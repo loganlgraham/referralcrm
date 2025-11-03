@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Referral CRM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand__icon">RC</div>
+          <div class="brand__name">Referral CRM</div>
+        </div>
+        <nav class="sidebar__nav">
+          <button class="nav-btn active" data-section="dashboard">
+            <span class="nav-btn__icon">📊</span>
+            <span>Dashboard</span>
+          </button>
+          <button class="nav-btn" data-section="referrals">
+            <span class="nav-btn__icon">🔁</span>
+            <span>Referrals</span>
+          </button>
+          <button class="nav-btn" data-section="agents">
+            <span class="nav-btn__icon">🧑‍🤝‍🧑</span>
+            <span>Agent Network</span>
+          </button>
+          <button class="nav-btn" data-section="pipeline">
+            <span class="nav-btn__icon">🗂️</span>
+            <span>Pipeline</span>
+          </button>
+          <button class="nav-btn" data-section="tasks">
+            <span class="nav-btn__icon">✅</span>
+            <span>Tasks</span>
+          </button>
+        </nav>
+        <div class="sidebar__footer">
+          <button class="primary-btn" id="newReferralBtn">+ New Referral</button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <h1 id="sectionTitle">Dashboard</h1>
+            <p class="topbar__subtitle">
+              Monitor referral performance and relationships at a glance.
+            </p>
+          </div>
+          <div class="topbar__actions">
+            <input
+              type="search"
+              id="globalSearch"
+              placeholder="Search referrals or agents..."
+            />
+            <button class="icon-btn" aria-label="Notifications">🔔</button>
+            <div class="avatar">AL</div>
+          </div>
+        </header>
+
+        <section class="content" id="dashboard" data-section>
+          <div class="grid grid--metrics" id="metricCards"></div>
+          <div class="grid">
+            <article class="card" id="conversionCard">
+              <header class="card__header">
+                <h2>Conversion Funnel</h2>
+                <select id="funnelFilter">
+                  <option value="quarter">This Quarter</option>
+                  <option value="month">This Month</option>
+                </select>
+              </header>
+              <div class="conversion-graph" id="conversionGraph"></div>
+            </article>
+            <article class="card" id="activityCard">
+              <header class="card__header">
+                <h2>Recent Activity</h2>
+              </header>
+              <ul class="activity-feed" id="activityFeed"></ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="content is-hidden" id="referrals" data-section>
+          <article class="card">
+            <header class="card__header">
+              <div>
+                <h2>Referral Pipeline</h2>
+                <p class="muted">
+                  Track in-flight referrals and quickly identify bottlenecks.
+                </p>
+              </div>
+              <div class="filters">
+                <select id="statusFilter">
+                  <option value="all">All statuses</option>
+                </select>
+                <select id="sourceFilter">
+                  <option value="all">All sources</option>
+                </select>
+              </div>
+            </header>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Client</th>
+                    <th>Referring Agent</th>
+                    <th>Receiving Agent</th>
+                    <th>Status</th>
+                    <th>Value</th>
+                    <th>Updated</th>
+                  </tr>
+                </thead>
+                <tbody id="referralTable"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <section class="content is-hidden" id="agents" data-section>
+          <article class="card">
+            <header class="card__header">
+              <div>
+                <h2>Agent Network</h2>
+                <p class="muted">
+                  Maintain healthy relationships with your partner network.
+                </p>
+              </div>
+              <div class="filters">
+                <select id="regionFilter">
+                  <option value="all">All regions</option>
+                </select>
+              </div>
+            </header>
+            <div class="agent-grid" id="agentGrid"></div>
+          </article>
+        </section>
+
+        <section class="content is-hidden" id="pipeline" data-section>
+          <article class="card">
+            <header class="card__header">
+              <h2>Referral Stages</h2>
+              <p class="muted">
+                Visualize referral progression and workload distribution.
+              </p>
+            </header>
+            <div class="kanban" id="pipelineBoard"></div>
+          </article>
+        </section>
+
+        <section class="content is-hidden" id="tasks" data-section>
+          <article class="card">
+            <header class="card__header">
+              <h2>Follow-Up Tasks</h2>
+              <p class="muted">
+                Stay on top of next steps to keep deals moving.
+              </p>
+              <button class="primary-btn" id="addTaskBtn">Add Task</button>
+            </header>
+            <div class="task-list" id="taskList"></div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal" id="modal" aria-hidden="true">
+      <div class="modal__overlay" data-modal-close></div>
+      <div class="modal__dialog" role="dialog" aria-modal="true">
+        <header class="modal__header">
+          <h2 id="modalTitle">New Referral</h2>
+          <button class="icon-btn" data-modal-close aria-label="Close">✕</button>
+        </header>
+        <form id="modalForm" class="form"></form>
+        <footer class="modal__footer">
+          <button class="ghost-btn" data-modal-close>Cancel</button>
+          <button class="primary-btn" type="submit">Save</button>
+        </footer>
+      </div>
+    </div>
+
+    <template id="taskTemplate">
+      <article class="task-card">
+        <header>
+          <h3 class="task-card__title"></h3>
+          <span class="task-card__status"></span>
+        </header>
+        <p class="task-card__description"></p>
+        <footer>
+          <span class="task-card__due"></span>
+          <div class="task-card__assignee"></div>
+        </footer>
+      </article>
+    </template>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
