@@ -1,31 +1,35 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { connectMongo } from '@/lib/mongoose';
-import { Referral } from '@/models/referral';
+import { Referral, ReferralDocument } from '@/models/referral';
 import { updateReferralSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { canManageReferral, canViewReferral } from '@/lib/rbac';
 
-interface Params {
+interface RouteContext {
   params: { id: string };
 }
 
-export async function GET(_: Request, { params }: Params) {
+export async function GET(request: NextRequest, context: RouteContext): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
   await connectMongo();
-  const referral = await Referral.findById(params.id).lean();
+  const referral = await Referral.findById<ReferralDocument>(context.params.id).lean();
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
   }
-  if (!canViewReferral(session, { assignedAgent: referral.assignedAgent?.toString?.(), lender: referral.lender?.toString?.(), org: referral.org })) {
+  if (!canViewReferral(session, { 
+    assignedAgent: referral.assignedAgent?.toString(), 
+    lender: referral.lender?.toString(), 
+    org: referral.org 
+  })) {
     return new NextResponse('Forbidden', { status: 403 });
   }
   return NextResponse.json(referral);
 }
 
-export async function PATCH(request: Request, { params }: Params) {
+export async function PATCH(request: NextRequest, context: RouteContext): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });
@@ -38,7 +42,7 @@ export async function PATCH(request: Request, { params }: Params) {
   }
 
   await connectMongo();
-  const existing = await Referral.findById(params.id);
+  const existing = await Referral.findById(context.params.id);
   if (!existing) {
     return new NextResponse('Not found', { status: 404 });
   }
@@ -46,7 +50,7 @@ export async function PATCH(request: Request, { params }: Params) {
     return new NextResponse('Forbidden', { status: 403 });
   }
   const referral = await Referral.findByIdAndUpdate(
-    params.id,
+    context.params.id,
     {
       ...parsed.data,
       $push: {
@@ -70,19 +74,19 @@ export async function PATCH(request: Request, { params }: Params) {
   return NextResponse.json(referral);
 }
 
-export async function DELETE(_: Request, { params }: Params) {
+export async function DELETE(request: NextRequest, context: RouteContext): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
   await connectMongo();
-  const referral = await Referral.findById(params.id);
+  const referral = await Referral.findById(context.params.id);
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
   }
   if (!canViewReferral(session, { assignedAgent: referral.assignedAgent?.toString?.(), lender: referral.lender?.toString?.(), org: referral.org })) {
     return new NextResponse('Forbidden', { status: 403 });
   }
-  await Referral.findByIdAndUpdate(params.id, { deletedAt: new Date() });
+  await Referral.findByIdAndUpdate(context.params.id, { deletedAt: new Date() });
   return new NextResponse(null, { status: 204 });
 }

@@ -22,13 +22,13 @@ export function ImportWizard() {
   const [rows, setRows] = useState<Record<string, string>[]>([]);
   const [file, setFile] = useState<File | null>(null);
 
-  const parseFile = async (fileToParse: File) => {
+  const parseFile = async (fileToParse: File): Promise<Papa.ParseResult<Record<string, string>>> => {
     if (fileToParse.name.endsWith('.zip')) {
       const zip = await JSZip.loadAsync(fileToParse);
       const firstEntry = zip.file(/.*/)[0];
       if (!firstEntry) throw new Error('Zip file is empty');
       const content = await firstEntry.async('string');
-      return Papa.parse(content, { header: true });
+      return Papa.parse<Record<string, string>>(content, { header: true });
     }
     return new Promise<Papa.ParseResult<Record<string, string>>>((resolve, reject) => {
       Papa.parse<Record<string, string>>(fileToParse, {
@@ -46,7 +46,7 @@ export function ImportWizard() {
       const result = await parseFile(selected);
       setFile(selected);
       setHeaders(result.meta.fields || []);
-      setRows(result.data.slice(0, 20));
+      setRows(result.data.slice(0, 20) as Record<string, string>[]);
       setMapping({});
       setStep('Map Fields');
     } catch (error) {

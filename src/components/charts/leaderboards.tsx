@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency } from '@/utils/formatters';
@@ -40,18 +41,56 @@ function Leaderboard({ title, entries }: { title: string; entries: LeaderboardEn
   );
 }
 
-export function Leaderboards() {
-  const { data } = useSWR<LeaderboardsResponse>('/api/referrals?leaderboard=true', fetcher, {
-    suspense: true
-  });
+function LoadingLeaderboard() {
+  return (
+    <div className="rounded-lg bg-white p-4 shadow-sm animate-pulse">
+      <div className="h-4 bg-slate-200 rounded w-32" />
+      <ul className="mt-4 space-y-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <li key={i} className="flex items-center justify-between">
+            <div className="space-y-2">
+              <div className="h-4 bg-slate-200 rounded w-24" />
+              <div className="h-3 bg-slate-200 rounded w-36" />
+            </div>
+            <div className="h-3 bg-slate-200 rounded w-16" />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
-  if (!data) return null;
+export function Leaderboards() {
+  const [isMounted, setIsMounted] = useState(false);
+  const { data, error } = useSWR<LeaderboardsResponse>('/api/referrals?leaderboard=true', fetcher);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted || !data) {
+    return (
+      <div className="grid gap-4 md:grid-cols-3">
+        <LoadingLeaderboard />
+        <LoadingLeaderboard />
+        <LoadingLeaderboard />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg bg-red-50 p-4 text-red-800">
+        Failed to load leaderboard data. Please try again later.
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-4 md:grid-cols-3">
-      <Leaderboard title="By MC" entries={data.mc} />
-      <Leaderboard title="By Agent" entries={data.agents} />
-      <Leaderboard title="By Market" entries={data.markets} />
+      <Leaderboard title="Top Mortgage Companies" entries={data.mc} />
+      <Leaderboard title="Top Agents" entries={data.agents} />
+      <Leaderboard title="Top Markets" entries={data.markets} />
     </div>
   );
 }

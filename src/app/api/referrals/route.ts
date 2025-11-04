@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
@@ -6,7 +6,7 @@ import { createReferralSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { calculateReferralFeeDue } from '@/utils/referral';
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
   const summary = searchParams.get('summary');
   const leaderboard = searchParams.get('leaderboard');
@@ -89,7 +89,7 @@ export async function GET(request: Request) {
   return NextResponse.json(referrals);
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });

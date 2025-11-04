@@ -1,10 +1,11 @@
 import { Session } from 'next-auth';
 import { connectMongo } from '@/lib/mongoose';
-import { Referral } from '@/models/referral';
+import { Referral, ReferralDocument } from '@/models/referral';
 import { LenderMC } from '@/models/lender';
 import { Agent } from '@/models/agent';
 import { Payment } from '@/models/payment';
 import { differenceInBusinessDays } from 'date-fns';
+import { Types } from 'mongoose';
 
 interface GetReferralsParams {
   session: Session | null;
@@ -14,6 +15,33 @@ interface GetReferralsParams {
   agent?: string | null;
   state?: string | null;
   zip?: string | null;
+}
+
+interface PopulatedAgent {
+  _id: Types.ObjectId;
+  name: string;
+}
+
+interface PopulatedLender {
+  _id: Types.ObjectId;
+  name: string;
+}
+
+interface PopulatedReferral extends Omit<ReferralDocument, 'assignedAgent' | 'lender'> {
+  assignedAgent?: PopulatedAgent;
+  lender?: PopulatedLender;
+}
+
+interface ReferralListItem {
+  _id: string;
+  createdAt: string;
+  borrowerName: string;
+  borrowerEmail: string;
+  propertyZip: string;
+  status: string;
+  assignedAgentName?: string;
+  lenderName?: string;
+  referralFeeDueCents?: number;
 }
 
 const PAGE_SIZE = 20;
@@ -53,27 +81,27 @@ export async function getReferrals(params: GetReferralsParams) {
 
   const [items, total] = await Promise.all([
     Referral.find(query)
-      .populate('assignedAgent')
-      .populate('lender')
+      .populate<{ assignedAgent: { _id: Types.ObjectId; name: string } }>('assignedAgent')
+      .populate<{ lender: { _id: Types.ObjectId; name: string } }>('lender')
       .sort({ createdAt: -1 })
       .skip((page - 1) * PAGE_SIZE)
       .limit(PAGE_SIZE)
-      .lean(),
+      .lean<ReferralDocument[]>(),
     Referral.countDocuments(query)
   ]);
 
   return {
-    items: items.map((item) => ({
+    items: items.map((item: any) => ({
       _id: item._id.toString(),
-      createdAt: item.createdAt,
+      createdAt: item.createdAt.toISOString(),
       borrowerName: item.borrower.name,
       borrowerEmail: item.borrower.email,
       propertyZip: item.propertyZip,
       status: item.status,
-      assignedAgentName: item.assignedAgent ? (item.assignedAgent as any).name : undefined,
-      lenderName: item.lender ? (item.lender as any).name : undefined,
+      assignedAgentName: item.assignedAgent?.name,
+      lenderName: item.lender?.name,
       referralFeeDueCents: item.referralFeeDueCents
-    })),
+    } as ReferralListItem)),
     total,
     page,
     pageSize: PAGE_SIZE
@@ -83,10 +111,10 @@ export async function getReferrals(params: GetReferralsParams) {
 export async function getReferralById(id: string) {
   await connectMongo();
   const referral = await Referral.findById(id)
-    .populate('assignedAgent')
-    .populate('lender')
-    .populate('buyer')
-    .lean();
+    .populate<{ assignedAgent: { _id: Types.ObjectId; name: string } }>('assignedAgent')
+    .populate<{ lender: { _id: Types.ObjectId; name: string } }>('lender')
+    .populate<{ buyer: { _id: Types.ObjectId; name: string } }>('buyer')
+    .lean<ReferralDocument>();
   if (!referral) return null;
 
   const payments = await Payment.find({ referralId: referral._id }).lean();
@@ -97,8 +125,7 @@ export async function getReferralById(id: string) {
     _id: referral._id.toString(),
     assignedAgent: referral.assignedAgent ? { ...referral.assignedAgent, _id: referral.assignedAgent._id.toString() } : null,
     lender: referral.lender ? { ...referral.lender, _id: referral.lender._id.toString() } : null,
-    buyer: referral.buyer ? { ...referral.buyer, _id: referral.buyer._id.toString() } : null,
-    payments: payments.map((payment) => ({ ...payment, _id: payment._id.toString() })),
+    payments: payments.map((payment: any) => ({ ...payment, _id: payment._id.toString() })),
     daysInStatus
   };
 }

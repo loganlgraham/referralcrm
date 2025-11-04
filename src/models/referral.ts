@@ -83,10 +83,29 @@ const referralSchema = new Schema(
 
 referralSchema.index({ 'borrower.email': 1, createdAt: 1 }, { unique: true });
 
-export type ReferralDocument = typeof referralSchema extends infer U
-  ? U extends Schema<infer R, any>
-    ? R & { _id: Types.ObjectId }
-    : never
-  : never;
+export interface ReferralDocument {
+  _id: Types.ObjectId;
+  createdAt: Date;
+  source: 'Lender' | 'MC';
+  borrower: {
+    name: string;
+    email: string;
+    phone: string;
+  };
+  propertyZip: string;
+  assignedAgent?: Types.ObjectId;
+  status: ReferralStatus;
+  statusLastUpdated?: Date;
+  loanType?: string;
+  preApprovalAmountCents?: number;
+  estPurchasePriceCents?: number;
+  commissionBasisPoints?: number;
+  referralFeeBasisPoints?: number;
+  referralFeeDueCents?: number;
+  lender?: Types.ObjectId;
+  org: 'AFC' | 'AHA';
+  deletedAt?: Date;
+  audit?: AuditEntry[];
+}
 
-export const Referral = models.Referral || model('Referral', referralSchema);
+export const Referral = models.Referral || model<ReferralDocument>('Referral', referralSchema);

@@ -31,7 +31,7 @@ export const authOptions: NextAuthOptions = {
       if (!session.user) return session;
       session.user.id = token.sub!;
       session.user.role = (token.role as Session['user']['role']) || 'viewer';
-      session.user.org = (token.org as string) || 'AFC';
+      session.user.org = (token.org as Session['user']['org']) || 'AFC';
       return session;
     },
     async jwt({ token }) {
@@ -48,7 +48,6 @@ export const authOptions: NextAuthOptions = {
 };
 
 export const {
-  handlers: { GET: authGet, POST: authPost },
   auth,
   signIn,
   signOut
@@ -59,5 +58,9 @@ export async function getCurrentSession() {
 }
 
 export async function getSessionToken(req: Request) {
-  return getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  const headers = Object.fromEntries(req.headers);
+  return getToken({ 
+    req: { headers } as any, 
+    secret: process.env.NEXTAUTH_SECRET 
+  });
 }
