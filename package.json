@@ -40,7 +40,7 @@
     "tailwindcss-animate": "^1.0.7",
     "lucide-react": "^0.293.0",
     "@next-auth/mongodb-adapter": "^1.1.1",
-    "mongodb": "^6.3.0",
+    "mongodb": "^5.9.1",
     "swr": "^2.2.0"
   },
   "devDependencies": {
