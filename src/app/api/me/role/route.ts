@@ -20,10 +20,12 @@ export async function POST(req: NextRequest) {
   }
 
   await connectMongo();
-  const user = await User.findOne({ email: session.user.email }).select('_id role').lean();
+  const user = await User.findOne({ email: session.user.email })
+    .select('_id role')
+    .lean<{ _id: any; role?: string | null }>();
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-  if (user.role) {
+  if (user?.role) {
     return NextResponse.json({ error: 'Role already set' }, { status: 409 });
   }
 
