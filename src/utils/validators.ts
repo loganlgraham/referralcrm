@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { REFERRAL_STATUSES } from '@/models/referral';
+import { REFERRAL_STATUSES } from '@/constants/referrals';
 
 export const createReferralSchema = z.object({
   borrowerName: z.string().min(1),

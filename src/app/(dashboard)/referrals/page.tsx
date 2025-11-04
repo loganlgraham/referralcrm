@@ -33,7 +33,6 @@ export default async function ReferralsPage({ searchParams }: { searchParams: Re
     <div className="space-y-6">
       <Filters />
       <Suspense fallback={<div>Loading referrals…</div>}>
-        {/* @ts-expect-error Async Server Component */}
         <ReferralTableSection searchParams={searchParams} />
       </Suspense>
     </div>

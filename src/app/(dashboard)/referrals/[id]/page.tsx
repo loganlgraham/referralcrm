@@ -23,7 +23,7 @@ export default async function ReferralDetailPage({ params }: ReferralDetailPageP
     <div className="space-y-6">
       <ReferralHeader referral={referral} />
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
           <ReferralTimeline referralId={params.id} />
         </div>
         <div className="space-y-6">
