@@ -22,22 +22,33 @@ export const authOptions: NextAuthOptions = {
     })
   ],
   callbacks: {
-    async session({ session, token }) {
-      if (!session.user) return session;
-      session.user.id = token.sub!;
-      (session.user as any).role = (token as any).role || 'viewer';
-      (session.user as any).org = (token as any).org || 'AFC';
-      return session;
-    },
-    async jwt({ token }) {
-      if (!token.email) return token;
-      await connectMongo();
-      const user = await User.findOne({ email: token.email });
+    async jwt({ token, user }) {
+      // On first login, copy role from user record if present
       if (user) {
-        (token as any).role = user.role;
-        (token as any).org = user.org;
+        // @ts-ignore
+        token.role = (user as any).role ?? token.role;
+      }
+      // If still missing, try to load once from DB
+      if (!('role' in token) && token.sub) {
+        try {
+          await connectMongo();
+          const u = await User.findById(token.sub).select('role').lean();
+          // @ts-ignore
+          token.role = u?.role ?? null;
+        } catch {
+          // ignore DB errors here
+        }
       }
       return token;
-    }
+    },
+    async session({ session, token }) {
+      if (!session.user) return session;
+      // Expose id and role on session
+      // @ts-ignore
+      session.user.id = token.sub as string;
+      // @ts-ignore
+      session.user.role = (token as any).role ?? null;
+      return session;
+    },
   }
 };
