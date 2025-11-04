@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
+import { Types } from 'mongoose';
+
 import { connectMongo } from '@/lib/mongoose';
 import { Activity } from '@/models/activity';
 import { createActivitySchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
-import { canManageReferral, canViewReferral } from '@/lib/rbac';
+import { canViewReferral } from '@/lib/rbac';
 import { Referral } from '@/models/referral';
 
 interface Params {
@@ -16,11 +18,19 @@ export async function GET(_: Request, { params }: Params) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
   await connectMongo();
-  const referral = await Referral.findById(params.id).lean();
+  const referral = await Referral.findById(params.id)
+    .select('assignedAgent lender org')
+    .lean<{ assignedAgent?: Types.ObjectId | null; lender?: Types.ObjectId | null; org: 'AFC' | 'AHA' }>();
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
   }
-  if (!canViewReferral(session, { assignedAgent: referral.assignedAgent?.toString?.(), lender: referral.lender?.toString?.(), org: referral.org })) {
+  if (
+    !canViewReferral(session, {
+      assignedAgent: referral.assignedAgent?.toString?.(),
+      lender: referral.lender?.toString?.(),
+      org: referral.org
+    })
+  ) {
     return new NextResponse('Forbidden', { status: 403 });
   }
   const activities = await Activity.find({ referralId: params.id }).sort({ createdAt: -1 }).lean();
@@ -42,11 +52,19 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   await connectMongo();
-  const referral = await Referral.findById(params.id);
+  const referral = await Referral.findById(params.id)
+    .select('assignedAgent lender org')
+    .lean<{ assignedAgent?: Types.ObjectId | null; lender?: Types.ObjectId | null; org: 'AFC' | 'AHA' }>();
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
   }
-  if (!canViewReferral(session, { assignedAgent: referral.assignedAgent?.toString?.(), lender: referral.lender?.toString?.(), org: referral.org })) {
+  if (
+    !canViewReferral(session, {
+      assignedAgent: referral.assignedAgent?.toString?.(),
+      lender: referral.lender?.toString?.(),
+      org: referral.org
+    })
+  ) {
     return new NextResponse('Forbidden', { status: 403 });
   }
   const activity = await Activity.create({
