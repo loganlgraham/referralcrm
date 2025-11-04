@@ -1,23 +1,43 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function OnboardingPage() {
-  const { data: session, status } = useSession();
   const router = useRouter();
   const params = useSearchParams();
   const selectedRole = params.get('role') || 'agent';
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [session, setSession] = useState<any | null>(null);
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.replace('/login');
-    }
-  }, [status, router]);
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/session', { cache: 'no-store' });
+        const data = res.ok ? await res.json() : null;
+        if (!mounted) return;
+        if (!data?.user) {
+          router.replace('/login');
+          return;
+        }
+        setSession(data);
+      } catch (e) {
+        router.replace('/login');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
 
-  const roleAlreadySet = Boolean((session?.user as any)?.role);
+  const roleAlreadySet = Boolean(session?.user?.role);
 
   async function saveRole() {
     setSaving(true);
@@ -34,15 +54,14 @@ export default function OnboardingPage() {
     }
   }
 
-  if (status === 'loading') return null;
-  if (!session) return null;
+  if (loading) return null;
 
   return (
     <div className="mx-auto max-w-md p-6 space-y-4">
       <h1 className="text-2xl font-semibold">Welcome</h1>
       {roleAlreadySet ? (
         <>
-          <p>Your role is already set to {(session.user as any).role}.</p>
+          <p>Your role is already set to {session?.user?.role}.</p>
           <button className="rounded-md bg-black text-white py-2 px-4" onClick={() => router.replace('/')}>Continue</button>
         </>
       ) : (
