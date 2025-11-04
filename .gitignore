@@ -1,0 +1,9 @@
+node_modules
+.next
+out
+pnpm-lock.yaml
+.env.local
+.env*
+.DS_Store
+playwright-report
+coverage
