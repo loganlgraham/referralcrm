@@ -1,29 +1,20 @@
 import { MongoClient } from 'mongodb';
 
-const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/referralcrm';
-const options = {};
-
 let client: MongoClient | null = null;
-let promise: Promise<MongoClient> | null = null;
 
-declare global {
-  // eslint-disable-next-line no-var
-  var _mongoClientPromise: Promise<MongoClient> | null | undefined;
-}
-
-if (!process.env.MONGODB_URI) {
-  console.warn('Using fallback MongoDB URI for local development.');
-}
-
-if (process.env.NODE_ENV === 'development') {
-  if (!global._mongoClientPromise) {
-    client = new MongoClient(uri, options);
-    global._mongoClientPromise = client.connect();
+export function getMongoClient(): MongoClient {
+  const uri = process.env.MONGODB_URI ?? (process.env.NODE_ENV === 'development' ? 'mongodb://localhost:27017/referralcrm' : undefined);
+  if (!uri) {
+    throw new Error('Missing MONGODB_URI environment variable');
   }
-  promise = global._mongoClientPromise;
-} else {
-  client = new MongoClient(uri, options);
-  promise = client.connect();
+  if (!client) {
+    client = new MongoClient(uri, {});
+  }
+  return client;
 }
 
-export default promise!;
+export function getClientPromise(): Promise<MongoClient> {
+  return getMongoClient().connect();
+}
+
+export default getMongoClient;

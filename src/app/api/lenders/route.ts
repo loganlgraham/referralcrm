@@ -1,9 +1,9 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { connectMongo } from '@/lib/mongoose';
 import { LenderMC } from '@/models/lender';
 import { getCurrentSession } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });

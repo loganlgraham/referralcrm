@@ -17,9 +17,6 @@ const agentSchema = new Schema(
   { timestamps: true }
 );
 
-agentSchema.index({ statesLicensed: 1 });
-agentSchema.index({ zipCoverage: 1 });
-
 export const Agent = models.Agent || model('Agent', agentSchema);
 export type AgentDocument = typeof agentSchema extends infer U
   ? U extends Schema<infer R, any>

@@ -5,6 +5,8 @@ export const metadata: Metadata = {
   title: 'Imports | Referral CRM'
 };
 
+export const dynamic = 'force-dynamic';
+
 export default function ImportsPage() {
   return (
     <div className="max-w-4xl">

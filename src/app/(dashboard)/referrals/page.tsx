@@ -1,4 +1,5 @@
-import { Suspense } from 'react';
+export const dynamic = 'force-dynamic';
+
 import { Metadata } from 'next';
 import { ReferralTable, ReferralRow } from '@/components/tables/referral-table';
 import { getCurrentSession } from '@/lib/auth';
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
   title: 'Referrals | Referral CRM'
 };
 
-async function ReferralTableSection({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
+export default async function ReferralsPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
   const session = await getCurrentSession();
   const data = await getReferrals({
     session,
@@ -22,19 +23,11 @@ async function ReferralTableSection({ searchParams }: { searchParams: Record<str
   });
 
   return (
-    <div className="space-y-4">
-      <ReferralTable data={data.items as ReferralRow[]} />
-    </div>
-  );
-}
-
-export default async function ReferralsPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
-  return (
     <div className="space-y-6">
       <Filters />
-      <Suspense fallback={<div>Loading referrals…</div>}>
-        <ReferralTableSection searchParams={searchParams} />
-      </Suspense>
+      <div className="space-y-4">
+        <ReferralTable data={data.items as ReferralRow[]} />
+      </div>
     </div>
   );
 }

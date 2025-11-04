@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { Agent } from '@/models/agent';
@@ -14,7 +14,7 @@ const mappingMap = {
   Payment
 };
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });

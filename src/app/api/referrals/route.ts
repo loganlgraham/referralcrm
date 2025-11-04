@@ -89,7 +89,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   return NextResponse.json(referrals);
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export async function POST(request: Request) {
   const session = await getCurrentSession();
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });

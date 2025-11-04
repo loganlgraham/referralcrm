@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { Types } from 'mongoose';
 
 import { connectMongo } from '@/lib/mongoose';
@@ -36,7 +36,7 @@ const serializeActivity = (activity: LeanActivity) => ({
   actorId: activity.actorId ? activity.actorId.toString() : null
 });
 
-export async function GET(_: Request, { params }: Params) {
+export async function GET(_: NextRequest, { params }: Params): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });
@@ -66,7 +66,7 @@ export async function GET(_: Request, { params }: Params) {
   return NextResponse.json(activities.map(serializeActivity));
 }
 
-export async function POST(request: Request, { params }: Params) {
+export async function POST(request: NextRequest, { params }: Params): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });

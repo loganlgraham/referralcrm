@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { updateStatusSchema } from '@/utils/validators';
@@ -9,7 +9,7 @@ interface Params {
   params: { id: string };
 }
 
-export async function POST(request: Request, { params }: Params) {
+export async function POST(request: NextRequest, { params }: Params): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });

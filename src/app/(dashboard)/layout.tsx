@@ -1,10 +1,12 @@
 import { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
-import { getCurrentSession } from '@/lib/auth';
+import { getCurrentSession, Session } from '@/lib/auth';
 import { Sidebar } from '@/components/layout/sidebar';
 
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
-  const session = await getCurrentSession();
+  const session: Session | null = await getCurrentSession();
 
   if (!session) {
     redirect('/login');
