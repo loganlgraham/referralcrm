@@ -25,7 +25,10 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const file = formData.get('file');
   const entity = (formData.get('entity') as string) || 'Referral';
-  const mapping = JSON.parse((formData.get('mapping') as string) || '{}');
+  const mapping = JSON.parse((formData.get('mapping') as string) || '{}') as Record<
+    string,
+    string | null | undefined
+  >;
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: 'File missing' }, { status: 400 });
@@ -46,7 +49,7 @@ export async function POST(request: Request) {
     const mapped: Record<string, unknown> = {};
     Object.entries(mapping).forEach(([source, target]) => {
       if (!target) return;
-      mapped[target] = row[source];
+      mapped[target] = row[source as keyof typeof row] ?? null;
     });
     return mapped;
   });
