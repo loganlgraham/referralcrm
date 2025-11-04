@@ -4,6 +4,7 @@ out
 pnpm-lock.yaml
 .env.local
 .env*
+!.env.example
 .DS_Store
 playwright-report
 coverage
