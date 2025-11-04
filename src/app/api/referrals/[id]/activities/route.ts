@@ -56,7 +56,7 @@ export async function GET(_: Request, { params }: Params) {
   }
   const activities = await Activity.find({ referralId: params.id })
     .sort({ createdAt: -1 })
-    .lean<LeanActivity>();
+    .lean<LeanActivity[]>(); // array of LeanActivity
   return NextResponse.json(activities.map(serializeActivity));
 }
 
