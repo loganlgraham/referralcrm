@@ -4,7 +4,7 @@ const userSchema = new Schema(
   {
     name: String,
     email: { type: String, unique: true, required: true },
-    role: { type: String, enum: ['admin', 'manager', 'mc', 'agent', 'viewer'], default: 'viewer' },
+    role: { type: String, enum: ['agent', 'mortgage-consultant', 'admin'], default: null },
     org: { type: String, enum: ['AFC', 'AHA'], default: 'AFC' },
     permissions: [{ type: String }]
   },
