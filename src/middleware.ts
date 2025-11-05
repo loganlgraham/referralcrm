@@ -6,6 +6,19 @@ const protectedRoutes = ['/dashboard', '/referrals', '/agents', '/lenders', '/pa
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Bypass for NextAuth, static, and public auth routes
+  if (
+    pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/static') ||
+    pathname === '/login' ||
+    pathname === '/signup' ||
+    pathname === '/onboarding'
+  ) {
+    return NextResponse.next();
+  }
+
   const requiresAuth = protectedRoutes.some((route) => pathname.startsWith(route));
 
   if (!requiresAuth) {
@@ -24,5 +37,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/referrals/:path*', '/agents/:path*', '/lenders/:path*', '/payments/:path*', '/imports/:path*', '/settings/:path*']
+  matcher: ['/((?!_next|.*\..*).*)'],
 };
