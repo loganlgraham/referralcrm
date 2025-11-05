@@ -32,19 +32,10 @@ export default function SignupPage() {
     setError(null);
 
     try {
-      const result = await signIn('google', { callbackUrl, redirect: false });
+      const result = await signIn('google', { callbackUrl, redirect: true });
 
-      if (!result) {
-        console.error('Signup signIn returned no result', { provider: 'google', role, callbackUrl });
-        setError({
-          summary: 'No response returned from signIn. Check network availability and NextAuth configuration.',
-          details: { provider: 'google', callbackUrl },
-        });
-        return;
-      }
-
-      if (result.error) {
-        console.error('Signup signIn rejected by NextAuth', result);
+      if (result?.error) {
+        console.error('Signup signIn rejected by NextAuth before redirect', result);
         setError({
           summary: 'Sign-up request was rejected by NextAuth. Review the error details below.',
           details: sanitizeDetails({
@@ -57,79 +48,7 @@ export default function SignupPage() {
             url: result.url,
           }),
         });
-        return;
       }
-
-      if (result.url) {
-        try {
-          const target = new URL(result.url, window.location.origin);
-          const errorCode = target.searchParams.get('error');
-
-          if (errorCode || target.pathname.startsWith('/api/auth/error')) {
-            console.error('Signup signIn returned URL containing error information', {
-              provider: 'google',
-              role,
-              callbackUrl,
-              errorCode,
-              target: target.toString(),
-              originalUrl: result.url,
-            });
-
-            setError({
-              summary: 'Sign-up redirected with an error from NextAuth. Inspect the reported code.',
-              details: sanitizeDetails({
-                provider: 'google',
-                role,
-                callbackUrl,
-                message: result.error,
-                status: result.status,
-                ok: result.ok,
-                url: result.url,
-                resolvedUrl: target.toString(),
-                errorCode,
-              }),
-            });
-            return;
-          }
-
-          window.location.href = target.toString();
-          return;
-        } catch (parseError) {
-          console.error('Signup signIn received unparseable redirect URL', {
-            provider: 'google',
-            role,
-            callbackUrl,
-            result,
-            parseError,
-          });
-
-          setError({
-            summary: 'Received an invalid redirect URL from sign-up. Check the console for details.',
-            details: sanitizeDetails({
-              provider: 'google',
-              role,
-              callbackUrl,
-              message: parseError instanceof Error ? parseError.message : String(parseError),
-              status: result.status,
-              ok: result.ok,
-              url: result.url,
-            }),
-          });
-          return;
-        }
-      }
-
-      console.error('Signup signIn completed without redirect URL', result);
-      setError({
-        summary: 'Sign-up completed without a redirect URL. Verify the callback configuration.',
-        details: sanitizeDetails({
-          provider: 'google',
-          role,
-          callbackUrl,
-          status: result.status,
-          ok: result.ok,
-        }),
-      });
     } catch (err) {
       console.error('Signup signIn threw an unexpected error', err);
       setError({

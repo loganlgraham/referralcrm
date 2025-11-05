@@ -4,17 +4,90 @@ export const dynamic = 'force-dynamic';
 
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+
+const errorExplanations: Record<string, { title: string; description: string }> = {
+  OAuthAccountNotLinked: {
+    title: 'Google account is already linked to another user',
+    description:
+      'Sign in using the original provider you used during signup, or ask an admin to unlink the old account.',
+  },
+  OAuthCallback: {
+    title: 'The Google OAuth callback failed to validate',
+    description:
+      'Double-check the Google OAuth credentials, authorized redirect URLs, and any middleware rewrites that might block the callback.',
+  },
+  OAuthSignin: {
+    title: 'Google rejected the initial sign-in request',
+    description:
+      'Ensure the Google client ID/secret are correct and that third-party cookies are enabled in the browser.',
+  },
+  EmailSignin: {
+    title: 'Email sign-in is not currently available',
+    description: 'Verify email provider configuration or use Google sign-in instead.',
+  },
+  Configuration: {
+    title: 'NextAuth configuration error',
+    description: 'Review the server logs—environment variables or adapter configuration is likely invalid.',
+  },
+  AccessDenied: {
+    title: 'Access to this application was denied',
+    description: 'Confirm the user has permission to access this workspace or contact an administrator.',
+  },
+};
 
 function ErrorAlert() {
   const params = useSearchParams();
   const error = params.get('error');
+  const [origin, setOrigin] = useState('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setOrigin(window.location.origin);
+    }
+  }, []);
+
   if (!error) return null;
+
+  const provider = params.get('provider') ?? 'unknown';
+  const description = params.get('error_description');
+  const explanation = errorExplanations[error];
+
   return (
-    <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
-      Authentication error: <b>{error}</b>. See <a className="underline" href="/api/auth/providers">available providers</a>.
+    <div className="space-y-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+      <div>
+        <p className="font-medium">Authentication error: {error}</p>
+        <p className="text-xs text-red-800">
+          Provider: <b>{provider}</b>
+          {description ? (
+            <>
+              {' · '}Details: <span className="font-mono">{description}</span>
+            </>
+          ) : null}
+        </p>
+      </div>
+
+      {explanation ? (
+        <div className="rounded bg-red-100 p-2 text-xs text-red-900">
+          <p className="font-semibold">{explanation.title}</p>
+          <p>{explanation.description}</p>
+        </div>
+      ) : (
+        <p className="text-xs text-red-800">
+          Need more information? Inspect the network tab for <code>/api/auth/signin/google</code> and review
+          the server logs for the corresponding request ID.
+        </p>
+      )}
+
+      <p className="text-xs text-red-800">
+        Verify configured providers via{' '}
+        <a className="underline" href="/api/auth/providers">
+          /api/auth/providers
+        </a>{' '}
+        and confirm the callback URL matches <code>{origin}</code>.
+      </p>
     </div>
   );
 }
@@ -39,19 +112,10 @@ export default function LoginPage() {
     setLocalError(null);
 
     try {
-      const result = await signIn('google', { callbackUrl: '/', redirect: false });
+      const result = await signIn('google', { callbackUrl: '/', redirect: true });
 
-      if (!result) {
-        console.error('Login signIn returned no result', { provider: 'google' });
-        setLocalError({
-          summary: 'No response returned from signIn. Check network availability and NextAuth configuration.',
-          details: { provider: 'google' },
-        });
-        return;
-      }
-
-      if (result.error) {
-        console.error('Login signIn rejected by NextAuth', result);
+      if (result?.error) {
+        console.error('Login signIn rejected by NextAuth before redirect', result);
         setLocalError({
           summary: 'Sign-in request was rejected by NextAuth. Review the error details below.',
           details: sanitizeDetails({
@@ -62,69 +126,7 @@ export default function LoginPage() {
             url: result.url,
           }),
         });
-        return;
       }
-
-      if (result.url) {
-        try {
-          const target = new URL(result.url, window.location.origin);
-          const errorCode = target.searchParams.get('error');
-
-          if (errorCode || target.pathname.startsWith('/api/auth/error')) {
-            console.error('Login signIn returned URL containing error information', {
-              provider: 'google',
-              errorCode,
-              target: target.toString(),
-              originalUrl: result.url,
-            });
-
-            setLocalError({
-              summary: 'Sign-in redirected with an error from NextAuth. Inspect the reported code.',
-              details: sanitizeDetails({
-                provider: 'google',
-                message: result.error,
-                status: result.status,
-                ok: result.ok,
-                url: result.url,
-                resolvedUrl: target.toString(),
-                errorCode,
-              }),
-            });
-            return;
-          }
-
-          window.location.href = target.toString();
-          return;
-        } catch (parseError) {
-          console.error('Login signIn received unparseable redirect URL', {
-            provider: 'google',
-            result,
-            parseError,
-          });
-
-          setLocalError({
-            summary: 'Received an invalid redirect URL from sign-in. Check the console for details.',
-            details: sanitizeDetails({
-              provider: 'google',
-              message: parseError instanceof Error ? parseError.message : String(parseError),
-              status: result.status,
-              ok: result.ok,
-              url: result.url,
-            }),
-          });
-          return;
-        }
-      }
-
-      console.error('Login signIn completed without redirect URL', result);
-      setLocalError({
-        summary: 'Sign-in completed without a redirect URL. Verify the callback configuration.',
-        details: sanitizeDetails({
-          provider: 'google',
-          status: result.status,
-          ok: result.ok,
-        }),
-      });
     } catch (error) {
       console.error('Login signIn threw an unexpected error', error);
       setLocalError({
