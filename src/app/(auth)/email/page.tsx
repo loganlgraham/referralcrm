@@ -80,6 +80,16 @@ export default function EmailSignInPage() {
           </p>
         </div>
 
+        {/* Google sign-in option */}
+        <div className="space-y-3">
+          <button
+            onClick={() => signIn('google', { callbackUrl: '/', redirect: true })}
+            className="w-full rounded-md bg-black px-4 py-3 text-white hover:bg-gray-800"
+          >
+            Continue with Google
+          </button>
+        </div>
+
         <Suspense fallback={<div className="h-40 w-full animate-pulse bg-gray-100 rounded-md"></div>}>
           <EmailSignInForm />
         </Suspense>
