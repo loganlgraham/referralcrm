@@ -5,12 +5,22 @@ export const dynamic = 'force-dynamic';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
 import { useState } from 'react';
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+
+function ErrorAlert() {
+  const params = useSearchParams();
+  const error = params.get('error');
+  if (!error) return null;
+  return (
+    <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+      Authentication error: <b>{error}</b>. See <a className="underline" href="/api/auth/providers">available providers</a>.
+    </div>
+  );
+}
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
-  const params = useSearchParams();
-  const error = params.get('error');
 
   const handleGoogle = async () => {
     setLoading(true);
@@ -30,11 +40,9 @@ export default function LoginPage() {
           <p className="mt-2 text-sm text-gray-600">Sign in to your account</p>
         </div>
 
-        {error && (
-          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
-            Authentication error: <b>{error}</b>. See <a className="underline" href="/api/auth/providers">available providers</a>.
-          </div>
-        )}
+        <Suspense fallback={null}>
+          <ErrorAlert />
+        </Suspense>
 
         <div className="space-y-3">
           <button
