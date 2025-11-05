@@ -9,7 +9,11 @@ import { User } from '@/models/user';
 export const authOptions: NextAuthOptions = {
   adapter: MongoDBAdapter(getClientPromise() as any),
   session: { strategy: 'jwt' },
-  pages: { signIn: '/login' },
+  pages: { 
+    signIn: '/login',
+    error: '/login',
+    verifyRequest: '/login',
+  },
   secret: process.env.NEXTAUTH_SECRET,
   providers: [
     EmailProvider({
@@ -18,9 +22,11 @@ export const authOptions: NextAuthOptions = {
     }),
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || ''
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+      allowDangerousEmailAccountLinking: true,
     })
   ],
+  debug: process.env.NODE_ENV === 'development',
   callbacks: {
     async jwt({ token, user }) {
       // On first login, copy role from user record if present
