@@ -109,6 +109,8 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   );
 }
 
+const authSecret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
+
 export const authOptions: NextAuthOptions = {
   adapter: MongoDBAdapter(getClientPromise() as any),
   session: { strategy: 'jwt' },
@@ -117,7 +119,7 @@ export const authOptions: NextAuthOptions = {
     error: '/login',
     verifyRequest: '/auth/check-email',
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: authSecret,
   providers,
   debug: process.env.NODE_ENV === 'development',
   callbacks: {

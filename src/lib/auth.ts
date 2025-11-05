@@ -17,6 +17,7 @@ const roleMap: Record<string, DashboardRole> = {
 };
 
 const defaultExpiry = () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+const authSecret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
 
 function mapRole(value: unknown): DashboardRole {
   if (typeof value === 'string' && value in roleMap) {
@@ -64,12 +65,26 @@ export async function getCurrentSession(): Promise<Session | null> {
 
   const token = await getToken({
     req: buildRequestFromHeaders() as any,
-    secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+    secret: authSecret,
   });
 
   if (!token?.sub) {
     return null;
   }
+
+  const expInput = (token as Record<string, unknown>).exp;
+  const expires = (() => {
+    if (typeof expInput === 'number' && Number.isFinite(expInput)) {
+      return new Date(expInput * 1000).toISOString();
+    }
+    if (typeof expInput === 'string') {
+      const parsed = Number.parseInt(expInput, 10);
+      if (Number.isFinite(parsed)) {
+        return new Date(parsed * 1000).toISOString();
+      }
+    }
+    return defaultExpiry();
+  })();
 
   const mappedSession: Session = {
     user: {
@@ -79,7 +94,7 @@ export async function getCurrentSession(): Promise<Session | null> {
       role: mapRole((token as any).role),
       org: mapOrg((token as any).org),
     } as any,
-    expires: token.exp ? new Date(token.exp * 1000).toISOString() : defaultExpiry(),
+    expires,
   };
 
   return mappedSession;
@@ -89,7 +104,7 @@ export async function getSessionToken(req: Request) {
   const headersMap = Object.fromEntries(req.headers);
   return getToken({
     req: { headers: headersMap } as any,
-    secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+    secret: authSecret,
   });
 }
 
