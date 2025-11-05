@@ -49,7 +49,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 
 export const authOptions: NextAuthOptions = {
   adapter: MongoDBAdapter(getClientPromise() as any),
-  trustHost: true,
+  // trustHost removed for broader type compatibility
   session: { strategy: 'jwt' },
   pages: {
     signIn: '/login',
