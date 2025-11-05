@@ -19,29 +19,78 @@ function ErrorAlert() {
   );
 }
 
+type DetailedError = {
+  summary: string;
+  details?: Record<string, unknown>;
+};
+
+const sanitizeDetails = (details: Record<string, unknown>): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(details).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+  );
+
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<DetailedError | null>(null);
   const router = useRouter();
 
   const handleGoogle = async () => {
     setLoading(true);
     setLocalError(null);
 
-    const result = await signIn('google', { callbackUrl: '/', redirect: false });
+    try {
+      const result = await signIn('google', { callbackUrl: '/', redirect: false });
 
-    if (result?.error) {
-      setLocalError(result.error);
+      if (!result) {
+        console.error('Login signIn returned no result', { provider: 'google' });
+        setLocalError({
+          summary: 'No response returned from signIn. Check network availability and NextAuth configuration.',
+          details: { provider: 'google' },
+        });
+        return;
+      }
+
+      if (result.error) {
+        console.error('Login signIn rejected by NextAuth', result);
+        setLocalError({
+          summary: 'Sign-in request was rejected by NextAuth. Review the error details below.',
+          details: sanitizeDetails({
+            provider: 'google',
+            message: result.error,
+            status: result.status,
+            ok: result.ok,
+            url: result.url,
+          }),
+        });
+        return;
+      }
+
+      if (result.url) {
+        window.location.href = result.url;
+        return;
+      }
+
+      console.error('Login signIn completed without redirect URL', result);
+      setLocalError({
+        summary: 'Sign-in completed without a redirect URL. Verify the callback configuration.',
+        details: sanitizeDetails({
+          provider: 'google',
+          status: result.status,
+          ok: result.ok,
+        }),
+      });
+    } catch (error) {
+      console.error('Login signIn threw an unexpected error', error);
+      setLocalError({
+        summary: 'Unexpected error while calling signIn. See the captured message for debugging.',
+        details: sanitizeDetails({
+          provider: 'google',
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      });
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (result?.url) {
-      window.location.href = result.url;
-      return;
-    }
-
-    setLoading(false);
   };
 
   const handleEmail = () => {
@@ -61,8 +110,13 @@ export default function LoginPage() {
         </Suspense>
 
         {localError && (
-          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
-            Authentication error: <b>{localError}</b>.
+          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900 space-y-2">
+            <p className="font-medium">{localError.summary}</p>
+            {localError.details && (
+              <pre className="whitespace-pre-wrap break-words rounded bg-red-100 p-2 text-xs text-red-900">
+                {JSON.stringify(localError.details, null, 2)}
+              </pre>
+            )}
           </div>
         )}
 

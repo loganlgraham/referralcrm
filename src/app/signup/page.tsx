@@ -9,10 +9,20 @@ import { useRouter } from 'next/navigation';
 
 type Role = 'agent' | 'mortgage-consultant' | 'admin';
 
+type DetailedError = {
+  summary: string;
+  details?: Record<string, unknown>;
+};
+
+const sanitizeDetails = (details: Record<string, unknown>): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(details).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+  );
+
 export default function SignupPage() {
   const [role, setRole] = useState<Role>('agent');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<DetailedError | null>(null);
   const router = useRouter();
 
   const callbackUrl = `/onboarding?role=${encodeURIComponent(role)}`;
@@ -21,20 +31,65 @@ export default function SignupPage() {
     setLoading(true);
     setError(null);
 
-    const result = await signIn('google', { callbackUrl, redirect: false });
+    try {
+      const result = await signIn('google', { callbackUrl, redirect: false });
 
-    if (result?.error) {
-      setError(result.error);
+      if (!result) {
+        console.error('Signup signIn returned no result', { provider: 'google', role, callbackUrl });
+        setError({
+          summary: 'No response returned from signIn. Check network availability and NextAuth configuration.',
+          details: { provider: 'google', callbackUrl },
+        });
+        return;
+      }
+
+      if (result.error) {
+        console.error('Signup signIn rejected by NextAuth', result);
+        setError({
+          summary: 'Sign-up request was rejected by NextAuth. Review the error details below.',
+          details: sanitizeDetails({
+            provider: 'google',
+            role,
+            callbackUrl,
+            message: result.error,
+            status: result.status,
+            ok: result.ok,
+            url: result.url,
+          }),
+        });
+        return;
+      }
+
+      if (result.url) {
+        window.location.href = result.url;
+        return;
+      }
+
+      console.error('Signup signIn completed without redirect URL', result);
+      setError({
+        summary: 'Sign-up completed without a redirect URL. Verify the callback configuration.',
+        details: sanitizeDetails({
+          provider: 'google',
+          role,
+          callbackUrl,
+          status: result.status,
+          ok: result.ok,
+        }),
+      });
+    } catch (err) {
+      console.error('Signup signIn threw an unexpected error', err);
+      setError({
+        summary: 'Unexpected error while calling signIn. See the captured message for debugging.',
+        details: sanitizeDetails({
+          provider: 'google',
+          role,
+          callbackUrl,
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      });
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (result?.url) {
-      window.location.href = result.url;
-      return;
-    }
-
-    setLoading(false);
   };
 
   const handleEmail = () => {
@@ -77,8 +132,13 @@ export default function SignupPage() {
           </div>
 
           {error && (
-            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
-              Authentication error: <b>{error}</b>.
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900 space-y-2">
+              <p className="font-medium">{error.summary}</p>
+              {error.details && (
+                <pre className="whitespace-pre-wrap break-words rounded bg-red-100 p-2 text-xs text-red-900">
+                  {JSON.stringify(error.details, null, 2)}
+                </pre>
+              )}
             </div>
           )}
 
