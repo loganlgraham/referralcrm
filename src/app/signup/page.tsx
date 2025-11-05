@@ -12,13 +12,29 @@ type Role = 'agent' | 'mortgage-consultant' | 'admin';
 export default function SignupPage() {
   const [role, setRole] = useState<Role>('agent');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-  
+
   const callbackUrl = `/onboarding?role=${encodeURIComponent(role)}`;
 
   const handleGoogle = async () => {
     setLoading(true);
-    await signIn('google', { callbackUrl, redirect: true });
+    setError(null);
+
+    const result = await signIn('google', { callbackUrl, redirect: false });
+
+    if (result?.error) {
+      setError(result.error);
+      setLoading(false);
+      return;
+    }
+
+    if (result?.url) {
+      window.location.href = result.url;
+      return;
+    }
+
+    setLoading(false);
   };
 
   const handleEmail = () => {
@@ -59,6 +75,12 @@ export default function SignupPage() {
               ))}
             </div>
           </div>
+
+          {error && (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+              Authentication error: <b>{error}</b>.
+            </div>
+          )}
 
           <div className="space-y-3 pt-2">
             <button

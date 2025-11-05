@@ -21,11 +21,27 @@ function ErrorAlert() {
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
   const router = useRouter();
 
   const handleGoogle = async () => {
     setLoading(true);
-    await signIn('google', { callbackUrl: '/', redirect: true });
+    setLocalError(null);
+
+    const result = await signIn('google', { callbackUrl: '/', redirect: false });
+
+    if (result?.error) {
+      setLocalError(result.error);
+      setLoading(false);
+      return;
+    }
+
+    if (result?.url) {
+      window.location.href = result.url;
+      return;
+    }
+
+    setLoading(false);
   };
 
   const handleEmail = () => {
@@ -43,6 +59,12 @@ export default function LoginPage() {
         <Suspense fallback={null}>
           <ErrorAlert />
         </Suspense>
+
+        {localError && (
+          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+            Authentication error: <b>{localError}</b>.
+          </div>
+        )}
 
         <div className="space-y-3">
           <button
