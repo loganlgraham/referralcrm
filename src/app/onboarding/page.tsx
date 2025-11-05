@@ -4,9 +4,9 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 
-export default function OnboardingPage() {
+function OnboardingInner() {
   const router = useRouter();
   const params = useSearchParams();
   const selectedRole = params.get('role') || 'agent';
@@ -77,5 +77,13 @@ export default function OnboardingPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={null}>
+      <OnboardingInner />
+    </Suspense>
   );
 }
