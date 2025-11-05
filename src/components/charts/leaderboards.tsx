@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency } from '@/utils/formatters';
@@ -33,13 +33,25 @@ function Leaderboard({ title, entries }: { title: string; entries: SampleLeaderb
   );
 }
 
+function hasLeaderboardEntries(data: SampleLeaderboards | undefined) {
+  if (!data) {
+    return false;
+  }
+
+  return ['mc', 'agents', 'markets'].some((key) => data[key as keyof SampleLeaderboards]?.length);
+}
+
 export function Leaderboards() {
   const [displayData, setDisplayData] = useState<SampleLeaderboards>(SAMPLE_LEADERBOARDS);
+  const [usingSample, setUsingSample] = useState(true);
   const { data, error } = useSWR<SampleLeaderboards>('/api/referrals?leaderboard=true', fetcher);
 
   useEffect(() => {
-    if (data) {
-      setDisplayData(data);
+    if (hasLeaderboardEntries(data)) {
+      setDisplayData(data as SampleLeaderboards);
+      setUsingSample(false);
+    } else {
+      setUsingSample(true);
     }
   }, [data]);
 
@@ -48,9 +60,9 @@ export function Leaderboards() {
       <Leaderboard title="Top Mortgage Companies" entries={displayData.mc} />
       <Leaderboard title="Top Agents" entries={displayData.agents} />
       <Leaderboard title="Top Markets" entries={displayData.markets} />
-      {error && (
+      {(error || usingSample) && (
         <div className="md:col-span-3 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-3 text-sm text-amber-700">
-          Showing sample leaderboards because live data is unavailable.
+          Showing sample leaderboards because live data is {error ? 'unavailable' : 'not ready yet'}.
         </div>
       )}
     </div>
