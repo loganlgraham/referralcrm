@@ -1,4 +1,5 @@
 import { MongoDBAdapter } from '@next-auth/mongodb-adapter';
+import CredentialsProvider from 'next-auth/providers/credentials';
 import EmailProvider from 'next-auth/providers/email';
 import GoogleProvider from 'next-auth/providers/google';
 import type { NextAuthOptions } from 'next-auth';
@@ -6,8 +7,69 @@ import { Resend } from 'resend';
 import { getClientPromise } from '@/lib/mongodb-client';
 import { connectMongo } from '@/lib/mongoose';
 import { User } from '@/models/user';
+import { z } from 'zod';
+
+const roleValues = ['agent', 'mortgage-consultant', 'admin'] as const;
+type Role = (typeof roleValues)[number];
+
+const credentialsSchema = z.object({
+  email: z
+    .string()
+    .email()
+    .transform((value) => value.trim().toLowerCase()),
+  role: z.enum(roleValues),
+});
 
 const providers: NextAuthOptions['providers'] = [];
+
+providers.push(
+  CredentialsProvider({
+    name: 'Standard Login',
+    credentials: {
+      email: { label: 'Email', type: 'email' },
+      role: { label: 'Role', type: 'text' },
+    },
+    async authorize(credentials) {
+      const parsed = credentialsSchema.safeParse(credentials);
+
+      if (!parsed.success) {
+        throw new Error('Invalid credentials submitted. Please check the form fields and try again.');
+      }
+
+      const { email, role } = parsed.data;
+
+      await connectMongo();
+
+      const user = await User.findOne({ email });
+
+      if (!user) {
+        throw new Error('No account found for this email address. Please sign up first.');
+      }
+
+      const storedRole = (user.role as Role | null) ?? null;
+
+      if (storedRole && storedRole !== role) {
+        throw new Error('The selected role does not match the role assigned to this account.');
+      }
+
+      if (!storedRole) {
+        if (role === 'admin') {
+          throw new Error('Admin access requires an administrator to approve your account.');
+        }
+
+        user.role = role;
+        await user.save();
+      }
+
+      return {
+        id: user._id.toString(),
+        email: user.email,
+        name: user.name ?? undefined,
+        role: (user.role as Role | undefined) ?? role,
+      } as any;
+    },
+  })
+);
 
 // Email via Resend or SMTP
 if (process.env.RESEND_API_KEY && process.env.EMAIL_FROM) {
