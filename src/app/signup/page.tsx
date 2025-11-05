@@ -5,7 +5,6 @@ export const dynamic = 'force-dynamic';
 import Link from 'next/link';
 import { FormEvent, useMemo, useState } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 
 const roleOptions = [
   { value: 'agent', label: 'Agent' },
@@ -17,6 +16,25 @@ type Role = (typeof roleOptions)[number]['value'];
 
 type FieldErrors = Partial<Record<'name' | 'email' | 'role' | 'adminSecret', string[]>>;
 
+function sanitizeRedirect(target: string | null, defaultPath: string) {
+  if (!target) return defaultPath;
+
+  if (target.startsWith('/')) {
+    return target.startsWith('//') ? defaultPath : target;
+  }
+
+  try {
+    const base = typeof window !== 'undefined' ? window.location.origin : undefined;
+    const parsed = new URL(target, base);
+    if (base && parsed.origin !== base) {
+      return defaultPath;
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return defaultPath;
+  }
+}
+
 export default function SignupPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -25,7 +43,6 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const router = useRouter();
 
   const callbackUrl = useMemo(() => `/onboarding?role=${encodeURIComponent(role)}`, [role]);
 
@@ -38,6 +55,7 @@ export default function SignupPage() {
     const normalizedEmail = email.trim().toLowerCase();
     const trimmedName = name.trim();
 
+    let redirected = false;
     try {
       const response = await fetch('/api/auth/register', {
         method: 'POST',
@@ -74,13 +92,16 @@ export default function SignupPage() {
         return;
       }
 
-      const destination = result?.url ?? callbackUrl;
-      router.push(destination);
-      router.refresh();
+      const destination = sanitizeRedirect(result?.url ?? null, callbackUrl);
+      redirected = true;
+      window.location.assign(destination);
+      return;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unexpected error while creating your account.');
     } finally {
-      setLoading(false);
+      if (!redirected) {
+        setLoading(false);
+      }
     }
   };
 

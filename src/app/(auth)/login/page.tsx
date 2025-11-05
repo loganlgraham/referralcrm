@@ -3,9 +3,9 @@
 export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
-import { FormEvent, Suspense, useState } from 'react';
+import { FormEvent, Suspense, useMemo, useState } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 
 const roleOptions = [
   { value: 'agent', label: 'Agent' },
@@ -19,14 +19,36 @@ const providerErrorMessages: Record<string, string> = {
   CredentialsSignin: 'Unable to sign in with the provided credentials.',
 };
 
+function sanitizeRedirect(target: string | null, defaultPath: string) {
+  if (!target) return defaultPath;
+
+  if (target.startsWith('/')) {
+    return target.startsWith('//') ? defaultPath : target;
+  }
+
+  try {
+    const base = typeof window !== 'undefined' ? window.location.origin : undefined;
+    const parsed = new URL(target, base);
+    if (base && parsed.origin !== base) {
+      return defaultPath;
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return defaultPath;
+  }
+}
+
 function LoginForm() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('agent');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') ?? '/';
+  const callbackParam = searchParams.get('callbackUrl');
+  const callbackUrl = useMemo(
+    () => sanitizeRedirect(callbackParam, '/dashboard'),
+    [callbackParam]
+  );
   const providerError = searchParams.get('error');
   const displayProviderError = providerError
     ? providerErrorMessages[providerError] ?? providerError
@@ -45,6 +67,7 @@ function LoginForm() {
       return;
     }
 
+    let redirected = false;
     try {
       const result = await signIn('credentials', {
         email: normalizedEmail,
@@ -58,13 +81,16 @@ function LoginForm() {
         return;
       }
 
-      const destination = result?.url ?? callbackUrl;
-      router.push(destination);
-      router.refresh();
+      const destination = sanitizeRedirect(result?.url ?? null, callbackUrl);
+      redirected = true;
+      window.location.assign(destination);
+      return;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unexpected error during sign in.');
     } finally {
-      setLoading(false);
+      if (!redirected) {
+        setLoading(false);
+      }
     }
   };
 
