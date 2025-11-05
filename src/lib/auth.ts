@@ -1,17 +1,96 @@
+import { getServerSession } from 'next-auth';
 import { getToken } from 'next-auth/jwt';
+import { cookies, headers } from 'next/headers';
 import type { Session } from 'next-auth';
+import { authOptions } from './auth-config';
+
+type DashboardRole = 'admin' | 'manager' | 'mc' | 'agent' | 'viewer';
+type DashboardOrg = 'AFC' | 'AHA';
+
+const roleMap: Record<string, DashboardRole> = {
+  admin: 'admin',
+  manager: 'manager',
+  mc: 'mc',
+  agent: 'agent',
+  viewer: 'viewer',
+  'mortgage-consultant': 'mc',
+};
+
+const defaultExpiry = () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+function mapRole(value: unknown): DashboardRole {
+  if (typeof value === 'string' && value in roleMap) {
+    return roleMap[value];
+  }
+  return 'viewer';
+}
+
+function mapOrg(value: unknown): DashboardOrg {
+  return value === 'AHA' ? 'AHA' : 'AFC';
+}
+
+function enhanceSession(session: Session): Session {
+  const user = session.user as Record<string, unknown> | null | undefined;
+  if (!user) return session;
+
+  const enhancedUser = {
+    ...user,
+    role: mapRole(user.role),
+    org: mapOrg(user.org),
+  } as Session['user'] & { role: DashboardRole; org: DashboardOrg };
+
+  return { ...session, user: enhancedUser } as Session;
+}
+
+function buildRequestFromHeaders(): Request {
+  const h = new Headers();
+  for (const [key, value] of headers()) {
+    h.append(key, value);
+  }
+  const cookieHeader = cookies().toString();
+  if (cookieHeader) {
+    h.set('cookie', cookieHeader);
+  }
+  return new Request('http://localhost', { headers: h });
+}
 
 export async function getCurrentSession(): Promise<Session | null> {
-  const { getCurrentSession: getJwtSession } = await import('./session');
-  const s = await getJwtSession();
-  if (!s) return null;
-  // shape into NextAuth Session minimal
-  return { user: s.user, expires: '2099-01-01T00:00:00.000Z' } as Session;
+  const session = await getServerSession(authOptions);
+  const user = session?.user as Record<string, unknown> | null | undefined;
+
+  if (session && user?.id) {
+    return enhanceSession(session);
+  }
+
+  const token = await getToken({
+    req: buildRequestFromHeaders() as any,
+    secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+  });
+
+  if (!token?.sub) {
+    return null;
+  }
+
+  const mappedSession: Session = {
+    user: {
+      id: token.sub,
+      name: (token as any).name ?? null,
+      email: (token as any).email ?? null,
+      role: mapRole((token as any).role),
+      org: mapOrg((token as any).org),
+    } as any,
+    expires: token.exp ? new Date(token.exp * 1000).toISOString() : defaultExpiry(),
+  };
+
+  return mappedSession;
 }
 
 export async function getSessionToken(req: Request) {
-  const headers = Object.fromEntries(req.headers);
-  return getToken({ req: { headers } as any, secret: process.env.NEXTAUTH_SECRET });
+  const headersMap = Object.fromEntries(req.headers);
+  return getToken({
+    req: { headers: headersMap } as any,
+    secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+  });
 }
 
 export type { Session } from 'next-auth';
