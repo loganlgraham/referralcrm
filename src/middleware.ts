@@ -10,6 +10,7 @@ export async function middleware(request: NextRequest) {
   // Bypass for NextAuth, static, and public auth routes
   if (
     pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/auth') ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/static') ||
     pathname === '/login' ||

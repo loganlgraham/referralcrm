@@ -5,9 +5,12 @@ export const dynamic = 'force-dynamic';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
+  const params = useSearchParams();
+  const error = params.get('error');
 
   const handleGoogle = async () => {
     setLoading(true);
@@ -26,6 +29,12 @@ export default function LoginPage() {
           <h1 className="text-3xl font-bold">Welcome back</h1>
           <p className="mt-2 text-sm text-gray-600">Sign in to your account</p>
         </div>
+
+        {error && (
+          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+            Authentication error: <b>{error}</b>. See <a className="underline" href="/api/auth/providers">available providers</a>.
+          </div>
+        )}
 
         <div className="space-y-3">
           <button
