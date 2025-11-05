@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatNumber } from '@/utils/formatters';
@@ -16,6 +16,15 @@ interface KPIResponse {
   avgDaysToClose: number | null;
 }
 
+function LoadingCard() {
+  return (
+    <div className="rounded-lg bg-white p-4 shadow-sm animate-pulse">
+      <div className="h-4 w-24 rounded bg-slate-200" />
+      <div className="mt-2 h-8 w-32 rounded bg-slate-200" />
+    </div>
+  );
+}
+
 export function KPICards() {
   const [isMounted, setIsMounted] = useState(false);
   const { data, error } = useSWR<KPIResponse>('/api/referrals?summary=true', fetcher);
@@ -27,11 +36,8 @@ export function KPICards() {
   if (!isMounted || !data) {
     return (
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="rounded-lg bg-white p-4 shadow-sm animate-pulse">
-            <div className="h-4 bg-slate-200 rounded w-24" />
-            <div className="h-8 bg-slate-200 rounded w-32 mt-2" />
-          </div>
+        {Array.from({ length: 8 }).map((_, index) => (
+          <LoadingCard key={index} />
         ))}
       </div>
     );

@@ -1,6 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { Metadata } from 'next';
+import Link from 'next/link';
+import { PlusIcon } from 'lucide-react';
 import { ReferralTable, ReferralRow } from '@/components/tables/referral-table';
 import { getCurrentSession } from '@/lib/auth';
 import { getReferrals } from '@/lib/server/referrals';
@@ -10,7 +12,11 @@ export const metadata: Metadata = {
   title: 'Referrals | Referral CRM'
 };
 
-export default async function ReferralsPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
+export default async function ReferralsPage({
+  searchParams
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
   const session = await getCurrentSession();
   const data = await getReferrals({
     session,
@@ -22,12 +28,34 @@ export default async function ReferralsPage({ searchParams }: { searchParams: Re
     zip: searchParams.zip?.toString()
   });
 
+  const items = data.items as ReferralRow[];
+  const hasReferrals = items.length > 0;
+
   return (
     <div className="space-y-6">
-      <Filters />
-      <div className="space-y-4">
-        <ReferralTable data={data.items as ReferralRow[]} />
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Referrals</h1>
+          <p className="text-sm text-slate-500">Track every lead from intake through close.</p>
+        </div>
+        <Link
+          href="/referrals/new"
+          className="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+        >
+          <PlusIcon className="h-4 w-4" />
+          New referral
+        </Link>
       </div>
+      <Filters />
+      {hasReferrals ? (
+        <div className="space-y-4">
+          <ReferralTable data={items} />
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
+          No referrals yet. Add your first referral to get started.
+        </div>
+      )}
     </div>
   );
 }
