@@ -61,8 +61,62 @@ export default function SignupPage() {
       }
 
       if (result.url) {
-        window.location.href = result.url;
-        return;
+        try {
+          const target = new URL(result.url, window.location.origin);
+          const errorCode = target.searchParams.get('error');
+
+          if (errorCode || target.pathname.startsWith('/api/auth/error')) {
+            console.error('Signup signIn returned URL containing error information', {
+              provider: 'google',
+              role,
+              callbackUrl,
+              errorCode,
+              target: target.toString(),
+              originalUrl: result.url,
+            });
+
+            setError({
+              summary: 'Sign-up redirected with an error from NextAuth. Inspect the reported code.',
+              details: sanitizeDetails({
+                provider: 'google',
+                role,
+                callbackUrl,
+                message: result.error,
+                status: result.status,
+                ok: result.ok,
+                url: result.url,
+                resolvedUrl: target.toString(),
+                errorCode,
+              }),
+            });
+            return;
+          }
+
+          window.location.href = target.toString();
+          return;
+        } catch (parseError) {
+          console.error('Signup signIn received unparseable redirect URL', {
+            provider: 'google',
+            role,
+            callbackUrl,
+            result,
+            parseError,
+          });
+
+          setError({
+            summary: 'Received an invalid redirect URL from sign-up. Check the console for details.',
+            details: sanitizeDetails({
+              provider: 'google',
+              role,
+              callbackUrl,
+              message: parseError instanceof Error ? parseError.message : String(parseError),
+              status: result.status,
+              ok: result.ok,
+              url: result.url,
+            }),
+          });
+          return;
+        }
       }
 
       console.error('Signup signIn completed without redirect URL', result);

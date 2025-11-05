@@ -66,8 +66,54 @@ export default function LoginPage() {
       }
 
       if (result.url) {
-        window.location.href = result.url;
-        return;
+        try {
+          const target = new URL(result.url, window.location.origin);
+          const errorCode = target.searchParams.get('error');
+
+          if (errorCode || target.pathname.startsWith('/api/auth/error')) {
+            console.error('Login signIn returned URL containing error information', {
+              provider: 'google',
+              errorCode,
+              target: target.toString(),
+              originalUrl: result.url,
+            });
+
+            setLocalError({
+              summary: 'Sign-in redirected with an error from NextAuth. Inspect the reported code.',
+              details: sanitizeDetails({
+                provider: 'google',
+                message: result.error,
+                status: result.status,
+                ok: result.ok,
+                url: result.url,
+                resolvedUrl: target.toString(),
+                errorCode,
+              }),
+            });
+            return;
+          }
+
+          window.location.href = target.toString();
+          return;
+        } catch (parseError) {
+          console.error('Login signIn received unparseable redirect URL', {
+            provider: 'google',
+            result,
+            parseError,
+          });
+
+          setLocalError({
+            summary: 'Received an invalid redirect URL from sign-in. Check the console for details.',
+            details: sanitizeDetails({
+              provider: 'google',
+              message: parseError instanceof Error ? parseError.message : String(parseError),
+              status: result.status,
+              ok: result.ok,
+              url: result.url,
+            }),
+          });
+          return;
+        }
       }
 
       console.error('Login signIn completed without redirect URL', result);
