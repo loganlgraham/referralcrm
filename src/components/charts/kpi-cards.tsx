@@ -1,63 +1,75 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR from 'swr';
-import { formatCurrency, formatNumber } from '@/utils/formatters';
-import { SAMPLE_KPI_DATA, SampleKPIData } from '@/data/dashboard-sample';
 import { fetcher } from '@/utils/fetcher';
+import { formatCurrency, formatNumber } from '@/utils/formatters';
 
-function hasRealKpiData(data: SampleKPIData | undefined) {
-  if (!data) {
-    return false;
-  }
+interface KPIResponse {
+  requests: number;
+  closings: number;
+  conversion: number;
+  expectedRevenueCents: number;
+  receivedRevenueCents: number;
+  avgTimeToFirstContactHours: number | null;
+  avgDaysToContract: number | null;
+  avgDaysToClose: number | null;
+}
 
-  return [
-    data.requests,
-    data.closings,
-    data.conversion,
-    data.expectedRevenueCents,
-    data.receivedRevenueCents
-  ].some((value) => value && value > 0);
+function LoadingCard() {
+  return (
+    <div className="rounded-lg bg-white p-4 shadow-sm animate-pulse">
+      <div className="h-4 w-24 rounded bg-slate-200" />
+      <div className="mt-2 h-8 w-32 rounded bg-slate-200" />
+    </div>
+  );
 }
 
 export function KPICards() {
-  const [displayData, setDisplayData] = useState<SampleKPIData>(SAMPLE_KPI_DATA);
-  const [usingSample, setUsingSample] = useState(true);
-  const { data, error } = useSWR<SampleKPIData>('/api/referrals?summary=true', fetcher);
+  const [isMounted, setIsMounted] = useState(false);
+  const { data, error } = useSWR<KPIResponse>('/api/referrals?summary=true', fetcher);
 
   useEffect(() => {
-    if (hasRealKpiData(data)) {
-      setDisplayData(data as SampleKPIData);
-      setUsingSample(false);
-    } else {
-      setUsingSample(true);
-    }
-  }, [data]);
+    setIsMounted(true);
+  }, []);
 
-  const cards = useMemo(
-    () => [
-      { title: 'Requests', value: formatNumber(displayData.requests) },
-      { title: 'Closings', value: formatNumber(displayData.closings) },
-      { title: 'Closing Conversion %', value: `${displayData.conversion.toFixed(1)}%` },
-      { title: 'Expected Revenue', value: formatCurrency(displayData.expectedRevenueCents) },
-      { title: 'Received Revenue', value: formatCurrency(displayData.receivedRevenueCents) },
-      {
-        title: 'Avg Time to First Contact',
-        value: displayData.avgTimeToFirstContactHours
-          ? `${displayData.avgTimeToFirstContactHours.toFixed(1)} hrs`
-          : '—'
-      },
-      {
-        title: 'Avg Days to Contract',
-        value: displayData.avgDaysToContract ? `${displayData.avgDaysToContract.toFixed(1)} days` : '—'
-      },
-      {
-        title: 'Avg Days to Close',
-        value: displayData.avgDaysToClose ? `${displayData.avgDaysToClose.toFixed(1)} days` : '—'
-      }
-    ],
-    [displayData]
-  );
+  if (!isMounted || !data) {
+    return (
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <LoadingCard key={index} />
+        ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg bg-red-50 p-4 text-red-800">
+        Failed to load KPI data. Please try again later.
+      </div>
+    );
+  }
+
+  const cards = [
+    { title: 'Requests', value: formatNumber(data.requests) },
+    { title: 'Closings', value: formatNumber(data.closings) },
+    { title: 'Closing Conversion %', value: `${data.conversion.toFixed(1)}%` },
+    { title: 'Expected Revenue', value: formatCurrency(data.expectedRevenueCents) },
+    { title: 'Received Revenue', value: formatCurrency(data.receivedRevenueCents) },
+    {
+      title: 'Avg Time to First Contact',
+      value: data.avgTimeToFirstContactHours ? `${data.avgTimeToFirstContactHours.toFixed(1)} hrs` : '—'
+    },
+    {
+      title: 'Avg Days to Contract',
+      value: data.avgDaysToContract ? `${data.avgDaysToContract.toFixed(1)} days` : '—'
+    },
+    {
+      title: 'Avg Days to Close',
+      value: data.avgDaysToClose ? `${data.avgDaysToClose.toFixed(1)} days` : '—'
+    }
+  ];
 
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -67,11 +79,6 @@ export function KPICards() {
           <p className="mt-2 text-2xl font-semibold text-slate-900">{card.value}</p>
         </div>
       ))}
-      {(error || usingSample) && (
-        <div className="md:col-span-2 xl:col-span-4 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-3 text-sm text-amber-700">
-          Showing sample metrics because live data is {error ? 'unavailable' : 'not ready yet'}.
-        </div>
-      )}
     </div>
   );
 }
