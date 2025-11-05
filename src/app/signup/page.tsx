@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+export const dynamic = 'force-dynamic';
+
+import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
 
@@ -8,69 +10,81 @@ type Role = 'agent' | 'mortgage-consultant' | 'admin';
 
 export default function SignupPage() {
   const [role, setRole] = useState<Role>('agent');
+  const [loading, setLoading] = useState(false);
+  
   const callbackUrl = `/onboarding?role=${encodeURIComponent(role)}`;
 
-  const handleGoogle = useCallback(async () => {
-    try {
-      const res = await signIn('google', { callbackUrl });
-      if (res?.error) console.error(res.error);
-    } catch (e) {
-      console.error(e);
-      window.location.href = `/api/auth/signin/google?callbackUrl=${encodeURIComponent(callbackUrl)}`;
-    }
-  }, [callbackUrl]);
+  const handleGoogle = async () => {
+    setLoading(true);
+    await signIn('google', { callbackUrl, redirect: true });
+  };
 
-  const handleEmail = useCallback(async () => {
-    try {
-      const res = await signIn('email', { callbackUrl });
-      if (res?.error) console.error(res.error);
-    } catch (e) {
-      console.error(e);
-      window.location.href = `/api/auth/signin/email?callbackUrl=${encodeURIComponent(callbackUrl)}`;
-    }
-  }, [callbackUrl]);
+  const handleEmail = async () => {
+    setLoading(true);
+    await signIn('email', { callbackUrl, redirect: true });
+  };
 
   return (
-    <div className="mx-auto max-w-md p-6 space-y-6">
-      <h1 className="text-2xl font-semibold">Create your account</h1>
-
-      <div className="space-y-3">
-        <label className="block text-sm font-medium">I am a</label>
-        <div className="grid grid-cols-1 gap-2">
-          {[
-            { v: 'agent', label: 'Agent' },
-            { v: 'mortgage-consultant', label: 'Mortgage Consultant' },
-            { v: 'admin', label: 'Admin' },
-          ].map((r) => (
-            <label key={r.v} className="flex items-center gap-2 cursor-pointer border rounded-md p-2">
-              <input
-                type="radio"
-                name="role"
-                className="h-4 w-4"
-                checked={role === (r.v as Role)}
-                onChange={() => setRole(r.v as Role)}
-              />
-              <span>{r.label}</span>
-            </label>
-          ))}
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="w-full max-w-md space-y-8 rounded-lg border bg-white p-8 shadow-sm">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold">Create an account</h1>
+          <p className="mt-2 text-sm text-gray-600">Get started with your free account</p>
         </div>
-      </div>
 
-      <div className="space-y-2">
-        <button className="w-full rounded-md bg-black text-white py-2" onClick={handleGoogle}>
-          Continue with Google
-        </button>
-        <button className="w-full rounded-md border py-2" onClick={handleEmail}>
-          Continue with Email
-        </button>
-        <p className="text-xs text-center text-gray-500">
-          If nothing happens, <a className="underline" href={`/api/auth/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`}>open the provider list</a>.
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">I am a</label>
+            <div className="space-y-2">
+              {[
+                { v: 'agent', label: 'Agent' },
+                { v: 'mortgage-consultant', label: 'Mortgage Consultant' },
+                { v: 'admin', label: 'Admin' },
+              ].map((r) => (
+                <label
+                  key={r.v}
+                  className="flex items-center gap-3 cursor-pointer rounded-md border p-3 hover:bg-gray-50 transition-colors"
+                >
+                  <input
+                    type="radio"
+                    name="role"
+                    value={r.v}
+                    checked={role === (r.v as Role)}
+                    onChange={() => setRole(r.v as Role)}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm font-medium">{r.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <button
+              onClick={handleGoogle}
+              disabled={loading}
+              className="w-full rounded-md bg-black px-4 py-3 text-white hover:bg-gray-800 disabled:opacity-50"
+            >
+              {loading ? 'Loading...' : 'Continue with Google'}
+            </button>
+            
+            <button
+              onClick={handleEmail}
+              disabled={loading}
+              className="w-full rounded-md border border-gray-300 px-4 py-3 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {loading ? 'Loading...' : 'Continue with Email'}
+            </button>
+          </div>
+        </div>
+
+        <p className="text-center text-sm text-gray-600">
+          Already have an account?{' '}
+          <Link href="/login" className="font-medium text-black underline">
+            Log in
+          </Link>
         </p>
       </div>
-
-      <p className="text-sm text-gray-600">
-        Already have an account? <Link className="underline" href="/login">Log in</Link>
-      </p>
     </div>
   );
 }

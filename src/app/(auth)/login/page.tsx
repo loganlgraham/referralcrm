@@ -1,46 +1,57 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
-import { useCallback } from 'react';
+import { useState } from 'react';
 
 export default function LoginPage() {
-  const handleGoogle = useCallback(async () => {
-    try {
-      const res = await signIn('google', { callbackUrl: '/' });
-      if (res?.error) console.error(res.error);
-    } catch (e) {
-      console.error(e);
-      window.location.href = '/api/auth/signin/google';
-    }
-  }, []);
+  const [loading, setLoading] = useState(false);
 
-  const handleEmail = useCallback(async () => {
-    try {
-      // Without an email value, NextAuth will show its email form
-      const res = await signIn('email');
-      if (res?.error) console.error(res.error);
-    } catch (e) {
-      console.error(e);
-      window.location.href = '/api/auth/signin/email';
-    }
-  }, []);
+  const handleGoogle = async () => {
+    setLoading(true);
+    await signIn('google', { callbackUrl: '/', redirect: true });
+  };
+
+  const handleEmail = async () => {
+    setLoading(true);
+    await signIn('email', { callbackUrl: '/', redirect: true });
+  };
 
   return (
-    <div className="mx-auto max-w-md p-6 space-y-4">
-      <h1 className="text-2xl font-semibold text-center">Log in</h1>
-      <button className="w-full rounded-md bg-black text-white py-2" onClick={handleGoogle}>
-        Sign in with Google
-      </button>
-      <button className="w-full rounded-md border py-2" onClick={handleEmail}>
-        Sign in with Email
-      </button>
-      <p className="text-xs text-center text-gray-500">
-        If nothing happens, <a className="underline" href="/api/auth/signin">open the provider list</a>.
-      </p>
-      <p className="text-sm text-gray-600 text-center mt-2">
-        New here? <Link className="underline" href="/signup">Create an account</Link>
-      </p>
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="w-full max-w-md space-y-8 rounded-lg border bg-white p-8 shadow-sm">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold">Welcome back</h1>
+          <p className="mt-2 text-sm text-gray-600">Sign in to your account</p>
+        </div>
+
+        <div className="space-y-3">
+          <button
+            onClick={handleGoogle}
+            disabled={loading}
+            className="w-full rounded-md bg-black px-4 py-3 text-white hover:bg-gray-800 disabled:opacity-50"
+          >
+            {loading ? 'Loading...' : 'Continue with Google'}
+          </button>
+          
+          <button
+            onClick={handleEmail}
+            disabled={loading}
+            className="w-full rounded-md border border-gray-300 px-4 py-3 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {loading ? 'Loading...' : 'Continue with Email'}
+          </button>
+        </div>
+
+        <p className="text-center text-sm text-gray-600">
+          Don't have an account?{' '}
+          <Link href="/signup" className="font-medium text-black underline">
+            Sign up
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }
