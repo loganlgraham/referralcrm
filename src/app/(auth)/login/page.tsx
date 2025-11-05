@@ -6,7 +6,7 @@ import { signIn } from 'next-auth/react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 function ErrorAlert() {
   const params = useSearchParams();
@@ -21,15 +21,15 @@ function ErrorAlert() {
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
   const handleGoogle = async () => {
     setLoading(true);
     await signIn('google', { callbackUrl: '/', redirect: true });
   };
 
-  const handleEmail = async () => {
-    setLoading(true);
-    await signIn('email', { callbackUrl: '/', redirect: true });
+  const handleEmail = () => {
+    router.push('/auth/email');
   };
 
   return (

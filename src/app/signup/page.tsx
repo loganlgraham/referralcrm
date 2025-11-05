@@ -5,12 +5,14 @@ export const dynamic = 'force-dynamic';
 import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 type Role = 'agent' | 'mortgage-consultant' | 'admin';
 
 export default function SignupPage() {
   const [role, setRole] = useState<Role>('agent');
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
   
   const callbackUrl = `/onboarding?role=${encodeURIComponent(role)}`;
 
@@ -19,9 +21,8 @@ export default function SignupPage() {
     await signIn('google', { callbackUrl, redirect: true });
   };
 
-  const handleEmail = async () => {
-    setLoading(true);
-    await signIn('email', { callbackUrl, redirect: true });
+  const handleEmail = () => {
+    router.push(`/auth/email?callbackUrl=${encodeURIComponent(callbackUrl)}`);
   };
 
   return (
