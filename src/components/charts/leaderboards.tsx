@@ -4,21 +4,13 @@ import { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency } from '@/utils/formatters';
+import {
+  SAMPLE_LEADERBOARDS,
+  SampleLeaderboardEntry,
+  SampleLeaderboards
+} from '@/data/dashboard-sample';
 
-interface LeaderboardEntry {
-  name: string;
-  totalReferrals: number;
-  closings: number;
-  expectedRevenueCents: number;
-}
-
-interface LeaderboardsResponse {
-  mc: LeaderboardEntry[];
-  agents: LeaderboardEntry[];
-  markets: LeaderboardEntry[];
-}
-
-function Leaderboard({ title, entries }: { title: string; entries: LeaderboardEntry[] }) {
+function Leaderboard({ title, entries }: { title: string; entries: SampleLeaderboardEntry[] }) {
   return (
     <div className="rounded-lg bg-white p-4 shadow-sm">
       <h3 className="text-sm font-semibold text-slate-600">{title}</h3>
@@ -41,56 +33,26 @@ function Leaderboard({ title, entries }: { title: string; entries: LeaderboardEn
   );
 }
 
-function LoadingLeaderboard() {
-  return (
-    <div className="rounded-lg bg-white p-4 shadow-sm animate-pulse">
-      <div className="h-4 bg-slate-200 rounded w-32" />
-      <ul className="mt-4 space-y-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <li key={i} className="flex items-center justify-between">
-            <div className="space-y-2">
-              <div className="h-4 bg-slate-200 rounded w-24" />
-              <div className="h-3 bg-slate-200 rounded w-36" />
-            </div>
-            <div className="h-3 bg-slate-200 rounded w-16" />
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 export function Leaderboards() {
-  const [isMounted, setIsMounted] = useState(false);
-  const { data, error } = useSWR<LeaderboardsResponse>('/api/referrals?leaderboard=true', fetcher);
+  const [displayData, setDisplayData] = useState<SampleLeaderboards>(SAMPLE_LEADERBOARDS);
+  const { data, error } = useSWR<SampleLeaderboards>('/api/referrals?leaderboard=true', fetcher);
 
   useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  if (!isMounted || !data) {
-    return (
-      <div className="grid gap-4 md:grid-cols-3">
-        <LoadingLeaderboard />
-        <LoadingLeaderboard />
-        <LoadingLeaderboard />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-lg bg-red-50 p-4 text-red-800">
-        Failed to load leaderboard data. Please try again later.
-      </div>
-    );
-  }
+    if (data) {
+      setDisplayData(data);
+    }
+  }, [data]);
 
   return (
     <div className="grid gap-4 md:grid-cols-3">
-      <Leaderboard title="Top Mortgage Companies" entries={data.mc} />
-      <Leaderboard title="Top Agents" entries={data.agents} />
-      <Leaderboard title="Top Markets" entries={data.markets} />
+      <Leaderboard title="Top Mortgage Companies" entries={displayData.mc} />
+      <Leaderboard title="Top Agents" entries={displayData.agents} />
+      <Leaderboard title="Top Markets" entries={displayData.markets} />
+      {error && (
+        <div className="md:col-span-3 rounded-lg border border-dashed border-amber-300 bg-amber-50 p-3 text-sm text-amber-700">
+          Showing sample leaderboards because live data is unavailable.
+        </div>
+      )}
     </div>
   );
 }
