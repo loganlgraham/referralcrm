@@ -14,7 +14,7 @@ const roleOptions = [
 
 type Role = (typeof roleOptions)[number]['value'];
 
-type FieldErrors = Partial<Record<'name' | 'email' | 'role' | 'adminSecret', string[]>>;
+type FieldErrors = Partial<Record<'name' | 'email' | 'password' | 'role' | 'adminSecret', string[]>>;
 
 function sanitizeRedirect(target: string | null, defaultPath: string) {
   if (!target) return defaultPath;
@@ -38,6 +38,7 @@ function sanitizeRedirect(target: string | null, defaultPath: string) {
 export default function SignupPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('agent');
   const [adminSecret, setAdminSecret] = useState('');
   const [loading, setLoading] = useState(false);
@@ -54,6 +55,15 @@ export default function SignupPage() {
 
     const normalizedEmail = email.trim().toLowerCase();
     const trimmedName = name.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedPassword || trimmedPassword.length < 8) {
+      const message = 'Password must be at least 8 characters long.';
+      setError(message);
+      setFieldErrors({ password: [message] });
+      setLoading(false);
+      return;
+    }
 
     let redirected = false;
     try {
@@ -65,6 +75,7 @@ export default function SignupPage() {
         body: JSON.stringify({
           name: trimmedName,
           email: normalizedEmail,
+          password: trimmedPassword,
           role,
           adminSecret: role === 'admin' ? adminSecret.trim() || undefined : undefined,
         }),
@@ -82,7 +93,7 @@ export default function SignupPage() {
 
       const result = await signIn('credentials', {
         email: normalizedEmail,
-        role,
+        password: trimmedPassword,
         redirect: false,
         callbackUrl,
       });
@@ -160,6 +171,23 @@ export default function SignupPage() {
               onChange={(event) => setEmail(event.target.value)}
             />
             {renderFieldError('email')}
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700" htmlFor="password">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              autoComplete="new-password"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
+              placeholder="Create a password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+            <p className="text-xs text-gray-500">Use at least 8 characters.</p>
+            {renderFieldError('password')}
           </div>
 
           <div className="space-y-2">

@@ -7,6 +7,7 @@ const UserSchema = new Schema(
     emailVerified: Date,
     image: String,
     role: { type: String, enum: ['agent', 'mortgage-consultant', 'admin'], default: null },
+    passwordHash: { type: String, required: true, select: false },
   },
   { timestamps: true }
 );

@@ -7,14 +7,6 @@ import { FormEvent, Suspense, useMemo, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 
-const roleOptions = [
-  { value: 'agent', label: 'Agent' },
-  { value: 'mortgage-consultant', label: 'Mortgage Consultant' },
-  { value: 'admin', label: 'Admin' },
-] as const;
-
-type Role = (typeof roleOptions)[number]['value'];
-
 const providerErrorMessages: Record<string, string> = {
   CredentialsSignin: 'Unable to sign in with the provided credentials.',
 };
@@ -40,7 +32,7 @@ function sanitizeRedirect(target: string | null, defaultPath: string) {
 
 function LoginForm() {
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<Role>('agent');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const searchParams = useSearchParams();
@@ -60,9 +52,16 @@ function LoginForm() {
     setError(null);
 
     const normalizedEmail = email.trim().toLowerCase();
+    const trimmedPassword = password.trim();
 
     if (!normalizedEmail) {
       setError('Please enter an email address.');
+      setLoading(false);
+      return;
+    }
+
+    if (!trimmedPassword) {
+      setError('Please enter your password.');
       setLoading(false);
       return;
     }
@@ -71,7 +70,7 @@ function LoginForm() {
     try {
       const result = await signIn('credentials', {
         email: normalizedEmail,
-        role,
+        password: trimmedPassword,
         redirect: false,
         callbackUrl,
       });
@@ -99,7 +98,7 @@ function LoginForm() {
       <div className="w-full max-w-md space-y-8 rounded-lg border bg-white p-8 shadow-sm">
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold">Welcome back</h1>
-          <p className="text-sm text-gray-600">Sign in with the email and role assigned to your account.</p>
+          <p className="text-sm text-gray-600">Sign in with the email address and password for your account.</p>
         </div>
 
         {displayProviderError && (
@@ -132,25 +131,18 @@ function LoginForm() {
           </div>
 
           <div className="space-y-2">
-            <span className="block text-sm font-medium text-gray-700">Role</span>
-            <div className="space-y-2">
-              {roleOptions.map((option) => (
-                <label
-                  key={option.value}
-                  className="flex items-center gap-3 cursor-pointer rounded-md border p-3 hover:bg-gray-50 transition-colors"
-                >
-                  <input
-                    type="radio"
-                    name="role"
-                    value={option.value}
-                    checked={role === option.value}
-                    onChange={() => setRole(option.value)}
-                    className="h-4 w-4"
-                  />
-                  <span className="text-sm font-medium">{option.label}</span>
-                </label>
-              ))}
-            </div>
+            <label className="block text-sm font-medium text-gray-700" htmlFor="password">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
           </div>
 
           <button

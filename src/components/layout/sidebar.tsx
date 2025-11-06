@@ -7,14 +7,16 @@ import { Session } from 'next-auth';
 import { LogOutIcon } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 
-const navItems = [
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/referrals', label: 'Referrals' },
-  { href: '/agents', label: 'Agents' },
-  { href: '/lenders', label: 'Lenders' },
-  { href: '/payments', label: 'Payments' },
-  { href: '/imports', label: 'Imports' },
-  { href: '/settings', label: 'Settings', roles: ['admin', 'manager'] }
+type Role = 'admin' | 'mortgage-consultant' | 'agent' | string;
+
+const navItems: Array<{ href: string; label: string; roles?: Role[] }> = [
+  { href: '/dashboard', label: 'Dashboard', roles: ['admin', 'mortgage-consultant', 'agent'] },
+  { href: '/referrals', label: 'Referrals', roles: ['admin', 'mortgage-consultant', 'agent'] },
+  { href: '/agents', label: 'Agents', roles: ['admin', 'mortgage-consultant'] },
+  { href: '/lenders', label: 'Mortgage Consultants', roles: ['admin', 'agent'] },
+  { href: '/payments', label: 'Payments', roles: ['admin', 'agent'] },
+  { href: '/imports', label: 'Imports', roles: ['admin'] },
+  { href: '/settings', label: 'Settings', roles: ['admin'] }
 ];
 
 export function Sidebar({ session }: { session: Session }) {

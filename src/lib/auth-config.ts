@@ -2,6 +2,7 @@ import { MongoDBAdapter } from '@next-auth/mongodb-adapter';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import EmailProvider from 'next-auth/providers/email';
 import GoogleProvider from 'next-auth/providers/google';
+import bcrypt from 'bcryptjs';
 import type { NextAuthOptions } from 'next-auth';
 import { Resend } from 'resend';
 import { getClientPromise } from '@/lib/mongodb-client';
@@ -17,7 +18,7 @@ const credentialsSchema = z.object({
     .string()
     .email()
     .transform((value) => value.trim().toLowerCase()),
-  role: z.enum(roleValues),
+  password: z.string().min(1),
 });
 
 const providers: NextAuthOptions['providers'] = [];
@@ -27,7 +28,7 @@ providers.push(
     name: 'Standard Login',
     credentials: {
       email: { label: 'Email', type: 'email' },
-      role: { label: 'Role', type: 'text' },
+      password: { label: 'Password', type: 'password' },
     },
     async authorize(credentials) {
       const parsed = credentialsSchema.safeParse(credentials);
@@ -36,36 +37,37 @@ providers.push(
         throw new Error('Invalid credentials submitted. Please check the form fields and try again.');
       }
 
-      const { email, role } = parsed.data;
+      const { email, password } = parsed.data;
 
       await connectMongo();
 
-      const user = await User.findOne({ email });
+      const user = await User.findOne({ email }).select('+passwordHash role name email');
 
       if (!user) {
         throw new Error('No account found for this email address. Please sign up first.');
       }
 
-      const storedRole = (user.role as Role | null) ?? null;
-
-      if (storedRole && storedRole !== role) {
-        throw new Error('The selected role does not match the role assigned to this account.');
+      if (!user.passwordHash) {
+        throw new Error('This account has not been configured with a password. Please reset your password or contact support.');
       }
 
-      if (!storedRole) {
-        if (role === 'admin') {
-          throw new Error('Admin access requires an administrator to approve your account.');
-        }
+      const isValidPassword = await bcrypt.compare(password, user.passwordHash);
 
-        user.role = role;
-        await user.save();
+      if (!isValidPassword) {
+        throw new Error('Incorrect password. Please try again.');
+      }
+
+      const storedRole = (user.role as Role | null) ?? null;
+
+      if (!storedRole) {
+        throw new Error('This account does not have a role assigned. Please contact an administrator.');
       }
 
       return {
         id: user._id.toString(),
         email: user.email,
         name: user.name ?? undefined,
-        role: (user.role as Role | undefined) ?? role,
+        role: storedRole,
       } as any;
     },
   })

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import bcrypt from 'bcryptjs';
 import { connectMongo } from '@/lib/mongoose';
 import { User } from '@/models/user';
 import { z } from 'zod';
@@ -11,6 +12,10 @@ const payloadSchema = z.object({
     .string()
     .email('Please provide a valid email address')
     .transform((value) => value.trim().toLowerCase()),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters long')
+    .max(100, 'Password must be at most 100 characters long'),
   role: z.enum(roleValues),
   adminSecret: z.string().optional(),
 });
@@ -31,7 +36,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { name, email, role, adminSecret } = parsed.data;
+  const { name, email, password, role, adminSecret } = parsed.data;
 
   if (role === 'admin') {
     const expectedSecret = process.env.ADMIN_SIGNUP_SECRET;
@@ -60,11 +65,14 @@ export async function POST(request: Request) {
       );
     }
 
+    const passwordHash = await bcrypt.hash(password, 12);
+
     const user = await User.create({
       name,
       email,
       role,
       emailVerified: new Date(),
+      passwordHash,
     });
 
     return NextResponse.json(
