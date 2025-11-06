@@ -28,7 +28,16 @@ export const assignAgentSchema = z.object({
 });
 
 export const updateStatusSchema = z.object({
-  status: z.enum(REFERRAL_STATUSES)
+  status: z.enum(REFERRAL_STATUSES),
+  contractDetails: z
+    .object({
+      propertyAddress: z.string().min(1),
+      contractPrice: z.number().min(0),
+      agentCommissionPercentage: z.number().min(0),
+      referralFeePercentage: z.number().min(0),
+      referralFeeAmount: z.number().min(0)
+    })
+    .optional()
 });
 
 export const paymentSchema = z.object({

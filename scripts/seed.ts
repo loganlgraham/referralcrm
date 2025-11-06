@@ -55,6 +55,7 @@ async function main() {
       phone: '555-555-3001'
     },
     propertyZip: '80202',
+    propertyAddress: '123 Market St, Denver, CO 80202',
     source: 'MC',
     assignedAgent: agents[0]._id,
     lender: lenders[0]._id,

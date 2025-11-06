@@ -4,7 +4,7 @@ import { Referral, ReferralDocument } from '@/models/referral';
 import { LenderMC } from '@/models/lender';
 import { Agent } from '@/models/agent';
 import { Payment } from '@/models/payment';
-import { differenceInBusinessDays } from 'date-fns';
+import { differenceInDays } from 'date-fns';
 import { Types } from 'mongoose';
 
 interface GetReferralsParams {
@@ -43,6 +43,7 @@ interface ReferralListItem {
   borrowerEmail: string;
   borrowerPhone: string;
   propertyZip: string;
+  propertyAddress?: string;
   status: string;
   assignedAgentName?: string;
   assignedAgentEmail?: string;
@@ -108,6 +109,7 @@ export async function getReferrals(params: GetReferralsParams) {
       borrowerEmail: item.borrower.email,
       borrowerPhone: item.borrower.phone,
       propertyZip: item.propertyZip,
+      propertyAddress: item.propertyAddress,
       status: item.status,
       assignedAgentName: item.assignedAgent?.name,
       assignedAgentEmail: item.assignedAgent?.email,
@@ -127,19 +129,27 @@ export async function getReferrals(params: GetReferralsParams) {
 export async function getReferralById(id: string) {
   await connectMongo();
   const referral = await Referral.findById(id)
-    .populate<{ assignedAgent: { _id: Types.ObjectId; name: string } }>('assignedAgent')
-    .populate<{ lender: { _id: Types.ObjectId; name: string } }>('lender')
+    .populate<{ assignedAgent: { _id: Types.ObjectId; name: string; email?: string; phone?: string } }>(
+      'assignedAgent',
+      'name email phone'
+    )
+    .populate<{ lender: { _id: Types.ObjectId; name: string; email?: string; phone?: string } }>(
+      'lender',
+      'name email phone'
+    )
     .populate<{ buyer: { _id: Types.ObjectId; name: string } }>('buyer')
     .lean<ReferralDocument>();
   if (!referral) return null;
 
   const payments = await Payment.find({ referralId: referral._id }).lean();
-  const daysInStatus = differenceInBusinessDays(new Date(), referral.statusLastUpdated ?? referral.createdAt);
+  const daysInStatus = differenceInDays(new Date(), referral.statusLastUpdated ?? referral.createdAt);
 
   return {
     ...referral,
     _id: referral._id.toString(),
-    assignedAgent: referral.assignedAgent ? { ...referral.assignedAgent, _id: referral.assignedAgent._id.toString() } : null,
+    assignedAgent: referral.assignedAgent
+      ? { ...referral.assignedAgent, _id: referral.assignedAgent._id.toString() }
+      : null,
     lender: referral.lender ? { ...referral.lender, _id: referral.lender._id.toString() } : null,
     payments: payments.map((payment: any) => ({ ...payment, _id: payment._id.toString() })),
     daysInStatus

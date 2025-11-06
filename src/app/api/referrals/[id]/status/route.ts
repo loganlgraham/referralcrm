@@ -41,6 +41,22 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     newValue: parsed.data.status,
     timestamp: new Date()
   } as any);
+
+  if (parsed.data.status === 'Under Contract') {
+    const details = parsed.data.contractDetails;
+    if (!details) {
+      return NextResponse.json(
+        { error: { contractDetails: ['Contract details are required for Under Contract status.'] } },
+        { status: 422 }
+      );
+    }
+
+    referral.propertyAddress = details.propertyAddress;
+    referral.estPurchasePriceCents = Math.round(details.contractPrice * 100);
+    referral.commissionBasisPoints = Math.round(details.agentCommissionPercentage * 100);
+    referral.referralFeeBasisPoints = Math.round(details.referralFeePercentage * 100);
+    referral.referralFeeDueCents = Math.round(details.referralFeeAmount * 100);
+  }
   await referral.save();
 
   return NextResponse.json({ id: referral._id.toString(), status: referral.status });

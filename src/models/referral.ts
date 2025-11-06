@@ -47,6 +47,7 @@ const referralSchema = new Schema(
       phone: { type: String, required: true }
     },
     propertyZip: { type: String, required: true, index: true },
+    propertyAddress: { type: String, default: '' },
     assignedAgent: { type: Schema.Types.ObjectId, ref: 'Agent', index: true },
     status: {
       type: String,
@@ -93,6 +94,7 @@ export interface ReferralDocument {
     phone: string;
   };
   propertyZip: string;
+  propertyAddress?: string;
   assignedAgent?: Types.ObjectId;
   status: ReferralStatus;
   statusLastUpdated?: Date;

@@ -15,6 +15,7 @@ export interface ReferralRow {
   borrowerEmail: string;
   borrowerPhone: string;
   propertyZip: string;
+  propertyAddress?: string;
   status: ReferralStatus;
   assignedAgentName?: string;
   assignedAgentEmail?: string;
@@ -44,6 +45,10 @@ function StatusSelect({ referralId, value }: StatusSelectProps) {
 
   const handleChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     const nextStatus = event.target.value as ReferralStatus;
+    if (nextStatus === 'Under Contract') {
+      toast.info('Open the referral to record contract details before marking it Under Contract.');
+      return;
+    }
     setStatus(nextStatus);
     setLoading(true);
 
