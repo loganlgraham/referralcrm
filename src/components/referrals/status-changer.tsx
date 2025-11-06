@@ -9,7 +9,6 @@ interface ContractDetails {
   contractPriceCents?: number;
   agentCommissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
-  referralFeeDueCents?: number;
 }
 
 interface Props {
@@ -24,7 +23,6 @@ interface ContractFormState {
   contractPrice: string;
   agentCommissionPercentage: string;
   referralFeePercentage: string;
-  referralFeeAmount: string;
 }
 
 const buildInitialFormState = (details?: ContractDetails): ContractFormState => ({
@@ -32,10 +30,30 @@ const buildInitialFormState = (details?: ContractDetails): ContractFormState => 
   contractPrice: details?.contractPriceCents ? (details.contractPriceCents / 100).toString() : '',
   agentCommissionPercentage: details?.agentCommissionBasisPoints
     ? (details.agentCommissionBasisPoints / 100).toString()
-    : '',
+    : '3',
   referralFeePercentage: details?.referralFeeBasisPoints ? (details.referralFeeBasisPoints / 100).toString() : '',
-  referralFeeAmount: details?.referralFeeDueCents ? (details.referralFeeDueCents / 100).toString() : ''
 });
+
+const calculateReferralFeeAmount = (
+  priceInput: string,
+  commissionInput: string,
+  referralFeeInput: string
+) => {
+  const price = Number(priceInput);
+  const commission = Number(commissionInput);
+  const referralFee = Number(referralFeeInput);
+
+  if ([price, commission, referralFee].some((value) => Number.isNaN(value) || value <= 0)) {
+    return '';
+  }
+
+  const amount = price * (commission / 100) * (referralFee / 100);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return '';
+  }
+
+  return amount.toFixed(2);
+};
 
 export function StatusChanger({ referralId, status, statuses, contractDetails }: Props) {
   const [currentStatus, setCurrentStatus] = useState(status);
@@ -56,14 +74,30 @@ export function StatusChanger({ referralId, status, statuses, contractDetails }:
     if (currentStatus !== 'Under Contract') {
       return true;
     }
+    const referralFeeAmount = calculateReferralFeeAmount(
+      contractForm.contractPrice,
+      contractForm.agentCommissionPercentage,
+      contractForm.referralFeePercentage
+    );
+
     return (
       contractForm.propertyAddress.trim().length > 0 &&
       contractForm.contractPrice.trim().length > 0 &&
       contractForm.agentCommissionPercentage.trim().length > 0 &&
       contractForm.referralFeePercentage.trim().length > 0 &&
-      contractForm.referralFeeAmount.trim().length > 0
+      referralFeeAmount.trim().length > 0
     );
   }, [contractForm, currentStatus]);
+
+  const referralFeeAmountDisplay = useMemo(
+    () =>
+      calculateReferralFeeAmount(
+        contractForm.contractPrice,
+        contractForm.agentCommissionPercentage,
+        contractForm.referralFeePercentage
+      ),
+    [contractForm.agentCommissionPercentage, contractForm.contractPrice, contractForm.referralFeePercentage]
+  );
 
   const submitStatus = async (nextStatus: ReferralStatus, previousStatus: ReferralStatus) => {
     setLoading(true);
@@ -79,7 +113,7 @@ export function StatusChanger({ referralId, status, statuses, contractDetails }:
         const contractPrice = Number(contractForm.contractPrice);
         const agentCommission = Number(contractForm.agentCommissionPercentage);
         const referralFeePercentage = Number(contractForm.referralFeePercentage);
-        const referralFeeAmount = Number(contractForm.referralFeeAmount);
+        const referralFeeAmount = Number(referralFeeAmountDisplay);
 
         if ([contractPrice, agentCommission, referralFeePercentage, referralFeeAmount].some((value) => Number.isNaN(value))) {
           toast.error('Contract amounts must be valid numbers.');
@@ -91,8 +125,7 @@ export function StatusChanger({ referralId, status, statuses, contractDetails }:
           propertyAddress: contractForm.propertyAddress.trim(),
           contractPrice,
           agentCommissionPercentage: agentCommission,
-          referralFeePercentage,
-          referralFeeAmount
+          referralFeePercentage
         };
       }
 
@@ -119,14 +152,12 @@ export function StatusChanger({ referralId, status, statuses, contractDetails }:
           contractPrice: number;
           agentCommissionPercentage: number;
           referralFeePercentage: number;
-          referralFeeAmount: number;
         };
         setContractForm({
           propertyAddress: details.propertyAddress,
           contractPrice: String(details.contractPrice ?? ''),
           agentCommissionPercentage: String(details.agentCommissionPercentage ?? ''),
-          referralFeePercentage: String(details.referralFeePercentage ?? ''),
-          referralFeeAmount: String(details.referralFeeAmount ?? '')
+          referralFeePercentage: String(details.referralFeePercentage ?? '')
         });
       }
       toast.success('Referral status updated');
@@ -236,13 +267,11 @@ export function StatusChanger({ referralId, status, statuses, contractDetails }:
             <label className="block">
               <span className="text-slate-500">Referral Fee Amount ($)</span>
               <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={contractForm.referralFeeAmount}
-                onChange={handleContractFieldChange('referralFeeAmount')}
-                className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
-                placeholder="4500"
+                type="text"
+                value={referralFeeAmountDisplay}
+                readOnly
+                className="mt-1 w-full rounded border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700"
+                placeholder="Calculated automatically"
                 disabled={loading}
               />
             </label>

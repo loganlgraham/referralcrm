@@ -78,7 +78,7 @@ async function main() {
 
   await Payment.create({
     referralId: referral._id,
-    status: 'expected',
+    status: 'under_contract',
     expectedAmountCents: referral.referralFeeDueCents
   });
 

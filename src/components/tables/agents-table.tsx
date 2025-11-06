@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 
@@ -36,7 +37,11 @@ export function AgentsTable() {
           {data.map((agent) => (
             <tr key={agent._id} className="hover:bg-slate-50">
               <td className="px-4 py-3 text-sm text-slate-700">
-                <div className="font-medium text-slate-900">{agent.name}</div>
+                <div className="font-medium text-slate-900">
+                  <Link href={`/agents/${agent._id}`} className="text-brand hover:underline">
+                    {agent.name}
+                  </Link>
+                </div>
                 <div className="text-xs text-slate-500">{agent.email}</div>
                 <div className="text-xs text-slate-500">{agent.phone}</div>
               </td>

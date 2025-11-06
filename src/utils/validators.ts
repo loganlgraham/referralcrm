@@ -12,7 +12,6 @@ export const createReferralSchema = z.object({
 });
 
 export const updateReferralSchema = z.object({
-  notes: z.string().optional(),
   status: z.enum(REFERRAL_STATUSES).optional(),
   assignedAgent: z.string().optional(),
   referralFeeBasisPoints: z.number().int().min(0).optional()
@@ -27,6 +26,10 @@ export const assignAgentSchema = z.object({
   agentId: z.string().min(1)
 });
 
+export const assignLenderSchema = z.object({
+  lenderId: z.string().min(1)
+});
+
 export const updateStatusSchema = z.object({
   status: z.enum(REFERRAL_STATUSES),
   contractDetails: z
@@ -34,15 +37,28 @@ export const updateStatusSchema = z.object({
       propertyAddress: z.string().min(1),
       contractPrice: z.number().min(0),
       agentCommissionPercentage: z.number().min(0),
-      referralFeePercentage: z.number().min(0),
-      referralFeeAmount: z.number().min(0)
+      referralFeePercentage: z.number().min(0)
     })
     .optional()
 });
 
+export const createReferralNoteSchema = z.object({
+  content: z.string().min(1),
+  hiddenFromAgent: z.boolean().optional(),
+  hiddenFromMc: z.boolean().optional()
+});
+
+export const createAgentNoteSchema = z.object({
+  content: z.string().min(1)
+});
+
+export const createLenderNoteSchema = z.object({
+  content: z.string().min(1)
+});
+
 export const paymentSchema = z.object({
   referralId: z.string().min(1),
-  status: z.enum(['expected', 'invoiced', 'paid', 'writtenOff']).default('expected'),
+  status: z.enum(['under_contract', 'closed', 'paid']).default('under_contract'),
   expectedAmountCents: z.number().int().min(0),
   receivedAmountCents: z.number().int().min(0).optional(),
   invoiceDate: z.string().optional(),

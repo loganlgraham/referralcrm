@@ -5,8 +5,8 @@ const paymentSchema = new Schema(
     referralId: { type: Schema.Types.ObjectId, ref: 'Referral', required: true, index: true },
     status: {
       type: String,
-      enum: ['expected', 'invoiced', 'paid', 'writtenOff'],
-      default: 'expected',
+      enum: ['under_contract', 'closed', 'paid'],
+      default: 'under_contract',
       index: true
     },
     expectedAmountCents: { type: Number, required: true },

@@ -19,7 +19,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
-  if (!['admin', 'manager'].includes(session.user.role)) {
+  if (!['admin', 'manager', 'agent', 'mc'].includes(session.user.role)) {
     return new NextResponse('Forbidden', { status: 403 });
   }
 
@@ -48,7 +48,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
-  if (!['admin', 'manager'].includes(session.user.role)) {
+  if (!['admin', 'manager', 'agent', 'mc'].includes(session.user.role)) {
     return new NextResponse('Forbidden', { status: 403 });
   }
 

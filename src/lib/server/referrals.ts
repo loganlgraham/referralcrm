@@ -6,6 +6,7 @@ import { Agent } from '@/models/agent';
 import { Payment } from '@/models/payment';
 import { differenceInDays } from 'date-fns';
 import { Types } from 'mongoose';
+import { getCurrentSession } from '@/lib/auth';
 
 interface GetReferralsParams {
   session: Session | null;
@@ -127,6 +128,7 @@ export async function getReferrals(params: GetReferralsParams) {
 }
 
 export async function getReferralById(id: string) {
+  const session = await getCurrentSession();
   await connectMongo();
   const referral = await Referral.findById(id)
     .populate<{ assignedAgent: { _id: Types.ObjectId; name: string; email?: string; phone?: string } }>(
@@ -144,6 +146,27 @@ export async function getReferralById(id: string) {
   const payments = await Payment.find({ referralId: referral._id }).lean();
   const daysInStatus = differenceInDays(new Date(), referral.statusLastUpdated ?? referral.createdAt);
 
+  const viewerRole = session?.user?.role ?? 'viewer';
+  const notes = (referral.notes ?? []).map((note: any) => ({
+    id: note._id.toString(),
+    authorName: note.authorName,
+    authorRole: note.authorRole,
+    content: note.content,
+    createdAt: note.createdAt instanceof Date ? note.createdAt.toISOString() : new Date(note.createdAt).toISOString(),
+    hiddenFromAgent: note.hiddenFromAgent,
+    hiddenFromMc: note.hiddenFromMc
+  }));
+
+  const filteredNotes = notes.filter((note) => {
+    if (viewerRole === 'agent' && note.hiddenFromAgent) {
+      return false;
+    }
+    if (viewerRole === 'mc' && note.hiddenFromMc) {
+      return false;
+    }
+    return true;
+  });
+
   return {
     ...referral,
     _id: referral._id.toString(),
@@ -152,6 +175,8 @@ export async function getReferralById(id: string) {
       : null,
     lender: referral.lender ? { ...referral.lender, _id: referral.lender._id.toString() } : null,
     payments: payments.map((payment: any) => ({ ...payment, _id: payment._id.toString() })),
-    daysInStatus
+    daysInStatus,
+    notes: filteredNotes,
+    viewerRole
   };
 }

@@ -37,6 +37,19 @@ const auditSchema = new Schema<AuditEntry>(
   { _id: false }
 );
 
+const referralNoteSchema = new Schema(
+  {
+    author: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    authorName: { type: String, required: true },
+    authorRole: { type: String, required: true },
+    content: { type: String, required: true },
+    hiddenFromAgent: { type: Boolean, default: false },
+    hiddenFromMc: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now }
+  },
+  { _id: true }
+);
+
 const referralSchema = new Schema(
   {
     createdAt: { type: Date, default: Date.now, index: true },
@@ -63,7 +76,7 @@ const referralSchema = new Schema(
     referralFeeBasisPoints: { type: Number, default: 0 },
     closedPriceCents: { type: Number, default: 0 },
     referralFeeDueCents: { type: Number, default: 0 },
-    notes: String,
+    notes: { type: [referralNoteSchema], default: [] },
     attachments: [attachmentSchema],
     audit: [auditSchema],
     lender: { type: Schema.Types.ObjectId, ref: 'LenderMC' },
@@ -104,6 +117,16 @@ export interface ReferralDocument {
   commissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
   referralFeeDueCents?: number;
+  notes?: {
+    _id: Types.ObjectId;
+    author: Types.ObjectId;
+    authorName: string;
+    authorRole: string;
+    content: string;
+    hiddenFromAgent?: boolean;
+    hiddenFromMc?: boolean;
+    createdAt: Date;
+  }[];
   lender?: Types.ObjectId;
   org: 'AFC' | 'AHA';
   deletedAt?: Date;

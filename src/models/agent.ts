@@ -1,5 +1,17 @@
 import { Schema, model, models } from 'mongoose';
 
+const agentNoteSchema = new Schema(
+  {
+    author: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    authorName: { type: String, required: true },
+    authorRole: { type: String, required: true },
+    content: { type: String, required: true },
+    hiddenFromAgent: { type: Boolean, default: true },
+    createdAt: { type: Date, default: Date.now }
+  },
+  { _id: true }
+);
+
 const agentSchema = new Schema(
   {
     name: { type: String, required: true },
@@ -12,7 +24,8 @@ const agentSchema = new Schema(
     npsScore: { type: Number, default: null },
     avgResponseHours: { type: Number, default: null },
     brokerage: { type: String },
-    markets: [{ type: String }]
+    markets: [{ type: String }],
+    notes: { type: [agentNoteSchema], default: [] }
   },
   { timestamps: true }
 );

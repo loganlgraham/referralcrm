@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 
@@ -32,7 +33,11 @@ export function LendersTable() {
           {data.map((lender) => (
             <tr key={lender._id} className="hover:bg-slate-50">
               <td className="px-4 py-3 text-sm text-slate-700">
-                <div className="font-medium text-slate-900">{lender.name}</div>
+                <div className="font-medium text-slate-900">
+                  <Link href={`/lenders/${lender._id}`} className="text-brand hover:underline">
+                    {lender.name}
+                  </Link>
+                </div>
                 <div className="text-xs text-slate-500">{lender.email}</div>
                 <div className="text-xs text-slate-500">{lender.phone}</div>
               </td>

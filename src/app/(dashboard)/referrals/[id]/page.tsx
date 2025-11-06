@@ -4,6 +4,7 @@ import { getReferralById } from '@/lib/server/referrals';
 import { ReferralHeader } from '@/components/referrals/referral-header';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import { PaymentCard } from '@/components/referrals/payment-card';
+import { ReferralNotes } from '@/components/referrals/referral-notes';
 
 interface ReferralDetailPageProps {
   params: { id: string };
@@ -19,17 +20,15 @@ export default async function ReferralDetailPage({ params }: ReferralDetailPageP
     notFound();
   }
 
+  const viewerRole = referral.viewerRole ?? 'viewer';
+  const notes = referral.notes ?? [];
+
   return (
     <div className="space-y-6">
-      <ReferralHeader referral={referral} />
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <ReferralTimeline referralId={params.id} />
-        </div>
-        <div className="space-y-6">
-          <PaymentCard referral={referral} />
-        </div>
-      </div>
+      <ReferralHeader referral={referral} viewerRole={viewerRole} />
+      <ReferralNotes referralId={params.id} initialNotes={notes} viewerRole={viewerRole} />
+      <ReferralTimeline referralId={params.id} />
+      <PaymentCard referral={referral} />
     </div>
   );
 }

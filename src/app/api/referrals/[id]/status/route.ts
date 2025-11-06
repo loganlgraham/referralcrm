@@ -55,7 +55,10 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     referral.estPurchasePriceCents = Math.round(details.contractPrice * 100);
     referral.commissionBasisPoints = Math.round(details.agentCommissionPercentage * 100);
     referral.referralFeeBasisPoints = Math.round(details.referralFeePercentage * 100);
-    referral.referralFeeDueCents = Math.round(details.referralFeeAmount * 100);
+    const commissionRate = details.agentCommissionPercentage / 100;
+    const referralRate = details.referralFeePercentage / 100;
+    const referralFeeDue = details.contractPrice * commissionRate * referralRate;
+    referral.referralFeeDueCents = Math.round(referralFeeDue * 100);
   }
   await referral.save();
 
