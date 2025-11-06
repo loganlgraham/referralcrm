@@ -14,7 +14,7 @@ const roleOptions = [
 
 type Role = (typeof roleOptions)[number]['value'];
 
-type FieldErrors = Partial<Record<'name' | 'email' | 'password' | 'role' | 'adminSecret', string[]>>;
+type FieldErrors = Partial<Record<'name' | 'username' | 'email' | 'password' | 'role' | 'adminSecret', string[]>>;
 
 function sanitizeRedirect(target: string | null, defaultPath: string) {
   if (!target) return defaultPath;
@@ -37,6 +37,7 @@ function sanitizeRedirect(target: string | null, defaultPath: string) {
 
 export default function SignupPage() {
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('agent');
@@ -54,8 +55,17 @@ export default function SignupPage() {
     setFieldErrors({});
 
     const normalizedEmail = email.trim().toLowerCase();
+    const normalizedUsername = username.trim().toLowerCase();
     const trimmedName = name.trim();
     const trimmedPassword = password.trim();
+
+    if (!normalizedUsername) {
+      const message = 'Username is required.';
+      setError(message);
+      setFieldErrors({ username: [message] });
+      setLoading(false);
+      return;
+    }
 
     if (!trimmedPassword || trimmedPassword.length < 8) {
       const message = 'Password must be at least 8 characters long.';
@@ -74,6 +84,7 @@ export default function SignupPage() {
         },
         body: JSON.stringify({
           name: trimmedName,
+          username: normalizedUsername,
           email: normalizedEmail,
           password: trimmedPassword,
           role,
@@ -92,7 +103,7 @@ export default function SignupPage() {
       }
 
       const result = await signIn('credentials', {
-        email: normalizedEmail,
+        identifier: normalizedEmail,
         password: trimmedPassword,
         redirect: false,
         callbackUrl,
@@ -131,7 +142,7 @@ export default function SignupPage() {
       <div className="w-full max-w-md space-y-8 rounded-lg border bg-white p-8 shadow-sm">
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold">Create an account</h1>
-          <p className="text-sm text-gray-600">Sign up with your name, email, and role to get started.</p>
+          <p className="text-sm text-gray-600">Sign up with your name, username, email, and role to get started.</p>
         </div>
 
         {error && (
@@ -155,6 +166,23 @@ export default function SignupPage() {
               onChange={(event) => setName(event.target.value)}
             />
             {renderFieldError('name')}
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700" htmlFor="username">
+              Username
+            </label>
+            <input
+              id="username"
+              type="text"
+              autoComplete="username"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
+              placeholder="Choose a unique username"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+            />
+            <p className="text-xs text-gray-500">Letters, numbers, hyphens, and underscores only.</p>
+            {renderFieldError('username')}
           </div>
 
           <div className="space-y-2">

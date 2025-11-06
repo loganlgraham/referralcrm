@@ -31,7 +31,7 @@ function sanitizeRedirect(target: string | null, defaultPath: string) {
 }
 
 function LoginForm() {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,11 +51,11 @@ function LoginForm() {
     setLoading(true);
     setError(null);
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const trimmedIdentifier = identifier.trim();
     const trimmedPassword = password.trim();
 
-    if (!normalizedEmail) {
-      setError('Please enter an email address.');
+    if (!trimmedIdentifier) {
+      setError('Please enter your username or email.');
       setLoading(false);
       return;
     }
@@ -69,7 +69,7 @@ function LoginForm() {
     let redirected = false;
     try {
       const result = await signIn('credentials', {
-        email: normalizedEmail,
+        identifier: trimmedIdentifier,
         password: trimmedPassword,
         redirect: false,
         callbackUrl,
@@ -98,7 +98,7 @@ function LoginForm() {
       <div className="w-full max-w-md space-y-8 rounded-lg border bg-white p-8 shadow-sm">
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold">Welcome back</h1>
-          <p className="text-sm text-gray-600">Sign in with the email address and password for your account.</p>
+          <p className="text-sm text-gray-600">Sign in with the username or email and password for your account.</p>
         </div>
 
         {displayProviderError && (
@@ -116,17 +116,17 @@ function LoginForm() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700" htmlFor="email">
-              Email
+            <label className="block text-sm font-medium text-gray-700" htmlFor="identifier">
+              Username or email
             </label>
             <input
-              id="email"
-              type="email"
-              autoComplete="email"
+              id="identifier"
+              type="text"
+              autoComplete="username"
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              placeholder="yourname or you@example.com"
+              value={identifier}
+              onChange={(event) => setIdentifier(event.target.value)}
             />
           </div>
 

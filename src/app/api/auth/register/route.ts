@@ -6,8 +6,20 @@ import { z } from 'zod';
 
 const roleValues = ['agent', 'mortgage-consultant', 'admin'] as const;
 
+const usernamePattern = /^[a-z0-9](?:[a-z0-9-_]{1,28}[a-z0-9])?$/i;
+
 const payloadSchema = z.object({
   name: z.string().trim().min(1, 'Name is required'),
+  username: z
+    .string()
+    .trim()
+    .min(3, 'Username must be at least 3 characters long')
+    .max(30, 'Username must be at most 30 characters long')
+    .regex(
+      usernamePattern,
+      'Usernames may contain letters, numbers, underscores, and hyphens and must start and end with a letter or number.'
+    )
+    .transform((value) => value.toLowerCase()),
   email: z
     .string()
     .email('Please provide a valid email address')
@@ -36,7 +48,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { name, email, password, role, adminSecret } = parsed.data;
+  const { name, username, email, password, role, adminSecret } = parsed.data;
 
   if (role === 'admin') {
     const expectedSecret = process.env.ADMIN_SIGNUP_SECRET;
@@ -56,11 +68,24 @@ export async function POST(request: Request) {
   try {
     await connectMongo();
 
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+
+    if (existingUser?.email === email) {
+      return NextResponse.json(
+        {
+          error: 'An account with this email already exists. Try logging in instead.',
+          details: { email: ['Email is already registered.'] },
+        },
+        { status: 409 }
+      );
+    }
 
     if (existingUser) {
       return NextResponse.json(
-        { error: 'An account with this email already exists. Try logging in instead.' },
+        {
+          error: 'This username is already in use. Please choose another one.',
+          details: { username: ['Username is already taken.'] },
+        },
         { status: 409 }
       );
     }
@@ -69,6 +94,7 @@ export async function POST(request: Request) {
 
     const user = await User.create({
       name,
+      username,
       email,
       role,
       emailVerified: new Date(),
