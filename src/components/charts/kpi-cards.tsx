@@ -1,19 +1,29 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatNumber } from '@/utils/formatters';
 
+type Role = 'admin' | 'manager' | 'mc' | 'agent' | 'viewer' | undefined;
+
 interface KPIResponse {
-  requests: number;
-  closings: number;
-  conversion: number;
+  role?: Role;
+  totalReferrals: number;
+  closedReferrals: number;
+  closeRate: number;
   expectedRevenueCents: number;
-  receivedRevenueCents: number;
-  avgTimeToFirstContactHours: number | null;
-  avgDaysToContract: number | null;
-  avgDaysToClose: number | null;
+  amountPaidCents: number;
+  earnedCommissionCents: number;
+}
+
+function LoadingCard() {
+  return (
+    <div className="rounded-lg bg-white p-4 shadow-sm animate-pulse">
+      <div className="h-4 w-24 rounded bg-slate-200" />
+      <div className="mt-2 h-8 w-32 rounded bg-slate-200" />
+    </div>
+  );
 }
 
 export function KPICards() {
@@ -24,19 +34,6 @@ export function KPICards() {
     setIsMounted(true);
   }, []);
 
-  if (!isMounted || !data) {
-    return (
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="rounded-lg bg-white p-4 shadow-sm animate-pulse">
-            <div className="h-4 bg-slate-200 rounded w-24" />
-            <div className="h-8 bg-slate-200 rounded w-32 mt-2" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-
   if (error) {
     return (
       <div className="rounded-lg bg-red-50 p-4 text-red-800">
@@ -45,25 +42,45 @@ export function KPICards() {
     );
   }
 
-  const cards = [
-    { title: 'Requests', value: formatNumber(data.requests) },
-    { title: 'Closings', value: formatNumber(data.closings) },
-    { title: 'Closing Conversion %', value: `${data.conversion.toFixed(1)}%` },
-    { title: 'Expected Revenue', value: formatCurrency(data.expectedRevenueCents) },
-    { title: 'Received Revenue', value: formatCurrency(data.receivedRevenueCents) },
-    {
-      title: 'Avg Time to First Contact',
-      value: data.avgTimeToFirstContactHours ? `${data.avgTimeToFirstContactHours.toFixed(1)} hrs` : '—'
-    },
-    {
-      title: 'Avg Days to Contract',
-      value: data.avgDaysToContract ? `${data.avgDaysToContract.toFixed(1)} days` : '—'
-    },
-    {
-      title: 'Avg Days to Close',
-      value: data.avgDaysToClose ? `${data.avgDaysToClose.toFixed(1)} days` : '—'
-    }
+  if (!isMounted || !data) {
+    return (
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <LoadingCard key={index} />
+        ))}
+      </div>
+    );
+  }
+
+  const role = data.role;
+
+  const baseCards = [
+    { title: 'Total Referrals', value: formatNumber(data.totalReferrals) },
+    { title: 'Closed Deals', value: formatNumber(data.closedReferrals) },
+    { title: 'Close Rate', value: `${data.closeRate.toFixed(1)}%` }
   ];
+
+  const roleSpecificCards = (() => {
+    switch (role) {
+      case 'agent':
+        return [
+          { title: 'Amount Paid', value: formatCurrency(data.amountPaidCents) },
+          { title: 'Commission Earned', value: formatCurrency(data.earnedCommissionCents) }
+        ];
+      case 'mc':
+        return [
+          { title: 'Expected Revenue', value: formatCurrency(data.expectedRevenueCents) },
+          { title: 'Amount Paid', value: formatCurrency(data.amountPaidCents) }
+        ];
+      default:
+        return [
+          { title: 'Expected Revenue', value: formatCurrency(data.expectedRevenueCents) },
+          { title: 'Amount Paid', value: formatCurrency(data.amountPaidCents) }
+        ];
+    }
+  })();
+
+  const cards = [...baseCards, ...roleSpecificCards];
 
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

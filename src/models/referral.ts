@@ -51,7 +51,7 @@ const referralSchema = new Schema(
     status: {
       type: String,
       enum: REFERRAL_STATUSES,
-      default: 'New',
+      default: 'New Lead',
       index: true
     },
     statusLastUpdated: { type: Date, default: Date.now },

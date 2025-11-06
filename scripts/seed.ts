@@ -58,7 +58,7 @@ async function main() {
     source: 'MC',
     assignedAgent: agents[0]._id,
     lender: lenders[0]._id,
-    status: 'PWC',
+    status: 'In Communication',
     commissionBasisPoints: 3000,
     referralFeeBasisPoints: 2500,
     referralFeeDueCents: 4500000,
@@ -68,8 +68,8 @@ async function main() {
         actorId: agents[0]._id,
         actorRole: 'agent',
         field: 'status',
-        previousValue: 'New',
-        newValue: 'PWC',
+        previousValue: 'New Lead',
+        newValue: 'In Communication',
         timestamp: new Date()
       }
     ]

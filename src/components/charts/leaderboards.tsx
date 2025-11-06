@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency } from '@/utils/formatters';
@@ -44,15 +44,15 @@ function Leaderboard({ title, entries }: { title: string; entries: LeaderboardEn
 function LoadingLeaderboard() {
   return (
     <div className="rounded-lg bg-white p-4 shadow-sm animate-pulse">
-      <div className="h-4 bg-slate-200 rounded w-32" />
+      <div className="h-4 w-32 rounded bg-slate-200" />
       <ul className="mt-4 space-y-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <li key={i} className="flex items-center justify-between">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <li key={index} className="flex items-center justify-between">
             <div className="space-y-2">
-              <div className="h-4 bg-slate-200 rounded w-24" />
-              <div className="h-3 bg-slate-200 rounded w-36" />
+              <div className="h-4 w-24 rounded bg-slate-200" />
+              <div className="h-3 w-36 rounded bg-slate-200" />
             </div>
-            <div className="h-3 bg-slate-200 rounded w-16" />
+            <div className="h-3 w-16 rounded bg-slate-200" />
           </li>
         ))}
       </ul>

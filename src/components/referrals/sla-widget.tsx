@@ -2,8 +2,8 @@ import { differenceInHours, differenceInDays } from 'date-fns';
 
 export function SLAWidget({ referral }: { referral: any }) {
   const createdAt = referral.createdAt ? new Date(referral.createdAt) : new Date();
-  const firstContactAt = referral.audit?.find((entry: any) => entry.field === 'status' && entry.newValue === 'Contacted')?.timestamp;
-  const contractAt = referral.audit?.find((entry: any) => entry.field === 'status' && entry.newValue === 'UC')?.timestamp;
+  const firstContactAt = referral.audit?.find((entry: any) => entry.field === 'status' && entry.newValue === 'In Communication')?.timestamp;
+  const contractAt = referral.audit?.find((entry: any) => entry.field === 'status' && entry.newValue === 'Under Contract')?.timestamp;
   const closedAt = referral.audit?.find((entry: any) => entry.field === 'status' && entry.newValue === 'Closed')?.timestamp;
 
   const timeToFirstContact = firstContactAt ? differenceInHours(new Date(firstContactAt), createdAt) : null;

@@ -20,11 +20,15 @@ interface GetReferralsParams {
 interface PopulatedAgent {
   _id: Types.ObjectId;
   name: string;
+  email?: string;
+  phone?: string;
 }
 
 interface PopulatedLender {
   _id: Types.ObjectId;
   name: string;
+  email?: string;
+  phone?: string;
 }
 
 interface PopulatedReferral extends Omit<ReferralDocument, 'assignedAgent' | 'lender'> {
@@ -37,11 +41,17 @@ interface ReferralListItem {
   createdAt: string;
   borrowerName: string;
   borrowerEmail: string;
+  borrowerPhone: string;
   propertyZip: string;
   status: string;
   assignedAgentName?: string;
+  assignedAgentEmail?: string;
+  assignedAgentPhone?: string;
   lenderName?: string;
+  lenderEmail?: string;
+  lenderPhone?: string;
   referralFeeDueCents?: number;
+  preApprovalAmountCents?: number;
 }
 
 const PAGE_SIZE = 20;
@@ -81,26 +91,32 @@ export async function getReferrals(params: GetReferralsParams) {
 
   const [items, total] = await Promise.all([
     Referral.find(query)
-      .populate<{ assignedAgent: { _id: Types.ObjectId; name: string } }>('assignedAgent')
-      .populate<{ lender: { _id: Types.ObjectId; name: string } }>('lender')
+      .populate<{ assignedAgent: PopulatedAgent }>('assignedAgent', 'name email phone')
+      .populate<{ lender: PopulatedLender }>('lender', 'name email phone')
       .sort({ createdAt: -1 })
       .skip((page - 1) * PAGE_SIZE)
       .limit(PAGE_SIZE)
-      .lean<ReferralDocument[]>(),
+      .lean<PopulatedReferral[]>(),
     Referral.countDocuments(query)
   ]);
 
   return {
-    items: items.map((item: any) => ({
+    items: items.map((item: PopulatedReferral) => ({
       _id: item._id.toString(),
       createdAt: item.createdAt.toISOString(),
       borrowerName: item.borrower.name,
       borrowerEmail: item.borrower.email,
+      borrowerPhone: item.borrower.phone,
       propertyZip: item.propertyZip,
       status: item.status,
       assignedAgentName: item.assignedAgent?.name,
+      assignedAgentEmail: item.assignedAgent?.email,
+      assignedAgentPhone: item.assignedAgent?.phone,
       lenderName: item.lender?.name,
-      referralFeeDueCents: item.referralFeeDueCents
+      lenderEmail: item.lender?.email,
+      lenderPhone: item.lender?.phone,
+      referralFeeDueCents: item.referralFeeDueCents,
+      preApprovalAmountCents: item.preApprovalAmountCents
     } as ReferralListItem)),
     total,
     page,

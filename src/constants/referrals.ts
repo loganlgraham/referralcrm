@@ -1,11 +1,9 @@
 export const REFERRAL_STATUSES = [
-  'New',
-  'Contacted',
-  'PWC',
-  'Showing',
-  'UC',
-  'Closed',
-  'Lost'
+  'New Lead',
+  'In Communication',
+  'Showing Homes',
+  'Under Contract',
+  'Closed'
 ] as const;
 
 export type ReferralStatus = (typeof REFERRAL_STATUSES)[number];

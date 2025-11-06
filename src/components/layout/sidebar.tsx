@@ -21,6 +21,12 @@ export function Sidebar({ session }: { session: Session }) {
   const pathname = usePathname();
   const role = session.user.role;
 
+  const handleSignOut = async () => {
+    const result = await signOut({ callbackUrl: '/login', redirect: false });
+    const url = result?.url ?? '/login';
+    window.location.href = url;
+  };
+
   return (
     <aside className="fixed inset-y-0 left-0 z-20 w-64 bg-white shadow-lg">
       <div className="flex h-16 items-center justify-between border-b px-6">
@@ -48,7 +54,7 @@ export function Sidebar({ session }: { session: Session }) {
       <div className="mt-auto p-4">
         <button
           type="button"
-          onClick={() => signOut({ callbackUrl: '/login' })}
+          onClick={handleSignOut}
           className="flex w-full items-center justify-center gap-2 rounded-md bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-300"
         >
           <LogOutIcon className="h-4 w-4" />

@@ -1,24 +1,177 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import Link from 'next/link';
-import { ReferralStatus } from '@/constants/referrals';
-import { formatCurrency } from '@/utils/formatters';
+import { toast } from 'sonner';
+
+import { REFERRAL_STATUSES, ReferralStatus } from '@/constants/referrals';
+import { formatCurrency, formatNumber } from '@/utils/formatters';
 
 export interface ReferralRow {
   _id: string;
   createdAt: string;
   borrowerName: string;
   borrowerEmail: string;
+  borrowerPhone: string;
   propertyZip: string;
   status: ReferralStatus;
   assignedAgentName?: string;
+  assignedAgentEmail?: string;
+  assignedAgentPhone?: string;
   lenderName?: string;
+  lenderEmail?: string;
+  lenderPhone?: string;
   referralFeeDueCents?: number;
+  preApprovalAmountCents?: number;
 }
 
-const columns: ColumnDef<ReferralRow>[] = [
-  {
+type TableMode = 'admin' | 'mc' | 'agent';
+
+type ReferralTableProps = {
+  data: ReferralRow[];
+  mode: TableMode;
+};
+
+interface StatusSelectProps {
+  referralId: string;
+  value: ReferralStatus;
+}
+
+function StatusSelect({ referralId, value }: StatusSelectProps) {
+  const [status, setStatus] = useState<ReferralStatus>(value);
+  const [loading, setLoading] = useState(false);
+
+  const handleChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextStatus = event.target.value as ReferralStatus;
+    setStatus(nextStatus);
+    setLoading(true);
+
+    try {
+      const response = await fetch(`/api/referrals/${referralId}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update status');
+      }
+
+      toast.success('Referral status updated');
+    } catch (error) {
+      console.error(error);
+      toast.error('Unable to update status');
+      setStatus(value);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <select
+      value={status}
+      onChange={handleChange}
+      disabled={loading}
+      className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+    >
+      {REFERRAL_STATUSES.map((item) => (
+        <option key={item} value={item}>
+          {item}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function StatusBadge({ status }: { status: ReferralStatus }) {
+  return <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{status}</span>;
+}
+
+function NoteComposer({ referralId }: { referralId: string }) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const reset = () => {
+    setNote('');
+    setOpen(false);
+  };
+
+  const handleSubmit = async () => {
+    if (!note.trim()) {
+      toast.error('Add a note before saving');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/referrals/${referralId}/activities`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel: 'note', content: note.trim() })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save note');
+      }
+
+      toast.success('Note saved');
+      reset();
+    } catch (error) {
+      console.error(error);
+      toast.error('Unable to save note');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-sm font-medium text-brand hover:underline"
+      >
+        Add note
+      </button>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <textarea
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+        rows={3}
+        className="w-full rounded border border-slate-200 px-2 py-1 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+        placeholder="Capture quick context for this referral"
+        disabled={saving}
+      />
+      <div className="flex gap-2 text-sm">
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={saving}
+          className="inline-flex items-center rounded bg-brand px-3 py-1 font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          onClick={reset}
+          disabled={saving}
+          className="inline-flex items-center rounded border border-slate-200 px-3 py-1 font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
+  const borrowerColumn: ColumnDef<ReferralRow> = {
     header: 'Borrower',
     accessorKey: 'borrowerName',
     cell: ({ row }) => (
@@ -27,41 +180,110 @@ const columns: ColumnDef<ReferralRow>[] = [
           {row.original.borrowerName}
         </Link>
         <span className="text-xs text-slate-500">{row.original.borrowerEmail}</span>
+        <span className="text-xs text-slate-500">{row.original.borrowerPhone}</span>
       </div>
     )
-  },
-  {
-    header: 'Zip',
-    accessorKey: 'propertyZip'
-  },
-  {
-    header: 'Status',
-    accessorKey: 'status',
-    cell: ({ row }) => <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold">{row.original.status}</span>
-  },
-  {
-    header: 'Agent',
-    accessorKey: 'assignedAgentName',
-    cell: ({ row }) => row.original.assignedAgentName || 'Unassigned'
-  },
-  {
-    header: 'Lender/MC',
-    accessorKey: 'lenderName',
-    cell: ({ row }) => row.original.lenderName || '—'
-  },
-  {
-    header: 'Referral Fee Due',
-    accessorKey: 'referralFeeDueCents',
-    cell: ({ row }) => formatCurrency(row.original.referralFeeDueCents || 0)
-  },
-  {
+  };
+
+  const createdColumn: ColumnDef<ReferralRow> = {
     header: 'Created',
     accessorKey: 'createdAt',
     cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString()
-  }
-];
+  };
 
-export function ReferralTable({ data }: { data: ReferralRow[] }) {
+  if (mode === 'agent') {
+    return [
+      borrowerColumn,
+      {
+        header: 'Zip',
+        accessorKey: 'propertyZip'
+      },
+      {
+        header: 'Pre-Approval',
+        accessorKey: 'preApprovalAmountCents',
+        cell: ({ row }) =>
+          row.original.preApprovalAmountCents
+            ? formatCurrency(row.original.preApprovalAmountCents)
+            : '—'
+      },
+      {
+        header: 'Status',
+        accessorKey: 'status',
+        cell: ({ row }) => <StatusSelect referralId={row.original._id} value={row.original.status} />
+      },
+      {
+        header: 'Notes',
+        id: 'notes',
+        cell: ({ row }) => <NoteComposer referralId={row.original._id} />
+      },
+      createdColumn
+    ];
+  }
+
+  if (mode === 'mc') {
+    return [
+      borrowerColumn,
+      {
+        header: 'Agent Contact',
+        id: 'agentContact',
+        cell: ({ row }) => (
+          <div className="flex flex-col text-sm">
+            <span className="font-medium text-slate-700">{row.original.assignedAgentName || 'Unassigned'}</span>
+            {row.original.assignedAgentEmail && (
+              <span className="text-xs text-slate-500">{row.original.assignedAgentEmail}</span>
+            )}
+            {row.original.assignedAgentPhone && (
+              <span className="text-xs text-slate-500">{row.original.assignedAgentPhone}</span>
+            )}
+          </div>
+        )
+      },
+      {
+        header: 'Status',
+        accessorKey: 'status',
+        cell: ({ row }) => <StatusBadge status={row.original.status} />
+      },
+      {
+        header: 'Expected Fee',
+        accessorKey: 'referralFeeDueCents',
+        cell: ({ row }) => formatCurrency(row.original.referralFeeDueCents || 0)
+      },
+      createdColumn
+    ];
+  }
+
+  return [
+    borrowerColumn,
+    {
+      header: 'Zip',
+      accessorKey: 'propertyZip'
+    },
+    {
+      header: 'Status',
+      accessorKey: 'status',
+      cell: ({ row }) => <StatusBadge status={row.original.status} />
+    },
+    {
+      header: 'Agent',
+      accessorKey: 'assignedAgentName',
+      cell: ({ row }) => row.original.assignedAgentName || 'Unassigned'
+    },
+    {
+      header: 'Lender/MC',
+      accessorKey: 'lenderName',
+      cell: ({ row }) => row.original.lenderName || '—'
+    },
+    {
+      header: 'Referral Fee Due',
+      accessorKey: 'referralFeeDueCents',
+      cell: ({ row }) => formatCurrency(row.original.referralFeeDueCents || 0)
+    },
+    createdColumn
+  ];
+}
+
+export function ReferralTable({ data, mode }: ReferralTableProps) {
+  const columns = useMemo<ColumnDef<ReferralRow>[]>(() => buildColumns(mode), [mode]);
   const table = useReactTable({ data, columns, getCoreRowModel: getCoreRowModel() });
 
   return (
@@ -71,7 +293,10 @@ export function ReferralTable({ data }: { data: ReferralRow[] }) {
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
-                <th key={header.id} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <th
+                  key={header.id}
+                  className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500"
+                >
                   {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                 </th>
               ))}
@@ -90,6 +315,31 @@ export function ReferralTable({ data }: { data: ReferralRow[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+export function ReferralSummary({ data }: { data: ReferralRow[] }) {
+  const total = data.length;
+  const closed = data.filter((referral) => referral.status === 'Closed').length;
+  const closeRate = total === 0 ? 0 : (closed / total) * 100;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <dl className="grid gap-4 md:grid-cols-3">
+        <div>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Referrals</dt>
+          <dd className="mt-1 text-2xl font-semibold text-slate-900">{formatNumber(total)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Closed Deals</dt>
+          <dd className="mt-1 text-2xl font-semibold text-slate-900">{formatNumber(closed)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Close Rate</dt>
+          <dd className="mt-1 text-2xl font-semibold text-slate-900">{closeRate.toFixed(1)}%</dd>
+        </div>
+      </dl>
     </div>
   );
 }

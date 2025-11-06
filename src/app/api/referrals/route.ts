@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Types } from 'mongoose';
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
@@ -16,35 +17,84 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
+  const role = session.user?.role;
+  const userId = session.user?.id;
+  const referralMatch: Record<string, unknown> = { deletedAt: null };
+
+  if (role === 'mc' && userId) {
+    referralMatch.lender = Types.ObjectId.isValid(userId) ? new Types.ObjectId(userId) : userId;
+  }
+
+  if (role === 'agent' && userId) {
+    referralMatch.assignedAgent = Types.ObjectId.isValid(userId) ? new Types.ObjectId(userId) : userId;
+  }
+
   if (summary) {
-    const [requests, closings, expectedRevenue, receivedRevenue] = await Promise.all([
-      Referral.countDocuments({ deletedAt: null }),
-      Referral.countDocuments({ status: 'Closed', deletedAt: null }),
-      Referral.aggregate([
-        { $match: { deletedAt: null } },
-        { $group: { _id: null, amount: { $sum: '$referralFeeDueCents' } } }
-      ]),
-      Payment.aggregate([
-        { $group: { _id: null, amount: { $sum: '$receivedAmountCents' } } }
-      ])
+    const summaryMetrics = await Referral.aggregate([
+      { $match: referralMatch },
+      {
+        $group: {
+          _id: null,
+          totalReferrals: { $sum: 1 },
+          closedReferrals: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'Closed'] }, 1, 0]
+            }
+          },
+          expectedRevenueCents: { $sum: '$referralFeeDueCents' },
+          earnedCommissionCents: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'Closed'] }, '$referralFeeDueCents', 0]
+            }
+          }
+        }
+      }
     ]);
 
-    const totalRequests = requests;
-    const totalClosings = closings;
-    const conversion = totalRequests === 0 ? 0 : (totalClosings / totalRequests) * 100;
+    const metrics = summaryMetrics[0] ?? {
+      totalReferrals: 0,
+      closedReferrals: 0,
+      expectedRevenueCents: 0,
+      earnedCommissionCents: 0
+    };
+
+    const paymentMatch = Object.entries(referralMatch).reduce<Record<string, unknown>>((acc, [key, value]) => {
+      acc[`referral.${key}`] = value;
+      return acc;
+    }, {});
+
+    const receivedRevenue = await Payment.aggregate([
+      {
+        $lookup: {
+          from: 'referrals',
+          localField: 'referralId',
+          foreignField: '_id',
+          as: 'referral'
+        }
+      },
+      { $unwind: '$referral' },
+      { $match: paymentMatch },
+      { $group: { _id: null, amount: { $sum: '$receivedAmountCents' } } }
+    ]);
+
+    const closeRate =
+      metrics.totalReferrals === 0 ? 0 : (metrics.closedReferrals / metrics.totalReferrals) * 100;
+
     return NextResponse.json({
-      requests: totalRequests,
-      closings: totalClosings,
-      conversion,
-      expectedRevenueCents: expectedRevenue[0]?.amount || 0,
-      receivedRevenueCents: receivedRevenue[0]?.amount || 0,
-      avgTimeToFirstContactHours: null,
-      avgDaysToContract: null,
-      avgDaysToClose: null
+      role,
+      totalReferrals: metrics.totalReferrals,
+      closedReferrals: metrics.closedReferrals,
+      closeRate,
+      expectedRevenueCents: metrics.expectedRevenueCents,
+      amountPaidCents: receivedRevenue[0]?.amount || 0,
+      earnedCommissionCents: metrics.earnedCommissionCents
     });
   }
 
   if (leaderboard) {
+    if (role !== 'admin' && role !== 'manager') {
+      return NextResponse.json({ mc: [], agents: [], markets: [] });
+    }
     const byMc = await Referral.aggregate([
       { $match: { deletedAt: null } },
       { $group: { _id: '$lender', totalReferrals: { $sum: 1 }, closings: { $sum: { $cond: [{ $eq: ['$status', 'Closed'] }, 1, 0] } }, expectedRevenue: { $sum: '$referralFeeDueCents' } } },
@@ -78,14 +128,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
   }
 
-  const query: Record<string, unknown> = { deletedAt: null };
-  if (session?.user?.role === 'mc') {
-    query.lender = session.user.id;
-  }
-  if (session?.user?.role === 'agent') {
-    query.assignedAgent = session.user.id;
-  }
-  const referrals = await Referral.find(query).sort({ createdAt: -1 }).limit(50).lean();
+  const referrals = await Referral.find(referralMatch).sort({ createdAt: -1 }).limit(50).lean();
   return NextResponse.json(referrals);
 }
 
