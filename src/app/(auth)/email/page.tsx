@@ -1,7 +1,7 @@
 'use client';
 
 import { signIn } from 'next-auth/react';
-import { useState, FormEvent, Suspense } from 'react';
+import { useState, FormEvent, Suspense, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
@@ -70,6 +70,20 @@ function EmailSignInForm() {
 }
 
 export default function EmailSignInPage() {
+  const [hasGoogle, setHasGoogle] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/providers', { cache: 'no-store' });
+        const data = res.ok ? await res.json() : null;
+        setHasGoogle(Boolean(data?.google));
+      } catch {
+        setHasGoogle(false);
+      }
+    })();
+  }, []);
+
   return (
     <div className="flex min-h-screen items-center justify-center">
       <div className="w-full max-w-md space-y-8 rounded-lg border bg-white p-8 shadow-sm">
@@ -81,14 +95,19 @@ export default function EmailSignInPage() {
         </div>
 
         {/* Google sign-in option */}
-        <div className="space-y-3">
-          <button
-            onClick={() => signIn('google', { callbackUrl: '/', redirect: true })}
-            className="w-full rounded-md bg-black px-4 py-3 text-white hover:bg-gray-800"
-          >
-            Continue with Google
-          </button>
-        </div>
+        {hasGoogle && (
+          <div className="space-y-3">
+            <button
+              onClick={() => signIn('google', { callbackUrl: '/', redirect: true })}
+              className="w-full rounded-md bg-black px-4 py-3 text-white hover:bg-gray-800"
+            >
+              Continue with Google
+            </button>
+          </div>
+        )}
+        {!hasGoogle && (
+          <p className="text-xs text-gray-500">Google sign-in is not configured.</p>
+        )}
 
         <Suspense fallback={<div className="h-40 w-full animate-pulse bg-gray-100 rounded-md"></div>}>
           <EmailSignInForm />
