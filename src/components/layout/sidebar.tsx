@@ -7,12 +7,12 @@ import { Session } from 'next-auth';
 import { LogOutIcon } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 
-type Role = 'admin' | 'mortgage-consultant' | 'agent' | string;
+type Role = 'admin' | 'mc' | 'agent' | string;
 
 const navItems: Array<{ href: string; label: string; roles?: Role[] }> = [
-  { href: '/dashboard', label: 'Dashboard', roles: ['admin', 'mortgage-consultant', 'agent'] },
-  { href: '/referrals', label: 'Referrals', roles: ['admin', 'mortgage-consultant', 'agent'] },
-  { href: '/agents', label: 'Agents', roles: ['admin', 'mortgage-consultant'] },
+  { href: '/dashboard', label: 'Dashboard', roles: ['admin', 'mc', 'agent'] },
+  { href: '/referrals', label: 'Referrals', roles: ['admin', 'mc', 'agent'] },
+  { href: '/agents', label: 'Agents', roles: ['admin', 'mc'] },
   { href: '/lenders', label: 'Mortgage Consultants', roles: ['admin', 'agent'] },
   { href: '/payments', label: 'Payments', roles: ['admin', 'agent'] },
   { href: '/imports', label: 'Imports', roles: ['admin'] },
