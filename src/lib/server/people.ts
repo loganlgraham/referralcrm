@@ -1,3 +1,5 @@
+import { Types } from 'mongoose';
+
 import { connectMongo } from '@/lib/mongoose';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
@@ -42,14 +44,37 @@ interface NoteRecord {
   createdAt: Date;
 }
 
-const serializeNotes = (notes: NoteRecord[] = []): NoteSummary[] =>
-  notes.map((note) => ({
+const serializeNotes = (notes?: NoteRecord[] | null): NoteSummary[] =>
+  (Array.isArray(notes) ? notes : []).map((note) => ({
     id: note._id.toString(),
     authorName: note.authorName,
     authorRole: note.authorRole,
     content: note.content,
     createdAt: note.createdAt instanceof Date ? note.createdAt.toISOString() : new Date(note.createdAt).toISOString()
   }));
+
+type AgentLean = {
+  _id: Types.ObjectId;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  statesLicensed?: string[] | null;
+  zipCoverage?: string[] | null;
+  closings12mo?: number | null;
+  npsScore?: number | null;
+  notes?: NoteRecord[] | null;
+};
+
+type LenderLean = {
+  _id: Types.ObjectId;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  nmlsId?: string | null;
+  team?: string | null;
+  region?: string | null;
+  notes?: NoteRecord[] | null;
+};
 
 export async function getAgentProfile(id: string): Promise<AgentProfile | null> {
   const session = await getCurrentSession();
@@ -58,7 +83,7 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
   }
 
   await connectMongo();
-  const agent = await Agent.findById(id).lean();
+  const agent = await Agent.findById(id).lean<AgentLean>();
   if (!agent) {
     return null;
   }
@@ -72,7 +97,7 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
     zipCoverage: Array.isArray(agent.zipCoverage) ? agent.zipCoverage : undefined,
     closings12mo: agent.closings12mo ?? null,
     npsScore: agent.npsScore ?? null,
-    notes: serializeNotes(agent.notes as unknown as NoteRecord[])
+    notes: serializeNotes(agent.notes)
   };
 }
 
@@ -83,7 +108,7 @@ export async function getLenderProfile(id: string): Promise<LenderProfile | null
   }
 
   await connectMongo();
-  const lender = await LenderMC.findById(id).lean();
+  const lender = await LenderMC.findById(id).lean<LenderLean>();
   if (!lender) {
     return null;
   }
@@ -96,6 +121,6 @@ export async function getLenderProfile(id: string): Promise<LenderProfile | null
     nmlsId: lender.nmlsId ?? undefined,
     team: lender.team ?? null,
     region: lender.region ?? null,
-    notes: serializeNotes(lender.notes as unknown as NoteRecord[])
+    notes: serializeNotes(lender.notes)
   };
 }
