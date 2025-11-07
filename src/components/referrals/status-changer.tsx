@@ -142,7 +142,14 @@ export function StatusChanger({
     setContractForm(nextForm);
     setContractDirty(false);
     broadcastContractState(nextForm, false);
-  }, [broadcastContractState, contractDetails]);
+  }, [
+    broadcastContractState,
+    contractDetails?.propertyAddress,
+    contractDetails?.contractPriceCents,
+    contractDetails?.agentCommissionBasisPoints,
+    contractDetails?.referralFeeBasisPoints,
+    contractDetails ? 1 : 0,
+  ]);
 
   useEffect(() => {
     setPreApproval(preApprovalAmountCents ? (preApprovalAmountCents / 100).toString() : '');
@@ -285,7 +292,8 @@ export function StatusChanger({
         });
       }
 
-      onStatusChanged?.(next, body);
+      const changePayload = { ...body, previousStatus };
+      onStatusChanged?.(next, changePayload);
       toast.success('Referral status updated');
     } catch (error) {
       console.error(error);

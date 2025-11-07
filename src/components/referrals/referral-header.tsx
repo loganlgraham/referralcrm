@@ -55,6 +55,8 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
   );
   const [propertyAddress, setPropertyAddress] = useState<string | undefined>(referral.propertyAddress);
   const [draftContract, setDraftContract] = useState<ContractDraftSnapshot>({ hasUnsavedChanges: false });
+  const [daysInStatus, setDaysInStatus] = useState<number>(referral.daysInStatus ?? 0);
+  const [auditEntries, setAuditEntries] = useState<any[]>(Array.isArray(referral.audit) ? referral.audit : []);
 
   useEffect(() => {
     setStatus(referral.status as ReferralStatus);
@@ -83,6 +85,16 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
   useEffect(() => {
     setPropertyAddress(referral.propertyAddress);
   }, [referral.propertyAddress]);
+
+  useEffect(() => {
+    setDaysInStatus(referral.daysInStatus ?? 0);
+  }, [referral.daysInStatus]);
+
+  useEffect(() => {
+    if (Array.isArray(referral.audit)) {
+      setAuditEntries(referral.audit);
+    }
+  }, [referral.audit]);
 
   useEffect(() => {
     onFinancialsChange?.({
@@ -179,7 +191,6 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
     setCommissionBasisPoints(details.agentCommissionBasisPoints);
     setReferralFeeBasisPoints(details.referralFeeBasisPoints);
     setReferralFeeDueCents(details.referralFeeDueCents);
-    setStatus('Under Contract');
     setDraftContract({ hasUnsavedChanges: false });
     onFinancialsChange?.({
       status: 'Under Contract',
@@ -193,6 +204,10 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
   };
 
   const handleStatusChanged = (nextStatus: ReferralStatus, payload?: Record<string, unknown>) => {
+    const previousStatusValue =
+      typeof payload?.previousStatus === 'string'
+        ? (payload.previousStatus as ReferralStatus)
+        : status;
     setStatus(nextStatus);
     let nextPreApproval = preApprovalAmountCents ?? 0;
     let nextContractPrice = contractPriceCents;
@@ -243,6 +258,24 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
       setDraftContract({ hasUnsavedChanges: false });
     }
 
+    if (nextStatus !== previousStatusValue) {
+      const nextDays =
+        typeof payload?.daysInStatus === 'number' && !Number.isNaN(Number(payload.daysInStatus))
+          ? Number(payload.daysInStatus)
+          : 0;
+      setDaysInStatus(nextDays);
+      setAuditEntries((previous) => [
+        ...(Array.isArray(previous) ? previous : []),
+        {
+          field: 'status',
+          newValue: nextStatus,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+    } else if (typeof payload?.daysInStatus === 'number' && !Number.isNaN(Number(payload.daysInStatus))) {
+      setDaysInStatus(Number(payload.daysInStatus));
+    }
+
     onFinancialsChange?.({
       status: nextStatus,
       preApprovalAmountCents: nextPreApproval,
@@ -282,7 +315,7 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
           <div className="rounded-lg border border-slate-200 px-4 py-3 text-right">
             <p className="text-xs uppercase text-slate-400">Status</p>
             <p className="text-lg font-semibold text-brand">{status}</p>
-            <p className="text-xs text-slate-400">Days in status: {referral.daysInStatus ?? 0}</p>
+            <p className="text-xs text-slate-400">Days in status: {daysInStatus}</p>
           </div>
           <div className="rounded-lg border border-slate-200 px-4 py-3 text-right">
             <p className="text-xs uppercase text-slate-400">{primaryAmountLabel}</p>
@@ -292,7 +325,7 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
         </div>
       </div>
 
-      <SLAWidget referral={{ ...referral, status }} />
+      <SLAWidget referral={{ ...referral, status, audit: auditEntries }} />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr),minmax(280px,1fr)]">
         <StatusChanger
