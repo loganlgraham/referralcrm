@@ -1,17 +1,127 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectMongo } from '@/lib/mongoose';
+import { Types } from 'mongoose';
+
 import { Payment } from '@/models/payment';
 import { paymentSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
+import { Agent } from '@/models/agent';
+import { Referral } from '@/models/referral';
+
+type ReferralSummary = {
+  _id: Types.ObjectId;
+  borrower?: { name?: string | null } | null;
+  propertyAddress?: string | null;
+  propertyZip?: string | null;
+  assignedAgent?: Types.ObjectId | string | null;
+  commissionBasisPoints?: number | null;
+  referralFeeBasisPoints?: number | null;
+  estPurchasePriceCents?: number | null;
+  preApprovalAmountCents?: number | null;
+  referralFeeDueCents?: number | null;
+};
+
+type PaymentWithReferral = {
+  _id: Types.ObjectId;
+  referralId: ReferralSummary | null;
+  status: string;
+  expectedAmountCents?: number | null;
+  receivedAmountCents?: number | null;
+  invoiceDate?: Date | null;
+  paidDate?: Date | null;
+  createdAt?: Date | null;
+};
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
+
+  const role = session.user?.role;
+  if (role !== 'admin' && role !== 'agent' && role !== 'manager') {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
+
   await connectMongo();
-  const payments = await Payment.find().limit(100).lean();
-  return NextResponse.json(payments);
+
+  const filter: Record<string, unknown> = {};
+
+  if (role === 'agent') {
+    const candidateIds: (Types.ObjectId | string)[] = [];
+    if (session.user?.id && Types.ObjectId.isValid(session.user.id)) {
+      candidateIds.push(new Types.ObjectId(session.user.id));
+    }
+    if (session.user?.id) {
+      candidateIds.push(session.user.id);
+    }
+
+    const agentRecord = await Agent.findOne({ userId: session.user?.id })
+      .select('_id')
+      .lean<{ _id: Types.ObjectId } | null>();
+    if (agentRecord?._id) {
+      candidateIds.push(agentRecord._id);
+    }
+
+    if (candidateIds.length === 0) {
+      return NextResponse.json([]);
+    }
+
+    const referralDocs = await Referral.find({ assignedAgent: { $in: candidateIds } })
+      .select('_id')
+      .lean<{ _id: Types.ObjectId }[]>();
+
+    if (!referralDocs.length) {
+      return NextResponse.json([]);
+    }
+
+    filter.referralId = { $in: referralDocs.map((doc) => doc._id) };
+  }
+
+  const payments = await Payment.find(filter)
+    .sort({ createdAt: -1 })
+    .limit(200)
+    .populate<{ referralId: ReferralSummary }>({
+      path: 'referralId',
+      select:
+        'borrower propertyAddress propertyZip assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents',
+    })
+    .lean<PaymentWithReferral[]>();
+
+  const serialized = payments.map((payment) => {
+    const referral = payment.referralId ?? null;
+    const fallbackReferralId = (payment as any).referralId;
+    const referralId = referral?._id?.toString?.() ??
+      (fallbackReferralId instanceof Types.ObjectId ? fallbackReferralId.toString() : '');
+
+    return {
+      _id: payment._id.toString(),
+      referralId,
+      status: payment.status,
+      expectedAmountCents: payment.expectedAmountCents ?? 0,
+      receivedAmountCents: payment.receivedAmountCents ?? 0,
+      invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
+      paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
+      referral: referral
+        ? {
+            borrowerName: referral.borrower?.name ?? null,
+            propertyAddress: referral.propertyAddress ?? null,
+            propertyZip: referral.propertyZip ?? null,
+            assignedAgentId:
+              typeof referral.assignedAgent === 'string'
+                ? referral.assignedAgent
+                : referral.assignedAgent?.toString?.() ?? null,
+            commissionBasisPoints: referral.commissionBasisPoints ?? null,
+            referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
+            estPurchasePriceCents: referral.estPurchasePriceCents ?? null,
+            preApprovalAmountCents: referral.preApprovalAmountCents ?? null,
+            referralFeeDueCents: referral.referralFeeDueCents ?? null,
+          }
+        : null,
+    };
+  });
+
+  return NextResponse.json(serialized);
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
