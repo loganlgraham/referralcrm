@@ -5,11 +5,11 @@ import { toast } from 'sonner';
 
 import { formatCurrency } from '@/utils/formatters';
 
-type DealStatus = 'under_contract' | 'closed' | 'paid';
+type DealStatus = 'under_contract' | 'closed' | 'paid' | 'terminated';
 
 interface DealRecord {
   _id?: string;
-  status?: string;
+  status?: DealStatus;
   expectedAmountCents?: number;
 }
 
@@ -33,12 +33,14 @@ interface ReferralDealProps {
 const STATUS_OPTIONS: { value: DealStatus; label: string }[] = [
   { value: 'under_contract', label: 'Under Contract' },
   { value: 'closed', label: 'Closed' },
-  { value: 'paid', label: 'Paid' }
+  { value: 'paid', label: 'Paid' },
+  { value: 'terminated', label: 'Terminated' }
 ];
 
 export function DealCard({ referral, overrides }: ReferralDealProps) {
   const existingDeal = referral.payments?.[0];
-  const initialStatus = STATUS_OPTIONS.find((option) => option.value === existingDeal?.status)?.value ?? 'under_contract';
+  const existingStatus = (existingDeal?.status as DealStatus | undefined) ?? undefined;
+  const initialStatus = STATUS_OPTIONS.find((option) => option.value === existingStatus)?.value ?? 'under_contract';
   const [status, setStatus] = useState<DealStatus>(initialStatus);
   const [saving, setSaving] = useState(false);
   const [dealRecordId, setDealRecordId] = useState<string | undefined>(existingDeal?._id);
@@ -53,7 +55,12 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
     return referral.referralFeeDueCents ?? 0;
   }, [existingDeal?.expectedAmountCents, overrides?.referralFeeDueCents, referral.referralFeeDueCents]);
 
-  const formattedAmount = expectedAmountCents > 0 ? formatCurrency(expectedAmountCents) : '—';
+  const formattedAmount =
+    status === 'terminated'
+      ? '—'
+      : expectedAmountCents > 0
+        ? formatCurrency(expectedAmountCents)
+        : '—';
   const propertyLabel =
     overrides?.propertyAddress ||
     referral.propertyAddress ||
@@ -61,20 +68,31 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
 
   const handleStatusChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     const nextStatus = event.target.value as DealStatus;
-    setStatus(nextStatus);
+    const previousStatus = status;
 
-    if (expectedAmountCents <= 0) {
+    if (nextStatus !== 'terminated' && expectedAmountCents <= 0) {
       toast.error('Add contract details before updating deal status.');
+      event.target.value = previousStatus;
       return;
     }
 
+    setStatus(nextStatus);
+
     setSaving(true);
     try {
+      const payload: Record<string, unknown> = { status: nextStatus };
+      if (nextStatus === 'terminated') {
+        payload.expectedAmountCents = 0;
+      } else if (expectedAmountCents > 0) {
+        payload.expectedAmountCents = expectedAmountCents;
+      }
+
       if (dealRecordId) {
+        payload.id = dealRecordId;
         const response = await fetch('/api/payments', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: dealRecordId, status: nextStatus })
+          body: JSON.stringify(payload)
         });
         if (!response.ok) {
           throw new Error('Unable to update deal');
@@ -86,7 +104,7 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
           body: JSON.stringify({
             referralId: referral._id,
             status: nextStatus,
-            expectedAmountCents
+            expectedAmountCents: nextStatus === 'terminated' ? 0 : expectedAmountCents
           })
         });
         if (!response.ok) {
@@ -98,6 +116,7 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
       toast.success('Deal status saved');
     } catch (error) {
       console.error(error);
+      setStatus(previousStatus);
       toast.error(error instanceof Error ? error.message : 'Unable to update deal');
     } finally {
       setSaving(false);
@@ -121,6 +140,9 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
           {overrides?.hasUnsavedContractChanges && (
             <p className="mt-2 text-xs text-amber-600">Save contract details to lock in this referral fee.</p>
           )}
+          {status === 'terminated' && (
+            <p className="mt-2 text-xs text-slate-500">Terminated deals are excluded from revenue totals.</p>
+          )}
         </div>
         <div className="rounded border border-slate-200 p-3">
           <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">
@@ -129,7 +151,7 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
               value={status}
               onChange={handleStatusChange}
               className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
-              disabled={saving || expectedAmountCents <= 0}
+              disabled={saving}
             >
               {STATUS_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -138,7 +160,7 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
               ))}
             </select>
           </label>
-          {expectedAmountCents <= 0 && (
+          {expectedAmountCents <= 0 && status !== 'terminated' && (
             <p className="mt-2 text-xs text-amber-600">
               Enter contract details to calculate the referral fee before updating deal status.
             </p>
