@@ -149,7 +149,10 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
         hasUnsavedContractChanges: false,
       };
 
-  const showDeals = financials.status === 'Under Contract' || financials.status === 'Closed';
+  const showDeals =
+    financials.status === 'Under Contract' ||
+    financials.status === 'Closed' ||
+    contractDraft.hasUnsavedChanges;
 
   return (
     <div className="space-y-6">

@@ -138,6 +138,10 @@ export function StatusChanger({
   );
 
   useEffect(() => {
+    if (contractDirty) {
+      return;
+    }
+
     const nextForm = buildInitialFormState(contractDetails);
     setContractForm((previous) => {
       const hasChanged =
@@ -161,6 +165,7 @@ export function StatusChanger({
     contractDetails?.agentCommissionBasisPoints,
     contractDetails?.referralFeeBasisPoints,
     contractDetails ? 1 : 0,
+    contractDirty,
   ]);
 
   useEffect(() => {
