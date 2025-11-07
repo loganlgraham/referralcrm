@@ -32,37 +32,37 @@ export async function GET(): Promise<NextResponse> {
 
   if (session.user.role === 'agent') {
     const agent = await Agent.findOne({ $or: [{ userId: session.user.id }, { email: session.user.email }] })
-      .select('name email phone statesLicensed zipCoverage')
-      .lean();
+      .select('name email phone statesLicensed zipCoverage');
     if (!agent) {
       return new NextResponse('Not found', { status: 404 });
     }
+    const agentData = agent.toObject();
     return NextResponse.json({
       role: 'agent',
-      _id: agent._id.toString(),
-      name: agent.name,
-      email: agent.email,
-      phone: agent.phone ?? '',
-      statesLicensed: agent.statesLicensed ?? [],
-      coverageAreas: agent.zipCoverage ?? [],
+      _id: agentData._id.toString(),
+      name: agentData.name,
+      email: agentData.email,
+      phone: agentData.phone ?? '',
+      statesLicensed: agentData.statesLicensed ?? [],
+      coverageAreas: agentData.zipCoverage ?? [],
     });
   }
 
   if (session.user.role === 'mc') {
     const lender = await LenderMC.findOne({ $or: [{ userId: session.user.id }, { email: session.user.email }] })
-      .select('name email phone licensedStates nmlsId')
-      .lean();
+      .select('name email phone licensedStates nmlsId');
     if (!lender) {
       return new NextResponse('Not found', { status: 404 });
     }
+    const lenderData = lender.toObject();
     return NextResponse.json({
       role: 'mc',
-      _id: lender._id.toString(),
-      name: lender.name,
-      email: lender.email,
-      phone: lender.phone ?? '',
-      nmlsId: lender.nmlsId ?? '',
-      licensedStates: lender.licensedStates ?? [],
+      _id: lenderData._id.toString(),
+      name: lenderData.name,
+      email: lenderData.email,
+      phone: lenderData.phone ?? '',
+      nmlsId: lenderData.nmlsId ?? '',
+      licensedStates: lenderData.licensedStates ?? [],
     });
   }
 
