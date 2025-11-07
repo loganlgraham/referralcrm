@@ -1,45 +1,55 @@
 'use client';
 
 import Link from 'next/link';
-import { ChangeEvent, FormEvent, useState } from 'react';
+import { ChangeEvent, FormEvent, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
+
 import { fetcher } from '@/utils/fetcher';
 
 interface AgentRow {
   _id: string;
   name: string;
   email: string;
-  phone: string;
+  phone?: string;
   statesLicensed: string[];
-  zipCoverage?: string[];
   coverageAreas?: string[];
+  zipCoverage?: string[];
   closings12mo: number;
   closingRatePercentage?: number | null;
-  npsScore?: number;
-  avgResponseHours?: number;
+  npsScore?: number | null;
+  avgResponseHours?: number | null;
 }
+
+const EMPTY_FORM = {
+  name: '',
+  email: '',
+  phone: '',
+  states: '',
+  coverage: '',
+  closings: '',
+  closingRate: '',
+  nps: '',
+  avgResponse: '',
+};
 
 export function AgentsTable() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'admin';
+
   const { data, mutate } = useSWR<AgentRow[]>('/api/agents', fetcher);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    states: '',
-    coverage: '',
-    closings: '',
-    closingRate: '',
-    nps: '',
-    avgResponse: '',
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
 
-  if (!data) return <div className="rounded-lg bg-white p-4 shadow-sm">Loading agents…</div>;
+  const formDisabled = saving;
+
+  const agents = useMemo(() => data ?? [], [data]);
+
+  if (!data) {
+    return <div className="rounded-lg bg-white p-4 shadow-sm">Loading agents…</div>;
+  }
 
   const handleChange = (field: keyof typeof form) => (event: ChangeEvent<HTMLInputElement>) => {
     setForm((previous) => ({ ...previous, [field]: event.target.value }));
@@ -48,6 +58,7 @@ export function AgentsTable() {
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
+
     try {
       const statesLicensed = form.states
         .split(',')
@@ -79,21 +90,12 @@ export function AgentsTable() {
       });
 
       if (!response.ok) {
-        throw new Error('Unable to create agent');
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.message ?? 'Unable to create agent');
       }
 
       toast.success('Agent added');
-      setForm({
-        name: '',
-        email: '',
-        phone: '',
-        states: '',
-        coverage: '',
-        closings: '',
-        closingRate: '',
-        nps: '',
-        avgResponse: '',
-      });
+      setForm(EMPTY_FORM);
       setShowForm(false);
       await mutate();
     } catch (error) {
@@ -131,7 +133,7 @@ export function AgentsTable() {
                   onChange={handleChange('name')}
                   className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
                   required
-                  disabled={saving}
+                  disabled={formDisabled}
                 />
               </label>
               <label className="text-xs font-semibold text-slate-600">
@@ -142,7 +144,7 @@ export function AgentsTable() {
                   onChange={handleChange('email')}
                   className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
                   required
-                  disabled={saving}
+                  disabled={formDisabled}
                 />
               </label>
               <label className="text-xs font-semibold text-slate-600">
@@ -152,7 +154,7 @@ export function AgentsTable() {
                   value={form.phone}
                   onChange={handleChange('phone')}
                   className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                  disabled={saving}
+                  disabled={formDisabled}
                 />
               </label>
               <label className="text-xs font-semibold text-slate-600">
@@ -163,7 +165,7 @@ export function AgentsTable() {
                   onChange={handleChange('states')}
                   className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
                   placeholder="CO, UT"
-                  disabled={saving}
+                  disabled={formDisabled}
                 />
               </label>
               <label className="text-xs font-semibold text-slate-600">
@@ -174,7 +176,7 @@ export function AgentsTable() {
                   onChange={handleChange('coverage')}
                   className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
                   placeholder="Denver, 80202"
-                  disabled={saving}
+                  disabled={formDisabled}
                 />
               </label>
               <label className="text-xs font-semibold text-slate-600">
@@ -185,7 +187,7 @@ export function AgentsTable() {
                   value={form.closings}
                   onChange={handleChange('closings')}
                   className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                  disabled={saving}
+                  disabled={formDisabled}
                 />
               </label>
               <label className="text-xs font-semibold text-slate-600">
@@ -198,7 +200,7 @@ export function AgentsTable() {
                   value={form.closingRate}
                   onChange={handleChange('closingRate')}
                   className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                  disabled={saving}
+                  disabled={formDisabled}
                 />
               </label>
               <label className="text-xs font-semibold text-slate-600">
@@ -211,7 +213,7 @@ export function AgentsTable() {
                   value={form.nps}
                   onChange={handleChange('nps')}
                   className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                  disabled={saving}
+                  disabled={formDisabled}
                 />
               </label>
               <label className="text-xs font-semibold text-slate-600">
@@ -223,13 +225,13 @@ export function AgentsTable() {
                   value={form.avgResponse}
                   onChange={handleChange('avgResponse')}
                   className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                  disabled={saving}
+                  disabled={formDisabled}
                 />
               </label>
               <div className="md:col-span-2">
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={formDisabled}
                   className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {saving ? 'Saving…' : 'Save agent'}
@@ -239,6 +241,7 @@ export function AgentsTable() {
           )}
         </div>
       )}
+
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
@@ -253,7 +256,7 @@ export function AgentsTable() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {data.map((agent) => (
+            {agents.map((agent) => (
               <tr key={agent._id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 text-sm text-slate-700">
                   <div className="font-medium text-slate-900">
@@ -262,26 +265,29 @@ export function AgentsTable() {
                     </Link>
                   </div>
                   <div className="text-xs text-slate-500">{agent.email}</div>
-                  <div className="text-xs text-slate-500">{agent.phone}</div>
+                  <div className="text-xs text-slate-500">{agent.phone || '—'}</div>
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-700">{agent.statesLicensed.join(', ')}</td>
+                <td className="px-4 py-3 text-sm text-slate-700">{agent.statesLicensed.join(', ') || '—'}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">
                   {(agent.coverageAreas ?? agent.zipCoverage ?? []).slice(0, 5).join(', ') || '—'}
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{agent.closings12mo}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">
-                  {agent.closingRatePercentage !== undefined && agent.closingRatePercentage !== null
-                    ? `${agent.closingRatePercentage}%`
-                    : '—'}
+                  {agent.closingRatePercentage === null || agent.closingRatePercentage === undefined
+                    ? '—'
+                    : `${agent.closingRatePercentage}%`}
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{agent.npsScore ?? '—'}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">
-                  {agent.avgResponseHours ? `${agent.avgResponseHours} hrs` : '—'}
+                  {agent.avgResponseHours === null || agent.avgResponseHours === undefined
+                    ? '—'
+                    : `${agent.avgResponseHours} hrs`}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+    </div>
   );
 }
