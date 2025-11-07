@@ -26,7 +26,7 @@ interface McProfileResponse {
 }
 
 interface AdminProfileResponse {
-  role: string;
+  role: 'admin';
   name: string | null;
   email: string | null;
 }
