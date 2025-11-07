@@ -23,7 +23,7 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
       <div className="rounded-lg bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">{agent.name}</h1>
         <p className="mt-2 text-sm text-slate-600">{agent.email}</p>
-        <p className="text-sm text-slate-600">{agent.phone}</p>
+        <p className="text-sm text-slate-600">{agent.phone || '—'}</p>
         <div className="mt-4 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
           <div>
             <p className="text-xs uppercase text-slate-400">States Licensed</p>
@@ -45,9 +45,9 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
       </div>
       <PersonNotes
         subjectId={params.id}
-        initialNotes={(agent.notes as any[]) ?? []}
+        initialNotes={agent.notes}
         endpoint="/api/agents"
-        description="Only admins and managers can view these notes. They remain hidden from the agent by default."
+        description="Only admins and mortgage consultants can view these notes. They remain hidden from the agent by default."
       />
     </div>
   );

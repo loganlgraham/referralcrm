@@ -3,6 +3,37 @@ import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { getCurrentSession } from '@/lib/auth';
 
+type NoteSummary = {
+  id: string;
+  authorName: string;
+  authorRole: string;
+  content: string;
+  createdAt: string;
+};
+
+type AgentProfile = {
+  _id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  statesLicensed?: string[];
+  zipCoverage?: string[];
+  closings12mo?: number | null;
+  npsScore?: number | null;
+  notes: NoteSummary[];
+};
+
+type LenderProfile = {
+  _id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  nmlsId?: string;
+  team?: string | null;
+  region?: string | null;
+  notes: NoteSummary[];
+};
+
 interface NoteRecord {
   _id: any;
   authorName: string;
@@ -11,7 +42,7 @@ interface NoteRecord {
   createdAt: Date;
 }
 
-const serializeNotes = (notes: NoteRecord[] = []) =>
+const serializeNotes = (notes: NoteRecord[] = []): NoteSummary[] =>
   notes.map((note) => ({
     id: note._id.toString(),
     authorName: note.authorName,
@@ -20,9 +51,9 @@ const serializeNotes = (notes: NoteRecord[] = []) =>
     createdAt: note.createdAt instanceof Date ? note.createdAt.toISOString() : new Date(note.createdAt).toISOString()
   }));
 
-export async function getAgentProfile(id: string) {
+export async function getAgentProfile(id: string): Promise<AgentProfile | null> {
   const session = await getCurrentSession();
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'manager')) {
+  if (!session || (session.user.role !== 'admin' && session.user.role !== 'mc')) {
     return null;
   }
 
@@ -33,15 +64,21 @@ export async function getAgentProfile(id: string) {
   }
 
   return {
-    ...agent,
     _id: agent._id.toString(),
+    name: agent.name ?? '',
+    email: agent.email ?? '',
+    phone: agent.phone ?? undefined,
+    statesLicensed: Array.isArray(agent.statesLicensed) ? agent.statesLicensed : undefined,
+    zipCoverage: Array.isArray(agent.zipCoverage) ? agent.zipCoverage : undefined,
+    closings12mo: agent.closings12mo ?? null,
+    npsScore: agent.npsScore ?? null,
     notes: serializeNotes(agent.notes as unknown as NoteRecord[])
   };
 }
 
-export async function getLenderProfile(id: string) {
+export async function getLenderProfile(id: string): Promise<LenderProfile | null> {
   const session = await getCurrentSession();
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'manager')) {
+  if (!session || (session.user.role !== 'admin' && session.user.role !== 'agent')) {
     return null;
   }
 
@@ -52,8 +89,13 @@ export async function getLenderProfile(id: string) {
   }
 
   return {
-    ...lender,
     _id: lender._id.toString(),
+    name: lender.name ?? '',
+    email: lender.email ?? '',
+    phone: lender.phone ?? undefined,
+    nmlsId: lender.nmlsId ?? undefined,
+    team: lender.team ?? null,
+    region: lender.region ?? null,
     notes: serializeNotes(lender.notes as unknown as NoteRecord[])
   };
 }
