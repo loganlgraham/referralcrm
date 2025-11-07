@@ -30,16 +30,32 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
             <p className="font-medium text-slate-900">{agent.statesLicensed?.join(', ') || '—'}</p>
           </div>
           <div>
-            <p className="text-xs uppercase text-slate-400">Zip Coverage</p>
-            <p className="font-medium text-slate-900">{agent.zipCoverage?.slice(0, 10).join(', ') || '—'}</p>
+            <p className="text-xs uppercase text-slate-400">Areas Covered</p>
+            <p className="font-medium text-slate-900">{agent.coverageAreas?.slice(0, 10).join(', ') || '—'}</p>
           </div>
           <div>
             <p className="text-xs uppercase text-slate-400">Closings (12 mo)</p>
             <p className="font-medium text-slate-900">{agent.closings12mo ?? '—'}</p>
           </div>
           <div>
+            <p className="text-xs uppercase text-slate-400">Closing Percentage</p>
+            <p className="font-medium text-slate-900">
+              {agent.closingRatePercentage !== undefined && agent.closingRatePercentage !== null
+                ? `${agent.closingRatePercentage}%`
+                : '—'}
+            </p>
+          </div>
+          <div>
             <p className="text-xs uppercase text-slate-400">NPS Score</p>
             <p className="font-medium text-slate-900">{agent.npsScore ?? '—'}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase text-slate-400">Avg Response (hrs)</p>
+            <p className="font-medium text-slate-900">
+              {agent.avgResponseHours !== undefined && agent.avgResponseHours !== null
+                ? agent.avgResponseHours
+                : '—'}
+            </p>
           </div>
         </div>
       </div>

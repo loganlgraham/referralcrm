@@ -30,6 +30,10 @@ export default async function LenderDetailPage({ params }: LenderDetailPageProps
             <p className="font-medium text-slate-900">{lender.nmlsId ?? '—'}</p>
           </div>
           <div>
+            <p className="text-xs uppercase text-slate-400">Licensed States</p>
+            <p className="font-medium text-slate-900">{lender.licensedStates?.join(', ') || '—'}</p>
+          </div>
+          <div>
             <p className="text-xs uppercase text-slate-400">Team</p>
             <p className="font-medium text-slate-900">{lender.team ?? '—'}</p>
           </div>

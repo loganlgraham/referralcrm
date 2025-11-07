@@ -13,6 +13,12 @@ interface PaymentRecord {
   expectedAmountCents?: number;
 }
 
+interface PaymentOverrides {
+  referralFeeDueCents?: number;
+  propertyAddress?: string;
+  hasUnsavedContractChanges?: boolean;
+}
+
 interface ReferralPaymentProps {
   referral: {
     _id: string;
@@ -21,6 +27,7 @@ interface ReferralPaymentProps {
     referralFeeDueCents?: number;
     payments?: PaymentRecord[];
   };
+  overrides?: PaymentOverrides;
 }
 
 const STATUS_OPTIONS: { value: PaymentStatus; label: string }[] = [
@@ -29,7 +36,7 @@ const STATUS_OPTIONS: { value: PaymentStatus; label: string }[] = [
   { value: 'paid', label: 'Paid' }
 ];
 
-export function PaymentCard({ referral }: ReferralPaymentProps) {
+export function PaymentCard({ referral, overrides }: ReferralPaymentProps) {
   const existingPayment = referral.payments?.[0];
   const initialStatus = STATUS_OPTIONS.find((option) => option.value === existingPayment?.status)?.value ?? 'under_contract';
   const [status, setStatus] = useState<PaymentStatus>(initialStatus);
@@ -37,14 +44,18 @@ export function PaymentCard({ referral }: ReferralPaymentProps) {
   const [paymentId, setPaymentId] = useState<string | undefined>(existingPayment?._id);
 
   const expectedAmountCents = useMemo(() => {
+    if (overrides?.referralFeeDueCents !== undefined) {
+      return overrides.referralFeeDueCents;
+    }
     if (existingPayment?.expectedAmountCents && existingPayment.expectedAmountCents > 0) {
       return existingPayment.expectedAmountCents;
     }
     return referral.referralFeeDueCents ?? 0;
-  }, [existingPayment?.expectedAmountCents, referral.referralFeeDueCents]);
+  }, [existingPayment?.expectedAmountCents, overrides?.referralFeeDueCents, referral.referralFeeDueCents]);
 
   const formattedAmount = expectedAmountCents > 0 ? formatCurrency(expectedAmountCents) : '—';
-  const propertyLabel = referral.propertyAddress || (referral.propertyZip ? `Zip ${referral.propertyZip}` : 'Pending address');
+  const propertyLabel =
+    overrides?.propertyAddress || referral.propertyAddress || (referral.propertyZip ? `Zip ${referral.propertyZip}` : 'Pending address');
 
   const handleStatusChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     const nextStatus = event.target.value as PaymentStatus;
@@ -105,6 +116,9 @@ export function PaymentCard({ referral }: ReferralPaymentProps) {
         <div className="rounded border border-slate-200 p-3">
           <p className="text-xs uppercase text-slate-400">Referral Fee Due</p>
           <p className="font-medium text-slate-900">{formattedAmount}</p>
+          {overrides?.hasUnsavedContractChanges && (
+            <p className="mt-2 text-xs text-amber-600">Save contract details to lock in this referral fee.</p>
+          )}
         </div>
         <div className="rounded border border-slate-200 p-3">
           <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">

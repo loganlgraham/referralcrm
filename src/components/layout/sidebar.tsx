@@ -16,6 +16,7 @@ const navItems: Array<{ href: string; label: string; roles?: Role[] }> = [
   { href: '/lenders', label: 'Mortgage Consultants', roles: ['admin', 'agent'] },
   { href: '/payments', label: 'Payments', roles: ['admin', 'agent'] },
   { href: '/imports', label: 'Imports', roles: ['admin'] },
+  { href: '/profile', label: 'My Profile', roles: ['agent', 'mc'] },
   { href: '/settings', label: 'Settings', roles: ['admin'] }
 ];
 

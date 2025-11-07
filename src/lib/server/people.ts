@@ -19,9 +19,11 @@ type AgentProfile = {
   email: string;
   phone?: string;
   statesLicensed?: string[];
-  zipCoverage?: string[];
+  coverageAreas?: string[];
   closings12mo?: number | null;
+  closingRatePercentage?: number | null;
   npsScore?: number | null;
+  avgResponseHours?: number | null;
   notes: NoteSummary[];
 };
 
@@ -33,6 +35,7 @@ type LenderProfile = {
   nmlsId?: string;
   team?: string | null;
   region?: string | null;
+  licensedStates?: string[];
   notes: NoteSummary[];
 };
 
@@ -61,7 +64,9 @@ type AgentLean = {
   statesLicensed?: string[] | null;
   zipCoverage?: string[] | null;
   closings12mo?: number | null;
+  closingRatePercentage?: number | null;
   npsScore?: number | null;
+  avgResponseHours?: number | null;
   notes?: NoteRecord[] | null;
 };
 
@@ -73,6 +78,7 @@ type LenderLean = {
   nmlsId?: string | null;
   team?: string | null;
   region?: string | null;
+  licensedStates?: string[] | null;
   notes?: NoteRecord[] | null;
 };
 
@@ -94,9 +100,11 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
     email: agent.email ?? '',
     phone: agent.phone ?? undefined,
     statesLicensed: Array.isArray(agent.statesLicensed) ? agent.statesLicensed : undefined,
-    zipCoverage: Array.isArray(agent.zipCoverage) ? agent.zipCoverage : undefined,
+    coverageAreas: Array.isArray(agent.zipCoverage) ? agent.zipCoverage : undefined,
     closings12mo: agent.closings12mo ?? null,
+    closingRatePercentage: agent.closingRatePercentage ?? null,
     npsScore: agent.npsScore ?? null,
+    avgResponseHours: agent.avgResponseHours ?? null,
     notes: serializeNotes(agent.notes)
   };
 }
@@ -121,6 +129,7 @@ export async function getLenderProfile(id: string): Promise<LenderProfile | null
     nmlsId: lender.nmlsId ?? undefined,
     team: lender.team ?? null,
     region: lender.region ?? null,
+    licensedStates: Array.isArray(lender.licensedStates) ? lender.licensedStates : undefined,
     notes: serializeNotes(lender.notes)
   };
 }

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { connectMongo } from '@/lib/mongoose';
 import { User } from '@/models/user';
+import { Agent } from '@/models/agent';
+import { LenderMC } from '@/models/lender';
 import { z } from 'zod';
 
 const roleValues = ['agent', 'mortgage-consultant', 'admin'] as const;
@@ -100,6 +102,45 @@ export async function POST(request: Request) {
       emailVerified: new Date(),
       passwordHash,
     });
+
+    try {
+      if (role === 'agent') {
+        await Agent.findOneAndUpdate(
+          { $or: [{ userId: user._id }, { email }] },
+          {
+            userId: user._id,
+            name,
+            email,
+            phone: '',
+            statesLicensed: [],
+            zipCoverage: [],
+            closings12mo: 0,
+            closingRatePercentage: null,
+            npsScore: null,
+            avgResponseHours: null,
+            active: true,
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+      } else if (role === 'mortgage-consultant') {
+        await LenderMC.findOneAndUpdate(
+          { $or: [{ userId: user._id }, { email }] },
+          {
+            userId: user._id,
+            name,
+            email,
+            phone: '',
+            nmlsId: '',
+            licensedStates: [],
+            team: '',
+            region: '',
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+      }
+    } catch (error) {
+      console.error('Failed to sync profile record', error);
+    }
 
     return NextResponse.json(
       {

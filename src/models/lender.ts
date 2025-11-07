@@ -14,10 +14,12 @@ const lenderNoteSchema = new Schema(
 
 const lenderSchema = new Schema(
   {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', index: true, sparse: true, unique: true },
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true, index: true },
-    phone: { type: String, required: true },
+    phone: { type: String, required: false },
     nmlsId: { type: String, required: true },
+    licensedStates: [{ type: String, index: true }],
     team: String,
     region: String,
     notes: { type: [lenderNoteSchema], default: [] }

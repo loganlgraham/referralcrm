@@ -6,6 +6,7 @@ import { Payment } from '@/models/payment';
 import { createReferralSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { calculateReferralFeeDue } from '@/utils/referral';
+import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
@@ -160,12 +161,13 @@ export async function POST(request: Request) {
     propertyZip: parsed.data.propertyZip,
     loanType: parsed.data.loanType,
     estPurchasePriceCents: parsed.data.estPurchasePrice ? parsed.data.estPurchasePrice * 100 : 0,
-    commissionBasisPoints: 3000,
-    referralFeeBasisPoints: parsed.data.estPurchasePrice && parsed.data.estPurchasePrice > 400000 ? 3500 : 2500,
+    commissionBasisPoints: DEFAULT_AGENT_COMMISSION_BPS,
+    referralFeeBasisPoints:
+      parsed.data.estPurchasePrice && parsed.data.estPurchasePrice > 400000 ? 3500 : DEFAULT_REFERRAL_FEE_BPS,
     referralFeeDueCents: calculateReferralFeeDue(
       (parsed.data.estPurchasePrice || 0) * 100,
-      3000,
-      parsed.data.estPurchasePrice && parsed.data.estPurchasePrice > 400000 ? 3500 : 2500
+      DEFAULT_AGENT_COMMISSION_BPS,
+      parsed.data.estPurchasePrice && parsed.data.estPurchasePrice > 400000 ? 3500 : DEFAULT_REFERRAL_FEE_BPS
     ),
     audit: [
       {

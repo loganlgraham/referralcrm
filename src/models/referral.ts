@@ -1,6 +1,6 @@
 import { Schema, model, models, Types } from 'mongoose';
 
-import { REFERRAL_STATUSES } from '@/constants/referrals';
+import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS, REFERRAL_STATUSES } from '@/constants/referrals';
 
 export type ReferralStatus = (typeof REFERRAL_STATUSES)[number];
 
@@ -72,8 +72,8 @@ const referralSchema = new Schema(
     loanType: String,
     preApprovalAmountCents: { type: Number, default: 0 },
     estPurchasePriceCents: { type: Number, default: 0 },
-    commissionBasisPoints: { type: Number, default: 0 },
-    referralFeeBasisPoints: { type: Number, default: 0 },
+    commissionBasisPoints: { type: Number, default: DEFAULT_AGENT_COMMISSION_BPS },
+    referralFeeBasisPoints: { type: Number, default: DEFAULT_REFERRAL_FEE_BPS },
     closedPriceCents: { type: Number, default: 0 },
     referralFeeDueCents: { type: Number, default: 0 },
     notes: { type: [referralNoteSchema], default: [] },
