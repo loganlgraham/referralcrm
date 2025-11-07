@@ -24,8 +24,22 @@ type LeanActivity = {
 };
 
 type LeanReferralAccess = {
-  assignedAgent?: Types.ObjectId | string | null;
-  lender?: Types.ObjectId | string | null;
+  assignedAgent?:
+    | Types.ObjectId
+    | string
+    | null
+    | {
+        _id?: Types.ObjectId | string | null;
+        userId?: Types.ObjectId | string | null;
+      };
+  lender?:
+    | Types.ObjectId
+    | string
+    | null
+    | {
+        _id?: Types.ObjectId | string | null;
+        userId?: Types.ObjectId | string | null;
+      };
   org: 'AFC' | 'AHA';
 };
 
@@ -44,17 +58,15 @@ export async function GET(_: NextRequest, { params }: Params): Promise<NextRespo
   await connectMongo();
   const referral = await Referral.findById(params.id)
     .select('assignedAgent lender org')
+    .populate('assignedAgent', 'userId')
+    .populate('lender', 'userId')
     .lean<LeanReferralAccess>();
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
   }
   const accessScope = {
-    assignedAgent:
-      typeof referral.assignedAgent === 'string'
-        ? referral.assignedAgent
-        : referral.assignedAgent?.toString?.(),
-    lender:
-      typeof referral.lender === 'string' ? referral.lender : referral.lender?.toString?.(),
+    assignedAgent: referral.assignedAgent,
+    lender: referral.lender,
     org: referral.org
   };
   if (!canViewReferral(session, accessScope)) {
@@ -81,17 +93,15 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   await connectMongo();
   const referral = await Referral.findById(params.id)
     .select('assignedAgent lender org')
+    .populate('assignedAgent', 'userId')
+    .populate('lender', 'userId')
     .lean<LeanReferralAccess>();
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
   }
   const accessScope = {
-    assignedAgent:
-      typeof referral.assignedAgent === 'string'
-        ? referral.assignedAgent
-        : referral.assignedAgent?.toString?.(),
-    lender:
-      typeof referral.lender === 'string' ? referral.lender : referral.lender?.toString?.(),
+    assignedAgent: referral.assignedAgent,
+    lender: referral.lender,
     org: referral.org
   };
   if (!canViewReferral(session, accessScope)) {

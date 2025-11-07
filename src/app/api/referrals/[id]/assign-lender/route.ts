@@ -23,22 +23,25 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
 
   await connectMongo();
-  const referral = await Referral.findById(params.id);
+  const referral = await Referral.findById(params.id)
+    .populate('assignedAgent', 'userId')
+    .populate('lender', 'userId');
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
   }
 
   if (
     !canManageReferral(session, {
-      assignedAgent: referral.assignedAgent?.toString?.(),
-      lender: referral.lender?.toString?.(),
+      assignedAgent: referral.assignedAgent,
+      lender: referral.lender,
       org: referral.org
     })
   ) {
     return new NextResponse('Forbidden', { status: 403 });
   }
 
-  const previousLender = referral.lender ? referral.lender.toString() : null;
+  const previousLenderValue = (referral.lender as any)?._id ?? referral.lender ?? null;
+  const previousLender = previousLenderValue ? previousLenderValue.toString() : null;
   referral.lender = parsed.data.lenderId as any;
   referral.audit = referral.audit || [];
   referral.audit.push({
