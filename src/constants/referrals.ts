@@ -3,7 +3,8 @@ export const REFERRAL_STATUSES = [
   'In Communication',
   'Showing Homes',
   'Under Contract',
-  'Closed'
+  'Closed',
+  'Terminated'
 ] as const;
 
 export type ReferralStatus = (typeof REFERRAL_STATUSES)[number];

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { differenceInDays } from 'date-fns';
+
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
@@ -68,6 +70,13 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       { referralId: referral._id },
       { $set: { expectedAmountCents: referral.referralFeeDueCents ?? 0 } }
     );
+  } else if (parsed.data.status === 'Terminated') {
+    referral.estPurchasePriceCents = 0;
+    referral.referralFeeDueCents = 0;
+    await Payment.updateMany(
+      { referralId: referral._id },
+      { $set: { expectedAmountCents: 0 } }
+    );
   } else if (parsed.data.status !== 'Closed') {
     const commissionBasisPoints = referral.commissionBasisPoints || DEFAULT_AGENT_COMMISSION_BPS;
     const referralFeeBasisPoints = referral.referralFeeBasisPoints || DEFAULT_REFERRAL_FEE_BPS;
@@ -84,6 +93,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
   await referral.save();
 
+  const statusLastUpdated = referral.statusLastUpdated ?? new Date();
+  const daysInStatus = differenceInDays(new Date(), statusLastUpdated);
+
   return NextResponse.json({
     id: referral._id.toString(),
     status: referral.status,
@@ -99,5 +111,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         : undefined,
     preApprovalAmountCents: referral.preApprovalAmountCents ?? 0,
     referralFeeDueCents: referral.referralFeeDueCents ?? 0,
+    contractPriceCents: referral.estPurchasePriceCents ?? 0,
+    statusLastUpdated: statusLastUpdated.toISOString(),
+    daysInStatus,
   });
 }

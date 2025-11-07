@@ -7,7 +7,7 @@ import { DEFAULT_AGENT_COMMISSION_BPS } from '@/constants/referrals';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency } from '@/utils/formatters';
 
-interface PaymentRow {
+interface DealRow {
   _id: string;
   referralId: string;
   status: 'under_contract' | 'closed' | 'paid';
@@ -27,12 +27,13 @@ interface PaymentRow {
   } | null;
 }
 
-export function PaymentsTable() {
+export function DealsTable() {
   const { data: session } = useSession();
-  const { data } = useSWR<PaymentRow[]>('/api/payments', fetcher);
-  if (!data) return <div className="rounded-lg bg-white p-4 shadow-sm">Loading payments…</div>;
+  const { data } = useSWR<DealRow[]>('/api/payments', fetcher);
+  if (!data)
+    return <div className="rounded-lg bg-white p-4 shadow-sm">Loading deals…</div>;
 
-  const calculateCommission = (row: PaymentRow) => {
+  const calculateCommission = (row: DealRow) => {
     const commissionBps = row.referral?.commissionBasisPoints ?? DEFAULT_AGENT_COMMISSION_BPS;
     const baseAmountCents =
       row.referral?.estPurchasePriceCents && row.referral.estPurchasePriceCents > 0
@@ -94,25 +95,25 @@ export function PaymentsTable() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {data.map((payment) => {
-              const commission = calculateCommission(payment);
+            {data.map((deal) => {
+              const commission = calculateCommission(deal);
               const paidAmount =
-                payment.status === 'paid'
-                  ? payment.receivedAmountCents || payment.expectedAmountCents
-                  : payment.receivedAmountCents;
-              const referralFee = payment.referral?.referralFeeDueCents ?? payment.expectedAmountCents;
+                deal.status === 'paid'
+                  ? deal.receivedAmountCents || deal.expectedAmountCents
+                  : deal.receivedAmountCents;
+              const referralFee = deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents;
               const netCommission = commission - paidAmount;
-              const statusLabel = payment.status.replace('_', ' ');
+              const statusLabel = deal.status.replace('_', ' ');
 
               return (
-                <tr key={payment._id} className="hover:bg-slate-50">
+                <tr key={deal._id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 text-sm text-slate-700">
                     <div className="flex flex-col">
                       <span className="font-medium text-slate-900">
-                        {payment.referral?.borrowerName || 'Referral'}
+                        {deal.referral?.borrowerName || 'Referral'}
                       </span>
                       <span className="text-xs text-slate-500">
-                        {payment.referral?.propertyAddress || payment.referral?.propertyZip || payment.referralId}
+                        {deal.referral?.propertyAddress || deal.referral?.propertyZip || deal.referralId}
                       </span>
                     </div>
                   </td>

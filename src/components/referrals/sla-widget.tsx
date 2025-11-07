@@ -17,7 +17,15 @@ export function SLAWidget({ referral }: { referral: any }) {
 
   const getFirstStatusTimestamp = (status: string): Date | null => {
     const match = sortedAudit.find((entry) => entry.newValue === status && entry.timestamp);
-    return match?.timestamp ? new Date(match.timestamp) : null;
+    if (match?.timestamp) {
+      return new Date(match.timestamp);
+    }
+
+    if (referral.status === status && referral.statusLastUpdated) {
+      return new Date(referral.statusLastUpdated);
+    }
+
+    return null;
   };
 
   const firstContactAt = getFirstStatusTimestamp('In Communication');

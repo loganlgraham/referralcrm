@@ -20,7 +20,8 @@ export function nextStatuses(status: ReferralStatus): ReferralStatus[] {
     'In Communication',
     'Showing Homes',
     'Under Contract',
-    'Closed'
+    'Closed',
+    'Terminated'
   ];
   const currentIndex = pipeline.indexOf(status);
   if (currentIndex === -1) return pipeline;

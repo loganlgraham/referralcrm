@@ -50,7 +50,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const amountCents = Math.round(parsed.data.amount * 100);
   referral.preApprovalAmountCents = amountCents;
 
-  if (referral.status !== 'Under Contract' && referral.status !== 'Closed') {
+  if (!['Under Contract', 'Closed', 'Terminated'].includes(referral.status as string)) {
     const commissionBasisPoints = referral.commissionBasisPoints || DEFAULT_AGENT_COMMISSION_BPS;
     const referralFeeBasisPoints = referral.referralFeeBasisPoints || DEFAULT_REFERRAL_FEE_BPS;
     referral.referralFeeDueCents = calculateReferralFeeDue(

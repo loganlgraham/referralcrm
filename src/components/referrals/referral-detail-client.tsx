@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { ReferralHeader } from '@/components/referrals/referral-header';
 import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
-import { PaymentCard } from '@/components/referrals/payment-card';
+import { DealCard } from '@/components/referrals/deal-card';
 import type { ReferralStatus } from '@/constants/referrals';
 
 interface ReferralDetailClientProps {
@@ -125,13 +125,13 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
     propertyAddress: financials.propertyAddress ?? referral.propertyAddress,
   };
 
-  const paymentReferral = {
+  const dealReferral = {
     ...referral,
     referralFeeDueCents: financials.referralFeeDueCents,
     propertyAddress: financials.propertyAddress ?? referral.propertyAddress,
   };
 
-  const paymentOverrides: {
+  const dealOverrides: {
     referralFeeDueCents?: number;
     propertyAddress?: string;
     hasUnsavedContractChanges: boolean;
@@ -149,7 +149,7 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
         hasUnsavedContractChanges: false,
       };
 
-  const showPayments = financials.status === 'Under Contract' || financials.status === 'Closed';
+  const showDeals = financials.status === 'Under Contract' || financials.status === 'Closed';
 
   return (
     <div className="space-y-6">
@@ -161,7 +161,7 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
       />
       <ReferralNotes referralId={referralId} initialNotes={notes} viewerRole={viewerRole} />
       <ReferralTimeline referralId={referralId} />
-      {showPayments && <PaymentCard referral={paymentReferral} overrides={paymentOverrides} />}
+      {showDeals && <DealCard referral={dealReferral} overrides={dealOverrides} />}
     </div>
   );
 }

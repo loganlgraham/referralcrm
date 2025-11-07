@@ -139,9 +139,21 @@ export function StatusChanger({
 
   useEffect(() => {
     const nextForm = buildInitialFormState(contractDetails);
-    setContractForm(nextForm);
-    setContractDirty(false);
-    broadcastContractState(nextForm, false);
+    setContractForm((previous) => {
+      const hasChanged =
+        previous.propertyAddress !== nextForm.propertyAddress ||
+        previous.contractPrice !== nextForm.contractPrice ||
+        previous.agentCommissionPercentage !== nextForm.agentCommissionPercentage ||
+        previous.referralFeePercentage !== nextForm.referralFeePercentage;
+
+      if (!hasChanged) {
+        return previous;
+      }
+
+      setContractDirty(false);
+      broadcastContractState(nextForm, false);
+      return nextForm;
+    });
   }, [
     broadcastContractState,
     contractDetails?.propertyAddress,

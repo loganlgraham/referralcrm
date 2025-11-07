@@ -194,6 +194,7 @@ export async function getReferralById(id: string) {
     lender: referral.lender ? { ...referral.lender, _id: referral.lender._id.toString() } : null,
     payments: payments.map((payment: any) => ({ ...payment, _id: payment._id.toString() })),
     daysInStatus,
+    statusLastUpdated: referral.statusLastUpdated ? referral.statusLastUpdated.toISOString() : null,
     notes: filteredNotes,
     viewerRole
   };

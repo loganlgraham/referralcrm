@@ -5,77 +5,79 @@ import { toast } from 'sonner';
 
 import { formatCurrency } from '@/utils/formatters';
 
-type PaymentStatus = 'under_contract' | 'closed' | 'paid';
+type DealStatus = 'under_contract' | 'closed' | 'paid';
 
-interface PaymentRecord {
+interface DealRecord {
   _id?: string;
   status?: string;
   expectedAmountCents?: number;
 }
 
-interface PaymentOverrides {
+interface DealOverrides {
   referralFeeDueCents?: number;
   propertyAddress?: string;
   hasUnsavedContractChanges?: boolean;
 }
 
-interface ReferralPaymentProps {
+interface ReferralDealProps {
   referral: {
     _id: string;
     propertyAddress?: string;
     propertyZip?: string;
     referralFeeDueCents?: number;
-    payments?: PaymentRecord[];
+    payments?: DealRecord[];
   };
-  overrides?: PaymentOverrides;
+  overrides?: DealOverrides;
 }
 
-const STATUS_OPTIONS: { value: PaymentStatus; label: string }[] = [
+const STATUS_OPTIONS: { value: DealStatus; label: string }[] = [
   { value: 'under_contract', label: 'Under Contract' },
   { value: 'closed', label: 'Closed' },
   { value: 'paid', label: 'Paid' }
 ];
 
-export function PaymentCard({ referral, overrides }: ReferralPaymentProps) {
-  const existingPayment = referral.payments?.[0];
-  const initialStatus = STATUS_OPTIONS.find((option) => option.value === existingPayment?.status)?.value ?? 'under_contract';
-  const [status, setStatus] = useState<PaymentStatus>(initialStatus);
+export function DealCard({ referral, overrides }: ReferralDealProps) {
+  const existingDeal = referral.payments?.[0];
+  const initialStatus = STATUS_OPTIONS.find((option) => option.value === existingDeal?.status)?.value ?? 'under_contract';
+  const [status, setStatus] = useState<DealStatus>(initialStatus);
   const [saving, setSaving] = useState(false);
-  const [paymentId, setPaymentId] = useState<string | undefined>(existingPayment?._id);
+  const [dealRecordId, setDealRecordId] = useState<string | undefined>(existingDeal?._id);
 
   const expectedAmountCents = useMemo(() => {
     if (overrides?.referralFeeDueCents !== undefined) {
       return overrides.referralFeeDueCents;
     }
-    if (existingPayment?.expectedAmountCents && existingPayment.expectedAmountCents > 0) {
-      return existingPayment.expectedAmountCents;
+    if (existingDeal?.expectedAmountCents && existingDeal.expectedAmountCents > 0) {
+      return existingDeal.expectedAmountCents;
     }
     return referral.referralFeeDueCents ?? 0;
-  }, [existingPayment?.expectedAmountCents, overrides?.referralFeeDueCents, referral.referralFeeDueCents]);
+  }, [existingDeal?.expectedAmountCents, overrides?.referralFeeDueCents, referral.referralFeeDueCents]);
 
   const formattedAmount = expectedAmountCents > 0 ? formatCurrency(expectedAmountCents) : '—';
   const propertyLabel =
-    overrides?.propertyAddress || referral.propertyAddress || (referral.propertyZip ? `Zip ${referral.propertyZip}` : 'Pending address');
+    overrides?.propertyAddress ||
+    referral.propertyAddress ||
+    (referral.propertyZip ? `Zip ${referral.propertyZip}` : 'Pending address');
 
   const handleStatusChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const nextStatus = event.target.value as PaymentStatus;
+    const nextStatus = event.target.value as DealStatus;
     setStatus(nextStatus);
 
     if (expectedAmountCents <= 0) {
-      toast.error('Add contract details before updating payment status.');
+      toast.error('Add contract details before updating deal status.');
       return;
     }
 
     setSaving(true);
     try {
-      if (paymentId) {
+      if (dealRecordId) {
         const response = await fetch('/api/payments', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: paymentId, status: nextStatus })
+          body: JSON.stringify({ id: dealRecordId, status: nextStatus })
         });
         if (!response.ok) {
-          throw new Error('Unable to update payment');
+          throw new Error('Unable to update deal');
         }
       } else {
         const response = await fetch('/api/payments', {
@@ -88,15 +90,15 @@ export function PaymentCard({ referral, overrides }: ReferralPaymentProps) {
           })
         });
         if (!response.ok) {
-          throw new Error('Unable to create payment record');
+          throw new Error('Unable to create deal record');
         }
         const body = (await response.json()) as { id: string };
-        setPaymentId(body.id);
+        setDealRecordId(body.id);
       }
-      toast.success('Payment status saved');
+      toast.success('Deal status saved');
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : 'Unable to update payment');
+      toast.error(error instanceof Error ? error.message : 'Unable to update deal');
     } finally {
       setSaving(false);
     }
@@ -105,7 +107,7 @@ export function PaymentCard({ referral, overrides }: ReferralPaymentProps) {
   return (
     <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Payments</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Deals</h2>
         <p className="text-sm text-slate-500">Track referral revenue from contract through payout</p>
       </div>
       <div className="grid gap-3 text-sm">
@@ -122,7 +124,7 @@ export function PaymentCard({ referral, overrides }: ReferralPaymentProps) {
         </div>
         <div className="rounded border border-slate-200 p-3">
           <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">
-            Payment Status
+            Deal Status
             <select
               value={status}
               onChange={handleStatusChange}
@@ -138,7 +140,7 @@ export function PaymentCard({ referral, overrides }: ReferralPaymentProps) {
           </label>
           {expectedAmountCents <= 0 && (
             <p className="mt-2 text-xs text-amber-600">
-              Enter contract details to calculate the referral fee before updating payment status.
+              Enter contract details to calculate the referral fee before updating deal status.
             </p>
           )}
         </div>

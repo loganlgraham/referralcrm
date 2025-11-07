@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { differenceInDays } from 'date-fns';
 
 import { ReferralStatus, REFERRAL_STATUSES } from '@/constants/referrals';
 import { formatCurrency } from '@/utils/formatters';
@@ -225,6 +226,12 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
       setReferralFeeDueCents(nextReferralFeeDue);
     }
 
+    if (payload?.contractPriceCents !== undefined) {
+      const updatedContractPrice = Number(payload.contractPriceCents) || 0;
+      setContractPriceCents(updatedContractPrice);
+      nextContractPrice = updatedContractPrice;
+    }
+
     if (nextStatus === 'Under Contract' && payload?.contractDetails) {
       const details = payload.contractDetails as {
         propertyAddress?: string;
@@ -258,22 +265,31 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
       setDraftContract({ hasUnsavedChanges: false });
     }
 
+    const statusUpdatedAtRaw = payload?.statusLastUpdated;
+    const statusUpdatedAt =
+      typeof statusUpdatedAtRaw === 'string'
+        ? new Date(statusUpdatedAtRaw)
+        : statusUpdatedAtRaw instanceof Date
+        ? statusUpdatedAtRaw
+        : new Date();
+
+    const computedDaysInStatus =
+      typeof payload?.daysInStatus === 'number' && !Number.isNaN(Number(payload.daysInStatus))
+        ? Number(payload.daysInStatus)
+        : differenceInDays(new Date(), statusUpdatedAt);
+
     if (nextStatus !== previousStatusValue) {
-      const nextDays =
-        typeof payload?.daysInStatus === 'number' && !Number.isNaN(Number(payload.daysInStatus))
-          ? Number(payload.daysInStatus)
-          : 0;
-      setDaysInStatus(nextDays);
+      setDaysInStatus(computedDaysInStatus);
       setAuditEntries((previous) => [
         ...(Array.isArray(previous) ? previous : []),
         {
           field: 'status',
           newValue: nextStatus,
-          timestamp: new Date().toISOString(),
+          timestamp: statusUpdatedAt.toISOString(),
         },
       ]);
-    } else if (typeof payload?.daysInStatus === 'number' && !Number.isNaN(Number(payload.daysInStatus))) {
-      setDaysInStatus(Number(payload.daysInStatus));
+    } else {
+      setDaysInStatus(computedDaysInStatus);
     }
 
     onFinancialsChange?.({
