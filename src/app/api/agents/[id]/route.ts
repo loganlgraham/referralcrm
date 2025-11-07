@@ -77,9 +77,13 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     update.avgResponseHours = parsed.data.avgResponseHours;
   }
 
-  const updated = await Agent.findByIdAndUpdate(params.id, { $set: update }, { new: true }).lean();
+  const updated = await Agent.findByIdAndUpdate(params.id, { $set: update }, { new: true });
 
-  if (updated?.userId && (parsed.data.name !== undefined || parsed.data.email !== undefined)) {
+  if (!updated) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
+  if (updated.userId && (parsed.data.name !== undefined || parsed.data.email !== undefined)) {
     const userUpdate: Record<string, unknown> = {};
     if (parsed.data.name !== undefined) {
       userUpdate.name = parsed.data.name;
@@ -92,16 +96,18 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     }
   }
 
+  const updatedAgent = updated.toObject();
+
   return NextResponse.json({
-    _id: updated?._id.toString(),
-    name: updated?.name,
-    email: updated?.email,
-    phone: updated?.phone,
-    statesLicensed: updated?.statesLicensed ?? [],
-    coverageAreas: updated?.zipCoverage ?? [],
-    closings12mo: updated?.closings12mo ?? 0,
-    closingRatePercentage: updated?.closingRatePercentage ?? null,
-    npsScore: updated?.npsScore ?? null,
-    avgResponseHours: updated?.avgResponseHours ?? null,
+    _id: updatedAgent._id.toString(),
+    name: updatedAgent.name,
+    email: updatedAgent.email,
+    phone: updatedAgent.phone,
+    statesLicensed: updatedAgent.statesLicensed ?? [],
+    coverageAreas: updatedAgent.zipCoverage ?? [],
+    closings12mo: updatedAgent.closings12mo ?? 0,
+    closingRatePercentage: updatedAgent.closingRatePercentage ?? null,
+    npsScore: updatedAgent.npsScore ?? null,
+    avgResponseHours: updatedAgent.avgResponseHours ?? null,
   });
 }

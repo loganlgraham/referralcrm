@@ -69,9 +69,13 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     update.region = parsed.data.region;
   }
 
-  const updated = await LenderMC.findByIdAndUpdate(params.id, { $set: update }, { new: true }).lean();
+  const updated = await LenderMC.findByIdAndUpdate(params.id, { $set: update }, { new: true });
 
-  if (updated?.userId && (parsed.data.name !== undefined || parsed.data.email !== undefined)) {
+  if (!updated) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
+  if (updated.userId && (parsed.data.name !== undefined || parsed.data.email !== undefined)) {
     const userUpdate: Record<string, unknown> = {};
     if (parsed.data.name !== undefined) {
       userUpdate.name = parsed.data.name;
@@ -84,14 +88,16 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     }
   }
 
+  const updatedLender = updated.toObject();
+
   return NextResponse.json({
-    _id: updated?._id.toString(),
-    name: updated?.name,
-    email: updated?.email,
-    phone: updated?.phone,
-    nmlsId: updated?.nmlsId,
-    licensedStates: updated?.licensedStates ?? [],
-    team: updated?.team ?? '',
-    region: updated?.region ?? '',
+    _id: updatedLender._id.toString(),
+    name: updatedLender.name,
+    email: updatedLender.email,
+    phone: updatedLender.phone,
+    nmlsId: updatedLender.nmlsId,
+    licensedStates: updatedLender.licensedStates ?? [],
+    team: updatedLender.team ?? '',
+    region: updatedLender.region ?? '',
   });
 }
