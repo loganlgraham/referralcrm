@@ -33,10 +33,18 @@ function extractId(value: unknown): string | undefined {
     if (direct) {
       if (typeof direct === 'string') return direct;
       if (typeof direct === 'number' || typeof direct === 'bigint') return direct.toString();
-      if (typeof direct === 'object' && direct !== null && 'toString' in direct) {
-        const result = (direct as { toString: () => string }).toString();
-        if (result && result !== '[object Object]') return result;
+      if (typeof direct === 'object' && direct !== null) {
+        if (typeof (direct as any).toHexString === 'function') {
+          return (direct as { toHexString: () => string }).toHexString();
+        }
+        if ('toString' in direct && typeof direct.toString === 'function') {
+          const result = direct.toString();
+          if (result && result !== '[object Object]') return result;
+        }
       }
+    }
+    if (typeof (obj as any).toHexString === 'function') {
+      return (obj as { toHexString: () => string }).toHexString();
     }
     if ('toString' in obj && typeof obj.toString === 'function') {
       const fallback = obj.toString();
@@ -56,10 +64,15 @@ function extractUserId(value: unknown): string | undefined {
   if (!candidate) return undefined;
   if (typeof candidate === 'string') return candidate;
   if (typeof candidate === 'number' || typeof candidate === 'bigint') return candidate.toString();
-  if (typeof candidate === 'object' && candidate !== null && 'toString' in candidate) {
-    const valueAsString = (candidate as { toString: () => string }).toString();
-    if (valueAsString && valueAsString !== '[object Object]') {
-      return valueAsString;
+  if (typeof candidate === 'object' && candidate !== null) {
+    if (typeof (candidate as any).toHexString === 'function') {
+      return (candidate as { toHexString: () => string }).toHexString();
+    }
+    if ('toString' in candidate && typeof candidate.toString === 'function') {
+      const valueAsString = candidate.toString();
+      if (valueAsString && valueAsString !== '[object Object]') {
+        return valueAsString;
+      }
     }
   }
   return undefined;

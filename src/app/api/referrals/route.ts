@@ -7,6 +7,8 @@ import { createReferralSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { calculateReferralFeeDue } from '@/utils/referral';
 import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
+import { Agent } from '@/models/agent';
+import { LenderMC } from '@/models/lender';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
@@ -151,7 +153,7 @@ export async function POST(request: Request) {
 
   await connectMongo();
 
-  const referral = await Referral.create({
+  const referralData: Record<string, unknown> = {
     borrower: {
       name: parsed.data.borrowerName,
       email: parsed.data.borrowerEmail,
@@ -180,7 +182,23 @@ export async function POST(request: Request) {
         ip: ''
       }
     ]
-  });
+  };
+
+  if (session.user.role === 'mc') {
+    const lender = await LenderMC.findOne({ userId: session.user.id }).select('_id');
+    if (lender) {
+      referralData.lender = lender._id;
+    }
+  }
+
+  if (session.user.role === 'agent') {
+    const agent = await Agent.findOne({ userId: session.user.id }).select('_id');
+    if (agent) {
+      referralData.assignedAgent = agent._id;
+    }
+  }
+
+  const referral = await Referral.create(referralData);
 
   return NextResponse.json({ id: referral._id.toString() }, { status: 201 });
 }
