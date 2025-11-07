@@ -69,10 +69,28 @@ export async function getReferrals(params: GetReferralsParams) {
   if (state) query.propertyZip = new RegExp(`^${state}`, 'i');
 
   if (session?.user?.role === 'mc') {
-    query.lender = session.user.id;
+    const lender = await LenderMC.findOne({ userId: session.user.id }).select('_id');
+    if (!lender) {
+      return {
+        items: [],
+        total: 0,
+        page,
+        pageSize: PAGE_SIZE
+      };
+    }
+    query.lender = lender._id;
   }
   if (session?.user?.role === 'agent') {
-    query.assignedAgent = session.user.id;
+    const agent = await Agent.findOne({ userId: session.user.id }).select('_id');
+    if (!agent) {
+      return {
+        items: [],
+        total: 0,
+        page,
+        pageSize: PAGE_SIZE
+      };
+    }
+    query.assignedAgent = agent._id;
   }
   if (mc) {
     const lender = await LenderMC.findOne({

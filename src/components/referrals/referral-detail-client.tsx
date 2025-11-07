@@ -149,6 +149,8 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
         hasUnsavedContractChanges: false,
       };
 
+  const showPayments = financials.status === 'Under Contract' || financials.status === 'Closed';
+
   return (
     <div className="space-y-6">
       <ReferralHeader
@@ -159,7 +161,7 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
       />
       <ReferralNotes referralId={referralId} initialNotes={notes} viewerRole={viewerRole} />
       <ReferralTimeline referralId={referralId} />
-      <PaymentCard referral={paymentReferral} overrides={paymentOverrides} />
+      {showPayments && <PaymentCard referral={paymentReferral} overrides={paymentOverrides} />}
     </div>
   );
 }

@@ -31,7 +31,7 @@ export function Sidebar({ session }: { session: Session }) {
   };
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-20 w-64 bg-white shadow-lg">
+    <aside className="fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-lg">
       <div className="flex h-16 items-center justify-between border-b px-6">
         <div>
           <p className="text-sm font-semibold text-brand">AFC · AHA</p>

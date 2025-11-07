@@ -24,12 +24,44 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const userId = session.user?.id;
   const referralMatch: Record<string, unknown> = { deletedAt: null };
 
+  let missingProfile = false;
+
   if (role === 'mc' && userId) {
-    referralMatch.lender = Types.ObjectId.isValid(userId) ? new Types.ObjectId(userId) : userId;
+    const lender = await LenderMC.findOne({ userId }).select('_id');
+    if (!lender) {
+      missingProfile = true;
+    }
+    if (lender) {
+      referralMatch.lender = lender._id as Types.ObjectId;
+    }
   }
 
   if (role === 'agent' && userId) {
-    referralMatch.assignedAgent = Types.ObjectId.isValid(userId) ? new Types.ObjectId(userId) : userId;
+    const agent = await Agent.findOne({ userId }).select('_id');
+    if (!agent) {
+      missingProfile = true;
+    }
+    if (agent) {
+      referralMatch.assignedAgent = agent._id as Types.ObjectId;
+    }
+  }
+
+  if (missingProfile) {
+    if (summary) {
+      return NextResponse.json({
+        role,
+        totalReferrals: 0,
+        closedReferrals: 0,
+        closeRate: 0,
+        expectedRevenueCents: 0,
+        amountPaidCents: 0,
+        earnedCommissionCents: 0
+      });
+    }
+    if (leaderboard) {
+      return NextResponse.json({ mc: [], agents: [], markets: [] });
+    }
+    return NextResponse.json([]);
   }
 
   if (summary) {
