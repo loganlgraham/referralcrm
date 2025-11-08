@@ -230,11 +230,9 @@ export function DealsTable() {
       status: nextStatus,
     };
 
-    if (nextStatus !== 'terminated') {
-      const fallbackExpected = deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
-      if (fallbackExpected > 0) {
-        updates.expectedAmountCents = fallbackExpected;
-      }
+    const fallbackExpected = deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
+    if (fallbackExpected > 0) {
+      updates.expectedAmountCents = fallbackExpected;
     }
 
     await updateDeal(deal, updates, 'Deal status updated');
