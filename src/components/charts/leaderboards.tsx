@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatNumber } from '@/utils/formatters';
@@ -100,6 +100,8 @@ export function Leaderboards() {
     setIsMounted(true);
   }, []);
 
+  const timeframeLabel = TIMEFRAME_OPTIONS.find((option) => option.value === timeframe)?.label ?? 'This Month';
+
   if (error) {
     return (
       <div className="rounded-lg bg-red-50 p-4 text-red-800">
@@ -136,11 +138,6 @@ export function Leaderboards() {
   const mcEntries = data.mcTransfers[timeframe] ?? [];
   const closingEntries = data.agentClosings[timeframe] ?? [];
   const rateEntries = data.agentCloseRate[timeframe] ?? [];
-
-  const timeframeLabel = useMemo(
-    () => TIMEFRAME_OPTIONS.find((option) => option.value === timeframe)?.label ?? 'This Month',
-    [timeframe]
-  );
 
   return (
     <div className="space-y-4">
