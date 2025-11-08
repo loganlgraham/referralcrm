@@ -39,7 +39,7 @@ const STATUS_OPTIONS: { value: DealStatus; label: string }[] = [
   { value: 'terminated', label: 'Terminated' }
 ];
 
-const normalizeDeals = (deals: DealRecord[] | undefined): DealRecord[] => {
+const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] => {
   if (!Array.isArray(deals)) {
     return [];
   }
