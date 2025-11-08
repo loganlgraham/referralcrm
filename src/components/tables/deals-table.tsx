@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 
 import { DEFAULT_AGENT_COMMISSION_BPS } from '@/constants/referrals';
@@ -51,6 +52,7 @@ export function DealsTable() {
   const { data: session } = useSession();
   const { data, mutate } = useSWR<DealRow[]>('/api/payments', fetcher);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
 
   if (!data) {
     return <div className="rounded-lg bg-white p-4 shadow-sm">Loading deals…</div>;
@@ -146,26 +148,28 @@ export function DealsTable() {
     );
   })();
 
-  const handleStatusChange = async (deal: DealRow, nextStatus: DealStatus) => {
-    const previousSnapshot = [...data];
-    const optimistic = data.map((row) => (row._id === deal._id ? { ...row, status: nextStatus } : row));
+  const updateDeal = async (
+    deal: DealRow,
+    updates: Partial<Pick<DealRow, 'status' | 'expectedAmountCents' | 'receivedAmountCents'>>,
+    successMessage: string
+  ) => {
+    const previousSnapshot = data;
+    const optimisticRow: DealRow = { ...deal, ...updates };
+    const optimistic = data.map((row) => (row._id === deal._id ? optimisticRow : row));
 
     setUpdatingId(deal._id);
     await mutate(optimistic, false);
 
     try {
-      const payload: Record<string, unknown> = {
-        id: deal._id,
-        status: nextStatus,
-      };
-
-      if (nextStatus === 'terminated') {
-        payload.expectedAmountCents = 0;
-      } else {
-        const fallbackExpected = deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
-        if (fallbackExpected > 0) {
-          payload.expectedAmountCents = fallbackExpected;
-        }
+      const payload: Record<string, unknown> = { id: deal._id };
+      if ('status' in updates && updates.status) {
+        payload.status = updates.status;
+      }
+      if ('expectedAmountCents' in updates) {
+        payload.expectedAmountCents = updates.expectedAmountCents ?? 0;
+      }
+      if ('receivedAmountCents' in updates) {
+        payload.receivedAmountCents = updates.receivedAmountCents ?? 0;
       }
 
       const response = await fetch('/api/payments', {
@@ -175,96 +179,306 @@ export function DealsTable() {
       });
 
       if (!response.ok) {
-        throw new Error('Unable to update deal status');
+        throw new Error('Unable to update deal');
       }
 
-      toast.success('Deal status updated');
+      toast.success(successMessage);
       await mutate();
     } catch (error) {
       console.error(error);
       await mutate(previousSnapshot, false);
-      toast.error(error instanceof Error ? error.message : 'Unable to update deal status');
+      toast.error(error instanceof Error ? error.message : 'Unable to update deal');
       await mutate();
     } finally {
       setUpdatingId(null);
     }
   };
 
+  const handleStatusChange = async (deal: DealRow, nextStatus: DealStatus) => {
+    const updates: Partial<Pick<DealRow, 'status' | 'expectedAmountCents' | 'receivedAmountCents'>> = {
+      status: nextStatus,
+    };
+
+    if (nextStatus === 'terminated') {
+      updates.expectedAmountCents = 0;
+      updates.receivedAmountCents = 0;
+    } else {
+      const fallbackExpected = deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
+      if (fallbackExpected > 0) {
+        updates.expectedAmountCents = fallbackExpected;
+      }
+    }
+
+    await updateDeal(deal, updates, 'Deal status updated');
+  };
+
+  const handlePaidToggle = async (deal: DealRow, checked: boolean) => {
+    if (deal.status === 'terminated') {
+      return;
+    }
+
+    if (checked && deal.status === 'paid') {
+      return;
+    }
+
+    if (!checked && deal.status !== 'paid') {
+      return;
+    }
+
+    const nextStatus: DealStatus = checked ? 'paid' : 'closed';
+    const updates: Partial<Pick<DealRow, 'status' | 'expectedAmountCents'>> = {
+      status: nextStatus,
+    };
+
+    if (nextStatus !== 'terminated') {
+      const fallbackExpected = deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
+      if (fallbackExpected > 0) {
+        updates.expectedAmountCents = fallbackExpected;
+      }
+    }
+
+    await updateDeal(deal, updates, 'Deal status updated');
+  };
+
+  const handleAmountChange = (dealId: string, value: string) => {
+    setAmountDrafts((prev) => ({ ...prev, [dealId]: value }));
+  };
+
+  const handleAmountBlur = async (deal: DealRow) => {
+    const draft = amountDrafts[deal._id];
+    if (draft === undefined) {
+      return;
+    }
+
+    const trimmed = draft.trim();
+    if (!trimmed) {
+      setAmountDrafts((prev) => {
+        const next = { ...prev };
+        delete next[deal._id];
+        return next;
+      });
+      return;
+    }
+
+    const parsed = Number(trimmed.replace(/[^0-9.]/g, ''));
+    if (Number.isNaN(parsed) || parsed < 0) {
+      toast.error('Enter a valid received amount');
+      setAmountDrafts((prev) => {
+        const next = { ...prev };
+        delete next[deal._id];
+        return next;
+      });
+      return;
+    }
+
+    const cents = Math.round(parsed * 100);
+    if (cents === (deal.receivedAmountCents ?? 0)) {
+      setAmountDrafts((prev) => {
+        const next = { ...prev };
+        delete next[deal._id];
+        return next;
+      });
+      return;
+    }
+
+    await updateDeal(deal, { receivedAmountCents: cents }, 'Received amount updated');
+    setAmountDrafts((prev) => {
+      const next = { ...prev };
+      delete next[deal._id];
+      return next;
+    });
+  };
+
+  const renderReferralLink = (deal: DealRow) => {
+    const label = deal.referral?.borrowerName || 'Referral';
+    const href = deal.referralId ? `/referrals/${deal.referralId}` : '#';
+
+    if (!deal.referralId) {
+      return <span className="font-medium text-slate-900">{label}</span>;
+    }
+
+    return (
+      <Link
+        prefetch={false}
+        href={href}
+        className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+      >
+        {label}
+      </Link>
+    );
+  };
+
+  const renderStatusControl = (deal: DealRow) => (
+    <select
+      value={deal.status}
+      onChange={(event) => handleStatusChange(deal, event.target.value as DealStatus)}
+      className="rounded border border-slate-200 px-2 py-1 text-sm text-slate-700"
+      disabled={updatingId === deal._id}
+    >
+      {STATUS_OPTIONS.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+
+  const formatCentsForInput = (value: number | null | undefined) => {
+    if (value === null || value === undefined) {
+      return '';
+    }
+    return (value / 100).toFixed(2);
+  };
+
+  const renderAdminTable = () => (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <table className="min-w-full divide-y divide-slate-200">
+        <thead className="bg-slate-50">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Address</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral Fee</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Amount Received</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Paid</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {data.map((deal) => {
+            const isTerminated = deal.status === 'terminated';
+            const referralFee = isTerminated
+              ? 0
+              : deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
+            const receivedDraft = amountDrafts[deal._id];
+            const receivedInputValue =
+              receivedDraft !== undefined ? receivedDraft : formatCentsForInput(deal.receivedAmountCents ?? 0);
+
+            return (
+              <tr key={deal._id} className="hover:bg-slate-50">
+                <td className="px-4 py-3 text-sm text-slate-700">
+                  <div className="flex flex-col">
+                    {renderReferralLink(deal)}
+                    <span className="text-xs text-slate-500">{deal.referralId}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-sm text-slate-700">{renderStatusControl(deal)}</td>
+                <td className="px-4 py-3 text-sm text-slate-700">
+                  {deal.referral?.propertyAddress || deal.referral?.propertyZip || '—'}
+                </td>
+                <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(referralFee)}</td>
+                <td className="px-4 py-3 text-sm text-slate-700">
+                  {isTerminated ? (
+                    '—'
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-400">$</span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="0.01"
+                        value={receivedInputValue}
+                        onChange={(event) => handleAmountChange(deal._id, event.target.value)}
+                        onBlur={() => handleAmountBlur(deal)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.currentTarget.blur();
+                          }
+                          if (event.key === 'Escape') {
+                            setAmountDrafts((prev) => {
+                              const next = { ...prev };
+                              delete next[deal._id];
+                              return next;
+                            });
+                            event.currentTarget.blur();
+                          }
+                        }}
+                        className="w-28 rounded border border-slate-200 px-2 py-1 text-sm text-slate-700 focus:border-brand focus:outline-none"
+                        disabled={updatingId === deal._id}
+                      />
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-sm text-slate-700">
+                  {isTerminated ? (
+                    '—'
+                  ) : (
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                        checked={deal.status === 'paid'}
+                        onChange={(event) => handlePaidToggle(deal, event.target.checked)}
+                        disabled={updatingId === deal._id}
+                      />
+                      <span className="text-sm text-slate-700">{deal.status === 'paid' ? 'Yes' : 'No'}</span>
+                    </label>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const renderDefaultTable = () => (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <table className="min-w-full divide-y divide-slate-200">
+        <thead className="bg-slate-50">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral Fee</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {isAgentView ? 'Referral Fee Paid' : 'Paid'}
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Commission</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Net Commission</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {data.map((deal) => {
+            const commission = calculateCommission(deal);
+            const isTerminated = deal.status === 'terminated';
+            const paidAmount = isTerminated
+              ? 0
+              : deal.status === 'paid'
+                ? deal.receivedAmountCents || deal.expectedAmountCents || 0
+                : deal.receivedAmountCents || 0;
+            const referralFee = isTerminated
+              ? 0
+              : deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents;
+            const netCommission = isTerminated ? 0 : commission - paidAmount;
+
+            return (
+              <tr key={deal._id} className="hover:bg-slate-50">
+                <td className="px-4 py-3 text-sm text-slate-700">
+                  <div className="flex flex-col">
+                    {renderReferralLink(deal)}
+                    <span className="text-xs text-slate-500">
+                      {deal.referral?.propertyAddress || deal.referral?.propertyZip || deal.referralId}
+                    </span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-sm text-slate-700">{renderStatusControl(deal)}</td>
+                <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</td>
+                <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(paidAmount)}</td>
+                <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(commission)}</td>
+                <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(netCommission)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       {summarySection}
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral Fee</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {isAgentView ? 'Referral Fee Paid' : 'Paid'}
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Commission</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Net Commission</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {data.map((deal) => {
-              const commission = calculateCommission(deal);
-              const isTerminated = deal.status === 'terminated';
-              const paidAmount = isTerminated
-                ? 0
-                : deal.status === 'paid'
-                  ? deal.receivedAmountCents || deal.expectedAmountCents || 0
-                  : deal.receivedAmountCents || 0;
-              const referralFee = isTerminated
-                ? 0
-                : deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents;
-              const netCommission = isTerminated ? 0 : commission - paidAmount;
-
-              return (
-                <tr key={deal._id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 text-sm text-slate-700">
-                    <div className="flex flex-col">
-                      <span className="font-medium text-slate-900">
-                        {deal.referral?.borrowerName || 'Referral'}
-                      </span>
-                      <span className="text-xs text-slate-500">
-                        {deal.referral?.propertyAddress || deal.referral?.propertyZip || deal.referralId}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-700">
-                    <select
-                      value={deal.status}
-                      onChange={(event) => handleStatusChange(deal, event.target.value as DealStatus)}
-                      className="rounded border border-slate-200 px-2 py-1 text-sm text-slate-700"
-                      disabled={updatingId === deal._id}
-                    >
-                      {STATUS_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-700">
-                    {isTerminated ? '—' : formatCurrency(referralFee || 0)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-700">
-                    {isTerminated ? '—' : formatCurrency(paidAmount)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-700">
-                    {isTerminated ? '—' : formatCurrency(commission)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-slate-700">
-                    {isTerminated ? '—' : formatCurrency(netCommission)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {isAdminView ? renderAdminTable() : renderDefaultTable()}
     </div>
   );
 }
