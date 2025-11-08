@@ -9,6 +9,7 @@ import { calculateReferralFeeDue } from '@/utils/referral';
 import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
+import { startOfDay, startOfMonth, startOfWeek, startOfYear, subMonths } from 'date-fns';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
@@ -54,12 +55,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         closedReferrals: 0,
         closeRate: 0,
         expectedRevenueCents: 0,
-        amountPaidCents: 0,
-        earnedCommissionCents: 0
+        revenueReceivedCents: 0,
+        earnedCommissionCents: 0,
+        monthly: []
       });
     }
     if (leaderboard) {
-      return NextResponse.json({ mc: [], agents: [], markets: [] });
+      return NextResponse.json({
+        mcTransfers: { day: [], week: [], month: [], ytd: [] },
+        agentClosings: { day: [], week: [], month: [], ytd: [] },
+        agentCloseRate: { day: [], week: [], month: [], ytd: [] }
+      });
     }
     return NextResponse.json([]);
   }
@@ -86,7 +92,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return acc;
     }, {});
 
-    const [closedDealAggregation, paidRevenueAggregation, earnedCommissionAggregation] = await Promise.all([
+    const rangeStart = startOfMonth(subMonths(new Date(), 11));
+
+    const [
+      closedDealAggregation,
+      paidRevenueAggregation,
+      earnedCommissionAggregation,
+      monthlyReferrals,
+      monthlyDeals
+    ] = await Promise.all([
       Payment.aggregate([
         {
           $lookup: {
@@ -141,13 +155,142 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           }
         },
         { $group: { _id: null, amount: { $sum: '$expectedAmountCents' } } }
+      ]),
+      Referral.aggregate([
+        {
+          $match: {
+            ...referralMatch,
+            createdAt: { $gte: rangeStart }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              year: { $year: '$createdAt' },
+              month: { $month: '$createdAt' }
+            },
+            totalReferrals: { $sum: 1 },
+            mcTransfers: {
+              $sum: {
+                $cond: [{ $eq: ['$source', 'MC'] }, 1, 0]
+              }
+            }
+          }
+        }
+      ]),
+      Payment.aggregate([
+        {
+          $lookup: {
+            from: 'referrals',
+            localField: 'referralId',
+            foreignField: '_id',
+            as: 'referral'
+          }
+        },
+        { $unwind: '$referral' },
+        {
+          $match: {
+            ...paymentMatch,
+            status: { $in: ['closed', 'paid'] }
+          }
+        },
+        {
+          $addFields: {
+            metricDate: {
+              $ifNull: [
+                {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: ['$status', 'paid'] },
+                        { $ne: ['$paidDate', null] }
+                      ]
+                    },
+                    '$paidDate',
+                    '$updatedAt'
+                  ]
+                },
+                '$updatedAt'
+              ]
+            }
+          }
+        },
+        {
+          $match: {
+            metricDate: { $gte: rangeStart }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              year: { $year: '$metricDate' },
+              month: { $month: '$metricDate' }
+            },
+            dealsClosed: { $sum: 1 },
+            revenueReceivedCents: {
+              $sum: {
+                $cond: [{ $eq: ['$status', 'paid'] }, '$receivedAmountCents', 0]
+              }
+            }
+          }
+        }
       ])
     ]);
 
     const closedDeals = closedDealAggregation[0]?.count ?? 0;
-    const amountPaidCents = paidRevenueAggregation[0]?.amount ?? 0;
+    const revenueReceivedCentsTotal = paidRevenueAggregation[0]?.amount ?? 0;
     const earnedCommissionCents = earnedCommissionAggregation[0]?.amount ?? 0;
     const closeRate = metrics.totalReferrals === 0 ? 0 : (closedDeals / metrics.totalReferrals) * 100;
+
+    const monthBuckets: { key: string; label: string; year: number; month: number }[] = [];
+    const startMonth = rangeStart;
+
+    for (let i = 0; i < 12; i += 1) {
+      const date = startOfMonth(new Date(startMonth.getFullYear(), startMonth.getMonth() + i));
+      monthBuckets.push({
+        key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
+        label: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        year: date.getFullYear(),
+        month: date.getMonth() + 1
+      });
+    }
+
+    const referralMonthlyMap = new Map<string, { total: number; transfers: number }>();
+    monthlyReferrals.forEach((entry: any) => {
+      if (!entry?._id) return;
+      const key = `${entry._id.year}-${String(entry._id.month).padStart(2, '0')}`;
+      referralMonthlyMap.set(key, {
+        total: entry.totalReferrals ?? 0,
+        transfers: entry.mcTransfers ?? 0
+      });
+    });
+
+    const dealMonthlyMap = new Map<string, { dealsClosed: number; revenueReceivedCents: number }>();
+    monthlyDeals.forEach((entry: any) => {
+      if (!entry?._id) return;
+      const key = `${entry._id.year}-${String(entry._id.month).padStart(2, '0')}`;
+      dealMonthlyMap.set(key, {
+        dealsClosed: entry.dealsClosed ?? 0,
+        revenueReceivedCents: entry.revenueReceivedCents ?? 0
+      });
+    });
+
+    const monthly = monthBuckets.map((bucket) => {
+      const referralStats = referralMonthlyMap.get(bucket.key) ?? { total: 0, transfers: 0 };
+      const dealStats = dealMonthlyMap.get(bucket.key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
+      const monthlyCloseRate = referralStats.total === 0
+        ? 0
+        : (dealStats.dealsClosed / referralStats.total) * 100;
+
+      return {
+        monthKey: bucket.key,
+        label: bucket.label,
+        revenueReceivedCents: dealStats.revenueReceivedCents,
+        dealsClosed: dealStats.dealsClosed,
+        closeRate: Number(monthlyCloseRate.toFixed(1)),
+        mcTransfers: referralStats.transfers
+      };
+    });
 
     return NextResponse.json({
       role,
@@ -155,45 +298,263 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       closedReferrals: closedDeals,
       closeRate,
       expectedRevenueCents: metrics.expectedRevenueCents,
-      amountPaidCents,
-      earnedCommissionCents
+      revenueReceivedCents: revenueReceivedCentsTotal,
+      earnedCommissionCents,
+      monthly
     });
   }
 
   if (leaderboard) {
     if (role !== 'admin' && role !== 'manager') {
-      return NextResponse.json({ mc: [], agents: [], markets: [] });
+      return NextResponse.json({
+        mcTransfers: { day: [], week: [], month: [], ytd: [] },
+        agentClosings: { day: [], week: [], month: [], ytd: [] },
+        agentCloseRate: { day: [], week: [], month: [], ytd: [] }
+      });
     }
-    const byMc = await Referral.aggregate([
-      { $match: { deletedAt: null } },
-      { $group: { _id: '$lender', totalReferrals: { $sum: 1 }, closings: { $sum: { $cond: [{ $eq: ['$status', 'Closed'] }, 1, 0] } }, expectedRevenue: { $sum: '$referralFeeDueCents' } } },
-      { $sort: { expectedRevenue: -1 } },
-      { $limit: 5 }
-    ]);
-    const byAgent = await Referral.aggregate([
-      { $match: { deletedAt: null } },
-      { $group: { _id: '$assignedAgent', totalReferrals: { $sum: 1 }, closings: { $sum: { $cond: [{ $eq: ['$status', 'Closed'] }, 1, 0] } }, expectedRevenue: { $sum: '$referralFeeDueCents' } } },
-      { $sort: { expectedRevenue: -1 } },
-      { $limit: 5 }
-    ]);
-    const byMarket = await Referral.aggregate([
-      { $match: { deletedAt: null } },
-      { $group: { _id: '$propertyZip', totalReferrals: { $sum: 1 }, closings: { $sum: { $cond: [{ $eq: ['$status', 'Closed'] }, 1, 0] } }, expectedRevenue: { $sum: '$referralFeeDueCents' } } },
-      { $sort: { expectedRevenue: -1 } },
-      { $limit: 5 }
+
+    const now = new Date();
+    const timeframes: Record<'day' | 'week' | 'month' | 'ytd', Date> = {
+      day: startOfDay(now),
+      week: startOfWeek(now, { weekStartsOn: 0 }),
+      month: startOfMonth(now),
+      ytd: startOfYear(now)
+    };
+
+    const mcTransfers: Record<string, any[]> = {};
+    const agentClosings: Record<string, any[]> = {};
+    const agentReferralTotals: Record<string, any[]> = {};
+
+    await Promise.all(
+      (Object.entries(timeframes) as [keyof typeof timeframes, Date][]).map(async ([key, start]) => {
+        mcTransfers[key] = await Referral.aggregate([
+          {
+            $match: {
+              ...referralMatch,
+              createdAt: { $gte: start },
+              source: 'MC'
+            }
+          },
+          {
+            $group: {
+              _id: '$lender',
+              transfers: { $sum: 1 }
+            }
+          },
+          { $sort: { transfers: -1 } }
+        ]);
+
+        agentClosings[key] = await Payment.aggregate([
+          {
+            $lookup: {
+              from: 'referrals',
+              localField: 'referralId',
+              foreignField: '_id',
+              as: 'referral'
+            }
+          },
+          { $unwind: '$referral' },
+          {
+            $match: {
+              ...paymentMatch,
+              status: { $in: ['closed', 'paid'] }
+            }
+          },
+          {
+            $addFields: {
+              metricDate: {
+                $ifNull: [
+                  {
+                    $cond: [
+                      {
+                        $and: [
+                          { $eq: ['$status', 'paid'] },
+                          { $ne: ['$paidDate', null] }
+                        ]
+                      },
+                      '$paidDate',
+                      '$updatedAt'
+                    ]
+                  },
+                  '$updatedAt'
+                ]
+              }
+            }
+          },
+          {
+            $match: {
+              metricDate: { $gte: start }
+            }
+          },
+          {
+            $group: {
+              _id: '$referral.assignedAgent',
+              closings: { $sum: 1 },
+              paidRevenueCents: {
+                $sum: {
+                  $cond: [{ $eq: ['$status', 'paid'] }, '$receivedAmountCents', 0]
+                }
+              },
+              expectedRevenueCents: { $sum: '$expectedAmountCents' }
+            }
+          },
+          { $sort: { closings: -1, expectedRevenueCents: -1 } }
+        ]);
+
+        agentReferralTotals[key] = await Referral.aggregate([
+          {
+            $match: {
+              ...referralMatch,
+              createdAt: { $gte: start },
+              assignedAgent: { $ne: null }
+            }
+          },
+          {
+            $group: {
+              _id: '$assignedAgent',
+              totalReferrals: { $sum: 1 }
+            }
+          }
+        ]);
+      })
+    );
+
+    const lenderIds = new Set<string>();
+    const agentIds = new Set<string>();
+
+    Object.values(mcTransfers).forEach((entries) => {
+      entries.forEach((entry) => {
+        if (entry?._id) lenderIds.add(entry._id.toString());
+      });
+    });
+
+    Object.values(agentClosings).forEach((entries) => {
+      entries.forEach((entry) => {
+        if (entry?._id) agentIds.add(entry._id.toString());
+      });
+    });
+
+    Object.values(agentReferralTotals).forEach((entries) => {
+      entries.forEach((entry) => {
+        if (entry?._id) agentIds.add(entry._id.toString());
+      });
+    });
+
+    const [lenders, agents] = await Promise.all([
+      lenderIds.size
+        ? LenderMC.find({ _id: { $in: Array.from(lenderIds, (id) => new Types.ObjectId(id)) } }).select('name')
+        : Promise.resolve([]),
+      agentIds.size
+        ? Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } }).select('name')
+        : Promise.resolve([])
     ]);
 
-    const formatEntry = (entry: any) => ({
-      name: entry._id ? entry._id.toString() : 'Unassigned',
-      totalReferrals: entry.totalReferrals,
-      closings: entry.closings,
-      expectedRevenueCents: entry.expectedRevenue
+    const lenderNameMap = new Map<string, string>();
+    lenders.forEach((lender) => {
+      lenderNameMap.set(lender._id.toString(), lender.name || 'Unnamed MC');
+    });
+
+    const agentNameMap = new Map<string, string>();
+    agents.forEach((agent) => {
+      agentNameMap.set(agent._id.toString(), agent.name || 'Unnamed Agent');
+    });
+
+    const mcTransfersResponse: Record<'day' | 'week' | 'month' | 'ytd', any[]> = {
+      day: [],
+      week: [],
+      month: [],
+      ytd: []
+    };
+
+    (Object.keys(mcTransfersResponse) as (keyof typeof mcTransfersResponse)[]).forEach((key) => {
+      mcTransfersResponse[key] = mcTransfers[key]
+        .filter((entry) => entry?._id)
+        .map((entry) => {
+          const id = entry._id.toString();
+          return {
+            id,
+            name: lenderNameMap.get(id) || 'Unassigned',
+            transfers: entry.transfers ?? 0
+          };
+        })
+        .sort((a, b) => b.transfers - a.transfers)
+        .slice(0, 5);
+    });
+
+    const agentClosingsResponse: Record<'day' | 'week' | 'month' | 'ytd', any[]> = {
+      day: [],
+      week: [],
+      month: [],
+      ytd: []
+    };
+
+    const agentCloseRateResponse: Record<'day' | 'week' | 'month' | 'ytd', any[]> = {
+      day: [],
+      week: [],
+      month: [],
+      ytd: []
+    };
+
+    (Object.keys(agentClosingsResponse) as (keyof typeof agentClosingsResponse)[]).forEach((key) => {
+      const closingsEntries = agentClosings[key].filter((entry) => entry?._id);
+      const totalsMap = new Map<string, number>();
+      agentReferralTotals[key].forEach((entry) => {
+        if (!entry?._id) return;
+        totalsMap.set(entry._id.toString(), entry.totalReferrals ?? 0);
+      });
+
+      const closingFormatted = closingsEntries
+        .map((entry) => {
+          const id = entry._id.toString();
+          return {
+            id,
+            name: agentNameMap.get(id) || 'Unassigned',
+            closings: entry.closings ?? 0,
+            paidRevenueCents: entry.paidRevenueCents ?? 0,
+            expectedRevenueCents: entry.expectedRevenueCents ?? 0
+          };
+        })
+        .sort((a, b) => {
+          if (b.closings === a.closings) {
+            return (b.expectedRevenueCents ?? 0) - (a.expectedRevenueCents ?? 0);
+          }
+          return b.closings - a.closings;
+        });
+
+      agentClosingsResponse[key] = closingFormatted.slice(0, 5);
+
+      const ids = new Set<string>();
+      closingFormatted.forEach((entry) => ids.add(entry.id));
+      totalsMap.forEach((_, id) => ids.add(id));
+
+      const rateEntries = Array.from(ids).map((id) => {
+        const closings = closingFormatted.find((item) => item.id === id)?.closings ?? 0;
+        const assignedReferrals = totalsMap.get(id) ?? 0;
+        const denominator = Math.max(assignedReferrals, closings);
+        const rate = denominator === 0 ? 0 : (closings / denominator) * 100;
+        return {
+          id,
+          name: agentNameMap.get(id) || 'Unassigned',
+          closeRate: Number(rate.toFixed(1)),
+          closings,
+          totalReferrals: assignedReferrals === 0 && closings > 0 ? closings : assignedReferrals
+        };
+      });
+
+      agentCloseRateResponse[key] = rateEntries
+        .sort((a, b) => {
+          if (b.closeRate === a.closeRate) {
+            return b.closings - a.closings;
+          }
+          return b.closeRate - a.closeRate;
+        })
+        .slice(0, 5);
     });
 
     return NextResponse.json({
-      mc: byMc.map(formatEntry),
-      agents: byAgent.map(formatEntry),
-      markets: byMarket.map(formatEntry)
+      mcTransfers: mcTransfersResponse,
+      agentClosings: agentClosingsResponse,
+      agentCloseRate: agentCloseRateResponse
     });
   }
 
