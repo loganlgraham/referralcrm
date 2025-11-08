@@ -13,7 +13,7 @@ type MetricKey =
   | 'closeRate'
   | 'mcTransfers';
 
-interface MonthlyPoint {
+interface TrendPoint {
   monthKey: string;
   label: string;
   revenueReceivedCents: number;
@@ -30,14 +30,15 @@ interface KPIResponse {
   expectedRevenueCents: number;
   revenueReceivedCents: number;
   earnedCommissionCents: number;
-  monthly: MonthlyPoint[];
+  monthly: TrendPoint[];
+  weekly?: TrendPoint[];
 }
 
 const METRIC_CONFIG: Record<MetricKey, {
   label: string;
   color: string;
-  accessor: (point: MonthlyPoint) => number;
-  tooltip: (point: MonthlyPoint) => string;
+  accessor: (point: TrendPoint) => number;
+  tooltip: (point: TrendPoint) => string;
 }> = {
   revenueReceivedCents: {
     label: 'Revenue Received',
@@ -81,9 +82,29 @@ function LoadingCard() {
   );
 }
 
-function MetricTrendChart({ data }: { data: MonthlyPoint[] }) {
+type TrendView = 'monthly' | 'weekly';
+
+function MetricTrendChart({ monthly, weekly }: { monthly: TrendPoint[]; weekly?: TrendPoint[] }) {
   const [highlighted, setHighlighted] = useState<MetricKey[]>(METRIC_KEYS);
-  const [hoverIndex, setHoverIndex] = useState<number | null>(data.length > 0 ? data.length - 1 : null);
+  const [view, setView] = useState<TrendView>('monthly');
+  const [hoverIndex, setHoverIndex] = useState<number | null>(
+    monthly.length > 0 ? monthly.length - 1 : weekly && weekly.length > 0 ? weekly.length - 1 : null
+  );
+
+  const hasMonthly = monthly.length > 0;
+  const hasWeekly = Boolean(weekly?.length);
+
+  const activeView: TrendView = (() => {
+    if (view === 'weekly' && hasWeekly) {
+      return 'weekly';
+    }
+    if (!hasMonthly && hasWeekly) {
+      return 'weekly';
+    }
+    return 'monthly';
+  })();
+
+  const data = activeView === 'weekly' && weekly?.length ? weekly : monthly;
 
   const activeHighlights = highlighted.length > 0 ? highlighted : METRIC_KEYS;
   const highlightSet = new Set(activeHighlights);
@@ -95,6 +116,15 @@ function MetricTrendChart({ data }: { data: MonthlyPoint[] }) {
       setHoverIndex(null);
     }
   }, [data]);
+
+  useEffect(() => {
+    if (view === 'weekly' && !hasWeekly) {
+      setView('monthly');
+    }
+    if (view === 'monthly' && !hasMonthly && hasWeekly) {
+      setView('weekly');
+    }
+  }, [view, hasWeekly, hasMonthly]);
 
   const stepX = data.length > 1
     ? (CHART_WIDTH - CHART_PADDING_X * 2) / (data.length - 1)
@@ -178,9 +208,37 @@ function MetricTrendChart({ data }: { data: MonthlyPoint[] }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-600">Performance trends</h3>
-          <p className="text-xs text-slate-500">Trailing 12 months</p>
+          <p className="text-xs text-slate-500">
+            {activeView === 'weekly' ? 'Trailing 12 weeks (Mon – Sun)' : 'Trailing 12 months'}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setView('monthly')}
+              disabled={!hasMonthly}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                activeView === 'monthly'
+                  ? 'border-transparent bg-slate-900 text-white'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+              } ${hasMonthly ? '' : 'opacity-50'}`}
+            >
+              Monthly
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('weekly')}
+              disabled={!hasWeekly}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                activeView === 'weekly'
+                  ? 'border-transparent bg-slate-900 text-white'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+              } ${hasWeekly ? '' : 'opacity-50'}`}
+            >
+              Weekly
+            </button>
+          </div>
           {METRIC_KEYS.map((key) => {
             const isActive = highlightSet.has(key);
             return (
@@ -208,7 +266,7 @@ function MetricTrendChart({ data }: { data: MonthlyPoint[] }) {
         <svg
           viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
           role="img"
-          aria-label="Performance trends over the last 12 months"
+          aria-label="Performance trends over the selected timeframe"
           className="w-full"
         >
           <line
@@ -382,6 +440,10 @@ export function KPICards() {
 
   const cards = [...baseCards, ...roleSpecificCards];
 
+  const monthlyData = data.monthly ?? [];
+  const weeklyData = data.weekly ?? [];
+  const hasTrendData = monthlyData.length > 0 || weeklyData.length > 0;
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -392,7 +454,7 @@ export function KPICards() {
           </div>
         ))}
       </div>
-      {data.monthly?.length ? <MetricTrendChart data={data.monthly} /> : null}
+      {hasTrendData ? <MetricTrendChart monthly={monthlyData} weekly={weeklyData} /> : null}
     </div>
   );
 }

@@ -9,7 +9,17 @@ import { calculateReferralFeeDue } from '@/utils/referral';
 import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
-import { startOfDay, startOfMonth, startOfWeek, startOfYear, subMonths } from 'date-fns';
+import {
+  addWeeks,
+  format,
+  getISOWeek,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+  startOfYear,
+  subMonths,
+  subWeeks
+} from 'date-fns';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
@@ -57,7 +67,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         expectedRevenueCents: 0,
         revenueReceivedCents: 0,
         earnedCommissionCents: 0,
-        monthly: []
+        monthly: [],
+        weekly: []
       });
     }
     if (leaderboard) {
@@ -93,13 +104,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     };
 
     const rangeStart = startOfMonth(subMonths(new Date(), 11));
+    const weeklyRangeStart = startOfWeek(subWeeks(new Date(), 11), { weekStartsOn: 1 });
 
     const [
       closedDealAggregation,
       paidRevenueAggregation,
       earnedCommissionAggregation,
       monthlyReferrals,
-      monthlyDeals
+      monthlyDeals,
+      weeklyReferrals,
+      weeklyDeals
     ] = await Promise.all([
       Payment.aggregate([
         {
@@ -234,6 +248,87 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             }
           }
         }
+      ]),
+      Referral.aggregate([
+        {
+          $match: {
+            ...referralMatch,
+            createdAt: { $gte: weeklyRangeStart }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              year: { $isoWeekYear: '$createdAt' },
+              week: { $isoWeek: '$createdAt' }
+            },
+            totalReferrals: { $sum: 1 },
+            mcTransfers: {
+              $sum: {
+                $cond: [{ $eq: ['$source', 'MC'] }, 1, 0]
+              }
+            }
+          }
+        },
+        { $sort: { '_id.year': 1, '_id.week': 1 } }
+      ]),
+      Payment.aggregate([
+        {
+          $lookup: {
+            from: 'referrals',
+            localField: 'referralId',
+            foreignField: '_id',
+            as: 'referral'
+          }
+        },
+        { $unwind: '$referral' },
+        {
+          $match: {
+            ...paymentMatch,
+            status: { $in: ['closed', 'paid'] }
+          }
+        },
+        {
+          $addFields: {
+            metricDate: {
+              $ifNull: [
+                {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: ['$status', 'paid'] },
+                        { $ne: ['$paidDate', null] }
+                      ]
+                    },
+                    '$paidDate',
+                    '$updatedAt'
+                  ]
+                },
+                '$updatedAt'
+              ]
+            }
+          }
+        },
+        {
+          $match: {
+            metricDate: { $gte: weeklyRangeStart }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              year: { $isoWeekYear: '$metricDate' },
+              week: { $isoWeek: '$metricDate' }
+            },
+            dealsClosed: { $sum: 1 },
+            revenueReceivedCents: {
+              $sum: {
+                $cond: [{ $eq: ['$status', 'paid'] }, '$receivedAmountCents', 0]
+              }
+            }
+          }
+        },
+        { $sort: { '_id.year': 1, '_id.week': 1 } }
       ])
     ]);
 
@@ -292,6 +387,53 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       };
     });
 
+    const weekBuckets: { key: string; label: string }[] = [];
+    for (let i = 0; i < 12; i += 1) {
+      const start = addWeeks(weeklyRangeStart, i);
+      const key = `${start.getFullYear()}-W${String(getISOWeek(start)).padStart(2, '0')}`;
+      weekBuckets.push({
+        key,
+        label: `Week of ${format(start, 'MMM d')}`
+      });
+    }
+
+    const referralWeeklyMap = new Map<string, { total: number; transfers: number }>();
+    weeklyReferrals.forEach((entry: any) => {
+      if (!entry?._id) return;
+      const key = `${entry._id.year}-W${String(entry._id.week).padStart(2, '0')}`;
+      referralWeeklyMap.set(key, {
+        total: entry.totalReferrals ?? 0,
+        transfers: entry.mcTransfers ?? 0
+      });
+    });
+
+    const dealWeeklyMap = new Map<string, { dealsClosed: number; revenueReceivedCents: number }>();
+    weeklyDeals.forEach((entry: any) => {
+      if (!entry?._id) return;
+      const key = `${entry._id.year}-W${String(entry._id.week).padStart(2, '0')}`;
+      dealWeeklyMap.set(key, {
+        dealsClosed: entry.dealsClosed ?? 0,
+        revenueReceivedCents: entry.revenueReceivedCents ?? 0
+      });
+    });
+
+    const weekly = weekBuckets.map((bucket) => {
+      const referralStats = referralWeeklyMap.get(bucket.key) ?? { total: 0, transfers: 0 };
+      const dealStats = dealWeeklyMap.get(bucket.key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
+      const weeklyCloseRate = referralStats.total === 0
+        ? 0
+        : (dealStats.dealsClosed / referralStats.total) * 100;
+
+      return {
+        monthKey: bucket.key,
+        label: bucket.label,
+        revenueReceivedCents: dealStats.revenueReceivedCents,
+        dealsClosed: dealStats.dealsClosed,
+        closeRate: Number(weeklyCloseRate.toFixed(1)),
+        mcTransfers: referralStats.transfers
+      };
+    });
+
     return NextResponse.json({
       role,
       totalReferrals: metrics.totalReferrals,
@@ -300,7 +442,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       expectedRevenueCents: metrics.expectedRevenueCents,
       revenueReceivedCents: revenueReceivedCentsTotal,
       earnedCommissionCents,
-      monthly
+      monthly,
+      weekly
     });
   }
 
