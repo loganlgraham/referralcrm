@@ -66,10 +66,23 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     const referralRate = details.referralFeePercentage / 100;
     const referralFeeDue = details.contractPrice * commissionRate * referralRate;
     referral.referralFeeDueCents = Math.round(referralFeeDue * 100);
+
     await Payment.updateMany(
-      { referralId: referral._id },
+      { referralId: referral._id, status: 'under_contract' },
       { $set: { expectedAmountCents: referral.referralFeeDueCents ?? 0 } }
     );
+
+    const activeDeal = await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (!activeDeal) {
+      await Payment.create({
+        referralId: referral._id,
+        status: 'under_contract',
+        expectedAmountCents: referral.referralFeeDueCents ?? 0,
+      });
+    }
   } else if (parsed.data.status === 'Terminated') {
     referral.estPurchasePriceCents = 0;
     referral.referralFeeDueCents = 0;
@@ -87,7 +100,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       referralFeeBasisPoints
     );
     await Payment.updateMany(
-      { referralId: referral._id },
+      { referralId: referral._id, status: 'under_contract' },
       { $set: { expectedAmountCents: referral.referralFeeDueCents ?? 0 } }
     );
   }

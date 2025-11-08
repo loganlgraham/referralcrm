@@ -161,7 +161,9 @@ export async function getReferralById(id: string) {
     .lean<ReferralDocument>();
   if (!referral) return null;
 
-  const payments = await Payment.find({ referralId: referral._id }).lean();
+  const payments = await Payment.find({ referralId: referral._id })
+    .sort({ createdAt: -1 })
+    .lean();
   const daysInStatus = differenceInDays(new Date(), referral.statusLastUpdated ?? referral.createdAt);
 
   const viewerRole = session?.user?.role ?? 'viewer';
@@ -192,7 +194,16 @@ export async function getReferralById(id: string) {
       ? { ...referral.assignedAgent, _id: referral.assignedAgent._id.toString() }
       : null,
     lender: referral.lender ? { ...referral.lender, _id: referral.lender._id.toString() } : null,
-    payments: payments.map((payment: any) => ({ ...payment, _id: payment._id.toString() })),
+    payments: payments.map((payment: any) => ({
+      _id: payment._id.toString(),
+      status: payment.status,
+      expectedAmountCents: payment.expectedAmountCents ?? 0,
+      receivedAmountCents: payment.receivedAmountCents ?? 0,
+      invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
+      paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
+      createdAt: payment.createdAt ? payment.createdAt.toISOString() : null,
+      updatedAt: payment.updatedAt ? payment.updatedAt.toISOString() : null,
+    })),
     daysInStatus,
     statusLastUpdated: referral.statusLastUpdated ? referral.statusLastUpdated.toISOString() : null,
     notes: filteredNotes,
