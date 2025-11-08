@@ -70,6 +70,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json([]);
   }
 
+  const paymentMatch = Object.entries(referralMatch).reduce<Record<string, unknown>>((acc, [key, value]) => {
+    acc[`referral.${key}`] = value;
+    return acc;
+  }, {});
+
   if (summary) {
     const summaryMetrics = await Referral.aggregate([
       { $match: referralMatch },
@@ -86,11 +91,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       totalReferrals: 0,
       expectedRevenueCents: 0
     };
-
-    const paymentMatch = Object.entries(referralMatch).reduce<Record<string, unknown>>((acc, [key, value]) => {
-      acc[`referral.${key}`] = value;
-      return acc;
-    }, {});
 
     const rangeStart = startOfMonth(subMonths(new Date(), 11));
 
