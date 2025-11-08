@@ -11,6 +11,11 @@ const paymentSchema = new Schema(
     },
     expectedAmountCents: { type: Number, required: true },
     receivedAmountCents: { type: Number, default: 0 },
+    terminatedReason: {
+      type: String,
+      enum: ['inspection', 'appraisal', 'financing', 'changed_mind'],
+      default: null,
+    },
     invoiceDate: Date,
     paidDate: Date,
     notes: String

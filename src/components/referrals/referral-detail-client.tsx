@@ -150,13 +150,10 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
       };
 
   const hasTerminatedDeal = (referral.payments ?? []).some((payment: any) => payment.status === 'terminated');
+  const hasAnyDeals = Array.isArray(referral.payments) && referral.payments.length > 0;
 
   const showDeals =
-    financials.status === 'Under Contract' ||
-    financials.status === 'Closed' ||
-    financials.status === 'Terminated' ||
-    contractDraft.hasUnsavedChanges ||
-    hasTerminatedDeal;
+    financials.status === 'Under Contract' || contractDraft.hasUnsavedChanges || hasTerminatedDeal || hasAnyDeals;
 
   return (
     <div className="space-y-6">

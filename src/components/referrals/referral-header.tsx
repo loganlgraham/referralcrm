@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { differenceInDays } from 'date-fns';
+import { toast } from 'sonner';
 
 import { ReferralStatus, REFERRAL_STATUSES } from '@/constants/referrals';
 import { formatCurrency } from '@/utils/formatters';
@@ -38,6 +40,7 @@ type ReferralHeaderProps = {
 };
 
 export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onContractDraftChange }: ReferralHeaderProps) {
+  const router = useRouter();
   const [status, setStatus] = useState<ReferralStatus>(referral.status as ReferralStatus);
   const [preApprovalAmountCents, setPreApprovalAmountCents] = useState<number | undefined>(
     referral.preApprovalAmountCents
@@ -58,6 +61,8 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
   const [draftContract, setDraftContract] = useState<ContractDraftSnapshot>({ hasUnsavedChanges: false });
   const [daysInStatus, setDaysInStatus] = useState<number>(referral.daysInStatus ?? 0);
   const [auditEntries, setAuditEntries] = useState<any[]>(Array.isArray(referral.audit) ? referral.audit : []);
+  const [deleting, setDeleting] = useState(false);
+  const canDelete = viewerRole === 'admin' || viewerRole === 'manager';
 
   useEffect(() => {
     setStatus(referral.status as ReferralStatus);
@@ -317,6 +322,36 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
     });
   };
 
+  const handleDeleteReferral = async () => {
+    if (deleting) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'Delete this referral and all associated deals? This action cannot be undone.'
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const response = await fetch(`/api/referrals/${referral._id}`, { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error('Unable to delete referral');
+      }
+      toast.success('Referral deleted');
+      router.push('/referrals');
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Unable to delete referral');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-6 rounded-lg bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -327,17 +362,29 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
           </p>
           <p className="text-xs uppercase tracking-wide text-slate-400">{propertyLabel}</p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-lg border border-slate-200 px-4 py-3 text-right">
-            <p className="text-xs uppercase text-slate-400">Status</p>
-            <p className="text-lg font-semibold text-brand">{status}</p>
-            <p className="text-xs text-slate-400">Days in status: {daysInStatus}</p>
+        <div className="flex flex-col items-stretch gap-3 sm:items-end">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-lg border border-slate-200 px-4 py-3 text-right">
+              <p className="text-xs uppercase text-slate-400">Status</p>
+              <p className="text-lg font-semibold text-brand">{status}</p>
+              <p className="text-xs text-slate-400">Days in status: {daysInStatus}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 px-4 py-3 text-right">
+              <p className="text-xs uppercase text-slate-400">{primaryAmountLabel}</p>
+              <p className="text-lg font-semibold text-slate-900">{formattedPrimaryAmount}</p>
+              <p className="text-xs text-slate-400">Referral Fee Due: {formattedReferralFeeDue}</p>
+            </div>
           </div>
-          <div className="rounded-lg border border-slate-200 px-4 py-3 text-right">
-            <p className="text-xs uppercase text-slate-400">{primaryAmountLabel}</p>
-            <p className="text-lg font-semibold text-slate-900">{formattedPrimaryAmount}</p>
-            <p className="text-xs text-slate-400">Referral Fee Due: {formattedReferralFeeDue}</p>
-          </div>
+          {canDelete && (
+            <button
+              type="button"
+              onClick={handleDeleteReferral}
+              disabled={deleting}
+              className="self-start rounded border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-70 sm:self-end"
+            >
+              {deleting ? 'Deleting…' : 'Delete referral'}
+            </button>
+          )}
         </div>
       </div>
 

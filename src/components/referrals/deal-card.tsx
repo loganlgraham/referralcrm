@@ -6,6 +6,14 @@ import { toast } from 'sonner';
 import { formatCurrency } from '@/utils/formatters';
 
 type DealStatus = 'under_contract' | 'closed' | 'paid' | 'terminated';
+type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
+
+const TERMINATED_REASON_OPTIONS: { value: TerminatedReason; label: string }[] = [
+  { value: 'inspection', label: 'Inspection' },
+  { value: 'appraisal', label: 'Appraisal' },
+  { value: 'financing', label: 'Financing' },
+  { value: 'changed_mind', label: 'Changed Mind' },
+];
 
 interface DealRecord {
   _id: string;
@@ -13,6 +21,7 @@ interface DealRecord {
   expectedAmountCents?: number | null;
   receivedAmountCents?: number | null;
   createdAt?: string | null;
+  terminatedReason?: TerminatedReason | null;
 }
 
 interface DealOverrides {
@@ -51,6 +60,7 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
       expectedAmountCents: deal.expectedAmountCents ?? 0,
       receivedAmountCents: deal.receivedAmountCents ?? 0,
       createdAt: deal.createdAt ?? null,
+      terminatedReason: (deal.terminatedReason as TerminatedReason | undefined) ?? null,
     }))
     .sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -70,12 +80,27 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
     return snapshot;
   }, [deals]);
 
+  const initialReasonMap = useMemo(() => {
+    const snapshot: Record<string, TerminatedReason> = {};
+    deals.forEach((deal) => {
+      if (deal.terminatedReason) {
+        snapshot[deal._id] = deal.terminatedReason;
+      }
+    });
+    return snapshot;
+  }, [deals]);
+
   const [statusMap, setStatusMap] = useState<Record<string, DealStatus>>(initialStatusMap);
   const [savingMap, setSavingMap] = useState<Record<string, boolean>>({});
+  const [reasonMap, setReasonMap] = useState<Record<string, TerminatedReason>>(initialReasonMap);
 
   useEffect(() => {
     setStatusMap(initialStatusMap);
   }, [initialStatusMap]);
+
+  useEffect(() => {
+    setReasonMap(initialReasonMap);
+  }, [initialReasonMap]);
 
   const propertyLabel =
     overrides?.propertyAddress ||
@@ -136,8 +161,20 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
       if (nextStatus === 'terminated') {
         payload.expectedAmountCents = 0;
         payload.receivedAmountCents = 0;
+        const reason = reasonMap[deal._id] ?? deal.terminatedReason ?? 'inspection';
+        payload.terminatedReason = reason;
+        setReasonMap((prev) => ({ ...prev, [deal._id]: reason }));
       } else if (expectedAmountCents > 0) {
         payload.expectedAmountCents = expectedAmountCents;
+        payload.terminatedReason = null;
+        setReasonMap((prev) => {
+          if (!(deal._id in prev)) {
+            return prev;
+          }
+          const next = { ...prev };
+          delete next[deal._id];
+          return next;
+        });
       }
 
       const response = await fetch('/api/payments', {
@@ -155,6 +192,39 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
       console.error(error);
       setStatusMap((prev) => ({ ...prev, [deal._id]: previousStatus }));
       selectEl.value = previousStatus;
+      toast.error(error instanceof Error ? error.message : 'Unable to update deal');
+    } finally {
+      setSavingMap((prev) => {
+        const next = { ...prev };
+        delete next[deal._id];
+        return next;
+      });
+    }
+  };
+
+  const handleReasonChange = (deal: DealRecord) => async (event: ChangeEvent<HTMLSelectElement>) => {
+    const nextReason = event.target.value as TerminatedReason;
+    setReasonMap((prev) => ({ ...prev, [deal._id]: nextReason }));
+
+    if (getStatusForDeal(deal) !== 'terminated') {
+      return;
+    }
+
+    setSavingMap((prev) => ({ ...prev, [deal._id]: true }));
+    try {
+      const response = await fetch('/api/payments', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: deal._id, terminatedReason: nextReason }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Unable to update deal');
+      }
+
+      toast.success('Termination reason saved');
+    } catch (error) {
+      console.error(error);
       toast.error(error instanceof Error ? error.message : 'Unable to update deal');
     } finally {
       setSavingMap((prev) => {
@@ -195,6 +265,7 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
           : '—';
     const isSaving = savingMap[deal._id] ?? false;
     const statusLabel = STATUS_OPTIONS.find((option) => option.value === status)?.label ?? status;
+    const selectedReason = reasonMap[deal._id] ?? deal.terminatedReason ?? 'inspection';
 
     return (
       <div key={deal._id} className="space-y-3 rounded border border-slate-200 p-3">
@@ -238,6 +309,23 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
                 ))}
               </select>
             </label>
+            {status === 'terminated' && (
+              <label className="mt-2 flex flex-col gap-2 text-xs uppercase text-slate-400">
+                Termination Reason
+                <select
+                  value={selectedReason}
+                  onChange={handleReasonChange(deal)}
+                  className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                  disabled={isSaving}
+                >
+                  {TERMINATED_REASON_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {expectedAmountCents <= 0 && status !== 'terminated' && (
               <p className="mt-2 text-xs text-amber-600">
                 Enter contract details to calculate the referral fee before updating deal status.

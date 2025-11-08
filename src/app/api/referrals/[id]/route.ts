@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectMongo } from '@/lib/mongoose';
 import { Referral, ReferralDocument } from '@/models/referral';
+import { Payment } from '@/models/payment';
 import { updateReferralSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { canManageReferral, canViewReferral } from '@/lib/rbac';
@@ -94,6 +95,7 @@ export async function DELETE(request: NextRequest, context: RouteContext): Promi
   if (!canViewReferral(session, { assignedAgent: referral.assignedAgent, lender: referral.lender, org: referral.org })) {
     return new NextResponse('Forbidden', { status: 403 });
   }
+  await Payment.deleteMany({ referralId: referral._id });
   await Referral.findByIdAndUpdate(context.params.id, { deletedAt: new Date() });
   return new NextResponse(null, { status: 204 });
 }

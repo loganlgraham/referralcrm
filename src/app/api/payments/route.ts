@@ -27,6 +27,7 @@ type PaymentWithReferral = {
   status: string;
   expectedAmountCents?: number | null;
   receivedAmountCents?: number | null;
+  terminatedReason?: string | null;
   invoiceDate?: Date | null;
   paidDate?: Date | null;
   createdAt?: Date | null;
@@ -100,6 +101,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       status: payment.status,
       expectedAmountCents: payment.expectedAmountCents ?? 0,
       receivedAmountCents: payment.receivedAmountCents ?? 0,
+      terminatedReason: payment.terminatedReason ?? null,
       invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
       paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
       referral: referral
@@ -145,6 +147,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     status: parsed.data.status,
     expectedAmountCents: parsed.data.expectedAmountCents,
     receivedAmountCents: parsed.data.receivedAmountCents,
+    terminatedReason: parsed.data.terminatedReason ?? null,
     invoiceDate: parsed.data.invoiceDate,
     paidDate: parsed.data.paidDate,
     notes: parsed.data.notes

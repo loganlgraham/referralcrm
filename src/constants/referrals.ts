@@ -1,5 +1,6 @@
 export const REFERRAL_STATUSES = [
   'New Lead',
+  'Paired',
   'In Communication',
   'Showing Homes',
   'Under Contract',

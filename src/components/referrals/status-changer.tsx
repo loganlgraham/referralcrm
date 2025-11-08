@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { ReferralStatus } from '@/models/referral';
 import { toast } from 'sonner';
 
+import { formatCurrency } from '@/utils/formatters';
+
 interface ContractDetails {
   propertyAddress?: string;
   contractPriceCents?: number;
@@ -64,15 +66,15 @@ const calculateReferralFeeAmount = (
   const referralFee = Number(referralFeeInput);
 
   if ([price, commission, referralFee].some((value) => Number.isNaN(value) || value <= 0)) {
-    return '';
+    return null;
   }
 
   const amount = price * (commission / 100) * (referralFee / 100);
   if (!Number.isFinite(amount) || amount <= 0) {
-    return '';
+    return null;
   }
 
-  return amount.toFixed(2);
+  return amount;
 };
 
 export function StatusChanger({
@@ -104,6 +106,14 @@ export function StatusChanger({
     setPersistedStatus(status);
   }, [status]);
 
+  const pipelineOptions = useMemo(() => {
+    const filtered = statuses.filter((item) => item !== 'Closed' && item !== 'Terminated');
+    if (!filtered.includes(currentStatus)) {
+      return [...filtered, currentStatus];
+    }
+    return filtered;
+  }, [statuses, currentStatus]);
+
   const broadcastContractState = useCallback(
     (form: ContractFormState, dirty: boolean) => {
       if (!onContractDraftChange) {
@@ -128,9 +138,7 @@ export function StatusChanger({
         referralFeeBasisPoints:
           Number.isFinite(referralFee) && referralFee > 0 ? Math.round(referralFee * 100) : undefined,
         referralFeeDueCents:
-          referralFeeAmount && Number(referralFeeAmount) > 0
-            ? Math.round(Number(referralFeeAmount) * 100)
-            : undefined,
+          referralFeeAmount && referralFeeAmount > 0 ? Math.round(referralFeeAmount * 100) : undefined,
         hasUnsavedChanges: dirty,
       });
     },
@@ -196,19 +204,23 @@ export function StatusChanger({
       contractForm.contractPrice.trim().length > 0 &&
       contractForm.agentCommissionPercentage.trim().length > 0 &&
       contractForm.referralFeePercentage.trim().length > 0 &&
-      referralFeeAmount.trim().length > 0
+      referralFeeAmount !== null
     );
   }, [contractForm, currentStatus]);
 
-  const referralFeeAmountDisplay = useMemo(
-    () =>
-      calculateReferralFeeAmount(
-        contractForm.contractPrice,
-        contractForm.agentCommissionPercentage,
-        contractForm.referralFeePercentage
-      ),
-    [contractForm.agentCommissionPercentage, contractForm.contractPrice, contractForm.referralFeePercentage]
-  );
+  const referralFeeAmountDisplay = useMemo(() => {
+    const amount = calculateReferralFeeAmount(
+      contractForm.contractPrice,
+      contractForm.agentCommissionPercentage,
+      contractForm.referralFeePercentage
+    );
+
+    if (amount === null) {
+      return '';
+    }
+
+    return formatCurrency(Math.round(amount * 100));
+  }, [contractForm.agentCommissionPercentage, contractForm.contractPrice, contractForm.referralFeePercentage]);
 
   const submitStatus = async (nextStatus: ReferralStatus, previousStatus: ReferralStatus) => {
     setLoading(true);
@@ -224,9 +236,16 @@ export function StatusChanger({
         const contractPrice = Number(contractForm.contractPrice);
         const agentCommission = Number(contractForm.agentCommissionPercentage);
         const referralFeePercentage = Number(contractForm.referralFeePercentage);
-        const referralFeeAmount = Number(referralFeeAmountDisplay);
+        const referralFeeAmount = calculateReferralFeeAmount(
+          contractForm.contractPrice,
+          contractForm.agentCommissionPercentage,
+          contractForm.referralFeePercentage
+        );
 
-        if ([contractPrice, agentCommission, referralFeePercentage, referralFeeAmount].some((value) => Number.isNaN(value))) {
+        if (
+          [contractPrice, agentCommission, referralFeePercentage].some((value) => Number.isNaN(value)) ||
+          referralFeeAmount === null
+        ) {
           toast.error('Contract amounts must be valid numbers.');
           setLoading(false);
           return;
@@ -394,7 +413,7 @@ export function StatusChanger({
           className="mt-2 w-full rounded border border-slate-200 px-3 py-2 text-sm"
           disabled={loading}
         >
-          {statuses.map((item) => (
+          {pipelineOptions.map((item) => (
             <option key={item} value={item}>
               {item}
             </option>
@@ -486,7 +505,7 @@ export function StatusChanger({
               </label>
             </div>
             <label className="block">
-              <span className="text-slate-500">Referral Fee Amount ($)</span>
+              <span className="text-slate-500">Referral Fee Amount</span>
               <input
                 type="text"
                 value={referralFeeAmountDisplay}

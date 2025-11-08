@@ -203,6 +203,7 @@ export async function getReferralById(id: string) {
       paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
       createdAt: payment.createdAt ? payment.createdAt.toISOString() : null,
       updatedAt: payment.updatedAt ? payment.updatedAt.toISOString() : null,
+      terminatedReason: payment.terminatedReason ?? null,
     })),
     daysInStatus,
     statusLastUpdated: referral.statusLastUpdated ? referral.statusLastUpdated.toISOString() : null,

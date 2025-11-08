@@ -11,6 +11,7 @@ import { fetcher } from '@/utils/fetcher';
 import { formatCurrency } from '@/utils/formatters';
 
 type DealStatus = 'under_contract' | 'closed' | 'paid' | 'terminated';
+type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
 
 const STATUS_OPTIONS: { value: DealStatus; label: string }[] = [
   { value: 'under_contract', label: 'Under Contract' },
@@ -19,12 +20,20 @@ const STATUS_OPTIONS: { value: DealStatus; label: string }[] = [
   { value: 'terminated', label: 'Terminated' }
 ];
 
+const TERMINATED_REASON_OPTIONS: { value: TerminatedReason; label: string }[] = [
+  { value: 'inspection', label: 'Inspection' },
+  { value: 'appraisal', label: 'Appraisal' },
+  { value: 'financing', label: 'Financing' },
+  { value: 'changed_mind', label: 'Changed Mind' },
+];
+
 interface DealRow {
   _id: string;
   referralId: string;
   status: DealStatus;
   expectedAmountCents: number;
   receivedAmountCents: number;
+  terminatedReason?: TerminatedReason | null;
   invoiceDate?: string | null;
   paidDate?: string | null;
   referral?: {
@@ -53,6 +62,7 @@ export function DealsTable() {
   const { data, mutate } = useSWR<DealRow[]>('/api/payments', fetcher);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
+  const [reasonDrafts, setReasonDrafts] = useState<Record<string, TerminatedReason>>({});
 
   if (!data) {
     return <div className="rounded-lg bg-white p-4 shadow-sm">Loading deals…</div>;
@@ -97,7 +107,7 @@ export function DealsTable() {
       const paidAmount =
         row.status === 'paid'
           ? row.receivedAmountCents || row.expectedAmountCents || 0
-          : row.receivedAmountCents || 0;
+          : 0;
       const effectivePaid = isTerminated ? 0 : paidAmount;
       const commission = calculateCommission(row);
 
@@ -150,7 +160,9 @@ export function DealsTable() {
 
   const updateDeal = async (
     deal: DealRow,
-    updates: Partial<Pick<DealRow, 'status' | 'expectedAmountCents' | 'receivedAmountCents'>>,
+    updates: Partial<
+      Pick<DealRow, 'status' | 'expectedAmountCents' | 'receivedAmountCents' | 'terminatedReason'>
+    >,
     successMessage: string
   ) => {
     const previousSnapshot = data;
@@ -170,6 +182,9 @@ export function DealsTable() {
       }
       if ('receivedAmountCents' in updates) {
         payload.receivedAmountCents = updates.receivedAmountCents ?? 0;
+      }
+      if ('terminatedReason' in updates) {
+        payload.terminatedReason = updates.terminatedReason ?? null;
       }
 
       const response = await fetch('/api/payments', {
@@ -195,21 +210,50 @@ export function DealsTable() {
   };
 
   const handleStatusChange = async (deal: DealRow, nextStatus: DealStatus) => {
-    const updates: Partial<Pick<DealRow, 'status' | 'expectedAmountCents' | 'receivedAmountCents'>> = {
+    const updates: Partial<
+      Pick<DealRow, 'status' | 'expectedAmountCents' | 'receivedAmountCents' | 'terminatedReason'>
+    > = {
       status: nextStatus,
     };
 
     if (nextStatus === 'terminated') {
       updates.expectedAmountCents = 0;
       updates.receivedAmountCents = 0;
+      const fallbackReason =
+        reasonDrafts[deal._id] ?? deal.terminatedReason ?? 'inspection';
+      updates.terminatedReason = fallbackReason;
+      setReasonDrafts((prev) => ({ ...prev, [deal._id]: fallbackReason }));
     } else {
       const fallbackExpected = deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
       if (fallbackExpected > 0) {
         updates.expectedAmountCents = fallbackExpected;
       }
+      updates.terminatedReason = null;
+      setReasonDrafts((prev) => {
+        if (!(deal._id in prev)) {
+          return prev;
+        }
+        const next = { ...prev };
+        delete next[deal._id];
+        return next;
+      });
     }
 
     await updateDeal(deal, updates, 'Deal status updated');
+  };
+
+  const handleTerminatedReasonChange = async (deal: DealRow, nextReason: TerminatedReason) => {
+    setReasonDrafts((prev) => ({ ...prev, [deal._id]: nextReason }));
+
+    if (deal.status !== 'terminated' && deal.terminatedReason !== nextReason) {
+      return;
+    }
+
+    if (deal.status === 'terminated' && deal.terminatedReason === nextReason) {
+      return;
+    }
+
+    await updateDeal(deal, { terminatedReason: nextReason }, 'Termination reason updated');
   };
 
   const handlePaidToggle = async (deal: DealRow, checked: boolean) => {
@@ -306,20 +350,44 @@ export function DealsTable() {
     );
   };
 
-  const renderStatusControl = (deal: DealRow) => (
-    <select
-      value={deal.status}
-      onChange={(event) => handleStatusChange(deal, event.target.value as DealStatus)}
-      className="rounded border border-slate-200 px-2 py-1 text-sm text-slate-700"
-      disabled={updatingId === deal._id}
-    >
-      {STATUS_OPTIONS.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  );
+  const renderStatusControl = (deal: DealRow) => {
+    const isTerminated = deal.status === 'terminated';
+    const selectedReason =
+      reasonDrafts[deal._id] ?? deal.terminatedReason ?? 'inspection';
+
+    return (
+      <div className="space-y-2">
+        <select
+          value={deal.status}
+          onChange={(event) => handleStatusChange(deal, event.target.value as DealStatus)}
+          className="w-full rounded border border-slate-200 px-2 py-1 text-sm text-slate-700"
+          disabled={updatingId === deal._id}
+        >
+          {STATUS_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {isTerminated && (
+          <select
+            value={selectedReason}
+            onChange={(event) =>
+              handleTerminatedReasonChange(deal, event.target.value as TerminatedReason)
+            }
+            className="w-full rounded border border-slate-200 px-2 py-1 text-sm text-slate-700"
+            disabled={updatingId === deal._id}
+          >
+            {TERMINATED_REASON_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+    );
+  };
 
   const formatCentsForInput = (value: number | null | undefined) => {
     if (value === null || value === undefined) {

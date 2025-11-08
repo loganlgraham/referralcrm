@@ -61,6 +61,10 @@ export const paymentSchema = z.object({
   status: z.enum(['under_contract', 'closed', 'paid', 'terminated']).default('under_contract'),
   expectedAmountCents: z.number().int().min(0),
   receivedAmountCents: z.number().int().min(0).optional(),
+  terminatedReason: z
+    .enum(['inspection', 'appraisal', 'financing', 'changed_mind'])
+    .nullable()
+    .optional(),
   invoiceDate: z.string().optional(),
   paidDate: z.string().optional(),
   notes: z.string().optional()

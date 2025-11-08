@@ -17,6 +17,7 @@ export function daysInStatus(referral: Pick<ReferralDocument, 'statusLastUpdated
 export function nextStatuses(status: ReferralStatus): ReferralStatus[] {
   const pipeline: ReferralStatus[] = [
     'New Lead',
+    'Paired',
     'In Communication',
     'Showing Homes',
     'Under Contract',
