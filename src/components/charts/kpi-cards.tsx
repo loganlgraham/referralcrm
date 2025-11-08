@@ -167,8 +167,8 @@ function MetricTrendChart({ data }: { data: MonthlyPoint[] }) {
   const tooltipStyle = hoveredPoint && hoverIndex != null
     ? {
         left: `${Math.min(
-          Math.max(getXPosition(hoverIndex) - 90, chartDimensions.paddingX),
-          chartDimensions.width - chartDimensions.paddingX - 180
+          Math.max(getXPosition(hoverIndex) - 90, CHART_PADDING_X),
+          CHART_WIDTH - CHART_PADDING_X - 180
         )}px`
       }
     : undefined;
