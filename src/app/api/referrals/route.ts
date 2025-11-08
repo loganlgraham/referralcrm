@@ -71,26 +71,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         $group: {
           _id: null,
           totalReferrals: { $sum: 1 },
-          closedReferrals: {
-            $sum: {
-              $cond: [{ $eq: ['$status', 'Closed'] }, 1, 0]
-            }
-          },
-          expectedRevenueCents: { $sum: '$referralFeeDueCents' },
-          earnedCommissionCents: {
-            $sum: {
-              $cond: [{ $eq: ['$status', 'Closed'] }, '$referralFeeDueCents', 0]
-            }
-          }
+          expectedRevenueCents: { $sum: '$referralFeeDueCents' }
         }
       }
     ]);
 
     const metrics = summaryMetrics[0] ?? {
       totalReferrals: 0,
-      closedReferrals: 0,
-      expectedRevenueCents: 0,
-      earnedCommissionCents: 0
+      expectedRevenueCents: 0
     };
 
     const paymentMatch = Object.entries(referralMatch).reduce<Record<string, unknown>>((acc, [key, value]) => {
@@ -98,31 +86,77 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return acc;
     }, {});
 
-    const receivedRevenue = await Payment.aggregate([
-      {
-        $lookup: {
-          from: 'referrals',
-          localField: 'referralId',
-          foreignField: '_id',
-          as: 'referral'
-        }
-      },
-      { $unwind: '$referral' },
-      { $match: paymentMatch },
-      { $group: { _id: null, amount: { $sum: '$receivedAmountCents' } } }
+    const [closedDealAggregation, paidRevenueAggregation, earnedCommissionAggregation] = await Promise.all([
+      Payment.aggregate([
+        {
+          $lookup: {
+            from: 'referrals',
+            localField: 'referralId',
+            foreignField: '_id',
+            as: 'referral'
+          }
+        },
+        { $unwind: '$referral' },
+        {
+          $match: {
+            ...paymentMatch,
+            status: { $in: ['closed', 'paid'] }
+          }
+        },
+        { $group: { _id: '$referralId' } },
+        { $group: { _id: null, count: { $sum: 1 } } }
+      ]),
+      Payment.aggregate([
+        {
+          $lookup: {
+            from: 'referrals',
+            localField: 'referralId',
+            foreignField: '_id',
+            as: 'referral'
+          }
+        },
+        { $unwind: '$referral' },
+        {
+          $match: {
+            ...paymentMatch,
+            status: 'paid'
+          }
+        },
+        { $group: { _id: null, amount: { $sum: '$receivedAmountCents' } } }
+      ]),
+      Payment.aggregate([
+        {
+          $lookup: {
+            from: 'referrals',
+            localField: 'referralId',
+            foreignField: '_id',
+            as: 'referral'
+          }
+        },
+        { $unwind: '$referral' },
+        {
+          $match: {
+            ...paymentMatch,
+            status: { $in: ['closed', 'paid'] }
+          }
+        },
+        { $group: { _id: null, amount: { $sum: '$expectedAmountCents' } } }
+      ])
     ]);
 
-    const closeRate =
-      metrics.totalReferrals === 0 ? 0 : (metrics.closedReferrals / metrics.totalReferrals) * 100;
+    const closedDeals = closedDealAggregation[0]?.count ?? 0;
+    const amountPaidCents = paidRevenueAggregation[0]?.amount ?? 0;
+    const earnedCommissionCents = earnedCommissionAggregation[0]?.amount ?? 0;
+    const closeRate = metrics.totalReferrals === 0 ? 0 : (closedDeals / metrics.totalReferrals) * 100;
 
     return NextResponse.json({
       role,
       totalReferrals: metrics.totalReferrals,
-      closedReferrals: metrics.closedReferrals,
+      closedReferrals: closedDeals,
       closeRate,
       expectedRevenueCents: metrics.expectedRevenueCents,
-      amountPaidCents: receivedRevenue[0]?.amount || 0,
-      earnedCommissionCents: metrics.earnedCommissionCents
+      amountPaidCents,
+      earnedCommissionCents
     });
   }
 

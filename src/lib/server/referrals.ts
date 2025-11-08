@@ -93,23 +93,36 @@ export async function getReferrals(params: GetReferralsParams) {
     query.assignedAgent = agent._id;
   }
   if (mc) {
-    const lender = await LenderMC.findOne({
-      $or: [{ name: new RegExp(mc, 'i') }, { email: new RegExp(mc, 'i') }]
-    });
-    if (lender) {
-      query.lender = lender._id;
+    if (Types.ObjectId.isValid(mc)) {
+      query.lender = new Types.ObjectId(mc);
+    } else {
+      const lender = await LenderMC.findOne({
+        $or: [{ name: new RegExp(mc, 'i') }, { email: new RegExp(mc, 'i') }]
+      });
+      if (lender) {
+        query.lender = lender._id;
+      }
     }
   }
   if (agent) {
-    const agentDoc = await Agent.findOne({
-      $or: [{ name: new RegExp(agent, 'i') }, { email: new RegExp(agent, 'i') }]
-    });
-    if (agentDoc) {
-      query.assignedAgent = agentDoc._id;
+    if (Types.ObjectId.isValid(agent)) {
+      query.assignedAgent = new Types.ObjectId(agent);
+    } else {
+      const agentDoc = await Agent.findOne({
+        $or: [{ name: new RegExp(agent, 'i') }, { email: new RegExp(agent, 'i') }]
+      });
+      if (agentDoc) {
+        query.assignedAgent = agentDoc._id;
+      }
     }
   }
 
-  const [items, total] = await Promise.all([
+  const paymentMatch = Object.entries(query).reduce<Record<string, unknown>>((acc, [key, value]) => {
+    acc[`referral.${key}`] = value;
+    return acc;
+  }, {});
+
+  const [items, total, closedDealAggregation] = await Promise.all([
     Referral.find(query)
       .populate<{ assignedAgent: PopulatedAgent }>('assignedAgent', 'name email phone')
       .populate<{ lender: PopulatedLender }>('lender', 'name email phone')
@@ -117,8 +130,30 @@ export async function getReferrals(params: GetReferralsParams) {
       .skip((page - 1) * PAGE_SIZE)
       .limit(PAGE_SIZE)
       .lean<PopulatedReferral[]>(),
-    Referral.countDocuments(query)
+    Referral.countDocuments(query),
+    Payment.aggregate([
+      {
+        $lookup: {
+          from: 'referrals',
+          localField: 'referralId',
+          foreignField: '_id',
+          as: 'referral'
+        }
+      },
+      { $unwind: '$referral' },
+      {
+        $match: {
+          ...paymentMatch,
+          status: { $in: ['closed', 'paid'] }
+        }
+      },
+      { $group: { _id: '$referralId' } },
+      { $group: { _id: null, count: { $sum: 1 } } }
+    ])
   ]);
+
+  const closedDeals = closedDealAggregation[0]?.count ?? 0;
+  const closeRate = total === 0 ? 0 : (closedDeals / total) * 100;
 
   return {
     items: items.map((item: PopulatedReferral) => ({
@@ -141,7 +176,12 @@ export async function getReferrals(params: GetReferralsParams) {
     } as ReferralListItem)),
     total,
     page,
-    pageSize: PAGE_SIZE
+    pageSize: PAGE_SIZE,
+    summary: {
+      total,
+      closedDeals,
+      closeRate
+    }
   };
 }
 

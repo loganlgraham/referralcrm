@@ -89,8 +89,23 @@ function StatusSelect({ referralId, value }: StatusSelectProps) {
   );
 }
 
+const STATUS_BADGE_STYLES: Record<ReferralStatus, string> = {
+  'New Lead': 'bg-sky-100 text-sky-700',
+  Paired: 'bg-indigo-100 text-indigo-700',
+  'In Communication': 'bg-amber-100 text-amber-700',
+  'Showing Homes': 'bg-violet-100 text-violet-700',
+  'Under Contract': 'bg-emerald-100 text-emerald-700',
+  Closed: 'bg-green-100 text-green-700',
+  Terminated: 'bg-rose-100 text-rose-700'
+};
+
 function StatusBadge({ status }: { status: ReferralStatus }) {
-  return <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{status}</span>;
+  const style = STATUS_BADGE_STYLES[status] ?? 'bg-slate-100 text-slate-700';
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ${style}`}>
+      {status}
+    </span>
+  );
 }
 
 function NoteComposer({ referralId }: { referralId: string }) {
@@ -324,10 +339,14 @@ export function ReferralTable({ data, mode }: ReferralTableProps) {
   );
 }
 
-export function ReferralSummary({ data }: { data: ReferralRow[] }) {
-  const total = data.length;
-  const closed = data.filter((referral) => referral.status === 'Closed').length;
-  const closeRate = total === 0 ? 0 : (closed / total) * 100;
+interface ReferralSummaryMetrics {
+  total: number;
+  closedDeals: number;
+  closeRate: number;
+}
+
+export function ReferralSummary({ summary }: { summary: ReferralSummaryMetrics }) {
+  const { total, closedDeals, closeRate } = summary;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -338,7 +357,7 @@ export function ReferralSummary({ data }: { data: ReferralRow[] }) {
         </div>
         <div>
           <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Closed Deals</dt>
-          <dd className="mt-1 text-2xl font-semibold text-slate-900">{formatNumber(closed)}</dd>
+          <dd className="mt-1 text-2xl font-semibold text-slate-900">{formatNumber(closedDeals)}</dd>
         </div>
         <div>
           <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Close Rate</dt>
