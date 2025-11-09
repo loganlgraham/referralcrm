@@ -30,6 +30,9 @@ interface KPIResponse {
   expectedRevenueCents: number;
   revenueReceivedCents: number;
   earnedCommissionCents: number;
+  activePipeline: number;
+  mcTransferCount: number;
+  newReferrals30Days: number;
   monthly: TrendPoint[];
   weekly?: TrendPoint[];
 }
@@ -403,7 +406,7 @@ export function KPICards() {
   if (!isMounted || !data) {
     return (
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 5 }).map((_, index) => (
+        {Array.from({ length: 8 }).map((_, index) => (
           <LoadingCard key={index} />
         ))}
       </div>
@@ -438,7 +441,13 @@ export function KPICards() {
     }
   })();
 
-  const cards = [...baseCards, ...roleSpecificCards];
+  const growthCards = [
+    { title: 'Active Pipeline', value: formatNumber(data.activePipeline) },
+    { title: 'New Referrals (30d)', value: formatNumber(data.newReferrals30Days) },
+    { title: 'MC Transfers', value: formatNumber(data.mcTransferCount) }
+  ];
+
+  const cards = [...baseCards, ...growthCards, ...roleSpecificCards];
 
   const monthlyData = data.monthly ?? [];
   const weeklyData = data.weekly ?? [];

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 interface ReferralNote {
@@ -11,6 +11,7 @@ interface ReferralNote {
   createdAt: string;
   hiddenFromAgent?: boolean;
   hiddenFromMc?: boolean;
+  emailedTargets?: ('agent' | 'mc')[];
 }
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
@@ -19,6 +20,8 @@ interface Props {
   referralId: string;
   initialNotes: ReferralNote[];
   viewerRole: ViewerRole;
+  agentContact?: { name?: string | null; email?: string | null } | null;
+  mcContact?: { name?: string | null; email?: string | null } | null;
 }
 
 const formatTimestamp = (value: string) => {
@@ -29,14 +32,25 @@ const formatTimestamp = (value: string) => {
   }
 };
 
-export function ReferralNotes({ referralId, initialNotes, viewerRole }: Props) {
+export function ReferralNotes({
+  referralId,
+  initialNotes,
+  viewerRole,
+  agentContact,
+  mcContact
+}: Props) {
   const [notes, setNotes] = useState<ReferralNote[]>(() => [...initialNotes]);
   const [content, setContent] = useState('');
   const [hiddenFromAgent, setHiddenFromAgent] = useState(false);
   const [hiddenFromMc, setHiddenFromMc] = useState(false);
+  const [emailAgent, setEmailAgent] = useState(false);
+  const [emailMc, setEmailMc] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const canControlVisibility = viewerRole === 'admin' || viewerRole === 'manager';
+  const hasAgentEmail = Boolean(agentContact?.email);
+  const hasMcEmail = Boolean(mcContact?.email);
+  const canEmailNote = hasAgentEmail || hasMcEmail;
 
   const sortedNotes = useMemo(
     () =>
@@ -44,10 +58,24 @@ export function ReferralNotes({ referralId, initialNotes, viewerRole }: Props) {
     [notes]
   );
 
+  useEffect(() => {
+    if (hiddenFromAgent && emailAgent) {
+      setEmailAgent(false);
+    }
+  }, [hiddenFromAgent, emailAgent]);
+
+  useEffect(() => {
+    if (hiddenFromMc && emailMc) {
+      setEmailMc(false);
+    }
+  }, [hiddenFromMc, emailMc]);
+
   const resetForm = () => {
     setContent('');
     setHiddenFromAgent(false);
     setHiddenFromMc(false);
+    setEmailAgent(false);
+    setEmailMc(false);
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -56,6 +84,15 @@ export function ReferralNotes({ referralId, initialNotes, viewerRole }: Props) {
       toast.error('Add a note before saving');
       return;
     }
+
+    const emailTargets: ('agent' | 'mc')[] = [];
+    if (emailAgent && hasAgentEmail && !hiddenFromAgent) {
+      emailTargets.push('agent');
+    }
+    if (emailMc && hasMcEmail && !hiddenFromMc) {
+      emailTargets.push('mc');
+    }
+
     setSaving(true);
     try {
       const response = await fetch(`/api/referrals/${referralId}/notes`, {
@@ -64,7 +101,8 @@ export function ReferralNotes({ referralId, initialNotes, viewerRole }: Props) {
         body: JSON.stringify({
           content: content.trim(),
           hiddenFromAgent: canControlVisibility ? hiddenFromAgent : undefined,
-          hiddenFromMc: canControlVisibility ? hiddenFromMc : undefined
+          hiddenFromMc: canControlVisibility ? hiddenFromMc : undefined,
+          emailTargets: emailTargets.length > 0 ? emailTargets : undefined
         })
       });
       if (!response.ok) {
@@ -82,7 +120,12 @@ export function ReferralNotes({ referralId, initialNotes, viewerRole }: Props) {
         ...previous
       ]);
       resetForm();
-      toast.success('Note added');
+      const emailSummary = Array.isArray(created.emailedTargets) && created.emailedTargets.length > 0
+        ? ` Email sent to ${created.emailedTargets
+            .map((target) => (target === 'agent' ? agentContact?.name || 'agent' : mcContact?.name || 'MC'))
+            .join(' & ')}.`
+        : '';
+      toast.success(`Note added.${emailSummary}`.trim());
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Unable to save note');
@@ -128,6 +171,41 @@ export function ReferralNotes({ referralId, initialNotes, viewerRole }: Props) {
             </label>
           </div>
         )}
+        {canEmailNote && (
+          <div className="flex flex-wrap gap-4 text-xs text-slate-600">
+            {hasAgentEmail && (
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={emailAgent}
+                  onChange={(event) => setEmailAgent(event.target.checked)}
+                  disabled={saving || hiddenFromAgent}
+                />
+                Email agent
+              </label>
+            )}
+            {hasMcEmail && (
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={emailMc}
+                  onChange={(event) => setEmailMc(event.target.checked)}
+                  disabled={saving || hiddenFromMc}
+                />
+                Email MC
+              </label>
+            )}
+            {(!hasAgentEmail || !hasMcEmail) && (
+              <span className="text-slate-400">
+                {hasAgentEmail && !hasMcEmail
+                  ? 'MC email unavailable'
+                  : !hasAgentEmail && hasMcEmail
+                    ? 'Agent email unavailable'
+                    : 'No email contacts available'}
+              </span>
+            )}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <button
             type="submit"
@@ -157,7 +235,7 @@ export function ReferralNotes({ referralId, initialNotes, viewerRole }: Props) {
               <span>{formatTimestamp(note.createdAt)}</span>
             </div>
             <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{note.content}</p>
-            {(note.hiddenFromAgent || note.hiddenFromMc) && (
+            {(note.hiddenFromAgent || note.hiddenFromMc) && viewerRole === 'admin' && (
               <div className="mt-2 text-xs font-semibold uppercase tracking-wide text-amber-600">
                 {[
                   note.hiddenFromAgent ? 'Hidden from agent' : null,

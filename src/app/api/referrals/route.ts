@@ -17,6 +17,7 @@ import {
   startOfMonth,
   startOfWeek,
   startOfYear,
+  subDays,
   subMonths,
   subWeeks
 } from 'date-fns';
@@ -67,6 +68,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         expectedRevenueCents: 0,
         revenueReceivedCents: 0,
         earnedCommissionCents: 0,
+        activePipeline: 0,
+        mcTransferCount: 0,
+        newReferrals30Days: 0,
         monthly: [],
         weekly: []
       });
@@ -87,20 +91,44 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }, {});
 
   if (summary) {
+    const thirtyDaysAgo = subDays(new Date(), 30);
+
     const summaryMetrics = await Referral.aggregate([
       { $match: referralMatch },
       {
         $group: {
           _id: null,
           totalReferrals: { $sum: 1 },
-          expectedRevenueCents: { $sum: '$referralFeeDueCents' }
+          expectedRevenueCents: { $sum: '$referralFeeDueCents' },
+          activePipeline: {
+            $sum: {
+              $cond: [
+                { $in: ['$status', ['Closed', 'Terminated']] },
+                0,
+                1
+              ]
+            }
+          },
+          mcTransferCount: {
+            $sum: {
+              $cond: [{ $eq: ['$source', 'MC'] }, 1, 0]
+            }
+          },
+          newReferrals30Days: {
+            $sum: {
+              $cond: [{ $gte: ['$createdAt', thirtyDaysAgo] }, 1, 0]
+            }
+          }
         }
       }
     ]);
 
     const metrics = summaryMetrics[0] ?? {
       totalReferrals: 0,
-      expectedRevenueCents: 0
+      expectedRevenueCents: 0,
+      activePipeline: 0,
+      mcTransferCount: 0,
+      newReferrals30Days: 0
     };
 
     const rangeStart = startOfMonth(subMonths(new Date(), 11));
@@ -442,6 +470,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       expectedRevenueCents: metrics.expectedRevenueCents,
       revenueReceivedCents: revenueReceivedCentsTotal,
       earnedCommissionCents,
+      activePipeline: metrics.activePipeline ?? 0,
+      mcTransferCount: metrics.mcTransferCount ?? 0,
+      newReferrals30Days: metrics.newReferrals30Days ?? 0,
       monthly,
       weekly
     });

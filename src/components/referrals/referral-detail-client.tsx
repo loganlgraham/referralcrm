@@ -163,7 +163,19 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
         onFinancialsChange={handleFinancialsChange}
         onContractDraftChange={handleDraftChange}
       />
-      <ReferralNotes referralId={referralId} initialNotes={notes} viewerRole={viewerRole} />
+      <ReferralNotes
+        referralId={referralId}
+        initialNotes={notes}
+        viewerRole={viewerRole}
+        agentContact={{
+          name: referral.assignedAgent?.name ?? null,
+          email: referral.assignedAgent?.email ?? null
+        }}
+        mcContact={{
+          name: referral.lender?.name ?? null,
+          email: referral.lender?.email ?? null
+        }}
+      />
       <ReferralTimeline referralId={referralId} />
       {showDeals && <DealCard referral={dealReferral} overrides={dealOverrides} />}
     </div>

@@ -53,7 +53,9 @@ const buildInitialFormState = (details?: ContractDetails): ContractFormState => 
   agentCommissionPercentage: details?.agentCommissionBasisPoints
     ? (details.agentCommissionBasisPoints / 100).toString()
     : '3',
-  referralFeePercentage: details?.referralFeeBasisPoints ? (details.referralFeeBasisPoints / 100).toString() : '',
+  referralFeePercentage: details?.referralFeeBasisPoints
+    ? (details.referralFeeBasisPoints / 100).toString()
+    : '25',
 });
 
 const calculateReferralFeeAmount = (
@@ -61,7 +63,7 @@ const calculateReferralFeeAmount = (
   commissionInput: string,
   referralFeeInput: string
 ) => {
-  const price = Number(priceInput);
+  const price = priceInput ? Number(priceInput) : Number.NaN;
   const commission = Number(commissionInput);
   const referralFee = Number(referralFeeInput);
 
@@ -75,6 +77,17 @@ const calculateReferralFeeAmount = (
   }
 
   return amount;
+};
+
+const formatContractPriceDisplay = (value: string) => {
+  if (!value) {
+    return '';
+  }
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) {
+    return '';
+  }
+  return numeric.toLocaleString('en-US');
 };
 
 export function StatusChanger({
@@ -121,7 +134,7 @@ export function StatusChanger({
         return;
       }
 
-      const price = Number(form.contractPrice);
+      const price = form.contractPrice ? Number(form.contractPrice) : Number.NaN;
       const commission = Number(form.agentCommissionPercentage);
       const referralFee = Number(form.referralFeePercentage);
       const referralFeeAmount = calculateReferralFeeAmount(
@@ -234,7 +247,9 @@ export function StatusChanger({
           return;
         }
 
-        const contractPrice = Number(contractForm.contractPrice);
+        const contractPrice = contractForm.contractPrice
+          ? Number(contractForm.contractPrice)
+          : Number.NaN;
         const agentCommission = Number(contractForm.agentCommissionPercentage);
         const referralFeePercentage = Number(contractForm.referralFeePercentage);
         const referralFeeAmount = calculateReferralFeeAmount(
@@ -299,7 +314,7 @@ export function StatusChanger({
             : '',
           referralFeePercentage: details.referralFeeBasisPoints
             ? (details.referralFeeBasisPoints / 100).toString()
-            : '',
+            : '25',
         });
         setContractDirty(false);
         broadcastContractState(
@@ -311,7 +326,7 @@ export function StatusChanger({
               : '',
             referralFeePercentage: details.referralFeeBasisPoints
               ? (details.referralFeeBasisPoints / 100).toString()
-              : '',
+              : '25',
           },
           false
         );
@@ -356,7 +371,12 @@ export function StatusChanger({
     (event: ChangeEvent<HTMLInputElement>) => {
       const value = event.target.value;
       setContractForm((previous) => {
-        const next = { ...previous, [field]: value };
+        let nextValue = value;
+        if (field === 'contractPrice') {
+          const digitsOnly = value.replace(/[^0-9]/g, '');
+          nextValue = digitsOnly;
+        }
+        const next = { ...previous, [field]: nextValue };
         broadcastContractState(next, true);
         return next;
       });
@@ -467,13 +487,12 @@ export function StatusChanger({
             <label className="block">
               <span className="text-slate-500">Contract Price ($)</span>
               <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={contractForm.contractPrice}
+                type="text"
+                inputMode="numeric"
+                value={formatContractPriceDisplay(contractForm.contractPrice)}
                 onChange={handleContractFieldChange('contractPrice')}
                 className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
-                placeholder="450000"
+                placeholder="300,000"
                 disabled={loading}
               />
             </label>
