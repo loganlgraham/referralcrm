@@ -32,6 +32,48 @@ const formatTimestamp = (value: string) => {
   }
 };
 
+interface ToggleControlProps {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+}
+
+function ToggleControl({ label, checked, onChange, disabled }: ToggleControlProps) {
+  const handleToggle = () => {
+    if (!disabled) {
+      onChange(!checked);
+    }
+  };
+
+  const trackClasses = `relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${
+    disabled ? 'bg-slate-200' : checked ? 'bg-brand' : 'bg-slate-300'
+  }`;
+
+  const thumbClasses = `inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+    checked ? 'translate-x-4' : 'translate-x-1'
+  }`;
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={handleToggle}
+      disabled={disabled}
+      className={`inline-flex items-center gap-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${
+        disabled ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-600'
+      }`}
+    >
+      <span className={trackClasses}>
+        <span className={thumbClasses} />
+      </span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
 export function ReferralNotes({
   referralId,
   initialNotes,
@@ -47,7 +89,6 @@ export function ReferralNotes({
   const [emailMc, setEmailMc] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showNotesDropdown, setShowNotesDropdown] = useState(false);
-  const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
 
   const canControlVisibility = viewerRole === 'admin' || viewerRole === 'manager';
   const hasAgentEmail = Boolean(agentContact?.email);
@@ -78,19 +119,10 @@ export function ReferralNotes({
     setHiddenFromMc(false);
     setEmailAgent(false);
     setEmailMc(false);
-    setExpandedNotes({});
-  };
-
-  const toggleNoteExpansion = (noteId: string) => {
-    setExpandedNotes((previous) => ({
-      ...previous,
-      [noteId]: !previous[noteId]
-    }));
   };
 
   const handleDropdownToggle = () => {
     setShowNotesDropdown((previous) => !previous);
-    setExpandedNotes({});
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -164,50 +196,38 @@ export function ReferralNotes({
           placeholder="Add a note with borrower updates or next steps"
           disabled={saving}
         />
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-600">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
           {canControlVisibility && (
-            <label className="inline-flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={hiddenFromAgent}
-                onChange={(event) => setHiddenFromAgent(event.target.checked)}
-                disabled={saving}
-              />
-              Hide from agent
-            </label>
+            <ToggleControl
+              label="Hide from agent"
+              checked={hiddenFromAgent}
+              onChange={(value) => setHiddenFromAgent(value)}
+              disabled={saving}
+            />
           )}
           {canControlVisibility && (
-            <label className="inline-flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={hiddenFromMc}
-                onChange={(event) => setHiddenFromMc(event.target.checked)}
-                disabled={saving}
-              />
-              Hide from MC
-            </label>
+            <ToggleControl
+              label="Hide from MC"
+              checked={hiddenFromMc}
+              onChange={(value) => setHiddenFromMc(value)}
+              disabled={saving}
+            />
           )}
           {canEmailNote && hasAgentEmail && (
-            <label className="inline-flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={emailAgent}
-                onChange={(event) => setEmailAgent(event.target.checked)}
-                disabled={saving || hiddenFromAgent}
-              />
-              Email agent
-            </label>
+            <ToggleControl
+              label="Email agent"
+              checked={emailAgent}
+              onChange={(value) => setEmailAgent(value)}
+              disabled={saving || hiddenFromAgent}
+            />
           )}
           {canEmailNote && hasMcEmail && (
-            <label className="inline-flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={emailMc}
-                onChange={(event) => setEmailMc(event.target.checked)}
-                disabled={saving || hiddenFromMc}
-              />
-              Email MC
-            </label>
+            <ToggleControl
+              label="Email MC"
+              checked={emailMc}
+              onChange={(value) => setEmailMc(value)}
+              disabled={saving || hiddenFromMc}
+            />
           )}
           {canEmailNote && (!hasAgentEmail || !hasMcEmail) && (
             <span className="text-slate-400">
@@ -248,7 +268,7 @@ export function ReferralNotes({
               className="flex w-full items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
             >
               <span>
-                View notes ({sortedNotes.length})
+                Show details ({sortedNotes.length})
               </span>
               <span className={`transition-transform ${showNotesDropdown ? 'rotate-180' : ''}`} aria-hidden>
                 ▾
@@ -257,41 +277,39 @@ export function ReferralNotes({
             {showNotesDropdown && (
               <div className="max-h-80 space-y-2 overflow-y-auto rounded border border-slate-200 bg-slate-50 p-2">
                 {sortedNotes.map((note) => {
-                  const isExpanded = Boolean(expandedNotes[note.id]);
+                  const showVisibilityBadge =
+                    viewerRole === 'admin' && (note.hiddenFromAgent || note.hiddenFromMc);
+                  const showEmailBadge =
+                    Array.isArray(note.emailedTargets) && note.emailedTargets.length > 0;
+                  const showBadges = showVisibilityBadge || showEmailBadge;
+
                   return (
-                    <div key={note.id} className="rounded border border-slate-200 bg-white">
-                      <button
-                        type="button"
-                        onClick={() => toggleNoteExpansion(note.id)}
-                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
-                      >
+                    <div key={note.id} className="rounded border border-slate-200 bg-white px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs font-semibold text-slate-600">
                         <span className="truncate">
                           {note.authorName} · {note.authorRole}
-                          <span className="ml-2 font-normal text-slate-400">{formatTimestamp(note.createdAt)}</span>
                         </span>
-                        <span className={`shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} aria-hidden>
-                          ▾
-                        </span>
-                      </button>
-                      {isExpanded && (
-                        <div className="space-y-2 border-t border-slate-200 px-3 py-3 text-sm text-slate-700">
-                          <p className="whitespace-pre-line">{note.content}</p>
-                          {(note.hiddenFromAgent || note.hiddenFromMc) && viewerRole === 'admin' && (
-                            <div className="text-xs font-semibold uppercase tracking-wide text-amber-600">
+                        <span className="text-slate-400">{formatTimestamp(note.createdAt)}</span>
+                      </div>
+                      <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{note.content}</p>
+                      {showBadges && (
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide">
+                          {showVisibilityBadge && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">
                               {[
                                 note.hiddenFromAgent ? 'Hidden from agent' : null,
                                 note.hiddenFromMc ? 'Hidden from MC' : null
                               ]
                                 .filter(Boolean)
                                 .join(' • ')}
-                            </div>
+                            </span>
                           )}
-                          {Array.isArray(note.emailedTargets) && note.emailedTargets.length > 0 && (
-                            <div className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
+                          {showEmailBadge && (
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700">
                               {`Emailed: ${note.emailedTargets
-                                .map((target) => (target === 'agent' ? 'Agent' : 'MC'))
+                                ?.map((target) => (target === 'agent' ? 'Agent' : 'MC'))
                                 .join(' & ')}`}
-                            </div>
+                            </span>
                           )}
                         </div>
                       )}
