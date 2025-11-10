@@ -22,10 +22,18 @@ export const updateReferralSchema = z.object({
   assignedAgent: z.string().optional(),
   referralFeeBasisPoints: z.number().int().min(0).optional(),
   ahaBucket: z.enum(['AHA', 'AHA_OOS']).nullable().optional(),
+  source: z.enum(['Lender', 'MC']).optional(),
+  endorser: z.string().min(1).optional(),
+  clientType: z.enum(['Seller', 'Buyer']).optional(),
+  lookingInZip: z.string().min(5).optional(),
+  borrowerCurrentAddress: z.string().min(1).optional(),
+  stageOnTransfer: z.string().min(1).optional(),
+  initialNotes: z.string().optional(),
+  loanFileNumber: z.string().min(1).optional(),
 });
 
 export const createActivitySchema = z.object({
-  channel: z.enum(['call', 'sms', 'email', 'note']),
+  channel: z.enum(['call', 'sms', 'email', 'note', 'status', 'update']),
   content: z.string().min(1)
 });
 

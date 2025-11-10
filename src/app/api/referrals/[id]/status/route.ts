@@ -9,6 +9,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { canManageReferral } from '@/lib/rbac';
 import { calculateReferralFeeDue } from '@/utils/referral';
 import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
+import { logReferralActivity } from '@/lib/server/activities';
 
 interface Params {
   params: { id: string };
@@ -105,6 +106,16 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     );
   }
   await referral.save();
+
+  if (previousStatus !== referral.status) {
+    await logReferralActivity({
+      referralId: referral._id,
+      actorRole: session.user.role,
+      actorId: session.user.id,
+      channel: 'status',
+      content: `Status changed from ${previousStatus} to ${referral.status}`,
+    });
+  }
 
   const statusLastUpdated = referral.statusLastUpdated ?? new Date();
   const daysInStatus = differenceInDays(new Date(), statusLastUpdated);

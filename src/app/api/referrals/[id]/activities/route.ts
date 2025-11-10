@@ -17,7 +17,7 @@ type LeanActivity = {
   referralId: Types.ObjectId;
   actor: 'Agent' | 'MC' | 'System';
   actorId?: Types.ObjectId | null;
-  channel: 'call' | 'sms' | 'email' | 'note';
+  channel: 'call' | 'sms' | 'email' | 'note' | 'status' | 'update';
   content: string;
   createdAt: Date;
   updatedAt: Date;

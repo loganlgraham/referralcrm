@@ -5,10 +5,22 @@ import { Payment } from '@/models/payment';
 import { updateReferralSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { canManageReferral, canViewReferral } from '@/lib/rbac';
+import { logReferralActivity } from '@/lib/server/activities';
 
 interface RouteContext {
   params: { id: string };
 }
+
+const DETAIL_FIELD_LABELS = {
+  source: 'Source',
+  endorser: 'Endorser',
+  clientType: 'Client Type',
+  lookingInZip: 'Looking In (Zip)',
+  borrowerCurrentAddress: 'Borrower Current Address',
+  stageOnTransfer: 'Stage on Transfer',
+  initialNotes: 'Notes',
+  loanFileNumber: 'Loan File #',
+} as const;
 
 export async function GET(request: NextRequest, context: RouteContext): Promise<NextResponse> {
   const session = await getCurrentSession();
@@ -55,26 +67,68 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
   if (!canManageReferral(session, { assignedAgent: existing.assignedAgent, lender: existing.lender, org: existing.org })) {
     return new NextResponse('Forbidden', { status: 403 });
   }
-  const referral = await Referral.findByIdAndUpdate(
-    context.params.id,
-    {
-      ...parsed.data,
-      $push: {
-        audit: {
-          actorId: session.user.id,
-          actorRole: session.user.role,
-          field: 'update',
-          previousValue: null,
-          newValue: parsed.data,
-          timestamp: new Date()
+  const updatePayload = parsed.data as Record<string, unknown>;
+  const detailFieldKeys = Object.keys(DETAIL_FIELD_LABELS) as (keyof typeof DETAIL_FIELD_LABELS)[];
+  const toComparableString = (value: unknown) => {
+    if (value === undefined || value === null) {
+      return '';
+    }
+    if (typeof value === 'string') {
+      return value;
+    }
+    return String(value);
+  };
+
+  const changedDetailFields = detailFieldKeys.filter((field) => {
+    if (!(field in updatePayload)) {
+      return false;
+    }
+    const nextValue = toComparableString(updatePayload[field]);
+    const previousValue = toComparableString((existing as Record<string, unknown>)[field]);
+    return previousValue !== nextValue;
+  });
+
+  let referral;
+  try {
+    referral = await Referral.findByIdAndUpdate(
+      context.params.id,
+      {
+        ...parsed.data,
+        $push: {
+          audit: {
+            actorId: session.user.id,
+            actorRole: session.user.role,
+            field: 'update',
+            previousValue: null,
+            newValue: parsed.data,
+            timestamp: new Date()
+          }
         }
-      }
-    },
-    { new: true }
-  );
+      },
+      { new: true }
+    );
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && (error as { code?: number }).code === 11000) {
+      return NextResponse.json({ error: 'Loan file number must be unique' }, { status: 409 });
+    }
+    throw error;
+  }
 
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
+  }
+
+  if (changedDetailFields.length > 0) {
+    const updatedFieldsLabel = changedDetailFields
+      .map((field) => DETAIL_FIELD_LABELS[field])
+      .join(', ');
+    await logReferralActivity({
+      referralId: existing._id,
+      actorRole: session.user.role,
+      actorId: session.user.id,
+      channel: 'update',
+      content: `Updated referral details (${updatedFieldsLabel})`,
+    });
   }
 
   return NextResponse.json(referral);

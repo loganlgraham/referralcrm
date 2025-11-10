@@ -6,6 +6,7 @@ import { createReferralNoteSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { canViewReferral } from '@/lib/rbac';
 import { sendTransactionalEmail, isTransactionalEmailConfigured } from '@/lib/email';
+import { logReferralActivity } from '@/lib/server/activities';
 
 type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknown';
 
@@ -138,6 +139,14 @@ ${referralLink ? `Review the referral: ${referralLink}` : ''}`
   referral.notes = referral.notes || [];
   referral.notes.push(note);
   await referral.save();
+
+  await logReferralActivity({
+    referralId: referral._id,
+    actorRole: session.user.role,
+    actorId: session.user.id,
+    channel: 'note',
+    content: parsed.data.content.trim(),
+  });
 
   const saved = referral.notes[referral.notes.length - 1];
 
