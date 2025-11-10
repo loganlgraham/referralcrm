@@ -115,6 +115,7 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
     return snapshot;
   }, [deals]);
   const [afcMap, setAfcMap] = useState<Record<string, boolean>>(initialAfcMap);
+  const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setStatusMap(initialStatusMap);
@@ -131,6 +132,16 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
   useEffect(() => {
     setAfcMap(initialAfcMap);
   }, [initialAfcMap]);
+
+  useEffect(() => {
+    setExpandedMap((previous) => {
+      const next: Record<string, boolean> = {};
+      deals.forEach((deal) => {
+        next[deal._id] = previous[deal._id] ?? false;
+      });
+      return next;
+    });
+  }, [deals]);
 
   const propertyLabel =
     overrides?.propertyAddress ||
@@ -373,113 +384,147 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
     const assignedBucket = referral.ahaBucket ?? null;
     const matchesAssigned = !assignedBucket || agentSelection === assignedBucket || agentSelection === '';
 
+    const isExpanded = expandedMap[deal._id] ?? false;
+
+    const toggleExpanded = () => {
+      setExpandedMap((previous) => ({ ...previous, [deal._id]: !isExpanded }));
+    };
+
     return (
-      <div key={deal._id} className="space-y-3 rounded border border-slate-200 p-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase text-slate-400">{isPrimary ? 'Active Deal' : 'Deal History'}</p>
-            <p className="text-sm font-medium text-slate-900">{statusLabel}</p>
-          </div>
-          {deal.createdAt && (
-            <p className="text-xs text-slate-500">Updated {new Date(deal.createdAt).toLocaleDateString()}</p>
-          )}
-        </div>
-        <div className="grid gap-3 text-sm md:grid-cols-3">
-          <div className="rounded border border-slate-200 p-3">
-            <p className="text-xs uppercase text-slate-400">Property</p>
-            <p className="font-medium text-slate-900">{propertyLabel}</p>
-          </div>
-          <div className="rounded border border-slate-200 p-3">
-            <p className="text-xs uppercase text-slate-400">Referral Fee Due</p>
-            <p className="font-medium text-slate-900">{formattedAmount}</p>
-            {isPrimary && overrides?.hasUnsavedContractChanges && (
-              <p className="mt-2 text-xs text-amber-600">Save contract details to lock in this referral fee.</p>
-            )}
-            {status === 'terminated' && (
-              <p className="mt-2 text-xs text-slate-500">Terminated deals are excluded from revenue totals.</p>
-            )}
-          </div>
-          <div className="rounded border border-slate-200 p-3">
-            <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">
-              Deal Status
-              <select
-                value={status}
-                onChange={handleStatusChange(deal)}
-                className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
-                disabled={isSaving}
-              >
-                {STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {status === 'terminated' && (
-              <label className="mt-2 flex flex-col gap-2 text-xs uppercase text-slate-400">
-                Termination Reason
-                <select
-                  value={selectedReason}
-                  onChange={handleReasonChange(deal)}
-                  className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
-                  disabled={isSaving}
-                >
-                  {TERMINATED_REASON_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {expectedAmountCents <= 0 && status !== 'terminated' && (
-              <p className="mt-2 text-xs text-amber-600">
-                Enter contract details to calculate the referral fee before updating deal status.
-              </p>
+      <div key={deal._id} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <button
+          type="button"
+          onClick={toggleExpanded}
+          aria-expanded={isExpanded}
+          className="flex w-full items-center justify-between gap-4 bg-slate-50 px-4 py-3 text-left transition hover:bg-slate-100"
+        >
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                status === 'terminated'
+                  ? 'bg-rose-50 text-rose-600'
+                  : status === 'paid'
+                    ? 'bg-emerald-50 text-emerald-600'
+                    : status === 'closed'
+                      ? 'bg-sky-50 text-sky-600'
+                      : 'bg-amber-50 text-amber-600'
+              }`}
+            >
+              {statusLabel}
+            </span>
+            <span className="text-xs uppercase tracking-wide text-slate-400">
+              {isPrimary ? 'Active Deal' : 'Deal History'}
+            </span>
+            <span className="text-sm font-medium text-slate-900">{formattedAmount}</span>
+            <span className="text-xs text-slate-500">{propertyLabel}</span>
+            {deal.createdAt && (
+              <span className="text-xs text-slate-400">Updated {new Date(deal.createdAt).toLocaleDateString()}</span>
             )}
           </div>
-        </div>
-        <div className="grid gap-3 text-sm md:grid-cols-2">
-          <div className="rounded border border-slate-200 p-3">
-            <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">
-              Agent Outcome
-              <select
-                value={agentSelection}
-                onChange={handleAgentAttributionChange(deal)}
-                className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
-                disabled={isSaving}
-              >
-                <option value="">Not Used</option>
-                <option value="AHA">Used AHA</option>
-                <option value="AHA_OOS">Used AHA OOS</option>
-              </select>
-            </label>
-            {assignedBucket && agentSelection === '' && (
-              <p className="mt-2 text-xs text-slate-500">Mark whether this deal stayed with the assigned agent bucket.</p>
-            )}
-            {assignedBucket && agentSelection && !matchesAssigned && (
-              <p className="mt-2 text-xs text-amber-600">
-                This deal did not close with the assigned {assignedBucket === 'AHA' ? 'AHA' : 'AHA OOS'} agent.
-              </p>
-            )}
+          <span className="text-xs font-medium text-brand">
+            {isExpanded ? 'Hide details' : 'View details'}
+          </span>
+        </button>
+        {isExpanded && (
+          <div className="space-y-4 border-t border-slate-200 p-4 text-sm">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs uppercase text-slate-400">Property</p>
+                <p className="font-medium text-slate-900">{propertyLabel}</p>
+              </div>
+              <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs uppercase text-slate-400">Referral Fee Due</p>
+                <p className="font-medium text-slate-900">{formattedAmount}</p>
+                {isPrimary && overrides?.hasUnsavedContractChanges && (
+                  <p className="mt-2 text-xs text-amber-600">Save contract details to lock in this referral fee.</p>
+                )}
+                {status === 'terminated' && (
+                  <p className="mt-2 text-xs text-slate-500">Terminated deals are excluded from revenue totals.</p>
+                )}
+              </div>
+              <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">
+                  Deal Status
+                  <select
+                    value={status}
+                    onChange={handleStatusChange(deal)}
+                    className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                    disabled={isSaving}
+                  >
+                    {STATUS_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {status === 'terminated' && (
+                  <label className="mt-2 flex flex-col gap-2 text-xs uppercase text-slate-400">
+                    Termination Reason
+                    <select
+                      value={selectedReason}
+                      onChange={handleReasonChange(deal)}
+                      className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                      disabled={isSaving}
+                    >
+                      {TERMINATED_REASON_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {expectedAmountCents <= 0 && status !== 'terminated' && (
+                  <p className="mt-2 text-xs text-amber-600">
+                    Enter contract details to calculate the referral fee before updating deal status.
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">
+                  Agent Outcome
+                  <select
+                    value={agentSelection}
+                    onChange={handleAgentAttributionChange(deal)}
+                    className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                    disabled={isSaving}
+                  >
+                    <option value="">Not Used</option>
+                    <option value="AHA">Used AHA</option>
+                    <option value="AHA_OOS">Used AHA OOS</option>
+                  </select>
+                </label>
+                {assignedBucket && agentSelection === '' && (
+                  <p className="mt-2 text-xs text-slate-500">Mark whether this deal stayed with the assigned agent bucket.</p>
+                )}
+                {assignedBucket && agentSelection && !matchesAssigned && (
+                  <p className="mt-2 text-xs text-amber-600">
+                    This deal did not close with the assigned {assignedBucket === 'AHA' ? 'AHA' : 'AHA OOS'} agent.
+                  </p>
+                )}
+              </div>
+              <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs uppercase text-slate-400">Mortgage Company</p>
+                <label className="mt-2 inline-flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                    checked={usedAfc}
+                    onChange={handleAfcToggle(deal)}
+                    disabled={isSaving}
+                  />
+                  Used AFC
+                </label>
+                {!usedAfc && (
+                  <p className="mt-2 text-xs text-slate-500">Track whether AFC handled this deal.</p>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="rounded border border-slate-200 p-3">
-            <p className="text-xs uppercase text-slate-400">Mortgage Company</p>
-            <label className="mt-2 inline-flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-                checked={usedAfc}
-                onChange={handleAfcToggle(deal)}
-                disabled={isSaving}
-              />
-              Used AFC
-            </label>
-            {!usedAfc && (
-              <p className="mt-2 text-xs text-slate-500">Track whether AFC handled this deal.</p>
-            )}
-          </div>
-        </div>
+        )}
       </div>
     );
   };

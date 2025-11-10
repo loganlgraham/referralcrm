@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { REFERRAL_STATUSES, ReferralStatus } from '@/constants/referrals';
@@ -190,6 +191,51 @@ function NoteComposer({ referralId }: { referralId: string }) {
   );
 }
 
+function DeleteReferralButton({ referralId, borrowerName }: { referralId: string; borrowerName: string }) {
+  const router = useRouter();
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (deleting) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete this referral for ${borrowerName}? This action cannot be undone and will remove any associated deals.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const response = await fetch(`/api/referrals/${referralId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error('Unable to delete referral');
+      }
+      toast.success('Referral deleted');
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Unable to delete referral');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleDelete}
+      disabled={deleting}
+      className="rounded border border-rose-200 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+    >
+      {deleting ? 'Deleting…' : 'Delete'}
+    </button>
+  );
+}
+
 function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
   const borrowerColumn: ColumnDef<ReferralRow> = {
     header: 'Borrower',
@@ -298,7 +344,19 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
       accessorKey: 'referralFeeDueCents',
       cell: ({ row }) => formatCurrency(row.original.referralFeeDueCents || 0)
     },
-    createdColumn
+    createdColumn,
+    {
+      header: '',
+      id: 'actions',
+      cell: ({ row }) => (
+        <div className="flex justify-end">
+          <DeleteReferralButton
+            referralId={row.original._id}
+            borrowerName={row.original.borrowerName}
+          />
+        </div>
+      )
+    }
   ];
 }
 

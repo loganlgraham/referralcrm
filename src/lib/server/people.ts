@@ -11,6 +11,7 @@ type NoteSummary = {
   authorRole: string;
   content: string;
   createdAt: string;
+  emailedTargets: ('agent' | 'mc')[];
 };
 
 type AgentProfile = {
@@ -45,6 +46,7 @@ interface NoteRecord {
   authorRole: string;
   content: string;
   createdAt: Date;
+  emailedTargets?: ('agent' | 'mc')[];
 }
 
 const serializeNotes = (notes?: NoteRecord[] | null): NoteSummary[] =>
@@ -53,7 +55,8 @@ const serializeNotes = (notes?: NoteRecord[] | null): NoteSummary[] =>
     authorName: note.authorName,
     authorRole: note.authorRole,
     content: note.content,
-    createdAt: note.createdAt instanceof Date ? note.createdAt.toISOString() : new Date(note.createdAt).toISOString()
+    createdAt: note.createdAt instanceof Date ? note.createdAt.toISOString() : new Date(note.createdAt).toISOString(),
+    emailedTargets: Array.isArray(note.emailedTargets) ? note.emailedTargets : []
   }));
 
 type AgentLean = {

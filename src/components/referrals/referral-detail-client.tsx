@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 import { ReferralHeader } from '@/components/referrals/referral-header';
 import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import { DealCard } from '@/components/referrals/deal-card';
+import type { Contact } from '@/components/referrals/contact-assignment';
 import type { ReferralStatus } from '@/constants/referrals';
 
 interface ReferralDetailClientProps {
@@ -35,6 +38,27 @@ interface DraftState {
 }
 
 export function ReferralDetailClient({ referral, viewerRole, notes, referralId }: ReferralDetailClientProps) {
+  const router = useRouter();
+  const [agentContact, setAgentContact] = useState<Contact | null>(() =>
+    referral.assignedAgent
+      ? {
+          id: referral.assignedAgent._id ?? referral.assignedAgent.id ?? null,
+          name: referral.assignedAgent.name ?? null,
+          email: referral.assignedAgent.email ?? null,
+          phone: referral.assignedAgent.phone ?? null,
+        }
+      : null
+  );
+  const [mcContact, setMcContact] = useState<Contact | null>(() =>
+    referral.lender
+      ? {
+          id: referral.lender._id ?? referral.lender.id ?? null,
+          name: referral.lender.name ?? null,
+          email: referral.lender.email ?? null,
+          phone: referral.lender.phone ?? null,
+        }
+      : null
+  );
   const [financials, setFinancials] = useState<FinancialState>({
     status: referral.status,
     preApprovalAmountCents: referral.preApprovalAmountCents ?? 0,
@@ -45,6 +69,65 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
     propertyAddress: referral.propertyAddress ?? undefined,
   });
   const [contractDraft, setContractDraft] = useState<DraftState>({ hasUnsavedChanges: false });
+  const [deleting, setDeleting] = useState(false);
+
+  const canDelete = viewerRole === 'admin' || viewerRole === 'manager';
+
+  useEffect(() => {
+    setAgentContact(
+      referral.assignedAgent
+        ? {
+            id: referral.assignedAgent._id ?? referral.assignedAgent.id ?? null,
+            name: referral.assignedAgent.name ?? null,
+            email: referral.assignedAgent.email ?? null,
+            phone: referral.assignedAgent.phone ?? null,
+          }
+        : null
+    );
+  }, [referral.assignedAgent]);
+
+  useEffect(() => {
+    setMcContact(
+      referral.lender
+        ? {
+            id: referral.lender._id ?? referral.lender.id ?? null,
+            name: referral.lender.name ?? null,
+            email: referral.lender.email ?? null,
+            phone: referral.lender.phone ?? null,
+          }
+        : null
+    );
+  }, [referral.lender]);
+
+  const handleDeleteReferral = async () => {
+    if (deleting) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'Delete this referral and all associated deals? This action cannot be undone.'
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const response = await fetch(`/api/referrals/${referralId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error('Unable to delete referral');
+      }
+      toast.success('Referral deleted');
+      router.push('/referrals');
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Unable to delete referral');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const handleFinancialsChange = (snapshot: {
     status: ReferralStatus;
@@ -156,28 +239,44 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
     financials.status === 'Under Contract' || contractDraft.hasUnsavedChanges || hasTerminatedDeal || hasAnyDeals;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <ReferralHeader
         referral={headerReferral}
         viewerRole={viewerRole}
         onFinancialsChange={handleFinancialsChange}
         onContractDraftChange={handleDraftChange}
+        agentContact={agentContact}
+        mcContact={mcContact}
+        onAgentContactChange={setAgentContact}
+        onMcContactChange={setMcContact}
       />
       <ReferralNotes
         referralId={referralId}
         initialNotes={notes}
         viewerRole={viewerRole}
         agentContact={{
-          name: referral.assignedAgent?.name ?? null,
-          email: referral.assignedAgent?.email ?? null
+          name: agentContact?.name ?? null,
+          email: agentContact?.email ?? null
         }}
         mcContact={{
-          name: referral.lender?.name ?? null,
-          email: referral.lender?.email ?? null
+          name: mcContact?.name ?? null,
+          email: mcContact?.email ?? null
         }}
       />
-      <ReferralTimeline referralId={referralId} />
       {showDeals && <DealCard referral={dealReferral} overrides={dealOverrides} />}
+      <ReferralTimeline referralId={referralId} />
+      {canDelete && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleDeleteReferral}
+            disabled={deleting}
+            className="rounded-lg border border-rose-200 bg-rose-500/10 px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {deleting ? 'Deleting…' : 'Delete referral'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

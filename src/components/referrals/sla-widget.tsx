@@ -103,14 +103,19 @@ export function SLAWidget({ referral }: { referral: any }) {
   ];
 
   return (
-    <div className="grid gap-3 rounded-lg border border-slate-200 p-4">
-      <p className="text-xs uppercase text-slate-400">SLA Clocks</p>
-      {items.map((item) => (
-        <div key={item.label} className="flex items-center justify-between text-sm">
-          <span className="text-slate-500">{item.label}</span>
-          <span className="font-medium text-slate-900">{item.value}</span>
-        </div>
-      ))}
+    <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/50 p-4">
+      <div>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Speed to serve</h2>
+        <p className="text-xs text-slate-500">Time between key milestones in this referral journey.</p>
+      </div>
+      <dl className="space-y-2">
+        {items.map((item) => (
+          <div key={item.label} className="flex items-center justify-between gap-3 text-sm">
+            <dt className="text-slate-500">{item.label}</dt>
+            <dd className="font-medium text-slate-900">{item.value}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }
