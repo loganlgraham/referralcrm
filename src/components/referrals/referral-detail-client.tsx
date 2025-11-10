@@ -336,7 +336,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             errorBody.error !== null &&
             'fieldErrors' in errorBody.error
           ) {
-            const fieldErrors = (errorBody.error as { fieldErrors?: Record<string, string[]> }).fieldErrors;
+            const fieldErrors = (errorBody.error as {
+              fieldErrors?: Record<string, string[]>;
+            }).fieldErrors;
             if (fieldErrors) {
               const firstField = Object.keys(fieldErrors)[0];
               if (firstField && Array.isArray(fieldErrors[firstField]) && fieldErrors[firstField].length > 0) {
@@ -345,13 +347,15 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             }
             if (
               message === 'Unable to update referral details' &&
-              'formErrors' in (errorBody.error as Record<string, unknown>) &&
-              Array.isArray((errorBody.error as { formErrors?: unknown[] }).formErrors) &&
-              (errorBody.error as { formErrors?: unknown[] }).formErrors?.length
+              'formErrors' in (errorBody.error as Record<string, unknown>)
             ) {
-              const first = (errorBody.error as { formErrors: unknown[] }).formErrors[0];
-              if (typeof first === 'string') {
-                message = first;
+              const candidateFormErrors = (errorBody.error as Record<string, unknown>).formErrors;
+              const formErrors = Array.isArray(candidateFormErrors) ? candidateFormErrors : undefined;
+              if (formErrors?.length) {
+                const first = formErrors[0];
+                if (typeof first === 'string') {
+                  message = first;
+                }
               }
             }
           }
