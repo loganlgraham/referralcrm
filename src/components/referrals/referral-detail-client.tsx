@@ -176,8 +176,8 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
           email: referral.lender?.email ?? null
         }}
       />
-      <ReferralTimeline referralId={referralId} />
       {showDeals && <DealCard referral={dealReferral} overrides={dealOverrides} />}
+      <ReferralTimeline referralId={referralId} />
     </div>
   );
 }
