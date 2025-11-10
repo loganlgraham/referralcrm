@@ -388,15 +388,6 @@ function MetricTrendChart({ monthly, weekly }: { monthly: TrendPoint[]; weekly?:
   );
 }
 
-function LoadingCard() {
-  return (
-    <div className="rounded-lg bg-white p-4 shadow-sm animate-pulse">
-      <div className="h-4 w-24 rounded bg-slate-200" />
-      <div className="mt-2 h-8 w-32 rounded bg-slate-200" />
-    </div>
-  );
-}
-
 export function KPICards() {
   const [isMounted, setIsMounted] = useState(false);
   const { data, error } = useSWR<KPIResponse>('/api/referrals?summary=true', fetcher, {
