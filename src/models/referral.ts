@@ -1,6 +1,6 @@
 import { Schema, model, models, Types } from 'mongoose';
 
-import { REFERRAL_STATUSES } from '@/constants/referrals';
+import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS, REFERRAL_STATUSES } from '@/constants/referrals';
 
 export type ReferralStatus = (typeof REFERRAL_STATUSES)[number];
 
@@ -37,6 +37,19 @@ const auditSchema = new Schema<AuditEntry>(
   { _id: false }
 );
 
+const referralNoteSchema = new Schema(
+  {
+    author: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    authorName: { type: String, required: true },
+    authorRole: { type: String, required: true },
+    content: { type: String, required: true },
+    hiddenFromAgent: { type: Boolean, default: false },
+    hiddenFromMc: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now }
+  },
+  { _id: true }
+);
+
 const referralSchema = new Schema(
   {
     createdAt: { type: Date, default: Date.now, index: true },
@@ -47,22 +60,23 @@ const referralSchema = new Schema(
       phone: { type: String, required: true }
     },
     propertyZip: { type: String, required: true, index: true },
+    propertyAddress: { type: String, default: '' },
     assignedAgent: { type: Schema.Types.ObjectId, ref: 'Agent', index: true },
     status: {
       type: String,
       enum: REFERRAL_STATUSES,
-      default: 'New',
+      default: 'New Lead',
       index: true
     },
     statusLastUpdated: { type: Date, default: Date.now },
     loanType: String,
     preApprovalAmountCents: { type: Number, default: 0 },
     estPurchasePriceCents: { type: Number, default: 0 },
-    commissionBasisPoints: { type: Number, default: 0 },
-    referralFeeBasisPoints: { type: Number, default: 0 },
+    commissionBasisPoints: { type: Number, default: DEFAULT_AGENT_COMMISSION_BPS },
+    referralFeeBasisPoints: { type: Number, default: DEFAULT_REFERRAL_FEE_BPS },
     closedPriceCents: { type: Number, default: 0 },
     referralFeeDueCents: { type: Number, default: 0 },
-    notes: String,
+    notes: { type: [referralNoteSchema], default: [] },
     attachments: [attachmentSchema],
     audit: [auditSchema],
     lender: { type: Schema.Types.ObjectId, ref: 'LenderMC' },
@@ -74,6 +88,11 @@ const referralSchema = new Schema(
       daysToClose: { type: Number, default: null }
     },
     org: { type: String, enum: ['AFC', 'AHA'], default: 'AFC' },
+    ahaBucket: {
+      type: String,
+      enum: ['AHA', 'AHA_OOS'],
+      default: null,
+    },
     deletedAt: { type: Date, default: null }
   },
   {
@@ -93,6 +112,7 @@ export interface ReferralDocument {
     phone: string;
   };
   propertyZip: string;
+  propertyAddress?: string;
   assignedAgent?: Types.ObjectId;
   status: ReferralStatus;
   statusLastUpdated?: Date;
@@ -102,8 +122,19 @@ export interface ReferralDocument {
   commissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
   referralFeeDueCents?: number;
+  notes?: {
+    _id: Types.ObjectId;
+    author: Types.ObjectId;
+    authorName: string;
+    authorRole: string;
+    content: string;
+    hiddenFromAgent?: boolean;
+    hiddenFromMc?: boolean;
+    createdAt: Date;
+  }[];
   lender?: Types.ObjectId;
   org: 'AFC' | 'AHA';
+  ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   deletedAt?: Date;
   audit?: AuditEntry[];
 }

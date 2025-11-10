@@ -18,6 +18,7 @@ async function main() {
       statesLicensed: ['CO', 'UT'],
       zipCoverage: ['80202', '84060'],
       closings12mo: 12,
+      closingRatePercentage: 68,
       npsScore: 86,
       avgResponseHours: 1.5,
       brokerage: 'AHA',
@@ -30,6 +31,7 @@ async function main() {
       statesLicensed: ['AZ'],
       zipCoverage: ['85004'],
       closings12mo: 9,
+      closingRatePercentage: 54,
       npsScore: 90,
       avgResponseHours: 0.8,
       brokerage: 'AHA',
@@ -43,6 +45,7 @@ async function main() {
       email: 'morgan.consultant@afc.com',
       phone: '555-555-2001',
       nmlsId: '123456',
+      licensedStates: ['CO', 'UT'],
       team: 'Rockies',
       region: 'Mountain'
     }
@@ -55,21 +58,22 @@ async function main() {
       phone: '555-555-3001'
     },
     propertyZip: '80202',
+    propertyAddress: '123 Market St, Denver, CO 80202',
     source: 'MC',
     assignedAgent: agents[0]._id,
     lender: lenders[0]._id,
-    status: 'PWC',
-    commissionBasisPoints: 3000,
+    status: 'In Communication',
+    commissionBasisPoints: 300,
     referralFeeBasisPoints: 2500,
-    referralFeeDueCents: 4500000,
+    referralFeeDueCents: 337500,
     estPurchasePriceCents: 45000000,
     audit: [
       {
         actorId: agents[0]._id,
         actorRole: 'agent',
         field: 'status',
-        previousValue: 'New',
-        newValue: 'PWC',
+        previousValue: 'New Lead',
+        newValue: 'In Communication',
         timestamp: new Date()
       }
     ]
@@ -77,7 +81,7 @@ async function main() {
 
   await Payment.create({
     referralId: referral._id,
-    status: 'expected',
+    status: 'under_contract',
     expectedAmountCents: referral.referralFeeDueCents
   });
 

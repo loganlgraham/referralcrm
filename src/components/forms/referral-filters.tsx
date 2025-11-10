@@ -2,7 +2,16 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTransition } from 'react';
+import useSWR from 'swr';
+
 import { REFERRAL_STATUSES } from '@/constants/referrals';
+import { fetcher } from '@/utils/fetcher';
+
+interface DirectoryOption {
+  _id: string;
+  name: string;
+  email?: string | null;
+}
 
 export function Filters() {
   const router = useRouter();
@@ -17,9 +26,16 @@ export function Filters() {
       params.set(key, value);
     }
     startTransition(() => {
-      router.replace(`/referrals?${params.toString()}`);
+      const queryString = params.toString();
+      router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
     });
   };
+
+  const { data: agents } = useSWR<DirectoryOption[]>('/api/agents', fetcher);
+  const { data: lenders } = useSWR<DirectoryOption[]>('/api/lenders', fetcher);
+
+  const agentValue = searchParams.get('agent') ?? '';
+  const lenderValue = searchParams.get('mc') ?? '';
 
   return (
     <div className="grid gap-4 rounded-lg bg-white p-4 shadow-sm md:grid-cols-5">
@@ -41,25 +57,37 @@ export function Filters() {
       </label>
       <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
         MC
-        <input
-          type="text"
-          defaultValue={searchParams.get('mc') ?? ''}
-          onBlur={(event) => handleChange('mc', event.target.value)}
+        <select
+          value={lenderValue}
+          onChange={(event) => handleChange('mc', event.target.value)}
           className="mt-1 rounded border border-slate-200 px-2 py-1 text-sm"
-          placeholder="Name or email"
           disabled={isPending}
-        />
+        >
+          <option value="">All</option>
+          {lenders?.map((lender) => (
+            <option key={lender._id} value={lender._id}>
+              {lender.name}
+              {lender.email ? ` (${lender.email})` : ''}
+            </option>
+          ))}
+        </select>
       </label>
       <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
         Agent
-        <input
-          type="text"
-          defaultValue={searchParams.get('agent') ?? ''}
-          onBlur={(event) => handleChange('agent', event.target.value)}
+        <select
+          value={agentValue}
+          onChange={(event) => handleChange('agent', event.target.value)}
           className="mt-1 rounded border border-slate-200 px-2 py-1 text-sm"
-          placeholder="Name or email"
           disabled={isPending}
-        />
+        >
+          <option value="">All</option>
+          {agents?.map((agentOption) => (
+            <option key={agentOption._id} value={agentOption._id}>
+              {agentOption.name}
+              {agentOption.email ? ` (${agentOption.email})` : ''}
+            </option>
+          ))}
+        </select>
       </label>
       <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
         State

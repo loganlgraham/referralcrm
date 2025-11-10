@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { PlusIcon } from 'lucide-react';
-import { ReferralTable, ReferralRow } from '@/components/tables/referral-table';
+import { ReferralTable, ReferralRow, ReferralSummary } from '@/components/tables/referral-table';
 import { getCurrentSession } from '@/lib/auth';
 import { getReferrals } from '@/lib/server/referrals';
 import { Filters } from '@/components/forms/referral-filters';
@@ -18,6 +18,8 @@ export default async function ReferralsPage({
   searchParams: Record<string, string | string[] | undefined>;
 }) {
   const session = await getCurrentSession();
+  const role = (session?.user?.role as 'admin' | 'manager' | 'mc' | 'agent' | 'viewer' | undefined) ?? 'viewer';
+  const tableMode: 'admin' | 'mc' | 'agent' = role === 'agent' ? 'agent' : role === 'mc' ? 'mc' : 'admin';
   const data = await getReferrals({
     session,
     page: Number(searchParams.page || 1),
@@ -30,13 +32,26 @@ export default async function ReferralsPage({
 
   const items = data.items as ReferralRow[];
   const hasReferrals = items.length > 0;
+  const summary = data.summary ?? {
+    total: data.total ?? items.length,
+    closedDeals: 0,
+    closeRate: 0
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Referrals</h1>
-          <p className="text-sm text-slate-500">Track every lead from intake through close.</p>
+          <h1 className="text-2xl font-semibold text-slate-900">
+            {tableMode === 'agent' ? 'My referrals' : 'Referrals'}
+          </h1>
+          <p className="text-sm text-slate-500">
+            {tableMode === 'agent'
+              ? 'Review your leads, update their status, and capture quick notes as you work each opportunity.'
+              : tableMode === 'mc'
+              ? 'Keep tabs on the borrowers you have handed off and collaborate with partnered agents.'
+              : 'Track every lead from intake through close.'}
+          </p>
         </div>
         <Link
           href="/referrals/new"
@@ -49,7 +64,8 @@ export default async function ReferralsPage({
       <Filters />
       {hasReferrals ? (
         <div className="space-y-4">
-          <ReferralTable data={items} />
+          {tableMode !== 'admin' && <ReferralSummary summary={summary} />}
+          <ReferralTable data={items} mode={tableMode} />
         </div>
       ) : (
         <div className="rounded-lg border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-500">

@@ -7,14 +7,17 @@ import { Session } from 'next-auth';
 import { LogOutIcon } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 
-const navItems = [
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/referrals', label: 'Referrals' },
-  { href: '/agents', label: 'Agents' },
-  { href: '/lenders', label: 'Lenders' },
-  { href: '/payments', label: 'Payments' },
-  { href: '/imports', label: 'Imports' },
-  { href: '/settings', label: 'Settings', roles: ['admin', 'manager'] }
+type Role = 'admin' | 'mc' | 'agent' | string;
+
+const navItems: Array<{ href: string; label: string; roles?: Role[] }> = [
+  { href: '/dashboard', label: 'Dashboard', roles: ['admin', 'mc', 'agent'] },
+  { href: '/referrals', label: 'Referrals', roles: ['admin', 'mc', 'agent'] },
+  { href: '/agents', label: 'Agents', roles: ['admin', 'mc'] },
+  { href: '/lenders', label: 'Mortgage Consultants', roles: ['admin', 'agent'] },
+  { href: '/deals', label: 'Deals', roles: ['admin', 'agent'] },
+  { href: '/imports', label: 'Imports', roles: ['admin'] },
+  { href: '/profile', label: 'My Profile', roles: ['agent', 'mc'] },
+  { href: '/settings', label: 'Settings', roles: ['admin'] }
 ];
 
 export function Sidebar({ session }: { session: Session }) {
@@ -28,7 +31,7 @@ export function Sidebar({ session }: { session: Session }) {
   };
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-20 w-64 bg-white shadow-lg">
+    <aside className="fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-lg">
       <div className="flex h-16 items-center justify-between border-b px-6">
         <div>
           <p className="text-sm font-semibold text-brand">AFC · AHA</p>

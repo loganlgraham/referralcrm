@@ -15,9 +15,16 @@ export function daysInStatus(referral: Pick<ReferralDocument, 'statusLastUpdated
 }
 
 export function nextStatuses(status: ReferralStatus): ReferralStatus[] {
-  const pipeline: ReferralStatus[] = ['New', 'Contacted', 'PWC', 'Showing', 'UC', 'Closed'];
+  const pipeline: ReferralStatus[] = [
+    'New Lead',
+    'Paired',
+    'In Communication',
+    'Showing Homes',
+    'Under Contract',
+    'Closed',
+    'Terminated'
+  ];
   const currentIndex = pipeline.indexOf(status);
-  if (status === 'Lost') return [];
   if (currentIndex === -1) return pipeline;
   return pipeline.slice(currentIndex);
 }
