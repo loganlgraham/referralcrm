@@ -53,6 +53,8 @@ Required keys:
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
 - `EMAIL_SERVER` – SMTP connection string (e.g. `smtp://user:pass@smtp.host:587`)
 - `EMAIL_FROM` – default From address
+- `RESEND_API_KEY` / `RESEND_INBOUND_SECRET` – Resend transactional email and inbound webhook signing
+- `GCP_STORAGE_CLIENT_EMAIL`, `GCP_STORAGE_PRIVATE_KEY`, `INBOUND_EMAIL_BUCKET` – Google Cloud Storage service account & bucket for inbound attachments
 - `TZ` – defaults to `America/Denver`
 
 ### Local development
@@ -128,7 +130,7 @@ Key directories:
 - Create a free or dedicated cluster.
 - Configure a user with read/write access and whitelist Vercel IPs.
 - Recommended indexes:
-  - `Referral`: `{ status: 1, createdAt: -1 }`, `{ propertyZip: 1 }`, `{ lender: 1 }`, `{ assignedAgent: 1 }`
+  - `Referral`: `{ status: 1, createdAt: -1 }`, `{ lookingInZip: 1 }`, `{ lender: 1 }`, `{ assignedAgent: 1 }`, `{ loanFileNumber: 1 }`
   - `Payment`: `{ referralId: 1, status: 1 }`
   - `Agent`: `{ statesLicensed: 1 }`, `{ zipCoverage: 1 }`
 

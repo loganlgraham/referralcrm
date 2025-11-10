@@ -51,17 +51,35 @@ const referralNoteSchema = new Schema(
   { _id: true }
 );
 
+const inboundEmailSchema = new Schema(
+  {
+    messageId: { type: String, required: true },
+    routeHint: { type: String },
+    channel: { type: String, enum: ['AHA', 'AHA_OOS'] },
+    receivedAt: { type: Date, default: Date.now },
+    from: { type: String },
+    subject: { type: String }
+  },
+  { _id: false }
+);
+
 const referralSchema = new Schema(
   {
     createdAt: { type: Date, default: Date.now, index: true },
     source: { type: String, enum: ['Lender', 'MC'], required: true },
+    endorser: { type: String, default: '' },
+    clientType: { type: String, enum: ['Seller', 'Buyer'], required: true },
     borrower: {
       name: { type: String, required: true },
       email: { type: String, index: true, required: true },
       phone: { type: String, required: true }
     },
-    propertyZip: { type: String, required: true, index: true },
+    lookingInZip: { type: String, required: true, index: true },
+    borrowerCurrentAddress: { type: String, default: '' },
     propertyAddress: { type: String, default: '' },
+    stageOnTransfer: { type: String, default: '' },
+    initialNotes: { type: String, default: '' },
+    loanFileNumber: { type: String, required: true, unique: true },
     assignedAgent: { type: Schema.Types.ObjectId, ref: 'Agent', index: true },
     status: {
       type: String,
@@ -79,6 +97,7 @@ const referralSchema = new Schema(
     referralFeeDueCents: { type: Number, default: 0 },
     notes: { type: [referralNoteSchema], default: [] },
     attachments: [attachmentSchema],
+    inboundEmail: inboundEmailSchema,
     audit: [auditSchema],
     lender: { type: Schema.Types.ObjectId, ref: 'LenderMC' },
     buyer: { type: Schema.Types.ObjectId, ref: 'Buyer' },
@@ -102,6 +121,14 @@ const referralSchema = new Schema(
 );
 
 referralSchema.index({ 'borrower.email': 1, createdAt: 1 }, { unique: true });
+referralSchema.index({ loanFileNumber: 1 }, { unique: true });
+referralSchema.index(
+  { 'inboundEmail.messageId': 1 },
+  {
+    unique: true,
+    partialFilterExpression: { 'inboundEmail.messageId': { $exists: true, $ne: null } }
+  }
+);
 
 export interface ReferralDocument {
   _id: Types.ObjectId;
@@ -112,8 +139,14 @@ export interface ReferralDocument {
     email: string;
     phone: string;
   };
-  propertyZip: string;
+  endorser?: string;
+  clientType: 'Seller' | 'Buyer';
+  lookingInZip: string;
+  borrowerCurrentAddress?: string;
   propertyAddress?: string;
+  stageOnTransfer?: string;
+  initialNotes?: string;
+  loanFileNumber: string;
   assignedAgent?: Types.ObjectId;
   status: ReferralStatus;
   statusLastUpdated?: Date;
@@ -139,6 +172,14 @@ export interface ReferralDocument {
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   deletedAt?: Date;
   audit?: AuditEntry[];
+  inboundEmail?: {
+    messageId: string;
+    routeHint?: string;
+    channel?: 'AHA' | 'AHA_OOS' | null;
+    receivedAt?: Date;
+    from?: string;
+    subject?: string;
+  };
 }
 
 export const Referral = models.Referral || model<ReferralDocument>('Referral', referralSchema);

@@ -9,6 +9,7 @@ import { calculateReferralFeeDue } from '@/utils/referral';
 import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
+import { resolveAuditActorId } from '@/lib/server/audit';
 import {
   addWeeks,
   format,
@@ -822,6 +823,8 @@ export async function POST(request: Request) {
 
   await connectMongo();
 
+  const auditActorId = resolveAuditActorId(session.user.id);
+
   const referralData: Record<string, unknown> = {
     borrower: {
       name: parsed.data.borrowerName,
@@ -829,7 +832,13 @@ export async function POST(request: Request) {
       phone: parsed.data.borrowerPhone
     },
     source: parsed.data.source,
-    propertyZip: parsed.data.propertyZip,
+    endorser: parsed.data.endorser,
+    clientType: parsed.data.clientType,
+    lookingInZip: parsed.data.lookingInZip,
+    borrowerCurrentAddress: parsed.data.borrowerCurrentAddress,
+    stageOnTransfer: parsed.data.stageOnTransfer,
+    loanFileNumber: parsed.data.loanFileNumber,
+    initialNotes: parsed.data.initialNotes ?? '',
     loanType: parsed.data.loanType,
     estPurchasePriceCents: parsed.data.estPurchasePrice ? parsed.data.estPurchasePrice * 100 : 0,
     preApprovalAmountCents: parsed.data.estPurchasePrice ? parsed.data.estPurchasePrice * 100 : 0,
@@ -843,7 +852,7 @@ export async function POST(request: Request) {
     ),
     audit: [
       {
-        actorId: session.user.id,
+        ...(auditActorId ? { actorId: auditActorId } : {}),
         actorRole: session.user.role,
         field: 'create',
         previousValue: null,
