@@ -406,73 +406,69 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
     : 'Agent bucket indicates where this referral sits for reporting.';
 
   return (
-    <div className="space-y-8 rounded-lg bg-white p-6 shadow-sm">
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Borrower</p>
-          <h1 className="text-2xl font-semibold text-slate-900">{borrowerName}</h1>
-          <p className="text-sm text-slate-500">
-            {borrowerContact || 'Contact information pending'}
-          </p>
-          <p className="text-xs uppercase tracking-wide text-slate-400">{propertyLabel}</p>
+    <div className="space-y-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
+      <div className="grid gap-4 rounded-xl bg-gradient-to-r from-brand/5 via-white to-slate-50 p-5 lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-center">
+        <div className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand">Borrower</p>
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900 lg:text-3xl">{borrowerName}</h1>
+            <p className="mt-1 text-sm text-slate-600">
+              {borrowerContact || 'Contact information pending'}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-brand/70">
+            <span className="rounded-full bg-brand/10 px-3 py-1 text-brand">{status}</span>
+            <span className="rounded-full bg-slate-900/5 px-3 py-1 text-slate-500">{propertyLabel}</span>
+            <span className="rounded-full bg-amber-500/10 px-3 py-1 text-amber-600">{daysInStatus} days in stage</span>
+          </div>
         </div>
-        <div className="w-full max-w-xl space-y-4">
-          <section className="space-y-3 rounded-lg border border-slate-200 px-4 py-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">At a glance</h2>
-            <dl className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1">
-                <dt className="text-xs uppercase text-slate-400">Status</dt>
-                <dd className="text-lg font-semibold text-brand">{status}</dd>
-                <p className="text-xs text-slate-500">Days in status: {daysInStatus}</p>
-              </div>
-              <div className="space-y-1">
-                <dt className="text-xs uppercase text-slate-400">{primaryAmountLabel}</dt>
-                <dd className="text-lg font-semibold text-slate-900">{formattedPrimaryAmount}</dd>
-                <p className="text-xs text-slate-500">Referral Fee Due: {formattedReferralFeeDue}</p>
-              </div>
-            </dl>
-          </section>
-          <section className="space-y-3 rounded-lg border border-slate-200 px-4 py-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-1">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Agent bucket</h2>
-                <p className="text-xs text-slate-500">{bucketDescription}</p>
-              </div>
-              {canEditBucket ? (
-                <select
-                  value={ahaBucket}
-                  onChange={handleBucketChange}
-                  disabled={savingBucket}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-brand focus:outline-none sm:w-48"
-                >
-                  <option value="">Not set</option>
-                  <option value="AHA">AHA</option>
-                  <option value="AHA_OOS">AHA OOS</option>
-                </select>
-              ) : (
-                <p className="text-lg font-semibold text-slate-900">{bucketLabel}</p>
-              )}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <section className="flex h-full flex-col justify-between rounded-lg border border-brand/20 bg-white/80 p-4 shadow-sm">
+            <div className="space-y-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-brand">{primaryAmountLabel}</h2>
+              <p className="text-2xl font-semibold text-slate-900">{formattedPrimaryAmount}</p>
             </div>
+            <p className="text-xs font-medium text-slate-500">Referral Fee Due {formattedReferralFeeDue}</p>
           </section>
-          {canDelete && (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={handleDeleteReferral}
-                disabled={deleting}
-                className="rounded border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-70"
+          <section className="flex h-full flex-col justify-between rounded-lg border border-slate-200 bg-slate-900/5 p-4">
+            <div className="space-y-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Agent bucket</h2>
+              <p className="text-xs text-slate-500">{bucketDescription}</p>
+            </div>
+            {canEditBucket ? (
+              <select
+                value={ahaBucket}
+                onChange={handleBucketChange}
+                disabled={savingBucket}
+                className="mt-2 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
               >
-                {deleting ? 'Deleting…' : 'Delete referral'}
-              </button>
-            </div>
-          )}
+                <option value="">Not set</option>
+                <option value="AHA">AHA</option>
+                <option value="AHA_OOS">AHA OOS</option>
+              </select>
+            ) : (
+              <p className="mt-3 text-lg font-semibold text-slate-900">{bucketLabel}</p>
+            )}
+          </section>
         </div>
       </div>
+      {canDelete && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleDeleteReferral}
+            disabled={deleting}
+            className="rounded-lg border border-rose-200 bg-rose-500/10 px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {deleting ? 'Deleting…' : 'Delete referral'}
+          </button>
+        </div>
+      )}
 
       <SLAWidget referral={{ ...referral, status, audit: auditEntries }} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr),minmax(280px,1fr)]">
-        <section className="space-y-4 rounded-lg border border-slate-200 px-5 py-4">
+        <section className="space-y-4 rounded-xl border border-brand/20 bg-white px-5 py-4 shadow-sm">
           <div className="space-y-1">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Status &amp; progress</h2>
             <p className="text-xs text-slate-500">Update borrower stage and contract information.</p>
@@ -495,7 +491,7 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
             onContractDraftChange={handleContractDraftChangeInternal}
           />
         </section>
-        <section className="space-y-4 rounded-lg border border-slate-200 px-5 py-4">
+        <section className="space-y-4 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
           <div className="space-y-1">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Team assignments</h2>
             <p className="text-xs text-slate-500">Keep the right partners aligned on this referral.</p>
@@ -525,20 +521,20 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
         </section>
       </div>
 
-      <div className="rounded-lg border border-slate-200 px-4 py-4">
+      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Financial breakdown</h2>
-        <dl className="mt-3 grid gap-4 sm:grid-cols-3">
+        <dl className="mt-4 grid gap-4 sm:grid-cols-3">
           <div className="space-y-1">
-            <dt className="text-xs uppercase text-slate-400">Agent Commission</dt>
-            <dd className="text-sm font-medium text-slate-900">{commissionPercent}</dd>
+            <dt className="text-xs uppercase text-slate-500">Agent Commission</dt>
+            <dd className="text-sm font-semibold text-slate-900">{commissionPercent}</dd>
           </div>
           <div className="space-y-1">
-            <dt className="text-xs uppercase text-slate-400">Referral Fee %</dt>
-            <dd className="text-sm font-medium text-slate-900">{referralFeePercent}</dd>
+            <dt className="text-xs uppercase text-slate-500">Referral Fee %</dt>
+            <dd className="text-sm font-semibold text-slate-900">{referralFeePercent}</dd>
           </div>
           <div className="space-y-1">
-            <dt className="text-xs uppercase text-slate-400">Referral Fee Due</dt>
-            <dd className="text-sm font-medium text-slate-900">{formattedReferralFeeDue}</dd>
+            <dt className="text-xs uppercase text-slate-500">Referral Fee Due</dt>
+            <dd className="text-sm font-semibold text-slate-900">{formattedReferralFeeDue}</dd>
           </div>
         </dl>
       </div>
