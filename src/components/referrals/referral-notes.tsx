@@ -15,8 +15,11 @@ interface ReferralNote {
   emailedTargets?: ('agent' | 'mc')[];
 }
 
+type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknown';
+
 interface ReferralNoteResponse extends ReferralNote {
   deliveryFailed?: boolean;
+  deliveryFailureReason?: DeliveryFailureReason;
 }
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
@@ -166,7 +169,7 @@ export function ReferralNotes({
         throw new Error('Unable to save note');
       }
       const created = (await response.json()) as ReferralNoteResponse;
-      const { deliveryFailed, ...notePayload } = created;
+      const { deliveryFailed, deliveryFailureReason, ...notePayload } = created;
       setNotes((previous) => [
         {
           ...notePayload,
@@ -188,7 +191,17 @@ export function ReferralNotes({
       toast.success(`Note added.${emailSummary}`.trim());
 
       if (deliveryFailed && emailTargets.length > 0) {
-        toast.error('Note was saved, but the email could not be delivered.');
+        const message = (() => {
+          switch (deliveryFailureReason) {
+            case 'missing_configuration':
+              return 'Note saved, but email delivery is disabled. Set RESEND_API_KEY and EMAIL_FROM environment variables to enable email notifications.';
+            case 'no_recipients':
+              return 'Note saved, but no recipients with valid email addresses were available.';
+            default:
+              return 'Note was saved, but the email could not be delivered.';
+          }
+        })();
+        toast.error(message);
       }
     } catch (error) {
       console.error(error);

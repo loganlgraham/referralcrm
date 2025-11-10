@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -8,6 +8,7 @@ import { ReferralHeader } from '@/components/referrals/referral-header';
 import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import { DealCard } from '@/components/referrals/deal-card';
+import type { Contact } from '@/components/referrals/contact-assignment';
 import type { ReferralStatus } from '@/constants/referrals';
 
 interface ReferralDetailClientProps {
@@ -38,6 +39,26 @@ interface DraftState {
 
 export function ReferralDetailClient({ referral, viewerRole, notes, referralId }: ReferralDetailClientProps) {
   const router = useRouter();
+  const [agentContact, setAgentContact] = useState<Contact | null>(() =>
+    referral.assignedAgent
+      ? {
+          id: referral.assignedAgent._id ?? referral.assignedAgent.id ?? null,
+          name: referral.assignedAgent.name ?? null,
+          email: referral.assignedAgent.email ?? null,
+          phone: referral.assignedAgent.phone ?? null,
+        }
+      : null
+  );
+  const [mcContact, setMcContact] = useState<Contact | null>(() =>
+    referral.lender
+      ? {
+          id: referral.lender._id ?? referral.lender.id ?? null,
+          name: referral.lender.name ?? null,
+          email: referral.lender.email ?? null,
+          phone: referral.lender.phone ?? null,
+        }
+      : null
+  );
   const [financials, setFinancials] = useState<FinancialState>({
     status: referral.status,
     preApprovalAmountCents: referral.preApprovalAmountCents ?? 0,
@@ -51,6 +72,32 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
   const [deleting, setDeleting] = useState(false);
 
   const canDelete = viewerRole === 'admin' || viewerRole === 'manager';
+
+  useEffect(() => {
+    setAgentContact(
+      referral.assignedAgent
+        ? {
+            id: referral.assignedAgent._id ?? referral.assignedAgent.id ?? null,
+            name: referral.assignedAgent.name ?? null,
+            email: referral.assignedAgent.email ?? null,
+            phone: referral.assignedAgent.phone ?? null,
+          }
+        : null
+    );
+  }, [referral.assignedAgent]);
+
+  useEffect(() => {
+    setMcContact(
+      referral.lender
+        ? {
+            id: referral.lender._id ?? referral.lender.id ?? null,
+            name: referral.lender.name ?? null,
+            email: referral.lender.email ?? null,
+            phone: referral.lender.phone ?? null,
+          }
+        : null
+    );
+  }, [referral.lender]);
 
   const handleDeleteReferral = async () => {
     if (deleting) {
@@ -198,18 +245,22 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
         viewerRole={viewerRole}
         onFinancialsChange={handleFinancialsChange}
         onContractDraftChange={handleDraftChange}
+        agentContact={agentContact}
+        mcContact={mcContact}
+        onAgentContactChange={setAgentContact}
+        onMcContactChange={setMcContact}
       />
       <ReferralNotes
         referralId={referralId}
         initialNotes={notes}
         viewerRole={viewerRole}
         agentContact={{
-          name: referral.assignedAgent?.name ?? null,
-          email: referral.assignedAgent?.email ?? null
+          name: agentContact?.name ?? null,
+          email: agentContact?.email ?? null
         }}
         mcContact={{
-          name: referral.lender?.name ?? null,
-          email: referral.lender?.email ?? null
+          name: mcContact?.name ?? null,
+          email: mcContact?.email ?? null
         }}
       />
       {showDeals && <DealCard referral={dealReferral} overrides={dealOverrides} />}

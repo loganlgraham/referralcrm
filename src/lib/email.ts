@@ -9,16 +9,22 @@ type EmailPayload = {
 
 let resendClient: Resend | null = null;
 
-const hasResendConfig = Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+function hasResendConfiguration(): boolean {
+  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+}
 
 function getResendClient(): Resend | null {
-  if (!hasResendConfig) {
+  if (!hasResendConfiguration()) {
     return null;
   }
   if (!resendClient) {
     resendClient = new Resend(process.env.RESEND_API_KEY as string);
   }
   return resendClient;
+}
+
+export function isTransactionalEmailConfigured(): boolean {
+  return hasResendConfiguration();
 }
 
 export async function sendTransactionalEmail(payload: EmailPayload): Promise<boolean> {

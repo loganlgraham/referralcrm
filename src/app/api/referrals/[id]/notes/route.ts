@@ -5,7 +5,9 @@ import { Referral } from '@/models/referral';
 import { createReferralNoteSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { canViewReferral } from '@/lib/rbac';
-import { sendTransactionalEmail } from '@/lib/email';
+import { sendTransactionalEmail, isTransactionalEmailConfigured } from '@/lib/email';
+
+type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknown';
 
 interface Params {
   params: { id: string };
@@ -86,10 +88,15 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   let emailedTargets: ('agent' | 'mc')[] = [];
   let deliveryFailed = false;
+  let deliveryFailureReason: DeliveryFailureReason | undefined;
 
   if (requestedTargets.size > 0) {
-    if (recipients.length === 0) {
+    if (!isTransactionalEmailConfigured()) {
       deliveryFailed = true;
+      deliveryFailureReason = 'missing_configuration';
+    } else if (recipients.length === 0) {
+      deliveryFailed = true;
+      deliveryFailureReason = 'no_recipients';
     } else {
       const baseUrl = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');
       const referralLink = baseUrl
@@ -123,6 +130,7 @@ ${referralLink ? `Review the referral: ${referralLink}` : ''}`
         note.emailedTargets = emailedTargets;
       } else {
         deliveryFailed = true;
+        deliveryFailureReason = 'unknown';
       }
     }
   }
@@ -143,7 +151,8 @@ ${referralLink ? `Review the referral: ${referralLink}` : ''}`
       hiddenFromAgent: saved.hiddenFromAgent,
       hiddenFromMc: saved.hiddenFromMc,
       emailedTargets,
-      deliveryFailed
+      deliveryFailed,
+      deliveryFailureReason
     },
     { status: 201 }
   );

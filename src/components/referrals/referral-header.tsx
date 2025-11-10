@@ -8,7 +8,7 @@ import { ReferralStatus, REFERRAL_STATUSES } from '@/constants/referrals';
 import { formatCurrency } from '@/utils/formatters';
 import { StatusChanger } from '@/components/referrals/status-changer';
 import { SLAWidget } from '@/components/referrals/sla-widget';
-import { ContactAssignment } from '@/components/referrals/contact-assignment';
+import { ContactAssignment, type Contact } from '@/components/referrals/contact-assignment';
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
 type AhaBucketValue = '' | 'AHA' | 'AHA_OOS';
@@ -37,9 +37,22 @@ type ReferralHeaderProps = {
   viewerRole: ViewerRole;
   onFinancialsChange?: (snapshot: FinancialSnapshot) => void;
   onContractDraftChange?: (draft: ContractDraftSnapshot) => void;
+  agentContact?: Contact | null;
+  mcContact?: Contact | null;
+  onAgentContactChange?: (contact: Contact | null) => void;
+  onMcContactChange?: (contact: Contact | null) => void;
 };
 
-export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onContractDraftChange }: ReferralHeaderProps) {
+export function ReferralHeader({
+  referral,
+  viewerRole,
+  onFinancialsChange,
+  onContractDraftChange,
+  agentContact,
+  mcContact,
+  onAgentContactChange,
+  onMcContactChange,
+}: ReferralHeaderProps) {
   const [status, setStatus] = useState<ReferralStatus>(referral.status as ReferralStatus);
   const [preApprovalAmountCents, setPreApprovalAmountCents] = useState<number | undefined>(
     referral.preApprovalAmountCents
@@ -160,6 +173,24 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
     : '—';
   const canAssignAgent = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'mc';
   const canAssignMc = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'agent';
+  const fallbackAgentContact: Contact | null = referral.assignedAgent
+    ? {
+        id: referral.assignedAgent._id ?? referral.assignedAgent.id ?? null,
+        name: referral.assignedAgent.name ?? null,
+        email: referral.assignedAgent.email ?? null,
+        phone: referral.assignedAgent.phone ?? null,
+      }
+    : null;
+  const fallbackMcContact: Contact | null = referral.lender
+    ? {
+        id: referral.lender._id ?? referral.lender.id ?? null,
+        name: referral.lender.name ?? null,
+        email: referral.lender.email ?? null,
+        phone: referral.lender.phone ?? null,
+      }
+    : null;
+  const effectiveAgentContact = agentContact ?? fallbackAgentContact;
+  const effectiveMcContact = mcContact ?? fallbackMcContact;
   const canEditBucket = viewerRole === 'admin' || viewerRole === 'manager';
 
   const propertyLabel = useMemo(() => {
@@ -452,24 +483,16 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
           <ContactAssignment
             referralId={referral._id}
             type="agent"
-            contact={{
-              id: referral.assignedAgent?._id,
-              name: referral.assignedAgent?.name,
-              email: referral.assignedAgent?.email,
-              phone: referral.assignedAgent?.phone,
-            }}
+            contact={effectiveAgentContact}
             canAssign={canAssignAgent}
+            onContactChange={onAgentContactChange}
           />
           <ContactAssignment
             referralId={referral._id}
             type="mc"
-            contact={{
-              id: referral.lender?._id,
-              name: referral.lender?.name,
-              email: referral.lender?.email,
-              phone: referral.lender?.phone,
-            }}
+            contact={effectiveMcContact}
             canAssign={canAssignMc}
+            onContactChange={onMcContactChange}
           />
         </section>
       </div>

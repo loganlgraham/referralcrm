@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
 
@@ -11,7 +11,7 @@ const fetcher = (url: string) => fetch(url).then((response) => {
   return response.json();
 });
 
-interface Contact {
+export interface Contact {
   id?: string | null;
   name?: string | null;
   email?: string | null;
@@ -34,6 +34,7 @@ interface Props {
   type: AssignmentType;
   contact: Contact | null | undefined;
   canAssign: boolean;
+  onContactChange?: (contact: Contact | null) => void;
 }
 
 const directoryForType: Record<AssignmentType, string> = {
@@ -56,7 +57,13 @@ const endpointForType: Record<AssignmentType, (id: string) => string> = {
   mc: (id: string) => `/api/referrals/${id}/assign-lender`
 };
 
-export function ContactAssignment({ referralId, type, contact, canAssign }: Props) {
+export function ContactAssignment({
+  referralId,
+  type,
+  contact,
+  canAssign,
+  onContactChange
+}: Props) {
   const [open, setOpen] = useState(false);
   const [currentContact, setCurrentContact] = useState<Contact | null | undefined>(contact);
   const [selected, setSelected] = useState(contact?.id ?? '');
@@ -65,6 +72,11 @@ export function ContactAssignment({ referralId, type, contact, canAssign }: Prop
   const { data: options } = useSWR<AssignmentOption[]>(open && canAssign ? directoryForType[type] : null, fetcher);
 
   const title = labelForType[type];
+
+  useEffect(() => {
+    setCurrentContact(contact);
+    setSelected(contact?.id ?? '');
+  }, [contact]);
 
   const formattedContact = useMemo(() => {
     if (!currentContact?.name) {
@@ -95,15 +107,21 @@ export function ContactAssignment({ referralId, type, contact, canAssign }: Prop
       if (!response.ok) {
         throw new Error('Unable to update assignment');
       }
+      let nextContact: Contact | null = null;
       if (options) {
         const match = options.find((option) => option._id === selected);
-        setCurrentContact({
+        nextContact = {
           id: selected,
           name: match?.name ?? '',
           email: match?.email ?? null,
           phone: match?.phone ?? null
-        });
+        };
+      } else if (currentContact && currentContact.id === selected) {
+        nextContact = currentContact;
       }
+
+      setCurrentContact(nextContact);
+      onContactChange?.(nextContact);
       toast.success(`${title} assigned`);
       setOpen(false);
     } catch (error) {
