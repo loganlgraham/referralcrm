@@ -12,7 +12,7 @@ type ReferralSummary = {
   _id: Types.ObjectId;
   borrower?: { name?: string | null } | null;
   propertyAddress?: string | null;
-  propertyZip?: string | null;
+  lookingInZip?: string | null;
   assignedAgent?: Types.ObjectId | string | null;
   commissionBasisPoints?: number | null;
   referralFeeBasisPoints?: number | null;
@@ -88,7 +88,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .populate<{ referralId: ReferralSummary }>({
       path: 'referralId',
       select:
-        'borrower propertyAddress propertyZip assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents ahaBucket',
+        'borrower propertyAddress lookingInZip assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents ahaBucket',
     })
     .lean<PaymentWithReferral[]>();
 
@@ -113,7 +113,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         ? {
             borrowerName: referral.borrower?.name ?? null,
             propertyAddress: referral.propertyAddress ?? null,
-            propertyZip: referral.propertyZip ?? null,
+            lookingInZip: (referral as any).lookingInZip ?? null,
             assignedAgentId:
               typeof referral.assignedAgent === 'string'
                 ? referral.assignedAgent

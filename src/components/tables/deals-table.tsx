@@ -42,7 +42,7 @@ interface DealRow {
   referral?: {
     borrowerName?: string | null;
     propertyAddress?: string | null;
-    propertyZip?: string | null;
+    lookingInZip?: string | null;
     commissionBasisPoints?: number | null;
     referralFeeBasisPoints?: number | null;
     estPurchasePriceCents?: number | null;
@@ -484,7 +484,9 @@ export function DealsTable() {
                     )}
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">
-                  {deal.referral?.propertyAddress || deal.referral?.propertyZip || '—'}
+                  {deal.referral?.propertyAddress ||
+                    (deal.referral?.lookingInZip ? `Looking in ${deal.referral.lookingInZip}` : null) ||
+                    '—'}
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(referralFee)}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">
@@ -595,7 +597,9 @@ export function DealsTable() {
                   <div className="flex flex-col">
                     {renderReferralLink(deal)}
                     <span className="text-xs text-slate-500">
-                      {deal.referral?.propertyAddress || deal.referral?.propertyZip || deal.referralId}
+                      {deal.referral?.propertyAddress ||
+                        (deal.referral?.lookingInZip ? `Looking in ${deal.referral.lookingInZip}` : null) ||
+                        deal.referralId}
                     </span>
                   </div>
                 </td>

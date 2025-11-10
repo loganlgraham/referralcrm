@@ -15,8 +15,14 @@ export interface ReferralRow {
   borrowerName: string;
   borrowerEmail: string;
   borrowerPhone: string;
-  propertyZip: string;
+  endorser?: string;
+  clientType: 'Seller' | 'Buyer';
+  lookingInZip: string;
+  borrowerCurrentAddress?: string;
   propertyAddress?: string;
+  stageOnTransfer?: string;
+  initialNotes?: string;
+  loanFileNumber: string;
   status: ReferralStatus;
   assignedAgentName?: string;
   assignedAgentEmail?: string;
@@ -261,8 +267,12 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
     return [
       borrowerColumn,
       {
-        header: 'Zip',
-        accessorKey: 'propertyZip'
+        header: 'Loan File #',
+        accessorKey: 'loanFileNumber'
+      },
+      {
+        header: 'Looking In (Zip)',
+        accessorKey: 'lookingInZip'
       },
       {
         header: 'Pre-Approval',
@@ -289,6 +299,10 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
   if (mode === 'mc') {
     return [
       borrowerColumn,
+      {
+        header: 'Loan File #',
+        accessorKey: 'loanFileNumber'
+      },
       {
         header: 'Agent Contact',
         id: 'agentContact',
@@ -321,8 +335,12 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
   return [
     borrowerColumn,
     {
-      header: 'Zip',
-      accessorKey: 'propertyZip'
+      header: 'Loan File #',
+      accessorKey: 'loanFileNumber'
+    },
+    {
+      header: 'Looking In (Zip)',
+      accessorKey: 'lookingInZip'
     },
     {
       header: 'Status',

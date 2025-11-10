@@ -200,8 +200,8 @@ export function ReferralHeader({
     if (referral.propertyAddress) {
       return referral.propertyAddress;
     }
-    return `Zip ${referral.propertyZip}`;
-  }, [effectivePropertyAddress, referral.propertyAddress, referral.propertyZip]);
+    return referral.lookingInZip ? `Looking in ${referral.lookingInZip}` : 'Pending location';
+  }, [effectivePropertyAddress, referral.lookingInZip, referral.propertyAddress]);
 
   const borrowerName = referral.borrower?.name ?? 'Borrower';
   const borrowerContact = [referral.borrower?.email, referral.borrower?.phone]

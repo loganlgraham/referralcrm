@@ -5,8 +5,14 @@ export const createReferralSchema = z.object({
   borrowerName: z.string().min(1),
   borrowerEmail: z.string().email(),
   borrowerPhone: z.string().min(7),
-  propertyZip: z.string().min(5),
   source: z.enum(['Lender', 'MC']),
+  endorser: z.string().min(1),
+  clientType: z.enum(['Seller', 'Buyer']),
+  lookingInZip: z.string().min(5),
+  borrowerCurrentAddress: z.string().min(1),
+  stageOnTransfer: z.string().min(1),
+  loanFileNumber: z.string().min(1),
+  initialNotes: z.string().optional(),
   loanType: z.string().optional(),
   estPurchasePrice: z.number().optional()
 });

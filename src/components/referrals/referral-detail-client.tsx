@@ -250,6 +250,46 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
         onAgentContactChange={setAgentContact}
         onMcContactChange={setMcContact}
       />
+      <section className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Referral details</h2>
+          <p className="text-xs text-slate-500">Key context provided at intake.</p>
+        </div>
+        <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="space-y-1">
+            <dt className="text-xs uppercase text-slate-500">Loan File #</dt>
+            <dd className="text-sm font-semibold text-slate-900">{referral.loanFileNumber}</dd>
+          </div>
+          <div className="space-y-1">
+            <dt className="text-xs uppercase text-slate-500">Source</dt>
+            <dd className="text-sm text-slate-700">{referral.source}</dd>
+          </div>
+          <div className="space-y-1">
+            <dt className="text-xs uppercase text-slate-500">Endorser</dt>
+            <dd className="text-sm text-slate-700">{referral.endorser || '—'}</dd>
+          </div>
+          <div className="space-y-1">
+            <dt className="text-xs uppercase text-slate-500">Client Type</dt>
+            <dd className="text-sm text-slate-700">{referral.clientType}</dd>
+          </div>
+          <div className="space-y-1">
+            <dt className="text-xs uppercase text-slate-500">Looking In (Zip)</dt>
+            <dd className="text-sm text-slate-700">{referral.lookingInZip}</dd>
+          </div>
+          <div className="space-y-1">
+            <dt className="text-xs uppercase text-slate-500">Stage on Transfer</dt>
+            <dd className="text-sm text-slate-700">{referral.stageOnTransfer || '—'}</dd>
+          </div>
+          <div className="space-y-1 sm:col-span-2 lg:col-span-3">
+            <dt className="text-xs uppercase text-slate-500">Borrower Current Address</dt>
+            <dd className="text-sm text-slate-700">{referral.borrowerCurrentAddress || '—'}</dd>
+          </div>
+          <div className="space-y-1 sm:col-span-2 lg:col-span-3">
+            <dt className="text-xs uppercase text-slate-500">Notes</dt>
+            <dd className="text-sm text-slate-700">{referral.initialNotes || '—'}</dd>
+          </div>
+        </dl>
+      </section>
       <ReferralNotes
         referralId={referralId}
         initialNotes={notes}

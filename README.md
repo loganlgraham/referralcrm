@@ -128,7 +128,7 @@ Key directories:
 - Create a free or dedicated cluster.
 - Configure a user with read/write access and whitelist Vercel IPs.
 - Recommended indexes:
-  - `Referral`: `{ status: 1, createdAt: -1 }`, `{ propertyZip: 1 }`, `{ lender: 1 }`, `{ assignedAgent: 1 }`
+  - `Referral`: `{ status: 1, createdAt: -1 }`, `{ lookingInZip: 1 }`, `{ lender: 1 }`, `{ assignedAgent: 1 }`, `{ loanFileNumber: 1 }`
   - `Payment`: `{ referralId: 1, status: 1 }`
   - `Agent`: `{ statesLicensed: 1 }`, `{ zipCoverage: 1 }`
 

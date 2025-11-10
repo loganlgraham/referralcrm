@@ -37,7 +37,7 @@ interface ReferralDealProps {
   referral: {
     _id: string;
     propertyAddress?: string;
-    propertyZip?: string | null;
+    lookingInZip?: string | null;
     referralFeeDueCents?: number | null;
     payments?: DealRecord[] | null;
     ahaBucket?: AgentSelectValue | null;
@@ -146,7 +146,7 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
   const propertyLabel =
     overrides?.propertyAddress ||
     referral.propertyAddress ||
-    (referral.propertyZip ? `Zip ${referral.propertyZip}` : 'Pending address');
+    (referral.lookingInZip ? `Looking in ${referral.lookingInZip}` : 'Pending address');
 
   const getStatusForDeal = (deal: DealRecord): DealStatus => {
     return statusMap[deal._id] ?? ((deal.status as DealStatus | undefined) ?? 'under_contract');

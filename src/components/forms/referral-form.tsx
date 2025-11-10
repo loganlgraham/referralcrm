@@ -9,8 +9,14 @@ const referralSchema = z.object({
   borrowerName: z.string().min(1),
   borrowerEmail: z.string().email(),
   borrowerPhone: z.string().min(7),
-  propertyZip: z.string().min(5),
   source: z.enum(['Lender', 'MC']),
+  endorser: z.string().min(1),
+  clientType: z.enum(['Seller', 'Buyer']),
+  lookingInZip: z.string().min(5),
+  borrowerCurrentAddress: z.string().min(1),
+  stageOnTransfer: z.string().min(1),
+  loanFileNumber: z.string().min(1),
+  initialNotes: z.string().optional(),
   loanType: z.string().optional(),
   estPurchasePrice: z.number().optional()
 });
@@ -26,8 +32,14 @@ export function ReferralForm() {
       borrowerName: formData.get('borrowerName')?.toString() || '',
       borrowerEmail: formData.get('borrowerEmail')?.toString() || '',
       borrowerPhone: formData.get('borrowerPhone')?.toString() || '',
-      propertyZip: formData.get('propertyZip')?.toString() || '',
       source: (formData.get('source')?.toString() as 'Lender' | 'MC') || 'MC',
+      endorser: formData.get('endorser')?.toString() || '',
+      clientType: (formData.get('clientType')?.toString() as 'Seller' | 'Buyer') || 'Buyer',
+      lookingInZip: formData.get('lookingInZip')?.toString() || '',
+      borrowerCurrentAddress: formData.get('borrowerCurrentAddress')?.toString() || '',
+      stageOnTransfer: formData.get('stageOnTransfer')?.toString() || '',
+      loanFileNumber: formData.get('loanFileNumber')?.toString() || '',
+      initialNotes: formData.get('initialNotes')?.toString() || undefined,
       loanType: formData.get('loanType')?.toString() || undefined,
       estPurchasePrice: formData.get('estPurchasePrice')
         ? Number(formData.get('estPurchasePrice'))
@@ -83,15 +95,38 @@ export function ReferralForm() {
           <input name="borrowerPhone" required className="mt-1 w-full rounded border border-slate-200 px-3 py-2" />
         </label>
         <label className="text-sm font-medium text-slate-600">
-          Property zip
-          <input name="propertyZip" required className="mt-1 w-full rounded border border-slate-200 px-3 py-2" />
-        </label>
-        <label className="text-sm font-medium text-slate-600">
           Source
           <select name="source" className="mt-1 w-full rounded border border-slate-200 px-3 py-2">
             <option value="MC">MC</option>
             <option value="Lender">Lender</option>
           </select>
+        </label>
+        <label className="text-sm font-medium text-slate-600">
+          Endorser
+          <input name="endorser" required className="mt-1 w-full rounded border border-slate-200 px-3 py-2" />
+        </label>
+        <label className="text-sm font-medium text-slate-600">
+          Seller or Buyer
+          <select name="clientType" className="mt-1 w-full rounded border border-slate-200 px-3 py-2">
+            <option value="Buyer">Buyer</option>
+            <option value="Seller">Seller</option>
+          </select>
+        </label>
+        <label className="text-sm font-medium text-slate-600">
+          Looking in (Zip)
+          <input name="lookingInZip" required className="mt-1 w-full rounded border border-slate-200 px-3 py-2" />
+        </label>
+        <label className="text-sm font-medium text-slate-600 md:col-span-2">
+          Borrower current address
+          <input name="borrowerCurrentAddress" required className="mt-1 w-full rounded border border-slate-200 px-3 py-2" />
+        </label>
+        <label className="text-sm font-medium text-slate-600">
+          Stage on transfer
+          <input name="stageOnTransfer" required className="mt-1 w-full rounded border border-slate-200 px-3 py-2" />
+        </label>
+        <label className="text-sm font-medium text-slate-600">
+          Loan file number
+          <input name="loanFileNumber" required className="mt-1 w-full rounded border border-slate-200 px-3 py-2" />
         </label>
         <label className="text-sm font-medium text-slate-600">
           Loan type
@@ -105,6 +140,14 @@ export function ReferralForm() {
             min="0"
             step="1000"
             className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+          />
+        </label>
+        <label className="text-sm font-medium text-slate-600 md:col-span-2">
+          Notes
+          <textarea
+            name="initialNotes"
+            className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+            rows={3}
           />
         </label>
       </div>

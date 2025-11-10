@@ -8,7 +8,21 @@ import { toast } from 'sonner';
 const steps = ['Upload', 'Map Fields', 'Preview', 'Confirm'] as const;
 
 const ENTITY_FIELDS: Record<string, string[]> = {
-  Referral: ['borrowerName', 'borrowerEmail', 'borrowerPhone', 'propertyZip', 'status', 'createdAt'],
+  Referral: [
+    'borrowerName',
+    'borrowerEmail',
+    'borrowerPhone',
+    'source',
+    'endorser',
+    'clientType',
+    'lookingInZip',
+    'borrowerCurrentAddress',
+    'stageOnTransfer',
+    'loanFileNumber',
+    'initialNotes',
+    'status',
+    'createdAt'
+  ],
   Agent: ['name', 'email', 'phone', 'statesLicensed', 'zipCoverage'],
   LenderMC: ['name', 'email', 'phone', 'nmlsId', 'team', 'region'],
   Payment: ['referralId', 'status', 'expectedAmountCents', 'receivedAmountCents', 'invoiceDate', 'paidDate']
