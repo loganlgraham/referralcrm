@@ -13,10 +13,81 @@ import { DealCard } from '@/components/referrals/deal-card';
 import type { Contact } from '@/components/referrals/contact-assignment';
 import type { ReferralStatus } from '@/constants/referrals';
 
+type ReferralSource = 'Lender' | 'MC';
+type ReferralClientType = 'Seller' | 'Buyer';
+
+interface ReferralContact {
+  _id?: string | null;
+  id?: string | null;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}
+
+interface ReferralPayment {
+  _id: string;
+  status?: string | null;
+  expectedAmountCents?: number | null;
+  receivedAmountCents?: number | null;
+  invoiceDate?: string | null;
+  paidDate?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  terminatedReason?: string | null;
+  agentAttribution?: string | null;
+  usedAfc?: boolean;
+}
+
+interface ReferralDetailNote {
+  id: string;
+  authorName: string;
+  authorRole: string;
+  content: string;
+  createdAt: string;
+  hiddenFromAgent?: boolean;
+  hiddenFromMc?: boolean;
+  emailedTargets?: ('agent' | 'mc')[];
+}
+
+interface ReferralDetail {
+  _id: string;
+  loanFileNumber: string;
+  source: ReferralSource;
+  endorser: string;
+  clientType: ReferralClientType;
+  lookingInZip: string;
+  borrowerCurrentAddress: string;
+  stageOnTransfer: string;
+  initialNotes: string;
+  borrower: {
+    name: string;
+    email: string;
+    phone: string;
+  };
+  status: ReferralStatus;
+  preApprovalAmountCents?: number;
+  estPurchasePriceCents?: number;
+  referralFeeDueCents?: number;
+  commissionBasisPoints?: number;
+  referralFeeBasisPoints?: number;
+  propertyAddress?: string;
+  assignedAgent?: ReferralContact | null;
+  lender?: ReferralContact | null;
+  payments?: ReferralPayment[];
+  notes?: ReferralDetailNote[];
+  statusLastUpdated?: string | null;
+  daysInStatus?: number;
+  viewerRole?: string;
+  ahaBucket?: 'AHA' | 'AHA_OOS' | '' | null;
+  org?: string;
+  audit?: unknown[];
+  [key: string]: unknown;
+}
+
 interface ReferralDetailClientProps {
-  referral: any;
+  referral: ReferralDetail;
   viewerRole: string;
-  notes: any[];
+  notes: ReferralDetailNote[];
   referralId: string;
 }
 
@@ -38,9 +109,6 @@ interface DraftState {
   referralFeeDueCents?: number;
   hasUnsavedChanges: boolean;
 }
-
-type ReferralSource = 'Lender' | 'MC';
-type ReferralClientType = 'Seller' | 'Buyer';
 
 interface DetailDraft {
   loanFileNumber: string;
@@ -70,7 +138,7 @@ const normalizeSource = (value: unknown): ReferralSource => (value === 'Lender' 
 
 const normalizeClientType = (value: unknown): ReferralClientType => (value === 'Seller' ? 'Seller' : 'Buyer');
 
-const createDetailDraft = (referral: any): DetailDraft => ({
+const createDetailDraft = (referral: ReferralDetail): DetailDraft => ({
   loanFileNumber: ensureString(referral?.loanFileNumber),
   source: normalizeSource(referral?.source),
   endorser: ensureString(referral?.endorser),
@@ -96,7 +164,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const router = useRouter();
   const { mutate } = useSWRConfig();
   const activityFeedKey = `/api/referrals/${referralId}/activities`;
-  const [referral, setReferral] = useState(initialReferral);
+  const [referral, setReferral] = useState<ReferralDetail>(initialReferral);
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [detailsDraft, setDetailsDraft] = useState<DetailDraft>(() => createDetailDraft(initialReferral));
   const [savingDetails, setSavingDetails] = useState(false);
