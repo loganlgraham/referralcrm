@@ -5,9 +5,9 @@ import { toast } from 'sonner';
 
 import { formatCurrency } from '@/utils/formatters';
 
-type DealStatus = 'under_contract' | 'closed' | 'paid' | 'terminated';
-type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
-type AgentSelectValue = '' | 'AHA' | 'AHA_OOS';
+export type DealStatus = 'under_contract' | 'closed' | 'paid' | 'terminated';
+export type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
+export type AgentSelectValue = '' | 'AHA' | 'AHA_OOS';
 
 const TERMINATED_REASON_OPTIONS: { value: TerminatedReason; label: string }[] = [
   { value: 'inspection', label: 'Inspection' },
@@ -16,7 +16,7 @@ const TERMINATED_REASON_OPTIONS: { value: TerminatedReason; label: string }[] = 
   { value: 'changed_mind', label: 'Changed Mind' },
 ];
 
-interface DealRecord {
+export interface DealRecord {
   _id: string;
   status?: DealStatus | null;
   expectedAmountCents?: number | null;
@@ -27,13 +27,13 @@ interface DealRecord {
   usedAfc?: boolean | null;
 }
 
-interface DealOverrides {
+export interface DealOverrides {
   referralFeeDueCents?: number;
   propertyAddress?: string;
   hasUnsavedContractChanges?: boolean;
 }
 
-interface ReferralDealProps {
+export interface ReferralDealProps {
   referral: {
     _id: string;
     propertyAddress?: string;

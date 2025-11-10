@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import type { ChangeEvent, FormEvent } from 'react';
+import type { ChangeEvent, ComponentProps, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useSWRConfig } from 'swr';
@@ -10,6 +10,11 @@ import { ReferralHeader } from '@/components/referrals/referral-header';
 import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import { DealCard } from '@/components/referrals/deal-card';
+import type {
+  AgentSelectValue,
+  DealStatus,
+  TerminatedReason
+} from '@/components/referrals/deal-card';
 import type { Contact } from '@/components/referrals/contact-assignment';
 import type { ReferralStatus } from '@/constants/referrals';
 
@@ -91,6 +96,11 @@ interface ReferralDetailClientProps {
   referralId: string;
 }
 
+type DealCardProps = ComponentProps<typeof DealCard>;
+type DealCardReferral = DealCardProps['referral'];
+type DealCardDeal = NonNullable<DealCardReferral['payments']>[number];
+type DealCardOverrides = DealCardProps['overrides'];
+
 interface FinancialState {
   status: ReferralStatus;
   preApprovalAmountCents: number;
@@ -159,6 +169,27 @@ const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
   stageOnTransfer: draft.stageOnTransfer.trim(),
   initialNotes: draft.initialNotes.trim(),
 });
+
+const normalizeDealPayments = (
+  payments: ReferralPayment[] | undefined
+): DealCardReferral['payments'] => {
+  if (!Array.isArray(payments)) {
+    return null;
+  }
+
+  return payments.map<DealCardDeal>((payment) => ({
+    _id: payment._id,
+    status: (payment.status as DealStatus | undefined) ?? null,
+    expectedAmountCents: payment.expectedAmountCents ?? null,
+    receivedAmountCents: payment.receivedAmountCents ?? null,
+    createdAt: payment.createdAt ?? null,
+    terminatedReason: payment.terminatedReason
+      ? (payment.terminatedReason as TerminatedReason)
+      : null,
+    agentAttribution: payment.agentAttribution as AgentSelectValue | undefined,
+    usedAfc: payment.usedAfc ?? null,
+  }));
+};
 
 export function ReferralDetailClient({ referral: initialReferral, viewerRole, notes, referralId }: ReferralDetailClientProps) {
   const router = useRouter();
@@ -541,17 +572,19 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     propertyAddress: financials.propertyAddress ?? referral.propertyAddress,
   };
 
-  const dealReferral = {
-    ...referral,
-    referralFeeDueCents: financials.referralFeeDueCents,
-    propertyAddress: financials.propertyAddress ?? referral.propertyAddress,
+  const dealReferral: DealCardReferral = {
+    _id: referral._id,
+    propertyAddress: financials.propertyAddress ?? referral.propertyAddress ?? undefined,
+    lookingInZip: referral.lookingInZip ?? null,
+    referralFeeDueCents: financials.referralFeeDueCents ?? referral.referralFeeDueCents ?? null,
+    payments: normalizeDealPayments(referral.payments),
+    ahaBucket:
+      referral.ahaBucket === null || referral.ahaBucket === undefined
+        ? null
+        : (referral.ahaBucket as AgentSelectValue),
   };
 
-  const dealOverrides: {
-    referralFeeDueCents?: number;
-    propertyAddress?: string;
-    hasUnsavedContractChanges: boolean;
-  } = contractDraft.hasUnsavedChanges
+  const dealOverrides: DealCardOverrides = contractDraft.hasUnsavedChanges
     ? {
         referralFeeDueCents:
           contractDraft.referralFeeDueCents !== undefined
@@ -565,8 +598,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         hasUnsavedContractChanges: false,
       };
 
-  const hasTerminatedDeal = (referral.payments ?? []).some((payment: any) => payment.status === 'terminated');
-  const hasAnyDeals = Array.isArray(referral.payments) && referral.payments.length > 0;
+  const dealPayments = dealReferral.payments ?? [];
+  const hasTerminatedDeal = dealPayments.some((payment) => payment.status === 'terminated');
+  const hasAnyDeals = dealPayments.length > 0;
 
   const showDeals =
     financials.status === 'Under Contract' || contractDraft.hasUnsavedChanges || hasTerminatedDeal || hasAnyDeals;
