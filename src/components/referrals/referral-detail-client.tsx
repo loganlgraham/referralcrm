@@ -52,13 +52,13 @@ interface ReferralDetailNote {
 interface ReferralDetail {
   _id: string;
   loanFileNumber: string;
-  source: ReferralSource;
-  endorser: string;
-  clientType: ReferralClientType;
-  lookingInZip: string;
-  borrowerCurrentAddress: string;
-  stageOnTransfer: string;
-  initialNotes: string;
+  source?: ReferralSource | null;
+  endorser?: string | null;
+  clientType?: ReferralClientType | null;
+  lookingInZip?: string | null;
+  borrowerCurrentAddress?: string | null;
+  stageOnTransfer?: string | null;
+  initialNotes?: string | null;
   borrower: {
     name: string;
     email: string;
