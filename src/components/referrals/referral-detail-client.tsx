@@ -156,7 +156,7 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
     financials.status === 'Under Contract' || contractDraft.hasUnsavedChanges || hasTerminatedDeal || hasAnyDeals;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <ReferralHeader
         referral={headerReferral}
         viewerRole={viewerRole}
