@@ -195,7 +195,8 @@ function normalizeResendPayload(payload: unknown): NormalizedEmail | null {
     (typeof (payload as Record<string, unknown>).created_at === 'string' && (payload as Record<string, unknown>).created_at) ||
     (typeof (payload as Record<string, unknown>).createdAt === 'string' && (payload as Record<string, unknown>).createdAt);
 
-  const receivedAtCandidate = receivedAtRaw ? new Date(receivedAtRaw) : undefined;
+  const receivedAtCandidate =
+    typeof receivedAtRaw === 'string' && receivedAtRaw ? new Date(receivedAtRaw) : undefined;
   const receivedAt = receivedAtCandidate && !Number.isNaN(receivedAtCandidate.getTime()) ? receivedAtCandidate : undefined;
 
   return {
