@@ -214,7 +214,8 @@ export async function getReferralById(id: string) {
     content: note.content,
     createdAt: note.createdAt instanceof Date ? note.createdAt.toISOString() : new Date(note.createdAt).toISOString(),
     hiddenFromAgent: note.hiddenFromAgent,
-    hiddenFromMc: note.hiddenFromMc
+    hiddenFromMc: note.hiddenFromMc,
+    emailedTargets: Array.isArray(note.emailedTargets) ? note.emailedTargets : []
   }));
 
   const filteredNotes = notes.filter((note) => {

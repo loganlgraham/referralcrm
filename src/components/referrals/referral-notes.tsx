@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSWRConfig } from 'swr';
 import { toast } from 'sonner';
 
 interface ReferralNote {
@@ -12,6 +13,10 @@ interface ReferralNote {
   hiddenFromAgent?: boolean;
   hiddenFromMc?: boolean;
   emailedTargets?: ('agent' | 'mc')[];
+}
+
+interface ReferralNoteResponse extends ReferralNote {
+  deliveryFailed?: boolean;
 }
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
@@ -89,6 +94,9 @@ export function ReferralNotes({
   const [emailMc, setEmailMc] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showNotesDropdown, setShowNotesDropdown] = useState(false);
+  const { mutate } = useSWRConfig();
+
+  const activityFeedKey = `/api/referrals/${referralId}/activities`;
 
   const canControlVisibility = viewerRole === 'admin' || viewerRole === 'manager';
   const hasAgentEmail = Boolean(agentContact?.email);
@@ -145,6 +153,7 @@ export function ReferralNotes({
       const response = await fetch(`/api/referrals/${referralId}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           content: content.trim(),
           hiddenFromAgent: canControlVisibility ? hiddenFromAgent : undefined,
@@ -155,24 +164,31 @@ export function ReferralNotes({
       if (!response.ok) {
         throw new Error('Unable to save note');
       }
-      const created = (await response.json()) as ReferralNote;
+      const created = (await response.json()) as ReferralNoteResponse;
+      const { deliveryFailed, ...notePayload } = created;
       setNotes((previous) => [
         {
-          ...created,
+          ...notePayload,
           createdAt:
-            typeof created.createdAt === 'string'
-              ? created.createdAt
-              : new Date(created.createdAt).toISOString()
+            typeof notePayload.createdAt === 'string'
+              ? notePayload.createdAt
+              : new Date(notePayload.createdAt).toISOString()
         },
         ...previous
       ]);
       resetForm();
-      const emailSummary = Array.isArray(created.emailedTargets) && created.emailedTargets.length > 0
-        ? ` Email sent to ${created.emailedTargets
+      void mutate(activityFeedKey);
+
+      const emailSummary = Array.isArray(notePayload.emailedTargets) && notePayload.emailedTargets.length > 0
+        ? ` Email sent to ${notePayload.emailedTargets
             .map((target) => (target === 'agent' ? agentContact?.name || 'agent' : mcContact?.name || 'MC'))
             .join(' & ')}.`
         : '';
       toast.success(`Note added.${emailSummary}`.trim());
+
+      if (deliveryFailed && emailTargets.length > 0) {
+        toast.error('Note was saved, but the email could not be delivered.');
+      }
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Unable to save note');

@@ -13,7 +13,11 @@ interface Activity {
 }
 
 export function ReferralTimeline({ referralId }: { referralId: string }) {
-  const { data } = useSWR<Activity[]>(`/api/referrals/${referralId}/activities`, fetcher, {
+  const {
+    data,
+    error,
+    isLoading
+  } = useSWR<Activity[]>(`/api/referrals/${referralId}/activities`, fetcher, {
     refreshInterval: 60_000
   });
 
@@ -26,7 +30,10 @@ export function ReferralTimeline({ referralId }: { referralId: string }) {
         <h2 className="text-lg font-semibold text-slate-900">Activity timeline</h2>
         <p className="text-sm text-slate-500">Latest interactions and updates from your team.</p>
       </div>
-      {!data && <p className="text-sm text-slate-500">Loading activity…</p>}
+      {isLoading && <p className="text-sm text-slate-500">Loading activity…</p>}
+      {error && !isLoading && (
+        <p className="text-sm text-rose-500">We couldn’t load recent activity. Please refresh to try again.</p>
+      )}
       {data && !hasActivity && (
         <p className="text-sm text-slate-500">No activity logged yet. Add a note or update the status to get started.</p>
       )}
