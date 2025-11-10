@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 import { ReferralHeader } from '@/components/referrals/referral-header';
 import { ReferralNotes } from '@/components/referrals/referral-notes';
@@ -35,6 +37,7 @@ interface DraftState {
 }
 
 export function ReferralDetailClient({ referral, viewerRole, notes, referralId }: ReferralDetailClientProps) {
+  const router = useRouter();
   const [financials, setFinancials] = useState<FinancialState>({
     status: referral.status,
     preApprovalAmountCents: referral.preApprovalAmountCents ?? 0,
@@ -45,6 +48,39 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
     propertyAddress: referral.propertyAddress ?? undefined,
   });
   const [contractDraft, setContractDraft] = useState<DraftState>({ hasUnsavedChanges: false });
+  const [deleting, setDeleting] = useState(false);
+
+  const canDelete = viewerRole === 'admin' || viewerRole === 'manager';
+
+  const handleDeleteReferral = async () => {
+    if (deleting) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'Delete this referral and all associated deals? This action cannot be undone.'
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const response = await fetch(`/api/referrals/${referralId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error('Unable to delete referral');
+      }
+      toast.success('Referral deleted');
+      router.push('/referrals');
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Unable to delete referral');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const handleFinancialsChange = (snapshot: {
     status: ReferralStatus;
@@ -178,6 +214,18 @@ export function ReferralDetailClient({ referral, viewerRole, notes, referralId }
       />
       {showDeals && <DealCard referral={dealReferral} overrides={dealOverrides} />}
       <ReferralTimeline referralId={referralId} />
+      {canDelete && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleDeleteReferral}
+            disabled={deleting}
+            className="rounded-lg border border-rose-200 bg-rose-500/10 px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {deleting ? 'Deleting…' : 'Delete referral'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

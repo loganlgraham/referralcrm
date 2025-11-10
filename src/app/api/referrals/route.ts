@@ -832,6 +832,7 @@ export async function POST(request: Request) {
     propertyZip: parsed.data.propertyZip,
     loanType: parsed.data.loanType,
     estPurchasePriceCents: parsed.data.estPurchasePrice ? parsed.data.estPurchasePrice * 100 : 0,
+    preApprovalAmountCents: parsed.data.estPurchasePrice ? parsed.data.estPurchasePrice * 100 : 0,
     commissionBasisPoints: DEFAULT_AGENT_COMMISSION_BPS,
     referralFeeBasisPoints:
       parsed.data.estPurchasePrice && parsed.data.estPurchasePrice > 400000 ? 3500 : DEFAULT_REFERRAL_FEE_BPS,

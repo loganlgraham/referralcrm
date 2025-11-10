@@ -101,7 +101,8 @@ export function ReferralNotes({
   const canControlVisibility = viewerRole === 'admin' || viewerRole === 'manager';
   const hasAgentEmail = Boolean(agentContact?.email);
   const hasMcEmail = Boolean(mcContact?.email);
-  const canEmailNote = hasAgentEmail || hasMcEmail;
+  const agentEmailDisabled = saving || hiddenFromAgent || !hasAgentEmail;
+  const mcEmailDisabled = saving || hiddenFromMc || !hasMcEmail;
 
   const sortedNotes = useMemo(
     () =>
@@ -229,32 +230,28 @@ export function ReferralNotes({
               disabled={saving}
             />
           )}
-          {canEmailNote && hasAgentEmail && (
-            <ToggleControl
-              label="Email agent"
-              checked={emailAgent}
-              onChange={(value) => setEmailAgent(value)}
-              disabled={saving || hiddenFromAgent}
-            />
-          )}
-          {canEmailNote && hasMcEmail && (
-            <ToggleControl
-              label="Email MC"
-              checked={emailMc}
-              onChange={(value) => setEmailMc(value)}
-              disabled={saving || hiddenFromMc}
-            />
-          )}
-          {canEmailNote && (!hasAgentEmail || !hasMcEmail) && (
-            <span className="text-slate-400">
-              {hasAgentEmail && !hasMcEmail
-                ? 'MC email unavailable'
-                : !hasAgentEmail && hasMcEmail
-                  ? 'Agent email unavailable'
-                  : 'No email contacts available'}
-            </span>
-          )}
+          <ToggleControl
+            label="Email agent"
+            checked={emailAgent}
+            onChange={(value) => setEmailAgent(value)}
+            disabled={agentEmailDisabled}
+          />
+          <ToggleControl
+            label="Email MC"
+            checked={emailMc}
+            onChange={(value) => setEmailMc(value)}
+            disabled={mcEmailDisabled}
+          />
         </div>
+        {(!hasAgentEmail || !hasMcEmail) && (
+          <p className="text-xs text-slate-400">
+            {!hasAgentEmail && !hasMcEmail
+              ? 'Assign an agent or MC with an email address to send notes automatically.'
+              : !hasAgentEmail
+                ? 'Assign an agent with an email address to notify them automatically.'
+                : 'Assign an MC with an email address to notify them automatically.'}
+          </p>
+        )}
         <div className="flex flex-wrap gap-2">
           <button
             type="submit"

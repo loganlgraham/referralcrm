@@ -1,7 +1,6 @@
 'use client';
 
 import { type ChangeEvent, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { differenceInDays } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -41,7 +40,6 @@ type ReferralHeaderProps = {
 };
 
 export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onContractDraftChange }: ReferralHeaderProps) {
-  const router = useRouter();
   const [status, setStatus] = useState<ReferralStatus>(referral.status as ReferralStatus);
   const [preApprovalAmountCents, setPreApprovalAmountCents] = useState<number | undefined>(
     referral.preApprovalAmountCents
@@ -62,10 +60,8 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
   const [draftContract, setDraftContract] = useState<ContractDraftSnapshot>({ hasUnsavedChanges: false });
   const [daysInStatus, setDaysInStatus] = useState<number>(referral.daysInStatus ?? 0);
   const [auditEntries, setAuditEntries] = useState<any[]>(Array.isArray(referral.audit) ? referral.audit : []);
-  const [deleting, setDeleting] = useState(false);
   const [ahaBucket, setAhaBucket] = useState<AhaBucketValue>((referral.ahaBucket as AhaBucketValue) ?? '');
   const [savingBucket, setSavingBucket] = useState(false);
-  const canDelete = viewerRole === 'admin' || viewerRole === 'manager';
 
   useEffect(() => {
     setStatus(referral.status as ReferralStatus);
@@ -335,36 +331,6 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
     });
   };
 
-  const handleDeleteReferral = async () => {
-    if (deleting) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      'Delete this referral and all associated deals? This action cannot be undone.'
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setDeleting(true);
-    try {
-      const response = await fetch(`/api/referrals/${referral._id}`, { method: 'DELETE' });
-      if (!response.ok) {
-        throw new Error('Unable to delete referral');
-      }
-      toast.success('Referral deleted');
-      router.push('/referrals');
-      router.refresh();
-    } catch (error) {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : 'Unable to delete referral');
-    } finally {
-      setDeleting(false);
-    }
-  };
-
   const handleBucketChange = async (event: ChangeEvent<HTMLSelectElement>) => {
     const nextValue = event.target.value as AhaBucketValue;
     if (nextValue === ahaBucket) {
@@ -452,19 +418,6 @@ export function ReferralHeader({ referral, viewerRole, onFinancialsChange, onCon
           </section>
         </div>
       </div>
-      {canDelete && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={handleDeleteReferral}
-            disabled={deleting}
-            className="rounded-lg border border-rose-200 bg-rose-500/10 px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {deleting ? 'Deleting…' : 'Delete referral'}
-          </button>
-        </div>
-      )}
-
       <SLAWidget referral={{ ...referral, status, audit: auditEntries }} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr),minmax(280px,1fr)]">
