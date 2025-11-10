@@ -84,7 +84,10 @@ function verifyResendSignature(rawBody: string, header: string, secret: string):
     return false;
   }
 
-  return crypto.timingSafeEqual(provided, expected);
+  const providedView = new Uint8Array(provided);
+  const expectedView = new Uint8Array(expected);
+
+  return crypto.timingSafeEqual(providedView, expectedView);
 }
 
 function stripHtmlTags(html: string): string {
