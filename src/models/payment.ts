@@ -16,6 +16,12 @@ const paymentSchema = new Schema(
       enum: ['inspection', 'appraisal', 'financing', 'changed_mind'],
       default: null,
     },
+    agentAttribution: {
+      type: String,
+      enum: ['AHA', 'AHA_OOS'],
+      default: null,
+    },
+    usedAfc: { type: Boolean, default: false },
     invoiceDate: Date,
     paidDate: Date,
     notes: String

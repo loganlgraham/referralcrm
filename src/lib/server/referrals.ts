@@ -244,6 +244,8 @@ export async function getReferralById(id: string) {
       createdAt: payment.createdAt ? payment.createdAt.toISOString() : null,
       updatedAt: payment.updatedAt ? payment.updatedAt.toISOString() : null,
       terminatedReason: payment.terminatedReason ?? null,
+      agentAttribution: payment.agentAttribution ?? null,
+      usedAfc: Boolean(payment.usedAfc),
     })),
     daysInStatus,
     statusLastUpdated: referral.statusLastUpdated ? referral.statusLastUpdated.toISOString() : null,

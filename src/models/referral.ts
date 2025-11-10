@@ -88,6 +88,11 @@ const referralSchema = new Schema(
       daysToClose: { type: Number, default: null }
     },
     org: { type: String, enum: ['AFC', 'AHA'], default: 'AFC' },
+    ahaBucket: {
+      type: String,
+      enum: ['AHA', 'AHA_OOS'],
+      default: null,
+    },
     deletedAt: { type: Date, default: null }
   },
   {
@@ -129,6 +134,7 @@ export interface ReferralDocument {
   }[];
   lender?: Types.ObjectId;
   org: 'AFC' | 'AHA';
+  ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   deletedAt?: Date;
   audit?: AuditEntry[];
 }

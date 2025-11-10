@@ -14,7 +14,8 @@ export const createReferralSchema = z.object({
 export const updateReferralSchema = z.object({
   status: z.enum(REFERRAL_STATUSES).optional(),
   assignedAgent: z.string().optional(),
-  referralFeeBasisPoints: z.number().int().min(0).optional()
+  referralFeeBasisPoints: z.number().int().min(0).optional(),
+  ahaBucket: z.enum(['AHA', 'AHA_OOS']).nullable().optional(),
 });
 
 export const createActivitySchema = z.object({
@@ -66,6 +67,8 @@ export const paymentSchema = z.object({
     .enum(['inspection', 'appraisal', 'financing', 'changed_mind'])
     .nullable()
     .optional(),
+  agentAttribution: z.enum(['AHA', 'AHA_OOS']).nullable().optional(),
+  usedAfc: z.boolean().optional(),
   invoiceDate: z.string().optional(),
   paidDate: z.string().optional(),
   notes: z.string().optional()

@@ -19,6 +19,7 @@ type ReferralSummary = {
   estPurchasePriceCents?: number | null;
   preApprovalAmountCents?: number | null;
   referralFeeDueCents?: number | null;
+  ahaBucket?: 'AHA' | 'AHA_OOS' | null;
 };
 
 type PaymentWithReferral = {
@@ -28,6 +29,8 @@ type PaymentWithReferral = {
   expectedAmountCents?: number | null;
   receivedAmountCents?: number | null;
   terminatedReason?: string | null;
+  agentAttribution?: string | null;
+  usedAfc?: boolean | null;
   invoiceDate?: Date | null;
   paidDate?: Date | null;
   createdAt?: Date | null;
@@ -85,7 +88,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .populate<{ referralId: ReferralSummary }>({
       path: 'referralId',
       select:
-        'borrower propertyAddress propertyZip assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents',
+        'borrower propertyAddress propertyZip assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents ahaBucket',
     })
     .lean<PaymentWithReferral[]>();
 
@@ -102,6 +105,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       expectedAmountCents: payment.expectedAmountCents ?? 0,
       receivedAmountCents: payment.receivedAmountCents ?? 0,
       terminatedReason: payment.terminatedReason ?? null,
+      agentAttribution: payment.agentAttribution ?? null,
+      usedAfc: Boolean(payment.usedAfc),
       invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
       paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
       referral: referral
@@ -118,6 +123,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             estPurchasePriceCents: referral.estPurchasePriceCents ?? null,
             preApprovalAmountCents: referral.preApprovalAmountCents ?? null,
             referralFeeDueCents: referral.referralFeeDueCents ?? null,
+            ahaBucket: (referral as any).ahaBucket ?? null,
           }
         : null,
     };
@@ -148,6 +154,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     expectedAmountCents: parsed.data.expectedAmountCents,
     receivedAmountCents: parsed.data.receivedAmountCents,
     terminatedReason: parsed.data.terminatedReason ?? null,
+    agentAttribution: parsed.data.agentAttribution ?? null,
+    usedAfc: parsed.data.usedAfc ?? false,
     invoiceDate: parsed.data.invoiceDate,
     paidDate: parsed.data.paidDate,
     notes: parsed.data.notes
@@ -178,6 +186,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   await connectMongo();
   const updatePayload: Record<string, unknown> = { ...parsed.data };
   delete updatePayload.referralId;
+  if ('usedAfc' in updatePayload && updatePayload.usedAfc === undefined) {
+    updatePayload.usedAfc = false;
+  }
   const payment = await Payment.findByIdAndUpdate(body.id, updatePayload, { new: true });
   if (!payment) {
     return new NextResponse('Not found', { status: 404 });

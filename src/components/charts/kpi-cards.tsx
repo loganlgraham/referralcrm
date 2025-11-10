@@ -33,6 +33,9 @@ interface KPIResponse {
   activePipeline: number;
   mcTransferCount: number;
   newReferrals30Days: number;
+  ahaDealsLost: number;
+  ahaOosDealsLost: number;
+  afcDealsLost: number;
   monthly: TrendPoint[];
   weekly?: TrendPoint[];
 }
@@ -443,8 +446,14 @@ export function KPICards() {
 
   const growthCards = [
     { title: 'Active Pipeline', value: formatNumber(data.activePipeline) },
-    { title: 'New Referrals (30d)', value: formatNumber(data.newReferrals30Days) },
-    { title: 'MC Transfers', value: formatNumber(data.mcTransferCount) }
+    {
+      title: 'Growth Activity',
+      value: `New ${formatNumber(data.newReferrals30Days)} / MC ${formatNumber(data.mcTransferCount)}`
+    },
+    {
+      title: 'Deals Lost',
+      value: `AHA ${formatNumber(data.ahaDealsLost)} / OOS ${formatNumber(data.ahaOosDealsLost)} / AFC ${formatNumber(data.afcDealsLost)}`
+    }
   ];
 
   const cards = [...baseCards, ...growthCards, ...roleSpecificCards];

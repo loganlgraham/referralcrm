@@ -71,6 +71,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         activePipeline: 0,
         mcTransferCount: 0,
         newReferrals30Days: 0,
+        ahaDealsLost: 0,
+        ahaOosDealsLost: 0,
+        afcDealsLost: 0,
         monthly: [],
         weekly: []
       });
@@ -141,7 +144,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       monthlyReferrals,
       monthlyDeals,
       weeklyReferrals,
-      weeklyDeals
+      weeklyDeals,
+      dealOutcomeAggregation
     ] = await Promise.all([
       Payment.aggregate([
         {
@@ -317,6 +321,66 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           }
         },
         {
+          $group: {
+            _id: null,
+            ahaLost: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $eq: ['$referral.ahaBucket', 'AHA'] },
+                      { $ne: ['$agentAttribution', 'AHA'] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            },
+            ahaOosLost: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $eq: ['$referral.ahaBucket', 'AHA_OOS'] },
+                      { $ne: ['$agentAttribution', 'AHA_OOS'] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            },
+            afcLost: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$usedAfc', true] },
+                  0,
+                  1
+                ]
+              }
+            }
+          }
+        }
+      ])
+    ,
+      Payment.aggregate([
+        {
+          $lookup: {
+            from: 'referrals',
+            localField: 'referralId',
+            foreignField: '_id',
+            as: 'referral'
+          }
+        },
+        { $unwind: '$referral' },
+        {
+          $match: {
+            ...paymentMatch,
+            status: { $in: ['closed', 'paid'] }
+          }
+        },
+        {
           $addFields: {
             metricDate: {
               $ifNull: [
@@ -363,6 +427,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const closedDeals = closedDealAggregation[0]?.count ?? 0;
     const revenueReceivedCentsTotal = paidRevenueAggregation[0]?.amount ?? 0;
     const earnedCommissionCents = earnedCommissionAggregation[0]?.amount ?? 0;
+    const outcomeMetrics = dealOutcomeAggregation[0] ?? { ahaLost: 0, ahaOosLost: 0, afcLost: 0 };
     const closeRate = metrics.totalReferrals === 0 ? 0 : (closedDeals / metrics.totalReferrals) * 100;
 
     const monthBuckets: { key: string; label: string; year: number; month: number }[] = [];
@@ -474,7 +539,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       mcTransferCount: metrics.mcTransferCount ?? 0,
       newReferrals30Days: metrics.newReferrals30Days ?? 0,
       monthly,
-      weekly
+      weekly,
+      ahaDealsLost: outcomeMetrics.ahaLost ?? 0,
+      ahaOosDealsLost: outcomeMetrics.ahaOosLost ?? 0,
+      afcDealsLost: outcomeMetrics.afcLost ?? 0
     });
   }
 

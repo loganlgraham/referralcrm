@@ -12,6 +12,7 @@ import { formatCurrency } from '@/utils/formatters';
 
 type DealStatus = 'under_contract' | 'closed' | 'paid' | 'terminated';
 type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
+type AgentSelectValue = '' | 'AHA' | 'AHA_OOS';
 
 const STATUS_OPTIONS: { value: DealStatus; label: string }[] = [
   { value: 'under_contract', label: 'Under Contract' },
@@ -36,6 +37,8 @@ interface DealRow {
   terminatedReason?: TerminatedReason | null;
   invoiceDate?: string | null;
   paidDate?: string | null;
+  agentAttribution?: AgentSelectValue | null;
+  usedAfc?: boolean | null;
   referral?: {
     borrowerName?: string | null;
     propertyAddress?: string | null;
@@ -45,6 +48,7 @@ interface DealRow {
     estPurchasePriceCents?: number | null;
     preApprovalAmountCents?: number | null;
     referralFeeDueCents?: number | null;
+    ahaBucket?: AgentSelectValue | null;
   } | null;
 }
 
@@ -161,7 +165,10 @@ export function DealsTable() {
   const updateDeal = async (
     deal: DealRow,
     updates: Partial<
-      Pick<DealRow, 'status' | 'expectedAmountCents' | 'receivedAmountCents' | 'terminatedReason'>
+      Pick<
+        DealRow,
+        'status' | 'expectedAmountCents' | 'receivedAmountCents' | 'terminatedReason' | 'agentAttribution' | 'usedAfc'
+      >
     >,
     successMessage: string
   ) => {
@@ -186,6 +193,12 @@ export function DealsTable() {
       if ('terminatedReason' in updates) {
         payload.terminatedReason = updates.terminatedReason ?? null;
       }
+      if ('agentAttribution' in updates) {
+        payload.agentAttribution = updates.agentAttribution ?? null;
+      }
+      if ('usedAfc' in updates) {
+        payload.usedAfc = updates.usedAfc ?? false;
+      }
 
       const response = await fetch('/api/payments', {
         method: 'PATCH',
@@ -207,6 +220,26 @@ export function DealsTable() {
     } finally {
       setUpdatingId(null);
     }
+  };
+
+  const handleAgentOutcomeChange = async (deal: DealRow, nextValue: AgentSelectValue) => {
+    if ((deal.agentAttribution ?? '') === nextValue) {
+      return;
+    }
+
+    await updateDeal(
+      deal,
+      { agentAttribution: nextValue || null },
+      'Agent outcome updated'
+    );
+  };
+
+  const handleAfcUsageChange = async (deal: DealRow, checked: boolean) => {
+    if (Boolean(deal.usedAfc) === checked) {
+      return;
+    }
+
+    await updateDeal(deal, { usedAfc: checked }, 'AFC usage updated');
   };
 
   const handleStatusChange = async (deal: DealRow, nextStatus: DealStatus) => {
@@ -403,10 +436,12 @@ export function DealsTable() {
           <tr>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent Outcome</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Address</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral Fee</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Amount Received</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Paid</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Used AFC</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -428,6 +463,26 @@ export function DealsTable() {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{renderStatusControl(deal)}</td>
+                <td className="px-4 py-3 text-sm text-slate-700">
+                  <select
+                    value={deal.agentAttribution ?? ''}
+                    onChange={(event) =>
+                      handleAgentOutcomeChange(deal, event.target.value as AgentSelectValue)
+                    }
+                    className="w-full rounded border border-slate-200 px-2 py-1 text-sm text-slate-700"
+                    disabled={updatingId === deal._id}
+                  >
+                    <option value="">Not set</option>
+                    <option value="AHA">Used AHA</option>
+                    <option value="AHA_OOS">Used AHA OOS</option>
+                  </select>
+                  {deal.referral?.ahaBucket && deal.agentAttribution &&
+                    deal.agentAttribution !== deal.referral.ahaBucket && (
+                      <p className="mt-1 text-xs text-amber-600">
+                        Does not match assigned {deal.referral.ahaBucket === 'AHA' ? 'AHA' : 'AHA OOS'} bucket
+                      </p>
+                    )}
+                </td>
                 <td className="px-4 py-3 text-sm text-slate-700">
                   {deal.referral?.propertyAddress || deal.referral?.propertyZip || '—'}
                 </td>
@@ -478,6 +533,22 @@ export function DealsTable() {
                         disabled={updatingId === deal._id}
                       />
                       <span className="text-sm text-slate-700">{deal.status === 'paid' ? 'Yes' : 'No'}</span>
+                    </label>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-sm text-slate-700">
+                  {isTerminated ? (
+                    '—'
+                  ) : (
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                        checked={Boolean(deal.usedAfc)}
+                        onChange={(event) => handleAfcUsageChange(deal, event.target.checked)}
+                        disabled={updatingId === deal._id}
+                      />
+                      <span className="text-sm text-slate-700">{Boolean(deal.usedAfc) ? 'Yes' : 'No'}</span>
                     </label>
                   )}
                 </td>
