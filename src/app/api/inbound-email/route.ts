@@ -8,7 +8,7 @@ import { sendTransactionalEmail } from '@/lib/email';
 
 interface NormalizedAttachment {
   filename: string;
-  content?: string;
+  content: string;
   contentType?: string;
 }
 
@@ -155,35 +155,41 @@ function normalizeResendPayload(payload: unknown): NormalizedEmail | null {
     (typeof email.textBody === 'string' && email.textBody) ||
     (typeof email.html === 'string' ? stripHtmlTags(email.html) : '');
 
+  const attachments: NormalizedAttachment[] = [];
   const attachmentsRaw = Array.isArray(email.attachments) ? email.attachments : [];
-  const attachments: NormalizedAttachment[] = attachmentsRaw
-    .map((attachment) => {
-      if (!attachment || typeof attachment !== 'object') {
-        return null;
-      }
-      const candidate = attachment as Record<string, unknown>;
-      const filename =
-        (typeof candidate.filename === 'string' && candidate.filename) ||
-        (typeof candidate.name === 'string' && candidate.name);
-      if (!filename) {
-        return null;
-      }
-      const content =
-        (typeof candidate.content === 'string' && candidate.content) ||
-        (typeof candidate.data === 'string' && candidate.data) ||
-        (typeof candidate.base64 === 'string' && candidate.base64) ||
-        (typeof candidate.content_base64 === 'string' && candidate.content_base64);
-      const contentType =
-        (typeof candidate.contentType === 'string' && candidate.contentType) ||
-        (typeof candidate.type === 'string' && candidate.type) ||
-        undefined;
-      return {
-        filename,
-        content,
-        contentType
-      };
-    })
-    .filter((value): value is NormalizedAttachment => Boolean(value));
+  for (const attachment of attachmentsRaw) {
+    if (!attachment || typeof attachment !== 'object') {
+      continue;
+    }
+
+    const candidate = attachment as Record<string, unknown>;
+    const filename =
+      (typeof candidate.filename === 'string' && candidate.filename) ||
+      (typeof candidate.name === 'string' && candidate.name);
+    if (!filename) {
+      continue;
+    }
+
+    const content =
+      (typeof candidate.content === 'string' && candidate.content) ||
+      (typeof candidate.data === 'string' && candidate.data) ||
+      (typeof candidate.base64 === 'string' && candidate.base64) ||
+      (typeof candidate.content_base64 === 'string' && candidate.content_base64);
+    if (!content) {
+      continue;
+    }
+
+    const contentType =
+      (typeof candidate.contentType === 'string' && candidate.contentType) ||
+      (typeof candidate.type === 'string' && candidate.type) ||
+      undefined;
+
+    attachments.push({
+      filename,
+      content,
+      contentType
+    });
+  }
 
   const receivedAtRaw =
     (typeof (payload as Record<string, unknown>).created_at === 'string' && (payload as Record<string, unknown>).created_at) ||
