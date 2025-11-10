@@ -55,13 +55,19 @@ const referralSchema = new Schema(
   {
     createdAt: { type: Date, default: Date.now, index: true },
     source: { type: String, enum: ['Lender', 'MC'], required: true },
+    endorser: { type: String, default: '' },
+    clientType: { type: String, enum: ['Seller', 'Buyer'], required: true },
     borrower: {
       name: { type: String, required: true },
       email: { type: String, index: true, required: true },
       phone: { type: String, required: true }
     },
-    propertyZip: { type: String, required: true, index: true },
+    lookingInZip: { type: String, required: true, index: true },
+    borrowerCurrentAddress: { type: String, default: '' },
     propertyAddress: { type: String, default: '' },
+    stageOnTransfer: { type: String, default: '' },
+    initialNotes: { type: String, default: '' },
+    loanFileNumber: { type: String, required: true, unique: true },
     assignedAgent: { type: Schema.Types.ObjectId, ref: 'Agent', index: true },
     status: {
       type: String,
@@ -102,6 +108,7 @@ const referralSchema = new Schema(
 );
 
 referralSchema.index({ 'borrower.email': 1, createdAt: 1 }, { unique: true });
+referralSchema.index({ loanFileNumber: 1 }, { unique: true });
 
 export interface ReferralDocument {
   _id: Types.ObjectId;
@@ -112,8 +119,14 @@ export interface ReferralDocument {
     email: string;
     phone: string;
   };
-  propertyZip: string;
+  endorser?: string;
+  clientType: 'Seller' | 'Buyer';
+  lookingInZip: string;
+  borrowerCurrentAddress?: string;
   propertyAddress?: string;
+  stageOnTransfer?: string;
+  initialNotes?: string;
+  loanFileNumber: string;
   assignedAgent?: Types.ObjectId;
   status: ReferralStatus;
   statusLastUpdated?: Date;

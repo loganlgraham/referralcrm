@@ -43,8 +43,14 @@ interface ReferralListItem {
   borrowerName: string;
   borrowerEmail: string;
   borrowerPhone: string;
-  propertyZip: string;
+  endorser?: string;
+  clientType: 'Seller' | 'Buyer';
+  lookingInZip: string;
+  borrowerCurrentAddress?: string;
   propertyAddress?: string;
+  stageOnTransfer?: string;
+  initialNotes?: string;
+  loanFileNumber: string;
   status: string;
   assignedAgentName?: string;
   assignedAgentEmail?: string;
@@ -65,8 +71,8 @@ export async function getReferrals(params: GetReferralsParams) {
   const query: Record<string, unknown> = { deletedAt: null };
 
   if (status) query.status = status;
-  if (zip) query.propertyZip = zip;
-  if (state) query.propertyZip = new RegExp(`^${state}`, 'i');
+  if (zip) query.lookingInZip = zip;
+  if (state) query.lookingInZip = new RegExp(`^${state}`, 'i');
 
   if (session?.user?.role === 'mc') {
     const lender = await LenderMC.findOne({ userId: session.user.id }).select('_id');
@@ -162,8 +168,14 @@ export async function getReferrals(params: GetReferralsParams) {
       borrowerName: item.borrower.name,
       borrowerEmail: item.borrower.email,
       borrowerPhone: item.borrower.phone,
-      propertyZip: item.propertyZip,
+      endorser: item.endorser,
+      clientType: item.clientType,
+      lookingInZip: item.lookingInZip,
+      borrowerCurrentAddress: item.borrowerCurrentAddress,
       propertyAddress: item.propertyAddress,
+      stageOnTransfer: item.stageOnTransfer,
+      initialNotes: item.initialNotes,
+      loanFileNumber: item.loanFileNumber,
       status: item.status,
       assignedAgentName: item.assignedAgent?.name,
       assignedAgentEmail: item.assignedAgent?.email,
