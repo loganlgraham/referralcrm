@@ -22,12 +22,28 @@ interface NormalizedEmail {
   receivedAt?: Date;
 }
 
-const CHANNEL_MAP: Record<string, 'AHA' | 'AHA_OOS'> = {
-  aha: 'AHA',
-  ahaoos: 'AHA_OOS'
+interface ResendAttachmentMetadata {
+  id?: string;
+  attachment_id?: string;
+  filename?: string;
+  name?: string;
+  content?: string;
+  contentType?: string;
+  type?: string;
+  mime_type?: string;
+}
+
+type ResendEmailResponse = Record<string, unknown> & {
+  attachments?: ResendAttachmentMetadata[];
+};
+
+const CHANNEL_MAP: Record<string, { channel: 'AHA' | 'AHA_OOS'; routeHint: string }> = {
+  aha: { channel: 'AHA', routeHint: 'aha' },
+  ahaoos: { channel: 'AHA_OOS', routeHint: 'ahaoos' }
 };
 
 const CONFIRMATION_RECIPIENT = 'logan.graham@americanfinancing.net';
+const RESEND_API_BASE_URL = 'https://api.resend.com';
 
 function parseSignatureHeader(header: string): { signature: string; timestamp?: string } | null {
   if (!header) {
@@ -113,6 +129,185 @@ function pickEmailAddress(value: unknown): string | undefined {
     }
   }
   return undefined;
+}
+
+function extractEmailId(payload: Record<string, unknown>): string | null {
+  const data = (payload.data as Record<string, unknown>) ?? {};
+  const email = (data.email as Record<string, unknown>) ?? {};
+  const payloadEmail = (payload.email as Record<string, unknown>) ?? {};
+
+  const candidates: Array<string | null> = [
+    typeof data.email_id === 'string' ? data.email_id : null,
+    typeof data.emailId === 'string' ? data.emailId : null,
+    typeof email.id === 'string' ? email.id : null,
+    typeof payload.email_id === 'string' ? payload.email_id : null,
+    typeof payloadEmail.id === 'string' ? payloadEmail.id : null
+  ];
+
+  const emailId = candidates.find((candidate): candidate is string => Boolean(candidate && candidate.trim()));
+  return emailId ? emailId.trim() : null;
+}
+
+async function fetchFromResend(
+  urls: string[],
+  apiKey: string,
+  responseType: 'json' | 'arrayBuffer'
+): Promise<unknown | ArrayBuffer | null> {
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          ...(responseType === 'json' ? { Accept: 'application/json' } : {})
+        },
+        cache: 'no-store'
+      });
+
+      if (!response.ok) {
+        if (response.status >= 500) {
+          throw new Error(`Resend API error (${response.status}) at ${url}`);
+        }
+        if (response.status === 404) {
+          continue;
+        }
+        console.warn('Resend API request failed', { url, status: response.status });
+        continue;
+      }
+
+      if (responseType === 'json') {
+        return (await response.json()) as unknown;
+      }
+
+      return await response.arrayBuffer();
+    } catch (error) {
+      console.error('Failed to fetch from Resend API', { url, error });
+      continue;
+    }
+  }
+  return null;
+}
+
+async function fetchResendReceivedEmail(emailId: string, apiKey: string): Promise<ResendEmailResponse | null> {
+  const json = await fetchFromResend(
+    [
+      `${RESEND_API_BASE_URL}/inbound-emails/${emailId}`,
+      `${RESEND_API_BASE_URL}/emails/${emailId}`
+    ],
+    apiKey,
+    'json'
+  );
+
+  if (!json || typeof json !== 'object') {
+    return null;
+  }
+
+  return json as ResendEmailResponse;
+}
+
+async function fetchResendAttachment(
+  emailId: string,
+  attachmentId: string,
+  apiKey: string
+): Promise<string | null> {
+  const result = await fetchFromResend(
+    [
+      `${RESEND_API_BASE_URL}/inbound-emails/${emailId}/attachments/${attachmentId}`,
+      `${RESEND_API_BASE_URL}/emails/${emailId}/attachments/${attachmentId}`,
+      `${RESEND_API_BASE_URL}/attachments/${attachmentId}`
+    ],
+    apiKey,
+    'arrayBuffer'
+  );
+
+  if (!(result instanceof ArrayBuffer)) {
+    return null;
+  }
+
+  const buffer = Buffer.from(result);
+  return buffer.toString('base64');
+}
+
+async function hydrateEmailFromResend(
+  payload: Record<string, unknown>,
+  apiKey: string
+): Promise<NormalizedEmail | null> {
+  const emailId = extractEmailId(payload);
+  if (!emailId) {
+    return null;
+  }
+
+  const email = await fetchResendReceivedEmail(emailId, apiKey);
+  if (!email) {
+    return null;
+  }
+
+  const attachmentsRaw = Array.isArray(email.attachments) ? email.attachments : [];
+  const normalizedAttachments: NormalizedAttachment[] = [];
+
+  for (const attachment of attachmentsRaw) {
+    if (!attachment || typeof attachment !== 'object') {
+      continue;
+    }
+
+    const meta = attachment as ResendAttachmentMetadata;
+    const filename =
+      (typeof meta.filename === 'string' && meta.filename) ||
+      (typeof meta.name === 'string' && meta.name) ||
+      undefined;
+
+    if (!filename) {
+      continue;
+    }
+
+    const attachmentId =
+      (typeof meta.id === 'string' && meta.id) ||
+      (typeof meta.attachment_id === 'string' && meta.attachment_id) ||
+      undefined;
+
+    let content = typeof meta.content === 'string' ? meta.content : undefined;
+
+    if (!content && attachmentId) {
+      content = await fetchResendAttachment(emailId, attachmentId, apiKey) ?? undefined;
+    }
+
+    if (!content) {
+      continue;
+    }
+
+    const contentType =
+      (typeof meta.contentType === 'string' && meta.contentType) ||
+      (typeof meta.type === 'string' && meta.type) ||
+      (typeof meta.mime_type === 'string' && meta.mime_type) ||
+      undefined;
+
+    normalizedAttachments.push({
+      filename,
+      content,
+      contentType
+    });
+  }
+
+  const payloadData = (payload.data as Record<string, unknown>) ?? {};
+  const createdAtCandidate =
+    (typeof payloadData.created_at === 'string' && payloadData.created_at) ||
+    (typeof payload.created_at === 'string' && payload.created_at) ||
+    (typeof payloadData.createdAt === 'string' && payloadData.createdAt) ||
+    (typeof payload.createdAt === 'string' && payload.createdAt) ||
+    undefined;
+
+  const normalized = normalizeResendPayload({
+    ...payload,
+    created_at: createdAtCandidate,
+    data: {
+      ...payloadData,
+      email: {
+        ...email,
+        attachments: normalizedAttachments
+      }
+    }
+  });
+
+  return normalized;
 }
 
 function normalizeResendPayload(payload: unknown): NormalizedEmail | null {
@@ -263,6 +458,10 @@ function sanitizeFileName(name: string): string {
     .toLowerCase();
 }
 
+function normalizeRouteHint(raw: string): string {
+  return raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 function extractRouteHint(to: string[]): { channel: 'AHA' | 'AHA_OOS'; routeHint: string } | null {
   for (const recipient of to) {
     const emailAddressMatch = recipient.match(/<([^>]+)>/);
@@ -270,18 +469,36 @@ function extractRouteHint(to: string[]): { channel: 'AHA' | 'AHA_OOS'; routeHint
     if (!emailAddress || !emailAddress.includes('@')) {
       continue;
     }
-    const [localPart] = emailAddress.split('@');
-    if (!localPart) {
+
+    const [localPartRaw] = emailAddress.split('@');
+    if (!localPartRaw) {
       continue;
     }
+
+    const localPart = localPartRaw.toLowerCase();
     const plusIndex = localPart.indexOf('+');
-    if (plusIndex === -1 || plusIndex === localPart.length - 1) {
-      continue;
+    const candidates = new Set<string>();
+
+    if (plusIndex !== -1 && plusIndex < localPart.length - 1) {
+      candidates.add(localPart.slice(plusIndex + 1));
     }
-    const hint = localPart.slice(plusIndex + 1).toLowerCase();
-    const channel = CHANNEL_MAP[hint];
-    if (channel) {
-      return { channel, routeHint: hint };
+
+    candidates.add(localPart);
+    localPart.split(/[._-]+/).forEach((segment) => {
+      if (segment) {
+        candidates.add(segment);
+      }
+    });
+
+    for (const candidate of candidates) {
+      const normalized = normalizeRouteHint(candidate);
+      if (!normalized) {
+        continue;
+      }
+      const channelInfo = CHANNEL_MAP[normalized];
+      if (channelInfo) {
+        return channelInfo;
+      }
     }
   }
   return null;
@@ -312,6 +529,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Inbound email signing secret is not configured.' }, { status: 500 });
   }
 
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: 'Resend API key is not configured.' }, { status: 500 });
+  }
+
   const signatureHeader = request.headers.get('resend-signature');
   if (!signatureHeader) {
     return new NextResponse('Unauthorized', { status: 401 });
@@ -330,7 +552,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Unable to parse inbound email payload.' }, { status: 400 });
   }
 
-  const email = normalizeResendPayload(payload);
+  if (!payload || typeof payload !== 'object') {
+    return NextResponse.json({ error: 'Inbound email payload is malformed.' }, { status: 400 });
+  }
+
+  const payloadRecord = payload as Record<string, unknown>;
+  const eventType = typeof payloadRecord.type === 'string' ? payloadRecord.type : '';
+  if (eventType !== 'email.received') {
+    return NextResponse.json({ status: 'ignored', reason: 'event_type_unhandled' }, { status: 202 });
+  }
+
+  const email = await hydrateEmailFromResend(payloadRecord, apiKey);
   if (!email) {
     return NextResponse.json({ error: 'Inbound email payload is missing required fields.' }, { status: 400 });
   }
