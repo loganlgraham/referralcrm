@@ -45,7 +45,13 @@ const CHANNEL_MAP: Record<string, { channel: 'AHA' | 'AHA_OOS'; routeHint: strin
 const CONFIRMATION_RECIPIENT = 'logan.graham@americanfinancing.net';
 const RESEND_API_BASE_URL = 'https://api.resend.com';
 
-  return value.replace(/^"|"$/g, '').trim();
+function sanitizeSignatureComponent(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const sanitized = value.replace(/^"|"$/g, '').trim();
+  return sanitized ? sanitized : undefined;
 }
 
 function parseSignatureHeader(header: string, fallbackTimestamp?: string): {
@@ -580,9 +586,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
+  const timestampHeader =
+    request.headers.get('resend-timestamp') ?? request.headers.get('x-resend-timestamp') ?? undefined;
   const rawBody = await request.text();
 
-  if (!verifyResendSignature(rawBody, signatureInfo.signature, secret, signatureInfo.timestamp)) {
+  if (!verifyResendSignature(rawBody, signatureHeader, secret, timestampHeader)) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
