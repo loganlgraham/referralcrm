@@ -79,7 +79,7 @@ const referralSchema = new Schema(
     propertyAddress: { type: String, default: '' },
     stageOnTransfer: { type: String, default: '' },
     initialNotes: { type: String, default: '' },
-    loanFileNumber: { type: String, required: true, unique: true },
+    loanFileNumber: { type: String, required: true },
     assignedAgent: { type: Schema.Types.ObjectId, ref: 'Agent', index: true },
     status: {
       type: String,
