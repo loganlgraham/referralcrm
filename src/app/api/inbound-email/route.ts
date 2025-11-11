@@ -45,7 +45,13 @@ const CHANNEL_MAP: Record<string, { channel: 'AHA' | 'AHA_OOS'; routeHint: strin
 const CONFIRMATION_RECIPIENT = 'logan.graham@americanfinancing.net';
 const RESEND_API_BASE_URL = 'https://api.resend.com';
 
-function parseSignatureHeader(header: string): { signature: string; timestamp?: string } | null {
+  return value.replace(/^"|"$/g, '').trim();
+}
+
+function parseSignatureHeader(header: string, fallbackTimestamp?: string): {
+  signature: string;
+  timestamp?: string;
+} | null {
   if (!header) {
     return null;
   }
@@ -56,14 +62,25 @@ function parseSignatureHeader(header: string): { signature: string; timestamp?: 
       .map((pair) => pair.trim())
       .filter(Boolean)
       .map((pair) => pair.split('='));
-    const map = Object.fromEntries(parts.map(([key, value]) => [key, value]));
-    if (!map.v1) {
+    const map = Object.fromEntries(parts.map(([key, value]) => [key, sanitizeSignatureComponent(value)]));
+    const signature = sanitizeSignatureComponent(map.v1);
+    const timestamp =
+      sanitizeSignatureComponent(map.t) ?? sanitizeSignatureComponent(fallbackTimestamp);
+    if (!signature) {
       return null;
     }
-    return { signature: map.v1, timestamp: map.t };
+    return { signature, timestamp };
   }
 
-  return { signature: header.trim() };
+  const signatureOnly = sanitizeSignatureComponent(header);
+  if (!signatureOnly) {
+    return null;
+  }
+
+  return {
+    signature: signatureOnly,
+    timestamp: sanitizeSignatureComponent(fallbackTimestamp)
+  };
 }
 
 function decodeSignature(signature: string): Buffer | null {
@@ -86,8 +103,13 @@ function decodeSignature(signature: string): Buffer | null {
   }
 }
 
-function verifyResendSignature(rawBody: string, header: string, secret: string): boolean {
-  const parsed = parseSignatureHeader(header);
+function verifyResendSignature(
+  rawBody: string,
+  header: string,
+  secret: string,
+  fallbackTimestamp?: string
+): boolean {
+  const parsed = parseSignatureHeader(header, fallbackTimestamp);
   if (!parsed) {
     return false;
   }
@@ -560,7 +582,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const rawBody = await request.text();
 
-  if (!verifyResendSignature(rawBody, signatureHeader, secret)) {
+  if (!verifyResendSignature(rawBody, signatureInfo.signature, secret, signatureInfo.timestamp)) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
