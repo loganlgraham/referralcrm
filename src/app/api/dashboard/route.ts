@@ -17,6 +17,7 @@ import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
+import { PreApprovalMetric } from '@/models/pre-approval-metric';
 
 type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd';
 
@@ -238,6 +239,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (missingProfile) {
     return NextResponse.json({
       timeframe,
+      permissions: {
+        canViewGlobal: role === 'admin',
+        role: role ?? null
+      },
       main: {
         summary: {
           totalReferrals: 0,
@@ -266,7 +271,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         revenueBySource: [],
         revenueByEndorser: [],
         revenueByState: [],
-        monthlyReferrals: []
+        monthlyReferrals: [],
+        preApprovalConversion: {
+          trend: [],
+          entries: []
+        }
       },
       mc: {
         requestTrend: [],
@@ -550,12 +559,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
   });
 
+  const preApprovalMetrics = await PreApprovalMetric.find({
+    month: { $gte: referralsMonthlyStart }
+  })
+    .sort({ month: 1 })
+    .lean();
+
+  const preApprovalMap = new Map<string, { preApprovals: number; updatedAt: Date }>();
+  preApprovalMetrics.forEach((metric) => {
+    const key = `${metric.month.getFullYear()}-${String(metric.month.getMonth() + 1).padStart(2, '0')}`;
+    preApprovalMap.set(key, { preApprovals: metric.preApprovals, updatedAt: metric.updatedAt });
+  });
+
   const monthlyReferrals = monthBuckets.map((bucket) => {
     const referralStats = referralMonthlyMap.get(bucket.key) ?? { total: 0, transfers: 0 };
     const dealStats = dealMonthlyMap.get(bucket.key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
+    const preApprovalStats = preApprovalMap.get(bucket.key) ?? { preApprovals: 0, updatedAt: undefined };
     const monthlyCloseRate = referralStats.total === 0
       ? 0
       : (dealStats.dealsClosed / Math.max(referralStats.total, 1)) * 100;
+    const conversionRate =
+      preApprovalStats.preApprovals > 0
+        ? Number(((referralStats.total / preApprovalStats.preApprovals) * 100).toFixed(1))
+        : 0;
 
     return {
       monthKey: bucket.key,
@@ -564,7 +590,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       mcTransfers: referralStats.transfers,
       dealsClosed: dealStats.dealsClosed,
       revenueReceivedCents: dealStats.revenueReceivedCents,
-      closeRate: Number(monthlyCloseRate.toFixed(1))
+      closeRate: Number(monthlyCloseRate.toFixed(1)),
+      preApprovals: preApprovalStats.preApprovals,
+      conversionRate,
+      preApprovalsUpdatedAt: preApprovalStats.updatedAt
     };
   });
 
@@ -759,8 +788,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const adminAverageLeadToContract = daysToContractAvg;
   const adminAverageContractToClose = daysToCloseAvg;
 
+  const preApprovalConversionTrend = monthlyReferrals
+    .filter((entry) => entry.preApprovals > 0)
+    .map((entry) => ({
+      key: entry.monthKey,
+      label: entry.label,
+      value: entry.conversionRate
+    }));
+
+  const preApprovalEntries = monthlyReferrals
+    .filter((entry) => entry.preApprovals > 0)
+    .map((entry) => ({
+      monthKey: entry.monthKey,
+      label: entry.label,
+      totalReferrals: entry.totalReferrals,
+      preApprovals: entry.preApprovals,
+      conversionRate: entry.conversionRate,
+      updatedAt: entry.preApprovalsUpdatedAt
+    }));
+
   const responsePayload = {
     timeframe,
+    permissions: {
+      canViewGlobal: role === 'admin',
+      role: role ?? null
+    },
     main: {
       summary: {
         totalReferrals,
@@ -792,8 +844,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       monthlyReferrals: monthlyReferrals.map((entry) => ({
         monthKey: entry.monthKey,
         label: entry.label,
-        totalReferrals: entry.totalReferrals
-      }))
+        totalReferrals: entry.totalReferrals,
+        preApprovals: entry.preApprovals,
+        conversionRate: entry.conversionRate,
+        updatedAt: entry.preApprovalsUpdatedAt
+      })),
+      preApprovalConversion: {
+        trend: preApprovalConversionTrend,
+        entries: preApprovalEntries
+      }
     },
     mc: {
       requestTrend: mcRequestTrend,

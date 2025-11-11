@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatNumber } from '@/utils/formatters';
@@ -48,6 +49,10 @@ interface DashboardResponse {
     key: TimeframeKey;
     label: string;
   };
+  permissions: {
+    canViewGlobal: boolean;
+    role: string | null;
+  };
   main: {
     summary: DashboardSummary;
     trends: {
@@ -59,7 +64,25 @@ interface DashboardResponse {
     revenueBySource: { label: string; value: number }[];
     revenueByEndorser: { label: string; value: number }[];
     revenueByState: { label: string; value: number }[];
-    monthlyReferrals: { monthKey: string; label: string; totalReferrals: number }[];
+    monthlyReferrals: {
+      monthKey: string;
+      label: string;
+      totalReferrals: number;
+      preApprovals: number;
+      conversionRate: number;
+      updatedAt?: string;
+    }[];
+    preApprovalConversion: {
+      trend: TrendPoint[];
+      entries: {
+        monthKey: string;
+        label: string;
+        totalReferrals: number;
+        preApprovals: number;
+        conversionRate: number;
+        updatedAt?: string;
+      }[];
+    };
   };
   mc: {
     requestTrend: TrendPoint[];
@@ -295,80 +318,188 @@ function LeaderboardTable({ title, entries, valueLabel }: { title: string; entri
   );
 }
 
-function PreApprovalConversionTable({
-  rows,
-  timeframeKey
+function PreApprovalConversionSection({
+  monthlyReferrals,
+  conversion,
+  canEdit,
+  onSaved
 }: {
-  rows: { monthKey: string; label: string; totalReferrals: number }[];
-  timeframeKey: TimeframeKey;
+  monthlyReferrals: DashboardResponse['main']['monthlyReferrals'];
+  conversion: DashboardResponse['main']['preApprovalConversion'];
+  canEdit: boolean;
+  onSaved: () => void;
 }) {
-  const [inputs, setInputs] = useState<Record<string, string>>({});
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [inputValue, setInputValue] = useState<string>('');
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const match = monthlyReferrals.find((entry) => entry.monthKey === selectedMonth);
+    if (match) {
+      setInputValue(match.preApprovals > 0 ? String(match.preApprovals) : '');
+    } else {
+      setInputValue('');
+    }
+  }, [monthlyReferrals, selectedMonth]);
+
+  useEffect(() => {
+    if (!selectedMonth && monthlyReferrals.length) {
+      const lastEntry = monthlyReferrals[monthlyReferrals.length - 1];
+      setSelectedMonth(lastEntry?.monthKey ?? '');
+    }
+  }, [monthlyReferrals, selectedMonth]);
+
+  const selectedEntry = monthlyReferrals.find((entry) => entry.monthKey === selectedMonth);
+  const referralsForMonth = selectedEntry?.totalReferrals ?? 0;
+  const existingPreApprovals = selectedEntry?.preApprovals ?? 0;
+  const currentConversion = selectedEntry && existingPreApprovals > 0
+    ? (referralsForMonth / existingPreApprovals) * 100
+    : 0;
+
+  const sortedEntries = useMemo(() => {
+    return [...conversion.entries].sort((a, b) => (a.monthKey < b.monthKey ? 1 : -1));
+  }, [conversion.entries]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!canEdit || !selectedMonth) return;
+
+    const numericValue = Number(inputValue);
+    if (Number.isNaN(numericValue) || numericValue < 0) {
+      setErrorMessage('Enter a non-negative number.');
+      setStatus('error');
+      return;
+    }
+
+    setStatus('saving');
+    setErrorMessage(null);
+
+    const response = await fetch('/api/dashboard/pre-approvals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ month: selectedMonth, preApprovals: numericValue })
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      setErrorMessage(payload.error ?? 'Unable to save pre-approvals.');
+      setStatus('error');
+      return;
+    }
+
+    setStatus('saved');
+    onSaved();
+  };
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Pre-approval conversion</p>
-          <p className="text-xs text-slate-500">Enter monthly pre-approvals to measure referrals to buyer conversion.</p>
+          <p className="text-xs text-slate-500">
+            Track how referral volume compares with the number of pre-approvals you issue each month.
+          </p>
         </div>
+        {canEdit ? (
+          <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col text-xs font-medium text-slate-600">
+              Month
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(event) => setSelectedMonth(event.target.value)}
+                className="mt-1 w-40 rounded border border-slate-200 px-2 py-1 text-sm"
+              />
+            </label>
+            <label className="flex flex-col text-xs font-medium text-slate-600">
+              Pre-approvals
+              <input
+                type="number"
+                min={0}
+                value={inputValue}
+                onChange={(event) => setInputValue(event.target.value)}
+                className="mt-1 w-32 rounded border border-slate-200 px-2 py-1 text-sm"
+              />
+            </label>
+            <button
+              type="submit"
+              className="rounded bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={status === 'saving'}
+            >
+              {status === 'saving' ? 'Saving…' : 'Save entry'}
+            </button>
+          </form>
+        ) : null}
       </div>
-      <div className="mt-4 overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-slate-500">
-              <th className="py-2 font-medium">Month</th>
-              <th className="py-2 font-medium">Referrals</th>
-              <th className="py-2 font-medium">Pre-approvals</th>
-              <th className="py-2 font-medium">Conversion</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length ? (
-              rows.map((row) => {
-                const key = `${timeframeKey}-${row.monthKey}`;
-                const value = inputs[key] ?? '';
-                const parsed = Number(value);
-                const preApprovals = Number.isFinite(parsed) ? parsed : 0;
-                const conversion = preApprovals > 0 ? (row.totalReferrals / preApprovals) * 100 : 0;
-                return (
-                  <tr key={row.monthKey} className="border-t border-slate-100">
-                    <td className="py-2 text-slate-700">{row.label}</td>
-                    <td className="py-2 text-slate-700">{formatNumber(row.totalReferrals)}</td>
-                    <td className="py-2">
-                      <input
-                        type="number"
-                        min={0}
-                        inputMode="numeric"
-                        value={value}
-                        onChange={(event) => {
-                          const nextValue = event.target.value;
-                          setInputs((current) => ({
-                            ...current,
-                            [key]: nextValue
-                          }));
-                        }}
-                        className="w-32 rounded border border-slate-200 px-2 py-1 text-sm"
-                      />
-                    </td>
-                    <td className="py-2 text-slate-700">{conversion > 0 ? `${conversion.toFixed(1)}%` : '—'}</td>
-                  </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td colSpan={4} className="py-6 text-center text-sm text-slate-500">
-                  No referral history to analyze.
-                </td>
+      {selectedEntry ? (
+        <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-600">
+          <p>
+            {selectedEntry.label}: {formatNumber(referralsForMonth)} referrals ·{' '}
+            {existingPreApprovals > 0 ? `${formatNumber(existingPreApprovals)} pre-approvals` : 'No pre-approvals recorded'} ·{' '}
+            {existingPreApprovals > 0 ? `${currentConversion.toFixed(1)}% conversion` : 'Conversion unavailable'}
+          </p>
+        </div>
+      ) : null}
+      {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
+      {status === 'saved' && !errorMessage ? (
+        <p className="text-sm text-emerald-600">Pre-approvals saved.</p>
+      ) : null}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <LineChartCard
+          title="Conversion trend"
+          data={conversion.trend}
+          formatValue={(value) => `${value.toFixed(1)}%`}
+          helper="Referrals ÷ pre-approvals across recorded months"
+        />
+        <div className="overflow-hidden rounded-lg border border-slate-200">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 text-xs text-slate-500">
+              <tr className="text-left">
+                <th className="px-3 py-2 font-medium">Month</th>
+                <th className="px-3 py-2 font-medium text-right">Referrals</th>
+                <th className="px-3 py-2 font-medium text-right">Pre-approvals</th>
+                <th className="px-3 py-2 font-medium text-right">Conversion</th>
+                <th className="px-3 py-2 font-medium">Updated</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sortedEntries.length ? (
+                sortedEntries.map((entry) => (
+                  <tr key={entry.monthKey} className="border-t border-slate-100 text-slate-700">
+                    <td className="px-3 py-2 font-medium text-slate-900">{entry.label}</td>
+                    <td className="px-3 py-2 text-right">{formatNumber(entry.totalReferrals)}</td>
+                    <td className="px-3 py-2 text-right">{formatNumber(entry.preApprovals)}</td>
+                    <td className="px-3 py-2 text-right">{entry.conversionRate.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-slate-500">
+                      {entry.updatedAt ? new Date(entry.updatedAt).toLocaleDateString() : '—'}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500">
+                    No pre-approval history captured yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 }
 
-function MainDashboard({ data, timeframeKey }: { data: DashboardResponse['main']; timeframeKey: TimeframeKey }) {
+function MainDashboard({
+  data,
+  canEditPreApprovals,
+  onPreApprovalSaved
+}: {
+  data: DashboardResponse['main'];
+  canEditPreApprovals: boolean;
+  onPreApprovalSaved: () => void;
+}) {
   const cards = useMemo(() => {
     const summary = data.summary;
     return [
@@ -408,11 +539,16 @@ function MainDashboard({ data, timeframeKey }: { data: DashboardResponse['main']
 
       <div className="grid gap-4 lg:grid-cols-3">
         <RevenueList title="Revenue by source" items={data.revenueBySource} />
-        <RevenueList title="Revenue by endorser" items={data.revenueByEndorser} />
-        <RevenueList title="Revenue by state" items={data.revenueByState} />
+      <RevenueList title="Revenue by endorser" items={data.revenueByEndorser} />
+      <RevenueList title="Revenue by state" items={data.revenueByState} />
       </div>
 
-      <PreApprovalConversionTable rows={data.monthlyReferrals} timeframeKey={timeframeKey} />
+      <PreApprovalConversionSection
+        monthlyReferrals={data.monthlyReferrals}
+        conversion={data.preApprovalConversion}
+        canEdit={canEditPreApprovals}
+        onSaved={onPreApprovalSaved}
+      />
     </div>
   );
 }
@@ -478,10 +614,39 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
 export function DashboardTabs() {
   const [activeTab, setActiveTab] = useState<(typeof TAB_OPTIONS)[number]['value']>('main');
   const [timeframe, setTimeframe] = useState<TimeframeKey>('month');
+  const { data: session } = useSession();
 
-  const { data, error, isLoading } = useSWR<DashboardResponse>(`/api/dashboard?timeframe=${timeframe}`, fetcher, {
+  const { data, error, isLoading, mutate } = useSWR<DashboardResponse>(`/api/dashboard?timeframe=${timeframe}`, fetcher, {
     refreshInterval: 60_000
   });
+
+  const role = session?.user?.role ?? data?.permissions?.role ?? null;
+  const canViewGlobal = data?.permissions?.canViewGlobal ?? role === 'admin';
+
+  const visibleTabs = useMemo(() => {
+    return TAB_OPTIONS.filter((tab) => {
+      if (tab.value === 'main' || tab.value === 'admin') {
+        return canViewGlobal;
+      }
+      if (tab.value === 'mc') {
+        return role === 'mc' || canViewGlobal;
+      }
+      if (tab.value === 'agent') {
+        return role === 'agent' || canViewGlobal;
+      }
+      return true;
+    });
+  }, [canViewGlobal, role]);
+
+  useEffect(() => {
+    if (visibleTabs.length && !visibleTabs.some((tab) => tab.value === activeTab)) {
+      setActiveTab(visibleTabs[0].value);
+    }
+  }, [visibleTabs, activeTab]);
+
+  const handlePreApprovalSaved = () => {
+    void mutate();
+  };
 
   if (error) {
     return (
@@ -520,7 +685,7 @@ export function DashboardTabs() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {TAB_OPTIONS.map((tab) => {
+        {visibleTabs.map((tab) => {
           const isActive = activeTab === tab.value;
           return (
             <button
@@ -549,7 +714,13 @@ export function DashboardTabs() {
 
       {data ? (
         <div>
-          {activeTab === 'main' ? <MainDashboard data={data.main} timeframeKey={timeframe} /> : null}
+          {activeTab === 'main' ? (
+            <MainDashboard
+              data={data.main}
+              canEditPreApprovals={canViewGlobal}
+              onPreApprovalSaved={handlePreApprovalSaved}
+            />
+          ) : null}
           {activeTab === 'mc' ? <McDashboard data={data.mc} /> : null}
           {activeTab === 'agent' ? <AgentDashboard data={data.agent} /> : null}
           {activeTab === 'admin' ? <AdminDashboard data={data.admin} /> : null}

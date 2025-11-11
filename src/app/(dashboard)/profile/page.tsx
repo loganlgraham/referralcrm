@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 
 import { ProfileForm } from '@/components/forms/profile-form';
+import { ProfileMetrics } from '@/components/dashboard/profile-metrics';
 
 export const metadata: Metadata = {
   title: 'My Profile | Referral CRM',
@@ -8,8 +9,11 @@ export const metadata: Metadata = {
 
 export default function ProfilePage() {
   return (
-    <div className="max-w-3xl">
-      <ProfileForm />
+    <div>
+      <div className="max-w-3xl">
+        <ProfileForm />
+      </div>
+      <ProfileMetrics />
     </div>
   );
 }
