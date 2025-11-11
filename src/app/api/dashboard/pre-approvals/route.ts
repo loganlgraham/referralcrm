@@ -16,7 +16,7 @@ export async function GET(): Promise<NextResponse> {
 
   const metrics = await PreApprovalMetric.find()
     .sort({ month: -1 })
-    .lean<PreApprovalMetricDocument>();
+    .lean<PreApprovalMetricDocument[]>();
 
   return NextResponse.json(
     metrics.map((metric) => ({
