@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { useSWRConfig } from 'swr';
 
 import { ReferralHeader } from '@/components/referrals/referral-header';
+import { DealBriefingPanel } from '@/components/referrals/deal-briefing';
 import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import { DealCard } from '@/components/referrals/deal-card';
@@ -619,6 +620,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         onAgentContactChange={setAgentContact}
         onMcContactChange={setMcContact}
       />
+      <DealBriefingPanel referralId={referralId} />
       <section className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
