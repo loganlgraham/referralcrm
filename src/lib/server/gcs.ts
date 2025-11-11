@@ -2,7 +2,7 @@ import crypto from 'crypto';
 
 interface UploadParams {
   key: string;
-  body: Buffer;
+  body: Uint8Array;
   contentType?: string;
   messageId?: string;
 }
@@ -155,14 +155,17 @@ export async function uploadEmailAttachment(params: UploadParams): Promise<strin
   )}/o?uploadType=media&name=${encodeURIComponent(objectName)}`;
 
   try {
+    const body =
+      params.body instanceof Uint8Array ? params.body : new Uint8Array(params.body);
+
     const response = await fetch(uploadUrl, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': params.contentType ?? 'application/octet-stream',
-        'Content-Length': params.body.length.toString()
+        'Content-Length': body.byteLength.toString()
       },
-      body: params.body
+      body
     });
 
     if (!response.ok) {
