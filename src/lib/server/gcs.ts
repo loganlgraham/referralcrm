@@ -34,7 +34,14 @@ function getPrivateKey(): string | null {
 }
 
 function base64UrlEncode(value: Buffer | string): string {
-  return Buffer.from(value)
+  const buffer =
+    typeof value === 'string'
+      ? Buffer.from(value)
+      : Buffer.isBuffer(value)
+        ? value
+        : Buffer.from(value);
+
+  return buffer
     .toString('base64')
     .replace(/=/g, '')
     .replace(/\+/g, '-')
