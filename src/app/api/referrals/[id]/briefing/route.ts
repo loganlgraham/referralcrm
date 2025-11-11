@@ -4,6 +4,8 @@ import { differenceInDays, format } from 'date-fns';
 import { getCurrentSession } from '@/lib/auth';
 import { connectMongo } from '@/lib/mongoose';
 import { canViewReferral } from '@/lib/rbac';
+import '@/models/agent';
+import '@/models/lender';
 import { Payment } from '@/models/payment';
 import { Referral, ReferralDocument } from '@/models/referral';
 
