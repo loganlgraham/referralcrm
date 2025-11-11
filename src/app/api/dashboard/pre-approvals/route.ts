@@ -4,6 +4,7 @@ import { isValid, parseISO, startOfMonth } from 'date-fns';
 import { connectMongo } from '@/lib/mongoose';
 import { getCurrentSession } from '@/lib/auth';
 import { PreApprovalMetric } from '@/models/pre-approval-metric';
+import type { PreApprovalMetricDocument } from '@/models/pre-approval-metric';
 
 export async function GET(): Promise<NextResponse> {
   await connectMongo();
@@ -13,7 +14,9 @@ export async function GET(): Promise<NextResponse> {
     return new NextResponse('Forbidden', { status: 403 });
   }
 
-  const metrics = await PreApprovalMetric.find().sort({ month: -1 }).lean();
+  const metrics = await PreApprovalMetric.find()
+    .sort({ month: -1 })
+    .lean<PreApprovalMetricDocument>();
 
   return NextResponse.json(
     metrics.map((metric) => ({
@@ -61,7 +64,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       updatedBy: session.user.id
     },
     { new: true, upsert: true, setDefaultsOnInsert: true }
-  ).lean();
+  ).lean<PreApprovalMetricDocument>();
+
+  if (!metric) {
+    return NextResponse.json({ error: 'Unable to save pre-approval metric' }, { status: 500 });
+  }
 
   return NextResponse.json({
     id: metric._id.toString(),
