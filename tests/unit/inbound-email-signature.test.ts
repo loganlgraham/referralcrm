@@ -1,4 +1,4 @@
-import { parseSignatureHeader } from '@/app/api/inbound-email/route';
+import { parseSignatureHeader } from '@/app/api/inbound-email/signature';
 
 describe('parseSignatureHeader', () => {
   it('preserves signature padding when parsing comma-separated entries', () => {
