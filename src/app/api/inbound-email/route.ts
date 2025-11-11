@@ -37,9 +37,9 @@ type ResendEmailResponse = Record<string, unknown> & {
   attachments?: ResendAttachmentMetadata[];
 };
 
-const CHANNEL_MAP: Record<string, 'AHA' | 'AHA_OOS'> = {
-  aha: 'AHA',
-  ahaoos: 'AHA_OOS'
+const CHANNEL_MAP: Record<string, { channel: 'AHA' | 'AHA_OOS'; routeHint: string }> = {
+  aha: { channel: 'AHA', routeHint: 'aha' },
+  ahaoos: { channel: 'AHA_OOS', routeHint: 'ahaoos' }
 };
 
 const CONFIRMATION_RECIPIENT = 'logan.graham@americanfinancing.net';
@@ -458,6 +458,10 @@ function sanitizeFileName(name: string): string {
     .toLowerCase();
 }
 
+function normalizeRouteHint(raw: string): string {
+  return raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 function extractRouteHint(to: string[]): { channel: 'AHA' | 'AHA_OOS'; routeHint: string } | null {
   for (const recipient of to) {
     const emailAddressMatch = recipient.match(/<([^>]+)>/);
@@ -465,18 +469,36 @@ function extractRouteHint(to: string[]): { channel: 'AHA' | 'AHA_OOS'; routeHint
     if (!emailAddress || !emailAddress.includes('@')) {
       continue;
     }
-    const [localPart] = emailAddress.split('@');
-    if (!localPart) {
+
+    const [localPartRaw] = emailAddress.split('@');
+    if (!localPartRaw) {
       continue;
     }
+
+    const localPart = localPartRaw.toLowerCase();
     const plusIndex = localPart.indexOf('+');
-    if (plusIndex === -1 || plusIndex === localPart.length - 1) {
-      continue;
+    const candidates = new Set<string>();
+
+    if (plusIndex !== -1 && plusIndex < localPart.length - 1) {
+      candidates.add(localPart.slice(plusIndex + 1));
     }
-    const hint = localPart.slice(plusIndex + 1).toLowerCase();
-    const channel = CHANNEL_MAP[hint];
-    if (channel) {
-      return { channel, routeHint: hint };
+
+    candidates.add(localPart);
+    localPart.split(/[._-]+/).forEach((segment) => {
+      if (segment) {
+        candidates.add(segment);
+      }
+    });
+
+    for (const candidate of candidates) {
+      const normalized = normalizeRouteHint(candidate);
+      if (!normalized) {
+        continue;
+      }
+      const channelInfo = CHANNEL_MAP[normalized];
+      if (channelInfo) {
+        return channelInfo;
+      }
     }
   }
   return null;
