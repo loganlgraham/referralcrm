@@ -8,6 +8,7 @@ import { useSWRConfig } from 'swr';
 
 import { ReferralHeader } from '@/components/referrals/referral-header';
 import { DealBriefingPanel } from '@/components/referrals/deal-briefing';
+import { AdminFollowUpTasksPanel } from '@/components/referrals/admin-follow-up-tasks';
 import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import { DealCard } from '@/components/referrals/deal-card';
@@ -607,6 +608,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
   const showDeals =
     financials.status === 'Under Contract' || contractDraft.hasUnsavedChanges || hasTerminatedDeal || hasAnyDeals;
+  const showAdminFollowUps = viewerRole === 'admin';
 
   return (
     <div className="space-y-8">
@@ -620,7 +622,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         onAgentContactChange={setAgentContact}
         onMcContactChange={setMcContact}
       />
-      <DealBriefingPanel referralId={referralId} />
+      {showAdminFollowUps ? (
+        <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <AdminFollowUpTasksPanel referralId={referralId} />
+          <DealBriefingPanel referralId={referralId} />
+        </div>
+      ) : (
+        <DealBriefingPanel referralId={referralId} />
+      )}
       <section className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
