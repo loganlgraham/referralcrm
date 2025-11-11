@@ -36,7 +36,7 @@ export async function GET(_request: NextRequest): Promise<NextResponse> {
 
   let referralMatch: Partial<Record<'lender' | 'assignedAgent', unknown>> | null = null;
 
-  let referralKey: 'lender' | 'assignedAgent';
+  let referralKey: 'lender' | 'assignedAgent' | null = null;
 
   if (role === 'mc') {
     const lender = await LenderMC.findOne({ userId }).select('_id');
