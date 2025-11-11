@@ -20,6 +20,8 @@ export default async function ReferralsPage({
   const session = await getCurrentSession();
   const role = (session?.user?.role as 'admin' | 'manager' | 'mc' | 'agent' | 'viewer' | undefined) ?? 'viewer';
   const tableMode: 'admin' | 'mc' | 'agent' = role === 'agent' ? 'agent' : role === 'mc' ? 'mc' : 'admin';
+  const ahaBucketParam = searchParams.ahaBucket?.toString();
+
   const data = await getReferrals({
     session,
     page: Number(searchParams.page || 1),
@@ -27,7 +29,8 @@ export default async function ReferralsPage({
     mc: searchParams.mc?.toString(),
     agent: searchParams.agent?.toString(),
     state: searchParams.state?.toString(),
-    zip: searchParams.zip?.toString()
+    zip: searchParams.zip?.toString(),
+    ahaBucket: ahaBucketParam === 'AHA' || ahaBucketParam === 'AHA_OOS' ? ahaBucketParam : null
   });
 
   const items = data.items as ReferralRow[];
