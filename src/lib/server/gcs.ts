@@ -157,10 +157,19 @@ export async function uploadEmailAttachment(params: UploadParams): Promise<strin
   try {
     const body =
       params.body instanceof Uint8Array ? params.body : new Uint8Array(params.body);
-    const payload = body.byteOffset === 0 && body.byteLength === body.buffer.byteLength
-      ? body
-      : new Uint8Array(body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength));
-    const blob = new Blob([payload]);
+    const payload =
+      body.byteOffset === 0 && body.byteLength === body.buffer.byteLength
+        ? body
+        : new Uint8Array(
+            body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength)
+          );
+    const arrayBuffer =
+      payload.byteOffset === 0 && payload.byteLength === payload.buffer.byteLength
+        ? (payload.buffer as ArrayBuffer)
+        : (payload.buffer.slice(
+            payload.byteOffset,
+            payload.byteOffset + payload.byteLength
+          ) as ArrayBuffer);
 
     const response = await fetch(uploadUrl, {
       method: 'POST',
@@ -169,7 +178,7 @@ export async function uploadEmailAttachment(params: UploadParams): Promise<strin
         'Content-Type': params.contentType ?? 'application/octet-stream',
         'Content-Length': body.byteLength.toString()
       },
-      body: blob
+      body: arrayBuffer
     });
 
     if (!response.ok) {
