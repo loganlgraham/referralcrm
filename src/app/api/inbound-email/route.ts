@@ -45,13 +45,6 @@ const CHANNEL_MAP: Record<string, { channel: 'AHA' | 'AHA_OOS'; routeHint: strin
 const CONFIRMATION_RECIPIENT = 'logan.graham@americanfinancing.net';
 const RESEND_API_BASE_URL = 'https://api.resend.com';
 
-function normalizeHeaderValue(value: string | undefined | null): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-  return value.replace(/^"|"$/g, '').trim();
-}
-
 function parseSignatureHeader(header: string, fallbackTimestamp?: string): {
   signature: string;
   timestamp?: string;
@@ -556,33 +549,15 @@ function resolveInboundSecret(): string | undefined {
   );
 }
 
-function resolveSignatureHeader(
-  request: NextRequest
-): { signature: string; timestamp?: string } | null {
-  const signatureHeaderNames = ['resend-signature', 'x-resend-signature'];
-  const timestampHeaderNames = ['resend-timestamp', 'x-resend-timestamp'];
-
-  let signature: string | null = null;
-  for (const name of signatureHeaderNames) {
+function resolveSignatureHeader(request: NextRequest): string | null {
+  const headerNames = ['resend-signature', 'x-resend-signature'];
+  for (const name of headerNames) {
     const value = request.headers.get(name);
     if (value) {
-      signature = value;
-      break;
+      return value;
     }
   }
-
-  if (!signature) {
-    return null;
-  }
-
-  for (const name of timestampHeaderNames) {
-    const value = request.headers.get(name);
-    if (value) {
-      return { signature, timestamp: value };
-    }
-  }
-
-  return { signature };
+  return null;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -596,8 +571,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Resend API key is not configured.' }, { status: 500 });
   }
 
-  const signatureInfo = resolveSignatureHeader(request);
-  if (!signatureInfo) {
+  const signatureHeader = resolveSignatureHeader(request);
+  if (!signatureHeader) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
