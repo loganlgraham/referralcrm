@@ -392,9 +392,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         if (buffer.length === 0) {
           return null;
         }
+        const body = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
         const url = await uploadEmailAttachment({
           key,
-          body: buffer,
+          body,
           contentType: attachment.contentType,
           messageId: email.messageId
         });
