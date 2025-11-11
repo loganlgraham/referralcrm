@@ -54,7 +54,22 @@ function sanitizeSignatureComponent(value: unknown): string | undefined {
   return sanitized ? sanitized : undefined;
 }
 
-function parseSignatureHeader(header: string, fallbackTimestamp?: string): {
+function splitSignaturePair(pair: string): [string, string] | null {
+  const delimiterIndex = pair.indexOf('=');
+  if (delimiterIndex === -1) {
+    return null;
+  }
+
+  const key = pair.slice(0, delimiterIndex);
+  const value = pair.slice(delimiterIndex + 1);
+  if (!key) {
+    return null;
+  }
+
+  return [key, value];
+}
+
+export function parseSignatureHeader(header: string, fallbackTimestamp?: string): {
   signature: string;
   timestamp?: string;
 } | null {
@@ -67,8 +82,13 @@ function parseSignatureHeader(header: string, fallbackTimestamp?: string): {
       .split(',')
       .map((pair) => pair.trim())
       .filter(Boolean)
-      .map((pair) => pair.split('='));
-    const map = Object.fromEntries(parts.map(([key, value]) => [key, sanitizeSignatureComponent(value)]));
+      .map((pair) => splitSignaturePair(pair))
+      .filter(
+        (entry): entry is [string, string] => Array.isArray(entry) && entry.length === 2
+      );
+    const map = Object.fromEntries(
+      parts.map(([key, value]) => [key, sanitizeSignatureComponent(value)])
+    );
     const signature = sanitizeSignatureComponent(map.v1);
     const timestamp =
       sanitizeSignatureComponent(map.t) ?? sanitizeSignatureComponent(fallbackTimestamp);
