@@ -523,8 +523,27 @@ function escapeHtml(value: string): string {
   });
 }
 
+function resolveInboundSecret(): string | undefined {
+  return (
+    process.env.RESEND_INBOUND_SECRET ||
+    process.env.RESEND_INBOUND_WEBHOOK_SECRET ||
+    process.env.RESEND_WEBHOOK_SECRET
+  );
+}
+
+function resolveSignatureHeader(request: NextRequest): string | null {
+  const headerNames = ['resend-signature', 'x-resend-signature'];
+  for (const name of headerNames) {
+    const value = request.headers.get(name);
+    if (value) {
+      return value;
+    }
+  }
+  return null;
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const secret = process.env.RESEND_INBOUND_SECRET;
+  const secret = resolveInboundSecret();
   if (!secret) {
     return NextResponse.json({ error: 'Inbound email signing secret is not configured.' }, { status: 500 });
   }
@@ -534,7 +553,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Resend API key is not configured.' }, { status: 500 });
   }
 
-  const signatureHeader = request.headers.get('resend-signature');
+  const signatureHeader = resolveSignatureHeader(request);
   if (!signatureHeader) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
