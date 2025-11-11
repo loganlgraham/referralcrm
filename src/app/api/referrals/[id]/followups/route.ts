@@ -238,7 +238,7 @@ export async function POST(_request: NextRequest, context: RouteContext): Promis
       summary: string;
       suggestedChannel: 'Phone' | 'Email' | 'Text' | 'Internal';
       urgency: 'Low' | 'Medium' | 'High';
-    });
+    } => task !== null);
 
   if (tasks.length === 0) {
     return NextResponse.json({
