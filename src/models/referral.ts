@@ -68,18 +68,35 @@ const referralSchema = new Schema(
     createdAt: { type: Date, default: Date.now, index: true },
     source: { type: String, enum: ['Lender', 'MC'], required: true },
     endorser: { type: String, default: '' },
-    clientType: { type: String, enum: ['Seller', 'Buyer'], required: true },
+    clientType: {
+      type: String,
+      enum: ['Seller', 'Buyer'],
+      required(this: { isNew: boolean }) {
+        return this.isNew;
+      }
+    },
     borrower: {
       name: { type: String, required: true },
       email: { type: String, index: true, required: true },
       phone: { type: String, required: true }
     },
-    lookingInZip: { type: String, required: true, index: true },
+    lookingInZip: {
+      type: String,
+      index: true,
+      required(this: { isNew: boolean }) {
+        return this.isNew;
+      }
+    },
     borrowerCurrentAddress: { type: String, default: '' },
     propertyAddress: { type: String, default: '' },
     stageOnTransfer: { type: String, default: '' },
     initialNotes: { type: String, default: '' },
-    loanFileNumber: { type: String, required: true, unique: true },
+    loanFileNumber: {
+      type: String,
+      required(this: { isNew: boolean }) {
+        return this.isNew;
+      }
+    },
     assignedAgent: { type: Schema.Types.ObjectId, ref: 'Agent', index: true },
     status: {
       type: String,

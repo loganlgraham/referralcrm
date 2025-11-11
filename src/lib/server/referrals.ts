@@ -16,6 +16,7 @@ interface GetReferralsParams {
   agent?: string | null;
   state?: string | null;
   zip?: string | null;
+  ahaBucket?: 'AHA' | 'AHA_OOS' | null;
 }
 
 interface PopulatedAgent {
@@ -65,7 +66,7 @@ interface ReferralListItem {
 const PAGE_SIZE = 20;
 
 export async function getReferrals(params: GetReferralsParams) {
-  const { session, page = 1, status, mc, agent, state, zip } = params;
+  const { session, page = 1, status, mc, agent, state, zip, ahaBucket } = params;
   await connectMongo();
 
   const query: Record<string, unknown> = { deletedAt: null };
@@ -73,6 +74,7 @@ export async function getReferrals(params: GetReferralsParams) {
   if (status) query.status = status;
   if (zip) query.lookingInZip = zip;
   if (state) query.lookingInZip = new RegExp(`^${state}`, 'i');
+  if (ahaBucket === 'AHA' || ahaBucket === 'AHA_OOS') query.ahaBucket = ahaBucket;
 
   if (session?.user?.role === 'mc') {
     const lender = await LenderMC.findOne({ userId: session.user.id }).select('_id');

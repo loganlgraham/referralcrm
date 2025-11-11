@@ -36,9 +36,10 @@ export function Filters() {
 
   const agentValue = searchParams.get('agent') ?? '';
   const lenderValue = searchParams.get('mc') ?? '';
+  const ahaBucketValue = searchParams.get('ahaBucket') ?? '';
 
   return (
-    <div className="grid gap-4 rounded-lg bg-white p-4 shadow-sm md:grid-cols-5">
+    <div className="grid gap-4 rounded-lg bg-white p-4 shadow-sm md:grid-cols-6">
       <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
         Status
         <select
@@ -53,6 +54,19 @@ export function Filters() {
               {status}
             </option>
           ))}
+        </select>
+      </label>
+      <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+        AHA Bucket
+        <select
+          value={ahaBucketValue}
+          onChange={(event) => handleChange('ahaBucket', event.target.value)}
+          className="mt-1 rounded border border-slate-200 px-2 py-1 text-sm"
+          disabled={isPending}
+        >
+          <option value="">All</option>
+          <option value="AHA">AHA</option>
+          <option value="AHA_OOS">AHA OOS</option>
         </select>
       </label>
       <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">

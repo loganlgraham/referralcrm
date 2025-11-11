@@ -103,7 +103,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         $group: {
           _id: null,
           totalReferrals: { $sum: 1 },
-          expectedRevenueCents: { $sum: '$referralFeeDueCents' },
+          expectedRevenueCents: {
+            $sum: {
+              $cond: [
+                { $in: ['$status', ['Under Contract', 'Closed', 'Paid']] },
+                '$referralFeeDueCents',
+                0
+              ]
+            }
+          },
           activePipeline: {
             $sum: {
               $cond: [
@@ -180,10 +188,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         {
           $match: {
             ...paymentMatch,
-            status: 'paid'
+            status: { $ne: 'terminated' },
+            $or: [
+              { status: 'paid' },
+              { receivedAmountCents: { $gt: 0 } }
+            ]
           }
         },
-        { $group: { _id: null, amount: { $sum: '$receivedAmountCents' } } }
+        {
+          $group: {
+            _id: null,
+            amount: {
+              $sum: {
+                $cond: [
+                  { $gt: ['$receivedAmountCents', 0] },
+                  '$receivedAmountCents',
+                  0
+                ]
+              }
+            }
+          }
+        }
       ]),
       Payment.aggregate([
         {
@@ -276,7 +301,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             dealsClosed: { $sum: 1 },
             revenueReceivedCents: {
               $sum: {
-                $cond: [{ $eq: ['$status', 'paid'] }, '$receivedAmountCents', 0]
+                $cond: [
+                  { $gt: ['$receivedAmountCents', 0] },
+                  '$receivedAmountCents',
+                  0
+                ]
               }
             }
           }
@@ -318,7 +347,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         {
           $match: {
             ...paymentMatch,
-            status: { $in: ['closed', 'paid'] }
+            status: { $in: ['under_contract', 'closed', 'paid'] }
           }
         },
         {
@@ -355,9 +384,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             afcLost: {
               $sum: {
                 $cond: [
-                  { $eq: ['$usedAfc', true] },
-                  0,
-                  1
+                  {
+                    $and: [
+                      { $eq: ['$referral.org', 'AFC'] },
+                      { $ne: ['$usedAfc', true] }
+                    ]
+                  },
+                  1,
+                  0
                 ]
               }
             }
@@ -416,7 +450,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             dealsClosed: { $sum: 1 },
             revenueReceivedCents: {
               $sum: {
-                $cond: [{ $eq: ['$status', 'paid'] }, '$receivedAmountCents', 0]
+                $cond: [
+                  { $gt: ['$receivedAmountCents', 0] },
+                  '$receivedAmountCents',
+                  0
+                ]
               }
             }
           }
