@@ -127,12 +127,18 @@ function normalizeResendPayload(payload: unknown): NormalizedEmail | null {
   }
 
   const email = emailCandidate as Record<string, unknown>;
-  const headers = (email.headers as Record<string, string>) ?? {};
-  const messageId =
-    (typeof email.id === 'string' && email.id) ||
-    (typeof email.messageId === 'string' && email.messageId) ||
-    (typeof (email as Record<string, unknown>)['message_id'] === 'string' && (email as Record<string, unknown>)['message_id']) ||
-    (typeof headers['message-id'] === 'string' && headers['message-id']);
+  const headers = (email.headers as Record<string, unknown>) ?? {};
+  const messageIdCandidates: Array<string | null> = [
+    typeof email.id === 'string' ? email.id.trim() : null,
+    typeof email.messageId === 'string' ? email.messageId.trim() : null,
+    typeof (email as Record<string, unknown>)['message_id'] === 'string'
+      ? ((email as Record<string, unknown>)['message_id'] as string).trim()
+      : null,
+    typeof headers['message-id'] === 'string' ? (headers['message-id'] as string).trim() : null,
+    typeof headers['Message-Id'] === 'string' ? (headers['Message-Id'] as string).trim() : null
+  ];
+
+  const messageId = messageIdCandidates.find((candidate): candidate is string => Boolean(candidate));
 
   if (!messageId) {
     return null;
