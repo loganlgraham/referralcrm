@@ -6,6 +6,7 @@ import { updateReferralSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { canManageReferral, canViewReferral } from '@/lib/rbac';
 import { logReferralActivity } from '@/lib/server/activities';
+import { resolveAuditActorId } from '@/lib/server/audit';
 
 interface RouteContext {
   params: { id: string };
@@ -89,20 +90,26 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
   });
 
   let referral;
+  const auditActorId = resolveAuditActorId(session.user.id);
   try {
+    const auditEntry: Record<string, unknown> = {
+      actorRole: session.user.role,
+      field: 'update',
+      previousValue: null,
+      newValue: parsed.data,
+      timestamp: new Date()
+    };
+
+    if (auditActorId) {
+      auditEntry.actorId = auditActorId;
+    }
+
     referral = await Referral.findByIdAndUpdate(
       context.params.id,
       {
         ...parsed.data,
         $push: {
-          audit: {
-            actorId: session.user.id,
-            actorRole: session.user.role,
-            field: 'update',
-            previousValue: null,
-            newValue: parsed.data,
-            timestamp: new Date()
-          }
+          audit: auditEntry
         }
       },
       { new: true }
@@ -125,7 +132,7 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     await logReferralActivity({
       referralId: existing._id,
       actorRole: session.user.role,
-      actorId: session.user.id,
+      actorId: auditActorId ?? session.user.id,
       channel: 'update',
       content: `Updated referral details (${updatedFieldsLabel})`,
     });

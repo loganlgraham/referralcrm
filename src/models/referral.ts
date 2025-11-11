@@ -51,6 +51,18 @@ const referralNoteSchema = new Schema(
   { _id: true }
 );
 
+const inboundEmailSchema = new Schema(
+  {
+    messageId: { type: String, required: true },
+    routeHint: { type: String },
+    channel: { type: String, enum: ['AHA', 'AHA_OOS'] },
+    receivedAt: { type: Date, default: Date.now },
+    from: { type: String },
+    subject: { type: String }
+  },
+  { _id: false }
+);
+
 const referralSchema = new Schema(
   {
     createdAt: { type: Date, default: Date.now, index: true },
@@ -85,6 +97,7 @@ const referralSchema = new Schema(
     referralFeeDueCents: { type: Number, default: 0 },
     notes: { type: [referralNoteSchema], default: [] },
     attachments: [attachmentSchema],
+    inboundEmail: inboundEmailSchema,
     audit: [auditSchema],
     lender: { type: Schema.Types.ObjectId, ref: 'LenderMC' },
     buyer: { type: Schema.Types.ObjectId, ref: 'Buyer' },
@@ -109,6 +122,13 @@ const referralSchema = new Schema(
 
 referralSchema.index({ 'borrower.email': 1, createdAt: 1 }, { unique: true });
 referralSchema.index({ loanFileNumber: 1 }, { unique: true });
+referralSchema.index(
+  { 'inboundEmail.messageId': 1 },
+  {
+    unique: true,
+    partialFilterExpression: { 'inboundEmail.messageId': { $exists: true, $ne: null } }
+  }
+);
 
 export interface ReferralDocument {
   _id: Types.ObjectId;
@@ -152,6 +172,14 @@ export interface ReferralDocument {
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   deletedAt?: Date;
   audit?: AuditEntry[];
+  inboundEmail?: {
+    messageId: string;
+    routeHint?: string;
+    channel?: 'AHA' | 'AHA_OOS' | null;
+    receivedAt?: Date;
+    from?: string;
+    subject?: string;
+  };
 }
 
 export const Referral = models.Referral || model<ReferralDocument>('Referral', referralSchema);

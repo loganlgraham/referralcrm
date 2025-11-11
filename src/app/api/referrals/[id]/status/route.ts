@@ -10,6 +10,7 @@ import { canManageReferral } from '@/lib/rbac';
 import { calculateReferralFeeDue } from '@/utils/referral';
 import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
 import { logReferralActivity } from '@/lib/server/activities';
+import { resolveAuditActorId } from '@/lib/server/audit';
 
 interface Params {
   params: { id: string };
@@ -41,14 +42,20 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   referral.status = parsed.data.status;
   referral.statusLastUpdated = new Date();
   referral.audit = referral.audit || [];
-  referral.audit.push({
-    actorId: session.user.id as any,
+  const auditEntry: Record<string, unknown> = {
     actorRole: session.user.role,
     field: 'status',
     previousValue: previousStatus,
     newValue: parsed.data.status,
     timestamp: new Date()
-  } as any);
+  };
+
+  const actorId = resolveAuditActorId(session.user.id);
+  if (actorId) {
+    auditEntry.actorId = actorId;
+  }
+
+  referral.audit.push(auditEntry as any);
 
   if (parsed.data.status === 'Under Contract') {
     const details = parsed.data.contractDetails;

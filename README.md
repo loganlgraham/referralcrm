@@ -53,6 +53,8 @@ Required keys:
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
 - `EMAIL_SERVER` – SMTP connection string (e.g. `smtp://user:pass@smtp.host:587`)
 - `EMAIL_FROM` – default From address
+- `RESEND_API_KEY` / `RESEND_INBOUND_SECRET` – Resend transactional email and inbound webhook signing
+- `GCP_STORAGE_CLIENT_EMAIL`, `GCP_STORAGE_PRIVATE_KEY`, `INBOUND_EMAIL_BUCKET` – Google Cloud Storage service account & bucket for inbound attachments
 - `TZ` – defaults to `America/Denver`
 
 ### Local development
