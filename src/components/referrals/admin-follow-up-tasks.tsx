@@ -1,16 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import clsx from 'clsx';
 import { formatDistanceToNow } from 'date-fns';
-import { Loader2, RefreshCcw } from 'lucide-react';
+import { CheckCircle2, Loader2, RefreshCcw, Undo2 } from 'lucide-react';
 
-interface FollowUpTask {
-  audience: 'Agent' | 'MC' | 'Referral';
-  title: string;
-  summary: string;
-  suggestedChannel: 'Phone' | 'Email' | 'Text' | 'Internal';
-  urgency: 'Low' | 'Medium' | 'High';
-}
+import {
+  FollowUpTask,
+  getFollowUpTaskId,
+  useFollowUpCompletion,
+} from '@/hooks/use-follow-up-completion';
 
 interface FollowUpResponseMeta {
   source?: 'ai' | 'fallback';
@@ -25,6 +24,9 @@ interface FollowUpResponse {
 
 interface AdminFollowUpTasksPanelProps {
   referralId: string;
+  showHeader?: boolean;
+  variant?: 'card' | 'plain';
+  className?: string;
 }
 
 const audienceStyles: Record<FollowUpTask['audience'], string> = {
@@ -39,7 +41,12 @@ const urgencyStyles: Record<FollowUpTask['urgency'], string> = {
   Low: 'text-slate-500',
 };
 
-export function AdminFollowUpTasksPanel({ referralId }: AdminFollowUpTasksPanelProps) {
+export function AdminFollowUpTasksPanel({
+  referralId,
+  showHeader = true,
+  variant = 'card',
+  className,
+}: AdminFollowUpTasksPanelProps) {
   const [data, setData] = useState<FollowUpResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,13 +118,26 @@ export function AdminFollowUpTasksPanel({ referralId }: AdminFollowUpTasksPanelP
     return `Generated ${formatDistanceToNow(timestamp, { addSuffix: true })}`;
   }, [data?.generatedAt]);
 
+  const tasks = data?.tasks ?? [];
+  const { activeTasks, completedTasks, completionMeta, markComplete, undoComplete } = useFollowUpCompletion(referralId, tasks);
+
+  const containerClasses = clsx(
+    'space-y-4',
+    variant === 'card' && 'rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100',
+    className,
+  );
+
   return (
-    <section className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
+    <section className={containerClasses}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Admin follow-up tasks</h2>
-          <p className="text-xs text-slate-500">AI-suggested outreach for agents, MCs, and borrowers.</p>
-        </div>
+        {showHeader ? (
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Admin follow-up tasks</h2>
+            <p className="text-xs text-slate-500">AI-suggested outreach for agents, MCs, and borrowers.</p>
+          </div>
+        ) : (
+          <div className="text-xs font-medium uppercase tracking-wide text-slate-400">Follow-up plan</div>
+        )}
         <button
           type="button"
           onClick={() => fetchTasks()}
@@ -151,26 +171,82 @@ export function AdminFollowUpTasksPanel({ referralId }: AdminFollowUpTasksPanelP
         </div>
       )}
 
-      {data && data.tasks.length > 0 && !error && (
+      {tasks.length > 0 && !error && (
         <div className="space-y-4">
-          <ul className="space-y-3">
-            {data.tasks.map((task, index) => (
-              <li key={`${task.audience}-${task.title}-${index}`} className="rounded-lg border border-slate-200 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${audienceStyles[task.audience]}`}>
-                    <span>{task.audience}</span>
-                    <span className="text-slate-400">• {task.suggestedChannel}</span>
-                  </span>
-                  <span className={`text-xs font-semibold uppercase tracking-wide ${urgencyStyles[task.urgency]}`}>
-                    {task.urgency} urgency
-                  </span>
-                </div>
-                <h3 className="mt-3 text-sm font-semibold text-slate-800">{task.title}</h3>
-                <p className="mt-2 text-sm text-slate-600">{task.summary}</p>
-              </li>
-            ))}
-          </ul>
-          {data.meta?.source === 'fallback' && (
+          {activeTasks.length > 0 ? (
+            <ul className="space-y-3">
+              {activeTasks.map((task) => {
+                const taskId = getFollowUpTaskId(task);
+                return (
+                  <li key={taskId} className="space-y-3 rounded-lg border border-slate-200 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ring-1 ${audienceStyles[task.audience]}`}>
+                        <span>{task.audience}</span>
+                        <span className="text-slate-400">• {task.suggestedChannel}</span>
+                      </span>
+                      <span className={`text-xs font-semibold uppercase tracking-wide ${urgencyStyles[task.urgency]}`}>
+                        {task.urgency} urgency
+                      </span>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-800">{task.title}</h3>
+                      <p className="mt-2 text-sm text-slate-600">{task.summary}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => markComplete(task)}
+                      className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 transition hover:text-emerald-700"
+                    >
+                      <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                      Mark complete
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              All tasks are completed. Refresh to generate new outreach suggestions as needed.
+            </div>
+          )}
+          {completedTasks.length > 0 && (
+            <details className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+              <summary className="flex cursor-pointer items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-slate-600">
+                <span>Completed tasks ({completedTasks.length})</span>
+                <span className="text-xs font-medium text-slate-400">Click to toggle</span>
+              </summary>
+              <ul className="space-y-3 border-t border-slate-200 px-4 py-3">
+                {completedTasks.map((task) => {
+                  const taskId = getFollowUpTaskId(task);
+                  const completedAt = completionMeta.get(taskId);
+                  const completedLabel = completedAt
+                    ? `Completed ${formatDistanceToNow(new Date(completedAt), { addSuffix: true })}`
+                    : undefined;
+                  return (
+                    <li key={`${taskId}-completed`} className="space-y-2 rounded-md border border-slate-200 bg-slate-100 p-3 text-slate-500">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-wide">{task.audience}</span>
+                        {completedLabel && <span className="text-xs">{completedLabel}</span>}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">{task.title}</p>
+                        <p className="text-sm">{task.summary}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => undoComplete(task)}
+                        className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 transition hover:text-slate-700"
+                      >
+                        <Undo2 className="h-4 w-4" aria-hidden="true" />
+                        Move back to active
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </details>
+          )}
+          {data?.meta?.source === 'fallback' && (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
               {data.meta.reason ?? 'Showing baseline suggestions while the AI plan is unavailable.'}
             </div>
