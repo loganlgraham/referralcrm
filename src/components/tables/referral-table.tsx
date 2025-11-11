@@ -106,11 +106,22 @@ const STATUS_BADGE_STYLES: Record<ReferralStatus, string> = {
   Terminated: 'bg-rose-100 text-rose-700'
 };
 
+const STATUS_LABELS: Record<ReferralStatus, string> = {
+  'New Lead': 'New Lead',
+  Paired: 'Paired',
+  'In Communication': 'Communicating',
+  'Showing Homes': 'Showing Homes',
+  'Under Contract': 'Under Contract',
+  Closed: 'Closed',
+  Terminated: 'Terminated'
+};
+
 function StatusBadge({ status }: { status: ReferralStatus }) {
   const style = STATUS_BADGE_STYLES[status] ?? 'bg-slate-100 text-slate-700';
+  const label = STATUS_LABELS[status] ?? status;
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ${style}`}>
-      {status}
+      {label}
     </span>
   );
 }
@@ -323,11 +334,6 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
         accessorKey: 'status',
         cell: ({ row }) => <StatusBadge status={row.original.status} />
       },
-      {
-        header: 'Expected Fee',
-        accessorKey: 'referralFeeDueCents',
-        cell: ({ row }) => formatCurrency(row.original.referralFeeDueCents || 0)
-      },
       createdColumn
     ];
   }
@@ -356,11 +362,6 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
       header: 'Lender/MC',
       accessorKey: 'lenderName',
       cell: ({ row }) => row.original.lenderName || '—'
-    },
-    {
-      header: 'Referral Fee Due',
-      accessorKey: 'referralFeeDueCents',
-      cell: ({ row }) => formatCurrency(row.original.referralFeeDueCents || 0)
     },
     createdColumn,
     {

@@ -1,4 +1,4 @@
-import { differenceInDays, differenceInHours } from 'date-fns';
+import { differenceInMinutes } from 'date-fns';
 
 interface AuditEntry {
   field: string;
@@ -10,6 +10,7 @@ interface DealEntry {
   status?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  paidDate?: string | null;
 }
 
 const parseTimestamp = (value?: string | Date | null): Date | null => {
@@ -24,11 +25,42 @@ const parseTimestamp = (value?: string | Date | null): Date | null => {
 const findFirstDealTimestamp = (deals: DealEntry[], status: string): Date | null => {
   const matches = deals
     .filter((deal) => deal.status === status)
-    .map((deal) => parseTimestamp(deal.updatedAt) ?? parseTimestamp(deal.createdAt))
+    .map((deal) => {
+      if (status === 'paid') {
+        return (
+          parseTimestamp(deal.paidDate) ??
+          parseTimestamp(deal.updatedAt) ??
+          parseTimestamp(deal.createdAt)
+        );
+      }
+      if (status === 'closed') {
+        return parseTimestamp(deal.updatedAt) ?? parseTimestamp(deal.createdAt);
+      }
+      return parseTimestamp(deal.createdAt) ?? parseTimestamp(deal.updatedAt);
+    })
     .filter((value): value is Date => Boolean(value))
     .sort((a, b) => a.getTime() - b.getTime());
 
   return matches.length > 0 ? matches[0] : null;
+};
+
+const minutesBetween = (start: Date | null, end: Date | null): number | null => {
+  if (!start || !end) {
+    return null;
+  }
+
+  const minutes = differenceInMinutes(end, start);
+  return minutes >= 0 ? minutes : null;
+};
+
+const formatDuration = (minutes: number | null): string => {
+  if (minutes === null) {
+    return 'Pending';
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `${hours}h ${remainingMinutes}m`;
 };
 
 export function SLAWidget({ referral }: { referral: any }) {
@@ -59,46 +91,39 @@ export function SLAWidget({ referral }: { referral: any }) {
   const underContractAt = getFirstStatusTimestamp('Under Contract');
 
   const deals: DealEntry[] = Array.isArray(referral.payments) ? referral.payments : [];
-  const dealUnderContractAt = findFirstDealTimestamp(deals, 'under_contract') ?? underContractAt;
-  const dealClosedAt = findFirstDealTimestamp(deals, 'closed');
+
+  const dealUnderContractAt =
+    findFirstDealTimestamp(deals, 'under_contract') ?? underContractAt ?? pairedAt ?? createdAt;
+  const dealClosedAt = findFirstDealTimestamp(deals, 'closed') ?? getFirstStatusTimestamp('Closed');
   const dealPaidAt = findFirstDealTimestamp(deals, 'paid');
 
-  const newLeadToPaired = pairedAt ? Math.max(0, differenceInHours(pairedAt, createdAt)) : null;
-  const pairedToCommunication = pairedAt && inCommunicationAt
-    ? Math.max(0, differenceInHours(inCommunicationAt, pairedAt))
-    : null;
+  const newLeadToPaired = minutesBetween(createdAt, pairedAt);
+  const pairedToCommunication = minutesBetween(pairedAt, inCommunicationAt);
   const communicationStart = showingHomesAt ?? inCommunicationAt ?? pairedAt ?? createdAt;
-  const communicationToContract =
-    communicationStart && underContractAt
-      ? Math.max(0, differenceInDays(underContractAt, communicationStart))
-      : null;
-  const contractToClose =
-    dealUnderContractAt && dealClosedAt
-      ? Math.max(0, differenceInDays(dealClosedAt, dealUnderContractAt))
-      : null;
-  const closeToPaid =
-    dealClosedAt && dealPaidAt ? Math.max(0, differenceInDays(dealPaidAt, dealClosedAt)) : null;
+  const communicationToContract = minutesBetween(communicationStart, underContractAt);
+  const contractToClose = minutesBetween(dealUnderContractAt, dealClosedAt);
+  const closeToPaid = minutesBetween(dealClosedAt, dealPaidAt);
 
   const items = [
     {
       label: 'New Lead → Paired',
-      value: newLeadToPaired !== null ? `${newLeadToPaired} hrs` : 'Pending',
+      value: formatDuration(newLeadToPaired),
     },
     {
-      label: 'Paired → In Communication',
-      value: pairedToCommunication !== null ? `${pairedToCommunication} hrs` : 'Pending',
+      label: 'Paired → Communicating',
+      value: formatDuration(pairedToCommunication),
     },
     {
-      label: 'In Communication → Under Contract',
-      value: communicationToContract !== null ? `${communicationToContract} days` : 'Pending',
+      label: 'Communicating → Under Contract',
+      value: formatDuration(communicationToContract),
     },
     {
       label: 'Deal: Under Contract → Closed',
-      value: contractToClose !== null ? `${contractToClose} days` : 'Pending',
+      value: formatDuration(contractToClose),
     },
     {
       label: 'Deal: Closed → Paid',
-      value: closeToPaid !== null ? `${closeToPaid} days` : 'Pending',
+      value: formatDuration(closeToPaid),
     },
   ];
 

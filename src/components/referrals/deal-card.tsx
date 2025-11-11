@@ -22,6 +22,8 @@ export interface DealRecord {
   expectedAmountCents?: number | null;
   receivedAmountCents?: number | null;
   createdAt?: string | null;
+  updatedAt?: string | null;
+  paidDate?: string | null;
   terminatedReason?: TerminatedReason | null;
   agentAttribution?: AgentSelectValue;
   usedAfc?: boolean | null;
@@ -64,6 +66,8 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
       expectedAmountCents: deal.expectedAmountCents ?? 0,
       receivedAmountCents: deal.receivedAmountCents ?? 0,
       createdAt: deal.createdAt ?? null,
+      updatedAt: deal.updatedAt ?? null,
+      paidDate: deal.paidDate ?? null,
       terminatedReason: (deal.terminatedReason as TerminatedReason | undefined) ?? null,
       agentAttribution: (deal.agentAttribution as AgentSelectValue | undefined) ?? '',
       usedAfc: deal.usedAfc ?? false,

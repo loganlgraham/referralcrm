@@ -183,6 +183,8 @@ const normalizeDealPayments = (
     expectedAmountCents: payment.expectedAmountCents ?? null,
     receivedAmountCents: payment.receivedAmountCents ?? null,
     createdAt: payment.createdAt ?? null,
+    updatedAt: payment.updatedAt ?? null,
+    paidDate: payment.paidDate ?? null,
     terminatedReason: payment.terminatedReason
       ? (payment.terminatedReason as TerminatedReason)
       : null,

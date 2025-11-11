@@ -103,7 +103,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         $group: {
           _id: null,
           totalReferrals: { $sum: 1 },
-          expectedRevenueCents: { $sum: '$referralFeeDueCents' },
+          expectedRevenueCents: {
+            $sum: {
+              $cond: [
+                { $in: ['$status', ['Under Contract', 'Closed', 'Paid']] },
+                '$referralFeeDueCents',
+                0
+              ]
+            }
+          },
           activePipeline: {
             $sum: {
               $cond: [
