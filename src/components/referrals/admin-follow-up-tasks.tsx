@@ -12,9 +12,15 @@ interface FollowUpTask {
   urgency: 'Low' | 'Medium' | 'High';
 }
 
+interface FollowUpResponseMeta {
+  source?: 'ai' | 'fallback';
+  reason?: string;
+}
+
 interface FollowUpResponse {
   generatedAt: string;
   tasks: FollowUpTask[];
+  meta?: FollowUpResponseMeta;
 }
 
 interface AdminFollowUpTasksPanelProps {
@@ -73,6 +79,7 @@ export function AdminFollowUpTasksPanel({ referralId }: AdminFollowUpTasksPanelP
         setData({
           generatedAt: (payload as FollowUpResponse).generatedAt,
           tasks,
+          meta: (payload as FollowUpResponse).meta,
         });
       } catch (caughtError) {
         if (caughtError instanceof DOMException && caughtError.name === 'AbortError') {
@@ -163,6 +170,11 @@ export function AdminFollowUpTasksPanel({ referralId }: AdminFollowUpTasksPanelP
               </li>
             ))}
           </ul>
+          {data.meta?.source === 'fallback' && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              {data.meta.reason ?? 'Showing baseline suggestions while the AI plan is unavailable.'}
+            </div>
+          )}
           {generatedLabel && <p className="text-xs text-slate-400">{generatedLabel}</p>}
         </div>
       )}

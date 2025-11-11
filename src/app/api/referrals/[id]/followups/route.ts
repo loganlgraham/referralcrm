@@ -41,6 +41,72 @@ Requirements:
 
 const defaultModel = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
 
+type NormalizedTask = {
+  audience: 'Agent' | 'MC' | 'Referral';
+  title: string;
+  summary: string;
+  suggestedChannel: 'Phone' | 'Email' | 'Text' | 'Internal';
+  urgency: 'Low' | 'Medium' | 'High';
+};
+
+function buildFallbackTasks(
+  referral: ReferralDocument & {
+    assignedAgent?: { _id: string; name?: string | null } | null;
+    lender?: { _id: string; name?: string | null } | null;
+  },
+  daysInStatus: number,
+  reason?: string
+): { generatedAt: string; tasks: NormalizedTask[]; meta: { source: 'fallback'; reason: string } } {
+  const borrowerName = referral.borrower?.name?.trim() || 'the borrower';
+  const agentName = referral.assignedAgent?.name?.trim() || 'the assigned agent';
+  const lenderName = referral.lender?.name?.trim() || 'the mortgage consultant';
+  const status = referral.status ?? 'Unknown';
+  const stage = referral.stageOnTransfer?.trim() || 'Not provided';
+  const location = referral.lookingInZip?.trim() || referral.propertyAddress?.trim() || 'the target market';
+
+  const urgencyFromDays = daysInStatus > 21 ? 'High' : daysInStatus > 7 ? 'Medium' : 'Low';
+
+  const tasks: NormalizedTask[] = [
+    {
+      audience: 'Agent',
+      title: 'Confirm immediate next milestone',
+      summary: `Touch base with ${agentName} about the current "${status}" status and capture the next dated milestone so operations can support.`,
+      suggestedChannel: 'Email',
+      urgency: urgencyFromDays,
+    },
+    {
+      audience: 'MC',
+      title: 'Verify financing readiness',
+      summary: `Check with ${lenderName} on underwriting progress and whether any borrower documents are blocking movement toward closing.`,
+      suggestedChannel: 'Phone',
+      urgency: urgencyFromDays === 'Low' ? 'Medium' : urgencyFromDays,
+    },
+    {
+      audience: 'Referral',
+      title: 'Clarify borrower questions',
+      summary: `Reach out to ${borrowerName} to recap the plan for the ${stage} stage and answer any outstanding questions about homes in ${location}.`,
+      suggestedChannel: 'Phone',
+      urgency: urgencyFromDays,
+    },
+    {
+      audience: 'Agent',
+      title: 'Update CRM timeline entry',
+      summary: 'Ask the agent to log any recent showings, offers, or communications so the team has an accurate shared history.',
+      suggestedChannel: 'Internal',
+      urgency: 'Medium',
+    },
+  ];
+
+  return {
+    generatedAt: new Date().toISOString(),
+    tasks,
+    meta: {
+      source: 'fallback',
+      reason: reason ?? 'Using baseline outreach suggestions because the AI plan was unavailable.',
+    },
+  };
+}
+
 function toCurrencyString(cents?: number | null) {
   if (typeof cents !== 'number' || Number.isNaN(cents)) {
     return 'Not provided';
@@ -64,9 +130,6 @@ export async function POST(_request: NextRequest, context: RouteContext): Promis
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: 'OpenAI API key is not configured' }, { status: 503 });
-  }
 
   await connectMongo();
   const referral = await Referral.findById(context.params.id)
@@ -161,6 +224,13 @@ export async function POST(_request: NextRequest, context: RouteContext): Promis
 
   const userPrompt = `${contextLines.join('\n')}`;
 
+  if (!apiKey) {
+    return NextResponse.json(
+      buildFallbackTasks(referral, daysInStatus, 'OpenAI API key is not configured on the server.'),
+      { status: 200 }
+    );
+  }
+
   const completionResponse = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -176,7 +246,17 @@ export async function POST(_request: NextRequest, context: RouteContext): Promis
         { role: 'user', content: userPrompt },
       ],
     }),
+  }).catch((error) => {
+    console.error('Failed to reach OpenAI for follow-up tasks', error);
+    return null;
   });
+
+  if (!completionResponse) {
+    return NextResponse.json(
+      buildFallbackTasks(referral, daysInStatus, 'Unable to reach OpenAI. Showing baseline outreach instead.'),
+      { status: 200 }
+    );
+  }
 
   if (!completionResponse.ok) {
     const errorBody = await completionResponse.json().catch(() => undefined);
@@ -184,13 +264,25 @@ export async function POST(_request: NextRequest, context: RouteContext): Promis
       (errorBody && typeof errorBody.error === 'object' && errorBody.error && 'message' in errorBody.error
         ? (errorBody.error as { message?: string }).message
         : undefined) ?? completionResponse.statusText;
-    return NextResponse.json({ error: message || 'Unable to generate follow-up tasks' }, { status: completionResponse.status });
+    console.error('OpenAI follow-up generation failed', message);
+    return NextResponse.json(
+      buildFallbackTasks(referral, daysInStatus, message || 'OpenAI returned an error while generating tasks.'),
+      { status: 200 }
+    );
   }
 
-  const completion = await completionResponse.json();
+  const completion = await completionResponse.json().catch((error: unknown) => {
+    console.error('Failed to parse OpenAI follow-up response', error);
+    return null;
+  });
+
   const content = completion?.choices?.[0]?.message?.content;
   if (typeof content !== 'string') {
-    return NextResponse.json({ error: 'No content returned by OpenAI' }, { status: 502 });
+    console.error('OpenAI follow-up content missing or invalid');
+    return NextResponse.json(
+      buildFallbackTasks(referral, daysInStatus, 'OpenAI returned an unexpected response format.'),
+      { status: 200 }
+    );
   }
 
   const cleaned = content.trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
@@ -199,7 +291,11 @@ export async function POST(_request: NextRequest, context: RouteContext): Promis
   try {
     parsed = JSON.parse(cleaned);
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to parse model response' }, { status: 502 });
+    console.error('Failed to parse OpenAI follow-up JSON', error);
+    return NextResponse.json(
+      buildFallbackTasks(referral, daysInStatus, 'OpenAI returned invalid JSON for the follow-up plan.'),
+      { status: 200 }
+    );
   }
 
   const generatedAtRaw = (parsed as { generatedAt?: unknown }).generatedAt;
@@ -232,42 +328,14 @@ export async function POST(_request: NextRequest, context: RouteContext): Promis
         urgency: urgency === 'Low' || urgency === 'Medium' || urgency === 'High' ? urgency : 'Medium',
       };
     })
-    .filter((task): task is {
-      audience: 'Agent' | 'MC' | 'Referral';
-      title: string;
-      summary: string;
-      suggestedChannel: 'Phone' | 'Email' | 'Text' | 'Internal';
-      urgency: 'Low' | 'Medium' | 'High';
-    } => task !== null);
+    .filter((task): task is NormalizedTask => task !== null);
 
   if (tasks.length === 0) {
-    return NextResponse.json({
-      generatedAt,
-      tasks: [
-        {
-          audience: 'Agent',
-          title: 'Confirm next milestone',
-          summary: 'Touch base with the assigned agent to confirm the next milestone and timeline for the borrower.',
-          suggestedChannel: 'Phone',
-          urgency: 'Medium',
-        },
-        {
-          audience: 'MC',
-          title: 'Check loan progress',
-          summary: 'Reach out to the mortgage consultant for an update on underwriting status and required documents.',
-          suggestedChannel: 'Email',
-          urgency: 'Medium',
-        },
-        {
-          audience: 'Referral',
-          title: 'Offer borrower support',
-          summary: 'Contact the borrower to see if they need assistance or have questions about the next steps.',
-          suggestedChannel: 'Phone',
-          urgency: 'Low',
-        },
-      ],
-    });
+    return NextResponse.json(
+      buildFallbackTasks(referral, daysInStatus, 'AI response did not contain actionable follow-up items.'),
+      { status: 200 }
+    );
   }
 
-  return NextResponse.json({ generatedAt, tasks });
+  return NextResponse.json({ generatedAt, tasks, meta: { source: 'ai' as const } });
 }
