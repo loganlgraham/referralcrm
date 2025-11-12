@@ -345,6 +345,8 @@ export function ReferralHeader({
       commissionBasisPoints: nextCommission,
       referralFeeBasisPoints: nextReferralFeeBasis,
       propertyAddress: nextProperty,
+      statusLastUpdated: statusUpdatedAt.toISOString(),
+      daysInStatus: computedDaysInStatus,
     });
   };
 

@@ -53,6 +53,8 @@ interface ReferralListItem {
   initialNotes?: string;
   loanFileNumber: string;
   status: string;
+  statusLastUpdated?: string | null;
+  daysInStatus?: number;
   assignedAgentName?: string;
   assignedAgentEmail?: string;
   assignedAgentPhone?: string;
@@ -179,6 +181,8 @@ export async function getReferrals(params: GetReferralsParams) {
       initialNotes: item.initialNotes,
       loanFileNumber: item.loanFileNumber,
       status: item.status,
+      statusLastUpdated: item.statusLastUpdated ? item.statusLastUpdated.toISOString() : null,
+      daysInStatus: differenceInDays(new Date(), item.statusLastUpdated ?? item.createdAt),
       assignedAgentName: item.assignedAgent?.name,
       assignedAgentEmail: item.assignedAgent?.email,
       assignedAgentPhone: item.assignedAgent?.phone,

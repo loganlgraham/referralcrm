@@ -17,6 +17,7 @@ import type {
 } from '@/components/referrals/deal-card';
 import type { Contact } from '@/components/referrals/contact-assignment';
 import type { ReferralStatus } from '@/constants/referrals';
+import { ReferralFollowUpCard } from '@/components/referrals/referral-follow-up-card';
 
 type ReferralSource = 'Lender' | 'MC';
 type ReferralClientType = 'Seller' | 'Buyer';
@@ -498,6 +499,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     commissionBasisPoints?: number;
     referralFeeBasisPoints?: number;
     propertyAddress?: string;
+    statusLastUpdated?: string;
+    daysInStatus?: number;
   }) => {
     const statusChanged = snapshot.status !== financials.status;
     setFinancials((previous) => {
@@ -544,6 +547,29 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
     if (statusChanged) {
       void mutate(activityFeedKey);
+    }
+
+    if (statusChanged || snapshot.statusLastUpdated || snapshot.daysInStatus !== undefined) {
+      setReferral((previous) => {
+        const statusLastUpdated = snapshot.statusLastUpdated ?? previous.statusLastUpdated ?? null;
+        const daysInStatus =
+          snapshot.daysInStatus !== undefined ? snapshot.daysInStatus : previous.daysInStatus;
+
+        if (
+          previous.status === snapshot.status &&
+          previous.statusLastUpdated === statusLastUpdated &&
+          previous.daysInStatus === daysInStatus
+        ) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          status: snapshot.status ?? previous.status,
+          statusLastUpdated,
+          daysInStatus,
+        };
+      });
     }
   };
 
@@ -607,6 +633,39 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const showDeals =
     financials.status === 'Under Contract' || contractDraft.hasUnsavedChanges || hasTerminatedDeal || hasAnyDeals;
 
+  const followUpReferral = useMemo(
+    () => ({
+      _id: referral._id,
+      createdAt: referral.createdAt,
+      status: financials.status,
+      statusLastUpdated: referral.statusLastUpdated,
+      daysInStatus: referral.daysInStatus,
+      assignedAgent: agentContact?.name
+        ? { name: agentContact.name }
+        : referral.assignedAgent?.name
+        ? { name: referral.assignedAgent.name }
+        : null,
+      assignedAgentName: agentContact?.name ?? referral.assignedAgent?.name,
+      borrower: referral.borrower,
+      notes: referral.notes ?? [],
+      payments: referral.payments ?? [],
+      audit: referral.audit ?? [],
+    }),
+    [
+      agentContact?.name,
+      financials.status,
+      referral._id,
+      referral.audit,
+      referral.borrower,
+      referral.createdAt,
+      referral.daysInStatus,
+      referral.notes,
+      referral.payments,
+      referral.statusLastUpdated,
+      referral.assignedAgent?.name,
+    ]
+  );
+
   return (
     <div className="space-y-8">
       <ReferralHeader
@@ -619,6 +678,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         onAgentContactChange={setAgentContact}
         onMcContactChange={setMcContact}
       />
+      <ReferralFollowUpCard referral={followUpReferral} />
       <section className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
