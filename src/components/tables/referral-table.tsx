@@ -24,6 +24,8 @@ export interface ReferralRow {
   initialNotes?: string;
   loanFileNumber: string;
   status: ReferralStatus;
+  statusLastUpdated?: string | null;
+  daysInStatus?: number;
   assignedAgentName?: string;
   assignedAgentEmail?: string;
   assignedAgentPhone?: string;

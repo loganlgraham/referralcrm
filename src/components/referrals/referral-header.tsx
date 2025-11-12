@@ -21,6 +21,8 @@ interface FinancialSnapshot {
   commissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
   propertyAddress?: string;
+  statusLastUpdated?: string;
+  daysInStatus?: number;
 }
 
 interface ContractDraftSnapshot {
@@ -345,6 +347,8 @@ export function ReferralHeader({
       commissionBasisPoints: nextCommission,
       referralFeeBasisPoints: nextReferralFeeBasis,
       propertyAddress: nextProperty,
+      statusLastUpdated: statusUpdatedAt.toISOString(),
+      daysInStatus: computedDaysInStatus,
     });
   };
 
