@@ -52,6 +52,7 @@ interface AggregatedPayment {
     propertyAddress?: string;
     borrowerCurrentAddress?: string;
     closedPriceCents?: number;
+    estPurchasePriceCents?: number;
     referralFeeDueCents?: number;
     referralFeeBasisPoints?: number;
     commissionBasisPoints?: number;
@@ -376,9 +377,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return sum;
   }, 0);
 
-  const paidPayments = filteredPayments.filter((payment) => payment.status === 'paid' && payment.paidDate);
+  const paidPayments = filteredPayments.filter((payment) => payment.status === 'paid');
+  const paidPaymentsWithDates = paidPayments.filter((payment) => payment.paidDate);
   const averageDaysClosedToPaid = computeAverage(
-    paidPayments
+    paidPaymentsWithDates
       .map((payment) => {
         const end = payment.paidDate ? new Date(payment.paidDate) : undefined;
         const start = payment.invoiceDate ? new Date(payment.invoiceDate) : new Date(payment.updatedAt);
@@ -389,7 +391,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   );
 
   const averageRevenuePerDealCents = dealsClosed.length ? realizedRevenueCents / dealsClosed.length : 0;
-  const totalVolumeClosedCents = dealsClosed.reduce((sum, payment) => sum + (payment.referral?.closedPriceCents ?? 0), 0);
+  const totalVolumeClosedCents = dealsClosed.reduce((sum, payment) => {
+    const closedPrice = payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
+    return sum + closedPrice;
+  }, 0);
 
   const revenueBySourceMap = new Map<string, number>();
   const revenueByEndorserMap = new Map<string, number>();
@@ -425,7 +430,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .filter((payment) => payment.status === 'under_contract')
     .reduce((sum, payment) => sum + (payment.expectedAmountCents ?? 0), 0);
 
-  const activePipeline = referrals.filter((referral) => !['Closed', 'Terminated'].includes(referral.status ?? '')).length;
+  const activePipeline = referrals.filter((referral) => !['Closed', 'Terminated', 'Lost'].includes(referral.status ?? '')).length;
 
   const revenueBySource = Array.from(revenueBySourceMap.entries())
     .map(([label, value]) => ({ label, value }))
@@ -704,7 +709,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     current.expected += payment.expectedAmountCents ?? 0;
     if (payment.status === 'closed' || payment.status === 'paid') {
       current.closed += 1;
-      const closedPriceCents = payment.referral?.closedPriceCents ?? payment.referral?.referralFeeDueCents ?? 0;
+      const closedPriceCents =
+        payment.referral?.closedPriceCents ??
+        payment.referral?.estPurchasePriceCents ??
+        payment.referral?.referralFeeDueCents ??
+        0;
       const commissionBasisPoints = payment.referral?.commissionBasisPoints ?? 0;
       const commissionCents = (closedPriceCents * commissionBasisPoints) / 10000;
       if (commissionCents > 0) {

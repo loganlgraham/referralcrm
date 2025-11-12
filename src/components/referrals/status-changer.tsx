@@ -120,7 +120,7 @@ export function StatusChanger({
   }, [status]);
 
   const pipelineOptions = useMemo(() => {
-    const filtered = statuses.filter((item) => item !== 'Closed' && item !== 'Terminated');
+    const filtered = statuses.filter((item) => item !== 'Closed' && item !== 'Terminated' && item !== 'Lost');
     const containsCurrent = filtered.some((item) => item === currentStatus);
     if (!containsCurrent) {
       return [...filtered, currentStatus];

@@ -9,6 +9,7 @@ import { formatCurrency } from '@/utils/formatters';
 import { StatusChanger } from '@/components/referrals/status-changer';
 import { SLAWidget } from '@/components/referrals/sla-widget';
 import { ContactAssignment, type Contact } from '@/components/referrals/contact-assignment';
+import { EmailActivityLink } from '@/components/common/email-activity-link';
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
 type AhaBucketValue = '' | 'AHA' | 'AHA_OOS';
@@ -206,9 +207,9 @@ export function ReferralHeader({
   }, [effectivePropertyAddress, referral.lookingInZip, referral.propertyAddress]);
 
   const borrowerName = referral.borrower?.name ?? 'Borrower';
-  const borrowerContact = [referral.borrower?.email, referral.borrower?.phone]
-    .filter((value) => Boolean(value))
-    .join(' • ');
+  const borrowerEmail = referral.borrower?.email?.trim() ?? '';
+  const borrowerPhone = referral.borrower?.phone?.trim() ?? '';
+  const hasBorrowerContact = Boolean(borrowerEmail || borrowerPhone);
 
   const handleContractDraftChangeInternal = (draft: ContractDraftSnapshot) => {
     setDraftContract((previous) => {
@@ -413,9 +414,29 @@ export function ReferralHeader({
           <p className="text-xs font-semibold uppercase tracking-wide text-brand">Borrower</p>
           <div>
             <h1 className="text-2xl font-semibold text-slate-900 lg:text-3xl">{borrowerName}</h1>
-            <p className="mt-1 text-sm text-slate-600">
-              {borrowerContact || 'Contact information pending'}
-            </p>
+            {hasBorrowerContact ? (
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                {borrowerEmail && (
+                  <EmailActivityLink
+                    referralId={referral._id}
+                    email={borrowerEmail}
+                    recipient="Borrower"
+                    recipientName={borrowerName}
+                    className="text-sm"
+                  >
+                    {borrowerEmail}
+                  </EmailActivityLink>
+                )}
+                {borrowerEmail && borrowerPhone && <span className="text-slate-300">•</span>}
+                {borrowerPhone && (
+                  <a className="text-brand hover:underline" href={`tel:${borrowerPhone}`}>
+                    {borrowerPhone}
+                  </a>
+                )}
+              </div>
+            ) : (
+              <p className="mt-1 text-sm text-slate-600">Contact information pending</p>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-brand/70">
             <span className="rounded-full bg-brand/10 px-3 py-1 text-brand">{status}</span>

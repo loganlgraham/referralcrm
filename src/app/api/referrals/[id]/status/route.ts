@@ -91,7 +91,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         expectedAmountCents: referral.referralFeeDueCents ?? 0,
       });
     }
-  } else if (parsed.data.status === 'Terminated') {
+  } else if (parsed.data.status === 'Terminated' || parsed.data.status === 'Lost') {
     referral.estPurchasePriceCents = 0;
     referral.referralFeeDueCents = 0;
     await Payment.updateMany(

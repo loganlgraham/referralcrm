@@ -115,7 +115,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           activePipeline: {
             $sum: {
               $cond: [
-                { $in: ['$status', ['Closed', 'Terminated']] },
+                { $in: ['$status', ['Closed', 'Terminated', 'Lost']] },
                 0,
                 1
               ]

@@ -5,6 +5,7 @@ export const REFERRAL_STATUSES = [
   'Showing Homes',
   'Under Contract',
   'Closed',
+  'Lost',
   'Terminated'
 ] as const;
 

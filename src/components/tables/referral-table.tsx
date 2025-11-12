@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { REFERRAL_STATUSES, ReferralStatus } from '@/constants/referrals';
+import { EmailActivityLink } from '@/components/common/email-activity-link';
 import { formatCurrency, formatNumber } from '@/utils/formatters';
 
 export interface ReferralRow {
@@ -105,6 +106,7 @@ const STATUS_BADGE_STYLES: Record<ReferralStatus, string> = {
   'Showing Homes': 'bg-violet-100 text-violet-700',
   'Under Contract': 'bg-emerald-100 text-emerald-700',
   Closed: 'bg-green-100 text-green-700',
+  Lost: 'bg-slate-200 text-slate-600',
   Terminated: 'bg-rose-100 text-rose-700'
 };
 
@@ -115,6 +117,7 @@ const STATUS_LABELS: Record<ReferralStatus, string> = {
   'Showing Homes': 'Showing Homes',
   'Under Contract': 'Under Contract',
   Closed: 'Closed',
+  Lost: 'Lost',
   Terminated: 'Terminated'
 };
 
@@ -259,15 +262,30 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
   const borrowerColumn: ColumnDef<ReferralRow> = {
     header: 'Borrower',
     accessorKey: 'borrowerName',
-    cell: ({ row }) => (
-      <div className="flex flex-col">
-        <Link href={`/referrals/${row.original._id}`} className="font-medium text-brand">
-          {row.original.borrowerName}
-        </Link>
-        <span className="text-xs text-slate-500">{row.original.borrowerEmail}</span>
-        <span className="text-xs text-slate-500">{row.original.borrowerPhone}</span>
-      </div>
-    )
+    cell: ({ row }) => {
+      const { _id, borrowerName, borrowerEmail, borrowerPhone } = row.original;
+      return (
+        <div className="flex flex-col">
+          <Link href={`/referrals/${_id}`} className="font-medium text-brand">
+            {borrowerName}
+          </Link>
+          {borrowerEmail ? (
+            <EmailActivityLink
+              referralId={_id}
+              email={borrowerEmail}
+              recipient="Borrower"
+              recipientName={borrowerName}
+              className="text-xs"
+            >
+              {borrowerEmail}
+            </EmailActivityLink>
+          ) : (
+            <span className="text-xs text-slate-400">—</span>
+          )}
+          <span className="text-xs text-slate-500">{borrowerPhone}</span>
+        </div>
+      );
+    }
   };
 
   const createdColumn: ColumnDef<ReferralRow> = {
@@ -323,7 +341,15 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
           <div className="flex flex-col text-sm">
             <span className="font-medium text-slate-700">{row.original.assignedAgentName || 'Unassigned'}</span>
             {row.original.assignedAgentEmail && (
-              <span className="text-xs text-slate-500">{row.original.assignedAgentEmail}</span>
+              <EmailActivityLink
+                referralId={row.original._id}
+                email={row.original.assignedAgentEmail}
+                recipient="Assigned Agent"
+                recipientName={row.original.assignedAgentName}
+                className="text-xs"
+              >
+                {row.original.assignedAgentEmail}
+              </EmailActivityLink>
             )}
             {row.original.assignedAgentPhone && (
               <span className="text-xs text-slate-500">{row.original.assignedAgentPhone}</span>
@@ -358,12 +384,56 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
     {
       header: 'Agent',
       accessorKey: 'assignedAgentName',
-      cell: ({ row }) => row.original.assignedAgentName || 'Unassigned'
+      cell: ({ row }) => {
+        const { assignedAgentName, assignedAgentEmail, assignedAgentPhone, _id } = row.original;
+        if (!assignedAgentName && !assignedAgentEmail && !assignedAgentPhone) {
+          return 'Unassigned';
+        }
+        return (
+          <div className="flex flex-col text-sm">
+            <span className="font-medium text-slate-700">{assignedAgentName || 'Unassigned'}</span>
+            {assignedAgentEmail && (
+              <EmailActivityLink
+                referralId={_id}
+                email={assignedAgentEmail}
+                recipient="Assigned Agent"
+                recipientName={assignedAgentName}
+                className="text-xs"
+              >
+                {assignedAgentEmail}
+              </EmailActivityLink>
+            )}
+            {assignedAgentPhone && <span className="text-xs text-slate-500">{assignedAgentPhone}</span>}
+          </div>
+        );
+      }
     },
     {
       header: 'Lender/MC',
       accessorKey: 'lenderName',
-      cell: ({ row }) => row.original.lenderName || '—'
+      cell: ({ row }) => {
+        const { lenderName, lenderEmail, lenderPhone, _id } = row.original;
+        if (!lenderName && !lenderEmail && !lenderPhone) {
+          return '—';
+        }
+        return (
+          <div className="flex flex-col text-sm">
+            <span className="font-medium text-slate-700">{lenderName || 'Unassigned'}</span>
+            {lenderEmail && (
+              <EmailActivityLink
+                referralId={_id}
+                email={lenderEmail}
+                recipient="Mortgage Consultant"
+                recipientName={lenderName}
+                className="text-xs"
+              >
+                {lenderEmail}
+              </EmailActivityLink>
+            )}
+            {lenderPhone && <span className="text-xs text-slate-500">{lenderPhone}</span>}
+          </div>
+        );
+      }
     },
     createdColumn,
     {
