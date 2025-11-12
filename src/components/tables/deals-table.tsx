@@ -12,7 +12,7 @@ import { formatCurrency } from '@/utils/formatters';
 
 type DealStatus = 'under_contract' | 'closed' | 'paid' | 'terminated';
 type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
-type AgentSelectValue = '' | 'AHA' | 'AHA_OOS';
+type AgentSelectValue = '' | 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT';
 
 const STATUS_OPTIONS: { value: DealStatus; label: string }[] = [
   { value: 'under_contract', label: 'Under Contract' },
@@ -475,8 +475,11 @@ export function DealsTable() {
                     <option value="">Not set</option>
                     <option value="AHA">Used AHA</option>
                     <option value="AHA_OOS">Used AHA OOS</option>
+                    <option value="OUTSIDE_AGENT">Outside agent (lost)</option>
                   </select>
-                  {deal.referral?.ahaBucket && deal.agentAttribution &&
+                  {deal.referral?.ahaBucket &&
+                    deal.agentAttribution &&
+                    deal.agentAttribution !== 'OUTSIDE_AGENT' &&
                     deal.agentAttribution !== deal.referral.ahaBucket && (
                       <p className="mt-1 text-xs text-amber-600">
                         Does not match assigned {deal.referral.ahaBucket === 'AHA' ? 'AHA' : 'AHA OOS'} bucket

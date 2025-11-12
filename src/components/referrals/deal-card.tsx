@@ -7,7 +7,7 @@ import { formatCurrency } from '@/utils/formatters';
 
 export type DealStatus = 'under_contract' | 'closed' | 'paid' | 'terminated';
 export type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
-export type AgentSelectValue = '' | 'AHA' | 'AHA_OOS';
+export type AgentSelectValue = '' | 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT';
 
 const TERMINATED_REASON_OPTIONS: { value: TerminatedReason; label: string }[] = [
   { value: 'inspection', label: 'Inspection' },
@@ -499,6 +499,7 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
                     <option value="">Not Used</option>
                     <option value="AHA">Used AHA</option>
                     <option value="AHA_OOS">Used AHA OOS</option>
+                    <option value="OUTSIDE_AGENT">Outside agent (lost)</option>
                   </select>
                 </label>
                 {assignedBucket && agentSelection === '' && (

@@ -77,3 +77,34 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     updatedAt: metric.updatedAt
   });
 }
+
+export async function DELETE(request: NextRequest): Promise<NextResponse> {
+  await connectMongo();
+  const session = await getCurrentSession();
+
+  if (!session || session.user?.role !== 'admin') {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
+
+  const body = await request.json().catch(() => ({}));
+  const rawMonth = typeof body.month === 'string' ? body.month : '';
+
+  if (!rawMonth) {
+    return NextResponse.json({ error: 'Month is required' }, { status: 400 });
+  }
+
+  const parsed = parseISO(`${rawMonth}-01`);
+  if (!isValid(parsed)) {
+    return NextResponse.json({ error: 'Invalid month provided' }, { status: 400 });
+  }
+
+  const monthStart = startOfMonth(parsed);
+
+  const deleted = await PreApprovalMetric.findOneAndDelete({ month: monthStart });
+
+  if (!deleted) {
+    return NextResponse.json({ error: 'Pre-approval metric not found' }, { status: 404 });
+  }
+
+  return NextResponse.json({ success: true });
+}
