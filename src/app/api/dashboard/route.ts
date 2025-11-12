@@ -661,13 +661,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     };
   });
 
-  const allReferralDates = referrals.map((referral) => referral.createdAt);
-  const mcRequestTrend = {
-    all: groupTrendByTimeframe(allReferralDates, timeframe),
-    aha: groupTrendByTimeframe(ahaReferralDates, timeframe),
-    ahaOos: groupTrendByTimeframe(ahaOosReferralDates, timeframe)
-  };
-
   const lenderIds = new Set<string>();
   const agentIds = new Set<string>();
 
@@ -716,6 +709,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const referralByMcMap = new Map<string, number>();
   const referralByMcAhaMap = new Map<string, number>();
   const referralByMcAhaOosMap = new Map<string, number>();
+  const allReferralDates = referrals.map((referral) => referral.createdAt);
   const ahaReferralDates: Date[] = [];
   const ahaOosReferralDates: Date[] = [];
   referrals.forEach((referral) => {
@@ -730,6 +724,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       ahaOosReferralDates.push(referral.createdAt);
     }
   });
+
+  const mcRequestTrend = {
+    all: groupTrendByTimeframe(allReferralDates, timeframe),
+    aha: groupTrendByTimeframe(ahaReferralDates, timeframe),
+    ahaOos: groupTrendByTimeframe(ahaOosReferralDates, timeframe)
+  };
 
   filteredPayments.forEach((payment) => {
     const key = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
