@@ -562,7 +562,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'Follow-up plan not found' }, { status: 404 });
   }
 
-  const hasTask = plan.tasks?.some((task) => getFollowUpTaskId(task) === taskId);
+  const hasTask = plan.tasks?.some(
+    (task: FollowUpTask) => getFollowUpTaskId(task) === taskId
+  );
   if (!hasTask) {
     return NextResponse.json({ error: 'Task not found' }, { status: 404 });
   }
