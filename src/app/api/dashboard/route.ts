@@ -42,6 +42,7 @@ interface AggregatedPayment {
   invoiceDate?: Date | null;
   updatedAt: Date;
   usedAfc?: boolean;
+  agentAttribution?: 'AHA' | 'AHA_OOS' | null;
   referral: {
     _id: Types.ObjectId;
     createdAt: Date;
@@ -266,6 +267,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           closeRate: 0,
           afcDealsLost: 0,
           afcAttachRate: 0,
+          ahaAttachRate: 0,
+          ahaOosAttachRate: 0,
           activePipeline: 0,
           expectedRevenueCents: 0,
           realizedRevenueCents: 0,
@@ -286,6 +289,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         revenueBySource: [],
         revenueByEndorser: [],
         revenueByState: [],
+        referralRequestsByZip: [],
         monthlyReferrals: [],
         preApprovalConversion: {
           trend: [],
@@ -293,16 +297,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         }
       },
       mc: {
-        requestTrend: [],
+        requestTrend: { all: [], aha: [], ahaOos: [] },
         revenueLeaderboard: [],
-        closeRateLeaderboard: []
+        closeRateLeaderboard: [],
+        requestLeaderboard: { all: [], aha: [], ahaOos: [] }
       },
       agent: {
         averageCommissionCents: 0,
+        averageCommissionPercent: 0,
+        commissionSampleSize: 0,
         referralLeaderboard: [],
         closeRateLeaderboard: [],
         revenuePaid: [],
-        revenueExpected: []
+        revenueExpected: [],
+        netRevenue: []
       },
       admin: {
         slaAverages: {
@@ -312,7 +320,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           daysToClose: 0
         },
         averageDaysNewLeadToContract: 0,
-        averageDaysContractToClose: 0
+        averageDaysContractToClose: 0,
+        totalReferrals: 0,
+        assignedReferrals: 0,
+        unassignedReferrals: 0,
+        firstContactWithin24HoursRate: 0,
+        firstContactWithin24HoursCount: 0,
+        firstContactSampleSize: 0
       }
     });
   }
@@ -364,6 +378,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     : paymentsWithMetric;
 
   const totalReferrals = referrals.length;
+  const referralZipMap = new Map<string, number>();
+  referrals.forEach((referral) => {
+    const candidates = [referral.lookingInZip, referral.propertyPostalCode];
+    const zipCandidate = candidates.find((value) => {
+      if (value == null) return false;
+      const trimmed = value.toString().trim();
+      return trimmed.length > 0;
+    });
+    if (!zipCandidate) return;
+    const zip = zipCandidate.toString().trim();
+    referralZipMap.set(zip, (referralZipMap.get(zip) ?? 0) + 1);
+  });
   const dealsClosed = filteredPayments.filter((payment) => payment.status === 'closed' || payment.status === 'paid');
   const dealsUnderContract = filteredPayments.filter((payment) => payment.status === 'under_contract');
   const closeRate = totalReferrals === 0 ? 0 : (dealsClosed.length / totalReferrals) * 100;
@@ -375,6 +401,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const afcAttachRate = afcRelevant.length
     ? (afcRelevant.filter((payment) => Boolean(payment.usedAfc)).length / afcRelevant.length) * 100
     : 0;
+
+  const ahaRelevant = filteredPayments.filter(
+    (payment) => payment.referral?.ahaBucket === 'AHA' && ['under_contract', 'closed', 'paid'].includes(payment.status)
+  );
+  const ahaAttached = ahaRelevant.filter((payment) => payment.agentAttribution === 'AHA');
+  const ahaAttachRate = ahaRelevant.length ? (ahaAttached.length / ahaRelevant.length) * 100 : 0;
+
+  const ahaOosRelevant = filteredPayments.filter(
+    (payment) => payment.referral?.ahaBucket === 'AHA_OOS' && ['under_contract', 'closed', 'paid'].includes(payment.status)
+  );
+  const ahaOosAttached = ahaOosRelevant.filter((payment) => payment.agentAttribution === 'AHA_OOS');
+  const ahaOosAttachRate = ahaOosRelevant.length ? (ahaOosAttached.length / ahaOosRelevant.length) * 100 : 0;
 
   const expectedRevenueCents = filteredPayments.reduce((sum, payment) => sum + (payment.expectedAmountCents ?? 0), 0);
   const realizedRevenueCents = filteredPayments.reduce((sum, payment) => sum + (payment.receivedAmountCents ?? 0), 0);
@@ -457,6 +495,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .sort((a, b) => b.value - a.value);
 
   const revenueByState = Array.from(revenueByStateMap.entries())
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+
+  const referralRequestsByZip = Array.from(referralZipMap.entries())
     .map(([label, value]) => ({ label, value }))
     .sort((a, b) => b.value - a.value);
 
@@ -618,7 +660,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     };
   });
 
-  const mcRequestTrend = groupTrendByTimeframe(referrals.map((referral) => referral.createdAt), timeframe);
+  const allReferralDates = referrals.map((referral) => referral.createdAt);
+  const mcRequestTrend = {
+    all: groupTrendByTimeframe(allReferralDates, timeframe),
+    aha: groupTrendByTimeframe(ahaReferralDates, timeframe),
+    ahaOos: groupTrendByTimeframe(ahaOosReferralDates, timeframe)
+  };
 
   const lenderIds = new Set<string>();
   const agentIds = new Set<string>();
@@ -652,13 +699,35 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     agentNameMap.set(agent._id.toString(), agent.name || 'Unnamed Agent');
   });
 
+  const buildMcRequestLeaderboard = (sourceMap: Map<string, number>) =>
+    Array.from(sourceMap.entries())
+      .map(([key, value]) => ({
+        id: key,
+        name: key === 'unassigned' ? 'Unassigned MC' : lenderNameMap.get(key) ?? 'Unknown MC',
+        referrals: value
+      }))
+      .sort((a, b) => b.referrals - a.referrals)
+      .slice(0, 10);
+
   const mcRevenueMap = new Map<string, { revenue: number; expected: number; closed: number; totalReferrals: number }>();
   const mcCloseRateMap = new Map<string, { closed: number; total: number }>();
 
   const referralByMcMap = new Map<string, number>();
+  const referralByMcAhaMap = new Map<string, number>();
+  const referralByMcAhaOosMap = new Map<string, number>();
+  const ahaReferralDates: Date[] = [];
+  const ahaOosReferralDates: Date[] = [];
   referrals.forEach((referral) => {
     const key = referral.lender ? referral.lender.toString() : 'unassigned';
     referralByMcMap.set(key, (referralByMcMap.get(key) ?? 0) + 1);
+
+    if (referral.ahaBucket === 'AHA') {
+      referralByMcAhaMap.set(key, (referralByMcAhaMap.get(key) ?? 0) + 1);
+      ahaReferralDates.push(referral.createdAt);
+    } else if (referral.ahaBucket === 'AHA_OOS') {
+      referralByMcAhaOosMap.set(key, (referralByMcAhaOosMap.get(key) ?? 0) + 1);
+      ahaOosReferralDates.push(referral.createdAt);
+    }
   });
 
   filteredPayments.forEach((payment) => {
@@ -701,6 +770,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .sort((a, b) => b.closeRate - a.closeRate)
     .slice(0, 10);
 
+  const mcRequestLeaderboard = {
+    all: buildMcRequestLeaderboard(referralByMcMap),
+    aha: buildMcRequestLeaderboard(referralByMcAhaMap),
+    ahaOos: buildMcRequestLeaderboard(referralByMcAhaOosMap)
+  };
+
   const agentReferralCount = new Map<string, number>();
   referrals.forEach((referral) => {
     const key = referral.assignedAgent ? referral.assignedAgent.toString() : 'unassigned';
@@ -709,7 +784,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const agentRevenueMap = new Map<
     string,
-    { revenue: number; expected: number; closed: number; totalReferrals: number; commissionCents: number[] }
+    {
+      revenue: number;
+      expected: number;
+      closed: number;
+      totalReferrals: number;
+      commissionCents: number[];
+      commissionPercentages: number[];
+      netCommissionCents: number;
+    }
   >();
 
   filteredPayments.forEach((payment) => {
@@ -719,7 +802,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       expected: 0,
       closed: 0,
       totalReferrals: agentReferralCount.get(key) ?? 0,
-      commissionCents: []
+      commissionCents: [],
+      commissionPercentages: [],
+      netCommissionCents: 0
     };
     current.revenue += payment.receivedAmountCents ?? 0;
     current.expected += payment.expectedAmountCents ?? 0;
@@ -732,8 +817,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         0;
       const commissionBasisPoints = payment.referral?.commissionBasisPoints ?? 0;
       const commissionCents = (closedPriceCents * commissionBasisPoints) / 10000;
-      if (commissionCents > 0) {
+      const commissionPercent = commissionBasisPoints / 100;
+      if (commissionCents > 0 && commissionPercent > 0) {
         current.commissionCents.push(commissionCents);
+        current.commissionPercentages.push(commissionPercent);
+        const referralFeeCents = payment.referral?.referralFeeDueCents ?? 0;
+        current.netCommissionCents += commissionCents - referralFeeCents;
       }
     }
     current.totalReferrals = agentReferralCount.get(key) ?? current.totalReferrals;
@@ -782,9 +871,34 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .flatMap((value) => value.commissionCents);
   const averageAgentCommissionCents = computeAverage(agentCommissionValues);
 
+  const agentCommissionPercentages = Array.from(agentRevenueMap.values())
+    .flatMap((value) => value.commissionPercentages);
+  const averageAgentCommissionPercent = computeAverage(agentCommissionPercentages);
+  const agentCommissionSampleSize = agentCommissionPercentages.length;
+
+  const agentNetRevenue = Array.from(agentRevenueMap.entries())
+    .map(([key, value]) => ({
+      id: key,
+      name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
+      revenueCents: value.netCommissionCents
+    }))
+    .sort((a, b) => b.revenueCents - a.revenueCents)
+    .slice(0, 10);
+
+  const assignedReferrals = referrals.filter((referral) => Boolean(referral.assignedAgent)).length;
+  const unassignedReferrals = Math.max(totalReferrals - assignedReferrals, 0);
+
   const slaFields = referrals
     .map((referral) => referral.sla)
     .filter((sla): sla is NonNullable<typeof sla> => Boolean(sla));
+
+  const firstContactRecords = slaFields
+    .map((sla) => sla.timeToFirstAgentContactHours ?? null)
+    .filter((value): value is number => value != null);
+  const firstContactWithin24HoursCount = firstContactRecords.filter((value) => value <= 24).length;
+  const firstContactWithin24HoursRate = firstContactRecords.length
+    ? (firstContactWithin24HoursCount / firstContactRecords.length) * 100
+    : 0;
 
   const timeToFirstContactAvg = computeAverage(
     slaFields
@@ -846,6 +960,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         closeRate,
         afcDealsLost,
         afcAttachRate,
+        ahaAttachRate,
+        ahaOosAttachRate,
         activePipeline,
         expectedRevenueCents,
         realizedRevenueCents,
@@ -866,6 +982,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       revenueBySource,
       revenueByEndorser,
       revenueByState,
+      referralRequestsByZip,
       monthlyReferrals: monthlyReferrals.map((entry) => ({
         monthKey: entry.monthKey,
         label: entry.label,
@@ -882,14 +999,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     mc: {
       requestTrend: mcRequestTrend,
       revenueLeaderboard: mcRevenueLeaderboard,
-      closeRateLeaderboard: mcCloseRateLeaderboard
+      closeRateLeaderboard: mcCloseRateLeaderboard,
+      requestLeaderboard: mcRequestLeaderboard
     },
     agent: {
       averageCommissionCents: averageAgentCommissionCents,
+      averageCommissionPercent: averageAgentCommissionPercent,
+      commissionSampleSize: agentCommissionSampleSize,
       referralLeaderboard: agentReferralLeaderboard,
       closeRateLeaderboard: agentCloseRateLeaderboard,
       revenuePaid: agentRevenuePaid,
-      revenueExpected: agentRevenueExpected
+      revenueExpected: agentRevenueExpected,
+      netRevenue: agentNetRevenue
     },
     admin: {
       slaAverages: {
@@ -899,7 +1020,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         daysToClose: daysToCloseAvg
       },
       averageDaysNewLeadToContract: adminAverageLeadToContract,
-      averageDaysContractToClose: adminAverageContractToClose
+      averageDaysContractToClose: adminAverageContractToClose,
+      totalReferrals,
+      assignedReferrals,
+      unassignedReferrals,
+      firstContactWithin24HoursRate,
+      firstContactWithin24HoursCount,
+      firstContactSampleSize: firstContactRecords.length
     }
   };
 
