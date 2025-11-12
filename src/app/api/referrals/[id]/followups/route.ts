@@ -374,22 +374,30 @@ function serializePlan(plan: {
     .filter((task): task is FollowUpTask => task !== null);
   const validTaskIds = new Set(tasks.map((task) => getFollowUpTaskId(task)));
 
-  const completed = (plan.completed ?? [])
-    .filter((entry) => validTaskIds.has(entry.taskId))
-    .map((entry) => {
-      const completedAtDate = entry.completedAt instanceof Date ? entry.completedAt : new Date(entry.completedAt);
-      if (Number.isNaN(completedAtDate.getTime())) {
-        return null;
-      }
-      const completedBy = entry.completedBy
-        ? {
-            id: entry.completedBy.toString(),
-            name: entry.completedByName ?? null,
-          }
-        : undefined;
-      return { taskId: entry.taskId, completedAt: completedAtDate.toISOString(), completedBy } satisfies CompletionPayload;
-    })
-    .filter((entry): entry is CompletionPayload => entry !== null);
+  const completed: CompletionPayload[] = [];
+  for (const entry of plan.completed ?? []) {
+    if (!validTaskIds.has(entry.taskId)) {
+      continue;
+    }
+
+    const completedAtDate = entry.completedAt instanceof Date ? entry.completedAt : new Date(entry.completedAt);
+    if (Number.isNaN(completedAtDate.getTime())) {
+      continue;
+    }
+
+    const completedBy: CompletionPayload['completedBy'] = entry.completedBy
+      ? {
+          id: entry.completedBy.toString(),
+          name: entry.completedByName ?? null,
+        }
+      : undefined;
+
+    completed.push({
+      taskId: entry.taskId,
+      completedAt: completedAtDate.toISOString(),
+      completedBy,
+    });
+  }
 
   const generatedAtDate = plan.generatedAt instanceof Date ? plan.generatedAt : new Date(plan.generatedAt);
   const generatedAt = Number.isNaN(generatedAtDate.getTime()) ? new Date().toISOString() : generatedAtDate.toISOString();
