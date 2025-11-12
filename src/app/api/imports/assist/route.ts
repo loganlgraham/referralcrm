@@ -125,8 +125,7 @@ export async function POST(request: Request) {
                   items: { type: 'string' }
                 }
               },
-              required: [],
-              additionalProperties: false
+              required: []
             }
           }
         },
