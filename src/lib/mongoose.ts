@@ -10,7 +10,15 @@ const registerModels = async () => {
   }
 
   await Promise.all([
-    import('@/models/agent')
+    import('@/models/activity'),
+    import('@/models/agent'),
+    import('@/models/buyer'),
+    import('@/models/lender'),
+    import('@/models/payment'),
+    import('@/models/pre-approval-metric'),
+    import('@/models/referral'),
+    import('@/models/user'),
+    import('@/models/zip')
   ]);
 
   modelsRegistered = true;

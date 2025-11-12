@@ -105,6 +105,7 @@ const STATUS_BADGE_STYLES: Record<ReferralStatus, string> = {
   'Showing Homes': 'bg-violet-100 text-violet-700',
   'Under Contract': 'bg-emerald-100 text-emerald-700',
   Closed: 'bg-green-100 text-green-700',
+  Lost: 'bg-slate-200 text-slate-600',
   Terminated: 'bg-rose-100 text-rose-700'
 };
 
@@ -115,6 +116,7 @@ const STATUS_LABELS: Record<ReferralStatus, string> = {
   'Showing Homes': 'Showing Homes',
   'Under Contract': 'Under Contract',
   Closed: 'Closed',
+  Lost: 'Lost',
   Terminated: 'Terminated'
 };
 
@@ -248,7 +250,7 @@ function DeleteReferralButton({ referralId, borrowerName }: { referralId: string
       type="button"
       onClick={handleDelete}
       disabled={deleting}
-      className="rounded border border-rose-200 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+      className="whitespace-nowrap rounded border border-rose-200 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
     >
       {deleting ? 'Deleting…' : 'Delete'}
     </button>
@@ -259,15 +261,21 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
   const borrowerColumn: ColumnDef<ReferralRow> = {
     header: 'Borrower',
     accessorKey: 'borrowerName',
-    cell: ({ row }) => (
-      <div className="flex flex-col">
-        <Link href={`/referrals/${row.original._id}`} className="font-medium text-brand">
-          {row.original.borrowerName}
-        </Link>
-        <span className="text-xs text-slate-500">{row.original.borrowerEmail}</span>
-        <span className="text-xs text-slate-500">{row.original.borrowerPhone}</span>
-      </div>
-    )
+    cell: ({ row }) => {
+      const { _id, borrowerName, borrowerPhone } = row.original;
+      return (
+        <div className="flex flex-col">
+          <Link href={`/referrals/${_id}`} className="font-medium text-brand">
+            {borrowerName}
+          </Link>
+          {borrowerPhone ? (
+            <span className="text-xs text-slate-500">{borrowerPhone}</span>
+          ) : (
+            <span className="text-xs text-slate-400">—</span>
+          )}
+        </div>
+      );
+    }
   };
 
   const createdColumn: ColumnDef<ReferralRow> = {
@@ -322,9 +330,6 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
         cell: ({ row }) => (
           <div className="flex flex-col text-sm">
             <span className="font-medium text-slate-700">{row.original.assignedAgentName || 'Unassigned'}</span>
-            {row.original.assignedAgentEmail && (
-              <span className="text-xs text-slate-500">{row.original.assignedAgentEmail}</span>
-            )}
             {row.original.assignedAgentPhone && (
               <span className="text-xs text-slate-500">{row.original.assignedAgentPhone}</span>
             )}
@@ -358,24 +363,44 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
     {
       header: 'Agent',
       accessorKey: 'assignedAgentName',
-      cell: ({ row }) => row.original.assignedAgentName || 'Unassigned'
+      cell: ({ row }) => {
+        const { assignedAgentName, assignedAgentPhone } = row.original;
+        if (!assignedAgentName && !assignedAgentPhone) {
+          return 'Unassigned';
+        }
+        return (
+          <div className="flex flex-col text-sm">
+            <span className="font-medium text-slate-700">{assignedAgentName || 'Unassigned'}</span>
+            {assignedAgentPhone && <span className="text-xs text-slate-500">{assignedAgentPhone}</span>}
+          </div>
+        );
+      }
     },
     {
       header: 'Lender/MC',
       accessorKey: 'lenderName',
-      cell: ({ row }) => row.original.lenderName || '—'
+      cell: ({ row }) => {
+        const { lenderName, lenderPhone } = row.original;
+        if (!lenderName && !lenderPhone) {
+          return '—';
+        }
+        return (
+          <div className="flex flex-col text-sm">
+            <span className="font-medium text-slate-700">{lenderName || 'Unassigned'}</span>
+            {lenderPhone && <span className="text-xs text-slate-500">{lenderPhone}</span>}
+          </div>
+        );
+      }
     },
     createdColumn,
     {
       header: '',
       id: 'actions',
       cell: ({ row }) => (
-        <div className="flex justify-end">
-          <DeleteReferralButton
-            referralId={row.original._id}
-            borrowerName={row.original.borrowerName}
-          />
-        </div>
+        <DeleteReferralButton
+          referralId={row.original._id}
+          borrowerName={row.original.borrowerName}
+        />
       )
     }
   ];
@@ -394,7 +419,9 @@ export function ReferralTable({ data, mode }: ReferralTableProps) {
               {headerGroup.headers.map((header) => (
                 <th
                   key={header.id}
-                  className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500"
+                  className={`px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 ${
+                    header.column.id === 'actions' ? 'text-right' : 'text-left'
+                  }`}
                 >
                   {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                 </th>
@@ -406,7 +433,12 @@ export function ReferralTable({ data, mode }: ReferralTableProps) {
           {table.getRowModel().rows.map((row) => (
             <tr key={row.id} className="hover:bg-slate-50">
               {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} className="px-4 py-3 text-sm text-slate-700">
+                <td
+                  key={cell.id}
+                  className={`px-4 py-3 text-sm text-slate-700 ${
+                    cell.column.id === 'actions' ? 'text-right' : ''
+                  }`}
+                >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}

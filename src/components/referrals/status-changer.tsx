@@ -9,6 +9,9 @@ import { formatCurrency } from '@/utils/formatters';
 
 interface ContractDetails {
   propertyAddress?: string;
+  propertyCity?: string;
+  propertyState?: string;
+  propertyPostalCode?: string;
   contractPriceCents?: number;
   agentCommissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
@@ -24,6 +27,9 @@ interface Props {
   onStatusChanged?: (status: ReferralStatus, payload?: Record<string, unknown>) => void;
   onContractSaved?: (details: {
     propertyAddress: string;
+    propertyCity: string;
+    propertyState: string;
+    propertyPostalCode: string;
     contractPriceCents: number;
     agentCommissionBasisPoints: number;
     referralFeeBasisPoints: number;
@@ -32,6 +38,9 @@ interface Props {
   onPreApprovalSaved?: (details: { preApprovalAmountCents: number; referralFeeDueCents: number }) => void;
   onContractDraftChange?: (details: {
     propertyAddress?: string;
+    propertyCity?: string;
+    propertyState?: string;
+    propertyPostalCode?: string;
     contractPriceCents?: number;
     agentCommissionBasisPoints?: number;
     referralFeeBasisPoints?: number;
@@ -42,6 +51,9 @@ interface Props {
 
 interface ContractFormState {
   propertyAddress: string;
+  propertyCity: string;
+  propertyState: string;
+  propertyPostalCode: string;
   contractPrice: string;
   agentCommissionPercentage: string;
   referralFeePercentage: string;
@@ -49,6 +61,9 @@ interface ContractFormState {
 
 const buildInitialFormState = (details?: ContractDetails): ContractFormState => ({
   propertyAddress: details?.propertyAddress ?? '',
+  propertyCity: details?.propertyCity ?? '',
+  propertyState: details?.propertyState ? details.propertyState.toUpperCase() : '',
+  propertyPostalCode: details?.propertyPostalCode ?? '',
   contractPrice: details?.contractPriceCents ? (details.contractPriceCents / 100).toString() : '',
   agentCommissionPercentage: details?.agentCommissionBasisPoints
     ? (details.agentCommissionBasisPoints / 100).toString()
@@ -57,6 +72,29 @@ const buildInitialFormState = (details?: ContractDetails): ContractFormState => 
     ? (details.referralFeeBasisPoints / 100).toString()
     : '25',
 });
+
+const formatFullAddress = (
+  street?: string,
+  city?: string,
+  state?: string,
+  postal?: string
+) => {
+  const trimmedStreet = street?.trim();
+  const trimmedCity = city?.trim();
+  const trimmedState = state?.trim();
+  const trimmedPostal = postal?.trim();
+
+  const localityParts: string[] = [];
+  if (trimmedCity) {
+    localityParts.push(trimmedCity);
+  }
+  const statePostal = [trimmedState, trimmedPostal].filter((part) => part && part.length > 0).join(' ');
+  if (statePostal) {
+    localityParts.push(statePostal);
+  }
+
+  return [trimmedStreet, localityParts.join(', ')].filter((part) => part && part.length > 0).join(', ');
+};
 
 const calculateReferralFeeAmount = (
   priceInput: string,
@@ -120,7 +158,7 @@ export function StatusChanger({
   }, [status]);
 
   const pipelineOptions = useMemo(() => {
-    const filtered = statuses.filter((item) => item !== 'Closed' && item !== 'Terminated');
+    const filtered = statuses.filter((item) => item !== 'Closed' && item !== 'Terminated' && item !== 'Lost');
     const containsCurrent = filtered.some((item) => item === currentStatus);
     if (!containsCurrent) {
       return [...filtered, currentStatus];
@@ -143,8 +181,21 @@ export function StatusChanger({
         form.referralFeePercentage
       );
 
+      const trimmedCity = form.propertyCity.trim();
+      const trimmedState = form.propertyState.trim().toUpperCase();
+      const trimmedPostal = form.propertyPostalCode.trim();
+      const displayAddress = formatFullAddress(
+        form.propertyAddress,
+        trimmedCity,
+        trimmedState,
+        trimmedPostal
+      );
+
       onContractDraftChange({
-        propertyAddress: form.propertyAddress?.trim() ? form.propertyAddress : undefined,
+        propertyAddress: displayAddress || undefined,
+        propertyCity: trimmedCity || undefined,
+        propertyState: trimmedState || undefined,
+        propertyPostalCode: trimmedPostal || undefined,
         contractPriceCents:
           Number.isFinite(price) && price > 0 ? Math.round(price * 100) : undefined,
         agentCommissionBasisPoints:
@@ -168,6 +219,9 @@ export function StatusChanger({
     setContractForm((previous) => {
       const hasChanged =
         previous.propertyAddress !== nextForm.propertyAddress ||
+        previous.propertyCity !== nextForm.propertyCity ||
+        previous.propertyState !== nextForm.propertyState ||
+        previous.propertyPostalCode !== nextForm.propertyPostalCode ||
         previous.contractPrice !== nextForm.contractPrice ||
         previous.agentCommissionPercentage !== nextForm.agentCommissionPercentage ||
         previous.referralFeePercentage !== nextForm.referralFeePercentage;
@@ -183,6 +237,9 @@ export function StatusChanger({
   }, [
     broadcastContractState,
     contractDetails?.propertyAddress,
+    contractDetails?.propertyCity,
+    contractDetails?.propertyState,
+    contractDetails?.propertyPostalCode,
     contractDetails?.contractPriceCents,
     contractDetails?.agentCommissionBasisPoints,
     contractDetails?.referralFeeBasisPoints,
@@ -213,8 +270,15 @@ export function StatusChanger({
       contractForm.referralFeePercentage
     );
 
+    const hasCity = contractForm.propertyCity.trim().length > 0;
+    const stateValid = /^[A-Za-z]{2}$/.test(contractForm.propertyState.trim());
+    const postalValid = /^\d{5}(?:-\d{4})?$/.test(contractForm.propertyPostalCode.trim());
+
     return (
       contractForm.propertyAddress.trim().length > 0 &&
+      hasCity &&
+      stateValid &&
+      postalValid &&
       contractForm.contractPrice.trim().length > 0 &&
       contractForm.agentCommissionPercentage.trim().length > 0 &&
       contractForm.referralFeePercentage.trim().length > 0 &&
@@ -267,8 +331,16 @@ export function StatusChanger({
           return;
         }
 
+        const propertyStreet = contractForm.propertyAddress.trim();
+        const propertyCity = contractForm.propertyCity.trim();
+        const propertyState = contractForm.propertyState.trim().toUpperCase();
+        const propertyPostalCode = contractForm.propertyPostalCode.trim();
+
         payload.contractDetails = {
-          propertyAddress: contractForm.propertyAddress,
+          propertyAddress: propertyStreet,
+          propertyCity,
+          propertyState,
+          propertyPostalCode,
           contractPrice,
           agentCommissionPercentage: agentCommission,
           referralFeePercentage,
@@ -301,6 +373,9 @@ export function StatusChanger({
       if (next === 'Under Contract' && body.contractDetails) {
         const details = body.contractDetails as {
           propertyAddress: string;
+          propertyCity?: string;
+          propertyState?: string;
+          propertyPostalCode?: string;
           contractPriceCents: number;
           agentCommissionBasisPoints: number;
           referralFeeBasisPoints: number;
@@ -308,6 +383,9 @@ export function StatusChanger({
         };
         setContractForm({
           propertyAddress: details.propertyAddress ?? '',
+          propertyCity: details.propertyCity ?? '',
+          propertyState: details.propertyState ? details.propertyState.toUpperCase() : '',
+          propertyPostalCode: details.propertyPostalCode ?? '',
           contractPrice: details.contractPriceCents ? (details.contractPriceCents / 100).toString() : '',
           agentCommissionPercentage: details.agentCommissionBasisPoints
             ? (details.agentCommissionBasisPoints / 100).toString()
@@ -320,6 +398,9 @@ export function StatusChanger({
         broadcastContractState(
           {
             propertyAddress: details.propertyAddress ?? '',
+            propertyCity: details.propertyCity ?? '',
+            propertyState: details.propertyState ? details.propertyState.toUpperCase() : '',
+            propertyPostalCode: details.propertyPostalCode ?? '',
             contractPrice: details.contractPriceCents ? (details.contractPriceCents / 100).toString() : '',
             agentCommissionPercentage: details.agentCommissionBasisPoints
               ? (details.agentCommissionBasisPoints / 100).toString()
@@ -332,6 +413,9 @@ export function StatusChanger({
         );
         onContractSaved?.({
           propertyAddress: details.propertyAddress ?? '',
+          propertyCity: details.propertyCity ?? '',
+          propertyState: details.propertyState ?? '',
+          propertyPostalCode: details.propertyPostalCode ?? '',
           contractPriceCents: details.contractPriceCents ?? 0,
           agentCommissionBasisPoints: details.agentCommissionBasisPoints ?? 0,
           referralFeeBasisPoints: details.referralFeeBasisPoints ?? 0,
@@ -375,6 +459,11 @@ export function StatusChanger({
         if (field === 'contractPrice') {
           const digitsOnly = value.replace(/[^0-9]/g, '');
           nextValue = digitsOnly;
+        } else if (field === 'propertyState') {
+          nextValue = value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2);
+        } else if (field === 'propertyPostalCode') {
+          const sanitized = value.replace(/[^0-9-]/g, '');
+          nextValue = sanitized.slice(0, 10);
         }
         const next = { ...previous, [field]: nextValue };
         broadcastContractState(next, true);
@@ -480,10 +569,47 @@ export function StatusChanger({
                 value={contractForm.propertyAddress}
                 onChange={handleContractFieldChange('propertyAddress')}
                 className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
-                placeholder="123 Main St, City, ST 12345"
+                placeholder="123 Main St"
                 disabled={loading}
               />
             </label>
+            <div className="grid gap-3 md:grid-cols-[minmax(0,2fr),repeat(2,minmax(0,1fr))]">
+              <label className="block">
+                <span className="text-slate-500">City</span>
+                <input
+                  type="text"
+                  value={contractForm.propertyCity}
+                  onChange={handleContractFieldChange('propertyCity')}
+                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+                  placeholder="Austin"
+                  disabled={loading}
+                />
+              </label>
+              <label className="block">
+                <span className="text-slate-500">State</span>
+                <input
+                  type="text"
+                  value={contractForm.propertyState}
+                  onChange={handleContractFieldChange('propertyState')}
+                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 uppercase"
+                  placeholder="TX"
+                  maxLength={2}
+                  disabled={loading}
+                />
+              </label>
+              <label className="block">
+                <span className="text-slate-500">ZIP</span>
+                <input
+                  type="text"
+                  value={contractForm.propertyPostalCode}
+                  onChange={handleContractFieldChange('propertyPostalCode')}
+                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+                  placeholder="73301"
+                  inputMode="numeric"
+                  disabled={loading}
+                />
+              </label>
+            </div>
             <label className="block">
               <span className="text-slate-500">Contract Price ($)</span>
               <input
@@ -519,7 +645,7 @@ export function StatusChanger({
                   value={contractForm.referralFeePercentage}
                   onChange={handleContractFieldChange('referralFeePercentage')}
                   className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
-                  placeholder="1"
+                  placeholder="25"
                   disabled={loading}
                 />
               </label>

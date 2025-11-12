@@ -138,6 +138,31 @@ function SummaryCard({ title, value, helper }: { title: string; value: string; h
   );
 }
 
+function MetricGroupCard({
+  title,
+  metrics
+}: {
+  title: string;
+  metrics: { label: string; value: string; helper?: string }[];
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+      <dl className="mt-3 space-y-3">
+        {metrics.map((metric) => (
+          <div key={`${title}-${metric.label}`} className="space-y-1">
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-sm text-slate-500">{metric.label}</dt>
+              <dd className="text-sm font-semibold text-slate-900">{metric.value}</dd>
+            </div>
+            {metric.helper ? <p className="text-xs text-slate-400">{metric.helper}</p> : null}
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 function LineChartCard({
   title,
   data,
@@ -500,34 +525,62 @@ function MainDashboard({
   canEditPreApprovals: boolean;
   onPreApprovalSaved: () => void;
 }) {
-  const cards = useMemo(() => {
-    const summary = data.summary;
-    return [
-      { title: 'Total referrals', value: formatNumber(summary.totalReferrals) },
-      { title: 'Deals closed', value: formatNumber(summary.dealsClosed) },
-      { title: 'Close rate', value: `${summary.closeRate.toFixed(1)}%` },
-      { title: 'Deals under contract', value: formatNumber(summary.dealsUnderContract) },
-      { title: 'AFC deals lost', value: formatNumber(summary.afcDealsLost) },
-      { title: 'AFC attach rate', value: `${summary.afcAttachRate.toFixed(1)}%` },
-      { title: 'Active pipeline', value: formatNumber(summary.activePipeline) },
-      { title: 'Pipeline value', value: formatCurrency(summary.pipelineValueCents) },
-      { title: 'Expected revenue', value: formatCurrency(summary.expectedRevenueCents) },
-      { title: 'Realized revenue', value: formatCurrency(summary.realizedRevenueCents) },
-      { title: 'Closed, not paid', value: formatCurrency(summary.closedNotPaidCents) },
-      { title: 'Avg. days closed → paid', value: `${summary.averageDaysClosedToPaid.toFixed(1)} days` },
-      { title: 'Avg. revenue per deal', value: formatCurrency(summary.averageRevenuePerDealCents) },
-      { title: 'Total volume closed', value: formatCurrency(summary.totalVolumeClosedCents) },
-      { title: 'Avg. pre-approval amount', value: formatCurrency(summary.averagePaAmountCents) },
-      { title: 'Avg. referral fee paid', value: formatCurrency(summary.averageReferralFeePaidCents) }
-    ];
-  }, [data.summary]);
+  const summary = data.summary;
+
+  const highlights = [
+    {
+      title: 'Realized revenue',
+      value: formatCurrency(summary.realizedRevenueCents),
+      helper: `Closed, not paid ${formatCurrency(summary.closedNotPaidCents)}`
+    },
+    {
+      title: 'Pipeline value',
+      value: formatCurrency(summary.pipelineValueCents),
+      helper: `${formatNumber(summary.activePipeline)} active referrals`
+    },
+    {
+      title: 'Total referrals',
+      value: formatNumber(summary.totalReferrals),
+      helper: `${formatNumber(summary.dealsClosed)} closed`
+    },
+    {
+      title: 'Close rate',
+      value: `${summary.closeRate.toFixed(1)}%`,
+      helper: `Avg. days closed → paid ${summary.averageDaysClosedToPaid.toFixed(1)} days`
+    }
+  ];
+
+  const pipelineMetrics = [
+    { label: 'Deals under contract', value: formatNumber(summary.dealsUnderContract) },
+    { label: 'Active pipeline', value: formatNumber(summary.activePipeline) },
+    {
+      label: 'AFC attach rate',
+      value: `${summary.afcAttachRate.toFixed(1)}%`,
+      helper: `${formatNumber(summary.afcDealsLost)} deals lost`
+    },
+    { label: 'Avg. pre-approval amount', value: formatCurrency(summary.averagePaAmountCents) }
+  ];
+
+  const revenueMetrics = [
+    { label: 'Expected revenue', value: formatCurrency(summary.expectedRevenueCents) },
+    { label: 'Closed, not paid', value: formatCurrency(summary.closedNotPaidCents) },
+    { label: 'Total volume closed', value: formatCurrency(summary.totalVolumeClosedCents) },
+    { label: 'Avg. referral fee paid', value: formatCurrency(summary.averageReferralFeePaidCents) },
+    { label: 'Avg. revenue per deal', value: formatCurrency(summary.averageRevenuePerDealCents) },
+    { label: 'Avg. days closed → paid', value: `${summary.averageDaysClosedToPaid.toFixed(1)} days` }
+  ];
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {cards.map((card) => (
-          <SummaryCard key={card.title} title={card.title} value={card.value} />
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {highlights.map((card) => (
+          <SummaryCard key={card.title} title={card.title} value={card.value} helper={card.helper} />
         ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <MetricGroupCard title="Pipeline health" metrics={pipelineMetrics} />
+        <MetricGroupCard title="Revenue performance" metrics={revenueMetrics} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -539,8 +592,8 @@ function MainDashboard({
 
       <div className="grid gap-4 lg:grid-cols-3">
         <RevenueList title="Revenue by source" items={data.revenueBySource} />
-      <RevenueList title="Revenue by endorser" items={data.revenueByEndorser} />
-      <RevenueList title="Revenue by state" items={data.revenueByState} />
+        <RevenueList title="Revenue by endorser" items={data.revenueByEndorser} />
+        <RevenueList title="Revenue by state" items={data.revenueByState} />
       </div>
 
       <PreApprovalConversionSection

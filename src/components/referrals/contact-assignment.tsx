@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
 
+import { EmailActivityLink } from '@/components/common/email-activity-link';
+
 const fetcher = (url: string) => fetch(url).then((response) => {
   if (!response.ok) {
     throw new Error('Failed to load directory');
@@ -144,9 +146,15 @@ export function ContactAssignment({
                 {formattedContact.email && (
                   <p className="text-xs text-slate-500">
                     Email:{' '}
-                    <a className="text-brand hover:underline" href={`mailto:${formattedContact.email}`}>
+                    <EmailActivityLink
+                      referralId={referralId}
+                      email={formattedContact.email}
+                      recipient={title}
+                      recipientName={formattedContact.name}
+                      className="text-xs"
+                    >
                       {formattedContact.email}
-                    </a>
+                    </EmailActivityLink>
                   </p>
                 )}
                 {formattedContact.phone && (

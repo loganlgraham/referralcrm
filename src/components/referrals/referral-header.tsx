@@ -9,9 +9,33 @@ import { formatCurrency } from '@/utils/formatters';
 import { StatusChanger } from '@/components/referrals/status-changer';
 import { SLAWidget } from '@/components/referrals/sla-widget';
 import { ContactAssignment, type Contact } from '@/components/referrals/contact-assignment';
+import { EmailActivityLink } from '@/components/common/email-activity-link';
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
 type AhaBucketValue = '' | 'AHA' | 'AHA_OOS';
+
+const formatFullAddress = (
+  street?: string,
+  city?: string,
+  state?: string,
+  postal?: string
+) => {
+  const trimmedStreet = street?.trim();
+  const trimmedCity = city?.trim();
+  const trimmedState = state?.trim();
+  const trimmedPostal = postal?.trim();
+
+  const localityParts: string[] = [];
+  if (trimmedCity) {
+    localityParts.push(trimmedCity);
+  }
+  const statePostal = [trimmedState, trimmedPostal].filter((part) => part && part.length > 0).join(' ');
+  if (statePostal) {
+    localityParts.push(statePostal);
+  }
+
+  return [trimmedStreet, localityParts.join(', ')].filter((part) => part && part.length > 0).join(', ');
+};
 
 interface FinancialSnapshot {
   status: ReferralStatus;
@@ -21,12 +45,18 @@ interface FinancialSnapshot {
   commissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
   propertyAddress?: string;
+  propertyCity?: string;
+  propertyState?: string;
+  propertyPostalCode?: string;
   statusLastUpdated?: string;
   daysInStatus?: number;
 }
 
 interface ContractDraftSnapshot {
   propertyAddress?: string;
+  propertyCity?: string;
+  propertyState?: string;
+  propertyPostalCode?: string;
   contractPriceCents?: number;
   agentCommissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
@@ -72,6 +102,13 @@ export function ReferralHeader({
     referral.referralFeeBasisPoints
   );
   const [propertyAddress, setPropertyAddress] = useState<string | undefined>(referral.propertyAddress);
+  const [propertyCity, setPropertyCity] = useState<string | undefined>(referral.propertyCity);
+  const [propertyState, setPropertyState] = useState<string | undefined>(
+    referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined
+  );
+  const [propertyPostalCode, setPropertyPostalCode] = useState<string | undefined>(
+    referral.propertyPostalCode
+  );
   const [draftContract, setDraftContract] = useState<ContractDraftSnapshot>({ hasUnsavedChanges: false });
   const [daysInStatus, setDaysInStatus] = useState<number>(referral.daysInStatus ?? 0);
   const [auditEntries, setAuditEntries] = useState<any[]>(Array.isArray(referral.audit) ? referral.audit : []);
@@ -107,6 +144,18 @@ export function ReferralHeader({
   }, [referral.propertyAddress]);
 
   useEffect(() => {
+    setPropertyCity(referral.propertyCity);
+  }, [referral.propertyCity]);
+
+  useEffect(() => {
+    setPropertyState(referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined);
+  }, [referral.propertyState]);
+
+  useEffect(() => {
+    setPropertyPostalCode(referral.propertyPostalCode);
+  }, [referral.propertyPostalCode]);
+
+  useEffect(() => {
     setDaysInStatus(referral.daysInStatus ?? 0);
   }, [referral.daysInStatus]);
 
@@ -121,6 +170,11 @@ export function ReferralHeader({
   }, [referral.ahaBucket]);
 
   useEffect(() => {
+    const normalizedState = propertyState
+      ? propertyState
+      : referral.propertyState
+      ? String(referral.propertyState).toUpperCase()
+      : '';
     onFinancialsChange?.({
       status,
       preApprovalAmountCents: preApprovalAmountCents ?? 0,
@@ -128,7 +182,10 @@ export function ReferralHeader({
       referralFeeDueCents: referralFeeDueCents ?? 0,
       commissionBasisPoints,
       referralFeeBasisPoints,
-      propertyAddress: (propertyAddress ?? referral.propertyAddress) as string | undefined,
+      propertyAddress: propertyAddress ?? referral.propertyAddress ?? undefined,
+      propertyCity: propertyCity ?? referral.propertyCity ?? undefined,
+      propertyState: normalizedState || undefined,
+      propertyPostalCode: propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
     });
   }, [
     commissionBasisPoints,
@@ -136,13 +193,38 @@ export function ReferralHeader({
     onFinancialsChange,
     preApprovalAmountCents,
     propertyAddress,
+    propertyCity,
+    propertyPostalCode,
+    propertyState,
     referral.propertyAddress,
+    referral.propertyCity,
+    referral.propertyPostalCode,
+    referral.propertyState,
     referralFeeBasisPoints,
     referralFeeDueCents,
     status,
   ]);
 
   const allowDraftPreview = draftContract.hasUnsavedChanges && status === 'Under Contract';
+  const normalizedReferralState = referral.propertyState
+    ? String(referral.propertyState).toUpperCase()
+    : '';
+  const savedStreet = propertyAddress ?? referral.propertyAddress ?? '';
+  const savedCity = propertyCity ?? referral.propertyCity ?? '';
+  const savedState = propertyState ?? normalizedReferralState;
+  const savedPostal = propertyPostalCode ?? referral.propertyPostalCode ?? '';
+  const savedDisplayAddress = formatFullAddress(savedStreet, savedCity, savedState, savedPostal);
+  const draftDisplayAddress = allowDraftPreview
+    ? (() => {
+        if (draftContract.propertyAddress && draftContract.propertyAddress.trim().length > 0) {
+          return draftContract.propertyAddress;
+        }
+        const draftCity = draftContract.propertyCity ?? savedCity;
+        const draftState = draftContract.propertyState ?? savedState;
+        const draftPostal = draftContract.propertyPostalCode ?? savedPostal;
+        return formatFullAddress(savedStreet, draftCity, draftState, draftPostal);
+      })()
+    : null;
   const effectiveContractPriceCents = allowDraftPreview && draftContract.contractPriceCents !== undefined
     ? draftContract.contractPriceCents
     : contractPriceCents;
@@ -158,8 +240,10 @@ export function ReferralHeader({
       ? draftContract.referralFeeBasisPoints
       : referralFeeBasisPoints;
   const effectivePropertyAddress =
-    allowDraftPreview && draftContract.propertyAddress
-      ? draftContract.propertyAddress
+    draftDisplayAddress && draftDisplayAddress.trim().length > 0
+      ? draftDisplayAddress
+      : savedDisplayAddress && savedDisplayAddress.trim().length > 0
+      ? savedDisplayAddress
       : propertyAddress ?? referral.propertyAddress;
 
   const isUnderContract = status === 'Under Contract' || status === 'Closed';
@@ -199,22 +283,27 @@ export function ReferralHeader({
     if (effectivePropertyAddress && effectivePropertyAddress.trim().length > 0) {
       return effectivePropertyAddress;
     }
-    if (referral.propertyAddress) {
-      return referral.propertyAddress;
+    const savedFallback =
+      savedDisplayAddress && savedDisplayAddress.trim().length > 0 ? savedDisplayAddress : savedStreet;
+    if (savedFallback && savedFallback.trim().length > 0) {
+      return savedFallback;
     }
     return referral.lookingInZip ? `Looking in ${referral.lookingInZip}` : 'Pending location';
-  }, [effectivePropertyAddress, referral.lookingInZip, referral.propertyAddress]);
+  }, [effectivePropertyAddress, referral.lookingInZip, savedDisplayAddress, savedStreet]);
 
   const borrowerName = referral.borrower?.name ?? 'Borrower';
-  const borrowerContact = [referral.borrower?.email, referral.borrower?.phone]
-    .filter((value) => Boolean(value))
-    .join(' • ');
+  const borrowerEmail = referral.borrower?.email?.trim() ?? '';
+  const borrowerPhone = referral.borrower?.phone?.trim() ?? '';
+  const hasBorrowerContact = Boolean(borrowerEmail || borrowerPhone);
 
   const handleContractDraftChangeInternal = (draft: ContractDraftSnapshot) => {
     setDraftContract((previous) => {
       if (
         previous.hasUnsavedChanges === draft.hasUnsavedChanges &&
         previous.propertyAddress === draft.propertyAddress &&
+        previous.propertyCity === draft.propertyCity &&
+        previous.propertyState === draft.propertyState &&
+        previous.propertyPostalCode === draft.propertyPostalCode &&
         previous.contractPriceCents === draft.contractPriceCents &&
         previous.agentCommissionBasisPoints === draft.agentCommissionBasisPoints &&
         previous.referralFeeBasisPoints === draft.referralFeeBasisPoints &&
@@ -229,12 +318,18 @@ export function ReferralHeader({
 
   const handleContractSaved = (details: {
     propertyAddress: string;
+    propertyCity: string;
+    propertyState: string;
+    propertyPostalCode: string;
     contractPriceCents: number;
     agentCommissionBasisPoints: number;
     referralFeeBasisPoints: number;
     referralFeeDueCents: number;
   }) => {
     setPropertyAddress(details.propertyAddress);
+    setPropertyCity(details.propertyCity || undefined);
+    setPropertyState(details.propertyState ? details.propertyState.toUpperCase() : undefined);
+    setPropertyPostalCode(details.propertyPostalCode || undefined);
     setContractPriceCents(details.contractPriceCents);
     setCommissionBasisPoints(details.agentCommissionBasisPoints);
     setReferralFeeBasisPoints(details.referralFeeBasisPoints);
@@ -248,6 +343,9 @@ export function ReferralHeader({
       commissionBasisPoints: details.agentCommissionBasisPoints,
       referralFeeBasisPoints: details.referralFeeBasisPoints,
       propertyAddress: details.propertyAddress,
+      propertyCity: details.propertyCity,
+      propertyState: details.propertyState,
+      propertyPostalCode: details.propertyPostalCode,
     });
   };
 
@@ -262,7 +360,10 @@ export function ReferralHeader({
     let nextReferralFeeDue = referralFeeDueCents ?? 0;
     let nextCommission = commissionBasisPoints;
     let nextReferralFeeBasis = referralFeeBasisPoints;
-    let nextProperty = propertyAddress ?? referral.propertyAddress;
+    let nextPropertyStreet = propertyAddress ?? referral.propertyAddress ?? '';
+    let nextPropertyCity = propertyCity ?? referral.propertyCity ?? '';
+    let nextPropertyState = propertyState ?? normalizedReferralState;
+    let nextPropertyPostal = propertyPostalCode ?? referral.propertyPostalCode ?? '';
 
     if (payload?.preApprovalAmountCents !== undefined) {
       nextPreApproval = Number(payload.preApprovalAmountCents) || 0;
@@ -282,6 +383,9 @@ export function ReferralHeader({
     if (nextStatus === 'Under Contract' && payload?.contractDetails) {
       const details = payload.contractDetails as {
         propertyAddress?: string;
+        propertyCity?: string;
+        propertyState?: string;
+        propertyPostalCode?: string;
         contractPriceCents?: number;
         agentCommissionBasisPoints?: number;
         referralFeeBasisPoints?: number;
@@ -289,7 +393,20 @@ export function ReferralHeader({
       };
       if (details.propertyAddress) {
         setPropertyAddress(details.propertyAddress);
-        nextProperty = details.propertyAddress;
+        nextPropertyStreet = details.propertyAddress;
+      }
+      if (typeof details.propertyCity === 'string') {
+        setPropertyCity(details.propertyCity || undefined);
+        nextPropertyCity = details.propertyCity ?? '';
+      }
+      if (typeof details.propertyState === 'string') {
+        const normalizedState = details.propertyState ? details.propertyState.toUpperCase() : '';
+        setPropertyState(normalizedState || undefined);
+        nextPropertyState = normalizedState;
+      }
+      if (typeof details.propertyPostalCode === 'string') {
+        setPropertyPostalCode(details.propertyPostalCode || undefined);
+        nextPropertyPostal = details.propertyPostalCode ?? '';
       }
       if (typeof details.contractPriceCents === 'number') {
         setContractPriceCents(details.contractPriceCents);
@@ -346,7 +463,10 @@ export function ReferralHeader({
       referralFeeDueCents: nextReferralFeeDue,
       commissionBasisPoints: nextCommission,
       referralFeeBasisPoints: nextReferralFeeBasis,
-      propertyAddress: nextProperty,
+      propertyAddress: nextPropertyStreet,
+      propertyCity: nextPropertyCity || undefined,
+      propertyState: nextPropertyState || undefined,
+      propertyPostalCode: nextPropertyPostal || undefined,
       statusLastUpdated: statusUpdatedAt.toISOString(),
       daysInStatus: computedDaysInStatus,
     });
@@ -363,6 +483,14 @@ export function ReferralHeader({
       commissionBasisPoints: commissionBasisPoints,
       referralFeeBasisPoints: referralFeeBasisPoints,
       propertyAddress: propertyAddress ?? referral.propertyAddress,
+      propertyCity: propertyCity ?? referral.propertyCity ?? undefined,
+      propertyState:
+        propertyState
+          ? propertyState
+          : referral.propertyState
+          ? String(referral.propertyState).toUpperCase()
+          : undefined,
+      propertyPostalCode: propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
     });
   };
 
@@ -413,9 +541,29 @@ export function ReferralHeader({
           <p className="text-xs font-semibold uppercase tracking-wide text-brand">Borrower</p>
           <div>
             <h1 className="text-2xl font-semibold text-slate-900 lg:text-3xl">{borrowerName}</h1>
-            <p className="mt-1 text-sm text-slate-600">
-              {borrowerContact || 'Contact information pending'}
-            </p>
+            {hasBorrowerContact ? (
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                {borrowerEmail && (
+                  <EmailActivityLink
+                    referralId={referral._id}
+                    email={borrowerEmail}
+                    recipient="Borrower"
+                    recipientName={borrowerName}
+                    className="text-sm"
+                  >
+                    {borrowerEmail}
+                  </EmailActivityLink>
+                )}
+                {borrowerEmail && borrowerPhone && <span className="text-slate-300">•</span>}
+                {borrowerPhone && (
+                  <a className="text-brand hover:underline" href={`tel:${borrowerPhone}`}>
+                    {borrowerPhone}
+                  </a>
+                )}
+              </div>
+            ) : (
+              <p className="mt-1 text-sm text-slate-600">Contact information pending</p>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-brand/70">
             <span className="rounded-full bg-brand/10 px-3 py-1 text-brand">{status}</span>
@@ -467,6 +615,11 @@ export function ReferralHeader({
             statuses={REFERRAL_STATUSES}
             contractDetails={{
               propertyAddress: propertyAddress ?? referral.propertyAddress,
+              propertyCity: propertyCity ?? referral.propertyCity ?? undefined,
+              propertyState:
+                propertyState ??
+                (referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined),
+              propertyPostalCode: propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
               contractPriceCents: contractPriceCents,
               agentCommissionBasisPoints: commissionBasisPoints,
               referralFeeBasisPoints: referralFeeBasisPoints,

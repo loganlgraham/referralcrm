@@ -66,7 +66,15 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       );
     }
 
-    referral.propertyAddress = details.propertyAddress;
+    const propertyAddress = details.propertyAddress.trim();
+    const propertyCity = details.propertyCity.trim();
+    const propertyState = details.propertyState.trim().toUpperCase();
+    const propertyPostalCode = details.propertyPostalCode.trim();
+
+    referral.propertyAddress = propertyAddress;
+    referral.propertyCity = propertyCity;
+    referral.propertyState = propertyState;
+    referral.propertyPostalCode = propertyPostalCode;
     referral.estPurchasePriceCents = Math.round(details.contractPrice * 100);
     referral.commissionBasisPoints = Math.round(details.agentCommissionPercentage * 100);
     referral.referralFeeBasisPoints = Math.round(details.referralFeePercentage * 100);
@@ -91,7 +99,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         expectedAmountCents: referral.referralFeeDueCents ?? 0,
       });
     }
-  } else if (parsed.data.status === 'Terminated') {
+  } else if (parsed.data.status === 'Terminated' || parsed.data.status === 'Lost') {
     referral.estPurchasePriceCents = 0;
     referral.referralFeeDueCents = 0;
     await Payment.updateMany(
@@ -134,6 +142,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       parsed.data.status === 'Under Contract'
         ? {
             propertyAddress: referral.propertyAddress ?? '',
+            propertyCity: referral.propertyCity ?? '',
+            propertyState: referral.propertyState ?? '',
+            propertyPostalCode: referral.propertyPostalCode ?? '',
             contractPriceCents: referral.estPurchasePriceCents ?? 0,
             agentCommissionBasisPoints: referral.commissionBasisPoints ?? 0,
             referralFeeBasisPoints: referral.referralFeeBasisPoints ?? 0,

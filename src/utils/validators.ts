@@ -50,6 +50,14 @@ export const updateStatusSchema = z.object({
   contractDetails: z
     .object({
       propertyAddress: z.string().min(1),
+      propertyCity: z.string().min(1),
+      propertyState: z
+        .string()
+        .regex(/^[A-Za-z]{2}$/)
+        .transform((value) => value.toUpperCase()),
+      propertyPostalCode: z
+        .string()
+        .regex(/^\d{5}(?:-\d{4})?$/, 'Enter a valid ZIP code'),
       contractPrice: z.number().min(0),
       agentCommissionPercentage: z.number().min(0),
       referralFeePercentage: z.number().min(0)

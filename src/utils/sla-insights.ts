@@ -517,7 +517,7 @@ export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommenda
     }
   }
 
-  if (status === 'Terminated' && hoursSinceLastNote !== null && hoursSinceLastNote > 24) {
+  if ((status === 'Terminated' || status === 'Lost') && hoursSinceLastNote !== null && hoursSinceLastNote > 24) {
     recommendations.push(
       buildRecommendation({
         id: 'capture-termination-reason',
