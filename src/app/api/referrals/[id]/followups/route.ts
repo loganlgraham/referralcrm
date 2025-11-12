@@ -342,24 +342,25 @@ async function generatePlan(
 
 type PlanLike = {
   generatedAt: Date | string;
-  tasks?: Array<FollowUpTask & Record<string, unknown>>;
-  meta?: PlanMeta | null;
-  completed?: {
-    taskId: string;
-    completedAt: Date | string;
-    completedBy?: Types.ObjectId;
-    completedByName?: string;
-  }[];
+  tasks?: unknown;
+  meta?: unknown;
+  completed?: unknown;
 };
 
 function serializePlan(plan: PlanLike): SerializedPlan {
-  const tasks = (plan.tasks ?? [])
+  const rawTasks = Array.isArray(plan.tasks) ? plan.tasks : [];
+
+  const tasks = rawTasks
     .map((task) => {
-      const audience = task.audience;
-      const title = task.title;
-      const summary = task.summary;
-      const suggestedChannel = task.suggestedChannel;
-      const urgency = task.urgency;
+      if (!task || typeof task !== 'object') {
+        return null;
+      }
+
+      const audience = (task as { audience?: unknown }).audience;
+      const title = (task as { title?: unknown }).title;
+      const summary = (task as { summary?: unknown }).summary;
+      const suggestedChannel = (task as { suggestedChannel?: unknown }).suggestedChannel;
+      const urgency = (task as { urgency?: unknown }).urgency;
 
       if (
         (audience !== 'Agent' && audience !== 'MC' && audience !== 'Referral') ||
@@ -376,26 +377,47 @@ function serializePlan(plan: PlanLike): SerializedPlan {
     .filter((task): task is FollowUpTask => task !== null);
   const validTaskIds = new Set(tasks.map((task) => getFollowUpTaskId(task)));
 
+  const rawCompleted = Array.isArray(plan.completed) ? plan.completed : [];
+
   const completed: CompletionPayload[] = [];
-  for (const entry of plan.completed ?? []) {
-    if (!validTaskIds.has(entry.taskId)) {
+  for (const entry of rawCompleted) {
+    if (!entry || typeof entry !== 'object') {
       continue;
     }
 
-    const completedAtDate = entry.completedAt instanceof Date ? entry.completedAt : new Date(entry.completedAt);
+    const taskId = (entry as { taskId?: unknown }).taskId;
+    if (typeof taskId !== 'string' || !validTaskIds.has(taskId)) {
+      continue;
+    }
+
+    const completedAtRaw = (entry as { completedAt?: unknown }).completedAt;
+    const completedAtDate = completedAtRaw instanceof Date ? completedAtRaw : new Date(completedAtRaw as string | number);
     if (Number.isNaN(completedAtDate.getTime())) {
       continue;
     }
 
-    const completedBy: CompletionPayload['completedBy'] = entry.completedBy
+    const completedByValue = (entry as { completedBy?: unknown }).completedBy;
+    const completedByName = (entry as { completedByName?: unknown }).completedByName;
+
+    const completedBy: CompletionPayload['completedBy'] = completedByValue
       ? {
-          id: entry.completedBy.toString(),
-          name: entry.completedByName ?? null,
+          id:
+            typeof completedByValue === 'string'
+              ? completedByValue
+              : completedByValue instanceof Types.ObjectId
+              ? completedByValue.toString()
+              : String(completedByValue),
+          name:
+            completedByName === undefined || completedByName === null
+              ? null
+              : typeof completedByName === 'string'
+              ? completedByName
+              : String(completedByName),
         }
       : undefined;
 
     completed.push({
-      taskId: entry.taskId,
+      taskId,
       completedAt: completedAtDate.toISOString(),
       completedBy,
     });
@@ -404,7 +426,22 @@ function serializePlan(plan: PlanLike): SerializedPlan {
   const generatedAtDate = plan.generatedAt instanceof Date ? plan.generatedAt : new Date(plan.generatedAt);
   const generatedAt = Number.isNaN(generatedAtDate.getTime()) ? new Date().toISOString() : generatedAtDate.toISOString();
 
-  const meta = plan.meta ? { source: plan.meta.source, ...(plan.meta.reason ? { reason: plan.meta.reason } : {}) } : undefined;
+  const metaSource =
+    plan.meta && typeof plan.meta === 'object' && plan.meta !== null && 'source' in plan.meta
+      ? (plan.meta as { source?: unknown }).source
+      : undefined;
+  const metaReason =
+    plan.meta && typeof plan.meta === 'object' && plan.meta !== null && 'reason' in plan.meta
+      ? (plan.meta as { reason?: unknown }).reason
+      : undefined;
+
+  const meta =
+    metaSource === 'ai' || metaSource === 'fallback'
+      ? {
+          source: metaSource,
+          ...(typeof metaReason === 'string' && metaReason ? { reason: metaReason } : {}),
+        }
+      : undefined;
 
   return { generatedAt, tasks, meta, completed };
 }
