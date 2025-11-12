@@ -435,7 +435,7 @@ function serializePlan(plan: PlanLike): SerializedPlan {
       ? (plan.meta as { reason?: unknown }).reason
       : undefined;
 
-  const meta =
+  const meta: PlanMeta | undefined =
     metaSource === 'ai' || metaSource === 'fallback'
       ? {
           source: metaSource,
