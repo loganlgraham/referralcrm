@@ -7,7 +7,6 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { REFERRAL_STATUSES, ReferralStatus } from '@/constants/referrals';
-import { EmailActivityLink } from '@/components/common/email-activity-link';
 import { formatCurrency, formatNumber } from '@/utils/formatters';
 
 export interface ReferralRow {
@@ -251,7 +250,7 @@ function DeleteReferralButton({ referralId, borrowerName }: { referralId: string
       type="button"
       onClick={handleDelete}
       disabled={deleting}
-      className="rounded border border-rose-200 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+      className="whitespace-nowrap rounded border border-rose-200 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
     >
       {deleting ? 'Deleting…' : 'Delete'}
     </button>
@@ -263,26 +262,17 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
     header: 'Borrower',
     accessorKey: 'borrowerName',
     cell: ({ row }) => {
-      const { _id, borrowerName, borrowerEmail, borrowerPhone } = row.original;
+      const { _id, borrowerName, borrowerPhone } = row.original;
       return (
         <div className="flex flex-col">
           <Link href={`/referrals/${_id}`} className="font-medium text-brand">
             {borrowerName}
           </Link>
-          {borrowerEmail ? (
-            <EmailActivityLink
-              referralId={_id}
-              email={borrowerEmail}
-              recipient="Borrower"
-              recipientName={borrowerName}
-              className="text-xs"
-            >
-              {borrowerEmail}
-            </EmailActivityLink>
+          {borrowerPhone ? (
+            <span className="text-xs text-slate-500">{borrowerPhone}</span>
           ) : (
             <span className="text-xs text-slate-400">—</span>
           )}
-          <span className="text-xs text-slate-500">{borrowerPhone}</span>
         </div>
       );
     }
@@ -340,17 +330,6 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
         cell: ({ row }) => (
           <div className="flex flex-col text-sm">
             <span className="font-medium text-slate-700">{row.original.assignedAgentName || 'Unassigned'}</span>
-            {row.original.assignedAgentEmail && (
-              <EmailActivityLink
-                referralId={row.original._id}
-                email={row.original.assignedAgentEmail}
-                recipient="Assigned Agent"
-                recipientName={row.original.assignedAgentName}
-                className="text-xs"
-              >
-                {row.original.assignedAgentEmail}
-              </EmailActivityLink>
-            )}
             {row.original.assignedAgentPhone && (
               <span className="text-xs text-slate-500">{row.original.assignedAgentPhone}</span>
             )}
@@ -385,24 +364,13 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
       header: 'Agent',
       accessorKey: 'assignedAgentName',
       cell: ({ row }) => {
-        const { assignedAgentName, assignedAgentEmail, assignedAgentPhone, _id } = row.original;
-        if (!assignedAgentName && !assignedAgentEmail && !assignedAgentPhone) {
+        const { assignedAgentName, assignedAgentPhone } = row.original;
+        if (!assignedAgentName && !assignedAgentPhone) {
           return 'Unassigned';
         }
         return (
           <div className="flex flex-col text-sm">
             <span className="font-medium text-slate-700">{assignedAgentName || 'Unassigned'}</span>
-            {assignedAgentEmail && (
-              <EmailActivityLink
-                referralId={_id}
-                email={assignedAgentEmail}
-                recipient="Assigned Agent"
-                recipientName={assignedAgentName}
-                className="text-xs"
-              >
-                {assignedAgentEmail}
-              </EmailActivityLink>
-            )}
             {assignedAgentPhone && <span className="text-xs text-slate-500">{assignedAgentPhone}</span>}
           </div>
         );
@@ -412,24 +380,13 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
       header: 'Lender/MC',
       accessorKey: 'lenderName',
       cell: ({ row }) => {
-        const { lenderName, lenderEmail, lenderPhone, _id } = row.original;
-        if (!lenderName && !lenderEmail && !lenderPhone) {
+        const { lenderName, lenderPhone } = row.original;
+        if (!lenderName && !lenderPhone) {
           return '—';
         }
         return (
           <div className="flex flex-col text-sm">
             <span className="font-medium text-slate-700">{lenderName || 'Unassigned'}</span>
-            {lenderEmail && (
-              <EmailActivityLink
-                referralId={_id}
-                email={lenderEmail}
-                recipient="Mortgage Consultant"
-                recipientName={lenderName}
-                className="text-xs"
-              >
-                {lenderEmail}
-              </EmailActivityLink>
-            )}
             {lenderPhone && <span className="text-xs text-slate-500">{lenderPhone}</span>}
           </div>
         );
@@ -440,12 +397,10 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
       header: '',
       id: 'actions',
       cell: ({ row }) => (
-        <div className="flex justify-end">
-          <DeleteReferralButton
-            referralId={row.original._id}
-            borrowerName={row.original.borrowerName}
-          />
-        </div>
+        <DeleteReferralButton
+          referralId={row.original._id}
+          borrowerName={row.original.borrowerName}
+        />
       )
     }
   ];
@@ -464,7 +419,9 @@ export function ReferralTable({ data, mode }: ReferralTableProps) {
               {headerGroup.headers.map((header) => (
                 <th
                   key={header.id}
-                  className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500"
+                  className={`px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 ${
+                    header.column.id === 'actions' ? 'text-right' : 'text-left'
+                  }`}
                 >
                   {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                 </th>
@@ -476,7 +433,12 @@ export function ReferralTable({ data, mode }: ReferralTableProps) {
           {table.getRowModel().rows.map((row) => (
             <tr key={row.id} className="hover:bg-slate-50">
               {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} className="px-4 py-3 text-sm text-slate-700">
+                <td
+                  key={cell.id}
+                  className={`px-4 py-3 text-sm text-slate-700 ${
+                    cell.column.id === 'actions' ? 'text-right' : ''
+                  }`}
+                >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}
