@@ -694,7 +694,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         : referral.assignedAgent?.name
         ? { name: referral.assignedAgent.name }
         : null,
-      assignedAgentName: agentContact?.name ?? referral.assignedAgent?.name,
+      assignedAgentName:
+        agentContact?.name ?? referral.assignedAgent?.name ?? undefined,
       borrower: referral.borrower,
       notes: referral.notes ?? [],
       payments: referral.payments ?? [],
