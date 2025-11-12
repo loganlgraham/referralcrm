@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { differenceInDays, format } from 'date-fns';
+import { Types } from 'mongoose';
 
 import { getCurrentSession } from '@/lib/auth';
+import { FollowUpTask, getFollowUpTaskId } from '@/lib/follow-ups';
 import { connectMongo } from '@/lib/mongoose';
 import { canViewReferral } from '@/lib/rbac';
 import '@/models/agent';
 import '@/models/lender';
+import { FollowUpPlan } from '@/models/follow-up-plan';
 import { Payment } from '@/models/payment';
 import { Referral, ReferralDocument } from '@/models/referral';
 
@@ -41,12 +44,25 @@ Requirements:
 
 const defaultModel = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
 
-type NormalizedTask = {
-  audience: 'Agent' | 'MC' | 'Referral';
-  title: string;
-  summary: string;
-  suggestedChannel: 'Phone' | 'Email' | 'Text' | 'Internal';
-  urgency: 'Low' | 'Medium' | 'High';
+type PlanMeta = { source: 'ai' | 'fallback'; reason?: string };
+
+type GeneratedPlan = {
+  generatedAt: string;
+  tasks: FollowUpTask[];
+  meta: PlanMeta;
+};
+
+type CompletionPayload = {
+  taskId: string;
+  completedAt: string;
+  completedBy?: { id: string; name?: string | null };
+};
+
+type SerializedPlan = {
+  generatedAt: string;
+  tasks: FollowUpTask[];
+  meta?: PlanMeta;
+  completed: CompletionPayload[];
 };
 
 function buildFallbackTasks(
@@ -56,7 +72,7 @@ function buildFallbackTasks(
   },
   daysInStatus: number,
   reason?: string
-): { generatedAt: string; tasks: NormalizedTask[]; meta: { source: 'fallback'; reason: string } } {
+): GeneratedPlan {
   const borrowerName = referral.borrower?.name?.trim() || 'the borrower';
   const agentName = referral.assignedAgent?.name?.trim() || 'the assigned agent';
   const lenderName = referral.lender?.name?.trim() || 'the mortgage consultant';
@@ -66,7 +82,7 @@ function buildFallbackTasks(
 
   const urgencyFromDays = daysInStatus > 21 ? 'High' : daysInStatus > 7 ? 'Medium' : 'Low';
 
-  const tasks: NormalizedTask[] = [
+  const tasks: FollowUpTask[] = [
     {
       audience: 'Agent',
       title: 'Confirm immediate next milestone',
@@ -123,14 +139,7 @@ function sanitizeNoteContent(content: unknown) {
   return trimmed.slice(0, MAX_NOTE_LENGTH);
 }
 
-export async function POST(_request: NextRequest, context: RouteContext): Promise<NextResponse> {
-  const session = await getCurrentSession();
-  if (!session) {
-    return new NextResponse('Unauthorized', { status: 401 });
-  }
-
-  const apiKey = process.env.OPENAI_API_KEY;
-
+async function resolveReferral(session: Awaited<ReturnType<typeof getCurrentSession>>, context: RouteContext) {
   await connectMongo();
   const referral = await Referral.findById(context.params.id)
     .populate('assignedAgent', 'name email phone')
@@ -143,23 +152,32 @@ export async function POST(_request: NextRequest, context: RouteContext): Promis
     >();
 
   if (!referral) {
-    return new NextResponse('Not found', { status: 404 });
+    return { error: new NextResponse('Not found', { status: 404 }) } as const;
   }
 
   if (
-    !canViewReferral(session, {
+    !canViewReferral(session!, {
       assignedAgent: referral.assignedAgent ?? undefined,
       lender: referral.lender ?? undefined,
       org: referral.org,
     })
   ) {
-    return new NextResponse('Forbidden', { status: 403 });
+    return { error: new NextResponse('Forbidden', { status: 403 }) } as const;
   }
 
-  const payments = await Payment.find({ referralId: referral._id }).sort({ createdAt: -1 }).lean();
+  return { referral, viewerRole: session!.user?.role ?? 'viewer' } as const;
+}
 
+async function generatePlan(
+  referral: ReferralDocument & {
+    assignedAgent?: { _id: string; name?: string; email?: string; phone?: string } | null;
+    lender?: { _id: string; name?: string; email?: string; phone?: string } | null;
+  },
+  viewerRole: string,
+  apiKey: string | undefined
+): Promise<GeneratedPlan> {
+  const payments = await Payment.find({ referralId: referral._id }).sort({ createdAt: -1 }).lean();
   const daysInStatus = differenceInDays(new Date(), referral.statusLastUpdated ?? referral.createdAt);
-  const viewerRole = session.user?.role ?? 'viewer';
 
   const visibleNotes = (referral.notes ?? [])
     .filter((note) => {
@@ -225,10 +243,7 @@ export async function POST(_request: NextRequest, context: RouteContext): Promis
   const userPrompt = `${contextLines.join('\n')}`;
 
   if (!apiKey) {
-    return NextResponse.json(
-      buildFallbackTasks(referral, daysInStatus, 'OpenAI API key is not configured on the server.'),
-      { status: 200 }
-    );
+    return buildFallbackTasks(referral, daysInStatus, 'OpenAI API key is not configured on the server.');
   }
 
   const completionResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -252,10 +267,7 @@ export async function POST(_request: NextRequest, context: RouteContext): Promis
   });
 
   if (!completionResponse) {
-    return NextResponse.json(
-      buildFallbackTasks(referral, daysInStatus, 'Unable to reach OpenAI. Showing baseline outreach instead.'),
-      { status: 200 }
-    );
+    return buildFallbackTasks(referral, daysInStatus, 'Unable to reach OpenAI. Showing baseline outreach instead.');
   }
 
   if (!completionResponse.ok) {
@@ -265,10 +277,7 @@ export async function POST(_request: NextRequest, context: RouteContext): Promis
         ? (errorBody.error as { message?: string }).message
         : undefined) ?? completionResponse.statusText;
     console.error('OpenAI follow-up generation failed', message);
-    return NextResponse.json(
-      buildFallbackTasks(referral, daysInStatus, message || 'OpenAI returned an error while generating tasks.'),
-      { status: 200 }
-    );
+    return buildFallbackTasks(referral, daysInStatus, message || 'OpenAI returned an error while generating tasks.');
   }
 
   const completion = await completionResponse.json().catch((error: unknown) => {
@@ -279,10 +288,7 @@ export async function POST(_request: NextRequest, context: RouteContext): Promis
   const content = completion?.choices?.[0]?.message?.content;
   if (typeof content !== 'string') {
     console.error('OpenAI follow-up content missing or invalid');
-    return NextResponse.json(
-      buildFallbackTasks(referral, daysInStatus, 'OpenAI returned an unexpected response format.'),
-      { status: 200 }
-    );
+    return buildFallbackTasks(referral, daysInStatus, 'OpenAI returned an unexpected response format.');
   }
 
   const cleaned = content.trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
@@ -292,10 +298,7 @@ export async function POST(_request: NextRequest, context: RouteContext): Promis
     parsed = JSON.parse(cleaned);
   } catch (error) {
     console.error('Failed to parse OpenAI follow-up JSON', error);
-    return NextResponse.json(
-      buildFallbackTasks(referral, daysInStatus, 'OpenAI returned invalid JSON for the follow-up plan.'),
-      { status: 200 }
-    );
+    return buildFallbackTasks(referral, daysInStatus, 'OpenAI returned invalid JSON for the follow-up plan.');
   }
 
   const generatedAtRaw = (parsed as { generatedAt?: unknown }).generatedAt;
@@ -314,7 +317,7 @@ export async function POST(_request: NextRequest, context: RouteContext): Promis
       const suggestedChannel = (task as { suggestedChannel?: unknown }).suggestedChannel;
       const urgency = (task as { urgency?: unknown }).urgency;
 
-      const normalizedAudience =
+      const normalizedAudience: FollowUpTask['audience'] =
         audience === 'Agent' || audience === 'MC' || audience === 'Referral' ? audience : 'Referral';
 
       return {
@@ -326,16 +329,207 @@ export async function POST(_request: NextRequest, context: RouteContext): Promis
             ? suggestedChannel
             : 'Email',
         urgency: urgency === 'Low' || urgency === 'Medium' || urgency === 'High' ? urgency : 'Medium',
-      };
+      } satisfies FollowUpTask;
     })
-    .filter((task): task is NormalizedTask => task !== null);
+    .filter((task): task is FollowUpTask => task !== null);
 
   if (tasks.length === 0) {
-    return NextResponse.json(
-      buildFallbackTasks(referral, daysInStatus, 'AI response did not contain actionable follow-up items.'),
-      { status: 200 }
-    );
+    return buildFallbackTasks(referral, daysInStatus, 'AI response did not contain actionable follow-up items.');
   }
 
-  return NextResponse.json({ generatedAt, tasks, meta: { source: 'ai' as const } });
+  return { generatedAt, tasks, meta: { source: 'ai' } };
+}
+
+function serializePlan(plan: {
+  generatedAt: Date | string;
+  tasks?: Array<FollowUpTask & Record<string, unknown>>;
+  meta?: PlanMeta | null;
+  completed?: {
+    taskId: string;
+    completedAt: Date | string;
+    completedBy?: Types.ObjectId;
+    completedByName?: string;
+  }[];
+}): SerializedPlan {
+  const tasks = (plan.tasks ?? [])
+    .map((task) => {
+      const audience = task.audience;
+      const title = task.title;
+      const summary = task.summary;
+      const suggestedChannel = task.suggestedChannel;
+      const urgency = task.urgency;
+
+      if (
+        (audience !== 'Agent' && audience !== 'MC' && audience !== 'Referral') ||
+        typeof title !== 'string' ||
+        typeof summary !== 'string' ||
+        (suggestedChannel !== 'Phone' && suggestedChannel !== 'Email' && suggestedChannel !== 'Text' && suggestedChannel !== 'Internal') ||
+        (urgency !== 'Low' && urgency !== 'Medium' && urgency !== 'High')
+      ) {
+        return null;
+      }
+
+      return { audience, title, summary, suggestedChannel, urgency } satisfies FollowUpTask;
+    })
+    .filter((task): task is FollowUpTask => task !== null);
+  const validTaskIds = new Set(tasks.map((task) => getFollowUpTaskId(task)));
+
+  const completed = (plan.completed ?? [])
+    .filter((entry) => validTaskIds.has(entry.taskId))
+    .map((entry) => {
+      const completedAtDate = entry.completedAt instanceof Date ? entry.completedAt : new Date(entry.completedAt);
+      if (Number.isNaN(completedAtDate.getTime())) {
+        return null;
+      }
+      const completedBy = entry.completedBy
+        ? {
+            id: entry.completedBy.toString(),
+            name: entry.completedByName ?? null,
+          }
+        : undefined;
+      return { taskId: entry.taskId, completedAt: completedAtDate.toISOString(), completedBy } satisfies CompletionPayload;
+    })
+    .filter((entry): entry is CompletionPayload => entry !== null);
+
+  const generatedAtDate = plan.generatedAt instanceof Date ? plan.generatedAt : new Date(plan.generatedAt);
+  const generatedAt = Number.isNaN(generatedAtDate.getTime()) ? new Date().toISOString() : generatedAtDate.toISOString();
+
+  const meta = plan.meta ? { source: plan.meta.source, ...(plan.meta.reason ? { reason: plan.meta.reason } : {}) } : undefined;
+
+  return { generatedAt, tasks, meta, completed };
+}
+
+function ensureAdmin(session: Awaited<ReturnType<typeof getCurrentSession>>) {
+  if (!session) {
+    return new NextResponse('Unauthorized', { status: 401 });
+  }
+  if (session.user?.role !== 'admin') {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
+  return null;
+}
+
+export async function GET(_request: NextRequest, context: RouteContext) {
+  const session = await getCurrentSession();
+  const gate = ensureAdmin(session);
+  if (gate) {
+    return gate;
+  }
+
+  const { referral, viewerRole, error } = await resolveReferral(session, context);
+  if (error) {
+    return error;
+  }
+
+  let plan = await FollowUpPlan.findOne({ referral: referral._id }).lean();
+
+  if (!plan) {
+    const generated = await generatePlan(referral, viewerRole, process.env.OPENAI_API_KEY);
+    plan = await FollowUpPlan.findOneAndUpdate(
+      { referral: referral._id },
+      {
+        referral: referral._id,
+        generatedAt: new Date(generated.generatedAt),
+        tasks: generated.tasks,
+        meta: generated.meta,
+        completed: [],
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    ).lean();
+  }
+
+  if (!plan) {
+    return new NextResponse('Unable to load follow-up plan', { status: 500 });
+  }
+
+  return NextResponse.json(serializePlan(plan));
+}
+
+export async function POST(_request: NextRequest, context: RouteContext) {
+  const session = await getCurrentSession();
+  const gate = ensureAdmin(session);
+  if (gate) {
+    return gate;
+  }
+
+  const { referral, viewerRole, error } = await resolveReferral(session, context);
+  if (error) {
+    return error;
+  }
+
+  const generated = await generatePlan(referral, viewerRole, process.env.OPENAI_API_KEY);
+
+  const plan = await FollowUpPlan.findOneAndUpdate(
+    { referral: referral._id },
+    {
+      referral: referral._id,
+      generatedAt: new Date(generated.generatedAt),
+      tasks: generated.tasks,
+      meta: generated.meta,
+      completed: [],
+    },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  ).lean();
+
+  if (!plan) {
+    return new NextResponse('Unable to refresh follow-up plan', { status: 500 });
+  }
+
+  return NextResponse.json(serializePlan(plan));
+}
+
+export async function PATCH(request: NextRequest, context: RouteContext) {
+  const session = await getCurrentSession();
+  const gate = ensureAdmin(session);
+  if (gate) {
+    return gate;
+  }
+
+  const { referral, error } = await resolveReferral(session, context);
+  if (error) {
+    return error;
+  }
+
+  const body = await request.json().catch(() => null);
+
+  const action = typeof body?.action === 'string' ? (body.action as 'complete' | 'undo') : null;
+  const taskId = typeof body?.taskId === 'string' ? body.taskId : null;
+
+  if (!action || !taskId || (action !== 'complete' && action !== 'undo')) {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+  }
+
+  const plan = await FollowUpPlan.findOne({ referral: referral._id });
+
+  if (!plan) {
+    return NextResponse.json({ error: 'Follow-up plan not found' }, { status: 404 });
+  }
+
+  const hasTask = plan.tasks?.some((task) => getFollowUpTaskId(task) === taskId);
+  if (!hasTask) {
+    return NextResponse.json({ error: 'Task not found' }, { status: 404 });
+  }
+
+  if (action === 'complete') {
+    const alreadyCompleted = plan.completed?.some((entry) => entry.taskId === taskId);
+    if (!alreadyCompleted) {
+      const userId = session!.user?.id;
+      const completedById = userId && Types.ObjectId.isValid(userId) ? new Types.ObjectId(userId) : undefined;
+      plan.completed = [
+        ...(plan.completed ?? []),
+        {
+          taskId,
+          completedAt: new Date(),
+          completedBy: completedById,
+          completedByName: session!.user?.name ?? undefined,
+        },
+      ];
+    }
+  } else if (action === 'undo') {
+    plan.completed = (plan.completed ?? []).filter((entry) => entry.taskId !== taskId);
+  }
+
+  await plan.save();
+
+  return NextResponse.json(serializePlan(plan));
 }
