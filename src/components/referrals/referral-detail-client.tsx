@@ -78,6 +78,9 @@ interface ReferralDetail {
   commissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
   propertyAddress?: string;
+  propertyCity?: string | null;
+  propertyState?: string | null;
+  propertyPostalCode?: string | null;
   assignedAgent?: ReferralContact | null;
   lender?: ReferralContact | null;
   payments?: ReferralPayment[];
@@ -115,10 +118,16 @@ interface FinancialState {
   commissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
   propertyAddress?: string;
+  propertyCity?: string;
+  propertyState?: string;
+  propertyPostalCode?: string;
 }
 
 interface DraftState {
   propertyAddress?: string;
+  propertyCity?: string;
+  propertyState?: string;
+  propertyPostalCode?: string;
   contractPriceCents?: number;
   agentCommissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
@@ -196,7 +205,30 @@ const normalizeDealPayments = (
       : null,
     agentAttribution: payment.agentAttribution as AgentSelectValue | undefined,
     usedAfc: payment.usedAfc ?? null,
-  }));
+    }));
+};
+
+const formatFullAddress = (
+  street?: string | null,
+  city?: string | null,
+  state?: string | null,
+  postal?: string | null
+) => {
+  const trimmedStreet = street?.trim();
+  const trimmedCity = city?.trim();
+  const trimmedState = state?.trim();
+  const trimmedPostal = postal?.trim();
+
+  const localityParts: string[] = [];
+  if (trimmedCity) {
+    localityParts.push(trimmedCity);
+  }
+  const statePostal = [trimmedState, trimmedPostal].filter((part) => part && part.length > 0).join(' ');
+  if (statePostal) {
+    localityParts.push(statePostal);
+  }
+
+  return [trimmedStreet, localityParts.join(', ')].filter((part) => part && part.length > 0).join(', ');
 };
 
 export function ReferralDetailClient({ referral: initialReferral, viewerRole, notes, referralId }: ReferralDetailClientProps) {
@@ -227,6 +259,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         }
       : null
   );
+  const initialPropertyState = initialReferral.propertyState
+    ? String(initialReferral.propertyState).toUpperCase()
+    : undefined;
   const [financials, setFinancials] = useState<FinancialState>({
     status: initialReferral.status,
     preApprovalAmountCents: initialReferral.preApprovalAmountCents ?? 0,
@@ -235,6 +270,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     commissionBasisPoints: initialReferral.commissionBasisPoints ?? undefined,
     referralFeeBasisPoints: initialReferral.referralFeeBasisPoints ?? undefined,
     propertyAddress: initialReferral.propertyAddress ?? undefined,
+    propertyCity: initialReferral.propertyCity ?? undefined,
+    propertyState: initialPropertyState,
+    propertyPostalCode: initialReferral.propertyPostalCode ?? undefined,
   });
   const [contractDraft, setContractDraft] = useState<DraftState>({ hasUnsavedChanges: false });
   const [deleting, setDeleting] = useState(false);
@@ -290,6 +328,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       commissionBasisPoints: referral.commissionBasisPoints ?? undefined,
       referralFeeBasisPoints: referral.referralFeeBasisPoints ?? undefined,
       propertyAddress: referral.propertyAddress ?? undefined,
+      propertyCity: referral.propertyCity ?? undefined,
+      propertyState: referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined,
+      propertyPostalCode: referral.propertyPostalCode ?? undefined,
     });
   }, [
     referral.status,
@@ -299,6 +340,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referral.commissionBasisPoints,
     referral.referralFeeBasisPoints,
     referral.propertyAddress,
+    referral.propertyCity,
+    referral.propertyState,
+    referral.propertyPostalCode,
   ]);
 
   useEffect(() => {
@@ -504,6 +548,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     commissionBasisPoints?: number;
     referralFeeBasisPoints?: number;
     propertyAddress?: string;
+    propertyCity?: string;
+    propertyState?: string;
+    propertyPostalCode?: string;
     statusLastUpdated?: string;
     daysInStatus?: number;
   }) => {
@@ -533,6 +580,20 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             : previous.referralFeeBasisPoints,
         propertyAddress:
           snapshot.propertyAddress !== undefined ? snapshot.propertyAddress : previous.propertyAddress,
+        propertyCity:
+          snapshot.propertyCity !== undefined
+            ? snapshot.propertyCity ?? undefined
+            : previous.propertyCity,
+        propertyState:
+          snapshot.propertyState !== undefined
+            ? snapshot.propertyState
+              ? snapshot.propertyState.toUpperCase()
+              : undefined
+            : previous.propertyState,
+        propertyPostalCode:
+          snapshot.propertyPostalCode !== undefined
+            ? snapshot.propertyPostalCode ?? undefined
+            : previous.propertyPostalCode,
       };
 
       if (
@@ -542,7 +603,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         next.referralFeeDueCents === previous.referralFeeDueCents &&
         next.commissionBasisPoints === previous.commissionBasisPoints &&
         next.referralFeeBasisPoints === previous.referralFeeBasisPoints &&
-        next.propertyAddress === previous.propertyAddress
+        next.propertyAddress === previous.propertyAddress &&
+        next.propertyCity === previous.propertyCity &&
+        next.propertyState === previous.propertyState &&
+        next.propertyPostalCode === previous.propertyPostalCode
       ) {
         return previous;
       }
@@ -554,25 +618,61 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       void mutate(activityFeedKey);
     }
 
-    if (statusChanged || snapshot.statusLastUpdated || snapshot.daysInStatus !== undefined) {
+    const propertyChanged =
+      snapshot.propertyAddress !== undefined ||
+      snapshot.propertyCity !== undefined ||
+      snapshot.propertyState !== undefined ||
+      snapshot.propertyPostalCode !== undefined;
+
+    if (statusChanged || snapshot.statusLastUpdated || snapshot.daysInStatus !== undefined || propertyChanged) {
       setReferral((previous) => {
         const statusLastUpdated = snapshot.statusLastUpdated ?? previous.statusLastUpdated ?? null;
         const daysInStatus =
           snapshot.daysInStatus !== undefined ? snapshot.daysInStatus : previous.daysInStatus;
 
+        const nextStatusValue = snapshot.status ?? previous.status;
+        const nextPropertyAddress =
+          snapshot.propertyAddress !== undefined
+            ? snapshot.propertyAddress ?? previous.propertyAddress ?? null
+            : previous.propertyAddress ?? null;
+        const nextPropertyCity =
+          snapshot.propertyCity !== undefined
+            ? snapshot.propertyCity ?? previous.propertyCity ?? null
+            : previous.propertyCity ?? null;
+        const nextPropertyState =
+          snapshot.propertyState !== undefined
+            ? snapshot.propertyState
+              ? snapshot.propertyState.toUpperCase()
+              : null
+            : previous.propertyState
+            ? String(previous.propertyState).toUpperCase()
+            : null;
+        const nextPropertyPostal =
+          snapshot.propertyPostalCode !== undefined
+            ? snapshot.propertyPostalCode ?? previous.propertyPostalCode ?? null
+            : previous.propertyPostalCode ?? null;
+
         if (
-          previous.status === snapshot.status &&
+          previous.status === nextStatusValue &&
           previous.statusLastUpdated === statusLastUpdated &&
-          previous.daysInStatus === daysInStatus
+          previous.daysInStatus === daysInStatus &&
+          (previous.propertyAddress ?? null) === nextPropertyAddress &&
+          (previous.propertyCity ?? null) === nextPropertyCity &&
+          (previous.propertyState ? String(previous.propertyState).toUpperCase() : null) === nextPropertyState &&
+          (previous.propertyPostalCode ?? null) === nextPropertyPostal
         ) {
           return previous;
         }
 
         return {
           ...previous,
-          status: snapshot.status ?? previous.status,
+          status: nextStatusValue,
           statusLastUpdated,
           daysInStatus,
+          propertyAddress: nextPropertyAddress ?? undefined,
+          propertyCity: nextPropertyCity ?? undefined,
+          propertyState: nextPropertyState ?? undefined,
+          propertyPostalCode: nextPropertyPostal ?? undefined,
         };
       });
     }
@@ -583,6 +683,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       if (
         previous.hasUnsavedChanges === draft.hasUnsavedChanges &&
         previous.propertyAddress === draft.propertyAddress &&
+        previous.propertyCity === draft.propertyCity &&
+        previous.propertyState === draft.propertyState &&
+        previous.propertyPostalCode === draft.propertyPostalCode &&
         previous.contractPriceCents === draft.contractPriceCents &&
         previous.agentCommissionBasisPoints === draft.agentCommissionBasisPoints &&
         previous.referralFeeBasisPoints === draft.referralFeeBasisPoints &&
@@ -603,11 +706,20 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     commissionBasisPoints: financials.commissionBasisPoints,
     referralFeeBasisPoints: financials.referralFeeBasisPoints,
     propertyAddress: financials.propertyAddress ?? referral.propertyAddress,
+    propertyCity: financials.propertyCity ?? referral.propertyCity,
+    propertyState: financials.propertyState ?? referral.propertyState,
+    propertyPostalCode: financials.propertyPostalCode ?? referral.propertyPostalCode,
   };
 
   const dealReferral: DealCardReferral = {
     _id: referral._id,
-    propertyAddress: financials.propertyAddress ?? referral.propertyAddress ?? undefined,
+    propertyAddress:
+      formatFullAddress(
+        financials.propertyAddress ?? referral.propertyAddress ?? undefined,
+        financials.propertyCity ?? referral.propertyCity ?? undefined,
+        financials.propertyState ?? (referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined),
+        financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined
+      ) || financials.propertyAddress ?? referral.propertyAddress ?? undefined,
     lookingInZip: referral.lookingInZip ?? null,
     referralFeeDueCents: financials.referralFeeDueCents ?? referral.referralFeeDueCents ?? null,
     payments: normalizeDealPayments(referral.payments),
@@ -624,7 +736,15 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             ? contractDraft.referralFeeDueCents
             : financials.referralFeeDueCents,
         propertyAddress:
-          contractDraft.propertyAddress ?? financials.propertyAddress ?? referral.propertyAddress,
+          contractDraft.propertyAddress ??
+          formatFullAddress(
+            contractDraft.propertyAddress ?? financials.propertyAddress ?? referral.propertyAddress ?? undefined,
+            contractDraft.propertyCity ?? financials.propertyCity ?? referral.propertyCity ?? undefined,
+            contractDraft.propertyState ?? financials.propertyState ?? (referral.propertyState
+              ? String(referral.propertyState).toUpperCase()
+              : undefined),
+            contractDraft.propertyPostalCode ?? financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined
+          ) ?? financials.propertyAddress ?? referral.propertyAddress,
         hasUnsavedContractChanges: true,
       }
     : {

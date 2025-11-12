@@ -50,6 +50,9 @@ interface AggregatedPayment {
     org?: 'AFC' | 'AHA';
     lookingInZip?: string;
     propertyAddress?: string;
+    propertyCity?: string;
+    propertyState?: string;
+    propertyPostalCode?: string;
     borrowerCurrentAddress?: string;
     closedPriceCents?: number;
     estPurchasePriceCents?: number;
@@ -68,6 +71,13 @@ interface AggregatedPayment {
     } | null;
   };
 }
+
+const ACTIVE_PIPELINE_STATUSES = new Set<string>([
+  'Paired',
+  'In Communication',
+  'Showing Homes',
+  'Under Contract',
+]);
 
 interface TrendPoint {
   key: string;
@@ -103,6 +113,10 @@ function parseTimeframe(value: string | null): TimeframeInfo {
 }
 
 function extractState(referral: AggregatedPayment['referral']): string {
+  const normalizedState = referral.propertyState?.toString().trim().toUpperCase();
+  if (normalizedState) {
+    return normalizedState;
+  }
   const candidates = [referral.propertyAddress, referral.borrowerCurrentAddress];
   for (const candidate of candidates) {
     if (!candidate) continue;
@@ -318,7 +332,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       ...(timeframeStart ? { createdAt: { $gte: timeframeStart } } : {})
     })
       .select(
-        'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress borrowerCurrentAddress closedPriceCents source endorser sla'
+        'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser sla'
       )
       .lean(),
     Payment.aggregate<AggregatedPayment>([
@@ -430,7 +444,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .filter((payment) => payment.status === 'under_contract')
     .reduce((sum, payment) => sum + (payment.expectedAmountCents ?? 0), 0);
 
-  const activePipeline = referrals.filter((referral) => !['Closed', 'Terminated', 'Lost'].includes(referral.status ?? '')).length;
+  const activePipeline = referrals.filter((referral) =>
+    ACTIVE_PIPELINE_STATUSES.has((referral.status as string | undefined) ?? '')
+  ).length;
 
   const revenueBySource = Array.from(revenueBySourceMap.entries())
     .map(([label, value]) => ({ label, value }))

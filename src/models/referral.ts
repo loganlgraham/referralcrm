@@ -89,6 +89,9 @@ const referralSchema = new Schema(
     },
     borrowerCurrentAddress: { type: String, default: '' },
     propertyAddress: { type: String, default: '' },
+    propertyCity: { type: String, default: '' },
+    propertyState: { type: String, default: '' },
+    propertyPostalCode: { type: String, default: '' },
     stageOnTransfer: { type: String, default: '' },
     initialNotes: { type: String, default: '' },
     loanFileNumber: {
@@ -161,6 +164,9 @@ export interface ReferralDocument {
   lookingInZip: string;
   borrowerCurrentAddress?: string;
   propertyAddress?: string;
+  propertyCity?: string;
+  propertyState?: string;
+  propertyPostalCode?: string;
   stageOnTransfer?: string;
   initialNotes?: string;
   loanFileNumber: string;
