@@ -8,7 +8,7 @@ import { connectMongo } from '@/lib/mongoose';
 import { canViewReferral } from '@/lib/rbac';
 import '@/models/agent';
 import '@/models/lender';
-import { FollowUpPlan } from '@/models/follow-up-plan';
+import { FollowUpPlan, FollowUpPlanDocument } from '@/models/follow-up-plan';
 import { Payment } from '@/models/payment';
 import { Referral, ReferralDocument } from '@/models/referral';
 
@@ -340,7 +340,7 @@ async function generatePlan(
   return { generatedAt, tasks, meta: { source: 'ai' } };
 }
 
-function serializePlan(plan: {
+type PlanLike = {
   generatedAt: Date | string;
   tasks?: Array<FollowUpTask & Record<string, unknown>>;
   meta?: PlanMeta | null;
@@ -350,7 +350,9 @@ function serializePlan(plan: {
     completedBy?: Types.ObjectId;
     completedByName?: string;
   }[];
-}): SerializedPlan {
+};
+
+function serializePlan(plan: PlanLike): SerializedPlan {
   const tasks = (plan.tasks ?? [])
     .map((task) => {
       const audience = task.audience;
@@ -429,11 +431,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     return error;
   }
 
-  let plan = await FollowUpPlan.findOne({ referral: referral._id }).lean();
+  const plan = await FollowUpPlan.findOne({ referral: referral._id }).lean<FollowUpPlanDocument>().exec();
 
   if (!plan) {
     const generated = await generatePlan(referral, viewerRole, process.env.OPENAI_API_KEY);
-    plan = await FollowUpPlan.findOneAndUpdate(
+    const createdPlan = await FollowUpPlan.findOneAndUpdate(
       { referral: referral._id },
       {
         referral: referral._id,
@@ -443,11 +445,15 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         completed: [],
       },
       { new: true, upsert: true, setDefaultsOnInsert: true }
-    ).lean();
-  }
+    )
+      .lean<FollowUpPlanDocument>()
+      .exec();
 
-  if (!plan) {
-    return new NextResponse('Unable to load follow-up plan', { status: 500 });
+    if (!createdPlan) {
+      return new NextResponse('Unable to load follow-up plan', { status: 500 });
+    }
+
+    return NextResponse.json(serializePlan(createdPlan));
   }
 
   return NextResponse.json(serializePlan(plan));
@@ -477,7 +483,9 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       completed: [],
     },
     { new: true, upsert: true, setDefaultsOnInsert: true }
-  ).lean();
+  )
+    .lean<FollowUpPlanDocument>()
+    .exec();
 
   if (!plan) {
     return new NextResponse('Unable to refresh follow-up plan', { status: 500 });
@@ -539,5 +547,5 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   await plan.save();
 
-  return NextResponse.json(serializePlan(plan));
+  return NextResponse.json(serializePlan(plan.toObject()));
 }
