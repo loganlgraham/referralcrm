@@ -60,6 +60,7 @@ interface AggregatedPayment {
     referralFeeDueCents?: number;
     referralFeeBasisPoints?: number;
     commissionBasisPoints?: number;
+    ahaBucket?: 'AHA' | 'AHA_OOS' | null;
     assignedAgent?: Types.ObjectId | null;
     lender?: Types.ObjectId | null;
     status?: string;
