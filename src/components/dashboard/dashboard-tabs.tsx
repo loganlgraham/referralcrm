@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
+import { FormEvent, MouseEvent as ReactMouseEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import { Trash2 } from 'lucide-react';
@@ -111,6 +111,7 @@ interface DashboardResponse {
     revenuePaid: LeaderboardEntry[];
     revenueExpected: LeaderboardEntry[];
     netRevenue: LeaderboardEntry[];
+    lostDeals: LeaderboardEntry[];
   };
   admin: {
     slaAverages: {
@@ -223,6 +224,46 @@ function LineChartCard({
   const activeIndex = hoverIndex != null ? hoverIndex : safeData.length > 0 ? safeData.length - 1 : null;
   const activePoint = activeIndex != null ? safeData[activeIndex] : null;
   const gradientId = useMemo(() => `gradient-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, [title]);
+  const tooltipPoint = activeIndex != null ? points[activeIndex] : null;
+
+  let tooltipMetrics: {
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+    valueLabel: string;
+    labelText: string;
+  } | null = null;
+
+  if (tooltipPoint && activePoint) {
+    const valueLabel = formatValue(activePoint.value);
+    const labelText = activePoint.label;
+    const textLength = Math.max(valueLabel.length, labelText.length);
+    const width = Math.min(Math.max(textLength * 7 + 24, 96), CHART_WIDTH - CHART_PADDING_X);
+    const height = 38;
+    const x = Math.min(
+      Math.max(tooltipPoint.x - width / 2, CHART_PADDING_X),
+      CHART_WIDTH - CHART_PADDING_X - width
+    );
+    const y = Math.max(tooltipPoint.y - height - 8, 8);
+    tooltipMetrics = { width, height, x, y, valueLabel, labelText };
+  }
+
+  const handleMouseMove = (event: ReactMouseEvent<SVGSVGElement>) => {
+    if (!hasData) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const relativeX = ((event.clientX - rect.left) / rect.width) * CHART_WIDTH;
+    let closestIndex = 0;
+    let minDistance = Number.POSITIVE_INFINITY;
+    points.forEach((point, index) => {
+      const distance = Math.abs(point.x - relativeX);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestIndex = index;
+      }
+    });
+    setHoverIndex(closestIndex);
+  };
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -248,6 +289,8 @@ function LineChartCard({
             className="h-48 w-full"
             role="img"
             aria-label={`${title} trend chart`}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={() => setHoverIndex(null)}
           >
             <defs>
               <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
@@ -271,10 +314,44 @@ function LineChartCard({
                   r={activeIndex === index ? 5 : 3}
                   fill={activeIndex === index ? '#0ea5e9' : '#bae6fd'}
                   onMouseEnter={() => setHoverIndex(index)}
-                  onMouseLeave={() => setHoverIndex(null)}
                 />
               </g>
             ))}
+            {tooltipPoint && tooltipMetrics ? (
+              <g pointerEvents="none">
+                <line
+                  x1={tooltipPoint.x}
+                  x2={tooltipPoint.x}
+                  y1={CHART_PADDING_Y}
+                  y2={CHART_HEIGHT - CHART_PADDING_Y}
+                  stroke="#cbd5f5"
+                  strokeDasharray="4 4"
+                />
+                <rect
+                  x={tooltipMetrics.x}
+                  y={tooltipMetrics.y}
+                  width={tooltipMetrics.width}
+                  height={tooltipMetrics.height}
+                  rx={6}
+                  fill="#ffffff"
+                  stroke="#cbd5f5"
+                />
+                <text
+                  x={tooltipMetrics.x + 8}
+                  y={tooltipMetrics.y + 18}
+                  className="text-[11px] font-semibold fill-slate-900"
+                >
+                  {tooltipMetrics.valueLabel}
+                </text>
+                <text
+                  x={tooltipMetrics.x + 8}
+                  y={tooltipMetrics.y + tooltipMetrics.height - 10}
+                  className="text-[10px] fill-slate-500"
+                >
+                  {tooltipMetrics.labelText}
+                </text>
+              </g>
+            ) : null}
             <line
               x1={CHART_PADDING_X}
               x2={CHART_WIDTH - CHART_PADDING_X}
@@ -795,7 +872,10 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
         <LeaderboardTable title="Revenue paid by agent" entries={data.revenuePaid} valueLabel="Revenue" />
         <LeaderboardTable title="Revenue expected by agent" entries={data.revenueExpected} valueLabel="Expected" />
       </div>
-      <LeaderboardTable title="Agent net earnings" entries={data.netRevenue} valueLabel="Net revenue" />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <LeaderboardTable title="Agent net earnings" entries={data.netRevenue} valueLabel="Net revenue" />
+        <LeaderboardTable title="Deals lost to outside agents" entries={data.lostDeals} valueLabel="Lost deals" />
+      </div>
     </div>
   );
 }
