@@ -21,6 +21,8 @@ interface FinancialSnapshot {
   commissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
   propertyAddress?: string;
+  statusLastUpdated?: string;
+  daysInStatus?: number;
 }
 
 interface ContractDraftSnapshot {
