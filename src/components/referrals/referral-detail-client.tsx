@@ -719,7 +719,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         financials.propertyCity ?? referral.propertyCity ?? undefined,
         financials.propertyState ?? (referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined),
         financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined
-      ) || financials.propertyAddress ?? referral.propertyAddress ?? undefined,
+      ) ?? financials.propertyAddress ?? referral.propertyAddress ?? undefined,
     lookingInZip: referral.lookingInZip ?? null,
     referralFeeDueCents: financials.referralFeeDueCents ?? referral.referralFeeDueCents ?? null,
     payments: normalizeDealPayments(referral.payments),
