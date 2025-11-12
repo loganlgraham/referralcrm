@@ -570,7 +570,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 
   if (action === 'complete') {
-    const alreadyCompleted = plan.completed?.some((entry) => entry.taskId === taskId);
+    const alreadyCompleted = plan.completed?.some(
+      (entry: { taskId: string }) => entry.taskId === taskId
+    );
     if (!alreadyCompleted) {
       const userId = session!.user?.id;
       const completedById = userId && Types.ObjectId.isValid(userId) ? new Types.ObjectId(userId) : undefined;
@@ -585,7 +587,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       ];
     }
   } else if (action === 'undo') {
-    plan.completed = (plan.completed ?? []).filter((entry) => entry.taskId !== taskId);
+    plan.completed = (plan.completed ?? []).filter(
+      (entry: { taskId: string }) => entry.taskId !== taskId
+    );
   }
 
   await plan.save();
