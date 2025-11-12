@@ -2,6 +2,20 @@ import mongoose from 'mongoose';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/referralcrm';
 
+let modelsRegistered = false;
+
+const registerModels = async () => {
+  if (modelsRegistered) {
+    return;
+  }
+
+  await Promise.all([
+    import('@/models/agent')
+  ]);
+
+  modelsRegistered = true;
+};
+
 if (!MONGODB_URI) {
   throw new Error('Missing MONGODB_URI environment variable');
 }
@@ -28,6 +42,7 @@ if (!cached) {
 
 export async function connectMongo(): Promise<typeof mongoose> {
   if (cached?.conn) {
+    await registerModels();
     return cached.conn;
   }
 
@@ -38,5 +53,6 @@ export async function connectMongo(): Promise<typeof mongoose> {
   }
 
   cached!.conn = await cached!.promise;
+  await registerModels();
   return cached!.conn;
 }
