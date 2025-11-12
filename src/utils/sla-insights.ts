@@ -67,7 +67,7 @@ export interface ReferralLike {
   status?: string;
   statusLastUpdated?: string | Date | null;
   daysInStatus?: number;
-  assignedAgent?: { name?: string | null } | null;
+  assignedAgent?: { name?: string | null; fullName?: string | null } | null;
   assignedAgentName?: string;
   borrower?: { name?: string };
   notes?: NoteLike[];
@@ -365,7 +365,10 @@ export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommenda
 
   const status = referral.status ?? 'New Lead';
   const assignedAgentName =
-    referral.assignedAgent?.name ?? referral.assignedAgentName ?? referral.assignedAgent?.['fullName'];
+    referral.assignedAgent?.name ??
+    referral.assignedAgent?.fullName ??
+    referral.assignedAgentName ??
+    undefined;
 
   const statusLastUpdated = parseTimestamp(referral.statusLastUpdated) ?? createdAt;
   const statusAgeDays =
