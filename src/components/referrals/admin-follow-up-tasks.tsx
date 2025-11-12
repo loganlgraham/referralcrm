@@ -137,7 +137,8 @@ export function AdminFollowUpTasksPanel({
           completedBy,
         } satisfies FollowUpCompletionEntry;
       })
-      .filter((entry): entry is FollowUpCompletionEntry => !!entry && validTaskIds.has(entry.taskId));
+      .filter((entry): entry is FollowUpCompletionEntry => entry !== null)
+      .filter((entry) => validTaskIds.has(entry.taskId));
 
     const generatedAt = typeof generatedAtRaw === 'string' && generatedAtRaw ? generatedAtRaw : new Date().toISOString();
 
