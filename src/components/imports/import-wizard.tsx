@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Papa from 'papaparse';
 import JSZip from 'jszip';
 import { toast } from 'sonner';
@@ -24,8 +24,28 @@ const ENTITY_FIELDS: Record<string, string[]> = {
     'createdAt'
   ],
   Agent: ['name', 'email', 'phone', 'statesLicensed', 'zipCoverage'],
-  LenderMC: ['name', 'email', 'phone', 'nmlsId', 'team', 'region'],
-  Payment: ['referralId', 'status', 'expectedAmountCents', 'receivedAmountCents', 'invoiceDate', 'paidDate']
+  'Mortgage Consultant': ['name', 'email', 'phone', 'nmlsId', 'team', 'region'],
+  Deal: [
+    'referralId',
+    'status',
+    'expectedAmountCents',
+    'receivedAmountCents',
+    'invoiceDate',
+    'paidDate',
+    'terminatedReason',
+    'agentOutcome',
+    'usedAfc',
+    'agentAttribution',
+    'agentAttributionType',
+    'notes'
+  ]
+};
+
+type ImportAssistantInsights = {
+  mappingSuggestions?: Record<string, string>;
+  rowIssues?: { rowIndex: number; message: string }[];
+  standardizedRows?: Record<string, string>[];
+  notes?: string[];
 };
 
 export function ImportWizard() {
@@ -35,6 +55,15 @@ export function ImportWizard() {
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [rows, setRows] = useState<Record<string, string>[]>([]);
   const [file, setFile] = useState<File | null>(null);
+  const [assistantInsights, setAssistantInsights] = useState<ImportAssistantInsights | null>(null);
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantError, setAssistantError] = useState<string | null>(null);
+  const [useStandardizedPreview, setUseStandardizedPreview] = useState(true);
+  const standardizedRows = assistantInsights?.standardizedRows ?? [];
+  const hasStandardizedRows = standardizedRows.length === rows.length && standardizedRows.length > 0;
+  const mappingSuggestionEntries = Object.entries(assistantInsights?.mappingSuggestions ?? {});
+  const rowIssues = assistantInsights?.rowIssues ?? [];
+  const assistantNotes = assistantInsights?.notes ?? [];
 
   const parseFile = async (fileToParse: File): Promise<Papa.ParseResult<Record<string, string>>> => {
     if (fileToParse.name.endsWith('.zip')) {
@@ -62,6 +91,9 @@ export function ImportWizard() {
       setHeaders(result.meta.fields || []);
       setRows(result.data.slice(0, 20) as Record<string, string>[]);
       setMapping({});
+      setAssistantInsights(null);
+      setAssistantError(null);
+      setUseStandardizedPreview(true);
       setStep('Map Fields');
     } catch (error) {
       console.error(error);
@@ -73,6 +105,77 @@ export function ImportWizard() {
     setMapping((prev) => ({ ...prev, [source]: target }));
   };
 
+  const fetchAssistantInsights = useCallback(async () => {
+    if (!headers.length || !rows.length) return;
+    setAssistantLoading(true);
+    setAssistantError(null);
+    try {
+      const response = await fetch('/api/imports/assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entity, headers, rows })
+      });
+      if (!response.ok) {
+        let message = 'Unable to fetch assistant insights';
+        try {
+          const errorPayload = await response.json();
+          if (typeof errorPayload?.error === 'string') {
+            message = errorPayload.error;
+          }
+        } catch (jsonError) {
+          const fallback = await response.text();
+          if (fallback) {
+            message = fallback;
+          }
+        }
+        throw new Error(message);
+      }
+      const data = (await response.json()) as ImportAssistantInsights;
+      setAssistantInsights(data);
+    } catch (error) {
+      console.error(error);
+      setAssistantInsights(null);
+      setAssistantError(
+        error instanceof Error
+          ? error.message
+          : 'Import assistant unavailable. Try again later.'
+      );
+    } finally {
+      setAssistantLoading(false);
+    }
+  }, [entity, headers, rows]);
+
+  useEffect(() => {
+    if (step === 'Map Fields' && headers.length && rows.length) {
+      void fetchAssistantInsights();
+    }
+  }, [fetchAssistantInsights, headers.length, rows.length, step]);
+
+  useEffect(() => {
+    setUseStandardizedPreview(hasStandardizedRows);
+  }, [hasStandardizedRows]);
+
+  const handleApplyMappingSuggestions = () => {
+    if (!assistantInsights?.mappingSuggestions) return;
+    setMapping((previous) => {
+      const next = { ...previous };
+      Object.entries(assistantInsights.mappingSuggestions ?? {}).forEach(([column, field]) => {
+        if (ENTITY_FIELDS[entity]?.includes(field)) {
+          next[column] = field;
+        }
+      });
+      return next;
+    });
+    toast.success('Mapping suggestions applied');
+  };
+
+  const previewRows = useMemo(() => {
+    if (useStandardizedPreview && hasStandardizedRows) {
+      return standardizedRows;
+    }
+    return rows;
+  }, [hasStandardizedRows, rows, standardizedRows, useStandardizedPreview]);
+
   const handleConfirm = async () => {
     if (!file) return;
     try {
@@ -80,6 +183,9 @@ export function ImportWizard() {
       formData.append('file', file);
       formData.append('entity', entity);
       formData.append('mapping', JSON.stringify(mapping));
+      if (assistantInsights) {
+        formData.append('assistantInsights', JSON.stringify(assistantInsights));
+      }
       const res = await fetch('/api/imports', {
         method: 'POST',
         body: formData
@@ -93,6 +199,9 @@ export function ImportWizard() {
       setHeaders([]);
       setRows([]);
       setMapping({});
+      setAssistantInsights(null);
+      setAssistantError(null);
+      setUseStandardizedPreview(true);
     } catch (error) {
       console.error(error);
       toast.error('Unable to start import');
@@ -150,6 +259,88 @@ export function ImportWizard() {
               </select>
             </div>
           ))}
+          <div className="rounded border border-slate-200 bg-slate-50/50 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-700">Import Assistant</h2>
+                <p className="text-xs text-slate-500">AI suggestions to speed up mapping and data cleanup.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void fetchAssistantInsights()}
+                disabled={assistantLoading}
+                className="rounded border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {assistantLoading ? 'Analyzing…' : 'Refresh'}
+              </button>
+            </div>
+            <div className="mt-3 space-y-3 text-sm text-slate-600">
+              {assistantLoading && <p className="text-slate-500">Analyzing sample rows…</p>}
+              {!assistantLoading && assistantError && (
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-sm text-red-600">{assistantError}</span>
+                  <button
+                    type="button"
+                    onClick={() => void fetchAssistantInsights()}
+                    className="rounded border border-red-200 px-3 py-1 text-xs font-medium text-red-600"
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+              {!assistantLoading && !assistantError && (
+                <>
+                  {mappingSuggestionEntries.length > 0 ? (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Suggested matches</p>
+                      <ul className="mt-2 space-y-1 text-xs">
+                        {mappingSuggestionEntries.map(([column, field]) => (
+                          <li key={column} className="flex items-center justify-between rounded border border-slate-200 bg-white px-2 py-1">
+                            <span className="font-medium text-slate-700">{column}</span>
+                            <span className="text-slate-500">→ {field}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500">No mapping suggestions yet.</p>
+                  )}
+                  {assistantNotes.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Assistant notes</p>
+                      <ul className="list-disc space-y-1 pl-5 text-xs text-slate-600">
+                        {assistantNotes.map((note, index) => (
+                          <li key={`${note}-${index}`}>{note}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {rowIssues.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Flagged rows</p>
+                      <ul className="list-disc space-y-1 pl-5 text-xs text-slate-600">
+                        {rowIssues.map((issue) => (
+                          <li key={`${issue.rowIndex}-${issue.message}`}>
+                            Row {issue.rowIndex + 1}: {issue.message}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleApplyMappingSuggestions}
+                disabled={assistantLoading || mappingSuggestionEntries.length === 0}
+                className="rounded bg-brand px-3 py-1 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Apply suggestions
+              </button>
+            </div>
+          </div>
           <button
             type="button"
             className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
@@ -161,7 +352,20 @@ export function ImportWizard() {
       )}
       {step === 'Preview' && (
         <div className="space-y-4">
-          <p className="text-sm text-slate-500">Preview first 20 rows.</p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-slate-500">Preview first 20 rows.</p>
+            {hasStandardizedRows && (
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border border-slate-300"
+                  checked={useStandardizedPreview}
+                  onChange={(event) => setUseStandardizedPreview(event.target.checked)}
+                />
+                Use AI-cleaned preview
+              </label>
+            )}
+          </div>
           <div className="max-h-64 overflow-auto rounded border border-slate-200">
             <table className="min-w-full text-sm">
               <thead>
@@ -174,7 +378,7 @@ export function ImportWizard() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, index) => (
+                {previewRows.map((row, index) => (
                   <tr key={index} className="odd:bg-white even:bg-slate-50">
                     {headers.map((header) => (
                       <td key={header} className="px-2 py-1">
@@ -186,6 +390,32 @@ export function ImportWizard() {
               </tbody>
             </table>
           </div>
+          {(rowIssues.length > 0 || assistantNotes.length > 0) && (
+            <div className="rounded border border-slate-200 bg-slate-50/50 p-4 text-xs text-slate-600">
+              {assistantNotes.length > 0 && (
+                <div className="space-y-1">
+                  <p className="font-semibold uppercase tracking-wide text-slate-500">Assistant notes</p>
+                  <ul className="list-disc space-y-1 pl-5">
+                    {assistantNotes.map((note, index) => (
+                      <li key={`preview-note-${index}`}>{note}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {rowIssues.length > 0 && (
+                <div className="space-y-1">
+                  <p className="font-semibold uppercase tracking-wide text-slate-500">Flagged rows</p>
+                  <ul className="list-disc space-y-1 pl-5">
+                    {rowIssues.map((issue) => (
+                      <li key={`preview-issue-${issue.rowIndex}-${issue.message}`}>
+                        Row {issue.rowIndex + 1}: {issue.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <button type="button" className="rounded border border-slate-300 px-4 py-2 text-sm" onClick={() => setStep('Map Fields')}>
               Back
@@ -200,6 +430,22 @@ export function ImportWizard() {
         <div className="space-y-4">
           <p className="text-sm text-slate-500">Confirm mapping and start import.</p>
           <pre className="max-h-40 overflow-auto rounded bg-slate-900 p-4 text-xs text-white">{JSON.stringify(mapping, null, 2)}</pre>
+          {assistantInsights && (
+            <div className="rounded border border-slate-200 bg-slate-50/50 p-4 text-xs text-slate-600">
+              <p className="font-semibold uppercase tracking-wide text-slate-500">Import assistant summary</p>
+              <p className="mt-1">
+                {mappingSuggestionEntries.length > 0
+                  ? `Passing ${mappingSuggestionEntries.length} mapping suggestion${mappingSuggestionEntries.length === 1 ? '' : 's'}`
+                  : 'No mapping suggestions applied.'}
+              </p>
+              <p>
+                {rowIssues.length > 0
+                  ? `Assistant flagged ${rowIssues.length} sample row${rowIssues.length === 1 ? '' : 's'} for review.`
+                  : 'No sample rows were flagged.'}
+              </p>
+              {hasStandardizedRows && <p>AI-standardized values are included for preview and downstream cleanup.</p>}
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <button type="button" className="rounded border border-slate-300 px-4 py-2 text-sm" onClick={() => setStep('Preview')}>
               Back
