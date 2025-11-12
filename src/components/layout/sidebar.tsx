@@ -12,6 +12,7 @@ type Role = 'admin' | 'mc' | 'agent' | string;
 const navItems: Array<{ href: string; label: string; roles?: Role[] }> = [
   { href: '/dashboard', label: 'Dashboard', roles: ['admin', 'mc', 'agent'] },
   { href: '/referrals', label: 'Referrals', roles: ['admin', 'mc', 'agent'] },
+  { href: '/referrals/tasks', label: 'Follow-up Tasks', roles: ['admin'] },
   { href: '/agents', label: 'Agents', roles: ['admin', 'mc'] },
   { href: '/lenders', label: 'Mortgage Consultants', roles: ['admin', 'agent'] },
   { href: '/deals', label: 'Deals', roles: ['admin', 'agent'] },
@@ -41,18 +42,25 @@ export function Sidebar({ session }: { session: Session }) {
       <nav className="flex flex-col space-y-1 p-4">
         {navItems
           .filter((item) => !item.roles || item.roles.includes(role))
-          .map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={clsx(
-                'rounded-md px-4 py-2 text-sm font-medium transition hover:bg-slate-100',
-                pathname.startsWith(item.href) && 'bg-brand text-white hover:bg-brand'
-              )}
-            >
-              {item.label}
-            </Link>
-          ))}
+          .map((item) => {
+            const isMatch = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const isReferralsTasks = pathname.startsWith('/referrals/tasks');
+            const highlight =
+              isMatch && !(item.href === '/referrals' && isReferralsTasks && pathname !== item.href);
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={clsx(
+                  'rounded-md px-4 py-2 text-sm font-medium transition hover:bg-slate-100',
+                  highlight && 'bg-brand text-white hover:bg-brand'
+                )}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
       </nav>
       <div className="mt-auto p-4">
         <button
