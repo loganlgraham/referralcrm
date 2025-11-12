@@ -57,6 +57,7 @@ interface ReferralDetailNote {
 
 interface ReferralDetail {
   _id: string;
+  createdAt: string;
   loanFileNumber: string;
   source?: ReferralSource | null;
   endorser?: string | null;
@@ -86,7 +87,11 @@ interface ReferralDetail {
   viewerRole?: string;
   ahaBucket?: 'AHA' | 'AHA_OOS' | '' | null;
   org?: string;
-  audit?: unknown[];
+  audit?: {
+    field?: string | null;
+    newValue?: unknown;
+    timestamp?: string | null;
+  }[];
   [key: string]: unknown;
 }
 
@@ -633,10 +638,54 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const showDeals =
     financials.status === 'Under Contract' || contractDraft.hasUnsavedChanges || hasTerminatedDeal || hasAnyDeals;
 
-  const followUpReferral = useMemo(
-    () => ({
+  const followUpReferral = useMemo(() => {
+    const createdAt = (() => {
+      if (typeof referral.createdAt === 'string') {
+        return referral.createdAt;
+      }
+      if (referral.createdAt) {
+        try {
+          return new Date(referral.createdAt).toISOString();
+        } catch (error) {
+          console.warn('Unable to parse referral.createdAt for follow-up tasks', error);
+        }
+      }
+      return new Date().toISOString();
+    })();
+
+    const auditEntries = Array.isArray(referral.audit)
+      ? referral.audit.map((entry) => {
+          if (!entry || typeof entry !== 'object') {
+            return {};
+          }
+
+          const candidate = entry as {
+            field?: unknown;
+            newValue?: unknown;
+            timestamp?: unknown;
+          };
+
+          return {
+            field: typeof candidate.field === 'string' ? candidate.field : undefined,
+            newValue:
+              typeof candidate.newValue === 'string'
+                ? candidate.newValue
+                : candidate.newValue != null
+                ? String(candidate.newValue)
+                : undefined,
+            timestamp:
+              typeof candidate.timestamp === 'string'
+                ? candidate.timestamp
+                : candidate.timestamp instanceof Date
+                ? candidate.timestamp.toISOString()
+                : undefined,
+          };
+        })
+      : [];
+
+    return {
       _id: referral._id,
-      createdAt: referral.createdAt,
+      createdAt,
       status: financials.status,
       statusLastUpdated: referral.statusLastUpdated,
       daysInStatus: referral.daysInStatus,
@@ -649,22 +698,21 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       borrower: referral.borrower,
       notes: referral.notes ?? [],
       payments: referral.payments ?? [],
-      audit: referral.audit ?? [],
-    }),
-    [
-      agentContact?.name,
-      financials.status,
-      referral._id,
-      referral.audit,
-      referral.borrower,
-      referral.createdAt,
-      referral.daysInStatus,
-      referral.notes,
-      referral.payments,
-      referral.statusLastUpdated,
-      referral.assignedAgent?.name,
-    ]
-  );
+      audit: auditEntries,
+    };
+  }, [
+    agentContact?.name,
+    financials.status,
+    referral._id,
+    referral.audit,
+    referral.borrower,
+    referral.createdAt,
+    referral.daysInStatus,
+    referral.notes,
+    referral.payments,
+    referral.statusLastUpdated,
+    referral.assignedAgent?.name,
+  ]);
 
   return (
     <div className="space-y-8">
