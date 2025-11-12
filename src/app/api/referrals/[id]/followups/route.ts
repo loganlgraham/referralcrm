@@ -449,11 +449,15 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       .lean<FollowUpPlanDocument>()
       .exec();
 
-    if (!createdPlan) {
+    if (!createdPlan || Array.isArray(createdPlan)) {
       return new NextResponse('Unable to load follow-up plan', { status: 500 });
     }
 
     return NextResponse.json(serializePlan(createdPlan));
+  }
+
+  if (Array.isArray(plan)) {
+    return new NextResponse('Unable to load follow-up plan', { status: 500 });
   }
 
   return NextResponse.json(serializePlan(plan));
@@ -487,7 +491,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     .lean<FollowUpPlanDocument>()
     .exec();
 
-  if (!plan) {
+  if (!plan || Array.isArray(plan)) {
     return new NextResponse('Unable to refresh follow-up plan', { status: 500 });
   }
 
