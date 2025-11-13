@@ -13,10 +13,17 @@ export async function GET(): Promise<NextResponse> {
   }
 
   await connectMongo();
-  const suggestions = await CoverageSuggestion.find<{ _id: Types.ObjectId; value: string }>()
+  const suggestions = await CoverageSuggestion.find()
     .select('value')
-    .lean();
-  const sorted = sortCoverageSuggestions(suggestions);
+    .lean()
+    .exec();
+
+  const normalizedSuggestions = suggestions.map((suggestion) => ({
+    _id: suggestion._id as Types.ObjectId,
+    value: suggestion.value as string
+  }));
+
+  const sorted = sortCoverageSuggestions(normalizedSuggestions);
   return NextResponse.json({ suggestions: sorted });
 }
 
