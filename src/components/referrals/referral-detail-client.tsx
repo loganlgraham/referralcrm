@@ -312,6 +312,26 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       });
     }
   }, []);
+  const handleDealCreated = useCallback(
+    (deal: ReferralPayment) => {
+      if (!deal?._id) {
+        return;
+      }
+
+      setReferral((previous) => {
+        const existingPayments = Array.isArray(previous.payments) ? previous.payments : [];
+        if (existingPayments.some((payment) => payment._id === deal._id)) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          payments: [deal, ...existingPayments],
+        };
+      });
+    },
+    []
+  );
   const contractHandlersRef = useRef<{
     onContractSaved: (details: {
       propertyAddress: string;
@@ -959,7 +979,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const hasAnyDeals = dealPayments.length > 0;
 
   const shouldShowDealPreparation =
-    contractPrepActive || financials.status === 'Under Contract' || contractDraft.hasUnsavedChanges;
+    contractPrepActive ||
+    financials.status === 'Under Contract' ||
+    contractDraft.hasUnsavedChanges ||
+    hasAnyDeals;
 
   const showDeals = shouldShowDealPreparation || hasTerminatedDeal || hasAnyDeals;
 
@@ -1267,6 +1290,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               onContractSaved={(details) => {
                 contractHandlersRef.current?.onContractSaved(details);
               }}
+              onDealCreated={handleDealCreated}
             />
           )}
         </div>

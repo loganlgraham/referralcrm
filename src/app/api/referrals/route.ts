@@ -348,7 +348,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         {
           $match: {
             ...paymentMatch,
-            status: { $in: ['under_contract', 'closed', 'payment_sent', 'paid'] }
+            status: {
+              $in: [
+                'under_contract',
+                'past_inspection',
+                'past_appraisal',
+                'clear_to_close',
+                'closed',
+                'payment_sent',
+                'paid',
+              ]
+            }
           }
         },
         {

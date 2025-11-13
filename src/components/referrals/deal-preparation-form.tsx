@@ -28,6 +28,22 @@ interface ContractFormState {
   dealSide: 'buy' | 'sell';
 }
 
+interface CreatedDealPayload {
+  _id: string;
+  status?: string | null;
+  expectedAmountCents?: number | null;
+  receivedAmountCents?: number | null;
+  terminatedReason?: string | null;
+  agentAttribution?: string | null;
+  usedAfc?: boolean;
+  commissionBasisPoints?: number | null;
+  referralFeeBasisPoints?: number | null;
+  side?: 'buy' | 'sell' | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  paidDate?: string | null;
+}
+
 interface DealPreparationFormProps {
   referralId: string;
   previousStatus: ReferralStatus;
@@ -57,6 +73,7 @@ interface DealPreparationFormProps {
     dealSide?: 'buy' | 'sell';
     hasUnsavedChanges: boolean;
   }) => void;
+  onDealCreated?: (deal: CreatedDealPayload) => void;
 }
 
 const buildInitialFormState = (details?: ContractDetails): ContractFormState => ({
@@ -137,6 +154,7 @@ export function DealPreparationForm({
   onContractSaved,
   onStatusChanged,
   onContractDraftChange,
+  onDealCreated,
 }: DealPreparationFormProps) {
   const router = useRouter();
   const [form, setForm] = useState<ContractFormState>(() => buildInitialFormState(contractDetails));
@@ -359,6 +377,7 @@ export function DealPreparationForm({
         referralFeeDueCents?: number;
         dealSide?: 'buy' | 'sell';
       } | undefined;
+      const createdDeal = body.deal as Record<string, unknown> | undefined;
 
       if (details) {
         const nextState = buildInitialFormState({
@@ -388,6 +407,67 @@ export function DealPreparationForm({
       } else {
         setDirty(false);
         broadcastDraft(form, false);
+      }
+
+      if (createdDeal && typeof createdDeal === 'object' && createdDeal !== null) {
+        const payload: CreatedDealPayload = {
+          _id: String(createdDeal._id ?? ''),
+          status:
+            typeof createdDeal.status === 'string'
+              ? createdDeal.status
+              : 'under_contract',
+          expectedAmountCents:
+            typeof createdDeal.expectedAmountCents === 'number'
+              ? createdDeal.expectedAmountCents
+              : 0,
+          receivedAmountCents:
+            typeof createdDeal.receivedAmountCents === 'number'
+              ? createdDeal.receivedAmountCents
+              : 0,
+          terminatedReason:
+            typeof createdDeal.terminatedReason === 'string'
+              ? createdDeal.terminatedReason
+              : null,
+          agentAttribution:
+            typeof createdDeal.agentAttribution === 'string'
+              ? createdDeal.agentAttribution
+              : null,
+          usedAfc: Boolean(createdDeal.usedAfc),
+          commissionBasisPoints:
+            typeof createdDeal.commissionBasisPoints === 'number'
+              ? createdDeal.commissionBasisPoints
+              : null,
+          referralFeeBasisPoints:
+            typeof createdDeal.referralFeeBasisPoints === 'number'
+              ? createdDeal.referralFeeBasisPoints
+              : null,
+          side:
+            createdDeal.side === 'sell'
+              ? 'sell'
+              : createdDeal.side === 'buy'
+                ? 'buy'
+                : null,
+          createdAt:
+            typeof createdDeal.createdAt === 'string'
+              ? createdDeal.createdAt
+              : createdDeal.createdAt instanceof Date
+                ? createdDeal.createdAt.toISOString()
+                : null,
+          updatedAt:
+            typeof createdDeal.updatedAt === 'string'
+              ? createdDeal.updatedAt
+              : createdDeal.updatedAt instanceof Date
+                ? createdDeal.updatedAt.toISOString()
+                : null,
+          paidDate:
+            typeof createdDeal.paidDate === 'string'
+              ? createdDeal.paidDate
+              : createdDeal.paidDate instanceof Date
+                ? createdDeal.paidDate.toISOString()
+                : null,
+        };
+
+        onDealCreated?.(payload);
       }
 
       onStatusChanged?.('Under Contract', { ...body, previousStatus });

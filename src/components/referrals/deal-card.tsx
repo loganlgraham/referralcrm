@@ -1,11 +1,20 @@
 'use client';
 
 import { type ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { formatCurrency } from '@/utils/formatters';
 
-export type DealStatus = 'under_contract' | 'closed' | 'payment_sent' | 'paid' | 'terminated';
+export type DealStatus =
+  | 'under_contract'
+  | 'past_inspection'
+  | 'past_appraisal'
+  | 'clear_to_close'
+  | 'closed'
+  | 'payment_sent'
+  | 'paid'
+  | 'terminated';
 export type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
 export type AgentSelectValue = '' | 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT';
 
@@ -69,6 +78,9 @@ export interface ReferralDealProps {
 
 const STATUS_OPTIONS: { value: DealStatus; label: string }[] = [
   { value: 'under_contract', label: 'Under Contract' },
+  { value: 'past_inspection', label: 'Past Inspection' },
+  { value: 'past_appraisal', label: 'Past Appraisal' },
+  { value: 'clear_to_close', label: 'Clear to Close' },
   { value: 'closed', label: 'Closed' },
   { value: 'payment_sent', label: 'Payment Sent' },
   { value: 'paid', label: 'Paid' },
@@ -104,7 +116,12 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
 };
 
 export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
-  const deals = useMemo(() => normalizeDeals(referral.payments), [referral.payments]);
+  const router = useRouter();
+  const [deals, setDeals] = useState<DealRecord[]>(() => normalizeDeals(referral.payments));
+
+  useEffect(() => {
+    setDeals(normalizeDeals(referral.payments));
+  }, [referral.payments]);
 
   const initialStatusMap = useMemo(() => {
     const snapshot: Record<string, DealStatus> = {};
@@ -215,6 +232,78 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
 
   const getStatusForDeal = (deal: DealRecord): DealStatus => {
     return statusMap[deal._id] ?? ((deal.status as DealStatus | undefined) ?? 'under_contract');
+  };
+
+  const handleDeleteDeal = (deal: DealRecord) => async () => {
+    const confirmed = window.confirm('Delete this deal? This action cannot be undone.');
+    if (!confirmed) {
+      return;
+    }
+
+    setSavingMap((prev) => ({ ...prev, [deal._id]: true }));
+
+    try {
+      const response = await fetch('/api/payments', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: deal._id }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Unable to delete deal');
+      }
+
+      setDeals((previous) => previous.filter((item) => item._id !== deal._id));
+      setStatusMap((previous) => {
+        const next = { ...previous };
+        delete next[deal._id];
+        return next;
+      });
+      setReasonMap((previous) => {
+        if (!(deal._id in previous)) {
+          return previous;
+        }
+        const next = { ...previous };
+        delete next[deal._id];
+        return next;
+      });
+      setAgentMap((previous) => {
+        if (!(deal._id in previous)) {
+          return previous;
+        }
+        const next = { ...previous };
+        delete next[deal._id];
+        return next;
+      });
+      setAfcMap((previous) => {
+        if (!(deal._id in previous)) {
+          return previous;
+        }
+        const next = { ...previous };
+        delete next[deal._id];
+        return next;
+      });
+      setExpandedMap((previous) => {
+        if (!(deal._id in previous)) {
+          return previous;
+        }
+        const next = { ...previous };
+        delete next[deal._id];
+        return next;
+      });
+
+      router.refresh();
+      toast.success('Deal deleted');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Unable to delete deal');
+    } finally {
+      setSavingMap((previous) => {
+        const next = { ...previous };
+        delete next[deal._id];
+        return next;
+      });
+    }
   };
 
   const activeDealId = (() => {
@@ -486,7 +575,13 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
                       ? 'bg-indigo-50 text-indigo-600'
                       : status === 'closed'
                         ? 'bg-sky-50 text-sky-600'
-                        : 'bg-amber-50 text-amber-600'
+                        : status === 'clear_to_close'
+                          ? 'bg-teal-50 text-teal-600'
+                          : status === 'past_appraisal'
+                            ? 'bg-blue-50 text-blue-600'
+                            : status === 'past_inspection'
+                              ? 'bg-amber-50 text-amber-600'
+                              : 'bg-amber-50 text-amber-600'
               }`}
             >
               {statusLabel}
@@ -566,6 +661,19 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
                   </p>
                 )}
               </div>
+            </div>
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <p className="text-xs text-slate-500">
+                {isSaving ? 'Saving…' : 'Update the deal status and referral fee details.'}
+              </p>
+              <button
+                type="button"
+                onClick={handleDeleteDeal(deal)}
+                disabled={isSaving}
+                className="inline-flex items-center justify-center rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                Delete deal
+              </button>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
               <div className="rounded border border-slate-200 bg-slate-50 p-3">

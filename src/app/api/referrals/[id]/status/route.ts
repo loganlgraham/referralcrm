@@ -99,12 +99,13 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       }
     );
 
-    const activeDeal = await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
+    let createdDeal: any = null;
+    let activeDeal = await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
       .sort({ createdAt: -1 })
       .lean();
 
     if (!activeDeal) {
-      await Payment.create({
+      const newDeal = await Payment.create({
         referralId: referral._id,
         status: 'under_contract',
         expectedAmountCents: referral.referralFeeDueCents ?? 0,
@@ -112,6 +113,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
         side: referral.dealSide,
       });
+      createdDeal = newDeal.toObject();
+      activeDeal = createdDeal;
     }
   } else if (parsed.data.status === 'Terminated' || parsed.data.status === 'Lost') {
     referral.estPurchasePriceCents = 0;
@@ -164,6 +167,30 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             referralFeeBasisPoints: referral.referralFeeBasisPoints ?? 0,
             referralFeeDueCents: referral.referralFeeDueCents ?? 0,
             dealSide: referral.dealSide ?? 'buy',
+          }
+        : undefined,
+    deal:
+      createdDeal
+        ? {
+            _id: createdDeal._id?.toString?.() ?? '',
+            status: createdDeal.status ?? 'under_contract',
+            expectedAmountCents: createdDeal.expectedAmountCents ?? 0,
+            receivedAmountCents: createdDeal.receivedAmountCents ?? 0,
+            terminatedReason: createdDeal.terminatedReason ?? null,
+            agentAttribution: createdDeal.agentAttribution ?? null,
+            usedAfc: Boolean(createdDeal.usedAfc),
+            commissionBasisPoints: createdDeal.commissionBasisPoints ?? null,
+            referralFeeBasisPoints: createdDeal.referralFeeBasisPoints ?? null,
+            side: createdDeal.side ?? null,
+            createdAt: createdDeal.createdAt instanceof Date
+              ? createdDeal.createdAt.toISOString()
+              : createdDeal.createdAt ?? null,
+            updatedAt: createdDeal.updatedAt instanceof Date
+              ? createdDeal.updatedAt.toISOString()
+              : createdDeal.updatedAt ?? null,
+            paidDate: createdDeal.paidDate instanceof Date
+              ? createdDeal.paidDate.toISOString()
+              : createdDeal.paidDate ?? null,
           }
         : undefined,
     preApprovalAmountCents: referral.preApprovalAmountCents ?? 0,

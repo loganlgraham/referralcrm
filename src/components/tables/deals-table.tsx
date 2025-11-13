@@ -10,12 +10,23 @@ import { DEFAULT_AGENT_COMMISSION_BPS } from '@/constants/referrals';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency } from '@/utils/formatters';
 
-type DealStatus = 'under_contract' | 'closed' | 'payment_sent' | 'paid' | 'terminated';
+type DealStatus =
+  | 'under_contract'
+  | 'past_inspection'
+  | 'past_appraisal'
+  | 'clear_to_close'
+  | 'closed'
+  | 'payment_sent'
+  | 'paid'
+  | 'terminated';
 type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
 type AgentSelectValue = '' | 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT';
 
 const STATUS_OPTIONS: { value: DealStatus; label: string }[] = [
   { value: 'under_contract', label: 'Under Contract' },
+  { value: 'past_inspection', label: 'Past Inspection' },
+  { value: 'past_appraisal', label: 'Past Appraisal' },
+  { value: 'clear_to_close', label: 'Clear to Close' },
   { value: 'closed', label: 'Closed' },
   { value: 'payment_sent', label: 'Payment Sent' },
   { value: 'paid', label: 'Paid' },
@@ -100,7 +111,12 @@ export function DealsTable() {
     (acc, row) => {
       const isTerminated = row.status === 'terminated';
 
-      if (row.status === 'under_contract') {
+      if (
+        row.status === 'under_contract' ||
+        row.status === 'past_inspection' ||
+        row.status === 'past_appraisal' ||
+        row.status === 'clear_to_close'
+      ) {
         acc.totalUnderContract += 1;
       }
       if (isTerminated) {

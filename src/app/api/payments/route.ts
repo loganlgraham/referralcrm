@@ -265,3 +265,31 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
   return NextResponse.json({ id: payment._id.toString() });
 }
+
+export async function DELETE(request: NextRequest): Promise<NextResponse> {
+  const session = await getCurrentSession();
+  if (!session) {
+    return new NextResponse('Unauthorized', { status: 401 });
+  }
+  if (!['admin', 'manager', 'agent', 'mc'].includes(session.user.role)) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
+
+  const body = await request
+    .json()
+    .catch(() => null) as { id?: string } | null;
+  const id = body?.id ?? request.nextUrl.searchParams.get('id');
+  if (!id) {
+    return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+  }
+
+  await connectMongo();
+  const payment = await Payment.findById(id);
+  if (!payment) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
+  await payment.deleteOne();
+
+  return NextResponse.json({ id });
+}

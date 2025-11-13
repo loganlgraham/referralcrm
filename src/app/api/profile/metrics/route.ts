@@ -95,12 +95,27 @@ export async function GET(_request: NextRequest): Promise<NextResponse> {
 
   const totalReferrals = referrals.length;
   const dealsClosed = paymentsWithMetric.filter((payment) => payment.status === 'closed' || payment.status === 'paid');
-  const dealsUnderContract = paymentsWithMetric.filter((payment) => payment.status === 'under_contract');
+  const dealsUnderContract = paymentsWithMetric.filter((payment) =>
+    [
+      'under_contract',
+      'past_inspection',
+      'past_appraisal',
+      'clear_to_close',
+    ].includes(payment.status)
+  );
   const closeRate = totalReferrals === 0 ? 0 : (dealsClosed.length / totalReferrals) * 100;
 
   const revenueRealizedCents = paymentsWithMetric.reduce((sum, payment) => sum + (payment.receivedAmountCents ?? 0), 0);
   const revenueExpectedCents = paymentsWithMetric.reduce((sum, payment) => {
-    if (payment.status === 'under_contract' || payment.status === 'closed' || payment.status === 'paid') {
+    if (
+      payment.status === 'closed' ||
+      payment.status === 'paid' ||
+      payment.status === 'payment_sent' ||
+      payment.status === 'clear_to_close' ||
+      payment.status === 'past_appraisal' ||
+      payment.status === 'past_inspection' ||
+      payment.status === 'under_contract'
+    ) {
       return sum + (payment.expectedAmountCents ?? 0);
     }
     return sum;
