@@ -17,8 +17,9 @@ import type { Contact } from '@/components/referrals/contact-assignment';
 import type { ReferralStatus } from '@/constants/referrals';
 import { ReferralFollowUpCard } from '@/components/referrals/referral-follow-up-card';
 
-type ReferralSource = 'Lender' | 'MC';
-type ReferralClientType = 'Seller' | 'Buyer';
+type ReferralSource = string;
+type ReferralClientType = 'Seller' | 'Buyer' | 'Both';
+type TransferStage = 'Pre-Approval TBD' | 'Pre-Approval';
 
 interface ReferralContact {
   _id?: string | null;
@@ -148,7 +149,7 @@ interface DetailDraft {
   clientType: ReferralClientType;
   lookingInZip: string;
   borrowerCurrentAddress: string;
-  stageOnTransfer: string;
+  stageOnTransfer: TransferStage;
 }
 
 const DETAIL_FIELD_KEYS: (keyof DetailDraft)[] = [
@@ -163,9 +164,22 @@ const DETAIL_FIELD_KEYS: (keyof DetailDraft)[] = [
 
 const ensureString = (value: unknown) => (typeof value === 'string' ? value : '');
 
-const normalizeSource = (value: unknown): ReferralSource => (value === 'Lender' ? 'Lender' : 'MC');
+const normalizeSource = (value: unknown): ReferralSource =>
+  typeof value === 'string' ? value.trim() : '';
 
-const normalizeClientType = (value: unknown): ReferralClientType => (value === 'Seller' ? 'Seller' : 'Buyer');
+const normalizeClientType = (value: unknown): ReferralClientType => {
+  if (value === 'Seller' || value === 'Both') {
+    return value;
+  }
+  return 'Buyer';
+};
+
+const normalizeStageOnTransfer = (value: unknown): TransferStage => {
+  if (value === 'Pre-Approval' || value === 'Pre-Approval TBD') {
+    return value;
+  }
+  return 'Pre-Approval TBD';
+};
 
 const createDetailDraft = (referral: ReferralDetail): DetailDraft => ({
   loanFileNumber: ensureString(referral?.loanFileNumber),
@@ -174,17 +188,17 @@ const createDetailDraft = (referral: ReferralDetail): DetailDraft => ({
   clientType: normalizeClientType(referral?.clientType),
   lookingInZip: ensureString(referral?.lookingInZip),
   borrowerCurrentAddress: ensureString(referral?.borrowerCurrentAddress),
-  stageOnTransfer: ensureString(referral?.stageOnTransfer),
+  stageOnTransfer: normalizeStageOnTransfer(referral?.stageOnTransfer),
 });
 
 const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
   loanFileNumber: draft.loanFileNumber.trim(),
-  source: draft.source,
+  source: draft.source.trim(),
   endorser: draft.endorser.trim(),
   clientType: draft.clientType,
   lookingInZip: draft.lookingInZip.trim(),
   borrowerCurrentAddress: draft.borrowerCurrentAddress.trim(),
-  stageOnTransfer: draft.stageOnTransfer.trim(),
+  stageOnTransfer: normalizeStageOnTransfer(draft.stageOnTransfer),
 });
 
 const normalizeDealPayments = (
@@ -1132,16 +1146,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               </label>
               <label className="space-y-1 text-sm font-medium text-slate-600">
                 <span>Source</span>
-                <select
+                <input
                   name="source"
                   value={detailsDraft.source}
                   onChange={handleDetailInputChange('source')}
+                  required
                   disabled={savingDetails}
                   className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-                >
-                  <option value="MC">MC</option>
-                  <option value="Lender">Lender</option>
-                </select>
+                />
               </label>
               <label className="space-y-1 text-sm font-medium text-slate-600">
                 <span>Endorser</span>
@@ -1165,6 +1177,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                 >
                   <option value="Buyer">Buyer</option>
                   <option value="Seller">Seller</option>
+                  <option value="Both">Both</option>
                 </select>
               </label>
               <label className="space-y-1 text-sm font-medium text-slate-600">
@@ -1180,14 +1193,16 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               </label>
               <label className="space-y-1 text-sm font-medium text-slate-600">
                 <span>Stage on Transfer</span>
-                <input
+                <select
                   name="stageOnTransfer"
                   value={detailsDraft.stageOnTransfer}
                   onChange={handleDetailInputChange('stageOnTransfer')}
-                  required
                   disabled={savingDetails}
                   className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-                />
+                >
+                  <option value="Pre-Approval TBD">Pre-Approval TBD</option>
+                  <option value="Pre-Approval">Pre-Approval</option>
+                </select>
               </label>
               <label className="space-y-1 text-sm font-medium text-slate-600 sm:col-span-2 lg:col-span-3">
                 <span>Borrower Current Address</span>

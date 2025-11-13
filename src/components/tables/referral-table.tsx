@@ -17,7 +17,7 @@ export interface ReferralRow {
   borrowerEmail: string;
   borrowerPhone: string;
   endorser?: string;
-  clientType: 'Seller' | 'Buyer';
+  clientType: 'Seller' | 'Buyer' | 'Both';
   lookingInZip: string;
   borrowerCurrentAddress?: string;
   propertyAddress?: string;

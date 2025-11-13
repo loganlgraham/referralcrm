@@ -66,16 +66,18 @@ const inboundEmailSchema = new Schema(
 const referralSchema = new Schema(
   {
     createdAt: { type: Date, default: Date.now, index: true },
-    source: { type: String, enum: ['Lender', 'MC'], required: true },
+    source: { type: String, required: true, trim: true },
     endorser: { type: String, default: '' },
     clientType: {
       type: String,
-      enum: ['Seller', 'Buyer'],
+      enum: ['Seller', 'Buyer', 'Both'],
       required(this: { isNew: boolean }) {
         return this.isNew;
       }
     },
     borrower: {
+      firstName: { type: String, default: '', trim: true },
+      lastName: { type: String, default: '', trim: true },
       name: { type: String, required: true },
       email: { type: String, index: true, required: true },
       phone: { type: String, required: true }
@@ -97,7 +99,7 @@ const referralSchema = new Schema(
       enum: ['buy', 'sell'],
       default: 'buy',
     },
-    stageOnTransfer: { type: String, default: '' },
+    stageOnTransfer: { type: String, default: 'Pre-Approval TBD' },
     initialNotes: { type: String, default: '' },
     loanFileNumber: {
       type: String,
@@ -165,14 +167,16 @@ referralSchema.index(
 export interface ReferralDocument {
   _id: Types.ObjectId;
   createdAt: Date;
-  source: 'Lender' | 'MC';
+  source: string;
   borrower: {
+    firstName?: string;
+    lastName?: string;
     name: string;
     email: string;
     phone: string;
   };
   endorser?: string;
-  clientType: 'Seller' | 'Buyer';
+  clientType: 'Seller' | 'Buyer' | 'Both';
   lookingInZip: string;
   borrowerCurrentAddress?: string;
   propertyAddress?: string;

@@ -53,17 +53,19 @@ async function main() {
 
   const referral = await Referral.create({
     borrower: {
+      firstName: 'Taylor',
+      lastName: 'Borrower',
       name: 'Taylor Borrower',
       email: 'taylor.borrower@example.com',
       phone: '555-555-3001'
     },
-    source: 'MC',
+    source: 'Marketing Campaign',
     endorser: 'Morgan Consultant',
     clientType: 'Buyer',
     lookingInZip: '80202',
     borrowerCurrentAddress: '456 Elm St, Denver, CO 80211',
     propertyAddress: '123 Market St, Denver, CO 80202',
-    stageOnTransfer: 'Initial Contact',
+    stageOnTransfer: 'Pre-Approval TBD',
     loanFileNumber: 'LFN-1001',
     initialNotes: 'Prefers weekend showings.',
     assignedAgent: agents[0]._id,

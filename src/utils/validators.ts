@@ -2,19 +2,20 @@ import { z } from 'zod';
 import { REFERRAL_STATUSES } from '@/constants/referrals';
 
 export const createReferralSchema = z.object({
-  borrowerName: z.string().min(1),
+  borrowerFirstName: z.string().min(1),
+  borrowerLastName: z.string().min(1),
   borrowerEmail: z.string().email(),
   borrowerPhone: z.string().min(7),
-  source: z.enum(['Lender', 'MC']),
+  source: z.string().min(1),
   endorser: z.string().min(1),
-  clientType: z.enum(['Seller', 'Buyer']),
+  clientType: z.enum(['Seller', 'Buyer', 'Both']),
   lookingInZip: z.string().min(5),
   borrowerCurrentAddress: z.string().min(1),
-  stageOnTransfer: z.string().min(1),
+  stageOnTransfer: z.enum(['Pre-Approval TBD', 'Pre-Approval']),
   loanFileNumber: z.string().min(1),
   initialNotes: z.string().optional(),
   loanType: z.string().optional(),
-  estPurchasePrice: z.number().optional()
+  preApprovalAmount: z.number().optional()
 });
 
 export const updateReferralSchema = z.object({
@@ -22,9 +23,9 @@ export const updateReferralSchema = z.object({
   assignedAgent: z.string().optional(),
   referralFeeBasisPoints: z.number().int().min(0).optional(),
   ahaBucket: z.enum(['AHA', 'AHA_OOS']).nullable().optional(),
-  source: z.enum(['Lender', 'MC']).optional(),
+  source: z.string().min(1).optional(),
   endorser: z.string().min(1).optional(),
-  clientType: z.enum(['Seller', 'Buyer']).optional(),
+  clientType: z.enum(['Seller', 'Buyer', 'Both']).optional(),
   lookingInZip: z.string().min(5).optional(),
   borrowerCurrentAddress: z.string().min(1).optional(),
   stageOnTransfer: z.string().min(1).optional(),
