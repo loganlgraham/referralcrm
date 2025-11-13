@@ -16,6 +16,8 @@ interface Params {
   params: { id: string };
 }
 
+const PRE_CONTRACT_STATUSES = new Set(['New Lead', 'Paired', 'In Communication', 'Showing Homes']);
+
 export async function POST(request: NextRequest, { params }: Params): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session) {
@@ -41,16 +43,18 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   if (!canManageReferral(session, { assignedAgent: referral.assignedAgent, lender: referral.lender, org: referral.org })) {
     return new NextResponse('Forbidden', { status: 403 });
   }
+  const now = new Date();
+  const nextStatus = parsed.data.status;
   const previousStatus = referral.status;
-  referral.status = parsed.data.status;
-  referral.statusLastUpdated = new Date();
+  referral.status = nextStatus;
+  referral.statusLastUpdated = now;
   referral.audit = referral.audit || [];
   const auditEntry: Record<string, unknown> = {
     actorRole: session.user.role,
     field: 'status',
     previousValue: previousStatus,
-    newValue: parsed.data.status,
-    timestamp: new Date()
+    newValue: nextStatus,
+    timestamp: now
   };
 
   const actorId = resolveAuditActorId(session.user.id);
@@ -61,6 +65,39 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   referral.audit.push(auditEntry as any);
 
   let createdDeal: any = null;
+  const sla = (referral.sla ??= {} as any);
+  let slaModified = false;
+
+  if (nextStatus === 'Under Contract') {
+    if (sla.contractToCloseMinutes != null) {
+      sla.previousContractToCloseMinutes = sla.contractToCloseMinutes;
+    }
+    if (sla.closedToPaidMinutes != null) {
+      sla.previousClosedToPaidMinutes = sla.closedToPaidMinutes;
+    }
+    sla.contractToCloseMinutes = null;
+    sla.closedToPaidMinutes = null;
+    sla.lastClosedAt = null;
+    sla.lastPaidAt = null;
+    sla.lastUnderContractAt = now;
+    slaModified = true;
+  } else if (PRE_CONTRACT_STATUSES.has(nextStatus)) {
+    if (sla.contractToCloseMinutes != null) {
+      sla.previousContractToCloseMinutes = sla.contractToCloseMinutes;
+    }
+    if (sla.closedToPaidMinutes != null) {
+      sla.previousClosedToPaidMinutes = sla.closedToPaidMinutes;
+    }
+    sla.contractToCloseMinutes = null;
+    sla.closedToPaidMinutes = null;
+    sla.lastUnderContractAt = null;
+    sla.lastClosedAt = null;
+    sla.lastPaidAt = null;
+    slaModified = true;
+  } else if (nextStatus === 'Closed') {
+    sla.lastClosedAt = now;
+    slaModified = true;
+  }
 
   if (parsed.data.status === 'Under Contract') {
     const details = parsed.data.contractDetails;
@@ -97,6 +134,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
           commissionBasisPoints: referral.commissionBasisPoints ?? null,
           referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
           side: referral.dealSide,
+          contractPriceCents: referral.estPurchasePriceCents ?? null,
         },
       }
     );
@@ -113,6 +151,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         commissionBasisPoints: referral.commissionBasisPoints ?? null,
         referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
         side: referral.dealSide,
+        contractPriceCents: referral.estPurchasePriceCents ?? null,
       });
       createdDeal = newDeal.toObject();
       activeDeal = createdDeal;
@@ -155,6 +194,10 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       );
     }
   }
+  if (slaModified) {
+    referral.markModified('sla');
+  }
+
   await referral.save();
 
   if (previousStatus !== referral.status) {
@@ -200,6 +243,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             commissionBasisPoints: createdDeal.commissionBasisPoints ?? null,
             referralFeeBasisPoints: createdDeal.referralFeeBasisPoints ?? null,
             side: createdDeal.side ?? null,
+            contractPriceCents: createdDeal.contractPriceCents ?? null,
             createdAt: createdDeal.createdAt instanceof Date
               ? createdDeal.createdAt.toISOString()
               : createdDeal.createdAt ?? null,

@@ -39,6 +39,7 @@ interface CreatedDealPayload {
   commissionBasisPoints?: number | null;
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
+  contractPriceCents?: number | null;
   createdAt?: string | null;
   updatedAt?: string | null;
   paidDate?: string | null;

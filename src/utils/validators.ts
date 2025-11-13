@@ -28,7 +28,6 @@ export const updateReferralSchema = z.object({
   lookingInZip: z.string().min(5).optional(),
   borrowerCurrentAddress: z.string().min(1).optional(),
   stageOnTransfer: z.string().min(1).optional(),
-  initialNotes: z.string().optional(),
   loanFileNumber: z.string().min(1).optional(),
 });
 
@@ -108,5 +107,6 @@ export const paymentSchema = z.object({
   notes: z.string().optional(),
   side: z.enum(['buy', 'sell']).optional(),
   commissionBasisPoints: z.number().int().min(0).optional(),
-  referralFeeBasisPoints: z.number().int().min(0).optional()
+  referralFeeBasisPoints: z.number().int().min(0).optional(),
+  contractPriceCents: z.number().int().min(0).optional()
 });

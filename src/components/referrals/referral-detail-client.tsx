@@ -43,6 +43,7 @@ interface ReferralPayment {
   commissionBasisPoints?: number | null;
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
+  contractPriceCents?: number | null;
 }
 
 interface ReferralDetailNote {
@@ -66,7 +67,6 @@ interface ReferralDetail {
   lookingInZip?: string | null;
   borrowerCurrentAddress?: string | null;
   stageOnTransfer?: string | null;
-  initialNotes?: string | null;
   borrower: {
     name: string;
     email: string;
@@ -149,7 +149,6 @@ interface DetailDraft {
   lookingInZip: string;
   borrowerCurrentAddress: string;
   stageOnTransfer: string;
-  initialNotes: string;
 }
 
 const DETAIL_FIELD_KEYS: (keyof DetailDraft)[] = [
@@ -160,7 +159,6 @@ const DETAIL_FIELD_KEYS: (keyof DetailDraft)[] = [
   'lookingInZip',
   'borrowerCurrentAddress',
   'stageOnTransfer',
-  'initialNotes',
 ];
 
 const ensureString = (value: unknown) => (typeof value === 'string' ? value : '');
@@ -177,7 +175,6 @@ const createDetailDraft = (referral: ReferralDetail): DetailDraft => ({
   lookingInZip: ensureString(referral?.lookingInZip),
   borrowerCurrentAddress: ensureString(referral?.borrowerCurrentAddress),
   stageOnTransfer: ensureString(referral?.stageOnTransfer),
-  initialNotes: ensureString(referral?.initialNotes),
 });
 
 const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
@@ -188,7 +185,6 @@ const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
   lookingInZip: draft.lookingInZip.trim(),
   borrowerCurrentAddress: draft.borrowerCurrentAddress.trim(),
   stageOnTransfer: draft.stageOnTransfer.trim(),
-  initialNotes: draft.initialNotes.trim(),
 });
 
 const normalizeDealPayments = (
@@ -214,6 +210,7 @@ const normalizeDealPayments = (
     commissionBasisPoints: payment.commissionBasisPoints ?? null,
     referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
     side: payment.side ?? null,
+    contractPriceCents: payment.contractPriceCents ?? null,
   }));
 };
 
@@ -359,7 +356,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       referral.lookingInZip,
       referral.borrowerCurrentAddress,
       referral.stageOnTransfer,
-      referral.initialNotes,
     ]
   );
   const detailsChanged = useMemo(
@@ -387,7 +383,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referral.lookingInZip,
     referral.borrowerCurrentAddress,
     referral.stageOnTransfer,
-    referral.initialNotes,
   ]);
 
   useEffect(() => {
@@ -654,7 +649,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         lookingInZip: normalizedDraft.lookingInZip,
         borrowerCurrentAddress: normalizedDraft.borrowerCurrentAddress,
         stageOnTransfer: normalizedDraft.stageOnTransfer,
-        initialNotes: normalizedDraft.initialNotes,
       }));
       setDetailsDraft(normalizedDraft);
       setIsEditingDetails(false);
@@ -994,6 +988,11 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       return;
     }
 
+    if (hasAnyDeals && !contractDraft.hasUnsavedChanges) {
+      setContractPrepActive(false);
+      return;
+    }
+
     if (financials.status !== 'Under Contract' && !contractDraft.hasUnsavedChanges) {
       setContractPrepActive(false);
     }
@@ -1201,17 +1200,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                 />
               </label>
-              <label className="space-y-1 text-sm font-medium text-slate-600 sm:col-span-2 lg:col-span-3">
-                <span>Notes</span>
-                <textarea
-                  name="initialNotes"
-                  value={detailsDraft.initialNotes}
-                  onChange={handleDetailInputChange('initialNotes')}
-                  rows={3}
-                  disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-                />
-              </label>
             </div>
             <div className="flex justify-end gap-3">
               <button
@@ -1263,10 +1251,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                 {referral.borrowerCurrentAddress?.trim() ? referral.borrowerCurrentAddress : '—'}
               </dd>
             </div>
-            <div className="space-y-1 sm:col-span-2 lg:col-span-3">
-              <dt className="text-xs uppercase text-slate-500">Notes</dt>
-              <dd className="text-sm text-slate-700">{referral.initialNotes?.trim() ? referral.initialNotes : '—'}</dd>
-            </div>
           </dl>
         )}
       </section>
@@ -1291,6 +1275,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             overrides={dealOverrides}
             summary={dealSummary}
             viewerRole={viewerRole}
+            onAddDeal={handleCreateDealRequest}
           />
           {shouldShowDealPreparation && (
             <DealPreparationForm

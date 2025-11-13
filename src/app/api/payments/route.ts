@@ -31,6 +31,7 @@ type PaymentWithReferral = {
   status: string;
   expectedAmountCents?: number | null;
   receivedAmountCents?: number | null;
+  contractPriceCents?: number | null;
   terminatedReason?: string | null;
   agentAttribution?: string | null;
   usedAfc?: boolean | null;
@@ -40,6 +41,28 @@ type PaymentWithReferral = {
   commissionBasisPoints?: number | null;
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
+};
+
+const toDate = (value?: Date | string | null): Date | null => {
+  if (!value) {
+    return null;
+  }
+
+  const candidate = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(candidate.getTime()) ? null : candidate;
+};
+
+const minutesBetweenDates = (start: Date | null, end: Date | null): number | null => {
+  if (!start || !end) {
+    return null;
+  }
+
+  const diff = end.getTime() - start.getTime();
+  if (diff <= 0) {
+    return 0;
+  }
+
+  return Math.round(diff / 60000);
 };
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -110,6 +133,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       status: payment.status,
       expectedAmountCents: payment.expectedAmountCents ?? 0,
       receivedAmountCents: payment.receivedAmountCents ?? 0,
+      contractPriceCents: payment.contractPriceCents ?? null,
       terminatedReason: payment.terminatedReason ?? null,
       agentAttribution: payment.agentAttribution ?? null,
       usedAfc: Boolean(payment.usedAfc),
@@ -172,6 +196,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     commissionBasisPoints: parsed.data.commissionBasisPoints ?? null,
     referralFeeBasisPoints: parsed.data.referralFeeBasisPoints ?? null,
     side: parsed.data.side ?? 'buy',
+    contractPriceCents: parsed.data.contractPriceCents ?? null,
   });
 
   return NextResponse.json({ id: payment._id.toString() }, { status: 201 });
@@ -204,14 +229,121 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
   const previousStatus = existingPayment.status;
 
+  const nextContractPriceCents =
+    parsed.data.contractPriceCents !== undefined
+      ? parsed.data.contractPriceCents
+      : existingPayment.contractPriceCents ?? null;
+  const nextCommissionBasisPoints =
+    parsed.data.commissionBasisPoints !== undefined
+      ? parsed.data.commissionBasisPoints ?? null
+      : existingPayment.commissionBasisPoints ?? null;
+  const nextReferralFeeBasisPoints =
+    parsed.data.referralFeeBasisPoints !== undefined
+      ? parsed.data.referralFeeBasisPoints ?? null
+      : existingPayment.referralFeeBasisPoints ?? null;
+  const nextSide =
+    parsed.data.side !== undefined ? parsed.data.side ?? existingPayment.side : existingPayment.side;
+
+  let nextExpectedAmountCents = existingPayment.expectedAmountCents ?? 0;
+  const shouldRecalculateReferralFee =
+    parsed.data.expectedAmountCents === undefined &&
+    (parsed.data.contractPriceCents !== undefined ||
+      parsed.data.commissionBasisPoints !== undefined ||
+      parsed.data.referralFeeBasisPoints !== undefined);
+
+  if (shouldRecalculateReferralFee) {
+    if (
+      nextContractPriceCents != null &&
+      nextCommissionBasisPoints != null &&
+      nextReferralFeeBasisPoints != null
+    ) {
+      const computed = Math.round(
+        (nextContractPriceCents * nextCommissionBasisPoints * nextReferralFeeBasisPoints) / 100_000_000
+      );
+      if (Number.isFinite(computed) && computed >= 0) {
+        nextExpectedAmountCents = computed;
+      }
+    }
+  } else if (parsed.data.expectedAmountCents !== undefined) {
+    nextExpectedAmountCents = parsed.data.expectedAmountCents ?? nextExpectedAmountCents;
+  }
+
   const updatePayload: Record<string, unknown> = { ...parsed.data };
   delete updatePayload.referralId;
+  updatePayload.contractPriceCents = nextContractPriceCents ?? null;
+  updatePayload.commissionBasisPoints = nextCommissionBasisPoints ?? null;
+  updatePayload.referralFeeBasisPoints = nextReferralFeeBasisPoints ?? null;
+  updatePayload.side = nextSide ?? 'buy';
+  updatePayload.expectedAmountCents = nextExpectedAmountCents;
   if ('usedAfc' in updatePayload && updatePayload.usedAfc === undefined) {
     updatePayload.usedAfc = false;
   }
+
   const payment = await Payment.findByIdAndUpdate(body.id, updatePayload, { new: true });
   if (!payment) {
     return new NextResponse('Not found', { status: 404 });
+  }
+
+  const referral = await Referral.findById(existingPayment.referralId);
+  if (referral) {
+    const now = new Date();
+    const sla = (referral.sla ??= {} as any);
+    let slaChanged = false;
+
+    if (parsed.data.status && parsed.data.status !== previousStatus) {
+      const nextStatus = parsed.data.status as string;
+
+      if (nextStatus === 'under_contract') {
+        sla.lastUnderContractAt = now;
+        slaChanged = true;
+      }
+
+      if (['closed', 'payment_sent', 'paid'].includes(nextStatus)) {
+        const underContractAt =
+          toDate(sla.lastUnderContractAt) ??
+          toDate(existingPayment.createdAt) ??
+          toDate(payment.createdAt) ??
+          now;
+        const closedMinutes = minutesBetweenDates(underContractAt, now);
+        if (closedMinutes != null) {
+          sla.contractToCloseMinutes = closedMinutes;
+          sla.lastClosedAt = now;
+          slaChanged = true;
+        }
+      }
+
+      if (nextStatus === 'paid') {
+        const closedAt =
+          toDate(sla.lastClosedAt) ??
+          toDate(existingPayment.updatedAt) ??
+          toDate(payment.updatedAt) ??
+          now;
+        const paidMinutes = minutesBetweenDates(closedAt, now);
+        if (paidMinutes != null) {
+          sla.closedToPaidMinutes = paidMinutes;
+          sla.lastPaidAt = now;
+          slaChanged = true;
+        }
+      }
+    }
+
+    if (nextContractPriceCents != null) {
+      referral.estPurchasePriceCents = nextContractPriceCents;
+    }
+    if (nextCommissionBasisPoints != null) {
+      referral.commissionBasisPoints = nextCommissionBasisPoints;
+    }
+    if (nextReferralFeeBasisPoints != null) {
+      referral.referralFeeBasisPoints = nextReferralFeeBasisPoints;
+    }
+    if (nextSide) {
+      referral.dealSide = nextSide;
+    }
+    referral.referralFeeDueCents = nextExpectedAmountCents;
+    if (slaChanged) {
+      referral.markModified('sla');
+    }
+    await referral.save();
   }
 
   if (

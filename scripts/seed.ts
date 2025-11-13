@@ -92,7 +92,8 @@ async function main() {
     expectedAmountCents: referral.referralFeeDueCents,
     commissionBasisPoints: referral.commissionBasisPoints ?? null,
     referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
-    side: 'buy'
+    side: 'buy',
+    contractPriceCents: referral.estPurchasePriceCents ?? null
   });
 
   console.log('Seed data loaded');

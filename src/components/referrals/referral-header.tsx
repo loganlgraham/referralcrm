@@ -306,6 +306,7 @@ export function ReferralHeader({
     ? `${(effectiveReferralFeeBasisPoints / 100).toFixed(2)}%`
     : '—';
   const dealSideLabel = dealSide === 'sell' ? 'Sell-side' : 'Buy-side';
+  const isAgentView = viewerRole === 'agent';
   const canAssignAgent = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'mc';
   const canAssignMc = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'agent';
   const fallbackAgentContact: Contact | null = referral.assignedAgent
@@ -642,8 +643,16 @@ export function ReferralHeader({
             <span className="rounded-full bg-amber-500/10 px-3 py-1 text-amber-600">{daysInStatus} days in stage</span>
           </div>
         </div>
-        <div className={`grid gap-3 ${showBucketSummary ? 'sm:grid-cols-2' : ''}`}>
-          <section className="flex h-full flex-col justify-between rounded-lg border border-brand/20 bg-white/80 p-4 shadow-sm">
+        <div
+          className={`grid gap-3 ${showBucketSummary ? 'sm:grid-cols-2' : ''} ${
+            isAgentView ? 'lg:justify-items-end' : ''
+          }`}
+        >
+          <section
+            className={`flex h-full flex-col justify-between rounded-lg border border-brand/20 bg-white/80 p-4 shadow-sm ${
+              isAgentView ? 'self-end sm:max-w-sm lg:max-w-xs lg:ml-auto' : ''
+            }`}
+          >
             <div className="space-y-2">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-brand">{primaryAmountLabel}</h2>
               <p className="text-2xl font-semibold text-slate-900">{formattedPrimaryAmount}</p>

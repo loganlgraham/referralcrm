@@ -130,7 +130,14 @@ const referralSchema = new Schema(
       timeToFirstAgentContactHours: { type: Number, default: null },
       timeToAssignmentHours: { type: Number, default: null },
       daysToContract: { type: Number, default: null },
-      daysToClose: { type: Number, default: null }
+      daysToClose: { type: Number, default: null },
+      contractToCloseMinutes: { type: Number, default: null },
+      closedToPaidMinutes: { type: Number, default: null },
+      previousContractToCloseMinutes: { type: Number, default: null },
+      previousClosedToPaidMinutes: { type: Number, default: null },
+      lastUnderContractAt: { type: Date, default: null },
+      lastClosedAt: { type: Date, default: null },
+      lastPaidAt: { type: Date, default: null }
     },
     org: { type: String, enum: ['AFC', 'AHA'], default: 'AFC' },
     ahaBucket: {
@@ -185,6 +192,19 @@ export interface ReferralDocument {
   referralFeeBasisPoints?: number;
   dealSide?: 'buy' | 'sell';
   referralFeeDueCents?: number;
+  sla?: {
+    timeToFirstAgentContactHours?: number | null;
+    timeToAssignmentHours?: number | null;
+    daysToContract?: number | null;
+    daysToClose?: number | null;
+    contractToCloseMinutes?: number | null;
+    closedToPaidMinutes?: number | null;
+    previousContractToCloseMinutes?: number | null;
+    previousClosedToPaidMinutes?: number | null;
+    lastUnderContractAt?: Date | null;
+    lastClosedAt?: Date | null;
+    lastPaidAt?: Date | null;
+  } | null;
   notes?: {
     _id: Types.ObjectId;
     author: Types.ObjectId;

@@ -73,11 +73,19 @@ export interface ReferralLike {
   notes?: NoteLike[];
   payments?: DealLike[];
   audit?: AuditEntryLike[];
+  sla?: {
+    contractToCloseMinutes?: number | null;
+    closedToPaidMinutes?: number | null;
+    previousContractToCloseMinutes?: number | null;
+    previousClosedToPaidMinutes?: number | null;
+  } | null;
 }
 
 const TIME_ZONE = 'America/Denver';
 const BUSINESS_START_HOUR = 8;
 const BUSINESS_END_HOUR = 17;
+
+const PRE_CONTRACT_STATUSES = new Set(['New Lead', 'Paired', 'In Communication', 'Showing Homes']);
 
 const SLA_THRESHOLDS = {
   minutesToAssignment: 120,
@@ -214,11 +222,7 @@ const minutesBetween = (start: Date | null, end: Date | null): number | null => 
   return calculateBusinessMinutes(start, end);
 };
 
-const formatDuration = (minutes: number | null): string => {
-  if (minutes === null) {
-    return 'Pending';
-  }
-
+const formatMinutesValue = (minutes: number): string => {
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
   if (hours === 0) {
@@ -230,14 +234,27 @@ const formatDuration = (minutes: number | null): string => {
   return `${hours}h ${remainingMinutes}m`;
 };
 
-const findFirstDealTimestamp = (deals: DealLike[], status: string): Date | null => {
+const formatDuration = (minutes: number | null, previous?: number | null): string => {
+  if (minutes === null) {
+    if (previous != null) {
+      return `Pending (prev ${formatMinutesValue(previous)})`;
+    }
+    return 'Pending';
+  }
+
+  return formatMinutesValue(minutes);
+};
+
+const findFirstDealTimestamp = (deals: DealLike[], statuses: string | string[]): Date | null => {
+  const targets = Array.isArray(statuses) ? new Set(statuses) : new Set([statuses]);
   const matches = deals
-    .filter((deal) => deal.status === status)
+    .filter((deal) => deal.status && targets.has(deal.status))
     .map((deal) => {
+      const status = deal.status ?? '';
       if (status === 'paid') {
         return parseTimestamp(deal.paidDate) ?? parseTimestamp(deal.updatedAt) ?? parseTimestamp(deal.createdAt);
       }
-      if (status === 'closed') {
+      if (status === 'closed' || status === 'payment_sent') {
         return parseTimestamp(deal.updatedAt) ?? parseTimestamp(deal.createdAt);
       }
       return parseTimestamp(deal.createdAt) ?? parseTimestamp(deal.updatedAt);
@@ -296,9 +313,43 @@ export const computeSlaDurations = (referral: ReferralLike): SlaDuration[] => {
   const underContractAt = getFirstStatusTimestamp('Under Contract');
 
   const deals: DealLike[] = Array.isArray(referral.payments) ? referral.payments : [];
-  const dealUnderContractAt =
-    findFirstDealTimestamp(deals, 'under_contract') ?? underContractAt ?? pairedAt ?? createdAt;
-  const dealClosedAt = findFirstDealTimestamp(deals, 'closed') ?? getFirstStatusTimestamp('Closed');
+  const storedContractToClose = referral.sla?.contractToCloseMinutes ?? null;
+  const storedClosedToPaid = referral.sla?.closedToPaidMinutes ?? null;
+  const previousContractToClose = referral.sla?.previousContractToCloseMinutes ?? null;
+  const previousClosedToPaid = referral.sla?.previousClosedToPaidMinutes ?? null;
+  const activeDealStatuses = new Set([
+    'under_contract',
+    'past_inspection',
+    'past_appraisal',
+    'clear_to_close',
+    'closed',
+    'payment_sent',
+    'paid',
+  ]);
+  const hasDealProgress = deals.some((deal) => deal.status && activeDealStatuses.has(deal.status));
+  const activeReferralStatuses = new Set([
+    'Under Contract',
+    'Closed',
+    'Payment Sent',
+    'Clear to Close',
+    'Past Inspection',
+    'Past Appraisal',
+  ]);
+  const isCurrentlyContracting = referral.status && activeReferralStatuses.has(referral.status);
+  const isPreContractStatus = referral.status ? PRE_CONTRACT_STATUSES.has(referral.status) : false;
+
+  const dealUnderContractAt = hasDealProgress || isCurrentlyContracting
+    ? findFirstDealTimestamp(deals, [
+        'under_contract',
+        'past_inspection',
+        'past_appraisal',
+        'clear_to_close',
+        'closed',
+        'payment_sent',
+        'paid',
+      ]) ?? underContractAt ?? pairedAt ?? createdAt
+    : null;
+  const dealClosedAt = findFirstDealTimestamp(deals, ['closed', 'payment_sent', 'paid']) ?? getFirstStatusTimestamp('Closed');
   const dealPaidAt = findFirstDealTimestamp(deals, 'paid');
 
   const newLeadToPaired = minutesBetween(createdAt, pairedAt);
@@ -307,6 +358,20 @@ export const computeSlaDurations = (referral: ReferralLike): SlaDuration[] => {
   const communicationToContract = minutesBetween(communicationStart, underContractAt);
   const contractToClose = minutesBetween(dealUnderContractAt, dealClosedAt);
   const closeToPaid = minutesBetween(dealClosedAt, dealPaidAt);
+
+  const contractToCloseMinutes = isPreContractStatus
+    ? null
+    : contractToClose ?? storedContractToClose ?? null;
+  const closeToPaidMinutes = isPreContractStatus
+    ? null
+    : closeToPaid ?? storedClosedToPaid ?? null;
+
+  const contractToClosePrevious = isPreContractStatus
+    ? previousContractToClose ?? storedContractToClose ?? null
+    : previousContractToClose ?? null;
+  const closeToPaidPrevious = isPreContractStatus
+    ? previousClosedToPaid ?? storedClosedToPaid ?? null
+    : previousClosedToPaid ?? null;
 
   return [
     {
@@ -330,14 +395,14 @@ export const computeSlaDurations = (referral: ReferralLike): SlaDuration[] => {
     {
       key: 'contract-to-close',
       label: 'Deal: Under Contract → Closed',
-      minutes: contractToClose,
-      formatted: formatDuration(contractToClose),
+      minutes: contractToCloseMinutes,
+      formatted: formatDuration(contractToCloseMinutes, contractToClosePrevious),
     },
     {
       key: 'close-to-paid',
       label: 'Deal: Closed → Paid',
-      minutes: closeToPaid,
-      formatted: formatDuration(closeToPaid),
+      minutes: closeToPaidMinutes,
+      formatted: formatDuration(closeToPaidMinutes, closeToPaidPrevious),
     },
   ];
 };

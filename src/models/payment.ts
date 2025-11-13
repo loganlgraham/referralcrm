@@ -20,6 +20,7 @@ const paymentSchema = new Schema(
     },
     expectedAmountCents: { type: Number, required: true },
     receivedAmountCents: { type: Number, default: 0 },
+    contractPriceCents: { type: Number, default: null },
     terminatedReason: {
       type: String,
       enum: ['inspection', 'appraisal', 'financing', 'changed_mind'],
