@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Types } from 'mongoose';
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { assignAgentSchema } from '@/utils/validators';
@@ -58,9 +59,21 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   referral.audit.push(auditEntry as any);
   await referral.save();
 
+  type AgentNameLean = { _id: Types.ObjectId; name?: string | null };
+
+  const previousAgentPromise = previousAgent
+    ? Agent.findById(previousAgent)
+        .select('name')
+        .lean<AgentNameLean | null>()
+    : Promise.resolve<AgentNameLean | null>(null);
+
+  const nextAgentPromise = Agent.findById(parsed.data.agentId)
+    .select('name')
+    .lean<AgentNameLean | null>();
+
   const [previousAgentDoc, nextAgentDoc] = await Promise.all([
-    previousAgent ? Agent.findById(previousAgent).select('name').lean() : null,
-    Agent.findById(parsed.data.agentId).select('name').lean(),
+    previousAgentPromise,
+    nextAgentPromise,
   ]);
 
   const previousLabel = previousAgentDoc?.name?.trim() || 'Unassigned';
