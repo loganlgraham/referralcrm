@@ -259,6 +259,17 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         }
       : null
   );
+  const handleAgentContactChange = (contact: Contact | null) => {
+    setAgentContact(contact);
+    router.refresh();
+    void mutate(activityFeedKey);
+  };
+
+  const handleMcContactChange = (contact: Contact | null) => {
+    setMcContact(contact);
+    router.refresh();
+    void mutate(activityFeedKey);
+  };
   const initialPropertyState = initialReferral.propertyState
     ? String(initialReferral.propertyState).toUpperCase()
     : undefined;
@@ -320,17 +331,66 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   ]);
 
   useEffect(() => {
-    setFinancials({
-      status: referral.status,
-      preApprovalAmountCents: referral.preApprovalAmountCents ?? 0,
-      contractPriceCents: referral.estPurchasePriceCents ?? undefined,
-      referralFeeDueCents: referral.referralFeeDueCents ?? 0,
-      commissionBasisPoints: referral.commissionBasisPoints ?? undefined,
-      referralFeeBasisPoints: referral.referralFeeBasisPoints ?? undefined,
-      propertyAddress: referral.propertyAddress ?? undefined,
-      propertyCity: referral.propertyCity ?? undefined,
-      propertyState: referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined,
-      propertyPostalCode: referral.propertyPostalCode ?? undefined,
+    setFinancials((previous) => {
+      const nextReferralFeeDue =
+        referral.referralFeeDueCents != null ? referral.referralFeeDueCents : previous.referralFeeDueCents ?? 0;
+      const nextPreApproval =
+        referral.preApprovalAmountCents != null
+          ? referral.preApprovalAmountCents
+          : previous.preApprovalAmountCents ?? 0;
+      const nextContractPrice =
+        referral.estPurchasePriceCents != null
+          ? referral.estPurchasePriceCents
+          : previous.contractPriceCents;
+      const nextCommission =
+        referral.commissionBasisPoints != null
+          ? referral.commissionBasisPoints
+          : previous.commissionBasisPoints;
+      const nextReferralFeeBasis =
+        referral.referralFeeBasisPoints != null
+          ? referral.referralFeeBasisPoints
+          : previous.referralFeeBasisPoints;
+      const nextPropertyAddress =
+        referral.propertyAddress !== undefined
+          ? referral.propertyAddress ?? undefined
+          : previous.propertyAddress;
+      const nextPropertyCity =
+        referral.propertyCity !== undefined ? referral.propertyCity ?? undefined : previous.propertyCity;
+      const nextPropertyState = referral.propertyState
+        ? String(referral.propertyState).toUpperCase()
+        : previous.propertyState;
+      const nextPropertyPostal =
+        referral.propertyPostalCode !== undefined
+          ? referral.propertyPostalCode ?? undefined
+          : previous.propertyPostalCode;
+
+      if (
+        previous.status === referral.status &&
+        previous.preApprovalAmountCents === nextPreApproval &&
+        previous.contractPriceCents === nextContractPrice &&
+        previous.referralFeeDueCents === nextReferralFeeDue &&
+        previous.commissionBasisPoints === nextCommission &&
+        previous.referralFeeBasisPoints === nextReferralFeeBasis &&
+        previous.propertyAddress === nextPropertyAddress &&
+        previous.propertyCity === nextPropertyCity &&
+        previous.propertyState === nextPropertyState &&
+        previous.propertyPostalCode === nextPropertyPostal
+      ) {
+        return previous;
+      }
+
+      return {
+        status: referral.status,
+        preApprovalAmountCents: nextPreApproval,
+        contractPriceCents: nextContractPrice,
+        referralFeeDueCents: nextReferralFeeDue,
+        commissionBasisPoints: nextCommission,
+        referralFeeBasisPoints: nextReferralFeeBasis,
+        propertyAddress: nextPropertyAddress,
+        propertyCity: nextPropertyCity,
+        propertyState: nextPropertyState,
+        propertyPostalCode: nextPropertyPostal,
+      };
     });
   }, [
     referral.status,
@@ -409,8 +469,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         throw new Error('Unable to delete referral');
       }
       toast.success('Referral deleted');
-      router.push('/referrals');
+      router.replace('/referrals');
       router.refresh();
+      void mutate('/api/referrals?summary=true');
+      void mutate('/api/referrals?leaderboard=true');
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Unable to delete referral');
@@ -555,6 +617,26 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     daysInStatus?: number;
   }) => {
     const statusChanged = snapshot.status !== financials.status;
+    const preApprovalChanged =
+      snapshot.preApprovalAmountCents !== undefined &&
+      snapshot.preApprovalAmountCents !== financials.preApprovalAmountCents;
+    const contractValueChanged =
+      snapshot.contractPriceCents !== undefined &&
+      snapshot.contractPriceCents !== financials.contractPriceCents;
+    const referralFeeChanged =
+      snapshot.referralFeeDueCents !== undefined &&
+      snapshot.referralFeeDueCents !== financials.referralFeeDueCents;
+    const commissionChanged =
+      snapshot.commissionBasisPoints !== undefined &&
+      snapshot.commissionBasisPoints !== financials.commissionBasisPoints;
+    const referralFeeBasisChanged =
+      snapshot.referralFeeBasisPoints !== undefined &&
+      snapshot.referralFeeBasisPoints !== financials.referralFeeBasisPoints;
+    const propertyFieldsTouched =
+      snapshot.propertyAddress !== undefined ||
+      snapshot.propertyCity !== undefined ||
+      snapshot.propertyState !== undefined ||
+      snapshot.propertyPostalCode !== undefined;
     setFinancials((previous) => {
       const next = {
         status: snapshot.status ?? previous.status,
@@ -614,7 +696,15 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       return next;
     });
 
-    if (statusChanged) {
+    if (
+      statusChanged ||
+      preApprovalChanged ||
+      contractValueChanged ||
+      referralFeeChanged ||
+      commissionChanged ||
+      referralFeeBasisChanged ||
+      propertyFieldsTouched
+    ) {
       void mutate(activityFeedKey);
     }
 
@@ -844,8 +934,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         onContractDraftChange={handleDraftChange}
         agentContact={agentContact}
         mcContact={mcContact}
-        onAgentContactChange={setAgentContact}
-        onMcContactChange={setMcContact}
+        onAgentContactChange={handleAgentContactChange}
+        onMcContactChange={handleMcContactChange}
       />
       <ReferralFollowUpCard referral={followUpReferral} />
       <section className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">

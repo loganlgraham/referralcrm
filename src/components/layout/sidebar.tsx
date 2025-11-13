@@ -10,7 +10,7 @@ import { signOut } from 'next-auth/react';
 type Role = 'admin' | 'mc' | 'agent' | string;
 
 const navItems: Array<{ href: string; label: string; roles?: Role[] }> = [
-  { href: '/dashboard', label: 'Dashboard', roles: ['admin', 'mc', 'agent'] },
+  { href: '/dashboard', label: 'Dashboard', roles: ['admin'] },
   { href: '/referrals', label: 'Referrals', roles: ['admin', 'mc', 'agent'] },
   { href: '/referrals/follow-ups', label: 'Follow-up Tasks', roles: ['admin', 'mc', 'agent'] },
   { href: '/agents', label: 'Agents', roles: ['admin', 'mc'] },

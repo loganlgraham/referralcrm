@@ -33,6 +33,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
   }
+  if (referral.deletedAt) {
+    return new NextResponse('Not found', { status: 404 });
+  }
 
   if (
     !canViewReferral(session, {

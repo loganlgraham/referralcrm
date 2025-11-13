@@ -38,7 +38,8 @@ export default async function ReferralsPage({
   const summary = data.summary ?? {
     total: data.total ?? items.length,
     closedDeals: 0,
-    closeRate: 0
+    closeRate: 0,
+    activeReferrals: 0
   };
 
   return (
@@ -67,7 +68,9 @@ export default async function ReferralsPage({
       <Filters />
       {hasReferrals ? (
         <div className="space-y-4">
-          {tableMode !== 'admin' && <ReferralSummary summary={summary} />}
+          {tableMode !== 'admin' && (
+            <ReferralSummary summary={summary} mode={tableMode === 'agent' ? 'agent' : 'mc'} />
+          )}
           <ReferralTable data={items} mode={tableMode} />
         </div>
       ) : (

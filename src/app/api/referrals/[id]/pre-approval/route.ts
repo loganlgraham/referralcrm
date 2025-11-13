@@ -8,6 +8,8 @@ import { getCurrentSession } from '@/lib/auth';
 import { canManageReferral } from '@/lib/rbac';
 import { calculateReferralFeeDue } from '@/utils/referral';
 import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
+import { logReferralActivity } from '@/lib/server/activities';
+import { formatCurrency } from '@/utils/formatters';
 
 const schema = z.object({
   amount: z.number().min(0),
@@ -34,6 +36,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     .populate('assignedAgent', 'userId')
     .populate('lender', 'userId');
   if (!referral) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+  if (referral.deletedAt) {
     return new NextResponse('Not found', { status: 404 });
   }
 
@@ -65,6 +70,15 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
 
   await referral.save();
+
+  const formattedAmount = formatCurrency(referral.preApprovalAmountCents ?? 0);
+  await logReferralActivity({
+    referralId: referral._id,
+    actorRole: session.user.role,
+    actorId: session.user.id,
+    channel: 'update',
+    content: `Updated pre-approval amount to ${formattedAmount}`,
+  });
 
   return NextResponse.json({
     preApprovalAmountCents: referral.preApprovalAmountCents ?? 0,

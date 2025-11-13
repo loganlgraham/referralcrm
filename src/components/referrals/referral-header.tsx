@@ -86,14 +86,14 @@ export function ReferralHeader({
   onMcContactChange,
 }: ReferralHeaderProps) {
   const [status, setStatus] = useState<ReferralStatus>(referral.status as ReferralStatus);
-  const [preApprovalAmountCents, setPreApprovalAmountCents] = useState<number | undefined>(
-    referral.preApprovalAmountCents
+  const [preApprovalAmountCents, setPreApprovalAmountCents] = useState<number>(
+    referral.preApprovalAmountCents ?? 0
   );
   const [contractPriceCents, setContractPriceCents] = useState<number | undefined>(
     referral.estPurchasePriceCents
   );
-  const [referralFeeDueCents, setReferralFeeDueCents] = useState<number | undefined>(
-    referral.referralFeeDueCents
+  const [referralFeeDueCents, setReferralFeeDueCents] = useState<number>(
+    referral.referralFeeDueCents ?? 0
   );
   const [commissionBasisPoints, setCommissionBasisPoints] = useState<number | undefined>(
     referral.commissionBasisPoints
@@ -120,7 +120,7 @@ export function ReferralHeader({
   }, [referral.status]);
 
   useEffect(() => {
-    setPreApprovalAmountCents(referral.preApprovalAmountCents);
+    setPreApprovalAmountCents(referral.preApprovalAmountCents ?? 0);
   }, [referral.preApprovalAmountCents]);
 
   useEffect(() => {
@@ -128,7 +128,7 @@ export function ReferralHeader({
   }, [referral.estPurchasePriceCents]);
 
   useEffect(() => {
-    setReferralFeeDueCents(referral.referralFeeDueCents);
+    setReferralFeeDueCents(referral.referralFeeDueCents ?? 0);
   }, [referral.referralFeeDueCents]);
 
   useEffect(() => {
@@ -250,7 +250,10 @@ export function ReferralHeader({
   const primaryAmountValue = isUnderContract ? effectiveContractPriceCents : preApprovalAmountCents;
   const primaryAmountLabel = isUnderContract ? 'Contract Price' : 'Pre-Approval Amount';
   const formattedPrimaryAmount = primaryAmountValue ? formatCurrency(primaryAmountValue) : '—';
-  const formattedReferralFeeDue = effectiveReferralFeeDueCents ? formatCurrency(effectiveReferralFeeDueCents) : '—';
+  const formattedReferralFeeDue =
+    effectiveReferralFeeDueCents !== undefined && effectiveReferralFeeDueCents !== null
+      ? formatCurrency(effectiveReferralFeeDueCents)
+      : '—';
   const commissionPercent = effectiveCommissionBasisPoints
     ? `${(effectiveCommissionBasisPoints / 100).toFixed(2)}%`
     : '—';
@@ -333,7 +336,7 @@ export function ReferralHeader({
     setContractPriceCents(details.contractPriceCents);
     setCommissionBasisPoints(details.agentCommissionBasisPoints);
     setReferralFeeBasisPoints(details.referralFeeBasisPoints);
-    setReferralFeeDueCents(details.referralFeeDueCents);
+    setReferralFeeDueCents(details.referralFeeDueCents ?? 0);
     setDraftContract({ hasUnsavedChanges: false });
     onFinancialsChange?.({
       status: 'Under Contract',
@@ -421,8 +424,9 @@ export function ReferralHeader({
         nextReferralFeeBasis = details.referralFeeBasisPoints;
       }
       if (typeof details.referralFeeDueCents === 'number') {
-        setReferralFeeDueCents(details.referralFeeDueCents);
-        nextReferralFeeDue = details.referralFeeDueCents;
+        const detailsReferralFee = details.referralFeeDueCents ?? 0;
+        setReferralFeeDueCents(detailsReferralFee);
+        nextReferralFeeDue = detailsReferralFee;
       }
       setDraftContract({ hasUnsavedChanges: false });
     } else {
@@ -474,7 +478,7 @@ export function ReferralHeader({
 
   const handlePreApprovalSaved = (details: { preApprovalAmountCents: number; referralFeeDueCents: number }) => {
     setPreApprovalAmountCents(details.preApprovalAmountCents);
-    setReferralFeeDueCents(details.referralFeeDueCents);
+    setReferralFeeDueCents(details.referralFeeDueCents ?? 0);
     onFinancialsChange?.({
       status,
       preApprovalAmountCents: details.preApprovalAmountCents,

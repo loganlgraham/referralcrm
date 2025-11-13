@@ -7,6 +7,7 @@ import { Payment } from '@/models/payment';
 import { differenceInDays } from 'date-fns';
 import { Types } from 'mongoose';
 import { getCurrentSession } from '@/lib/auth';
+import { ACTIVE_REFERRAL_STATUSES } from '@/constants/referrals';
 
 interface GetReferralsParams {
   session: Session | null;
@@ -132,7 +133,13 @@ export async function getReferrals(params: GetReferralsParams) {
     return acc;
   }, {});
 
-  const [items, total, closedDealAggregation] = await Promise.all([
+  const activeQuery: Record<string, unknown> = { ...query };
+
+  if (!('status' in activeQuery)) {
+    activeQuery.status = { $in: ACTIVE_REFERRAL_STATUSES };
+  }
+
+  const [items, total, closedDealAggregation, activeReferrals] = await Promise.all([
     Referral.find(query)
       .populate<{ assignedAgent: PopulatedAgent }>('assignedAgent', 'name email phone')
       .populate<{ lender: PopulatedLender }>('lender', 'name email phone')
@@ -159,7 +166,8 @@ export async function getReferrals(params: GetReferralsParams) {
       },
       { $group: { _id: '$referralId' } },
       { $group: { _id: null, count: { $sum: 1 } } }
-    ])
+    ]),
+    Referral.countDocuments(activeQuery)
   ]);
 
   const closedDeals = closedDealAggregation[0]?.count ?? 0;
@@ -198,7 +206,8 @@ export async function getReferrals(params: GetReferralsParams) {
     summary: {
       total,
       closedDeals,
-      closeRate
+      closeRate,
+      activeReferrals
     }
   };
 }
@@ -206,7 +215,7 @@ export async function getReferrals(params: GetReferralsParams) {
 export async function getReferralById(id: string) {
   const session = await getCurrentSession();
   await connectMongo();
-  const referral = await Referral.findById(id)
+  const referral = await Referral.findOne({ _id: id, deletedAt: null })
     .populate<{ assignedAgent: { _id: Types.ObjectId; name: string; email?: string; phone?: string } }>(
       'assignedAgent',
       'name email phone'
@@ -267,6 +276,11 @@ export async function getReferralById(id: string) {
       agentAttribution: payment.agentAttribution ?? null,
       usedAfc: Boolean(payment.usedAfc),
     })),
+    preApprovalAmountCents: typeof referral.preApprovalAmountCents === 'number' ? referral.preApprovalAmountCents : 0,
+    estPurchasePriceCents: typeof referral.estPurchasePriceCents === 'number' ? referral.estPurchasePriceCents : 0,
+    referralFeeDueCents: typeof referral.referralFeeDueCents === 'number' ? referral.referralFeeDueCents : 0,
+    commissionBasisPoints: typeof referral.commissionBasisPoints === 'number' ? referral.commissionBasisPoints : 0,
+    referralFeeBasisPoints: typeof referral.referralFeeBasisPoints === 'number' ? referral.referralFeeBasisPoints : 0,
     daysInStatus,
     statusLastUpdated: referral.statusLastUpdated ? referral.statusLastUpdated.toISOString() : null,
     audit: Array.isArray(referral.audit)

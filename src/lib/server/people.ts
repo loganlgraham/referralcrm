@@ -4,6 +4,11 @@ import { connectMongo } from '@/lib/mongoose';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { getCurrentSession } from '@/lib/auth';
+import {
+  computeAgentMetrics,
+  EMPTY_AGENT_METRICS,
+  type AgentMetricsSummary
+} from '@/lib/server/agent-metrics';
 
 type NoteSummary = {
   id: string;
@@ -19,12 +24,11 @@ type AgentProfile = {
   name: string;
   email: string;
   phone?: string;
+  licenseNumber?: string;
+  brokerage?: string;
   statesLicensed?: string[];
   coverageAreas?: string[];
-  closings12mo?: number | null;
-  closingRatePercentage?: number | null;
-  npsScore?: number | null;
-  avgResponseHours?: number | null;
+  metrics: AgentMetricsSummary;
   notes: NoteSummary[];
 };
 
@@ -64,12 +68,11 @@ type AgentLean = {
   name?: string | null;
   email?: string | null;
   phone?: string | null;
+  licenseNumber?: string | null;
+  brokerage?: string | null;
   statesLicensed?: string[] | null;
   zipCoverage?: string[] | null;
-  closings12mo?: number | null;
-  closingRatePercentage?: number | null;
   npsScore?: number | null;
-  avgResponseHours?: number | null;
   notes?: NoteRecord[] | null;
 };
 
@@ -97,17 +100,25 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
     return null;
   }
 
+  const metricsMap = await computeAgentMetrics(
+    [agent._id],
+    new Map([[agent._id.toString(), agent.npsScore ?? null]])
+  );
+  const metrics = metricsMap.get(agent._id.toString()) ?? {
+    ...EMPTY_AGENT_METRICS,
+    npsScore: agent.npsScore ?? null
+  };
+
   return {
     _id: agent._id.toString(),
     name: agent.name ?? '',
     email: agent.email ?? '',
     phone: agent.phone ?? undefined,
+    licenseNumber: agent.licenseNumber ?? undefined,
+    brokerage: agent.brokerage ?? undefined,
     statesLicensed: Array.isArray(agent.statesLicensed) ? agent.statesLicensed : undefined,
     coverageAreas: Array.isArray(agent.zipCoverage) ? agent.zipCoverage : undefined,
-    closings12mo: agent.closings12mo ?? null,
-    closingRatePercentage: agent.closingRatePercentage ?? null,
-    npsScore: agent.npsScore ?? null,
-    avgResponseHours: agent.avgResponseHours ?? null,
+    metrics,
     notes: serializeNotes(agent.notes)
   };
 }

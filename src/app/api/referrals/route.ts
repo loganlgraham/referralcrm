@@ -10,6 +10,7 @@ import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/consta
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { resolveAuditActorId } from '@/lib/server/audit';
+import { logReferralActivity } from '@/lib/server/activities';
 import {
   addWeeks,
   format,
@@ -916,6 +917,14 @@ export async function POST(request: Request) {
   }
 
   const referral = await Referral.create(referralData);
+
+  await logReferralActivity({
+    referralId: referral._id,
+    actorRole: session.user.role,
+    actorId: auditActorId ?? session.user.id,
+    channel: 'update',
+    content: `Created referral for ${parsed.data.borrowerName}`,
+  });
 
   return NextResponse.json({ id: referral._id.toString() }, { status: 201 });
 }

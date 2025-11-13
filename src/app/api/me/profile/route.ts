@@ -6,11 +6,14 @@ import { connectMongo } from '@/lib/mongoose';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { User } from '@/models/user';
+import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
 
 const agentProfileSchema = z.object({
   name: z.string().trim().min(1),
   email: z.string().trim().email().transform((value) => value.toLowerCase()),
   phone: z.string().trim().optional(),
+  licenseNumber: z.string().trim().optional(),
+  brokerage: z.string().trim().optional(),
   statesLicensed: z.array(z.string().trim().min(2)).optional().default([]),
   coverageAreas: z.array(z.string().trim().min(1)).optional().default([]),
 });
@@ -32,7 +35,7 @@ export async function GET(): Promise<NextResponse> {
 
   if (session.user.role === 'agent') {
     const agent = await Agent.findOne({ $or: [{ userId: session.user.id }, { email: session.user.email }] })
-      .select('name email phone statesLicensed zipCoverage');
+      .select('name email phone statesLicensed zipCoverage licenseNumber brokerage');
     if (!agent) {
       return new NextResponse('Not found', { status: 404 });
     }
@@ -43,6 +46,8 @@ export async function GET(): Promise<NextResponse> {
       name: agentData.name,
       email: agentData.email,
       phone: agentData.phone ?? '',
+      licenseNumber: agentData.licenseNumber ?? '',
+      brokerage: agentData.brokerage ?? '',
       statesLicensed: agentData.statesLicensed ?? [],
       coverageAreas: agentData.zipCoverage ?? [],
     });
@@ -99,7 +104,13 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     agent.phone = parsed.data.phone ?? '';
     agent.statesLicensed = parsed.data.statesLicensed;
     agent.zipCoverage = parsed.data.coverageAreas;
+    agent.licenseNumber = parsed.data.licenseNumber ?? '';
+    agent.brokerage = parsed.data.brokerage ?? '';
     await agent.save();
+
+    if (parsed.data.coverageAreas.length > 0) {
+      await rememberCoverageSuggestions(parsed.data.coverageAreas);
+    }
 
     if (agent.userId) {
       await User.findByIdAndUpdate(agent.userId, {
@@ -113,6 +124,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       name: agent.name,
       email: agent.email,
       phone: agent.phone,
+      licenseNumber: agent.licenseNumber ?? '',
+      brokerage: agent.brokerage ?? '',
       statesLicensed: agent.statesLicensed,
       coverageAreas: agent.zipCoverage,
     });

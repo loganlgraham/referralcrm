@@ -3,8 +3,9 @@
 export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, Suspense, useEffect, useMemo, useState } from 'react';
 import { signIn } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
 
 const roleOptions = [
   { value: 'agent', label: 'Agent' },
@@ -36,6 +37,25 @@ function sanitizeRedirect(target: string | null, defaultPath: string) {
 }
 
 export default function SignupPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
+          <div className="w-full max-w-md space-y-8 rounded-lg border bg-white p-8 text-center shadow-sm">
+            <div className="space-y-2">
+              <h1 className="text-3xl font-bold">Create an account</h1>
+              <p className="text-sm text-gray-600">Preparing your signup experience…</p>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <SignupPageContent />
+    </Suspense>
+  );
+}
+
+function SignupPageContent() {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -45,8 +65,20 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const searchParams = useSearchParams();
 
   const callbackUrl = useMemo(() => `/onboarding?role=${encodeURIComponent(role)}`, [role]);
+
+  useEffect(() => {
+    const emailParam = searchParams.get('email');
+    if (emailParam) {
+      setEmail((previous) => (previous ? previous : emailParam));
+    }
+    const roleParam = searchParams.get('role');
+    if (roleParam && roleOptions.some((option) => option.value === roleParam)) {
+      setRole((previous) => (previous === roleParam ? previous : (roleParam as Role)));
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

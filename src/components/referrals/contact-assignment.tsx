@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import { toast } from 'sonner';
 
 import { EmailActivityLink } from '@/components/common/email-activity-link';
@@ -72,6 +72,7 @@ export function ContactAssignment({
   const [submitting, setSubmitting] = useState(false);
 
   const { data: options } = useSWR<AssignmentOption[]>(open && canAssign ? directoryForType[type] : null, fetcher);
+  const { mutate } = useSWRConfig();
 
   const title = labelForType[type];
 
@@ -124,6 +125,7 @@ export function ContactAssignment({
 
       setCurrentContact(nextContact);
       onContactChange?.(nextContact);
+      void mutate(`/api/referrals/${referralId}/activities`);
       toast.success(`${title} assigned`);
       setOpen(false);
     } catch (error) {

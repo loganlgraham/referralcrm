@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Types } from 'mongoose';
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { assignAgentSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { canManageReferral } from '@/lib/rbac';
 import { resolveAuditActorId } from '@/lib/server/audit';
+import { logReferralActivity } from '@/lib/server/activities';
+import { Agent } from '@/models/agent';
 
 interface Params {
   params: { id: string };
@@ -24,9 +27,12 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   await connectMongo();
   const referral = await Referral.findById(params.id)
-    .populate('assignedAgent', 'userId')
+    .populate('assignedAgent', 'userId name')
     .populate('lender', 'userId');
   if (!referral) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+  if (referral.deletedAt) {
     return new NextResponse('Not found', { status: 404 });
   }
   if (!canManageReferral(session, { assignedAgent: referral.assignedAgent, lender: referral.lender, org: referral.org })) {
@@ -45,13 +51,47 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     timestamp: new Date()
   };
 
-  const actorId = resolveAuditActorId(session.user.id);
-  if (actorId) {
-    auditEntry.actorId = actorId;
+  const auditActorId = resolveAuditActorId(session.user.id);
+  if (auditActorId) {
+    auditEntry.actorId = auditActorId;
   }
 
   referral.audit.push(auditEntry as any);
   await referral.save();
+
+  type AgentNameLean = { _id: Types.ObjectId; name?: string | null };
+
+  const previousAgentPromise = previousAgent
+    ? Agent.findById(previousAgent)
+        .select('name')
+        .lean<AgentNameLean | null>()
+    : Promise.resolve<AgentNameLean | null>(null);
+
+  const nextAgentPromise = Agent.findById(parsed.data.agentId)
+    .select('name')
+    .lean<AgentNameLean | null>();
+
+  const [previousAgentDoc, nextAgentDoc] = await Promise.all([
+    previousAgentPromise,
+    nextAgentPromise,
+  ]);
+
+  const previousLabel = previousAgentDoc?.name?.trim() || 'Unassigned';
+  const nextLabel = nextAgentDoc?.name?.trim() || 'Unassigned';
+  const activityContent =
+    previousAgent && previousAgent !== parsed.data.agentId
+      ? `Reassigned agent from ${previousLabel} to ${nextLabel}`
+      : previousAgent
+      ? `Confirmed agent assignment for ${nextLabel}`
+      : `Assigned agent ${nextLabel}`;
+
+  await logReferralActivity({
+    referralId: referral._id,
+    actorRole: session.user.role,
+    actorId: auditActorId ?? session.user.id,
+    channel: 'update',
+    content: activityContent,
+  });
 
   return NextResponse.json({ id: referral._id.toString() });
 }
