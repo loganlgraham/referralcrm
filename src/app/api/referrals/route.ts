@@ -170,7 +170,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         {
           $match: {
             ...paymentMatch,
-            status: { $in: ['closed', 'paid'] }
+            status: { $in: ['closed', 'payment_sent', 'paid'] }
           }
         },
         { $group: { _id: '$referralId' } },
@@ -224,7 +224,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         {
           $match: {
             ...paymentMatch,
-            status: { $in: ['closed', 'paid'] }
+            status: { $in: ['closed', 'payment_sent', 'paid'] }
           }
         },
         { $group: { _id: null, amount: { $sum: '$expectedAmountCents' } } }
@@ -264,7 +264,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         {
           $match: {
             ...paymentMatch,
-            status: { $in: ['closed', 'paid'] }
+            status: { $in: ['closed', 'payment_sent', 'paid'] }
           }
         },
         {
@@ -348,7 +348,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         {
           $match: {
             ...paymentMatch,
-            status: { $in: ['under_contract', 'closed', 'paid'] }
+            status: { $in: ['under_contract', 'closed', 'payment_sent', 'paid'] }
           }
         },
         {
@@ -413,7 +413,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         {
           $match: {
             ...paymentMatch,
-            status: { $in: ['closed', 'paid'] }
+            status: { $in: ['closed', 'payment_sent', 'paid'] }
           }
         },
         {
@@ -639,7 +639,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           {
             $match: {
               ...paymentMatch,
-              status: { $in: ['closed', 'paid'] }
+              status: { $in: ['closed', 'payment_sent', 'paid'] }
             }
           },
           {

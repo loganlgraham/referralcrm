@@ -162,7 +162,7 @@ export async function getReferrals(params: GetReferralsParams) {
       {
         $match: {
           ...paymentMatch,
-          status: { $in: ['closed', 'paid'] }
+          status: { $in: ['closed', 'payment_sent', 'paid'] }
         }
       },
       { $group: { _id: '$referralId' } },

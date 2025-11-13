@@ -7,6 +7,8 @@ import { paymentSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { Agent } from '@/models/agent';
 import { Referral } from '@/models/referral';
+import { User } from '@/models/user';
+import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 
 type ReferralSummary = {
   _id: Types.ObjectId;
@@ -184,6 +186,13 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   }
 
   await connectMongo();
+  const existingPayment = await Payment.findById(body.id);
+  if (!existingPayment) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
+  const previousStatus = existingPayment.status;
+
   const updatePayload: Record<string, unknown> = { ...parsed.data };
   delete updatePayload.referralId;
   if ('usedAfc' in updatePayload && updatePayload.usedAfc === undefined) {
@@ -192,6 +201,53 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const payment = await Payment.findByIdAndUpdate(body.id, updatePayload, { new: true });
   if (!payment) {
     return new NextResponse('Not found', { status: 404 });
+  }
+
+  if (
+    parsed.data.status === 'payment_sent' &&
+    previousStatus !== 'payment_sent' &&
+    session.user.role === 'agent' &&
+    isTransactionalEmailConfigured()
+  ) {
+    const adminUsers = await User.find({ role: 'admin', email: { $ne: null } })
+      .select('name email')
+      .lean<{ name?: string | null; email?: string | null }[]>();
+    const adminEmails = adminUsers
+      .map((user) => (typeof user.email === 'string' && user.email ? user.email : null))
+      .filter((email): email is string => Boolean(email));
+
+    if (adminEmails.length > 0) {
+      const referral = await Referral.findById(existingPayment.referralId).lean();
+      const borrowerName = referral?.borrower?.name ?? 'a referral client';
+      const amountCents = payment.expectedAmountCents ?? referral?.referralFeeDueCents ?? 0;
+      const formattedAmount = amountCents
+        ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amountCents / 100)
+        : 'the referral fee';
+      const baseUrl = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');
+      const referralLink = referral && baseUrl ? `${baseUrl}/referrals/${referral._id.toString()}` : null;
+      const agentName = session.user.name ?? 'An agent';
+
+      const textBody = [
+        `${agentName} marked the referral fee as Payment Sent for ${borrowerName}.`,
+        `Amount: ${formattedAmount}.`,
+        referralLink ? `View the referral: ${referralLink}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      const htmlBody = `
+        <p>${agentName} marked the referral fee as <strong>Payment Sent</strong> for ${borrowerName}.</p>
+        <p>Amount: <strong>${formattedAmount}</strong></p>
+        ${referralLink ? `<p><a href="${referralLink}" style="color:#2563eb;">View referral details</a></p>` : ''}
+      `;
+
+      await sendTransactionalEmail({
+        to: adminEmails,
+        subject: `${agentName} sent a referral payment for ${borrowerName}`,
+        text: textBody,
+        html: htmlBody,
+      });
+    }
   }
 
   return NextResponse.json({ id: payment._id.toString() });

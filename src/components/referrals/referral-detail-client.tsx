@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, ComponentProps, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -10,6 +10,7 @@ import { ReferralHeader } from '@/components/referrals/referral-header';
 import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import { DealCard } from '@/components/referrals/deal-card';
+import { DealPreparationForm } from '@/components/referrals/deal-preparation-form';
 import type {
   AgentSelectValue,
   DealStatus,
@@ -110,6 +111,7 @@ type DealCardProps = ComponentProps<typeof DealCard>;
 type DealCardReferral = DealCardProps['referral'];
 type DealCardDeal = NonNullable<DealCardReferral['payments']>[number];
 type DealCardOverrides = DealCardProps['overrides'];
+type DealCardSummary = DealCardProps['summary'];
 
 interface FinancialState {
   status: ReferralStatus;
@@ -287,6 +289,20 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     propertyPostalCode: initialReferral.propertyPostalCode ?? undefined,
   });
   const [contractDraft, setContractDraft] = useState<DraftState>({ hasUnsavedChanges: false });
+  const [contractPrepActive, setContractPrepActive] = useState(false);
+  const contractHandlersRef = useRef<{
+    onContractSaved: (details: {
+      propertyAddress: string;
+      propertyCity: string;
+      propertyState: string;
+      propertyPostalCode: string;
+      contractPriceCents: number;
+      agentCommissionBasisPoints: number;
+      referralFeeBasisPoints: number;
+      referralFeeDueCents: number;
+    }) => void;
+    onContractDraftChange: (draft: any) => void;
+  } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const normalizedDetailDraft = useMemo(() => normalizeDetailDraft(detailsDraft), [detailsDraft]);
@@ -405,6 +421,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referral.propertyState,
     referral.propertyPostalCode,
   ]);
+
+  useEffect(() => {
+    if (financials.status === 'Under Contract') {
+      setContractPrepActive(true);
+    } else if (!contractDraft.hasUnsavedChanges) {
+      setContractPrepActive(false);
+    }
+  }, [contractDraft.hasUnsavedChanges, financials.status]);
 
   useEffect(() => {
     setAgentContact(
@@ -820,6 +844,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         : (referral.ahaBucket as AgentSelectValue),
   };
 
+  const baseOverrideAddress =
+    formatFullAddress(
+      financials.propertyAddress ?? referral.propertyAddress ?? undefined,
+      financials.propertyCity ?? referral.propertyCity ?? undefined,
+      financials.propertyState ?? (referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined),
+      financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined
+    ) ?? financials.propertyAddress ?? referral.propertyAddress;
+
   const dealOverrides: DealCardOverrides = contractDraft.hasUnsavedChanges
     ? {
         referralFeeDueCents:
@@ -835,19 +867,48 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               ? String(referral.propertyState).toUpperCase()
               : undefined),
             contractDraft.propertyPostalCode ?? financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined
-          ) ?? financials.propertyAddress ?? referral.propertyAddress,
+          ) ?? baseOverrideAddress,
+        contractPriceCents:
+          contractDraft.contractPriceCents !== undefined
+            ? contractDraft.contractPriceCents
+            : financials.contractPriceCents,
+        commissionBasisPoints:
+          contractDraft.agentCommissionBasisPoints !== undefined
+            ? contractDraft.agentCommissionBasisPoints
+            : financials.commissionBasisPoints,
+        referralFeeBasisPoints:
+          contractDraft.referralFeeBasisPoints !== undefined
+            ? contractDraft.referralFeeBasisPoints
+            : financials.referralFeeBasisPoints,
         hasUnsavedContractChanges: true,
       }
     : {
+        referralFeeDueCents: financials.referralFeeDueCents,
+        propertyAddress: baseOverrideAddress,
+        contractPriceCents: financials.contractPriceCents,
+        commissionBasisPoints: financials.commissionBasisPoints,
+        referralFeeBasisPoints: financials.referralFeeBasisPoints,
         hasUnsavedContractChanges: false,
       };
+
+  const dealSummary: DealCardSummary = {
+    borrowerName: referral.borrower?.name ?? null,
+    statusLabel: financials.status,
+    propertyAddress: baseOverrideAddress ?? null,
+    contractPriceCents: financials.contractPriceCents ?? referral.estPurchasePriceCents ?? null,
+    referralFeeDueCents: financials.referralFeeDueCents ?? referral.referralFeeDueCents ?? null,
+    commissionBasisPoints: financials.commissionBasisPoints ?? referral.commissionBasisPoints ?? null,
+    referralFeeBasisPoints: financials.referralFeeBasisPoints ?? referral.referralFeeBasisPoints ?? null,
+  };
 
   const dealPayments = dealReferral.payments ?? [];
   const hasTerminatedDeal = dealPayments.some((payment) => payment.status === 'terminated');
   const hasAnyDeals = dealPayments.length > 0;
 
-  const showDeals =
-    financials.status === 'Under Contract' || contractDraft.hasUnsavedChanges || hasTerminatedDeal || hasAnyDeals;
+  const shouldShowDealPreparation =
+    contractPrepActive || financials.status === 'Under Contract' || contractDraft.hasUnsavedChanges;
+
+  const showDeals = shouldShowDealPreparation || hasTerminatedDeal || hasAnyDeals;
 
   const followUpReferral = useMemo(() => {
     const createdAt = (() => {
@@ -933,6 +994,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         viewerRole={viewerRole}
         onFinancialsChange={handleFinancialsChange}
         onContractDraftChange={handleDraftChange}
+        onUnderContractIntentChange={setContractPrepActive}
+        onContractHandlersReady={(handlers) => {
+          contractHandlersRef.current = handlers;
+        }}
         agentContact={agentContact}
         mcContact={mcContact}
         onAgentContactChange={handleAgentContactChange}
@@ -1122,7 +1187,35 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         }}
         adminContacts={referral.adminContacts ?? []}
       />
-      {showDeals && <DealCard referral={dealReferral} overrides={dealOverrides} />}
+      {showDeals && (
+        <div className="space-y-4">
+          <DealCard referral={dealReferral} overrides={dealOverrides} summary={dealSummary} />
+          {shouldShowDealPreparation && (
+            <DealPreparationForm
+              referralId={referralId}
+              previousStatus={financials.status}
+              visible={shouldShowDealPreparation}
+              contractDetails={{
+                propertyAddress: financials.propertyAddress ?? referral.propertyAddress ?? undefined,
+                propertyCity: financials.propertyCity ?? referral.propertyCity ?? undefined,
+                propertyState:
+                  financials.propertyState ??
+                  (referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined),
+                propertyPostalCode: financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
+                contractPriceCents: financials.contractPriceCents,
+                agentCommissionBasisPoints: financials.commissionBasisPoints,
+                referralFeeBasisPoints: financials.referralFeeBasisPoints,
+              }}
+              onContractDraftChange={(draft) => {
+                contractHandlersRef.current?.onContractDraftChange(draft);
+              }}
+              onContractSaved={(details) => {
+                contractHandlersRef.current?.onContractSaved(details);
+              }}
+            />
+          )}
+        </div>
+      )}
       <ReferralTimeline referralId={referralId} />
       {canDelete && (
         <div className="flex justify-end">

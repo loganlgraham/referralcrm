@@ -1,6 +1,6 @@
 'use client';
 
-import { type ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { differenceInDays } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -69,6 +69,20 @@ type ReferralHeaderProps = {
   viewerRole: ViewerRole;
   onFinancialsChange?: (snapshot: FinancialSnapshot) => void;
   onContractDraftChange?: (draft: ContractDraftSnapshot) => void;
+  onUnderContractIntentChange?: (isPreparing: boolean) => void;
+  onContractHandlersReady?: (handlers: {
+    onContractSaved: (details: {
+      propertyAddress: string;
+      propertyCity: string;
+      propertyState: string;
+      propertyPostalCode: string;
+      contractPriceCents: number;
+      agentCommissionBasisPoints: number;
+      referralFeeBasisPoints: number;
+      referralFeeDueCents: number;
+    }) => void;
+    onContractDraftChange: (draft: ContractDraftSnapshot) => void;
+  }) => void;
   agentContact?: Contact | null;
   mcContact?: Contact | null;
   onAgentContactChange?: (contact: Contact | null) => void;
@@ -80,6 +94,8 @@ export function ReferralHeader({
   viewerRole,
   onFinancialsChange,
   onContractDraftChange,
+  onUnderContractIntentChange,
+  onContractHandlersReady,
   agentContact,
   mcContact,
   onAgentContactChange,
@@ -300,58 +316,74 @@ export function ReferralHeader({
   const borrowerPhone = referral.borrower?.phone?.trim() ?? '';
   const hasBorrowerContact = Boolean(borrowerEmail || borrowerPhone);
 
-  const handleContractDraftChangeInternal = (draft: ContractDraftSnapshot) => {
-    setDraftContract((previous) => {
-      if (
-        previous.hasUnsavedChanges === draft.hasUnsavedChanges &&
-        previous.propertyAddress === draft.propertyAddress &&
-        previous.propertyCity === draft.propertyCity &&
-        previous.propertyState === draft.propertyState &&
-        previous.propertyPostalCode === draft.propertyPostalCode &&
-        previous.contractPriceCents === draft.contractPriceCents &&
-        previous.agentCommissionBasisPoints === draft.agentCommissionBasisPoints &&
-        previous.referralFeeBasisPoints === draft.referralFeeBasisPoints &&
-        previous.referralFeeDueCents === draft.referralFeeDueCents
-      ) {
-        return previous;
-      }
-      return draft;
-    });
-    onContractDraftChange?.(draft);
-  };
+  const handleContractDraftChangeInternal = useCallback(
+    (draft: ContractDraftSnapshot) => {
+      setDraftContract((previous) => {
+        if (
+          previous.hasUnsavedChanges === draft.hasUnsavedChanges &&
+          previous.propertyAddress === draft.propertyAddress &&
+          previous.propertyCity === draft.propertyCity &&
+          previous.propertyState === draft.propertyState &&
+          previous.propertyPostalCode === draft.propertyPostalCode &&
+          previous.contractPriceCents === draft.contractPriceCents &&
+          previous.agentCommissionBasisPoints === draft.agentCommissionBasisPoints &&
+          previous.referralFeeBasisPoints === draft.referralFeeBasisPoints &&
+          previous.referralFeeDueCents === draft.referralFeeDueCents
+        ) {
+          return previous;
+        }
+        return draft;
+      });
+      onContractDraftChange?.(draft);
+    },
+    [onContractDraftChange]
+  );
 
-  const handleContractSaved = (details: {
-    propertyAddress: string;
-    propertyCity: string;
-    propertyState: string;
-    propertyPostalCode: string;
-    contractPriceCents: number;
-    agentCommissionBasisPoints: number;
-    referralFeeBasisPoints: number;
-    referralFeeDueCents: number;
-  }) => {
-    setPropertyAddress(details.propertyAddress);
-    setPropertyCity(details.propertyCity || undefined);
-    setPropertyState(details.propertyState ? details.propertyState.toUpperCase() : undefined);
-    setPropertyPostalCode(details.propertyPostalCode || undefined);
-    setContractPriceCents(details.contractPriceCents);
-    setCommissionBasisPoints(details.agentCommissionBasisPoints);
-    setReferralFeeBasisPoints(details.referralFeeBasisPoints);
-    setReferralFeeDueCents(details.referralFeeDueCents ?? 0);
-    setDraftContract({ hasUnsavedChanges: false });
-    onFinancialsChange?.({
-      status: 'Under Contract',
-      preApprovalAmountCents: preApprovalAmountCents ?? 0,
-      contractPriceCents: details.contractPriceCents,
-      referralFeeDueCents: details.referralFeeDueCents,
-      commissionBasisPoints: details.agentCommissionBasisPoints,
-      referralFeeBasisPoints: details.referralFeeBasisPoints,
-      propertyAddress: details.propertyAddress,
-      propertyCity: details.propertyCity,
-      propertyState: details.propertyState,
-      propertyPostalCode: details.propertyPostalCode,
+  const handleContractSaved = useCallback(
+    (details: {
+      propertyAddress: string;
+      propertyCity: string;
+      propertyState: string;
+      propertyPostalCode: string;
+      contractPriceCents: number;
+      agentCommissionBasisPoints: number;
+      referralFeeBasisPoints: number;
+      referralFeeDueCents: number;
+    }) => {
+      setPropertyAddress(details.propertyAddress);
+      setPropertyCity(details.propertyCity || undefined);
+      setPropertyState(details.propertyState ? details.propertyState.toUpperCase() : undefined);
+      setPropertyPostalCode(details.propertyPostalCode || undefined);
+      setContractPriceCents(details.contractPriceCents);
+      setCommissionBasisPoints(details.agentCommissionBasisPoints);
+      setReferralFeeBasisPoints(details.referralFeeBasisPoints);
+      setReferralFeeDueCents(details.referralFeeDueCents ?? 0);
+      setDraftContract({ hasUnsavedChanges: false });
+      onFinancialsChange?.({
+        status: 'Under Contract',
+        preApprovalAmountCents: preApprovalAmountCents ?? 0,
+        contractPriceCents: details.contractPriceCents,
+        referralFeeDueCents: details.referralFeeDueCents,
+        commissionBasisPoints: details.agentCommissionBasisPoints,
+        referralFeeBasisPoints: details.referralFeeBasisPoints,
+        propertyAddress: details.propertyAddress,
+        propertyCity: details.propertyCity,
+        propertyState: details.propertyState,
+        propertyPostalCode: details.propertyPostalCode,
+      });
+    },
+    [
+      onFinancialsChange,
+      preApprovalAmountCents,
+    ]
+  );
+
+  useEffect(() => {
+    onContractHandlersReady?.({
+      onContractSaved: handleContractSaved,
+      onContractDraftChange: handleContractDraftChangeInternal,
     });
-  };
+  }, [handleContractDraftChangeInternal, handleContractSaved, onContractHandlersReady]);
 
   const handleStatusChanged = (nextStatus: ReferralStatus, payload?: Record<string, unknown>) => {
     const previousStatusValue =
@@ -620,23 +652,10 @@ export function ReferralHeader({
             referralId={referral._id}
             status={status}
             statuses={REFERRAL_STATUSES}
-            contractDetails={{
-              propertyAddress: propertyAddress ?? referral.propertyAddress,
-              propertyCity: propertyCity ?? referral.propertyCity ?? undefined,
-              propertyState:
-                propertyState ??
-                (referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined),
-              propertyPostalCode: propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
-              contractPriceCents: contractPriceCents,
-              agentCommissionBasisPoints: commissionBasisPoints,
-              referralFeeBasisPoints: referralFeeBasisPoints,
-            }}
             preApprovalAmountCents={preApprovalAmountCents}
-            referralFeeDueCents={referralFeeDueCents}
             onStatusChanged={handleStatusChanged}
-            onContractSaved={handleContractSaved}
             onPreApprovalSaved={handlePreApprovalSaved}
-            onContractDraftChange={handleContractDraftChangeInternal}
+            onUnderContractIntentChange={onUnderContractIntentChange}
           />
         </section>
         <section className="space-y-4 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">

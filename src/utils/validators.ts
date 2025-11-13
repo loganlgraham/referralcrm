@@ -82,7 +82,9 @@ export const createLenderNoteSchema = z.object({
 
 export const paymentSchema = z.object({
   referralId: z.string().min(1),
-  status: z.enum(['under_contract', 'closed', 'paid', 'terminated']).default('under_contract'),
+  status: z
+    .enum(['under_contract', 'closed', 'payment_sent', 'paid', 'terminated'])
+    .default('under_contract'),
   expectedAmountCents: z.number().int().min(0),
   receivedAmountCents: z.number().int().min(0).optional(),
   terminatedReason: z

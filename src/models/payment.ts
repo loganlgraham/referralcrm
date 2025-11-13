@@ -5,7 +5,7 @@ const paymentSchema = new Schema(
     referralId: { type: Schema.Types.ObjectId, ref: 'Referral', required: true, index: true },
     status: {
       type: String,
-      enum: ['under_contract', 'closed', 'paid', 'terminated'],
+      enum: ['under_contract', 'closed', 'payment_sent', 'paid', 'terminated'],
       default: 'under_contract',
       index: true
     },

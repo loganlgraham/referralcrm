@@ -39,7 +39,7 @@ interface DashboardRequestContext {
 
 interface AggregatedPayment {
   _id: Types.ObjectId;
-  status: 'under_contract' | 'closed' | 'paid' | 'terminated';
+  status: 'under_contract' | 'closed' | 'payment_sent' | 'paid' | 'terminated';
   expectedAmountCents: number;
   receivedAmountCents: number;
   paidDate?: Date | null;
@@ -486,7 +486,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       {
         $match: {
           ...paymentMatch,
-          status: { $in: ['under_contract', 'closed', 'paid'] }
+          status: { $in: ['under_contract', 'closed', 'payment_sent', 'paid'] }
         }
       }
     ])
@@ -533,7 +533,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   );
 
   const afcRelevant = filteredPayments.filter(
-    (payment) => payment.referral?.org === 'AFC' && ['under_contract', 'closed', 'paid'].includes(payment.status)
+    (payment) =>
+      payment.referral?.org === 'AFC' && ['under_contract', 'closed', 'payment_sent', 'paid'].includes(payment.status)
   );
   const afcDealsLost = afcRelevant.filter((payment) => !payment.usedAfc).length;
   const afcAttachRate = afcRelevant.length
@@ -541,13 +542,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     : 0;
 
   const ahaRelevant = filteredPayments.filter(
-    (payment) => payment.referral?.ahaBucket === 'AHA' && ['under_contract', 'closed', 'paid'].includes(payment.status)
+    (payment) =>
+      payment.referral?.ahaBucket === 'AHA' && ['under_contract', 'closed', 'payment_sent', 'paid'].includes(payment.status)
   );
   const ahaAttached = ahaRelevant.filter((payment) => payment.agentAttribution === 'AHA');
   const ahaAttachRate = ahaRelevant.length ? (ahaAttached.length / ahaRelevant.length) * 100 : 0;
 
   const ahaOosRelevant = filteredPayments.filter(
-    (payment) => payment.referral?.ahaBucket === 'AHA_OOS' && ['under_contract', 'closed', 'paid'].includes(payment.status)
+    (payment) =>
+      payment.referral?.ahaBucket === 'AHA_OOS' && ['under_contract', 'closed', 'payment_sent', 'paid'].includes(payment.status)
   );
   const ahaOosAttached = ahaOosRelevant.filter((payment) => payment.agentAttribution === 'AHA_OOS');
   const ahaOosAttachRate = ahaOosRelevant.length ? (ahaOosAttached.length / ahaOosRelevant.length) * 100 : 0;
@@ -688,7 +691,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       {
         $match: {
           ...paymentMatch,
-          status: { $in: ['closed', 'paid'] },
+          status: { $in: ['closed', 'payment_sent', 'paid'] },
           agentAttribution: { $ne: 'OUTSIDE_AGENT' }
         }
       },

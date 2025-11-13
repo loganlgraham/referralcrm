@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 
 import { formatCurrency } from '@/utils/formatters';
 
-export type DealStatus = 'under_contract' | 'closed' | 'paid' | 'terminated';
+export type DealStatus = 'under_contract' | 'closed' | 'payment_sent' | 'paid' | 'terminated';
 export type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
 export type AgentSelectValue = '' | 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT';
 
@@ -32,7 +32,20 @@ export interface DealRecord {
 export interface DealOverrides {
   referralFeeDueCents?: number;
   propertyAddress?: string;
+  contractPriceCents?: number;
+  commissionBasisPoints?: number;
+  referralFeeBasisPoints?: number;
   hasUnsavedContractChanges?: boolean;
+}
+
+export interface DealSummaryInfo {
+  borrowerName?: string | null;
+  statusLabel?: string | null;
+  propertyAddress?: string | null;
+  contractPriceCents?: number | null;
+  referralFeeDueCents?: number | null;
+  commissionBasisPoints?: number | null;
+  referralFeeBasisPoints?: number | null;
 }
 
 export interface ReferralDealProps {
@@ -45,11 +58,13 @@ export interface ReferralDealProps {
     ahaBucket?: AgentSelectValue | null;
   };
   overrides?: DealOverrides;
+  summary?: DealSummaryInfo;
 }
 
 const STATUS_OPTIONS: { value: DealStatus; label: string }[] = [
   { value: 'under_contract', label: 'Under Contract' },
   { value: 'closed', label: 'Closed' },
+  { value: 'payment_sent', label: 'Payment Sent' },
   { value: 'paid', label: 'Paid' },
   { value: 'terminated', label: 'Terminated' }
 ];
@@ -79,7 +94,7 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
     });
 };
 
-export function DealCard({ referral, overrides }: ReferralDealProps) {
+export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
   const deals = useMemo(() => normalizeDeals(referral.payments), [referral.payments]);
 
   const initialStatusMap = useMemo(() => {
@@ -151,6 +166,33 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
     overrides?.propertyAddress ||
     referral.propertyAddress ||
     (referral.lookingInZip ? `Looking in ${referral.lookingInZip}` : 'Pending address');
+
+  const summaryBorrower = summary?.borrowerName?.trim() ? summary.borrowerName.trim() : null;
+  const summaryStatusLabel = summary?.statusLabel?.trim() ? summary.statusLabel.trim() : null;
+  const summaryAddress = overrides?.propertyAddress ?? summary?.propertyAddress ?? propertyLabel;
+  const summaryContractPriceCents =
+    overrides?.contractPriceCents ?? summary?.contractPriceCents ?? null;
+  const summaryReferralFeeCents =
+    overrides?.referralFeeDueCents ?? summary?.referralFeeDueCents ?? referral.referralFeeDueCents ?? null;
+  const summaryCommissionBasisPoints =
+    overrides?.commissionBasisPoints ?? summary?.commissionBasisPoints ?? null;
+
+  const summaryContractPriceDisplay = summaryContractPriceCents
+    ? formatCurrency(summaryContractPriceCents)
+    : '—';
+  const summaryReferralFeeDisplay =
+    summaryReferralFeeCents != null ? formatCurrency(summaryReferralFeeCents) : '—';
+
+  const summaryCommissionCents =
+    summaryContractPriceCents && summaryCommissionBasisPoints
+      ? Math.round((summaryContractPriceCents * summaryCommissionBasisPoints) / 10000)
+      : null;
+  const summaryNetCommissionCents =
+    summaryCommissionCents != null
+      ? summaryCommissionCents - (summaryReferralFeeCents ?? 0)
+      : null;
+  const summaryNetCommissionDisplay =
+    summaryNetCommissionCents != null ? formatCurrency(summaryNetCommissionCents) : '—';
 
   const getStatusForDeal = (deal: DealRecord): DealStatus => {
     return statusMap[deal._id] ?? ((deal.status as DealStatus | undefined) ?? 'under_contract');
@@ -409,9 +451,11 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
                   ? 'bg-rose-50 text-rose-600'
                   : status === 'paid'
                     ? 'bg-emerald-50 text-emerald-600'
-                    : status === 'closed'
-                      ? 'bg-sky-50 text-sky-600'
-                      : 'bg-amber-50 text-amber-600'
+                    : status === 'payment_sent'
+                      ? 'bg-indigo-50 text-indigo-600'
+                      : status === 'closed'
+                        ? 'bg-sky-50 text-sky-600'
+                        : 'bg-amber-50 text-amber-600'
               }`}
             >
               {statusLabel}
@@ -444,6 +488,12 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
                 )}
                 {status === 'terminated' && (
                   <p className="mt-2 text-xs text-slate-500">Terminated deals are excluded from revenue totals.</p>
+                )}
+                {status === 'payment_sent' && (
+                  <p className="mt-2 text-xs text-indigo-600">Agent marked payment as sent. Awaiting admin confirmation.</p>
+                )}
+                {status === 'paid' && (
+                  <p className="mt-2 text-xs text-emerald-600">Payment received and confirmed by admin.</p>
                 )}
               </div>
               <div className="rounded border border-slate-200 bg-slate-50 p-3">
@@ -540,9 +590,42 @@ export function DealCard({ referral, overrides }: ReferralDealProps) {
         <h2 className="text-lg font-semibold text-slate-900">Deals</h2>
         <p className="text-sm text-slate-500">Track referral revenue from contract through payout</p>
       </div>
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div>
+            <dt className="text-xs uppercase text-slate-400">Referral</dt>
+            <dd className="text-sm font-medium text-slate-900">{summaryBorrower ?? '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-slate-400">Status</dt>
+            <dd className="text-sm font-medium text-slate-900">{summaryStatusLabel ?? '—'}</dd>
+          </div>
+          <div className="sm:col-span-2 lg:col-span-3">
+            <dt className="text-xs uppercase text-slate-400">Property</dt>
+            <dd className="text-sm font-medium text-slate-900">{summaryAddress}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-slate-400">Contract Price</dt>
+            <dd className="text-sm font-medium text-slate-900">{summaryContractPriceDisplay}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-slate-400">Referral Fee</dt>
+            <dd className="text-sm font-medium text-slate-900">{summaryReferralFeeDisplay}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-slate-400">Net Commission</dt>
+            <dd className="text-sm font-medium text-slate-900">{summaryNetCommissionDisplay}</dd>
+          </div>
+        </dl>
+        {overrides?.hasUnsavedContractChanges && (
+          <p className="mt-3 text-xs text-amber-600">
+            Save the deal preparation form below to create or update the active deal.
+          </p>
+        )}
+      </div>
       {sortedDeals.length === 0 ? (
         <div className="rounded border border-dashed border-slate-300 p-4 text-sm text-slate-600">
-          <p>Save contract details to create the first deal for this referral.</p>
+          <p>Use the deal preparation form below to create the first deal for this referral.</p>
         </div>
       ) : (
         <div className="space-y-4">{sortedDeals.map(renderDeal)}</div>
