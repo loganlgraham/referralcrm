@@ -16,6 +16,11 @@ const agentProfileSchema = z.object({
   brokerage: z.string().trim().optional(),
   statesLicensed: z.array(z.string().trim().min(2)).optional().default([]),
   coverageAreas: z.array(z.string().trim().min(1)).optional().default([]),
+  markets: z.array(z.string().trim().min(1)).optional().default([]),
+  closings12mo: z.number().int().min(0).optional(),
+  closingRatePercentage: z.number().min(0).max(100).nullable().optional(),
+  npsScore: z.number().min(-100).max(100).nullable().optional(),
+  avgResponseHours: z.number().min(0).max(240).nullable().optional(),
 });
 
 const lenderProfileSchema = z.object({
@@ -35,7 +40,9 @@ export async function GET(): Promise<NextResponse> {
 
   if (session.user.role === 'agent') {
     const agent = await Agent.findOne({ $or: [{ userId: session.user.id }, { email: session.user.email }] })
-      .select('name email phone statesLicensed zipCoverage licenseNumber brokerage');
+      .select(
+        'name email phone statesLicensed zipCoverage licenseNumber brokerage markets closings12mo closingRatePercentage npsScore avgResponseHours'
+      );
     if (!agent) {
       return new NextResponse('Not found', { status: 404 });
     }
@@ -50,6 +57,12 @@ export async function GET(): Promise<NextResponse> {
       brokerage: agentData.brokerage ?? '',
       statesLicensed: agentData.statesLicensed ?? [],
       coverageAreas: agentData.zipCoverage ?? [],
+      markets: agentData.markets ?? [],
+      closings12mo: typeof agentData.closings12mo === 'number' ? agentData.closings12mo : 0,
+      closingRatePercentage:
+        typeof agentData.closingRatePercentage === 'number' ? agentData.closingRatePercentage : null,
+      npsScore: typeof agentData.npsScore === 'number' ? agentData.npsScore : null,
+      avgResponseHours: typeof agentData.avgResponseHours === 'number' ? agentData.avgResponseHours : null,
     });
   }
 
@@ -104,8 +117,15 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     agent.phone = parsed.data.phone ?? '';
     agent.statesLicensed = parsed.data.statesLicensed;
     agent.zipCoverage = parsed.data.coverageAreas;
+    agent.markets = parsed.data.markets;
     agent.licenseNumber = parsed.data.licenseNumber ?? '';
     agent.brokerage = parsed.data.brokerage ?? '';
+    if (typeof parsed.data.closings12mo === 'number') {
+      agent.closings12mo = parsed.data.closings12mo;
+    }
+    agent.closingRatePercentage = parsed.data.closingRatePercentage ?? null;
+    agent.npsScore = parsed.data.npsScore ?? null;
+    agent.avgResponseHours = parsed.data.avgResponseHours ?? null;
     await agent.save();
 
     if (parsed.data.coverageAreas.length > 0) {
@@ -128,6 +148,12 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       brokerage: agent.brokerage ?? '',
       statesLicensed: agent.statesLicensed,
       coverageAreas: agent.zipCoverage,
+      markets: agent.markets ?? [],
+      closings12mo: typeof agent.closings12mo === 'number' ? agent.closings12mo : 0,
+      closingRatePercentage:
+        typeof agent.closingRatePercentage === 'number' ? agent.closingRatePercentage : null,
+      npsScore: typeof agent.npsScore === 'number' ? agent.npsScore : null,
+      avgResponseHours: typeof agent.avgResponseHours === 'number' ? agent.avgResponseHours : null,
     });
   }
 
