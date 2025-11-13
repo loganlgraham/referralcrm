@@ -19,7 +19,6 @@ const DETAIL_FIELD_LABELS = {
   lookingInZip: 'Looking In (Zip)',
   borrowerCurrentAddress: 'Borrower Current Address',
   stageOnTransfer: 'Stage on Transfer',
-  initialNotes: 'Notes',
   loanFileNumber: 'Loan File #',
 } as const;
 

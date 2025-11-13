@@ -1,8 +1,10 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
+import { getCurrentSession } from '@/lib/auth';
 import { getAgentProfile } from '@/lib/server/people';
 import { PersonNotes } from '@/components/people/person-notes';
+import { AgentNpsEditor } from '@/components/people/agent-nps-editor';
 import { formatCurrency, formatDecimal, formatPhoneNumber } from '@/utils/formatters';
 
 interface AgentDetailPageProps {
@@ -14,10 +16,17 @@ export const metadata: Metadata = {
 };
 
 export default async function AgentDetailPage({ params }: AgentDetailPageProps) {
+  const session = await getCurrentSession();
+  if (!session || (session.user.role !== 'admin' && session.user.role !== 'mc')) {
+    notFound();
+  }
+
   const agent = await getAgentProfile(params.id);
   if (!agent) {
     notFound();
   }
+
+  const canEditNps = session.user.role === 'admin';
 
   const metricCards = [
     { label: 'Closings (12 mo)', value: agent.metrics.closingsLast12Months.toString() },
@@ -103,6 +112,11 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
             </div>
           ))}
         </div>
+        {canEditNps && (
+          <div className="mt-6">
+            <AgentNpsEditor agentId={agent._id} initialScore={agent.metrics.npsScore ?? null} />
+          </div>
+        )}
       </div>
       <PersonNotes
         subjectId={params.id}

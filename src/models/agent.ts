@@ -28,6 +28,8 @@ const agentSchema = new Schema(
     avgResponseHours: { type: Number, default: null },
     brokerage: { type: String },
     markets: [{ type: String }],
+    specialties: { type: [String], default: [] },
+    experienceSince: { type: Date },
     notes: { type: [agentNoteSchema], default: [] }
   },
   { timestamps: true }

@@ -170,7 +170,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         {
           $match: {
             ...paymentMatch,
-            status: { $in: ['closed', 'paid'] }
+            status: { $in: ['closed', 'payment_sent', 'paid'] }
           }
         },
         { $group: { _id: '$referralId' } },
@@ -224,7 +224,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         {
           $match: {
             ...paymentMatch,
-            status: { $in: ['closed', 'paid'] }
+            status: { $in: ['closed', 'payment_sent', 'paid'] }
           }
         },
         { $group: { _id: null, amount: { $sum: '$expectedAmountCents' } } }
@@ -264,7 +264,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         {
           $match: {
             ...paymentMatch,
-            status: { $in: ['closed', 'paid'] }
+            status: { $in: ['closed', 'payment_sent', 'paid'] }
           }
         },
         {
@@ -348,7 +348,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         {
           $match: {
             ...paymentMatch,
-            status: { $in: ['under_contract', 'closed', 'paid'] }
+            status: {
+              $in: [
+                'under_contract',
+                'past_inspection',
+                'past_appraisal',
+                'clear_to_close',
+                'closed',
+                'payment_sent',
+                'paid',
+              ]
+            }
           }
         },
         {
@@ -413,7 +423,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         {
           $match: {
             ...paymentMatch,
-            status: { $in: ['closed', 'paid'] }
+            status: { $in: ['closed', 'payment_sent', 'paid'] }
           }
         },
         {
@@ -639,7 +649,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           {
             $match: {
               ...paymentMatch,
-              status: { $in: ['closed', 'paid'] }
+              status: { $in: ['closed', 'payment_sent', 'paid'] }
             }
           },
           {
@@ -853,7 +863,7 @@ export async function POST(request: Request) {
   const body = await request.json();
   const parsed = createReferralSchema.safeParse({
     ...body,
-    estPurchasePrice: body.estPurchasePrice ? Number(body.estPurchasePrice) : undefined
+    preApprovalAmount: body.preApprovalAmount ? Number(body.preApprovalAmount) : undefined
   });
 
   if (!parsed.success) {
@@ -864,9 +874,19 @@ export async function POST(request: Request) {
 
   const auditActorId = resolveAuditActorId(session.user.id);
 
+  const borrowerFirstName = parsed.data.borrowerFirstName.trim();
+  const borrowerLastName = parsed.data.borrowerLastName.trim();
+  const borrowerName = [borrowerFirstName, borrowerLastName].filter(Boolean).join(' ').trim();
+  const preApprovalAmount = parsed.data.preApprovalAmount ?? 0;
+  const preApprovalAmountCents = Math.round(preApprovalAmount * 100);
+  const referralFeeBasisPoints =
+    preApprovalAmount > 400000 ? 3500 : DEFAULT_REFERRAL_FEE_BPS;
+
   const referralData: Record<string, unknown> = {
     borrower: {
-      name: parsed.data.borrowerName,
+      name: borrowerName,
+      firstName: borrowerFirstName,
+      lastName: borrowerLastName,
       email: parsed.data.borrowerEmail,
       phone: parsed.data.borrowerPhone
     },
@@ -877,17 +897,15 @@ export async function POST(request: Request) {
     borrowerCurrentAddress: parsed.data.borrowerCurrentAddress,
     stageOnTransfer: parsed.data.stageOnTransfer,
     loanFileNumber: parsed.data.loanFileNumber,
-    initialNotes: parsed.data.initialNotes ?? '',
     loanType: parsed.data.loanType,
-    estPurchasePriceCents: parsed.data.estPurchasePrice ? parsed.data.estPurchasePrice * 100 : 0,
-    preApprovalAmountCents: parsed.data.estPurchasePrice ? parsed.data.estPurchasePrice * 100 : 0,
+    estPurchasePriceCents: preApprovalAmountCents,
+    preApprovalAmountCents,
     commissionBasisPoints: DEFAULT_AGENT_COMMISSION_BPS,
-    referralFeeBasisPoints:
-      parsed.data.estPurchasePrice && parsed.data.estPurchasePrice > 400000 ? 3500 : DEFAULT_REFERRAL_FEE_BPS,
+    referralFeeBasisPoints,
     referralFeeDueCents: calculateReferralFeeDue(
-      (parsed.data.estPurchasePrice || 0) * 100,
+      preApprovalAmountCents,
       DEFAULT_AGENT_COMMISSION_BPS,
-      parsed.data.estPurchasePrice && parsed.data.estPurchasePrice > 400000 ? 3500 : DEFAULT_REFERRAL_FEE_BPS
+      referralFeeBasisPoints
     ),
     audit: [
       {
@@ -916,6 +934,18 @@ export async function POST(request: Request) {
     }
   }
 
+  if (parsed.data.initialNotes?.trim() && Types.ObjectId.isValid(session.user.id)) {
+    referralData.notes = [
+      {
+        author: new Types.ObjectId(session.user.id),
+        authorName: session.user.name || session.user.email || 'Team Member',
+        authorRole: session.user.role,
+        content: parsed.data.initialNotes.trim(),
+        createdAt: new Date(),
+      },
+    ];
+  }
+
   const referral = await Referral.create(referralData);
 
   await logReferralActivity({
@@ -923,7 +953,7 @@ export async function POST(request: Request) {
     actorRole: session.user.role,
     actorId: auditActorId ?? session.user.id,
     channel: 'update',
-    content: `Created referral for ${parsed.data.borrowerName}`,
+    content: `Created referral for ${borrowerName || 'a new client'}`,
   });
 
   return NextResponse.json({ id: referral._id.toString() }, { status: 201 });

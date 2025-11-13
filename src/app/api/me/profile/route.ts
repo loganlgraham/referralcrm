@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { parseISO } from 'date-fns';
 
 import { getCurrentSession } from '@/lib/auth';
 import { connectMongo } from '@/lib/mongoose';
@@ -17,10 +18,8 @@ const agentProfileSchema = z.object({
   statesLicensed: z.array(z.string().trim().min(2)).optional().default([]),
   coverageAreas: z.array(z.string().trim().min(1)).optional().default([]),
   markets: z.array(z.string().trim().min(1)).optional().default([]),
-  closings12mo: z.number().int().min(0).optional(),
-  closingRatePercentage: z.number().min(0).max(100).nullable().optional(),
-  npsScore: z.number().min(-100).max(100).nullable().optional(),
-  avgResponseHours: z.number().min(0).max(240).nullable().optional(),
+  experienceSince: z.string().trim().optional().nullable(),
+  specialties: z.array(z.string().trim().min(1)).optional().default([]),
 });
 
 const lenderProfileSchema = z.object({
@@ -41,7 +40,7 @@ export async function GET(): Promise<NextResponse> {
   if (session.user.role === 'agent') {
     const agent = await Agent.findOne({ $or: [{ userId: session.user.id }, { email: session.user.email }] })
       .select(
-        'name email phone statesLicensed zipCoverage licenseNumber brokerage markets closings12mo closingRatePercentage npsScore avgResponseHours'
+        'name email phone statesLicensed zipCoverage licenseNumber brokerage markets experienceSince specialties'
       );
     if (!agent) {
       return new NextResponse('Not found', { status: 404 });
@@ -58,11 +57,9 @@ export async function GET(): Promise<NextResponse> {
       statesLicensed: agentData.statesLicensed ?? [],
       coverageAreas: agentData.zipCoverage ?? [],
       markets: agentData.markets ?? [],
-      closings12mo: typeof agentData.closings12mo === 'number' ? agentData.closings12mo : 0,
-      closingRatePercentage:
-        typeof agentData.closingRatePercentage === 'number' ? agentData.closingRatePercentage : null,
-      npsScore: typeof agentData.npsScore === 'number' ? agentData.npsScore : null,
-      avgResponseHours: typeof agentData.avgResponseHours === 'number' ? agentData.avgResponseHours : null,
+      experienceSince:
+        agentData.experienceSince instanceof Date ? agentData.experienceSince.toISOString() : null,
+      specialties: Array.isArray(agentData.specialties) ? agentData.specialties : [],
     });
   }
 
@@ -120,12 +117,16 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     agent.markets = parsed.data.markets;
     agent.licenseNumber = parsed.data.licenseNumber ?? '';
     agent.brokerage = parsed.data.brokerage ?? '';
-    if (typeof parsed.data.closings12mo === 'number') {
-      agent.closings12mo = parsed.data.closings12mo;
+    agent.specialties = parsed.data.specialties ?? [];
+    if (parsed.data.experienceSince) {
+      const experienceDate = parseISO(parsed.data.experienceSince);
+      if (Number.isNaN(experienceDate.getTime())) {
+        return NextResponse.json({ error: { experienceSince: ['Experience start date is invalid.'] } }, { status: 422 });
+      }
+      agent.experienceSince = experienceDate;
+    } else {
+      agent.experienceSince = null;
     }
-    agent.closingRatePercentage = parsed.data.closingRatePercentage ?? null;
-    agent.npsScore = parsed.data.npsScore ?? null;
-    agent.avgResponseHours = parsed.data.avgResponseHours ?? null;
     await agent.save();
 
     if (parsed.data.coverageAreas.length > 0) {
@@ -149,11 +150,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       statesLicensed: agent.statesLicensed,
       coverageAreas: agent.zipCoverage,
       markets: agent.markets ?? [],
-      closings12mo: typeof agent.closings12mo === 'number' ? agent.closings12mo : 0,
-      closingRatePercentage:
-        typeof agent.closingRatePercentage === 'number' ? agent.closingRatePercentage : null,
-      npsScore: typeof agent.npsScore === 'number' ? agent.npsScore : null,
-      avgResponseHours: typeof agent.avgResponseHours === 'number' ? agent.avgResponseHours : null,
+      experienceSince: agent.experienceSince instanceof Date ? agent.experienceSince.toISOString() : null,
+      specialties: Array.isArray(agent.specialties) ? agent.specialties : [],
     });
   }
 

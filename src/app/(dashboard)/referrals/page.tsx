@@ -65,7 +65,7 @@ export default async function ReferralsPage({
           New referral
         </Link>
       </div>
-      <Filters />
+      <Filters mode={tableMode} />
       {hasReferrals ? (
         <div className="space-y-4">
           {tableMode !== 'admin' && (

@@ -2,19 +2,20 @@ import { z } from 'zod';
 import { REFERRAL_STATUSES } from '@/constants/referrals';
 
 export const createReferralSchema = z.object({
-  borrowerName: z.string().min(1),
+  borrowerFirstName: z.string().min(1),
+  borrowerLastName: z.string().min(1),
   borrowerEmail: z.string().email(),
   borrowerPhone: z.string().min(7),
-  source: z.enum(['Lender', 'MC']),
+  source: z.string().min(1),
   endorser: z.string().min(1),
-  clientType: z.enum(['Seller', 'Buyer']),
+  clientType: z.enum(['Seller', 'Buyer', 'Both']),
   lookingInZip: z.string().min(5),
   borrowerCurrentAddress: z.string().min(1),
-  stageOnTransfer: z.string().min(1),
+  stageOnTransfer: z.enum(['Pre-Approval TBD', 'Pre-Approval']),
   loanFileNumber: z.string().min(1),
   initialNotes: z.string().optional(),
   loanType: z.string().optional(),
-  estPurchasePrice: z.number().optional()
+  preApprovalAmount: z.number().optional()
 });
 
 export const updateReferralSchema = z.object({
@@ -22,13 +23,12 @@ export const updateReferralSchema = z.object({
   assignedAgent: z.string().optional(),
   referralFeeBasisPoints: z.number().int().min(0).optional(),
   ahaBucket: z.enum(['AHA', 'AHA_OOS']).nullable().optional(),
-  source: z.enum(['Lender', 'MC']).optional(),
+  source: z.string().min(1).optional(),
   endorser: z.string().min(1).optional(),
-  clientType: z.enum(['Seller', 'Buyer']).optional(),
+  clientType: z.enum(['Seller', 'Buyer', 'Both']).optional(),
   lookingInZip: z.string().min(5).optional(),
   borrowerCurrentAddress: z.string().min(1).optional(),
   stageOnTransfer: z.string().min(1).optional(),
-  initialNotes: z.string().optional(),
   loanFileNumber: z.string().min(1).optional(),
 });
 
@@ -60,7 +60,8 @@ export const updateStatusSchema = z.object({
         .regex(/^\d{5}(?:-\d{4})?$/, 'Enter a valid ZIP code'),
       contractPrice: z.number().min(0),
       agentCommissionPercentage: z.number().min(0),
-      referralFeePercentage: z.number().min(0)
+      referralFeePercentage: z.number().min(0),
+      dealSide: z.enum(['buy', 'sell'])
     })
     .optional()
 });
@@ -69,7 +70,7 @@ export const createReferralNoteSchema = z.object({
   content: z.string().min(1),
   hiddenFromAgent: z.boolean().optional(),
   hiddenFromMc: z.boolean().optional(),
-  emailTargets: z.array(z.enum(['agent', 'mc'])).optional()
+  emailTargets: z.array(z.enum(['agent', 'mc', 'admin'])).optional()
 });
 
 export const createAgentNoteSchema = z.object({
@@ -82,7 +83,18 @@ export const createLenderNoteSchema = z.object({
 
 export const paymentSchema = z.object({
   referralId: z.string().min(1),
-  status: z.enum(['under_contract', 'closed', 'paid', 'terminated']).default('under_contract'),
+  status: z
+    .enum([
+      'under_contract',
+      'past_inspection',
+      'past_appraisal',
+      'clear_to_close',
+      'closed',
+      'payment_sent',
+      'paid',
+      'terminated',
+    ])
+    .default('under_contract'),
   expectedAmountCents: z.number().int().min(0),
   receivedAmountCents: z.number().int().min(0).optional(),
   terminatedReason: z
@@ -93,5 +105,9 @@ export const paymentSchema = z.object({
   usedAfc: z.boolean().optional(),
   invoiceDate: z.string().optional(),
   paidDate: z.string().optional(),
-  notes: z.string().optional()
+  notes: z.string().optional(),
+  side: z.enum(['buy', 'sell']).optional(),
+  commissionBasisPoints: z.number().int().min(0).optional(),
+  referralFeeBasisPoints: z.number().int().min(0).optional(),
+  contractPriceCents: z.number().int().min(0).optional()
 });

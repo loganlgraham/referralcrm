@@ -39,7 +39,15 @@ interface DashboardRequestContext {
 
 interface AggregatedPayment {
   _id: Types.ObjectId;
-  status: 'under_contract' | 'closed' | 'paid' | 'terminated';
+  status:
+    | 'under_contract'
+    | 'past_inspection'
+    | 'past_appraisal'
+    | 'clear_to_close'
+    | 'closed'
+    | 'payment_sent'
+    | 'paid'
+    | 'terminated';
   expectedAmountCents: number;
   receivedAmountCents: number;
   paidDate?: Date | null;
@@ -486,7 +494,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       {
         $match: {
           ...paymentMatch,
-          status: { $in: ['under_contract', 'closed', 'paid'] }
+          status: {
+            $in: [
+              'under_contract',
+              'past_inspection',
+              'past_appraisal',
+              'clear_to_close',
+              'closed',
+              'payment_sent',
+              'paid',
+            ]
+          }
         }
       }
     ])
@@ -525,7 +543,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
       (payment.status === 'closed' || payment.status === 'paid')
   );
-  const dealsUnderContract = filteredPayments.filter((payment) => payment.status === 'under_contract');
+  const dealsUnderContract = filteredPayments.filter((payment) =>
+    [
+      'under_contract',
+      'past_inspection',
+      'past_appraisal',
+      'clear_to_close',
+    ].includes(payment.status)
+  );
   const closeRate = totalReferrals === 0 ? 0 : (dealsClosed.length / totalReferrals) * 100;
 
   const revenueEligiblePayments = filteredPayments.filter(
@@ -533,7 +558,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   );
 
   const afcRelevant = filteredPayments.filter(
-    (payment) => payment.referral?.org === 'AFC' && ['under_contract', 'closed', 'paid'].includes(payment.status)
+    (payment) =>
+      payment.referral?.org === 'AFC' &&
+      [
+        'under_contract',
+        'past_inspection',
+        'past_appraisal',
+        'clear_to_close',
+        'closed',
+        'payment_sent',
+        'paid',
+      ].includes(payment.status)
   );
   const afcDealsLost = afcRelevant.filter((payment) => !payment.usedAfc).length;
   const afcAttachRate = afcRelevant.length
@@ -541,13 +576,33 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     : 0;
 
   const ahaRelevant = filteredPayments.filter(
-    (payment) => payment.referral?.ahaBucket === 'AHA' && ['under_contract', 'closed', 'paid'].includes(payment.status)
+    (payment) =>
+      payment.referral?.ahaBucket === 'AHA' &&
+      [
+        'under_contract',
+        'past_inspection',
+        'past_appraisal',
+        'clear_to_close',
+        'closed',
+        'payment_sent',
+        'paid',
+      ].includes(payment.status)
   );
   const ahaAttached = ahaRelevant.filter((payment) => payment.agentAttribution === 'AHA');
   const ahaAttachRate = ahaRelevant.length ? (ahaAttached.length / ahaRelevant.length) * 100 : 0;
 
   const ahaOosRelevant = filteredPayments.filter(
-    (payment) => payment.referral?.ahaBucket === 'AHA_OOS' && ['under_contract', 'closed', 'paid'].includes(payment.status)
+    (payment) =>
+      payment.referral?.ahaBucket === 'AHA_OOS' &&
+      [
+        'under_contract',
+        'past_inspection',
+        'past_appraisal',
+        'clear_to_close',
+        'closed',
+        'payment_sent',
+        'paid',
+      ].includes(payment.status)
   );
   const ahaOosAttached = ahaOosRelevant.filter((payment) => payment.agentAttribution === 'AHA_OOS');
   const ahaOosAttachRate = ahaOosRelevant.length ? (ahaOosAttached.length / ahaOosRelevant.length) * 100 : 0;
@@ -628,7 +683,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   );
 
   const pipelineValueCents = revenueEligiblePayments
-    .filter((payment) => payment.status === 'under_contract')
+    .filter((payment) =>
+      [
+        'under_contract',
+        'past_inspection',
+        'past_appraisal',
+        'clear_to_close',
+      ].includes(payment.status)
+    )
     .reduce((sum, payment) => sum + (payment.expectedAmountCents ?? 0), 0);
 
   const activePipeline = referrals.filter((referral) =>
@@ -688,7 +750,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       {
         $match: {
           ...paymentMatch,
-          status: { $in: ['closed', 'paid'] },
+          status: { $in: ['closed', 'payment_sent', 'paid'] },
           agentAttribution: { $ne: 'OUTSIDE_AGENT' }
         }
       },

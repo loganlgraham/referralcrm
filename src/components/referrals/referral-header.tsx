@@ -1,6 +1,6 @@
 'use client';
 
-import { type ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { differenceInDays } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -50,6 +50,7 @@ interface FinancialSnapshot {
   propertyPostalCode?: string;
   statusLastUpdated?: string;
   daysInStatus?: number;
+  dealSide?: 'buy' | 'sell';
 }
 
 interface ContractDraftSnapshot {
@@ -61,6 +62,7 @@ interface ContractDraftSnapshot {
   agentCommissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
   referralFeeDueCents?: number;
+  dealSide?: 'buy' | 'sell';
   hasUnsavedChanges: boolean;
 }
 
@@ -69,6 +71,22 @@ type ReferralHeaderProps = {
   viewerRole: ViewerRole;
   onFinancialsChange?: (snapshot: FinancialSnapshot) => void;
   onContractDraftChange?: (draft: ContractDraftSnapshot) => void;
+  onUnderContractIntentChange?: (isPreparing: boolean) => void;
+  onContractHandlersReady?: (handlers: {
+    onContractSaved: (details: {
+      propertyAddress: string;
+      propertyCity: string;
+      propertyState: string;
+      propertyPostalCode: string;
+      contractPriceCents: number;
+      agentCommissionBasisPoints: number;
+      referralFeeBasisPoints: number;
+      referralFeeDueCents: number;
+      dealSide: 'buy' | 'sell';
+    }) => void;
+    onContractDraftChange: (draft: ContractDraftSnapshot) => void;
+  }) => void;
+  onCreateDealRequest?: () => void;
   agentContact?: Contact | null;
   mcContact?: Contact | null;
   onAgentContactChange?: (contact: Contact | null) => void;
@@ -80,6 +98,9 @@ export function ReferralHeader({
   viewerRole,
   onFinancialsChange,
   onContractDraftChange,
+  onUnderContractIntentChange,
+  onContractHandlersReady,
+  onCreateDealRequest,
   agentContact,
   mcContact,
   onAgentContactChange,
@@ -100,6 +121,9 @@ export function ReferralHeader({
   );
   const [referralFeeBasisPoints, setReferralFeeBasisPoints] = useState<number | undefined>(
     referral.referralFeeBasisPoints
+  );
+  const [dealSide, setDealSide] = useState<'buy' | 'sell'>(
+    referral.dealSide === 'sell' ? 'sell' : 'buy'
   );
   const [propertyAddress, setPropertyAddress] = useState<string | undefined>(referral.propertyAddress);
   const [propertyCity, setPropertyCity] = useState<string | undefined>(referral.propertyCity);
@@ -138,6 +162,10 @@ export function ReferralHeader({
   useEffect(() => {
     setReferralFeeBasisPoints(referral.referralFeeBasisPoints);
   }, [referral.referralFeeBasisPoints]);
+
+  useEffect(() => {
+    setDealSide(referral.dealSide === 'sell' ? 'sell' : 'buy');
+  }, [referral.dealSide]);
 
   useEffect(() => {
     setPropertyAddress(referral.propertyAddress);
@@ -186,6 +214,7 @@ export function ReferralHeader({
       propertyCity: propertyCity ?? referral.propertyCity ?? undefined,
       propertyState: normalizedState || undefined,
       propertyPostalCode: propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
+      dealSide,
     });
   }, [
     commissionBasisPoints,
@@ -196,6 +225,7 @@ export function ReferralHeader({
     propertyCity,
     propertyPostalCode,
     propertyState,
+    dealSide,
     referral.propertyAddress,
     referral.propertyCity,
     referral.propertyPostalCode,
@@ -246,20 +276,37 @@ export function ReferralHeader({
       ? savedDisplayAddress
       : propertyAddress ?? referral.propertyAddress;
 
-  const isUnderContract = status === 'Under Contract' || status === 'Closed';
-  const primaryAmountValue = isUnderContract ? effectiveContractPriceCents : preApprovalAmountCents;
-  const primaryAmountLabel = isUnderContract ? 'Contract Price' : 'Pre-Approval Amount';
+  const primaryAmountValue = preApprovalAmountCents ?? 0;
+  const primaryAmountLabel = 'Pre-Approval Amount';
   const formattedPrimaryAmount = primaryAmountValue ? formatCurrency(primaryAmountValue) : '—';
+  const derivedReferralFeeDueCents = (() => {
+    if (
+      effectiveContractPriceCents &&
+      effectiveCommissionBasisPoints &&
+      effectiveReferralFeeBasisPoints
+    ) {
+      const computed =
+        (effectiveContractPriceCents * effectiveCommissionBasisPoints * effectiveReferralFeeBasisPoints) /
+        100_000_000;
+      if (Number.isFinite(computed) && computed > 0) {
+        return Math.round(computed);
+      }
+    }
+    if (effectiveReferralFeeDueCents != null) {
+      return effectiveReferralFeeDueCents;
+    }
+    return null;
+  })();
   const formattedReferralFeeDue =
-    effectiveReferralFeeDueCents !== undefined && effectiveReferralFeeDueCents !== null
-      ? formatCurrency(effectiveReferralFeeDueCents)
-      : '—';
+    derivedReferralFeeDueCents != null ? formatCurrency(derivedReferralFeeDueCents) : '—';
   const commissionPercent = effectiveCommissionBasisPoints
     ? `${(effectiveCommissionBasisPoints / 100).toFixed(2)}%`
     : '—';
   const referralFeePercent = effectiveReferralFeeBasisPoints
     ? `${(effectiveReferralFeeBasisPoints / 100).toFixed(2)}%`
     : '—';
+  const dealSideLabel = dealSide === 'sell' ? 'Sell-side' : 'Buy-side';
+  const isAgentView = viewerRole === 'agent';
   const canAssignAgent = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'mc';
   const canAssignMc = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'agent';
   const fallbackAgentContact: Contact | null = referral.assignedAgent
@@ -281,6 +328,7 @@ export function ReferralHeader({
   const effectiveAgentContact = agentContact ?? fallbackAgentContact;
   const effectiveMcContact = mcContact ?? fallbackMcContact;
   const canEditBucket = viewerRole === 'admin' || viewerRole === 'manager';
+  const showBucketSummary = viewerRole !== 'agent';
 
   const propertyLabel = useMemo(() => {
     if (effectivePropertyAddress && effectivePropertyAddress.trim().length > 0) {
@@ -299,58 +347,78 @@ export function ReferralHeader({
   const borrowerPhone = referral.borrower?.phone?.trim() ?? '';
   const hasBorrowerContact = Boolean(borrowerEmail || borrowerPhone);
 
-  const handleContractDraftChangeInternal = (draft: ContractDraftSnapshot) => {
-    setDraftContract((previous) => {
-      if (
-        previous.hasUnsavedChanges === draft.hasUnsavedChanges &&
-        previous.propertyAddress === draft.propertyAddress &&
-        previous.propertyCity === draft.propertyCity &&
-        previous.propertyState === draft.propertyState &&
-        previous.propertyPostalCode === draft.propertyPostalCode &&
-        previous.contractPriceCents === draft.contractPriceCents &&
-        previous.agentCommissionBasisPoints === draft.agentCommissionBasisPoints &&
-        previous.referralFeeBasisPoints === draft.referralFeeBasisPoints &&
-        previous.referralFeeDueCents === draft.referralFeeDueCents
-      ) {
-        return previous;
-      }
-      return draft;
-    });
-    onContractDraftChange?.(draft);
-  };
+  const handleContractDraftChangeInternal = useCallback(
+    (draft: ContractDraftSnapshot) => {
+      setDraftContract((previous) => {
+        if (
+          previous.hasUnsavedChanges === draft.hasUnsavedChanges &&
+          previous.propertyAddress === draft.propertyAddress &&
+          previous.propertyCity === draft.propertyCity &&
+          previous.propertyState === draft.propertyState &&
+          previous.propertyPostalCode === draft.propertyPostalCode &&
+          previous.contractPriceCents === draft.contractPriceCents &&
+          previous.agentCommissionBasisPoints === draft.agentCommissionBasisPoints &&
+          previous.referralFeeBasisPoints === draft.referralFeeBasisPoints &&
+          previous.referralFeeDueCents === draft.referralFeeDueCents &&
+          previous.dealSide === draft.dealSide
+        ) {
+          return previous;
+        }
+        return draft;
+      });
+      onContractDraftChange?.(draft);
+    },
+    [onContractDraftChange]
+  );
 
-  const handleContractSaved = (details: {
-    propertyAddress: string;
-    propertyCity: string;
-    propertyState: string;
-    propertyPostalCode: string;
-    contractPriceCents: number;
-    agentCommissionBasisPoints: number;
-    referralFeeBasisPoints: number;
-    referralFeeDueCents: number;
-  }) => {
-    setPropertyAddress(details.propertyAddress);
-    setPropertyCity(details.propertyCity || undefined);
-    setPropertyState(details.propertyState ? details.propertyState.toUpperCase() : undefined);
-    setPropertyPostalCode(details.propertyPostalCode || undefined);
-    setContractPriceCents(details.contractPriceCents);
-    setCommissionBasisPoints(details.agentCommissionBasisPoints);
-    setReferralFeeBasisPoints(details.referralFeeBasisPoints);
-    setReferralFeeDueCents(details.referralFeeDueCents ?? 0);
-    setDraftContract({ hasUnsavedChanges: false });
-    onFinancialsChange?.({
-      status: 'Under Contract',
-      preApprovalAmountCents: preApprovalAmountCents ?? 0,
-      contractPriceCents: details.contractPriceCents,
-      referralFeeDueCents: details.referralFeeDueCents,
-      commissionBasisPoints: details.agentCommissionBasisPoints,
-      referralFeeBasisPoints: details.referralFeeBasisPoints,
-      propertyAddress: details.propertyAddress,
-      propertyCity: details.propertyCity,
-      propertyState: details.propertyState,
-      propertyPostalCode: details.propertyPostalCode,
+  const handleContractSaved = useCallback(
+    (details: {
+      propertyAddress: string;
+      propertyCity: string;
+      propertyState: string;
+      propertyPostalCode: string;
+      contractPriceCents: number;
+      agentCommissionBasisPoints: number;
+      referralFeeBasisPoints: number;
+      referralFeeDueCents: number;
+      dealSide: 'buy' | 'sell';
+    }) => {
+      setPropertyAddress(details.propertyAddress);
+      setPropertyCity(details.propertyCity || undefined);
+      setPropertyState(details.propertyState ? details.propertyState.toUpperCase() : undefined);
+      setPropertyPostalCode(details.propertyPostalCode || undefined);
+      setContractPriceCents(details.contractPriceCents);
+      setCommissionBasisPoints(details.agentCommissionBasisPoints);
+      setReferralFeeBasisPoints(details.referralFeeBasisPoints);
+      setReferralFeeDueCents(details.referralFeeDueCents ?? 0);
+      setDealSide(details.dealSide);
+      setDraftContract({ hasUnsavedChanges: false });
+      onFinancialsChange?.({
+        status: 'Under Contract',
+        preApprovalAmountCents: preApprovalAmountCents ?? 0,
+        contractPriceCents: details.contractPriceCents,
+        referralFeeDueCents: details.referralFeeDueCents,
+        commissionBasisPoints: details.agentCommissionBasisPoints,
+        referralFeeBasisPoints: details.referralFeeBasisPoints,
+        propertyAddress: details.propertyAddress,
+        propertyCity: details.propertyCity,
+        propertyState: details.propertyState,
+        propertyPostalCode: details.propertyPostalCode,
+        dealSide: details.dealSide,
+      });
+    },
+    [
+      onFinancialsChange,
+      preApprovalAmountCents,
+    ]
+  );
+
+  useEffect(() => {
+    onContractHandlersReady?.({
+      onContractSaved: handleContractSaved,
+      onContractDraftChange: handleContractDraftChangeInternal,
     });
-  };
+  }, [handleContractDraftChangeInternal, handleContractSaved, onContractHandlersReady]);
 
   const handleStatusChanged = (nextStatus: ReferralStatus, payload?: Record<string, unknown>) => {
     const previousStatusValue =
@@ -575,34 +643,43 @@ export function ReferralHeader({
             <span className="rounded-full bg-amber-500/10 px-3 py-1 text-amber-600">{daysInStatus} days in stage</span>
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <section className="flex h-full flex-col justify-between rounded-lg border border-brand/20 bg-white/80 p-4 shadow-sm">
+        <div
+          className={`grid gap-3 ${showBucketSummary ? 'sm:grid-cols-2' : ''} ${
+            isAgentView ? 'lg:justify-items-end' : ''
+          }`}
+        >
+          <section
+            className={`flex h-full flex-col justify-between rounded-lg border border-brand/20 bg-white/80 p-4 shadow-sm ${
+              isAgentView ? 'self-end sm:max-w-sm lg:max-w-xs lg:ml-auto' : ''
+            }`}
+          >
             <div className="space-y-2">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-brand">{primaryAmountLabel}</h2>
               <p className="text-2xl font-semibold text-slate-900">{formattedPrimaryAmount}</p>
             </div>
-            <p className="text-xs font-medium text-slate-500">Referral Fee Due {formattedReferralFeeDue}</p>
           </section>
-          <section className="flex h-full flex-col justify-between rounded-lg border border-slate-200 bg-slate-900/5 p-4">
-            <div className="space-y-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Agent bucket</h2>
-              <p className="text-xs text-slate-500">{bucketDescription}</p>
-            </div>
-            {canEditBucket ? (
-              <select
-                value={ahaBucket}
-                onChange={handleBucketChange}
-                disabled={savingBucket}
-                className="mt-2 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
-              >
-                <option value="">Not set</option>
-                <option value="AHA">AHA</option>
-                <option value="AHA_OOS">AHA OOS</option>
-              </select>
-            ) : (
-              <p className="mt-3 text-lg font-semibold text-slate-900">{bucketLabel}</p>
-            )}
-          </section>
+          {showBucketSummary && (
+            <section className="flex h-full flex-col justify-between rounded-lg border border-slate-200 bg-slate-900/5 p-4">
+              <div className="space-y-2">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Agent bucket</h2>
+                <p className="text-xs text-slate-500">{bucketDescription}</p>
+              </div>
+              {canEditBucket ? (
+                <select
+                  value={ahaBucket}
+                  onChange={handleBucketChange}
+                  disabled={savingBucket}
+                  className="mt-2 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+                >
+                  <option value="">Not set</option>
+                  <option value="AHA">AHA</option>
+                  <option value="AHA_OOS">AHA OOS</option>
+                </select>
+              ) : (
+                <p className="mt-3 text-lg font-semibold text-slate-900">{bucketLabel}</p>
+              )}
+            </section>
+          )}
         </div>
       </div>
       <SLAWidget referral={{ ...referral, status, audit: auditEntries }} />
@@ -617,23 +694,11 @@ export function ReferralHeader({
             referralId={referral._id}
             status={status}
             statuses={REFERRAL_STATUSES}
-            contractDetails={{
-              propertyAddress: propertyAddress ?? referral.propertyAddress,
-              propertyCity: propertyCity ?? referral.propertyCity ?? undefined,
-              propertyState:
-                propertyState ??
-                (referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined),
-              propertyPostalCode: propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
-              contractPriceCents: contractPriceCents,
-              agentCommissionBasisPoints: commissionBasisPoints,
-              referralFeeBasisPoints: referralFeeBasisPoints,
-            }}
             preApprovalAmountCents={preApprovalAmountCents}
-            referralFeeDueCents={referralFeeDueCents}
             onStatusChanged={handleStatusChanged}
-            onContractSaved={handleContractSaved}
             onPreApprovalSaved={handlePreApprovalSaved}
-            onContractDraftChange={handleContractDraftChangeInternal}
+            onUnderContractIntentChange={onUnderContractIntentChange}
+            onCreateDealRequest={onCreateDealRequest}
           />
         </section>
         <section className="space-y-4 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
@@ -660,7 +725,7 @@ export function ReferralHeader({
 
       <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Financial breakdown</h2>
-        <dl className="mt-4 grid gap-4 sm:grid-cols-3">
+        <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1">
             <dt className="text-xs uppercase text-slate-500">Agent Commission</dt>
             <dd className="text-sm font-semibold text-slate-900">{commissionPercent}</dd>
@@ -672,6 +737,10 @@ export function ReferralHeader({
           <div className="space-y-1">
             <dt className="text-xs uppercase text-slate-500">Referral Fee Due</dt>
             <dd className="text-sm font-semibold text-slate-900">{formattedReferralFeeDue}</dd>
+          </div>
+          <div className="space-y-1">
+            <dt className="text-xs uppercase text-slate-500">Deal Side</dt>
+            <dd className="text-sm font-semibold text-slate-900">{dealSideLabel}</dd>
           </div>
         </dl>
       </div>

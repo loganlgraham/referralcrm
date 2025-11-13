@@ -7,6 +7,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { canViewReferral } from '@/lib/rbac';
 import { sendTransactionalEmail, isTransactionalEmailConfigured } from '@/lib/email';
 import { logReferralActivity } from '@/lib/server/activities';
+import { User } from '@/models/user';
 
 type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknown';
 
@@ -56,11 +57,20 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     hiddenFromAgent: allowHidden ? Boolean(parsed.data.hiddenFromAgent) : false,
     hiddenFromMc: allowHidden ? Boolean(parsed.data.hiddenFromMc) : false,
     createdAt: new Date(),
-    emailedTargets: [] as ('agent' | 'mc')[]
+    emailedTargets: [] as ('agent' | 'mc' | 'admin')[]
   } as any;
 
   const requestedTargets = new Set(parsed.data.emailTargets ?? []);
-  const recipients: { email: string; name: string; target: 'agent' | 'mc' }[] = [];
+  const recipients: { email: string; name: string; target: 'agent' | 'mc' | 'admin' }[] = [];
+  const seenEmails = new Set<string>();
+  const addRecipient = (recipient: { email: string; name: string; target: 'agent' | 'mc' | 'admin' }) => {
+    const normalized = recipient.email.trim().toLowerCase();
+    if (!normalized || seenEmails.has(normalized)) {
+      return;
+    }
+    seenEmails.add(normalized);
+    recipients.push({ ...recipient, email: recipient.email.trim() });
+  };
 
   if (
     requestedTargets.has('agent') &&
@@ -69,7 +79,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     referral.assignedAgent.email &&
     !note.hiddenFromAgent
   ) {
-    recipients.push({
+    addRecipient({
       email: referral.assignedAgent.email as string,
       name: (referral.assignedAgent as any).name || 'Agent',
       target: 'agent'
@@ -83,14 +93,29 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     referral.lender.email &&
     !note.hiddenFromMc
   ) {
-    recipients.push({
+    addRecipient({
       email: referral.lender.email as string,
       name: (referral.lender as any).name || 'MC',
       target: 'mc'
     });
   }
 
-  let emailedTargets: ('agent' | 'mc')[] = [];
+  if (requestedTargets.has('admin')) {
+    const adminUsers = (await User.find({ role: 'admin', email: { $ne: null } })
+      .select('name email')
+      .lean()) as Array<{ name?: string | null; email?: string | null }>;
+    adminUsers.forEach((admin) => {
+      if (typeof admin.email === 'string' && admin.email.trim()) {
+        addRecipient({
+          email: admin.email,
+          name: admin.name && admin.name.trim() ? admin.name : 'Admin',
+          target: 'admin',
+        });
+      }
+    });
+  }
+
+  let emailedTargets: ('agent' | 'mc' | 'admin')[] = [];
   let deliveryFailed = false;
   let deliveryFailureReason: DeliveryFailureReason | undefined;
 

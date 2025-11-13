@@ -7,16 +7,24 @@ import useSWR from 'swr';
 import { REFERRAL_STATUSES } from '@/constants/referrals';
 import { fetcher } from '@/utils/fetcher';
 
+type FilterMode = 'admin' | 'mc' | 'agent';
+
 interface DirectoryOption {
   _id: string;
   name: string;
   email?: string | null;
 }
 
-export function Filters() {
+interface FiltersProps {
+  mode?: FilterMode;
+}
+
+export function Filters({ mode = 'admin' }: FiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+
+  const isAgentMode = mode === 'agent';
 
   const handleChange = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -31,12 +39,12 @@ export function Filters() {
     });
   };
 
-  const { data: agents } = useSWR<DirectoryOption[]>('/api/agents', fetcher);
+  const { data: agents } = useSWR<DirectoryOption[]>(isAgentMode ? null : '/api/agents', fetcher);
   const { data: lenders } = useSWR<DirectoryOption[]>('/api/lenders', fetcher);
 
-  const agentValue = searchParams.get('agent') ?? '';
+  const agentValue = isAgentMode ? '' : searchParams.get('agent') ?? '';
   const lenderValue = searchParams.get('mc') ?? '';
-  const ahaBucketValue = searchParams.get('ahaBucket') ?? '';
+  const ahaBucketValue = isAgentMode ? '' : searchParams.get('ahaBucket') ?? '';
 
   return (
     <div className="grid gap-4 rounded-lg bg-white p-4 shadow-sm md:grid-cols-6">
@@ -56,19 +64,21 @@ export function Filters() {
           ))}
         </select>
       </label>
-      <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
-        AHA Bucket
-        <select
-          value={ahaBucketValue}
-          onChange={(event) => handleChange('ahaBucket', event.target.value)}
-          className="mt-1 rounded border border-slate-200 px-2 py-1 text-sm"
-          disabled={isPending}
-        >
-          <option value="">All</option>
-          <option value="AHA">AHA</option>
-          <option value="AHA_OOS">AHA OOS</option>
-        </select>
-      </label>
+      {!isAgentMode && (
+        <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+          AHA Bucket
+          <select
+            value={ahaBucketValue}
+            onChange={(event) => handleChange('ahaBucket', event.target.value)}
+            className="mt-1 rounded border border-slate-200 px-2 py-1 text-sm"
+            disabled={isPending}
+          >
+            <option value="">All</option>
+            <option value="AHA">AHA</option>
+            <option value="AHA_OOS">AHA OOS</option>
+          </select>
+        </label>
+      )}
       <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
         MC
         <select
@@ -86,35 +96,39 @@ export function Filters() {
           ))}
         </select>
       </label>
-      <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
-        Agent
-        <select
-          value={agentValue}
-          onChange={(event) => handleChange('agent', event.target.value)}
-          className="mt-1 rounded border border-slate-200 px-2 py-1 text-sm"
-          disabled={isPending}
-        >
-          <option value="">All</option>
-          {agents?.map((agentOption) => (
-            <option key={agentOption._id} value={agentOption._id}>
-              {agentOption.name}
-              {agentOption.email ? ` (${agentOption.email})` : ''}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
-        State
-        <input
-          type="text"
-          maxLength={2}
-          defaultValue={searchParams.get('state') ?? ''}
-          onBlur={(event) => handleChange('state', event.target.value.toUpperCase())}
-          className="mt-1 rounded border border-slate-200 px-2 py-1 text-sm"
-          placeholder="CO"
-          disabled={isPending}
-        />
-      </label>
+      {!isAgentMode && (
+        <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+          Agent
+          <select
+            value={agentValue}
+            onChange={(event) => handleChange('agent', event.target.value)}
+            className="mt-1 rounded border border-slate-200 px-2 py-1 text-sm"
+            disabled={isPending}
+          >
+            <option value="">All</option>
+            {agents?.map((agentOption) => (
+              <option key={agentOption._id} value={agentOption._id}>
+                {agentOption.name}
+                {agentOption.email ? ` (${agentOption.email})` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {!isAgentMode && (
+        <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+          State
+          <input
+            type="text"
+            maxLength={2}
+            defaultValue={searchParams.get('state') ?? ''}
+            onBlur={(event) => handleChange('state', event.target.value.toUpperCase())}
+            className="mt-1 rounded border border-slate-200 px-2 py-1 text-sm"
+            placeholder="CO"
+            disabled={isPending}
+          />
+        </label>
+      )}
       <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
         Zip
         <input

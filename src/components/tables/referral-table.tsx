@@ -17,7 +17,7 @@ export interface ReferralRow {
   borrowerEmail: string;
   borrowerPhone: string;
   endorser?: string;
-  clientType: 'Seller' | 'Buyer';
+  clientType: 'Seller' | 'Buyer' | 'Both';
   lookingInZip: string;
   borrowerCurrentAddress?: string;
   propertyAddress?: string;
@@ -35,6 +35,8 @@ export interface ReferralRow {
   lenderPhone?: string;
   referralFeeDueCents?: number;
   preApprovalAmountCents?: number;
+  dealStatus?: string | null;
+  dealStatusLabel?: string | null;
 }
 
 type TableMode = 'admin' | 'mc' | 'agent';
@@ -47,9 +49,10 @@ type ReferralTableProps = {
 interface StatusSelectProps {
   referralId: string;
   value: ReferralStatus;
+  dealStatusLabel?: string | null;
 }
 
-function StatusSelect({ referralId, value }: StatusSelectProps) {
+function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps) {
   const [status, setStatus] = useState<ReferralStatus>(value);
   const [loading, setLoading] = useState(false);
 
@@ -84,22 +87,27 @@ function StatusSelect({ referralId, value }: StatusSelectProps) {
   };
 
   return (
-    <select
-      value={status}
-      onChange={handleChange}
-      disabled={loading}
-      className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
-    >
-      {REFERRAL_STATUSES.map((item) => (
-        <option key={item} value={item}>
-          {item}
-        </option>
-      ))}
-    </select>
+    <div className="space-y-1">
+      <select
+        value={status}
+        onChange={handleChange}
+        disabled={loading}
+        className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+      >
+        {REFERRAL_STATUSES.map((item) => (
+          <option key={item} value={item}>
+            {item}
+          </option>
+        ))}
+      </select>
+      {dealStatusLabel && dealStatusLabel !== status && (
+        <p className="text-xs text-slate-500">Deal stage: {dealStatusLabel}</p>
+      )}
+    </div>
   );
 }
 
-const STATUS_BADGE_STYLES: Record<ReferralStatus, string> = {
+const STATUS_BADGE_STYLES: Record<string, string> = {
   'New Lead': 'bg-sky-100 text-sky-700',
   Paired: 'bg-indigo-100 text-indigo-700',
   'In Communication': 'bg-amber-100 text-amber-700',
@@ -107,10 +115,15 @@ const STATUS_BADGE_STYLES: Record<ReferralStatus, string> = {
   'Under Contract': 'bg-emerald-100 text-emerald-700',
   Closed: 'bg-green-100 text-green-700',
   Lost: 'bg-slate-200 text-slate-600',
-  Terminated: 'bg-rose-100 text-rose-700'
+  Terminated: 'bg-rose-100 text-rose-700',
+  'Past Inspection': 'bg-amber-100 text-amber-700',
+  'Past Appraisal': 'bg-blue-100 text-blue-700',
+  'Clear to Close': 'bg-teal-100 text-teal-700',
+  'Payment Sent': 'bg-indigo-100 text-indigo-700',
+  'Payment Received': 'bg-emerald-100 text-emerald-700'
 };
 
-const STATUS_LABELS: Record<ReferralStatus, string> = {
+const STATUS_LABELS: Record<string, string> = {
   'New Lead': 'New Lead',
   Paired: 'Paired',
   'In Communication': 'Communicating',
@@ -118,10 +131,15 @@ const STATUS_LABELS: Record<ReferralStatus, string> = {
   'Under Contract': 'Under Contract',
   Closed: 'Closed',
   Lost: 'Lost',
-  Terminated: 'Terminated'
+  Terminated: 'Terminated',
+  'Past Inspection': 'Past Inspection',
+  'Past Appraisal': 'Past Appraisal',
+  'Clear to Close': 'Clear to Close',
+  'Payment Sent': 'Payment Sent',
+  'Payment Received': 'Payment Received'
 };
 
-function StatusBadge({ status }: { status: ReferralStatus }) {
+function StatusBadge({ status }: { status: string }) {
   const style = STATUS_BADGE_STYLES[status] ?? 'bg-slate-100 text-slate-700';
   const label = STATUS_LABELS[status] ?? status;
   return (
@@ -307,7 +325,13 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
       {
         header: 'Status',
         accessorKey: 'status',
-        cell: ({ row }) => <StatusSelect referralId={row.original._id} value={row.original.status} />
+        cell: ({ row }) => (
+          <StatusSelect
+            referralId={row.original._id}
+            value={row.original.status}
+            dealStatusLabel={row.original.dealStatusLabel ?? null}
+          />
+        )
       },
       {
         header: 'Notes',
@@ -340,7 +364,9 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
       {
         header: 'Status',
         accessorKey: 'status',
-        cell: ({ row }) => <StatusBadge status={row.original.status} />
+        cell: ({ row }) => (
+          <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />
+        )
       },
       createdColumn
     ];
@@ -359,7 +385,7 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
     {
       header: 'Status',
       accessorKey: 'status',
-      cell: ({ row }) => <StatusBadge status={row.original.status} />
+      cell: ({ row }) => <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />
     },
     {
       header: 'Agent',

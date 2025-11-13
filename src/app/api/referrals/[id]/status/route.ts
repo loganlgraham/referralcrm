@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { differenceInDays } from 'date-fns';
+import { differenceInDays, differenceInMinutes } from 'date-fns';
 
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
@@ -15,6 +15,8 @@ import { resolveAuditActorId } from '@/lib/server/audit';
 interface Params {
   params: { id: string };
 }
+
+const PRE_CONTRACT_STATUSES = new Set(['New Lead', 'Paired', 'In Communication', 'Showing Homes']);
 
 export async function POST(request: NextRequest, { params }: Params): Promise<NextResponse> {
   const session = await getCurrentSession();
@@ -41,16 +43,24 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   if (!canManageReferral(session, { assignedAgent: referral.assignedAgent, lender: referral.lender, org: referral.org })) {
     return new NextResponse('Forbidden', { status: 403 });
   }
+  const now = new Date();
+  const nextStatus = parsed.data.status;
   const previousStatus = referral.status;
-  referral.status = parsed.data.status;
-  referral.statusLastUpdated = new Date();
+  const previousStatusUpdatedAt =
+    referral.statusLastUpdated instanceof Date
+      ? referral.statusLastUpdated
+      : referral.statusLastUpdated
+      ? new Date(referral.statusLastUpdated)
+      : null;
+  referral.status = nextStatus;
+  referral.statusLastUpdated = now;
   referral.audit = referral.audit || [];
   const auditEntry: Record<string, unknown> = {
     actorRole: session.user.role,
     field: 'status',
     previousValue: previousStatus,
-    newValue: parsed.data.status,
-    timestamp: new Date()
+    newValue: nextStatus,
+    timestamp: now
   };
 
   const actorId = resolveAuditActorId(session.user.id);
@@ -59,6 +69,79 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
 
   referral.audit.push(auditEntry as any);
+
+  let createdDeal: any = null;
+  const sla = (referral.sla ??= {} as any);
+  let slaModified = false;
+
+  if (nextStatus === 'Under Contract') {
+    if (sla.contractToCloseMinutes != null) {
+      sla.previousContractToCloseMinutes = sla.contractToCloseMinutes;
+    }
+    if (sla.closedToPaidMinutes != null) {
+      sla.previousClosedToPaidMinutes = sla.closedToPaidMinutes;
+    }
+    sla.contractToCloseMinutes = null;
+    sla.closedToPaidMinutes = null;
+    sla.lastClosedAt = null;
+    sla.lastPaidAt = null;
+    sla.lastUnderContractAt = now;
+    slaModified = true;
+  } else if (PRE_CONTRACT_STATUSES.has(nextStatus)) {
+    if (nextStatus === 'Paired') {
+      sla.lastPairedAt = now;
+      slaModified = true;
+    } else if (nextStatus === 'In Communication') {
+      let pairedAt: Date | null = null;
+      if (sla.lastPairedAt) {
+        const candidate = sla.lastPairedAt instanceof Date ? sla.lastPairedAt : new Date(sla.lastPairedAt);
+        if (!Number.isNaN(candidate.getTime())) {
+          pairedAt = candidate;
+        }
+      }
+      if (!pairedAt && previousStatus === 'Paired' && previousStatusUpdatedAt) {
+        pairedAt = previousStatusUpdatedAt;
+      }
+      if (!pairedAt) {
+        const auditEntries = Array.isArray(referral.audit) ? referral.audit : [];
+        for (let index = auditEntries.length - 1; index >= 0; index -= 1) {
+          const entry = auditEntries[index];
+          if (entry?.field === 'status' && entry.newValue === 'Paired' && entry.timestamp) {
+            const timestamp = entry.timestamp instanceof Date ? entry.timestamp : new Date(entry.timestamp);
+            if (!Number.isNaN(timestamp.getTime())) {
+              pairedAt = timestamp;
+              break;
+            }
+          }
+        }
+      }
+      if (pairedAt) {
+        const minutes = Math.max(differenceInMinutes(now, pairedAt), 0);
+        sla.timeToFirstAgentContactHours = Math.round((minutes / 60) * 10) / 10;
+        sla.lastPairedAt = pairedAt;
+        slaModified = true;
+      }
+    } else if (nextStatus === 'New Lead' && sla.lastPairedAt) {
+      sla.lastPairedAt = null;
+      slaModified = true;
+    }
+
+    if (sla.contractToCloseMinutes != null) {
+      sla.previousContractToCloseMinutes = sla.contractToCloseMinutes;
+    }
+    if (sla.closedToPaidMinutes != null) {
+      sla.previousClosedToPaidMinutes = sla.closedToPaidMinutes;
+    }
+    sla.contractToCloseMinutes = null;
+    sla.closedToPaidMinutes = null;
+    sla.lastUnderContractAt = null;
+    sla.lastClosedAt = null;
+    sla.lastPaidAt = null;
+    slaModified = true;
+  } else if (nextStatus === 'Closed') {
+    sla.lastClosedAt = now;
+    slaModified = true;
+  }
 
   if (parsed.data.status === 'Under Contract') {
     const details = parsed.data.contractDetails;
@@ -81,6 +164,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     referral.estPurchasePriceCents = Math.round(details.contractPrice * 100);
     referral.commissionBasisPoints = Math.round(details.agentCommissionPercentage * 100);
     referral.referralFeeBasisPoints = Math.round(details.referralFeePercentage * 100);
+    referral.dealSide = details.dealSide;
     const commissionRate = details.agentCommissionPercentage / 100;
     const referralRate = details.referralFeePercentage / 100;
     const referralFeeDue = details.contractPrice * commissionRate * referralRate;
@@ -88,19 +172,33 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
     await Payment.updateMany(
       { referralId: referral._id, status: 'under_contract' },
-      { $set: { expectedAmountCents: referral.referralFeeDueCents ?? 0 } }
+      {
+        $set: {
+          expectedAmountCents: referral.referralFeeDueCents ?? 0,
+          commissionBasisPoints: referral.commissionBasisPoints ?? null,
+          referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
+          side: referral.dealSide,
+          contractPriceCents: referral.estPurchasePriceCents ?? null,
+        },
+      }
     );
 
-    const activeDeal = await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
+    let activeDeal = await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
       .sort({ createdAt: -1 })
       .lean();
 
     if (!activeDeal) {
-      await Payment.create({
+      const newDeal = await Payment.create({
         referralId: referral._id,
         status: 'under_contract',
         expectedAmountCents: referral.referralFeeDueCents ?? 0,
+        commissionBasisPoints: referral.commissionBasisPoints ?? null,
+        referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
+        side: referral.dealSide,
+        contractPriceCents: referral.estPurchasePriceCents ?? null,
       });
+      createdDeal = newDeal.toObject();
+      activeDeal = createdDeal;
     }
   } else if (parsed.data.status === 'Terminated' || parsed.data.status === 'Lost') {
     referral.estPurchasePriceCents = 0;
@@ -110,19 +208,40 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       { $set: { expectedAmountCents: 0 } }
     );
   } else if (parsed.data.status !== 'Closed') {
-    const commissionBasisPoints = referral.commissionBasisPoints || DEFAULT_AGENT_COMMISSION_BPS;
-    const referralFeeBasisPoints = referral.referralFeeBasisPoints || DEFAULT_REFERRAL_FEE_BPS;
-    const baseAmount = referral.preApprovalAmountCents ?? 0;
-    referral.referralFeeDueCents = calculateReferralFeeDue(
-      baseAmount,
-      commissionBasisPoints,
-      referralFeeBasisPoints
-    );
-    await Payment.updateMany(
-      { referralId: referral._id, status: 'under_contract' },
-      { $set: { expectedAmountCents: referral.referralFeeDueCents ?? 0 } }
-    );
+    const hasActiveDeal = await Payment.exists({
+      referralId: referral._id,
+      status: {
+        $in: [
+          'under_contract',
+          'past_inspection',
+          'past_appraisal',
+          'clear_to_close',
+          'closed',
+          'payment_sent',
+          'paid'
+        ],
+      },
+    });
+
+    if (!hasActiveDeal) {
+      const commissionBasisPoints = referral.commissionBasisPoints || DEFAULT_AGENT_COMMISSION_BPS;
+      const referralFeeBasisPoints = referral.referralFeeBasisPoints || DEFAULT_REFERRAL_FEE_BPS;
+      const baseAmount = referral.preApprovalAmountCents ?? 0;
+      referral.referralFeeDueCents = calculateReferralFeeDue(
+        baseAmount,
+        commissionBasisPoints,
+        referralFeeBasisPoints
+      );
+      await Payment.updateMany(
+        { referralId: referral._id, status: 'under_contract' },
+        { $set: { expectedAmountCents: referral.referralFeeDueCents ?? 0 } }
+      );
+    }
   }
+  if (slaModified) {
+    referral.markModified('sla');
+  }
+
   await referral.save();
 
   if (previousStatus !== referral.status) {
@@ -152,6 +271,32 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             agentCommissionBasisPoints: referral.commissionBasisPoints ?? 0,
             referralFeeBasisPoints: referral.referralFeeBasisPoints ?? 0,
             referralFeeDueCents: referral.referralFeeDueCents ?? 0,
+            dealSide: referral.dealSide ?? 'buy',
+          }
+        : undefined,
+    deal:
+      createdDeal
+        ? {
+            _id: createdDeal._id?.toString?.() ?? '',
+            status: createdDeal.status ?? 'under_contract',
+            expectedAmountCents: createdDeal.expectedAmountCents ?? 0,
+            receivedAmountCents: createdDeal.receivedAmountCents ?? 0,
+            terminatedReason: createdDeal.terminatedReason ?? null,
+            agentAttribution: createdDeal.agentAttribution ?? null,
+            usedAfc: Boolean(createdDeal.usedAfc),
+            commissionBasisPoints: createdDeal.commissionBasisPoints ?? null,
+            referralFeeBasisPoints: createdDeal.referralFeeBasisPoints ?? null,
+            side: createdDeal.side ?? null,
+            contractPriceCents: createdDeal.contractPriceCents ?? null,
+            createdAt: createdDeal.createdAt instanceof Date
+              ? createdDeal.createdAt.toISOString()
+              : createdDeal.createdAt ?? null,
+            updatedAt: createdDeal.updatedAt instanceof Date
+              ? createdDeal.updatedAt.toISOString()
+              : createdDeal.updatedAt ?? null,
+            paidDate: createdDeal.paidDate instanceof Date
+              ? createdDeal.paidDate.toISOString()
+              : createdDeal.paidDate ?? null,
           }
         : undefined,
     preApprovalAmountCents: referral.preApprovalAmountCents ?? 0,

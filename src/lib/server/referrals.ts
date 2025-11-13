@@ -8,6 +8,8 @@ import { differenceInDays } from 'date-fns';
 import { Types } from 'mongoose';
 import { getCurrentSession } from '@/lib/auth';
 import { ACTIVE_REFERRAL_STATUSES } from '@/constants/referrals';
+import { User } from '@/models/user';
+import { DEAL_STATUS_LABELS } from '@/constants/deals';
 
 interface GetReferralsParams {
   session: Session | null;
@@ -46,7 +48,7 @@ interface ReferralListItem {
   borrowerEmail: string;
   borrowerPhone: string;
   endorser?: string;
-  clientType: 'Seller' | 'Buyer';
+  clientType: 'Seller' | 'Buyer' | 'Both';
   lookingInZip: string;
   borrowerCurrentAddress?: string;
   propertyAddress?: string;
@@ -64,6 +66,8 @@ interface ReferralListItem {
   lenderPhone?: string;
   referralFeeDueCents?: number;
   preApprovalAmountCents?: number;
+  dealStatus?: string | null;
+  dealStatusLabel?: string | null;
 }
 
 const PAGE_SIZE = 20;
@@ -161,7 +165,7 @@ export async function getReferrals(params: GetReferralsParams) {
       {
         $match: {
           ...paymentMatch,
-          status: { $in: ['closed', 'paid'] }
+          status: { $in: ['closed', 'payment_sent', 'paid'] }
         }
       },
       { $group: { _id: '$referralId' } },
@@ -173,33 +177,66 @@ export async function getReferrals(params: GetReferralsParams) {
   const closedDeals = closedDealAggregation[0]?.count ?? 0;
   const closeRate = total === 0 ? 0 : (closedDeals / total) * 100;
 
+  const referralIds = items.map((item) => item._id);
+  const paymentDocs = await Payment.find({ referralId: { $in: referralIds } })
+    .sort({ createdAt: -1 })
+    .select('referralId status')
+    .lean<{ referralId: Types.ObjectId; status?: string }[]>();
+
+  const dealStatusMap = new Map<string, { primary?: string; fallback?: string }>();
+  for (const payment of paymentDocs) {
+    const status = typeof payment.status === 'string' ? payment.status : null;
+    if (!status) {
+      continue;
+    }
+    const key = payment.referralId.toString();
+    const record = dealStatusMap.get(key) ?? {};
+    if (!record.fallback) {
+      record.fallback = status;
+    }
+    if (!record.primary && status !== 'terminated') {
+      record.primary = status;
+    }
+    dealStatusMap.set(key, record);
+  }
+
   return {
-    items: items.map((item: PopulatedReferral) => ({
-      _id: item._id.toString(),
-      createdAt: item.createdAt.toISOString(),
-      borrowerName: item.borrower.name,
-      borrowerEmail: item.borrower.email,
-      borrowerPhone: item.borrower.phone,
-      endorser: item.endorser,
-      clientType: item.clientType,
-      lookingInZip: item.lookingInZip,
-      borrowerCurrentAddress: item.borrowerCurrentAddress,
-      propertyAddress: item.propertyAddress,
-      stageOnTransfer: item.stageOnTransfer,
-      initialNotes: item.initialNotes,
-      loanFileNumber: item.loanFileNumber,
-      status: item.status,
-      statusLastUpdated: item.statusLastUpdated ? item.statusLastUpdated.toISOString() : null,
-      daysInStatus: differenceInDays(new Date(), item.statusLastUpdated ?? item.createdAt),
-      assignedAgentName: item.assignedAgent?.name,
-      assignedAgentEmail: item.assignedAgent?.email,
-      assignedAgentPhone: item.assignedAgent?.phone,
-      lenderName: item.lender?.name,
-      lenderEmail: item.lender?.email,
-      lenderPhone: item.lender?.phone,
-      referralFeeDueCents: item.referralFeeDueCents,
-      preApprovalAmountCents: item.preApprovalAmountCents
-    } as ReferralListItem)),
+    items: items.map((item: PopulatedReferral) => {
+      const dealRecord = dealStatusMap.get(item._id.toString());
+      const dealStatus = dealRecord?.primary ?? dealRecord?.fallback ?? null;
+      const dealStatusLabel = dealStatus
+        ? DEAL_STATUS_LABELS[dealStatus as keyof typeof DEAL_STATUS_LABELS] ?? null
+        : null;
+
+      return {
+        _id: item._id.toString(),
+        createdAt: item.createdAt.toISOString(),
+        borrowerName: item.borrower.name,
+        borrowerEmail: item.borrower.email,
+        borrowerPhone: item.borrower.phone,
+        endorser: item.endorser,
+        clientType: item.clientType,
+        lookingInZip: item.lookingInZip,
+        borrowerCurrentAddress: item.borrowerCurrentAddress,
+        propertyAddress: item.propertyAddress,
+        stageOnTransfer: item.stageOnTransfer,
+        initialNotes: item.initialNotes,
+        loanFileNumber: item.loanFileNumber,
+        status: item.status,
+        statusLastUpdated: item.statusLastUpdated ? item.statusLastUpdated.toISOString() : null,
+        daysInStatus: differenceInDays(new Date(), item.statusLastUpdated ?? item.createdAt),
+        assignedAgentName: item.assignedAgent?.name,
+        assignedAgentEmail: item.assignedAgent?.email,
+        assignedAgentPhone: item.assignedAgent?.phone,
+        lenderName: item.lender?.name,
+        lenderEmail: item.lender?.email,
+        lenderPhone: item.lender?.phone,
+        referralFeeDueCents: item.referralFeeDueCents,
+        preApprovalAmountCents: item.preApprovalAmountCents,
+        dealStatus,
+        dealStatusLabel
+      } as ReferralListItem;
+    }),
     total,
     page,
     pageSize: PAGE_SIZE,
@@ -234,6 +271,13 @@ export async function getReferralById(id: string) {
   const daysInStatus = differenceInDays(new Date(), referral.statusLastUpdated ?? referral.createdAt);
 
   const viewerRole = session?.user?.role ?? 'viewer';
+  const adminUsers = (await User.find({ role: 'admin', email: { $ne: null } })
+    .select('name email')
+    .lean()) as Array<{ name?: string | null; email?: string | null }>;
+  const adminContacts = adminUsers.map((admin) => ({
+    name: typeof admin.name === 'string' && admin.name.trim() ? admin.name : null,
+    email: typeof admin.email === 'string' && admin.email ? admin.email : null,
+  }));
   const notes = (referral.notes ?? []).map((note: any) => ({
     id: note._id.toString(),
     authorName: note.authorName,
@@ -275,12 +319,16 @@ export async function getReferralById(id: string) {
       terminatedReason: payment.terminatedReason ?? null,
       agentAttribution: payment.agentAttribution ?? null,
       usedAfc: Boolean(payment.usedAfc),
+      commissionBasisPoints: payment.commissionBasisPoints ?? null,
+      referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
+      side: payment.side ?? null,
     })),
     preApprovalAmountCents: typeof referral.preApprovalAmountCents === 'number' ? referral.preApprovalAmountCents : 0,
     estPurchasePriceCents: typeof referral.estPurchasePriceCents === 'number' ? referral.estPurchasePriceCents : 0,
     referralFeeDueCents: typeof referral.referralFeeDueCents === 'number' ? referral.referralFeeDueCents : 0,
     commissionBasisPoints: typeof referral.commissionBasisPoints === 'number' ? referral.commissionBasisPoints : 0,
     referralFeeBasisPoints: typeof referral.referralFeeBasisPoints === 'number' ? referral.referralFeeBasisPoints : 0,
+    dealSide: referral.dealSide ?? 'buy',
     daysInStatus,
     statusLastUpdated: referral.statusLastUpdated ? referral.statusLastUpdated.toISOString() : null,
     audit: Array.isArray(referral.audit)
@@ -301,6 +349,7 @@ export async function getReferralById(id: string) {
         }))
       : [],
     notes: filteredNotes,
+    adminContacts,
     viewerRole
   };
 }

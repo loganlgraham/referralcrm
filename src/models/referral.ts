@@ -46,7 +46,7 @@ const referralNoteSchema = new Schema(
     hiddenFromAgent: { type: Boolean, default: false },
     hiddenFromMc: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now },
-    emailedTargets: { type: [String], enum: ['agent', 'mc'], default: [] }
+    emailedTargets: { type: [String], enum: ['agent', 'mc', 'admin'], default: [] }
   },
   { _id: true }
 );
@@ -66,16 +66,18 @@ const inboundEmailSchema = new Schema(
 const referralSchema = new Schema(
   {
     createdAt: { type: Date, default: Date.now, index: true },
-    source: { type: String, enum: ['Lender', 'MC'], required: true },
+    source: { type: String, required: true, trim: true },
     endorser: { type: String, default: '' },
     clientType: {
       type: String,
-      enum: ['Seller', 'Buyer'],
+      enum: ['Seller', 'Buyer', 'Both'],
       required(this: { isNew: boolean }) {
         return this.isNew;
       }
     },
     borrower: {
+      firstName: { type: String, default: '', trim: true },
+      lastName: { type: String, default: '', trim: true },
       name: { type: String, required: true },
       email: { type: String, index: true, required: true },
       phone: { type: String, required: true }
@@ -92,7 +94,12 @@ const referralSchema = new Schema(
     propertyCity: { type: String, default: '' },
     propertyState: { type: String, default: '' },
     propertyPostalCode: { type: String, default: '' },
-    stageOnTransfer: { type: String, default: '' },
+    dealSide: {
+      type: String,
+      enum: ['buy', 'sell'],
+      default: 'buy',
+    },
+    stageOnTransfer: { type: String, default: 'Pre-Approval TBD' },
     initialNotes: { type: String, default: '' },
     loanFileNumber: {
       type: String,
@@ -125,7 +132,15 @@ const referralSchema = new Schema(
       timeToFirstAgentContactHours: { type: Number, default: null },
       timeToAssignmentHours: { type: Number, default: null },
       daysToContract: { type: Number, default: null },
-      daysToClose: { type: Number, default: null }
+      daysToClose: { type: Number, default: null },
+      contractToCloseMinutes: { type: Number, default: null },
+      closedToPaidMinutes: { type: Number, default: null },
+      previousContractToCloseMinutes: { type: Number, default: null },
+      previousClosedToPaidMinutes: { type: Number, default: null },
+      lastPairedAt: { type: Date, default: null },
+      lastUnderContractAt: { type: Date, default: null },
+      lastClosedAt: { type: Date, default: null },
+      lastPaidAt: { type: Date, default: null }
     },
     org: { type: String, enum: ['AFC', 'AHA'], default: 'AFC' },
     ahaBucket: {
@@ -153,14 +168,16 @@ referralSchema.index(
 export interface ReferralDocument {
   _id: Types.ObjectId;
   createdAt: Date;
-  source: 'Lender' | 'MC';
+  source: string;
   borrower: {
+    firstName?: string;
+    lastName?: string;
     name: string;
     email: string;
     phone: string;
   };
   endorser?: string;
-  clientType: 'Seller' | 'Buyer';
+  clientType: 'Seller' | 'Buyer' | 'Both';
   lookingInZip: string;
   borrowerCurrentAddress?: string;
   propertyAddress?: string;
@@ -178,7 +195,22 @@ export interface ReferralDocument {
   estPurchasePriceCents?: number;
   commissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
+  dealSide?: 'buy' | 'sell';
   referralFeeDueCents?: number;
+  sla?: {
+    timeToFirstAgentContactHours?: number | null;
+    timeToAssignmentHours?: number | null;
+    daysToContract?: number | null;
+    daysToClose?: number | null;
+    contractToCloseMinutes?: number | null;
+    closedToPaidMinutes?: number | null;
+    previousContractToCloseMinutes?: number | null;
+    previousClosedToPaidMinutes?: number | null;
+    lastPairedAt?: Date | null;
+    lastUnderContractAt?: Date | null;
+    lastClosedAt?: Date | null;
+    lastPaidAt?: Date | null;
+  } | null;
   notes?: {
     _id: Types.ObjectId;
     author: Types.ObjectId;
@@ -188,7 +220,7 @@ export interface ReferralDocument {
     hiddenFromAgent?: boolean;
     hiddenFromMc?: boolean;
     createdAt: Date;
-    emailedTargets?: ('agent' | 'mc')[];
+    emailedTargets?: ('agent' | 'mc' | 'admin')[];
   }[];
   lender?: Types.ObjectId;
   org: 'AFC' | 'AHA';

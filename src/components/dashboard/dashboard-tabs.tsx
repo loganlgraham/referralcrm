@@ -16,21 +16,17 @@ import { Trash2 } from 'lucide-react';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatNumber } from '@/utils/formatters';
 import {
-  addDays,
-  addMonths,
-  endOfMonth,
-  endOfWeek,
-  format as formatDate,
-  parseISO,
-  startOfDay,
-  startOfMonth,
-  startOfWeek,
-  startOfYear,
-  subYears
-} from 'date-fns';
+  TimeframeDropdown,
+  TIMEFRAME_PRESETS,
+  formatDateInput,
+  formatDisplayRange,
+  getPresetRange,
+  isDateRangeValid,
+  type DateRange,
+  type TimeframeKey,
+  type TimeframePreset
+} from '@/components/dashboard/timeframe-controls';
 
-type TimeframePreset = 'day' | 'week' | 'month' | 'year' | 'ytd';
-type TimeframeKey = TimeframePreset | 'custom';
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
 
 interface TrendPoint {
@@ -157,14 +153,6 @@ interface DashboardResponse {
   };
 }
 
-const TIMEFRAME_PRESETS: { label: string; value: TimeframePreset }[] = [
-  { label: 'Day', value: 'day' },
-  { label: 'Week', value: 'week' },
-  { label: 'Month', value: 'month' },
-  { label: 'Year', value: 'year' },
-  { label: 'YTD', value: 'ytd' }
-];
-
 const TAB_OPTIONS = [
   { label: 'Main', value: 'main' },
   { label: 'MC', value: 'mc' },
@@ -186,72 +174,6 @@ const DEFAULT_NETWORK_FILTER: Record<TabValue, NetworkFilter> = {
   agent: 'ALL',
   admin: 'AHA_OOS'
 };
-
-type DateRange = { start: string; end: string };
-
-const DATE_INPUT_FORMAT = 'yyyy-MM-dd';
-const DISPLAY_RANGE_FORMAT = 'MMM d, yyyy';
-
-function formatDateInput(date: Date): string {
-  return formatDate(date, DATE_INPUT_FORMAT);
-}
-
-type RangeDraft = { start: string | null; end: string | null };
-
-function normalizeRange(start: string | null, end: string | null): RangeDraft {
-  if (!start || !end) {
-    return { start, end };
-  }
-  return start <= end ? { start, end } : { start: end, end: start };
-}
-
-function formatDisplayRange(range: DateRange): string {
-  if (!range.start || !range.end) {
-    return 'Select timeframe';
-  }
-  const start = parseISO(range.start);
-  const end = parseISO(range.end);
-  const startLabel = formatDate(start, DISPLAY_RANGE_FORMAT);
-  const endLabel = formatDate(end, DISPLAY_RANGE_FORMAT);
-  if (range.start === range.end) {
-    return startLabel;
-  }
-  return `${startLabel} – ${endLabel}`;
-}
-
-function getPresetRange(preset: TimeframePreset): DateRange {
-  const now = new Date();
-  const end = formatDateInput(now);
-
-  switch (preset) {
-    case 'day': {
-      const dayStart = startOfDay(now);
-      const formatted = formatDateInput(dayStart);
-      return { start: formatted, end: formatted };
-    }
-    case 'week': {
-      const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-      return { start: formatDateInput(weekStart), end };
-    }
-    case 'year': {
-      const yearStart = startOfDay(subYears(now, 1));
-      return { start: formatDateInput(yearStart), end };
-    }
-    case 'ytd': {
-      const start = startOfYear(now);
-      return { start: formatDateInput(start), end };
-    }
-    case 'month':
-    default: {
-      const start = startOfMonth(now);
-      return { start: formatDateInput(start), end };
-    }
-  }
-}
-
-function isDateRangeValid(range: DateRange): boolean {
-  return Boolean(range.start && range.end && range.start <= range.end);
-}
 
 function NetworkFilterButtons({
   value,
@@ -279,252 +201,6 @@ function NetworkFilterButtons({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-function TimeframeDropdown({
-  timeframe,
-  rangeLabel,
-  customRange,
-  onPresetSelect,
-  onCustomRangeSelect,
-  maxDate
-}: {
-  timeframe: TimeframeKey;
-  rangeLabel: string;
-  customRange: DateRange;
-  onPresetSelect: (preset: TimeframePreset) => void;
-  onCustomRangeSelect: (range: DateRange) => void;
-  maxDate: string;
-}) {
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
-  const [visibleMonth, setVisibleMonth] = useState<Date>(() => startOfMonth(new Date()));
-  const [selectionPhase, setSelectionPhase] = useState<'start' | 'end'>('start');
-  const [rangeDraft, setRangeDraft] = useState<RangeDraft>({ start: null, end: null });
-
-  const closePicker = useCallback(() => {
-    setIsOpen(false);
-    setSelectionPhase('start');
-    setRangeDraft({ start: null, end: null });
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const defaultMonth = customRange.start ? parseISO(customRange.start) : new Date();
-    setVisibleMonth(startOfMonth(defaultMonth));
-    setSelectionPhase('start');
-    setRangeDraft({ start: null, end: null });
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!dropdownRef.current) {
-        return;
-      }
-      if (!dropdownRef.current.contains(event.target as Node)) {
-        closePicker();
-      }
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        closePicker();
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen, customRange.start, closePicker]);
-
-  const handlePresetClick = (preset: TimeframePreset) => {
-    onPresetSelect(preset);
-    closePicker();
-  };
-
-  const handleDayClick = (dateString: string) => {
-    if (dateString > maxDate) {
-      return;
-    }
-
-    if (selectionPhase === 'start') {
-      setRangeDraft({ start: dateString, end: dateString });
-      setSelectionPhase('end');
-      return;
-    }
-
-    const startValue = rangeDraft.start ?? dateString;
-    const sorted = normalizeRange(startValue, dateString);
-    onCustomRangeSelect({ start: sorted.start ?? dateString, end: sorted.end ?? dateString });
-    closePicker();
-  };
-
-  const handleDayHover = (dateString: string) => {
-    if (selectionPhase === 'end' && rangeDraft.start && dateString <= maxDate) {
-      setRangeDraft((prev) => ({ ...prev, end: dateString }));
-    }
-  };
-
-  const displayedRange = useMemo(() => {
-    if (selectionPhase === 'end' && rangeDraft.start) {
-      const endValue = rangeDraft.end ?? rangeDraft.start;
-      return normalizeRange(rangeDraft.start, endValue);
-    }
-    return normalizeRange(customRange.start, customRange.end);
-  }, [selectionPhase, rangeDraft, customRange.start, customRange.end]);
-
-  const calendarStart = useMemo(() => {
-    return startOfWeek(startOfMonth(visibleMonth), { weekStartsOn: 0 });
-  }, [visibleMonth]);
-
-  const calendarEnd = useMemo(() => {
-    return endOfWeek(endOfMonth(visibleMonth), { weekStartsOn: 0 });
-  }, [visibleMonth]);
-
-  const days: Date[] = [];
-  for (let day = calendarStart; day <= calendarEnd; day = addDays(day, 1)) {
-    days.push(day);
-  }
-
-  const maxDateLabel = formatDate(parseISO(maxDate), DISPLAY_RANGE_FORMAT);
-  const selectionPrompt =
-    selectionPhase === 'start'
-      ? 'Choose a start date'
-      : rangeDraft.start
-      ? `Choose an end date (starting ${formatDate(parseISO(rangeDraft.start), DISPLAY_RANGE_FORMAT)})`
-      : 'Choose an end date';
-
-  const canGoNextMonth = formatDateInput(addMonths(visibleMonth, 1)) <= maxDate;
-
-  return (
-    <div ref={dropdownRef} className="relative flex flex-col items-end gap-2">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Timeframe</span>
-      <button
-        type="button"
-        onClick={() => setIsOpen((prev) => !prev)}
-        className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
-      >
-        <span>{rangeLabel}</span>
-        <span className="text-xs text-slate-400">▾</span>
-      </button>
-      {isOpen ? (
-        <div className="absolute right-0 z-20 mt-2 w-80 rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => setVisibleMonth((prev) => addMonths(prev, -1))}
-              className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-            >
-              ‹
-            </button>
-            <div className="text-sm font-semibold text-slate-700">{formatDate(visibleMonth, 'MMMM yyyy')}</div>
-            <button
-              type="button"
-              onClick={() => setVisibleMonth((prev) => addMonths(prev, 1))}
-              disabled={!canGoNextMonth}
-              className={`rounded border px-2 py-1 text-xs transition ${
-                canGoNextMonth
-                  ? 'border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900'
-                  : 'cursor-not-allowed border-slate-100 text-slate-300'
-              }`}
-            >
-              ›
-            </button>
-          </div>
-
-          <div className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-400">{selectionPrompt}</div>
-          <div className="mt-2 grid grid-cols-7 gap-1 text-center text-xs text-slate-400">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-              <div key={day}>{day}</div>
-            ))}
-          </div>
-          <div className="mt-2 grid grid-cols-7 gap-1">
-            {days.map((day) => {
-              const dateKey = formatDateInput(day);
-              const isCurrentMonth = day.getMonth() === visibleMonth.getMonth();
-              const isDisabled = dateKey > maxDate;
-              const inRange =
-                displayedRange.start && displayedRange.end
-                  ? dateKey >= displayedRange.start && dateKey <= displayedRange.end
-                  : false;
-              const isStart = displayedRange.start ? dateKey === displayedRange.start : false;
-              const isEnd = displayedRange.end ? dateKey === displayedRange.end : false;
-
-              const baseClasses = 'flex h-9 w-9 items-center justify-center rounded-full text-sm transition';
-              let className = `${baseClasses} `;
-
-              if (isDisabled) {
-                className += 'cursor-not-allowed text-slate-300';
-              } else if (!isCurrentMonth) {
-                className += 'text-slate-300 hover:bg-slate-100 hover:text-slate-600';
-              } else if (isStart || isEnd) {
-                className += 'bg-slate-900 text-white';
-              } else if (inRange) {
-                className += 'bg-slate-200 text-slate-700';
-              } else {
-                className += 'text-slate-700 hover:bg-slate-100 hover:text-slate-900';
-              }
-
-              return (
-                <button
-                  key={dateKey}
-                  type="button"
-                  onClick={() => handleDayClick(dateKey)}
-                  onMouseEnter={() => handleDayHover(dateKey)}
-                  disabled={isDisabled}
-                  className={className}
-                >
-                  {day.getDate()}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-            <span>Latest selectable date: {maxDateLabel}</span>
-            <button
-              type="button"
-              onClick={() => {
-                setSelectionPhase('start');
-                setRangeDraft({ start: null, end: null });
-              }}
-              className="text-xs font-medium text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline"
-            >
-              Reset selection
-            </button>
-          </div>
-
-          <div className="mt-4 border-t border-slate-100 pt-3">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Quick links</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {TIMEFRAME_PRESETS.map((option) => {
-                const isActive = timeframe === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => handlePresetClick(option.value)}
-                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                      isActive
-                        ? 'border-transparent bg-slate-900 text-white'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

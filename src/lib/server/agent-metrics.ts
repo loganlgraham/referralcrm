@@ -96,7 +96,17 @@ export async function computeAgentMetrics(
     Payment.aggregate<PaymentWithReferral>([
       {
         $match: {
-          status: { $in: ['under_contract', 'closed', 'paid'] }
+          status: {
+            $in: [
+              'under_contract',
+              'past_inspection',
+              'past_appraisal',
+              'clear_to_close',
+              'closed',
+              'payment_sent',
+              'paid',
+            ]
+          }
         }
       },
       {
@@ -173,7 +183,7 @@ export async function computeAgentMetrics(
       : null;
 
     const closedPayments = agentPayments.filter((payment) =>
-      ['closed', 'paid'].includes(payment.status)
+      ['closed', 'payment_sent', 'paid'].includes(payment.status)
     );
 
     const dealsClosedAllTime = closedPayments.length;
