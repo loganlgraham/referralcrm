@@ -960,7 +960,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         hasUnsavedContractChanges: false,
       };
 
-  const dealPayments = normalizedDeals;
+  const dealPayments = normalizedDeals ?? [];
   const hasTerminatedDeal = dealPayments.some((payment) => payment.status === 'terminated');
   const hasAnyDeals = dealPayments.length > 0;
   const activeDealStatusLabel = useMemo(() => {
