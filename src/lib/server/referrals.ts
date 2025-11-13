@@ -9,6 +9,7 @@ import { Types } from 'mongoose';
 import { getCurrentSession } from '@/lib/auth';
 import { ACTIVE_REFERRAL_STATUSES } from '@/constants/referrals';
 import { User } from '@/models/user';
+import { DEAL_STATUS_LABELS } from '@/constants/deals';
 
 interface GetReferralsParams {
   session: Session | null;
@@ -65,6 +66,8 @@ interface ReferralListItem {
   lenderPhone?: string;
   referralFeeDueCents?: number;
   preApprovalAmountCents?: number;
+  dealStatus?: string | null;
+  dealStatusLabel?: string | null;
 }
 
 const PAGE_SIZE = 20;
@@ -174,33 +177,66 @@ export async function getReferrals(params: GetReferralsParams) {
   const closedDeals = closedDealAggregation[0]?.count ?? 0;
   const closeRate = total === 0 ? 0 : (closedDeals / total) * 100;
 
+  const referralIds = items.map((item) => item._id);
+  const paymentDocs = await Payment.find({ referralId: { $in: referralIds } })
+    .sort({ createdAt: -1 })
+    .select('referralId status')
+    .lean<{ referralId: Types.ObjectId; status?: string }[]>();
+
+  const dealStatusMap = new Map<string, { primary?: string; fallback?: string }>();
+  for (const payment of paymentDocs) {
+    const status = typeof payment.status === 'string' ? payment.status : null;
+    if (!status) {
+      continue;
+    }
+    const key = payment.referralId.toString();
+    const record = dealStatusMap.get(key) ?? {};
+    if (!record.fallback) {
+      record.fallback = status;
+    }
+    if (!record.primary && status !== 'terminated') {
+      record.primary = status;
+    }
+    dealStatusMap.set(key, record);
+  }
+
   return {
-    items: items.map((item: PopulatedReferral) => ({
-      _id: item._id.toString(),
-      createdAt: item.createdAt.toISOString(),
-      borrowerName: item.borrower.name,
-      borrowerEmail: item.borrower.email,
-      borrowerPhone: item.borrower.phone,
-      endorser: item.endorser,
-      clientType: item.clientType,
-      lookingInZip: item.lookingInZip,
-      borrowerCurrentAddress: item.borrowerCurrentAddress,
-      propertyAddress: item.propertyAddress,
-      stageOnTransfer: item.stageOnTransfer,
-      initialNotes: item.initialNotes,
-      loanFileNumber: item.loanFileNumber,
-      status: item.status,
-      statusLastUpdated: item.statusLastUpdated ? item.statusLastUpdated.toISOString() : null,
-      daysInStatus: differenceInDays(new Date(), item.statusLastUpdated ?? item.createdAt),
-      assignedAgentName: item.assignedAgent?.name,
-      assignedAgentEmail: item.assignedAgent?.email,
-      assignedAgentPhone: item.assignedAgent?.phone,
-      lenderName: item.lender?.name,
-      lenderEmail: item.lender?.email,
-      lenderPhone: item.lender?.phone,
-      referralFeeDueCents: item.referralFeeDueCents,
-      preApprovalAmountCents: item.preApprovalAmountCents
-    } as ReferralListItem)),
+    items: items.map((item: PopulatedReferral) => {
+      const dealRecord = dealStatusMap.get(item._id.toString());
+      const dealStatus = dealRecord?.primary ?? dealRecord?.fallback ?? null;
+      const dealStatusLabel = dealStatus
+        ? DEAL_STATUS_LABELS[dealStatus as keyof typeof DEAL_STATUS_LABELS] ?? null
+        : null;
+
+      return {
+        _id: item._id.toString(),
+        createdAt: item.createdAt.toISOString(),
+        borrowerName: item.borrower.name,
+        borrowerEmail: item.borrower.email,
+        borrowerPhone: item.borrower.phone,
+        endorser: item.endorser,
+        clientType: item.clientType,
+        lookingInZip: item.lookingInZip,
+        borrowerCurrentAddress: item.borrowerCurrentAddress,
+        propertyAddress: item.propertyAddress,
+        stageOnTransfer: item.stageOnTransfer,
+        initialNotes: item.initialNotes,
+        loanFileNumber: item.loanFileNumber,
+        status: item.status,
+        statusLastUpdated: item.statusLastUpdated ? item.statusLastUpdated.toISOString() : null,
+        daysInStatus: differenceInDays(new Date(), item.statusLastUpdated ?? item.createdAt),
+        assignedAgentName: item.assignedAgent?.name,
+        assignedAgentEmail: item.assignedAgent?.email,
+        assignedAgentPhone: item.assignedAgent?.phone,
+        lenderName: item.lender?.name,
+        lenderEmail: item.lender?.email,
+        lenderPhone: item.lender?.phone,
+        referralFeeDueCents: item.referralFeeDueCents,
+        preApprovalAmountCents: item.preApprovalAmountCents,
+        dealStatus,
+        dealStatusLabel
+      } as ReferralListItem;
+    }),
     total,
     page,
     pageSize: PAGE_SIZE,

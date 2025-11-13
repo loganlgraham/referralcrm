@@ -11,11 +11,8 @@ import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import { DealCard } from '@/components/referrals/deal-card';
 import { DealPreparationForm } from '@/components/referrals/deal-preparation-form';
-import type {
-  AgentSelectValue,
-  DealStatus,
-  TerminatedReason
-} from '@/components/referrals/deal-card';
+import type { AgentSelectValue, TerminatedReason } from '@/components/referrals/deal-card';
+import { DEAL_STATUS_LABELS, type DealStatus } from '@/constants/deals';
 import type { Contact } from '@/components/referrals/contact-assignment';
 import type { ReferralStatus } from '@/constants/referrals';
 import { ReferralFollowUpCard } from '@/components/referrals/referral-follow-up-card';
@@ -318,6 +315,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         return;
       }
 
+      setContractPrepActive(false);
+      setContractDraft({ hasUnsavedChanges: false });
+
       setReferral((previous) => {
         const existingPayments = Array.isArray(previous.payments) ? previous.payments : [];
         if (existingPayments.some((payment) => payment._id === deal._id)) {
@@ -471,14 +471,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referral.propertyPostalCode,
     referral.dealSide,
   ]);
-
-  useEffect(() => {
-    if (financials.status === 'Under Contract') {
-      setContractPrepActive(true);
-    } else if (!contractDraft.hasUnsavedChanges) {
-      setContractPrepActive(false);
-    }
-  }, [contractDraft.hasUnsavedChanges, financials.status]);
 
   useEffect(() => {
     setAgentContact(
@@ -895,6 +887,11 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
   };
 
+  const normalizedDeals = useMemo(
+    () => normalizeDealPayments(referral.payments),
+    [referral.payments]
+  );
+
   const dealReferral: DealCardReferral = {
     _id: referral._id,
     propertyAddress:
@@ -906,7 +903,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       ) ?? financials.propertyAddress ?? referral.propertyAddress ?? undefined,
     lookingInZip: referral.lookingInZip ?? null,
     referralFeeDueCents: financials.referralFeeDueCents ?? referral.referralFeeDueCents ?? null,
-    payments: normalizeDealPayments(referral.payments),
+    payments: normalizedDeals,
     ahaBucket:
       referral.ahaBucket === null || referral.ahaBucket === undefined
         ? null
@@ -963,9 +960,26 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         hasUnsavedContractChanges: false,
       };
 
+  const dealPayments = normalizedDeals;
+  const hasTerminatedDeal = dealPayments.some((payment) => payment.status === 'terminated');
+  const hasAnyDeals = dealPayments.length > 0;
+  const activeDealStatusLabel = useMemo(() => {
+    for (const payment of dealPayments) {
+      const status = (payment.status as DealStatus | undefined) ?? 'under_contract';
+      if (status !== 'terminated') {
+        return DEAL_STATUS_LABELS[status] ?? null;
+      }
+    }
+    if (dealPayments[0]?.status) {
+      const fallback = dealPayments[0].status as DealStatus;
+      return DEAL_STATUS_LABELS[fallback] ?? null;
+    }
+    return null;
+  }, [dealPayments]);
+
   const dealSummary: DealCardSummary = {
     borrowerName: referral.borrower?.name ?? null,
-    statusLabel: financials.status,
+    statusLabel: activeDealStatusLabel ?? financials.status,
     propertyAddress: baseOverrideAddress ?? null,
     contractPriceCents: financials.contractPriceCents ?? referral.estPurchasePriceCents ?? null,
     referralFeeDueCents: financials.referralFeeDueCents ?? referral.referralFeeDueCents ?? null,
@@ -974,17 +988,23 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
   };
 
-  const dealPayments = dealReferral.payments ?? [];
-  const hasTerminatedDeal = dealPayments.some((payment) => payment.status === 'terminated');
-  const hasAnyDeals = dealPayments.length > 0;
+  useEffect(() => {
+    if (financials.status === 'Under Contract' && !hasAnyDeals) {
+      setContractPrepActive(true);
+      return;
+    }
+
+    if (financials.status !== 'Under Contract' && !contractDraft.hasUnsavedChanges) {
+      setContractPrepActive(false);
+    }
+  }, [contractDraft.hasUnsavedChanges, financials.status, hasAnyDeals]);
 
   const shouldShowDealPreparation =
     contractPrepActive ||
-    financials.status === 'Under Contract' ||
     contractDraft.hasUnsavedChanges ||
-    hasAnyDeals;
+    (!hasAnyDeals && financials.status === 'Under Contract');
 
-  const showDeals = shouldShowDealPreparation || hasTerminatedDeal || hasAnyDeals;
+  const showDeals = contractPrepActive || contractDraft.hasUnsavedChanges || hasTerminatedDeal || hasAnyDeals;
 
   const followUpReferral = useMemo(() => {
     const createdAt = (() => {
@@ -1266,7 +1286,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       />
       {showDeals && (
         <div ref={dealSectionRef} className="space-y-4">
-          <DealCard referral={dealReferral} overrides={dealOverrides} summary={dealSummary} />
+          <DealCard
+            referral={dealReferral}
+            overrides={dealOverrides}
+            summary={dealSummary}
+            viewerRole={viewerRole}
+          />
           {shouldShowDealPreparation && (
             <DealPreparationForm
               referralId={referralId}

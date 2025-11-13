@@ -125,18 +125,35 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       { $set: { expectedAmountCents: 0 } }
     );
   } else if (parsed.data.status !== 'Closed') {
-    const commissionBasisPoints = referral.commissionBasisPoints || DEFAULT_AGENT_COMMISSION_BPS;
-    const referralFeeBasisPoints = referral.referralFeeBasisPoints || DEFAULT_REFERRAL_FEE_BPS;
-    const baseAmount = referral.preApprovalAmountCents ?? 0;
-    referral.referralFeeDueCents = calculateReferralFeeDue(
-      baseAmount,
-      commissionBasisPoints,
-      referralFeeBasisPoints
-    );
-    await Payment.updateMany(
-      { referralId: referral._id, status: 'under_contract' },
-      { $set: { expectedAmountCents: referral.referralFeeDueCents ?? 0 } }
-    );
+    const hasActiveDeal = await Payment.exists({
+      referralId: referral._id,
+      status: {
+        $in: [
+          'under_contract',
+          'past_inspection',
+          'past_appraisal',
+          'clear_to_close',
+          'closed',
+          'payment_sent',
+          'paid'
+        ],
+      },
+    });
+
+    if (!hasActiveDeal) {
+      const commissionBasisPoints = referral.commissionBasisPoints || DEFAULT_AGENT_COMMISSION_BPS;
+      const referralFeeBasisPoints = referral.referralFeeBasisPoints || DEFAULT_REFERRAL_FEE_BPS;
+      const baseAmount = referral.preApprovalAmountCents ?? 0;
+      referral.referralFeeDueCents = calculateReferralFeeDue(
+        baseAmount,
+        commissionBasisPoints,
+        referralFeeBasisPoints
+      );
+      await Payment.updateMany(
+        { referralId: referral._id, status: 'under_contract' },
+        { $set: { expectedAmountCents: referral.referralFeeDueCents ?? 0 } }
+      );
+    }
   }
   await referral.save();
 

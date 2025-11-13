@@ -1,20 +1,12 @@
 'use client';
 
-import { type ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { type ChangeEvent, MouseEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/constants/deals';
 import { formatCurrency } from '@/utils/formatters';
-
-export type DealStatus =
-  | 'under_contract'
-  | 'past_inspection'
-  | 'past_appraisal'
-  | 'clear_to_close'
-  | 'closed'
-  | 'payment_sent'
-  | 'paid'
-  | 'terminated';
 export type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
 export type AgentSelectValue = '' | 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT';
 
@@ -74,18 +66,32 @@ export interface ReferralDealProps {
   };
   overrides?: DealOverrides;
   summary?: DealSummaryInfo;
+  viewerRole?: string;
 }
 
-const STATUS_OPTIONS: { value: DealStatus; label: string }[] = [
-  { value: 'under_contract', label: 'Under Contract' },
-  { value: 'past_inspection', label: 'Past Inspection' },
-  { value: 'past_appraisal', label: 'Past Appraisal' },
-  { value: 'clear_to_close', label: 'Clear to Close' },
-  { value: 'closed', label: 'Closed' },
-  { value: 'payment_sent', label: 'Payment Sent' },
-  { value: 'paid', label: 'Paid' },
-  { value: 'terminated', label: 'Terminated' }
-];
+const deriveReferralFeeCents = (
+  contractPriceCents?: number | null,
+  commissionBasisPoints?: number | null,
+  referralFeeBasisPoints?: number | null
+) => {
+  if (!contractPriceCents || contractPriceCents <= 0) {
+    return null;
+  }
+  if (!commissionBasisPoints || commissionBasisPoints <= 0) {
+    return null;
+  }
+  if (!referralFeeBasisPoints || referralFeeBasisPoints <= 0) {
+    return null;
+  }
+
+  const computed =
+    (contractPriceCents * commissionBasisPoints * referralFeeBasisPoints) / 100_000_000;
+  if (!Number.isFinite(computed) || computed <= 0) {
+    return null;
+  }
+
+  return Math.round(computed);
+};
 
 const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] => {
   if (!Array.isArray(deals)) {
@@ -115,7 +121,7 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
     });
 };
 
-export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
+export function DealCard({ referral, overrides, summary, viewerRole }: ReferralDealProps) {
   const router = useRouter();
   const [deals, setDeals] = useState<DealRecord[]>(() => normalizeDeals(referral.payments));
 
@@ -188,6 +194,13 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
     });
   }, [deals]);
 
+  const statusOptions = useMemo(() => {
+    if (viewerRole === 'agent') {
+      return DEAL_STATUS_OPTIONS.filter((option) => option.value !== 'paid');
+    }
+    return DEAL_STATUS_OPTIONS;
+  }, [viewerRole]);
+
   const propertyLabel =
     overrides?.propertyAddress ||
     referral.propertyAddress ||
@@ -198,12 +211,21 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
   const summaryAddress = overrides?.propertyAddress ?? summary?.propertyAddress ?? propertyLabel;
   const summaryContractPriceCents =
     overrides?.contractPriceCents ?? summary?.contractPriceCents ?? null;
-  const summaryReferralFeeCents =
-    overrides?.referralFeeDueCents ?? summary?.referralFeeDueCents ?? referral.referralFeeDueCents ?? null;
   const summaryCommissionBasisPoints =
     overrides?.commissionBasisPoints ?? summary?.commissionBasisPoints ?? null;
   const summaryReferralFeeBasisPoints =
     overrides?.referralFeeBasisPoints ?? summary?.referralFeeBasisPoints ?? null;
+  const derivedSummaryReferralFee = deriveReferralFeeCents(
+    summaryContractPriceCents,
+    summaryCommissionBasisPoints,
+    summaryReferralFeeBasisPoints
+  );
+  const summaryReferralFeeCents =
+    derivedSummaryReferralFee ??
+    overrides?.referralFeeDueCents ??
+    summary?.referralFeeDueCents ??
+    referral.referralFeeDueCents ??
+    null;
   const summaryDealSide = overrides?.dealSide ?? summary?.dealSide ?? referral.dealSide ?? 'buy';
 
   const summaryContractPriceDisplay = summaryContractPriceCents
@@ -315,16 +337,34 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
     return undefined;
   })();
 
-  const computeExpectedAmount = (deal: DealRecord): number => {
+  const computeExpectedAmount = (deal: DealRecord, isPrimary: boolean): number => {
     const status = getStatusForDeal(deal);
     if (status === 'terminated') {
       return 0;
     }
 
-    if (activeDealId && deal._id === activeDealId) {
-      if (overrides?.referralFeeDueCents !== undefined) {
-        return overrides.referralFeeDueCents;
-      }
+    const baseContractPrice = isPrimary
+      ? overrides?.contractPriceCents ?? summary?.contractPriceCents ?? null
+      : summary?.contractPriceCents ?? null;
+    const baseCommissionBps = isPrimary
+      ? overrides?.commissionBasisPoints ?? deal.commissionBasisPoints ?? summary?.commissionBasisPoints ?? null
+      : deal.commissionBasisPoints ?? summary?.commissionBasisPoints ?? null;
+    const baseReferralFeeBps = isPrimary
+      ? overrides?.referralFeeBasisPoints ?? deal.referralFeeBasisPoints ?? summary?.referralFeeBasisPoints ?? null
+      : deal.referralFeeBasisPoints ?? summary?.referralFeeBasisPoints ?? null;
+
+    const derivedAmount = deriveReferralFeeCents(
+      baseContractPrice,
+      baseCommissionBps,
+      baseReferralFeeBps
+    );
+
+    if (derivedAmount && derivedAmount > 0) {
+      return derivedAmount;
+    }
+
+    if (isPrimary && overrides?.referralFeeDueCents !== undefined) {
+      return overrides.referralFeeDueCents;
     }
 
     if (deal.expectedAmountCents && deal.expectedAmountCents > 0) {
@@ -339,7 +379,8 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
     const nextStatus = selectEl.value as DealStatus;
     const previousStatus = getStatusForDeal(deal);
 
-    const expectedAmountCents = computeExpectedAmount(deal);
+    const isPrimaryDeal = activeDealId ? deal._id === activeDealId : deals[0]?._id === deal._id;
+    const expectedAmountCents = computeExpectedAmount(deal, Boolean(isPrimaryDeal));
 
     if (nextStatus !== 'terminated' && expectedAmountCents <= 0) {
       toast.error('Add contract details before updating deal status.');
@@ -523,7 +564,7 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
   const renderDeal = (deal: DealRecord, index: number) => {
     const status = getStatusForDeal(deal);
     const isPrimary = activeDealId ? deal._id === activeDealId : index === 0;
-    const expectedAmountCents = computeExpectedAmount(deal);
+    const expectedAmountCents = computeExpectedAmount(deal, isPrimary);
     const formattedAmount =
       status === 'terminated'
         ? '—'
@@ -531,7 +572,7 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
           ? formatCurrency(expectedAmountCents)
           : '—';
     const isSaving = savingMap[deal._id] ?? false;
-    const statusLabel = STATUS_OPTIONS.find((option) => option.value === status)?.label ?? status;
+    const statusLabel = DEAL_STATUS_LABELS[status] ?? status;
     const selectedReason = reasonMap[deal._id] ?? deal.terminatedReason ?? 'inspection';
     const agentSelection = agentMap[deal._id] ?? '';
     const usedAfc = afcMap[deal._id] ?? false;
@@ -556,15 +597,22 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
       setExpandedMap((previous) => ({ ...previous, [deal._id]: !isExpanded }));
     };
 
+    const handleDeleteClick = async (event: MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      await handleDeleteDeal(deal)();
+    };
+
     return (
       <div key={deal._id} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <button
-          type="button"
-          onClick={toggleExpanded}
-          aria-expanded={isExpanded}
-          className="flex w-full items-center justify-between gap-4 bg-slate-50 px-4 py-3 text-left transition hover:bg-slate-100"
-        >
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        <div className="flex items-stretch">
+          <button
+            type="button"
+            onClick={toggleExpanded}
+            aria-expanded={isExpanded}
+            className="flex w-full flex-1 items-center justify-between gap-4 bg-slate-50 px-4 py-3 text-left transition hover:bg-slate-100"
+          >
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                 status === 'terminated'
@@ -594,11 +642,21 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
             {deal.createdAt && (
               <span className="text-xs text-slate-400">Updated {new Date(deal.createdAt).toLocaleDateString()}</span>
             )}
-          </div>
-          <span className="text-xs font-medium text-brand">
-            {isExpanded ? 'Hide details' : 'View details'}
-          </span>
-        </button>
+            </div>
+            <span className="text-xs font-medium text-brand">
+              {isExpanded ? 'Hide details' : 'View details'}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={handleDeleteClick}
+            disabled={isSaving}
+            className="flex items-center justify-center border-l border-slate-200 bg-white px-3 text-slate-500 transition hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
+            aria-label="Delete deal"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
         {isExpanded && (
           <div className="space-y-4 border-t border-slate-200 p-4 text-sm">
             <div className="grid gap-3 md:grid-cols-3">
@@ -631,7 +689,7 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
                     className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
                     disabled={isSaving}
                   >
-                    {STATUS_OPTIONS.map((option) => (
+                    {statusOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
@@ -666,14 +724,6 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
               <p className="text-xs text-slate-500">
                 {isSaving ? 'Saving…' : 'Update the deal status and referral fee details.'}
               </p>
-              <button
-                type="button"
-                onClick={handleDeleteDeal(deal)}
-                disabled={isSaving}
-                className="inline-flex items-center justify-center rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                Delete deal
-              </button>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
               <div className="rounded border border-slate-200 bg-slate-50 p-3">
@@ -743,51 +793,53 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
         <h2 className="text-lg font-semibold text-slate-900">Deals</h2>
         <p className="text-sm text-slate-500">Track referral revenue from contract through payout</p>
       </div>
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div>
-            <dt className="text-xs uppercase text-slate-400">Referral</dt>
-            <dd className="text-sm font-medium text-slate-900">{summaryBorrower ?? '—'}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase text-slate-400">Status</dt>
-            <dd className="text-sm font-medium text-slate-900">{summaryStatusLabel ?? '—'}</dd>
-          </div>
-          <div className="sm:col-span-2 lg:col-span-3">
-            <dt className="text-xs uppercase text-slate-400">Property</dt>
-            <dd className="text-sm font-medium text-slate-900">{summaryAddress}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase text-slate-400">Contract Price</dt>
-            <dd className="text-sm font-medium text-slate-900">{summaryContractPriceDisplay}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase text-slate-400">Agent Commission %</dt>
-            <dd className="text-sm font-medium text-slate-900">{summaryCommissionPercentDisplay}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase text-slate-400">Referral Fee %</dt>
-            <dd className="text-sm font-medium text-slate-900">{summaryReferralFeePercentDisplay}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase text-slate-400">Referral Fee</dt>
-            <dd className="text-sm font-medium text-slate-900">{summaryReferralFeeDisplay}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase text-slate-400">Net Commission</dt>
-            <dd className="text-sm font-medium text-slate-900">{summaryNetCommissionDisplay}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase text-slate-400">Deal Side</dt>
-            <dd className="text-sm font-medium text-slate-900">{summaryDealSideDisplay}</dd>
-          </div>
-        </dl>
-        {overrides?.hasUnsavedContractChanges && (
-          <p className="mt-3 text-xs text-amber-600">
-            Save the deal preparation form below to create or update the active deal.
-          </p>
-        )}
-      </div>
+      {sortedDeals.length === 0 || overrides?.hasUnsavedContractChanges ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <dt className="text-xs uppercase text-slate-400">Referral</dt>
+              <dd className="text-sm font-medium text-slate-900">{summaryBorrower ?? '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-slate-400">Status</dt>
+              <dd className="text-sm font-medium text-slate-900">{summaryStatusLabel ?? '—'}</dd>
+            </div>
+            <div className="sm:col-span-2 lg:col-span-3">
+              <dt className="text-xs uppercase text-slate-400">Property</dt>
+              <dd className="text-sm font-medium text-slate-900">{summaryAddress}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-slate-400">Contract Price</dt>
+              <dd className="text-sm font-medium text-slate-900">{summaryContractPriceDisplay}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-slate-400">Agent Commission %</dt>
+              <dd className="text-sm font-medium text-slate-900">{summaryCommissionPercentDisplay}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-slate-400">Referral Fee %</dt>
+              <dd className="text-sm font-medium text-slate-900">{summaryReferralFeePercentDisplay}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-slate-400">Referral Fee</dt>
+              <dd className="text-sm font-medium text-slate-900">{summaryReferralFeeDisplay}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-slate-400">Net Commission</dt>
+              <dd className="text-sm font-medium text-slate-900">{summaryNetCommissionDisplay}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-slate-400">Deal Side</dt>
+              <dd className="text-sm font-medium text-slate-900">{summaryDealSideDisplay}</dd>
+            </div>
+          </dl>
+          {overrides?.hasUnsavedContractChanges && (
+            <p className="mt-3 text-xs text-amber-600">
+              Save the deal preparation form below to create or update the active deal.
+            </p>
+          )}
+        </div>
+      ) : null}
       {sortedDeals.length === 0 ? (
         <div className="rounded border border-dashed border-slate-300 p-4 text-sm text-slate-600">
           <p>Use the deal preparation form below to create the first deal for this referral.</p>
