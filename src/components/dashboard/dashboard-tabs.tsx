@@ -1,31 +1,9 @@
 'use client';
 
-import {
-  FormEvent,
-  MouseEvent as ReactMouseEvent,
-  ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from 'react';
+import { FormEvent, MouseEvent as ReactMouseEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import { Trash2 } from 'lucide-react';
-import {
-  addDays,
-  addMonths,
-  endOfMonth,
-  endOfWeek,
-  format as formatDate,
-  parseISO,
-  startOfDay,
-  startOfMonth,
-  startOfWeek,
-  startOfYear,
-  subYears
-} from 'date-fns';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatNumber } from '@/utils/formatters';
 
@@ -1192,7 +1170,7 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
   const filterLabel = filterOptions.find((option) => option.value === requestFilter)?.label ?? 'All';
 
   const renderFilterButtons = () => (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex gap-1">
       {filterOptions.map((option) => {
         const isActive = requestFilter === option.value;
         return (
@@ -1200,7 +1178,7 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
             key={option.value}
             type="button"
             onClick={() => setRequestFilter(option.value)}
-            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+            className={`rounded border px-2 py-1 text-xs font-medium transition ${
               isActive
                 ? 'border-transparent bg-slate-900 text-white'
                 : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
