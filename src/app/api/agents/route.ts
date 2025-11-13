@@ -43,7 +43,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     npsScore?: number | null;
   };
 
-  const agents = await Agent.find(filter).lean<AgentLean>();
+  const agents = await Agent.find(filter).lean<AgentLean[]>();
 
   const agentIds = agents.map((agent) => agent._id);
   const npsScores = new Map<string, number | null>();
