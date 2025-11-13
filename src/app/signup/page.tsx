@@ -3,8 +3,9 @@
 export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { signIn } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
 
 const roleOptions = [
   { value: 'agent', label: 'Agent' },
@@ -45,8 +46,20 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const searchParams = useSearchParams();
 
   const callbackUrl = useMemo(() => `/onboarding?role=${encodeURIComponent(role)}`, [role]);
+
+  useEffect(() => {
+    const emailParam = searchParams.get('email');
+    if (emailParam) {
+      setEmail((previous) => (previous ? previous : emailParam));
+    }
+    const roleParam = searchParams.get('role');
+    if (roleParam && roleOptions.some((option) => option.value === roleParam)) {
+      setRole((previous) => (previous === roleParam ? previous : (roleParam as Role)));
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

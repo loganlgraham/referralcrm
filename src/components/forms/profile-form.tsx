@@ -1,10 +1,11 @@
 'use client';
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useId, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
 
 import { fetcher } from '@/utils/fetcher';
+import { useCoverageSuggestions } from '@/hooks/use-coverage-suggestions';
 
 interface AgentProfileResponse {
   role: 'agent';
@@ -14,6 +15,8 @@ interface AgentProfileResponse {
   phone: string;
   statesLicensed: string[];
   coverageAreas: string[];
+  licenseNumber?: string;
+  brokerage?: string;
 }
 
 interface McProfileResponse {
@@ -36,6 +39,8 @@ type ProfileResponse = AgentProfileResponse | McProfileResponse | AdminProfileRe
 export function ProfileForm() {
   const { data, mutate } = useSWR<ProfileResponse>('/api/me/profile', fetcher);
   const [saving, setSaving] = useState(false);
+  const { suggestions } = useCoverageSuggestions();
+  const datalistId = useId();
 
   const initialState = useMemo(() => {
     if (!data) {
@@ -45,6 +50,8 @@ export function ProfileForm() {
         phone: '',
         states: '',
         coverage: '',
+        licenseNumber: '',
+        brokerage: '',
       };
     }
 
@@ -55,6 +62,8 @@ export function ProfileForm() {
         phone: data.phone ?? '',
         states: (data.statesLicensed ?? []).join(', '),
         coverage: (data.coverageAreas ?? []).join(', '),
+        licenseNumber: data.licenseNumber ?? '',
+        brokerage: data.brokerage ?? '',
       };
     }
 
@@ -65,6 +74,8 @@ export function ProfileForm() {
         phone: data.phone ?? '',
         states: (data.licensedStates ?? []).join(', '),
         coverage: '',
+        licenseNumber: '',
+        brokerage: '',
       };
     }
 
@@ -74,6 +85,8 @@ export function ProfileForm() {
       phone: '',
       states: '',
       coverage: '',
+      licenseNumber: '',
+      brokerage: '',
     };
   }, [data]);
 
@@ -116,6 +129,8 @@ export function ProfileForm() {
           .split(',')
           .map((value) => value.trim())
           .filter(Boolean);
+        payload.licenseNumber = form.licenseNumber.trim();
+        payload.brokerage = form.brokerage.trim();
       }
 
       if (data.role === 'mc') {
@@ -188,6 +203,30 @@ export function ProfileForm() {
         </label>
         {data.role === 'agent' && (
           <label className="text-sm font-semibold text-slate-600">
+            License number
+            <input
+              type="text"
+              value={form.licenseNumber}
+              onChange={handleChange('licenseNumber')}
+              className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+              disabled={saving}
+            />
+          </label>
+        )}
+        {data.role === 'agent' && (
+          <label className="text-sm font-semibold text-slate-600">
+            Brokerage
+            <input
+              type="text"
+              value={form.brokerage}
+              onChange={handleChange('brokerage')}
+              className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+              disabled={saving}
+            />
+          </label>
+        )}
+        {data.role === 'agent' && (
+          <label className="text-sm font-semibold text-slate-600">
             Areas covered (zip, city, or county)
             <input
               type="text"
@@ -195,6 +234,7 @@ export function ProfileForm() {
               onChange={handleChange('coverage')}
               className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
               placeholder="Denver, 80202, Jefferson County"
+              list={datalistId}
               disabled={saving}
             />
           </label>
@@ -214,6 +254,14 @@ export function ProfileForm() {
         )}
       </div>
 
+      {data.role === 'agent' && suggestions.length > 0 && (
+        <datalist id={datalistId}>
+          {suggestions.map((suggestion) => (
+            <option key={suggestion.id} value={suggestion.value} />
+          ))}
+        </datalist>
+      )}
+
       <button
         type="submit"
         disabled={saving || (data.role !== 'agent' && data.role !== 'mc')}
@@ -224,3 +272,4 @@ export function ProfileForm() {
     </form>
   );
 }
+

@@ -5,17 +5,17 @@ import { connectMongo } from '@/lib/mongoose';
 import { Agent } from '@/models/agent';
 import { User } from '@/models/user';
 import { getCurrentSession } from '@/lib/auth';
+import { computeAgentMetrics, EMPTY_AGENT_METRICS } from '@/lib/server/agent-metrics';
+import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
 
 const updateAgentSchema = z.object({
   name: z.string().trim().min(1).optional(),
   email: z.string().trim().email().transform((value) => value.toLowerCase()).optional(),
   phone: z.string().trim().optional(),
+  licenseNumber: z.string().trim().optional(),
+  brokerage: z.string().trim().optional(),
   statesLicensed: z.array(z.string().trim().min(2)).optional(),
   coverageAreas: z.array(z.string().trim().min(1)).optional(),
-  closings12mo: z.number().int().min(0).optional(),
-  closingRatePercentage: z.number().min(0).max(100).nullable().optional(),
-  npsScore: z.number().min(0).max(100).nullable().optional(),
-  avgResponseHours: z.number().min(0).nullable().optional(),
 });
 
 interface Params {
@@ -58,29 +58,27 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
   if (parsed.data.phone !== undefined) {
     update.phone = parsed.data.phone;
   }
+  if (parsed.data.licenseNumber !== undefined) {
+    update.licenseNumber = parsed.data.licenseNumber;
+  }
+  if (parsed.data.brokerage !== undefined) {
+    update.brokerage = parsed.data.brokerage;
+  }
   if (parsed.data.statesLicensed !== undefined) {
     update.statesLicensed = parsed.data.statesLicensed;
   }
   if (parsed.data.coverageAreas !== undefined) {
     update.zipCoverage = parsed.data.coverageAreas;
   }
-  if (parsed.data.closings12mo !== undefined && isAdmin) {
-    update.closings12mo = parsed.data.closings12mo;
-  }
-  if (parsed.data.closingRatePercentage !== undefined && isAdmin) {
-    update.closingRatePercentage = parsed.data.closingRatePercentage;
-  }
-  if (parsed.data.npsScore !== undefined && isAdmin) {
-    update.npsScore = parsed.data.npsScore;
-  }
-  if (parsed.data.avgResponseHours !== undefined && isAdmin) {
-    update.avgResponseHours = parsed.data.avgResponseHours;
-  }
 
   const updated = await Agent.findByIdAndUpdate(params.id, { $set: update }, { new: true });
 
   if (!updated) {
     return new NextResponse('Not found', { status: 404 });
+  }
+
+  if (parsed.data.coverageAreas && parsed.data.coverageAreas.length > 0) {
+    await rememberCoverageSuggestions(parsed.data.coverageAreas);
   }
 
   if (updated.userId && (parsed.data.name !== undefined || parsed.data.email !== undefined)) {
@@ -96,6 +94,12 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     }
   }
 
+  const metricsMap = await computeAgentMetrics([updated._id], new Map([[updated._id.toString(), updated.npsScore ?? null]]));
+  const metrics = metricsMap.get(updated._id.toString()) ?? {
+    ...EMPTY_AGENT_METRICS,
+    npsScore: updated.npsScore ?? null
+  };
+
   const updatedAgent = updated.toObject();
 
   return NextResponse.json({
@@ -103,11 +107,11 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     name: updatedAgent.name,
     email: updatedAgent.email,
     phone: updatedAgent.phone,
+    licenseNumber: updatedAgent.licenseNumber ?? '',
+    brokerage: updatedAgent.brokerage ?? '',
     statesLicensed: updatedAgent.statesLicensed ?? [],
     coverageAreas: updatedAgent.zipCoverage ?? [],
-    closings12mo: updatedAgent.closings12mo ?? 0,
-    closingRatePercentage: updatedAgent.closingRatePercentage ?? null,
-    npsScore: updatedAgent.npsScore ?? null,
-    avgResponseHours: updatedAgent.avgResponseHours ?? null,
+    metrics,
+    npsScore: metrics.npsScore,
   });
 }

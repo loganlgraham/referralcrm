@@ -18,6 +18,7 @@ const agentSchema = new Schema(
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true, index: true },
     phone: { type: String, required: false },
+    licenseNumber: { type: String },
     statesLicensed: [{ type: String, index: true }],
     zipCoverage: [{ type: String, index: true }],
     active: { type: Boolean, default: true },
