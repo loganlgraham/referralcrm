@@ -7,6 +7,8 @@ import { getCurrentSession } from '@/lib/auth';
 import { canManageReferral } from '@/lib/rbac';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
+import { Types } from 'mongoose';
+
 import { LenderMC } from '@/models/lender';
 
 interface Params {
@@ -66,10 +68,14 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   referral.audit.push(auditEntry as any);
   await referral.save();
 
-  const [previousLenderDoc, nextLenderDoc] = await Promise.all([
-    previousLender ? LenderMC.findById(previousLender).select('name').lean() : null,
-    LenderMC.findById(parsed.data.lenderId).select('name').lean(),
-  ]);
+  const previousLenderDoc = previousLender
+    ? await LenderMC.findById(previousLender)
+        .select('name')
+        .lean<{ _id: Types.ObjectId; name?: string }>()
+    : null;
+  const nextLenderDoc = await LenderMC.findById(parsed.data.lenderId)
+    .select('name')
+    .lean<{ _id: Types.ObjectId; name?: string }>();
 
   const previousLabel = previousLenderDoc?.name?.trim() || 'Unassigned';
   const nextLabel = nextLenderDoc?.name?.trim() || 'Unassigned';
