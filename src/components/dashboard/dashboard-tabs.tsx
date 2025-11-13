@@ -4,10 +4,12 @@ import { FormEvent, MouseEvent as ReactMouseEvent, ReactNode, useEffect, useMemo
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import { Trash2 } from 'lucide-react';
+import { format as formatDate, startOfDay, startOfMonth, startOfWeek, startOfYear, subYears } from 'date-fns';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatNumber } from '@/utils/formatters';
 
-type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd';
+type TimeframePreset = 'day' | 'week' | 'month' | 'year' | 'ytd';
+type TimeframeKey = TimeframePreset | 'custom';
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
 
 interface TrendPoint {
@@ -52,6 +54,8 @@ interface DashboardResponse {
   timeframe: {
     key: TimeframeKey;
     label: string;
+    start: string | null;
+    end: string | null;
   };
   permissions: {
     canViewGlobal: boolean;
@@ -132,7 +136,7 @@ interface DashboardResponse {
   };
 }
 
-const TIMEFRAME_OPTIONS: { label: string; value: TimeframeKey }[] = [
+const TIMEFRAME_PRESETS: { label: string; value: TimeframePreset }[] = [
   { label: 'Day', value: 'day' },
   { label: 'Week', value: 'week' },
   { label: 'Month', value: 'month' },
@@ -161,6 +165,48 @@ const DEFAULT_NETWORK_FILTER: Record<TabValue, NetworkFilter> = {
   agent: 'ALL',
   admin: 'AHA_OOS'
 };
+
+type DateRange = { start: string; end: string };
+
+const DATE_INPUT_FORMAT = 'yyyy-MM-dd';
+
+function formatDateInput(date: Date): string {
+  return formatDate(date, DATE_INPUT_FORMAT);
+}
+
+function getPresetRange(preset: TimeframePreset): DateRange {
+  const now = new Date();
+  const end = formatDateInput(now);
+
+  switch (preset) {
+    case 'day': {
+      const dayStart = startOfDay(now);
+      const formatted = formatDateInput(dayStart);
+      return { start: formatted, end: formatted };
+    }
+    case 'week': {
+      const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+      return { start: formatDateInput(weekStart), end };
+    }
+    case 'year': {
+      const yearStart = startOfDay(subYears(now, 1));
+      return { start: formatDateInput(yearStart), end };
+    }
+    case 'ytd': {
+      const start = startOfYear(now);
+      return { start: formatDateInput(start), end };
+    }
+    case 'month':
+    default: {
+      const start = startOfMonth(now);
+      return { start: formatDateInput(start), end };
+    }
+  }
+}
+
+function isDateRangeValid(range: DateRange): boolean {
+  return Boolean(range.start && range.end && range.start <= range.end);
+}
 
 function NetworkFilterButtons({
   value,
@@ -736,15 +782,11 @@ function PreApprovalConversionSection({
 function MainDashboard({
   data,
   canEditPreApprovals,
-  onPreApprovalSaved,
-  networkFilter,
-  onNetworkFilterChange
+  onPreApprovalSaved
 }: {
   data: DashboardResponse['main'];
   canEditPreApprovals: boolean;
   onPreApprovalSaved: () => void;
-  networkFilter: NetworkFilter;
-  onNetworkFilterChange: (value: NetworkFilter) => void;
 }) {
   const summary = data.summary;
 
@@ -795,10 +837,6 @@ function MainDashboard({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <NetworkFilterButtons value={networkFilter} onChange={onNetworkFilterChange} />
-      </div>
-
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {highlights.map((card) => (
           <SummaryCard key={card.title} title={card.title} value={card.value} helper={card.helper} />
@@ -839,15 +877,7 @@ function MainDashboard({
   );
 }
 
-function McDashboard({
-  data,
-  networkFilter,
-  onNetworkFilterChange
-}: {
-  data: DashboardResponse['mc'];
-  networkFilter: NetworkFilter;
-  onNetworkFilterChange: (value: NetworkFilter) => void;
-}) {
+function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
   const [requestFilter, setRequestFilter] = useState<'all' | 'AHA' | 'AHA_OOS'>('all');
 
   const filterOptions: { label: string; value: 'all' | 'AHA' | 'AHA_OOS' }[] = [
@@ -894,10 +924,6 @@ function McDashboard({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <NetworkFilterButtons value={networkFilter} onChange={onNetworkFilterChange} />
-      </div>
-
       <LineChartCard
         title="Requests received"
         data={selectedTrend}
@@ -919,15 +945,7 @@ function McDashboard({
   );
 }
 
-function AgentDashboard({
-  data,
-  networkFilter,
-  onNetworkFilterChange
-}: {
-  data: DashboardResponse['agent'];
-  networkFilter: NetworkFilter;
-  onNetworkFilterChange: (value: NetworkFilter) => void;
-}) {
+function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
   const averageCommissionDisplay =
     data.averageCommissionPercent > 0 ? `${data.averageCommissionPercent.toFixed(2)}%` : '—';
   const commissionHelper =
@@ -937,10 +955,6 @@ function AgentDashboard({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <NetworkFilterButtons value={networkFilter} onChange={onNetworkFilterChange} />
-      </div>
-
       <SummaryCard title="Average agent commission" value={averageCommissionDisplay} helper={commissionHelper} />
       <div className="grid gap-4 lg:grid-cols-2">
         <LeaderboardTable title="Referrals by agent" entries={data.referralLeaderboard} valueLabel="Referrals" />
@@ -958,15 +972,7 @@ function AgentDashboard({
   );
 }
 
-function AdminDashboard({
-  data,
-  networkFilter,
-  onNetworkFilterChange
-}: {
-  data: DashboardResponse['admin'];
-  networkFilter: NetworkFilter;
-  onNetworkFilterChange: (value: NetworkFilter) => void;
-}) {
+function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
   const assignmentRate = data.totalReferrals
     ? (data.assignedReferrals / data.totalReferrals) * 100
     : 0;
@@ -1001,10 +1007,6 @@ function AdminDashboard({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <NetworkFilterButtons value={networkFilter} onChange={onNetworkFilterChange} />
-      </div>
-
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => (
           <SummaryCard key={card.title} title={card.title} value={card.value} helper={card.helper} />
@@ -1017,17 +1019,26 @@ function AdminDashboard({
 export function DashboardTabs() {
   const [activeTab, setActiveTab] = useState<(typeof TAB_OPTIONS)[number]['value']>('main');
   const [timeframe, setTimeframe] = useState<TimeframeKey>('month');
+  const [customRange, setCustomRange] = useState<DateRange>(() => getPresetRange('month'));
   const [networkFilters, setNetworkFilters] = useState<Record<TabValue, NetworkFilter>>(() => ({
     ...DEFAULT_NETWORK_FILTER
   }));
   const { data: session } = useSession();
 
   const activeNetworkFilter = networkFilters[activeTab] ?? 'ALL';
+  const { start: customStart, end: customEnd } = customRange;
 
-  const swrKey = useMemo(
-    () => `/api/dashboard?timeframe=${timeframe}&network=${activeNetworkFilter}`,
-    [timeframe, activeNetworkFilter]
-  );
+  const swrKey = useMemo<string | null>(() => {
+    const params = new URLSearchParams({ timeframe, network: activeNetworkFilter });
+    if (timeframe === 'custom') {
+      if (!customStart || !customEnd || customStart > customEnd) {
+        return null;
+      }
+      params.set('start', customStart);
+      params.set('end', customEnd);
+    }
+    return `/api/dashboard?${params.toString()}`;
+  }, [timeframe, activeNetworkFilter, customStart, customEnd]);
 
   const { data, error, isLoading, mutate } = useSWR<DashboardResponse>(swrKey, fetcher, {
     refreshInterval: 60_000
@@ -1040,6 +1051,18 @@ export function DashboardTabs() {
       }
       return { ...prev, [tab]: value };
     });
+  };
+
+  useEffect(() => {
+    if (timeframe === 'custom') {
+      return;
+    }
+    setCustomRange(getPresetRange(timeframe));
+  }, [timeframe]);
+
+  const handleCustomRangeChange = (field: keyof DateRange, value: string) => {
+    setCustomRange((prev) => ({ ...prev, [field]: value }));
+    setTimeframe('custom');
   };
 
   const role = session?.user?.role ?? data?.permissions?.role ?? null;
@@ -1067,8 +1090,15 @@ export function DashboardTabs() {
   }, [visibleTabs, activeTab]);
 
   const handlePreApprovalSaved = () => {
+    if (!swrKey) {
+      return;
+    }
     void mutate();
   };
+
+  const isCustomRangeInvalid = timeframe === 'custom' && !isDateRangeValid(customRange);
+  const maxSelectableDate = formatDateInput(new Date());
+  const showSkeleton = Boolean(swrKey) && (isLoading || !data) && !isCustomRangeInvalid;
 
   if (error) {
     return (
@@ -1083,13 +1113,38 @@ export function DashboardTabs() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Performance dashboards</h1>
-          <p className="text-sm text-slate-500">{data?.timeframe.label ?? 'Loading timeframe...'}</p>
+          <p className="text-sm text-slate-500">
+            {data?.timeframe.label ?? (timeframe === 'custom' && !isCustomRangeInvalid ? 'Custom range' : 'Loading timeframe...')}
+          </p>
         </div>
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="flex flex-col items-start gap-1">
+        <div className="flex flex-wrap items-end justify-end gap-6">
+          <div className="flex flex-col items-end gap-2">
             <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Timeframe</span>
-            <div className="flex flex-wrap items-center gap-2">
-              {TIMEFRAME_OPTIONS.map((option) => {
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <label className="flex items-center gap-2 text-xs text-slate-500">
+                <span>Start</span>
+                <input
+                  type="date"
+                  value={customStart}
+                  max={customEnd || maxSelectableDate}
+                  onChange={(event) => handleCustomRangeChange('start', event.target.value)}
+                  className="w-36 rounded border border-slate-200 px-2 py-1 text-sm text-slate-700"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-xs text-slate-500">
+                <span>End</span>
+                <input
+                  type="date"
+                  value={customEnd}
+                  min={customStart || undefined}
+                  max={maxSelectableDate}
+                  onChange={(event) => handleCustomRangeChange('end', event.target.value)}
+                  className="w-36 rounded border border-slate-200 px-2 py-1 text-sm text-slate-700"
+                />
+              </label>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              {TIMEFRAME_PRESETS.map((option) => {
                 const isActive = timeframe === option.value;
                 return (
                   <button
@@ -1107,8 +1162,11 @@ export function DashboardTabs() {
                 );
               })}
             </div>
+            {timeframe === 'custom' && isCustomRangeInvalid ? (
+              <p className="text-xs text-red-600">Select a valid start and end date to update the dashboards.</p>
+            ) : null}
           </div>
-          <div className="flex flex-col items-start gap-1">
+          <div className="flex flex-col items-end gap-2">
             <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Network</span>
             <NetworkFilterButtons
               value={activeNetworkFilter}
@@ -1138,7 +1196,7 @@ export function DashboardTabs() {
         })}
       </div>
 
-      {isLoading || !data ? (
+      {showSkeleton ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, index) => (
             <div key={index} className="h-32 animate-pulse rounded-lg border border-slate-200 bg-white" />
@@ -1146,38 +1204,18 @@ export function DashboardTabs() {
         </div>
       ) : null}
 
-      {data ? (
+      {isCustomRangeInvalid ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Select a start and end date to load dashboard metrics.
+        </div>
+      ) : data ? (
         <div>
           {activeTab === 'main' ? (
-            <MainDashboard
-              data={data.main}
-              canEditPreApprovals={canViewGlobal}
-              onPreApprovalSaved={handlePreApprovalSaved}
-              networkFilter={networkFilters.main}
-              onNetworkFilterChange={(value) => handleNetworkFilterChange('main', value)}
-            />
+            <MainDashboard data={data.main} canEditPreApprovals={canViewGlobal} onPreApprovalSaved={handlePreApprovalSaved} />
           ) : null}
-          {activeTab === 'mc' ? (
-            <McDashboard
-              data={data.mc}
-              networkFilter={networkFilters.mc}
-              onNetworkFilterChange={(value) => handleNetworkFilterChange('mc', value)}
-            />
-          ) : null}
-          {activeTab === 'agent' ? (
-            <AgentDashboard
-              data={data.agent}
-              networkFilter={networkFilters.agent}
-              onNetworkFilterChange={(value) => handleNetworkFilterChange('agent', value)}
-            />
-          ) : null}
-          {activeTab === 'admin' ? (
-            <AdminDashboard
-              data={data.admin}
-              networkFilter={networkFilters.admin}
-              onNetworkFilterChange={(value) => handleNetworkFilterChange('admin', value)}
-            />
-          ) : null}
+          {activeTab === 'mc' ? <McDashboard data={data.mc} /> : null}
+          {activeTab === 'agent' ? <AgentDashboard data={data.agent} /> : null}
+          {activeTab === 'admin' ? <AdminDashboard data={data.admin} /> : null}
         </div>
       ) : null}
     </div>

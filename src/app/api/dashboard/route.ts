@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Types } from 'mongoose';
 import {
   differenceInCalendarDays,
+  endOfDay,
   format,
   startOfDay,
   startOfHour,
@@ -19,13 +20,14 @@ import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { PreApprovalMetric } from '@/models/pre-approval-metric';
 
-type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd';
+type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd' | 'custom';
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
 
 interface TimeframeInfo {
   key: TimeframeKey;
   label: string;
   start?: Date;
+  end?: Date;
 }
 
 interface DashboardRequestContext {
@@ -94,25 +96,100 @@ const TIMEFRAME_LABELS: Record<TimeframeKey, string> = {
   week: 'This Week',
   month: 'This Month',
   year: 'Last 12 Months',
-  ytd: 'Year to Date'
+  ytd: 'Year to Date',
+  custom: 'Custom range'
 };
 
-function parseTimeframe(value: string | null): TimeframeInfo {
-  const key = (value as TimeframeKey) || 'month';
-  const now = new Date();
+function parseDateOnly(value: string | null): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed;
+}
 
-  switch (key) {
+function parseTimeframe(
+  value: string | null,
+  startParam: string | null,
+  endParam: string | null
+): TimeframeInfo {
+  const now = new Date();
+  const normalizedKey: TimeframeKey =
+    value === 'day' ||
+    value === 'week' ||
+    value === 'month' ||
+    value === 'year' ||
+    value === 'ytd' ||
+    value === 'custom'
+      ? (value as TimeframeKey)
+      : 'month';
+
+  if (normalizedKey === 'custom') {
+    const startDate = parseDateOnly(startParam);
+    const endDate = parseDateOnly(endParam);
+
+    let start = startDate ? startOfDay(startDate) : null;
+    let end = endDate ? endOfDay(endDate) : null;
+
+    if (start && end && start > end) {
+      const temp = start;
+      start = end;
+      end = temp;
+    }
+
+    const fallbackStart = start ?? startOfMonth(now);
+    const fallbackEnd = end ?? endOfDay(now);
+    const label =
+      start && end
+        ? `Custom (${format(start, 'MMM d, yyyy')} – ${format(end, 'MMM d, yyyy')})`
+        : TIMEFRAME_LABELS.custom;
+
+    return {
+      key: 'custom',
+      label,
+      start: start ?? fallbackStart,
+      end: end ?? fallbackEnd
+    };
+  }
+
+  switch (normalizedKey) {
     case 'day':
-      return { key: 'day', label: TIMEFRAME_LABELS.day, start: startOfDay(now) };
+      return {
+        key: 'day',
+        label: TIMEFRAME_LABELS.day,
+        start: startOfDay(now),
+        end: endOfDay(now)
+      };
     case 'week':
-      return { key: 'week', label: TIMEFRAME_LABELS.week, start: startOfWeek(now, { weekStartsOn: 1 }) };
+      return {
+        key: 'week',
+        label: TIMEFRAME_LABELS.week,
+        start: startOfWeek(now, { weekStartsOn: 1 }),
+        end: endOfDay(now)
+      };
     case 'year':
-      return { key: 'year', label: TIMEFRAME_LABELS.year, start: subYears(now, 1) };
+      return {
+        key: 'year',
+        label: TIMEFRAME_LABELS.year,
+        start: subYears(now, 1),
+        end: endOfDay(now)
+      };
     case 'ytd':
-      return { key: 'ytd', label: TIMEFRAME_LABELS.ytd, start: startOfYear(now) };
+      return {
+        key: 'ytd',
+        label: TIMEFRAME_LABELS.ytd,
+        start: startOfYear(now),
+        end: endOfDay(now)
+      };
     case 'month':
     default:
-      return { key: 'month', label: TIMEFRAME_LABELS.month, start: startOfMonth(now) };
+      return {
+        key: 'month',
+        label: TIMEFRAME_LABELS.month,
+        start: startOfMonth(now),
+        end: endOfDay(now)
+      };
   }
 }
 
@@ -147,7 +224,11 @@ function resolveMetricDate(payment: AggregatedPayment): Date {
 }
 
 function createDashboardContext(request: NextRequest): DashboardRequestContext {
-  const timeframe = parseTimeframe(request.nextUrl.searchParams.get('timeframe'));
+  const timeframe = parseTimeframe(
+    request.nextUrl.searchParams.get('timeframe'),
+    request.nextUrl.searchParams.get('start'),
+    request.nextUrl.searchParams.get('end')
+  );
   const referralMatch: Record<string, unknown> = { deletedAt: null };
   const networkParam = request.nextUrl.searchParams.get('network');
   const normalizedNetwork =
@@ -169,6 +250,27 @@ function createDashboardContext(request: NextRequest): DashboardRequestContext {
 
 function groupTrendByTimeframe(dates: Date[], timeframe: TimeframeInfo): TrendPoint[] {
   if (dates.length === 0) return [];
+
+  if (timeframe.key === 'custom') {
+    const firstDate = new Date(dates[0]);
+    const earliest = dates.reduce((min, current) => {
+      const candidate = new Date(current);
+      return candidate < min ? candidate : min;
+    }, firstDate);
+    const latest = dates.reduce((max, current) => {
+      const candidate = new Date(current);
+      return candidate > max ? candidate : max;
+    }, firstDate);
+
+    const rangeStart = timeframe.start ?? earliest;
+    const rangeEnd = timeframe.end ?? latest;
+    const dayDiff = Math.max(differenceInCalendarDays(rangeEnd, rangeStart), 0);
+
+    const derivedKey: TimeframeKey =
+      dayDiff <= 1 ? 'day' : dayDiff <= 31 ? 'week' : dayDiff <= 180 ? 'month' : 'year';
+
+    return groupTrendByTimeframe(dates, { ...timeframe, key: derivedKey });
+  }
 
   const buckets = new Map<string, { label: string; value: number; sort: number }>();
 
@@ -352,11 +454,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   context.paymentMatch = paymentMatch;
 
   const timeframeStart = timeframe.start;
+  const timeframeEnd = timeframe.end;
+
+  const createdAtMatch: Record<string, Date> = {};
+  if (timeframeStart) {
+    createdAtMatch.$gte = timeframeStart;
+  }
+  if (timeframeEnd) {
+    createdAtMatch.$lte = timeframeEnd;
+  }
 
   const [referrals, payments] = await Promise.all([
     Referral.find({
       ...referralMatch,
-      ...(timeframeStart ? { createdAt: { $gte: timeframeStart } } : {})
+      ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
     })
       .select(
         'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser sla'
@@ -386,9 +497,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     metricDate: resolveMetricDate(payment)
   }));
 
-  const filteredPayments = timeframeStart
-    ? paymentsWithMetric.filter((payment) => payment.metricDate >= timeframeStart)
-    : paymentsWithMetric;
+  const filteredPayments = paymentsWithMetric.filter((payment) => {
+    if (timeframeStart && payment.metricDate < timeframeStart) {
+      return false;
+    }
+    if (timeframeEnd && payment.metricDate > timeframeEnd) {
+      return false;
+    }
+    return true;
+  });
 
   const totalReferrals = referrals.length;
   const referralZipMap = new Map<string, number>();
@@ -999,8 +1116,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       updatedAt: entry.preApprovalsUpdatedAt
     }));
 
+  const timeframeResponse = {
+    key: timeframe.key,
+    label: timeframe.label,
+    start: timeframe.start?.toISOString() ?? null,
+    end: timeframe.end?.toISOString() ?? null
+  };
+
   const responsePayload = {
-    timeframe,
+    timeframe: timeframeResponse,
     permissions: {
       canViewGlobal: role === 'admin',
       role: role ?? null
