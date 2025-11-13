@@ -128,6 +128,67 @@ const formatContractPriceDisplay = (value: string) => {
   return numeric.toLocaleString('en-US');
 };
 
+const centsToCurrencyInput = (value?: number | null) => {
+  if (!value) {
+    return '';
+  }
+  const amount = value / 100;
+  return Number.isInteger(amount) ? amount.toString() : amount.toFixed(2);
+};
+
+const sanitizeCurrencyInput = (value: string) => {
+  if (!value) {
+    return '';
+  }
+  const stripped = value.replace(/[^0-9.]/g, '');
+  if (!stripped) {
+    return '';
+  }
+
+  const [integerPart = '', ...decimalParts] = stripped.split('.');
+  const decimalPart = decimalParts.join('').slice(0, 2);
+  const normalizedInteger = integerPart.replace(/^0+(?=\d)/, '');
+  const hasDecimal = decimalParts.length > 0;
+  const safeInteger = normalizedInteger || (integerPart.length > 0 ? '0' : '');
+
+  if (!hasDecimal) {
+    return safeInteger;
+  }
+
+  const integerPortion = safeInteger || '0';
+  return decimalPart.length > 0 ? `${integerPortion}.${decimalPart}` : `${integerPortion}.`;
+};
+
+const formatCurrencyInputDisplay = (value: string) => {
+  if (!value) {
+    return '';
+  }
+
+  const [integerPart = '', decimalPart] = value.split('.');
+  const hasDecimal = decimalPart !== undefined;
+  const sanitizedInteger = integerPart.replace(/[^0-9]/g, '');
+  const integerValue = sanitizedInteger ? Number(sanitizedInteger) : 0;
+  const formattedInteger = sanitizedInteger
+    ? integerValue.toLocaleString('en-US')
+    : hasDecimal
+    ? '0'
+    : '';
+
+  if (!hasDecimal) {
+    return formattedInteger;
+  }
+
+  if (decimalPart === undefined) {
+    return formattedInteger;
+  }
+
+  if (decimalPart.length === 0) {
+    return `${formattedInteger}.`;
+  }
+
+  return `${formattedInteger}.${decimalPart}`;
+};
+
 export function StatusChanger({
   referralId,
   status,
@@ -146,9 +207,7 @@ export function StatusChanger({
   const [loading, setLoading] = useState(false);
   const [contractForm, setContractForm] = useState<ContractFormState>(() => buildInitialFormState(contractDetails));
   const [contractDirty, setContractDirty] = useState(false);
-  const [preApproval, setPreApproval] = useState(
-    preApprovalAmountCents ? (preApprovalAmountCents / 100).toString() : ''
-  );
+  const [preApproval, setPreApproval] = useState(() => centsToCurrencyInput(preApprovalAmountCents));
   const [preApprovalDirty, setPreApprovalDirty] = useState(false);
   const [preApprovalSaving, setPreApprovalSaving] = useState(false);
 
@@ -248,7 +307,7 @@ export function StatusChanger({
   ]);
 
   useEffect(() => {
-    setPreApproval(preApprovalAmountCents ? (preApprovalAmountCents / 100).toString() : '');
+    setPreApproval(centsToCurrencyInput(preApprovalAmountCents));
     setPreApprovalDirty(false);
   }, [preApprovalAmountCents]);
 
@@ -477,7 +536,8 @@ export function StatusChanger({
   };
 
   const handlePreApprovalChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setPreApproval(event.target.value);
+    const sanitized = sanitizeCurrencyInput(event.target.value);
+    setPreApproval(sanitized);
     setPreApprovalDirty(true);
   };
 
@@ -537,13 +597,12 @@ export function StatusChanger({
           <label className="text-sm text-slate-600">
             Amount ($)
             <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={preApproval}
+              type="text"
+              inputMode="decimal"
+              value={formatCurrencyInputDisplay(preApproval)}
               onChange={handlePreApprovalChange}
               className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
-              placeholder="350000"
+              placeholder="300,000"
               disabled={preApprovalSaving || loading}
             />
           </label>
