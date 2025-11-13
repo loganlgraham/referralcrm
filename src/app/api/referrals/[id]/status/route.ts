@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { differenceInDays } from 'date-fns';
+import { differenceInDays, differenceInMinutes } from 'date-fns';
 
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
@@ -46,6 +46,12 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const now = new Date();
   const nextStatus = parsed.data.status;
   const previousStatus = referral.status;
+  const previousStatusUpdatedAt =
+    referral.statusLastUpdated instanceof Date
+      ? referral.statusLastUpdated
+      : referral.statusLastUpdated
+      ? new Date(referral.statusLastUpdated)
+      : null;
   referral.status = nextStatus;
   referral.statusLastUpdated = now;
   referral.audit = referral.audit || [];
@@ -82,6 +88,44 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     sla.lastUnderContractAt = now;
     slaModified = true;
   } else if (PRE_CONTRACT_STATUSES.has(nextStatus)) {
+    if (nextStatus === 'Paired') {
+      sla.lastPairedAt = now;
+      slaModified = true;
+    } else if (nextStatus === 'In Communication') {
+      let pairedAt: Date | null = null;
+      if (sla.lastPairedAt) {
+        const candidate = sla.lastPairedAt instanceof Date ? sla.lastPairedAt : new Date(sla.lastPairedAt);
+        if (!Number.isNaN(candidate.getTime())) {
+          pairedAt = candidate;
+        }
+      }
+      if (!pairedAt && previousStatus === 'Paired' && previousStatusUpdatedAt) {
+        pairedAt = previousStatusUpdatedAt;
+      }
+      if (!pairedAt) {
+        const auditEntries = Array.isArray(referral.audit) ? referral.audit : [];
+        for (let index = auditEntries.length - 1; index >= 0; index -= 1) {
+          const entry = auditEntries[index];
+          if (entry?.field === 'status' && entry.newValue === 'Paired' && entry.timestamp) {
+            const timestamp = entry.timestamp instanceof Date ? entry.timestamp : new Date(entry.timestamp);
+            if (!Number.isNaN(timestamp.getTime())) {
+              pairedAt = timestamp;
+              break;
+            }
+          }
+        }
+      }
+      if (pairedAt) {
+        const minutes = Math.max(differenceInMinutes(now, pairedAt), 0);
+        sla.timeToFirstAgentContactHours = Math.round((minutes / 60) * 10) / 10;
+        sla.lastPairedAt = pairedAt;
+        slaModified = true;
+      }
+    } else if (nextStatus === 'New Lead' && sla.lastPairedAt) {
+      sla.lastPairedAt = null;
+      slaModified = true;
+    }
+
     if (sla.contractToCloseMinutes != null) {
       sla.previousContractToCloseMinutes = sla.contractToCloseMinutes;
     }

@@ -138,7 +138,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let referralMatch: Partial<Record<'lender' | 'assignedAgent', unknown>> | null = null;
 
   let referralKey: 'lender' | 'assignedAgent' | null = null;
-  let agentProfile: { avgResponseHours: number | null; npsScore: number | null } | null = null;
+  let agentProfile: { npsScore: number | null } | null = null;
 
   if (role === 'mc') {
     const lender = await LenderMC.findOne({ userId }).select('_id');
@@ -150,7 +150,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   if (role === 'agent') {
-    const agent = await Agent.findOne({ userId }).select('_id avgResponseHours npsScore');
+    const agent = await Agent.findOne({ userId }).select('_id npsScore');
     if (!agent) {
       return NextResponse.json({ role, metrics: null, timeframeLabel: timeframe.label });
     }
@@ -158,8 +158,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     referralKey = 'assignedAgent';
     const agentData = agent.toObject();
     agentProfile = {
-      avgResponseHours:
-        typeof agentData.avgResponseHours === 'number' ? agentData.avgResponseHours : null,
       npsScore: typeof agentData.npsScore === 'number' ? agentData.npsScore : null
     };
   }
@@ -174,7 +172,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       ...referralMatch,
       createdAt: { $gte: timeframe.start, $lte: timeframe.end }
     })
-      .select('createdAt status')
+      .select('createdAt status sla.timeToFirstAgentContactHours')
       .lean(),
     Payment.aggregate([
       {
@@ -240,6 +238,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       })()
     : undefined;
 
+  const responseSamples = referrals
+    .map((referral: any) => referral.sla?.timeToFirstAgentContactHours ?? null)
+    .filter((value): value is number => value != null);
+
+  const avgResponseHours = responseSamples.length
+    ? responseSamples.reduce((sum, value) => sum + value, 0) / responseSamples.length
+    : null;
+
   const metrics = {
     totalReferrals,
     dealsClosed: dealsClosed.length,
@@ -248,7 +254,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     revenueRealizedCents,
     revenueExpectedCents,
     averageCommissionCents,
-    avgResponseHours: agentProfile?.avgResponseHours ?? null,
+    avgResponseHours,
     npsScore: agentProfile?.npsScore ?? null
   };
 

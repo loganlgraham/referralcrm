@@ -19,10 +19,6 @@ interface AgentProfileResponse {
   licenseNumber?: string;
   brokerage?: string;
   markets?: string[];
-  closings12mo?: number;
-  closingRatePercentage?: number | null;
-  npsScore?: number | null;
-  avgResponseHours?: number | null;
   experienceSince?: string | null;
   specialties?: string[];
 }
@@ -53,10 +49,6 @@ type FormState = {
   licenseNumber: string;
   brokerage: string;
   markets: string;
-  closings12mo: string;
-  closingRatePercentage: string;
-  avgResponseHours: string;
-  npsScore: string;
   experienceSince: string;
   specialties: string;
 };
@@ -89,10 +81,6 @@ export function ProfileForm() {
         licenseNumber: '',
         brokerage: '',
         markets: '',
-        closings12mo: '',
-        closingRatePercentage: '',
-        avgResponseHours: '',
-        npsScore: '',
         experienceSince: '',
         specialties: '',
       };
@@ -108,11 +96,6 @@ export function ProfileForm() {
         licenseNumber: data.licenseNumber ?? '',
         brokerage: data.brokerage ?? '',
         markets: (data.markets ?? []).join(', '),
-        closings12mo: typeof data.closings12mo === 'number' ? String(data.closings12mo) : '',
-        closingRatePercentage:
-          typeof data.closingRatePercentage === 'number' ? String(data.closingRatePercentage) : '',
-        avgResponseHours: typeof data.avgResponseHours === 'number' ? String(data.avgResponseHours) : '',
-        npsScore: typeof data.npsScore === 'number' ? String(data.npsScore) : '',
         experienceSince: data.experienceSince ? data.experienceSince.slice(0, 10) : '',
         specialties: (data.specialties ?? []).join(', '),
       };
@@ -128,10 +111,6 @@ export function ProfileForm() {
         licenseNumber: '',
         brokerage: '',
         markets: '',
-        closings12mo: '',
-        closingRatePercentage: '',
-        avgResponseHours: '',
-        npsScore: '',
         experienceSince: '',
         specialties: '',
       };
@@ -146,10 +125,6 @@ export function ProfileForm() {
       licenseNumber: '',
       brokerage: '',
       markets: '',
-      closings12mo: '',
-      closingRatePercentage: '',
-      avgResponseHours: '',
-      npsScore: '',
       experienceSince: '',
       specialties: '',
     };
@@ -224,50 +199,6 @@ export function ProfileForm() {
         payload.markets = parseList(form.markets);
         payload.licenseNumber = form.licenseNumber.trim();
         payload.brokerage = form.brokerage.trim();
-
-        const closingsValue = form.closings12mo.trim();
-        if (closingsValue) {
-          const parsed = Number(closingsValue);
-          if (!Number.isFinite(parsed) || parsed < 0) {
-            throw new Error('Closings (last 12 months) must be a positive number.');
-          }
-          payload.closings12mo = Math.round(parsed);
-        } else {
-          payload.closings12mo = 0;
-        }
-
-        const closingRateValue = form.closingRatePercentage.trim();
-        if (closingRateValue) {
-          const parsed = Number(closingRateValue);
-          if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
-            throw new Error('Closing rate should be between 0 and 100%.');
-          }
-          payload.closingRatePercentage = Number(parsed.toFixed(1));
-        } else {
-          payload.closingRatePercentage = null;
-        }
-
-        const responseHoursValue = form.avgResponseHours.trim();
-        if (responseHoursValue) {
-          const parsed = Number(responseHoursValue);
-          if (!Number.isFinite(parsed) || parsed < 0) {
-            throw new Error('Average response time must be zero or greater.');
-          }
-          payload.avgResponseHours = Number(parsed.toFixed(1));
-        } else {
-          payload.avgResponseHours = null;
-        }
-
-        const npsValue = form.npsScore.trim();
-        if (npsValue) {
-          const parsed = Number(npsValue);
-          if (!Number.isFinite(parsed) || parsed < -100 || parsed > 100) {
-            throw new Error('NPS score should fall between -100 and 100.');
-          }
-          payload.npsScore = Math.round(parsed);
-        } else {
-          payload.npsScore = null;
-        }
 
         payload.specialties = parseList(form.specialties);
 
@@ -597,67 +528,6 @@ export function ProfileForm() {
                 </div>
               </section>
 
-              <section className="space-y-4">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Performance metrics</h2>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm font-semibold text-slate-600">
-                    Closings (last 12 months)
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      value={form.closings12mo}
-                      onChange={handleChange('closings12mo')}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
-                      placeholder="24"
-                      disabled={saving}
-                    />
-                  </label>
-                  <label className="text-sm font-semibold text-slate-600">
-                    Closing rate (%)
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      max={100}
-                      step={0.1}
-                      value={form.closingRatePercentage}
-                      onChange={handleChange('closingRatePercentage')}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
-                      placeholder="42.5"
-                      disabled={saving}
-                    />
-                  </label>
-                  <label className="text-sm font-semibold text-slate-600">
-                    Average response time (hours)
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      step={0.1}
-                      value={form.avgResponseHours}
-                      onChange={handleChange('avgResponseHours')}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
-                      placeholder="2.5"
-                      disabled={saving}
-                    />
-                  </label>
-                  <label className="text-sm font-semibold text-slate-600">
-                    NPS score
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={-100}
-                      max={100}
-                      value={form.npsScore}
-                      onChange={handleChange('npsScore')}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
-                      placeholder="68"
-                      disabled={saving}
-                    />
-                  </label>
-                </div>
-              </section>
             </>
           )}
 

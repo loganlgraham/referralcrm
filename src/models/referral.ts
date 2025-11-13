@@ -137,6 +137,7 @@ const referralSchema = new Schema(
       closedToPaidMinutes: { type: Number, default: null },
       previousContractToCloseMinutes: { type: Number, default: null },
       previousClosedToPaidMinutes: { type: Number, default: null },
+      lastPairedAt: { type: Date, default: null },
       lastUnderContractAt: { type: Date, default: null },
       lastClosedAt: { type: Date, default: null },
       lastPaidAt: { type: Date, default: null }
@@ -205,6 +206,7 @@ export interface ReferralDocument {
     closedToPaidMinutes?: number | null;
     previousContractToCloseMinutes?: number | null;
     previousClosedToPaidMinutes?: number | null;
+    lastPairedAt?: Date | null;
     lastUnderContractAt?: Date | null;
     lastClosedAt?: Date | null;
     lastPaidAt?: Date | null;

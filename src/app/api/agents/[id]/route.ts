@@ -16,6 +16,7 @@ const updateAgentSchema = z.object({
   brokerage: z.string().trim().optional(),
   statesLicensed: z.array(z.string().trim().min(2)).optional(),
   coverageAreas: z.array(z.string().trim().min(1)).optional(),
+  npsScore: z.number().min(-100).max(100).nullable().optional(),
 });
 
 interface Params {
@@ -69,6 +70,12 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
   }
   if (parsed.data.coverageAreas !== undefined) {
     update.zipCoverage = parsed.data.coverageAreas;
+  }
+  if (parsed.data.npsScore !== undefined) {
+    if (!isAdmin) {
+      return new NextResponse('Forbidden', { status: 403 });
+    }
+    update.npsScore = parsed.data.npsScore;
   }
 
   const updated = await Agent.findByIdAndUpdate(params.id, { $set: update }, { new: true });
