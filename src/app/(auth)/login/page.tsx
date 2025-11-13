@@ -101,7 +101,7 @@ function LoginForm() {
   const handleGoogleSignIn = () => {
     setError(null);
     setGoogleLoading(true);
-    void signIn('google', { callbackUrl: googleCallbackUrl }).catch((err) => {
+    void signIn('google', { callbackUrl }).catch((err) => {
       console.error('Failed to start Google sign-in', err);
       setError('Unable to start Google sign in. Please try again.');
       setGoogleLoading(false);
