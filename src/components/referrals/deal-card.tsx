@@ -27,6 +27,9 @@ export interface DealRecord {
   terminatedReason?: TerminatedReason | null;
   agentAttribution?: AgentSelectValue;
   usedAfc?: boolean | null;
+  commissionBasisPoints?: number | null;
+  referralFeeBasisPoints?: number | null;
+  side?: 'buy' | 'sell' | null;
 }
 
 export interface DealOverrides {
@@ -35,6 +38,7 @@ export interface DealOverrides {
   contractPriceCents?: number;
   commissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
+  dealSide?: 'buy' | 'sell';
   hasUnsavedContractChanges?: boolean;
 }
 
@@ -46,6 +50,7 @@ export interface DealSummaryInfo {
   referralFeeDueCents?: number | null;
   commissionBasisPoints?: number | null;
   referralFeeBasisPoints?: number | null;
+  dealSide?: 'buy' | 'sell' | null;
 }
 
 export interface ReferralDealProps {
@@ -56,6 +61,7 @@ export interface ReferralDealProps {
     referralFeeDueCents?: number | null;
     payments?: DealRecord[] | null;
     ahaBucket?: AgentSelectValue | null;
+    dealSide?: 'buy' | 'sell' | null;
   };
   overrides?: DealOverrides;
   summary?: DealSummaryInfo;
@@ -86,6 +92,9 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
       terminatedReason: (deal.terminatedReason as TerminatedReason | undefined) ?? null,
       agentAttribution: (deal.agentAttribution as AgentSelectValue | undefined) ?? '',
       usedAfc: deal.usedAfc ?? false,
+      commissionBasisPoints: deal.commissionBasisPoints ?? null,
+      referralFeeBasisPoints: deal.referralFeeBasisPoints ?? null,
+      side: deal.side ?? null,
     }))
     .sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -176,6 +185,9 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
     overrides?.referralFeeDueCents ?? summary?.referralFeeDueCents ?? referral.referralFeeDueCents ?? null;
   const summaryCommissionBasisPoints =
     overrides?.commissionBasisPoints ?? summary?.commissionBasisPoints ?? null;
+  const summaryReferralFeeBasisPoints =
+    overrides?.referralFeeBasisPoints ?? summary?.referralFeeBasisPoints ?? null;
+  const summaryDealSide = overrides?.dealSide ?? summary?.dealSide ?? referral.dealSide ?? 'buy';
 
   const summaryContractPriceDisplay = summaryContractPriceCents
     ? formatCurrency(summaryContractPriceCents)
@@ -193,6 +205,13 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
       : null;
   const summaryNetCommissionDisplay =
     summaryNetCommissionCents != null ? formatCurrency(summaryNetCommissionCents) : '—';
+  const summaryCommissionPercentDisplay = summaryCommissionBasisPoints
+    ? `${(summaryCommissionBasisPoints / 100).toFixed(2)}%`
+    : '—';
+  const summaryReferralFeePercentDisplay = summaryReferralFeeBasisPoints
+    ? `${(summaryReferralFeeBasisPoints / 100).toFixed(2)}%`
+    : '—';
+  const summaryDealSideDisplay = summaryDealSide === 'sell' ? 'Sell-side' : 'Buy-side';
 
   const getStatusForDeal = (deal: DealRecord): DealStatus => {
     return statusMap[deal._id] ?? ((deal.status as DealStatus | undefined) ?? 'under_contract');
@@ -429,6 +448,18 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
     const usedAfc = afcMap[deal._id] ?? false;
     const assignedBucket = referral.ahaBucket ?? null;
     const matchesAssigned = !assignedBucket || agentSelection === assignedBucket || agentSelection === '';
+    const dealCommissionBasisPoints =
+      overrides?.commissionBasisPoints ?? deal.commissionBasisPoints ?? summary?.commissionBasisPoints ?? null;
+    const dealReferralFeeBasisPoints =
+      overrides?.referralFeeBasisPoints ?? deal.referralFeeBasisPoints ?? summary?.referralFeeBasisPoints ?? null;
+    const dealSide = overrides?.dealSide ?? deal.side ?? summary?.dealSide ?? referral.dealSide ?? 'buy';
+    const dealCommissionPercentDisplay = dealCommissionBasisPoints
+      ? `${(dealCommissionBasisPoints / 100).toFixed(2)}%`
+      : '—';
+    const dealReferralFeePercentDisplay = dealReferralFeeBasisPoints
+      ? `${(dealReferralFeeBasisPoints / 100).toFixed(2)}%`
+      : '—';
+    const dealSideDisplay = dealSide === 'sell' ? 'Sell-side' : 'Buy-side';
 
     const isExpanded = expandedMap[deal._id] ?? false;
 
@@ -536,6 +567,20 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
                 )}
               </div>
             </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs uppercase text-slate-400">Agent Commission %</p>
+                <p className="font-medium text-slate-900">{dealCommissionPercentDisplay}</p>
+              </div>
+              <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs uppercase text-slate-400">Referral Fee %</p>
+                <p className="font-medium text-slate-900">{dealReferralFeePercentDisplay}</p>
+              </div>
+              <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs uppercase text-slate-400">Deal Side</p>
+                <p className="font-medium text-slate-900">{dealSideDisplay}</p>
+              </div>
+            </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded border border-slate-200 bg-slate-50 p-3">
                 <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">
@@ -609,12 +654,24 @@ export function DealCard({ referral, overrides, summary }: ReferralDealProps) {
             <dd className="text-sm font-medium text-slate-900">{summaryContractPriceDisplay}</dd>
           </div>
           <div>
+            <dt className="text-xs uppercase text-slate-400">Agent Commission %</dt>
+            <dd className="text-sm font-medium text-slate-900">{summaryCommissionPercentDisplay}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-slate-400">Referral Fee %</dt>
+            <dd className="text-sm font-medium text-slate-900">{summaryReferralFeePercentDisplay}</dd>
+          </div>
+          <div>
             <dt className="text-xs uppercase text-slate-400">Referral Fee</dt>
             <dd className="text-sm font-medium text-slate-900">{summaryReferralFeeDisplay}</dd>
           </div>
           <div>
             <dt className="text-xs uppercase text-slate-400">Net Commission</dt>
             <dd className="text-sm font-medium text-slate-900">{summaryNetCommissionDisplay}</dd>
+          </div>
+          <div>
+            <dt className="text-xs uppercase text-slate-400">Deal Side</dt>
+            <dd className="text-sm font-medium text-slate-900">{summaryDealSideDisplay}</dd>
           </div>
         </dl>
         {overrides?.hasUnsavedContractChanges && (

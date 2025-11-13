@@ -82,13 +82,17 @@ async function main() {
         newValue: 'In Communication',
         timestamp: new Date()
       }
-    ]
+    ],
+    dealSide: 'buy'
   });
 
   await Payment.create({
     referralId: referral._id,
     status: 'under_contract',
-    expectedAmountCents: referral.referralFeeDueCents
+    expectedAmountCents: referral.referralFeeDueCents,
+    commissionBasisPoints: referral.commissionBasisPoints ?? null,
+    referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
+    side: 'buy'
   });
 
   console.log('Seed data loaded');

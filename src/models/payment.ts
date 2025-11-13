@@ -16,6 +16,13 @@ const paymentSchema = new Schema(
       enum: ['inspection', 'appraisal', 'financing', 'changed_mind'],
       default: null,
     },
+    commissionBasisPoints: { type: Number, default: null },
+    referralFeeBasisPoints: { type: Number, default: null },
+    side: {
+      type: String,
+      enum: ['buy', 'sell'],
+      default: 'buy',
+    },
     agentAttribution: {
       type: String,
       enum: ['AHA', 'AHA_OOS', 'OUTSIDE_AGENT'],

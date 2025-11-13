@@ -92,6 +92,11 @@ const referralSchema = new Schema(
     propertyCity: { type: String, default: '' },
     propertyState: { type: String, default: '' },
     propertyPostalCode: { type: String, default: '' },
+    dealSide: {
+      type: String,
+      enum: ['buy', 'sell'],
+      default: 'buy',
+    },
     stageOnTransfer: { type: String, default: '' },
     initialNotes: { type: String, default: '' },
     loanFileNumber: {
@@ -178,6 +183,7 @@ export interface ReferralDocument {
   estPurchasePriceCents?: number;
   commissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
+  dealSide?: 'buy' | 'sell';
   referralFeeDueCents?: number;
   notes?: {
     _id: Types.ObjectId;

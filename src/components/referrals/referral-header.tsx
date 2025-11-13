@@ -50,6 +50,7 @@ interface FinancialSnapshot {
   propertyPostalCode?: string;
   statusLastUpdated?: string;
   daysInStatus?: number;
+  dealSide?: 'buy' | 'sell';
 }
 
 interface ContractDraftSnapshot {
@@ -61,6 +62,7 @@ interface ContractDraftSnapshot {
   agentCommissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
   referralFeeDueCents?: number;
+  dealSide?: 'buy' | 'sell';
   hasUnsavedChanges: boolean;
 }
 
@@ -80,9 +82,11 @@ type ReferralHeaderProps = {
       agentCommissionBasisPoints: number;
       referralFeeBasisPoints: number;
       referralFeeDueCents: number;
+      dealSide: 'buy' | 'sell';
     }) => void;
     onContractDraftChange: (draft: ContractDraftSnapshot) => void;
   }) => void;
+  onCreateDealRequest?: () => void;
   agentContact?: Contact | null;
   mcContact?: Contact | null;
   onAgentContactChange?: (contact: Contact | null) => void;
@@ -96,6 +100,7 @@ export function ReferralHeader({
   onContractDraftChange,
   onUnderContractIntentChange,
   onContractHandlersReady,
+  onCreateDealRequest,
   agentContact,
   mcContact,
   onAgentContactChange,
@@ -116,6 +121,9 @@ export function ReferralHeader({
   );
   const [referralFeeBasisPoints, setReferralFeeBasisPoints] = useState<number | undefined>(
     referral.referralFeeBasisPoints
+  );
+  const [dealSide, setDealSide] = useState<'buy' | 'sell'>(
+    referral.dealSide === 'sell' ? 'sell' : 'buy'
   );
   const [propertyAddress, setPropertyAddress] = useState<string | undefined>(referral.propertyAddress);
   const [propertyCity, setPropertyCity] = useState<string | undefined>(referral.propertyCity);
@@ -154,6 +162,10 @@ export function ReferralHeader({
   useEffect(() => {
     setReferralFeeBasisPoints(referral.referralFeeBasisPoints);
   }, [referral.referralFeeBasisPoints]);
+
+  useEffect(() => {
+    setDealSide(referral.dealSide === 'sell' ? 'sell' : 'buy');
+  }, [referral.dealSide]);
 
   useEffect(() => {
     setPropertyAddress(referral.propertyAddress);
@@ -202,6 +214,7 @@ export function ReferralHeader({
       propertyCity: propertyCity ?? referral.propertyCity ?? undefined,
       propertyState: normalizedState || undefined,
       propertyPostalCode: propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
+      dealSide,
     });
   }, [
     commissionBasisPoints,
@@ -212,6 +225,7 @@ export function ReferralHeader({
     propertyCity,
     propertyPostalCode,
     propertyState,
+    dealSide,
     referral.propertyAddress,
     referral.propertyCity,
     referral.propertyPostalCode,
@@ -276,6 +290,7 @@ export function ReferralHeader({
   const referralFeePercent = effectiveReferralFeeBasisPoints
     ? `${(effectiveReferralFeeBasisPoints / 100).toFixed(2)}%`
     : '—';
+  const dealSideLabel = dealSide === 'sell' ? 'Sell-side' : 'Buy-side';
   const canAssignAgent = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'mc';
   const canAssignMc = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'agent';
   const fallbackAgentContact: Contact | null = referral.assignedAgent
@@ -328,7 +343,8 @@ export function ReferralHeader({
           previous.contractPriceCents === draft.contractPriceCents &&
           previous.agentCommissionBasisPoints === draft.agentCommissionBasisPoints &&
           previous.referralFeeBasisPoints === draft.referralFeeBasisPoints &&
-          previous.referralFeeDueCents === draft.referralFeeDueCents
+          previous.referralFeeDueCents === draft.referralFeeDueCents &&
+          previous.dealSide === draft.dealSide
         ) {
           return previous;
         }
@@ -349,6 +365,7 @@ export function ReferralHeader({
       agentCommissionBasisPoints: number;
       referralFeeBasisPoints: number;
       referralFeeDueCents: number;
+      dealSide: 'buy' | 'sell';
     }) => {
       setPropertyAddress(details.propertyAddress);
       setPropertyCity(details.propertyCity || undefined);
@@ -358,6 +375,7 @@ export function ReferralHeader({
       setCommissionBasisPoints(details.agentCommissionBasisPoints);
       setReferralFeeBasisPoints(details.referralFeeBasisPoints);
       setReferralFeeDueCents(details.referralFeeDueCents ?? 0);
+      setDealSide(details.dealSide);
       setDraftContract({ hasUnsavedChanges: false });
       onFinancialsChange?.({
         status: 'Under Contract',
@@ -370,6 +388,7 @@ export function ReferralHeader({
         propertyCity: details.propertyCity,
         propertyState: details.propertyState,
         propertyPostalCode: details.propertyPostalCode,
+        dealSide: details.dealSide,
       });
     },
     [
@@ -656,6 +675,7 @@ export function ReferralHeader({
             onStatusChanged={handleStatusChanged}
             onPreApprovalSaved={handlePreApprovalSaved}
             onUnderContractIntentChange={onUnderContractIntentChange}
+            onCreateDealRequest={onCreateDealRequest}
           />
         </section>
         <section className="space-y-4 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
@@ -682,7 +702,7 @@ export function ReferralHeader({
 
       <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Financial breakdown</h2>
-        <dl className="mt-4 grid gap-4 sm:grid-cols-3">
+        <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1">
             <dt className="text-xs uppercase text-slate-500">Agent Commission</dt>
             <dd className="text-sm font-semibold text-slate-900">{commissionPercent}</dd>
@@ -694,6 +714,10 @@ export function ReferralHeader({
           <div className="space-y-1">
             <dt className="text-xs uppercase text-slate-500">Referral Fee Due</dt>
             <dd className="text-sm font-semibold text-slate-900">{formattedReferralFeeDue}</dd>
+          </div>
+          <div className="space-y-1">
+            <dt className="text-xs uppercase text-slate-500">Deal Side</dt>
+            <dd className="text-sm font-semibold text-slate-900">{dealSideLabel}</dd>
           </div>
         </dl>
       </div>

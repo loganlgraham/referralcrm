@@ -60,7 +60,8 @@ export const updateStatusSchema = z.object({
         .regex(/^\d{5}(?:-\d{4})?$/, 'Enter a valid ZIP code'),
       contractPrice: z.number().min(0),
       agentCommissionPercentage: z.number().min(0),
-      referralFeePercentage: z.number().min(0)
+      referralFeePercentage: z.number().min(0),
+      dealSide: z.enum(['buy', 'sell'])
     })
     .optional()
 });
@@ -95,5 +96,8 @@ export const paymentSchema = z.object({
   usedAfc: z.boolean().optional(),
   invoiceDate: z.string().optional(),
   paidDate: z.string().optional(),
-  notes: z.string().optional()
+  notes: z.string().optional(),
+  side: z.enum(['buy', 'sell']).optional(),
+  commissionBasisPoints: z.number().int().min(0).optional(),
+  referralFeeBasisPoints: z.number().int().min(0).optional()
 });

@@ -22,6 +22,7 @@ type ReferralSummary = {
   preApprovalAmountCents?: number | null;
   referralFeeDueCents?: number | null;
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
+  dealSide?: 'buy' | 'sell' | null;
 };
 
 type PaymentWithReferral = {
@@ -36,6 +37,9 @@ type PaymentWithReferral = {
   invoiceDate?: Date | null;
   paidDate?: Date | null;
   createdAt?: Date | null;
+  commissionBasisPoints?: number | null;
+  referralFeeBasisPoints?: number | null;
+  side?: 'buy' | 'sell' | null;
 };
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -111,6 +115,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       usedAfc: Boolean(payment.usedAfc),
       invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
       paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
+      commissionBasisPoints: payment.commissionBasisPoints ?? null,
+      referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
+      side: payment.side ?? 'buy',
       referral: referral
         ? {
             borrowerName: referral.borrower?.name ?? null,
@@ -126,6 +133,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             preApprovalAmountCents: referral.preApprovalAmountCents ?? null,
             referralFeeDueCents: referral.referralFeeDueCents ?? null,
             ahaBucket: (referral as any).ahaBucket ?? null,
+            dealSide: (referral as any).dealSide ?? null,
           }
         : null,
     };
@@ -160,7 +168,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     usedAfc: parsed.data.usedAfc ?? false,
     invoiceDate: parsed.data.invoiceDate,
     paidDate: parsed.data.paidDate,
-    notes: parsed.data.notes
+    notes: parsed.data.notes,
+    commissionBasisPoints: parsed.data.commissionBasisPoints ?? null,
+    referralFeeBasisPoints: parsed.data.referralFeeBasisPoints ?? null,
+    side: parsed.data.side ?? 'buy',
   });
 
   return NextResponse.json({ id: payment._id.toString() }, { status: 201 });

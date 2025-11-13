@@ -14,6 +14,7 @@ interface ContractDetails {
   contractPriceCents?: number;
   agentCommissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
+  dealSide?: 'buy' | 'sell';
 }
 
 interface ContractFormState {
@@ -24,6 +25,7 @@ interface ContractFormState {
   contractPrice: string;
   agentCommissionPercentage: string;
   referralFeePercentage: string;
+  dealSide: 'buy' | 'sell';
 }
 
 interface DealPreparationFormProps {
@@ -40,6 +42,7 @@ interface DealPreparationFormProps {
     agentCommissionBasisPoints: number;
     referralFeeBasisPoints: number;
     referralFeeDueCents: number;
+    dealSide: 'buy' | 'sell';
   }) => void;
   onStatusChanged?: (status: ReferralStatus, payload?: Record<string, unknown>) => void;
   onContractDraftChange?: (details: {
@@ -51,6 +54,7 @@ interface DealPreparationFormProps {
     agentCommissionBasisPoints?: number;
     referralFeeBasisPoints?: number;
     referralFeeDueCents?: number;
+    dealSide?: 'buy' | 'sell';
     hasUnsavedChanges: boolean;
   }) => void;
 }
@@ -67,6 +71,7 @@ const buildInitialFormState = (details?: ContractDetails): ContractFormState => 
   referralFeePercentage: details?.referralFeeBasisPoints
     ? (details.referralFeeBasisPoints / 100).toString()
     : '25',
+  dealSide: details?.dealSide ?? 'buy',
 });
 
 const formatFullAddress = (
@@ -205,6 +210,7 @@ export function DealPreparationForm({
           Number.isFinite(referralFee) && referralFee > 0 ? Math.round(referralFee * 100) : undefined,
         referralFeeDueCents:
           referralFeeAmount && referralFeeAmount > 0 ? Math.round(referralFeeAmount * 100) : undefined,
+        dealSide: state.dealSide,
         hasUnsavedChanges,
       });
     },
@@ -260,7 +266,7 @@ export function DealPreparationForm({
     return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }, [form.contractPrice, form.agentCommissionPercentage, form.referralFeePercentage]);
 
-  const handleFieldChange = (field: keyof ContractFormState) => (event: ChangeEvent<HTMLInputElement>) => {
+  const handleFieldChange = (field: keyof ContractFormState) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const value = event.target.value;
     setForm((previous) => {
       let nextValue = value;
@@ -272,8 +278,10 @@ export function DealPreparationForm({
       } else if (field === 'propertyPostalCode') {
         const sanitized = value.replace(/[^0-9-]/g, '');
         nextValue = sanitized.slice(0, 10);
+      } else if (field === 'dealSide') {
+        nextValue = value === 'sell' ? 'sell' : 'buy';
       }
-      const next = { ...previous, [field]: nextValue };
+      const next = { ...previous, [field]: nextValue as ContractFormState[typeof field] };
       broadcastDraft(next, true);
       return next;
     });
@@ -323,6 +331,7 @@ export function DealPreparationForm({
             contractPrice,
             agentCommissionPercentage: agentCommission,
             referralFeePercentage,
+            dealSide: form.dealSide,
           },
         }),
       });
@@ -359,6 +368,7 @@ export function DealPreparationForm({
           contractPriceCents: details.contractPriceCents,
           agentCommissionBasisPoints: details.agentCommissionBasisPoints,
           referralFeeBasisPoints: details.referralFeeBasisPoints,
+          dealSide: details.dealSide,
         });
         setForm(nextState);
         setDirty(false);
@@ -372,6 +382,7 @@ export function DealPreparationForm({
           agentCommissionBasisPoints: details.agentCommissionBasisPoints ?? 0,
           referralFeeBasisPoints: details.referralFeeBasisPoints ?? 0,
           referralFeeDueCents: details.referralFeeDueCents ?? 0,
+          dealSide: details.dealSide ?? 'buy',
         });
       } else {
         setDirty(false);
@@ -485,6 +496,18 @@ export function DealPreparationForm({
             />
           </label>
         </div>
+        <label className="block">
+          <span className="text-slate-500">Deal Side</span>
+          <select
+            value={form.dealSide}
+            onChange={handleFieldChange('dealSide')}
+            className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+            disabled={saving}
+          >
+            <option value="buy">Buy-side</option>
+            <option value="sell">Sell-side</option>
+          </select>
+        </label>
         <label className="block">
           <span className="text-slate-500">Referral Fee Amount</span>
           <input

@@ -81,6 +81,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     referral.estPurchasePriceCents = Math.round(details.contractPrice * 100);
     referral.commissionBasisPoints = Math.round(details.agentCommissionPercentage * 100);
     referral.referralFeeBasisPoints = Math.round(details.referralFeePercentage * 100);
+    referral.dealSide = details.dealSide;
     const commissionRate = details.agentCommissionPercentage / 100;
     const referralRate = details.referralFeePercentage / 100;
     const referralFeeDue = details.contractPrice * commissionRate * referralRate;
@@ -88,7 +89,14 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
     await Payment.updateMany(
       { referralId: referral._id, status: 'under_contract' },
-      { $set: { expectedAmountCents: referral.referralFeeDueCents ?? 0 } }
+      {
+        $set: {
+          expectedAmountCents: referral.referralFeeDueCents ?? 0,
+          commissionBasisPoints: referral.commissionBasisPoints ?? null,
+          referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
+          side: referral.dealSide,
+        },
+      }
     );
 
     const activeDeal = await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
@@ -100,6 +108,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         referralId: referral._id,
         status: 'under_contract',
         expectedAmountCents: referral.referralFeeDueCents ?? 0,
+        commissionBasisPoints: referral.commissionBasisPoints ?? null,
+        referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
+        side: referral.dealSide,
       });
     }
   } else if (parsed.data.status === 'Terminated' || parsed.data.status === 'Lost') {
@@ -152,6 +163,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             agentCommissionBasisPoints: referral.commissionBasisPoints ?? 0,
             referralFeeBasisPoints: referral.referralFeeBasisPoints ?? 0,
             referralFeeDueCents: referral.referralFeeDueCents ?? 0,
+            dealSide: referral.dealSide ?? 'buy',
           }
         : undefined,
     preApprovalAmountCents: referral.preApprovalAmountCents ?? 0,
