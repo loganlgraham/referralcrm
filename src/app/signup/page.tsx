@@ -86,7 +86,12 @@ function SignupPageContent() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const searchParams = useSearchParams();
 
-  const callbackUrl = useMemo(() => `/onboarding?role=${encodeURIComponent(role)}`, [role]);
+  const callbackUrl = useMemo(() => {
+    if (role === 'agent') {
+      return '/profile?welcome=1';
+    }
+    return `/onboarding?role=${encodeURIComponent(role)}`;
+  }, [role]);
 
   useEffect(() => {
     const emailParam = searchParams.get('email');

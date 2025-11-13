@@ -42,6 +42,10 @@ function LoginForm() {
     () => sanitizeRedirect(callbackParam, '/dashboard'),
     [callbackParam]
   );
+  const googleCallbackUrl = useMemo(
+    () => sanitizeRedirect(callbackParam, '/onboarding'),
+    [callbackParam]
+  );
   const providerError = searchParams.get('error');
   const displayProviderError = providerError
     ? providerErrorMessages[providerError] ?? providerError

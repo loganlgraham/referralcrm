@@ -13,6 +13,10 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     redirect('/login');
   }
 
+  if (!session.user.role || session.user.role === 'viewer') {
+    redirect('/onboarding');
+  }
+
   return (
     <div className="min-h-screen w-full bg-slate-100">
       <Sidebar session={session} />
