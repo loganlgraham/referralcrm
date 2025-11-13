@@ -60,6 +60,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   referral.audit.push(auditEntry as any);
 
+  let createdDeal: any = null;
+
   if (parsed.data.status === 'Under Contract') {
     const details = parsed.data.contractDetails;
     if (!details) {
@@ -99,7 +101,6 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       }
     );
 
-    let createdDeal: any = null;
     let activeDeal = await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
       .sort({ createdAt: -1 })
       .lean();
