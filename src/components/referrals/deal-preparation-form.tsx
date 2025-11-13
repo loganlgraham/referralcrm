@@ -357,6 +357,7 @@ export function DealPreparationForm({
         agentCommissionBasisPoints?: number;
         referralFeeBasisPoints?: number;
         referralFeeDueCents?: number;
+        dealSide?: 'buy' | 'sell';
       } | undefined;
 
       if (details) {
