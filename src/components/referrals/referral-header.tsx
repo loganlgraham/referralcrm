@@ -250,7 +250,10 @@ export function ReferralHeader({
   const primaryAmountValue = isUnderContract ? effectiveContractPriceCents : preApprovalAmountCents;
   const primaryAmountLabel = isUnderContract ? 'Contract Price' : 'Pre-Approval Amount';
   const formattedPrimaryAmount = primaryAmountValue ? formatCurrency(primaryAmountValue) : '—';
-  const formattedReferralFeeDue = effectiveReferralFeeDueCents ? formatCurrency(effectiveReferralFeeDueCents) : '—';
+  const formattedReferralFeeDue =
+    effectiveReferralFeeDueCents !== undefined && effectiveReferralFeeDueCents !== null
+      ? formatCurrency(effectiveReferralFeeDueCents)
+      : '—';
   const commissionPercent = effectiveCommissionBasisPoints
     ? `${(effectiveCommissionBasisPoints / 100).toFixed(2)}%`
     : '—';

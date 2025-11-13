@@ -320,17 +320,66 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   ]);
 
   useEffect(() => {
-    setFinancials({
-      status: referral.status,
-      preApprovalAmountCents: referral.preApprovalAmountCents ?? 0,
-      contractPriceCents: referral.estPurchasePriceCents ?? undefined,
-      referralFeeDueCents: referral.referralFeeDueCents ?? 0,
-      commissionBasisPoints: referral.commissionBasisPoints ?? undefined,
-      referralFeeBasisPoints: referral.referralFeeBasisPoints ?? undefined,
-      propertyAddress: referral.propertyAddress ?? undefined,
-      propertyCity: referral.propertyCity ?? undefined,
-      propertyState: referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined,
-      propertyPostalCode: referral.propertyPostalCode ?? undefined,
+    setFinancials((previous) => {
+      const nextReferralFeeDue =
+        referral.referralFeeDueCents != null ? referral.referralFeeDueCents : previous.referralFeeDueCents ?? 0;
+      const nextPreApproval =
+        referral.preApprovalAmountCents != null
+          ? referral.preApprovalAmountCents
+          : previous.preApprovalAmountCents ?? 0;
+      const nextContractPrice =
+        referral.estPurchasePriceCents != null
+          ? referral.estPurchasePriceCents
+          : previous.contractPriceCents;
+      const nextCommission =
+        referral.commissionBasisPoints != null
+          ? referral.commissionBasisPoints
+          : previous.commissionBasisPoints;
+      const nextReferralFeeBasis =
+        referral.referralFeeBasisPoints != null
+          ? referral.referralFeeBasisPoints
+          : previous.referralFeeBasisPoints;
+      const nextPropertyAddress =
+        referral.propertyAddress !== undefined
+          ? referral.propertyAddress ?? undefined
+          : previous.propertyAddress;
+      const nextPropertyCity =
+        referral.propertyCity !== undefined ? referral.propertyCity ?? undefined : previous.propertyCity;
+      const nextPropertyState = referral.propertyState
+        ? String(referral.propertyState).toUpperCase()
+        : previous.propertyState;
+      const nextPropertyPostal =
+        referral.propertyPostalCode !== undefined
+          ? referral.propertyPostalCode ?? undefined
+          : previous.propertyPostalCode;
+
+      if (
+        previous.status === referral.status &&
+        previous.preApprovalAmountCents === nextPreApproval &&
+        previous.contractPriceCents === nextContractPrice &&
+        previous.referralFeeDueCents === nextReferralFeeDue &&
+        previous.commissionBasisPoints === nextCommission &&
+        previous.referralFeeBasisPoints === nextReferralFeeBasis &&
+        previous.propertyAddress === nextPropertyAddress &&
+        previous.propertyCity === nextPropertyCity &&
+        previous.propertyState === nextPropertyState &&
+        previous.propertyPostalCode === nextPropertyPostal
+      ) {
+        return previous;
+      }
+
+      return {
+        status: referral.status,
+        preApprovalAmountCents: nextPreApproval,
+        contractPriceCents: nextContractPrice,
+        referralFeeDueCents: nextReferralFeeDue,
+        commissionBasisPoints: nextCommission,
+        referralFeeBasisPoints: nextReferralFeeBasis,
+        propertyAddress: nextPropertyAddress,
+        propertyCity: nextPropertyCity,
+        propertyState: nextPropertyState,
+        propertyPostalCode: nextPropertyPostal,
+      };
     });
   }, [
     referral.status,
@@ -409,8 +458,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         throw new Error('Unable to delete referral');
       }
       toast.success('Referral deleted');
-      router.push('/referrals');
-      router.refresh();
+      router.replace('/referrals');
+      void mutate('/api/referrals?summary=true');
+      void mutate('/api/referrals?leaderboard=true');
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Unable to delete referral');
