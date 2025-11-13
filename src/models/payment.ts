@@ -18,7 +18,7 @@ const paymentSchema = new Schema(
     },
     agentAttribution: {
       type: String,
-      enum: ['AHA', 'AHA_OOS'],
+      enum: ['AHA', 'AHA_OOS', 'OUTSIDE_AGENT'],
       default: null,
     },
     usedAfc: { type: Boolean, default: false },

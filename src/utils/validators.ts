@@ -89,7 +89,7 @@ export const paymentSchema = z.object({
     .enum(['inspection', 'appraisal', 'financing', 'changed_mind'])
     .nullable()
     .optional(),
-  agentAttribution: z.enum(['AHA', 'AHA_OOS']).nullable().optional(),
+  agentAttribution: z.enum(['AHA', 'AHA_OOS', 'OUTSIDE_AGENT']).nullable().optional(),
   usedAfc: z.boolean().optional(),
   invoiceDate: z.string().optional(),
   paidDate: z.string().optional(),

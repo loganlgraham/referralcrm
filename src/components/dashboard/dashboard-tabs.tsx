@@ -1,12 +1,14 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, MouseEvent as ReactMouseEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
+import { Trash2 } from 'lucide-react';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatNumber } from '@/utils/formatters';
 
 type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd';
+type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
 
 interface TrendPoint {
   key: string;
@@ -32,6 +34,8 @@ interface DashboardSummary {
   closeRate: number;
   afcDealsLost: number;
   afcAttachRate: number;
+  ahaAttachRate: number;
+  ahaOosAttachRate: number;
   activePipeline: number;
   expectedRevenueCents: number;
   realizedRevenueCents: number;
@@ -64,6 +68,7 @@ interface DashboardResponse {
     revenueBySource: { label: string; value: number }[];
     revenueByEndorser: { label: string; value: number }[];
     revenueByState: { label: string; value: number }[];
+    referralRequestsByZip: { label: string; value: number }[];
     monthlyReferrals: {
       monthKey: string;
       label: string;
@@ -85,16 +90,29 @@ interface DashboardResponse {
     };
   };
   mc: {
-    requestTrend: TrendPoint[];
+    requestTrend: {
+      all: TrendPoint[];
+      aha: TrendPoint[];
+      ahaOos: TrendPoint[];
+    };
     revenueLeaderboard: LeaderboardEntry[];
     closeRateLeaderboard: LeaderboardEntry[];
+    requestLeaderboard: {
+      all: LeaderboardEntry[];
+      aha: LeaderboardEntry[];
+      ahaOos: LeaderboardEntry[];
+    };
   };
   agent: {
     averageCommissionCents: number;
+    averageCommissionPercent: number;
+    commissionSampleSize: number;
     referralLeaderboard: LeaderboardEntry[];
     closeRateLeaderboard: LeaderboardEntry[];
     revenuePaid: LeaderboardEntry[];
     revenueExpected: LeaderboardEntry[];
+    netRevenue: LeaderboardEntry[];
+    lostDeals: LeaderboardEntry[];
   };
   admin: {
     slaAverages: {
@@ -105,6 +123,12 @@ interface DashboardResponse {
     };
     averageDaysNewLeadToContract: number;
     averageDaysContractToClose: number;
+    totalReferrals: number;
+    assignedReferrals: number;
+    unassignedReferrals: number;
+    firstContactWithin24HoursRate: number;
+    firstContactWithin24HoursCount: number;
+    firstContactSampleSize: number;
   };
 }
 
@@ -122,6 +146,51 @@ const TAB_OPTIONS = [
   { label: 'Agent', value: 'agent' },
   { label: 'Admin', value: 'admin' }
 ] as const;
+
+type TabValue = (typeof TAB_OPTIONS)[number]['value'];
+
+const NETWORK_FILTER_OPTIONS: { label: string; value: NetworkFilter }[] = [
+  { label: 'All', value: 'ALL' },
+  { label: 'AHA', value: 'AHA' },
+  { label: 'AHA OOS', value: 'AHA_OOS' }
+];
+
+const DEFAULT_NETWORK_FILTER: Record<TabValue, NetworkFilter> = {
+  main: 'ALL',
+  mc: 'ALL',
+  agent: 'ALL',
+  admin: 'AHA_OOS'
+};
+
+function NetworkFilterButtons({
+  value,
+  onChange
+}: {
+  value: NetworkFilter;
+  onChange: (value: NetworkFilter) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {NETWORK_FILTER_OPTIONS.map((option) => {
+        const isActive = value === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+              isActive
+                ? 'border-transparent bg-slate-900 text-white'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 const CHART_WIDTH = 320;
 const CHART_HEIGHT = 180;
@@ -167,12 +236,14 @@ function LineChartCard({
   title,
   data,
   formatValue,
-  helper
+  helper,
+  actions
 }: {
   title: string;
   data: TrendPoint[];
   formatValue: (value: number) => string;
   helper?: string;
+  actions?: ReactNode;
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const safeData = data ?? [];
@@ -199,20 +270,63 @@ function LineChartCard({
   const activeIndex = hoverIndex != null ? hoverIndex : safeData.length > 0 ? safeData.length - 1 : null;
   const activePoint = activeIndex != null ? safeData[activeIndex] : null;
   const gradientId = useMemo(() => `gradient-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, [title]);
+  const tooltipPoint = activeIndex != null ? points[activeIndex] : null;
+
+  let tooltipMetrics: {
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+    valueLabel: string;
+    labelText: string;
+  } | null = null;
+
+  if (tooltipPoint && activePoint) {
+    const valueLabel = formatValue(activePoint.value);
+    const labelText = activePoint.label;
+    const textLength = Math.max(valueLabel.length, labelText.length);
+    const width = Math.min(Math.max(textLength * 7 + 24, 96), CHART_WIDTH - CHART_PADDING_X);
+    const height = 38;
+    const x = Math.min(
+      Math.max(tooltipPoint.x - width / 2, CHART_PADDING_X),
+      CHART_WIDTH - CHART_PADDING_X - width
+    );
+    const y = Math.max(tooltipPoint.y - height - 8, 8);
+    tooltipMetrics = { width, height, x, y, valueLabel, labelText };
+  }
+
+  const handleMouseMove = (event: ReactMouseEvent<SVGSVGElement>) => {
+    if (!hasData) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const relativeX = ((event.clientX - rect.left) / rect.width) * CHART_WIDTH;
+    let closestIndex = 0;
+    let minDistance = Number.POSITIVE_INFINITY;
+    points.forEach((point, index) => {
+      const distance = Math.abs(point.x - relativeX);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestIndex = index;
+      }
+    });
+    setHoverIndex(closestIndex);
+  };
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
           {helper ? <p className="text-xs text-slate-500">{helper}</p> : null}
         </div>
-        {activePoint ? (
-          <div className="text-right text-sm text-slate-700">
-            <p className="font-semibold">{formatValue(activePoint.value)}</p>
-            <p className="text-xs text-slate-500">{activePoint.label}</p>
-          </div>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-3">
+          {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+          {activePoint ? (
+            <div className="text-right text-sm text-slate-700">
+              <p className="font-semibold">{formatValue(activePoint.value)}</p>
+              <p className="text-xs text-slate-500">{activePoint.label}</p>
+            </div>
+          ) : null}
+        </div>
       </div>
       <div className="mt-4">
         {hasData ? (
@@ -221,6 +335,8 @@ function LineChartCard({
             className="h-48 w-full"
             role="img"
             aria-label={`${title} trend chart`}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={() => setHoverIndex(null)}
           >
             <defs>
               <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
@@ -244,10 +360,44 @@ function LineChartCard({
                   r={activeIndex === index ? 5 : 3}
                   fill={activeIndex === index ? '#0ea5e9' : '#bae6fd'}
                   onMouseEnter={() => setHoverIndex(index)}
-                  onMouseLeave={() => setHoverIndex(null)}
                 />
               </g>
             ))}
+            {tooltipPoint && tooltipMetrics ? (
+              <g pointerEvents="none">
+                <line
+                  x1={tooltipPoint.x}
+                  x2={tooltipPoint.x}
+                  y1={CHART_PADDING_Y}
+                  y2={CHART_HEIGHT - CHART_PADDING_Y}
+                  stroke="#cbd5f5"
+                  strokeDasharray="4 4"
+                />
+                <rect
+                  x={tooltipMetrics.x}
+                  y={tooltipMetrics.y}
+                  width={tooltipMetrics.width}
+                  height={tooltipMetrics.height}
+                  rx={6}
+                  fill="#ffffff"
+                  stroke="#cbd5f5"
+                />
+                <text
+                  x={tooltipMetrics.x + 8}
+                  y={tooltipMetrics.y + 18}
+                  className="text-[11px] font-semibold fill-slate-900"
+                >
+                  {tooltipMetrics.valueLabel}
+                </text>
+                <text
+                  x={tooltipMetrics.x + 8}
+                  y={tooltipMetrics.y + tooltipMetrics.height - 10}
+                  className="text-[10px] fill-slate-500"
+                >
+                  {tooltipMetrics.labelText}
+                </text>
+              </g>
+            ) : null}
             <line
               x1={CHART_PADDING_X}
               x2={CHART_WIDTH - CHART_PADDING_X}
@@ -277,7 +427,17 @@ function LineChartCard({
   );
 }
 
-function RevenueList({ title, items }: { title: string; items: { label: string; value: number }[] }) {
+function RankedList({
+  title,
+  items,
+  formatValue = formatCurrency,
+  emptyMessage = 'No data recorded.'
+}: {
+  title: string;
+  items: { label: string; value: number }[];
+  formatValue?: (value: number) => string;
+  emptyMessage?: string;
+}) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
@@ -286,21 +446,34 @@ function RevenueList({ title, items }: { title: string; items: { label: string; 
           items.slice(0, 8).map((item) => (
             <li key={item.label} className="flex items-center justify-between text-sm text-slate-700">
               <span className="font-medium text-slate-900">{item.label}</span>
-              <span>{formatCurrency(item.value)}</span>
+              <span>{formatValue(item.value)}</span>
             </li>
           ))
         ) : (
-          <li className="text-sm text-slate-500">No revenue recorded.</li>
+          <li className="text-sm text-slate-500">{emptyMessage}</li>
         )}
       </ul>
     </div>
   );
 }
 
-function LeaderboardTable({ title, entries, valueLabel }: { title: string; entries: LeaderboardEntry[]; valueLabel: string }) {
+function LeaderboardTable({
+  title,
+  entries,
+  valueLabel,
+  actions
+}: {
+  title: string;
+  entries: LeaderboardEntry[];
+  valueLabel: string;
+  actions?: ReactNode;
+}) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+      </div>
       <table className="mt-4 w-full text-sm">
         <thead>
           <tr className="text-left text-xs text-slate-500">
@@ -358,6 +531,7 @@ function PreApprovalConversionSection({
   const [inputValue, setInputValue] = useState<string>('');
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [deletingMonth, setDeletingMonth] = useState<string | null>(null);
 
   useEffect(() => {
     const match = monthlyReferrals.find((entry) => entry.monthKey === selectedMonth);
@@ -415,6 +589,35 @@ function PreApprovalConversionSection({
 
     setStatus('saved');
     onSaved();
+  };
+
+  const handleDelete = async (monthKey: string) => {
+    if (!canEdit) return;
+    setDeletingMonth(monthKey);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch('/api/dashboard/pre-approvals', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month: monthKey })
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error ?? 'Unable to delete pre-approval entry.');
+      }
+
+      setStatus('idle');
+      setSelectedMonth('');
+      setInputValue('');
+      onSaved();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to delete pre-approval entry.');
+      setStatus('error');
+    } finally {
+      setDeletingMonth(null);
+    }
   };
 
   return (
@@ -486,6 +689,7 @@ function PreApprovalConversionSection({
                 <th className="px-3 py-2 font-medium text-right">Pre-approvals</th>
                 <th className="px-3 py-2 font-medium text-right">Conversion</th>
                 <th className="px-3 py-2 font-medium">Updated</th>
+                {canEdit ? <th className="px-3 py-2 font-medium text-right">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -499,11 +703,24 @@ function PreApprovalConversionSection({
                     <td className="px-3 py-2 text-slate-500">
                       {entry.updatedAt ? new Date(entry.updatedAt).toLocaleDateString() : '—'}
                     </td>
+                    {canEdit ? (
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(entry.monthKey)}
+                          className="inline-flex items-center justify-center rounded p-1 text-slate-400 transition hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={deletingMonth === entry.monthKey}
+                          aria-label={`Delete ${entry.label} pre-approval entry`}
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={canEdit ? 6 : 5} className="px-3 py-6 text-center text-sm text-slate-500">
                     No pre-approval history captured yet.
                   </td>
                 </tr>
@@ -519,11 +736,15 @@ function PreApprovalConversionSection({
 function MainDashboard({
   data,
   canEditPreApprovals,
-  onPreApprovalSaved
+  onPreApprovalSaved,
+  networkFilter,
+  onNetworkFilterChange
 }: {
   data: DashboardResponse['main'];
   canEditPreApprovals: boolean;
   onPreApprovalSaved: () => void;
+  networkFilter: NetworkFilter;
+  onNetworkFilterChange: (value: NetworkFilter) => void;
 }) {
   const summary = data.summary;
 
@@ -558,6 +779,8 @@ function MainDashboard({
       value: `${summary.afcAttachRate.toFixed(1)}%`,
       helper: `${formatNumber(summary.afcDealsLost)} deals lost`
     },
+    { label: 'AHA attach rate', value: `${summary.ahaAttachRate.toFixed(1)}%` },
+    { label: 'AHA OOS attach rate', value: `${summary.ahaOosAttachRate.toFixed(1)}%` },
     { label: 'Avg. pre-approval amount', value: formatCurrency(summary.averagePaAmountCents) }
   ];
 
@@ -572,6 +795,10 @@ function MainDashboard({
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <NetworkFilterButtons value={networkFilter} onChange={onNetworkFilterChange} />
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {highlights.map((card) => (
           <SummaryCard key={card.title} title={card.title} value={card.value} helper={card.helper} />
@@ -590,10 +817,16 @@ function MainDashboard({
         <LineChartCard title="MC transfers" data={data.trends.mcTransfers} formatValue={(value) => formatNumber(Math.round(value))} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <RevenueList title="Revenue by source" items={data.revenueBySource} />
-        <RevenueList title="Revenue by endorser" items={data.revenueByEndorser} />
-        <RevenueList title="Revenue by state" items={data.revenueByState} />
+      <div className="grid gap-4 lg:grid-cols-4">
+        <RankedList title="Revenue by source" items={data.revenueBySource} />
+        <RankedList title="Revenue by endorser" items={data.revenueByEndorser} />
+        <RankedList title="Revenue by state" items={data.revenueByState} />
+        <RankedList
+          title="Referral requests by ZIP"
+          items={data.referralRequestsByZip}
+          formatValue={(value) => formatNumber(value)}
+          emptyMessage="No referral requests recorded."
+        />
       </div>
 
       <PreApprovalConversionSection
@@ -606,16 +839,79 @@ function MainDashboard({
   );
 }
 
-function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
+function McDashboard({
+  data,
+  networkFilter,
+  onNetworkFilterChange
+}: {
+  data: DashboardResponse['mc'];
+  networkFilter: NetworkFilter;
+  onNetworkFilterChange: (value: NetworkFilter) => void;
+}) {
+  const [requestFilter, setRequestFilter] = useState<'all' | 'AHA' | 'AHA_OOS'>('all');
+
+  const filterOptions: { label: string; value: 'all' | 'AHA' | 'AHA_OOS' }[] = [
+    { label: 'All', value: 'all' },
+    { label: 'AHA', value: 'AHA' },
+    { label: 'AHA OOS', value: 'AHA_OOS' }
+  ];
+
+  const selectedTrend = useMemo(() => {
+    if (requestFilter === 'AHA') return data.requestTrend.aha;
+    if (requestFilter === 'AHA_OOS') return data.requestTrend.ahaOos;
+    return data.requestTrend.all;
+  }, [data.requestTrend, requestFilter]);
+
+  const selectedLeaderboard = useMemo(() => {
+    if (requestFilter === 'AHA') return data.requestLeaderboard.aha;
+    if (requestFilter === 'AHA_OOS') return data.requestLeaderboard.ahaOos;
+    return data.requestLeaderboard.all;
+  }, [data.requestLeaderboard, requestFilter]);
+
+  const filterLabel = filterOptions.find((option) => option.value === requestFilter)?.label ?? 'All';
+
+  const renderFilterButtons = () => (
+    <div className="flex gap-1">
+      {filterOptions.map((option) => {
+        const isActive = requestFilter === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => setRequestFilter(option.value)}
+            className={`rounded border px-2 py-1 text-xs font-medium transition ${
+              isActive
+                ? 'border-transparent bg-slate-900 text-white'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <NetworkFilterButtons value={networkFilter} onChange={onNetworkFilterChange} />
+      </div>
+
       <LineChartCard
         title="Requests received"
-        data={data.requestTrend}
+        data={selectedTrend}
         formatValue={(value) => formatNumber(Math.round(value))}
-        helper="Trend of referral requests routed to MCs"
+        helper={`Trend of referral requests routed to MCs (${filterLabel})`}
+        actions={renderFilterButtons()}
       />
       <div className="grid gap-4 lg:grid-cols-2">
+        <LeaderboardTable
+          title="Referral requests by MC"
+          entries={selectedLeaderboard}
+          valueLabel="Requests"
+          actions={renderFilterButtons()}
+        />
         <LeaderboardTable title="Revenue by MC" entries={data.revenueLeaderboard} valueLabel="Revenue" />
         <LeaderboardTable title="Close rate by MC" entries={data.closeRateLeaderboard} valueLabel="Close rate" />
       </div>
@@ -623,10 +919,29 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
   );
 }
 
-function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
+function AgentDashboard({
+  data,
+  networkFilter,
+  onNetworkFilterChange
+}: {
+  data: DashboardResponse['agent'];
+  networkFilter: NetworkFilter;
+  onNetworkFilterChange: (value: NetworkFilter) => void;
+}) {
+  const averageCommissionDisplay =
+    data.averageCommissionPercent > 0 ? `${data.averageCommissionPercent.toFixed(2)}%` : '—';
+  const commissionHelper =
+    data.commissionSampleSize > 0
+      ? `Across ${formatNumber(data.commissionSampleSize)} closed/paid deals`
+      : 'No closed or paid deals this period';
+
   return (
     <div className="space-y-6">
-      <SummaryCard title="Average agent commission" value={formatCurrency(data.averageCommissionCents)} helper="Paid deals this period" />
+      <div className="flex justify-end">
+        <NetworkFilterButtons value={networkFilter} onChange={onNetworkFilterChange} />
+      </div>
+
+      <SummaryCard title="Average agent commission" value={averageCommissionDisplay} helper={commissionHelper} />
       <div className="grid gap-4 lg:grid-cols-2">
         <LeaderboardTable title="Referrals by agent" entries={data.referralLeaderboard} valueLabel="Referrals" />
         <LeaderboardTable title="Close rate by agent" entries={data.closeRateLeaderboard} valueLabel="Close rate" />
@@ -635,30 +950,65 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
         <LeaderboardTable title="Revenue paid by agent" entries={data.revenuePaid} valueLabel="Revenue" />
         <LeaderboardTable title="Revenue expected by agent" entries={data.revenueExpected} valueLabel="Expected" />
       </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <LeaderboardTable title="Agent net earnings" entries={data.netRevenue} valueLabel="Net revenue" />
+        <LeaderboardTable title="Deals lost to outside agents" entries={data.lostDeals} valueLabel="Lost deals" />
+      </div>
     </div>
   );
 }
 
-function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
-  const rows = [
-    { label: 'Avg. time to first agent contact', value: `${data.slaAverages.timeToFirstAgentContactHours.toFixed(1)} hours` },
-    { label: 'Avg. time to assignment', value: `${data.slaAverages.timeToAssignmentHours.toFixed(1)} hours` },
-    { label: 'Avg. days to contract', value: `${data.averageDaysNewLeadToContract.toFixed(1)} days` },
-    { label: 'Avg. days contract → close', value: `${data.averageDaysContractToClose.toFixed(1)} days` }
+function AdminDashboard({
+  data,
+  networkFilter,
+  onNetworkFilterChange
+}: {
+  data: DashboardResponse['admin'];
+  networkFilter: NetworkFilter;
+  onNetworkFilterChange: (value: NetworkFilter) => void;
+}) {
+  const assignmentRate = data.totalReferrals
+    ? (data.assignedReferrals / data.totalReferrals) * 100
+    : 0;
+  const assignmentHelper = data.totalReferrals
+    ? `${formatNumber(data.assignedReferrals)} of ${formatNumber(data.totalReferrals)} referrals assigned`
+    : 'No referrals this period';
+  const firstContactHelper = data.firstContactSampleSize
+    ? `${formatNumber(data.firstContactWithin24HoursCount)} of ${formatNumber(data.firstContactSampleSize)} contacts`
+    : 'No contact records available';
+
+  const cards = [
+    {
+      title: 'Avg. time to first agent contact',
+      value: `${data.slaAverages.timeToFirstAgentContactHours.toFixed(1)} hours`,
+      helper: 'Goal ≤ 24 hours'
+    },
+    { title: 'Avg. time to assignment', value: `${data.slaAverages.timeToAssignmentHours.toFixed(1)} hours` },
+    { title: 'Avg. days to contract', value: `${data.averageDaysNewLeadToContract.toFixed(1)} days` },
+    { title: 'Avg. days contract → close', value: `${data.averageDaysContractToClose.toFixed(1)} days` },
+    { title: 'Assignment rate', value: `${assignmentRate.toFixed(1)}%`, helper: assignmentHelper },
+    {
+      title: 'First contact within 24h',
+      value: `${data.firstContactWithin24HoursRate.toFixed(1)}%`,
+      helper: firstContactHelper
+    },
+    {
+      title: 'Unassigned referrals',
+      value: formatNumber(data.unassignedReferrals),
+      helper: data.unassignedReferrals > 0 ? 'Needs follow-up' : 'All referrals assigned'
+    }
   ];
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Service-level summary</p>
-        <ul className="mt-4 space-y-3 text-sm text-slate-700">
-          {rows.map((row) => (
-            <li key={row.label} className="flex items-center justify-between">
-              <span className="font-medium text-slate-900">{row.label}</span>
-              <span>{row.value}</span>
-            </li>
-          ))}
-        </ul>
+      <div className="flex justify-end">
+        <NetworkFilterButtons value={networkFilter} onChange={onNetworkFilterChange} />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {cards.map((card) => (
+          <SummaryCard key={card.title} title={card.title} value={card.value} helper={card.helper} />
+        ))}
       </div>
     </div>
   );
@@ -667,11 +1017,30 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
 export function DashboardTabs() {
   const [activeTab, setActiveTab] = useState<(typeof TAB_OPTIONS)[number]['value']>('main');
   const [timeframe, setTimeframe] = useState<TimeframeKey>('month');
+  const [networkFilters, setNetworkFilters] = useState<Record<TabValue, NetworkFilter>>(() => ({
+    ...DEFAULT_NETWORK_FILTER
+  }));
   const { data: session } = useSession();
 
-  const { data, error, isLoading, mutate } = useSWR<DashboardResponse>(`/api/dashboard?timeframe=${timeframe}`, fetcher, {
+  const activeNetworkFilter = networkFilters[activeTab] ?? 'ALL';
+
+  const swrKey = useMemo(
+    () => `/api/dashboard?timeframe=${timeframe}&network=${activeNetworkFilter}`,
+    [timeframe, activeNetworkFilter]
+  );
+
+  const { data, error, isLoading, mutate } = useSWR<DashboardResponse>(swrKey, fetcher, {
     refreshInterval: 60_000
   });
+
+  const handleNetworkFilterChange = (tab: TabValue, value: NetworkFilter) => {
+    setNetworkFilters((prev) => {
+      if (prev[tab] === value) {
+        return prev;
+      }
+      return { ...prev, [tab]: value };
+    });
+  };
 
   const role = session?.user?.role ?? data?.permissions?.role ?? null;
   const canViewGlobal = data?.permissions?.canViewGlobal ?? role === 'admin';
@@ -716,24 +1085,36 @@ export function DashboardTabs() {
           <h1 className="text-2xl font-semibold text-slate-900">Performance dashboards</h1>
           <p className="text-sm text-slate-500">{data?.timeframe.label ?? 'Loading timeframe...'}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {TIMEFRAME_OPTIONS.map((option) => {
-            const isActive = timeframe === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setTimeframe(option.value)}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                  isActive
-                    ? 'border-transparent bg-slate-900 text-white'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                }`}
-              >
-                {option.label}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex flex-col items-start gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Timeframe</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {TIMEFRAME_OPTIONS.map((option) => {
+                const isActive = timeframe === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setTimeframe(option.value)}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                      isActive
+                        ? 'border-transparent bg-slate-900 text-white'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex flex-col items-start gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Network</span>
+            <NetworkFilterButtons
+              value={activeNetworkFilter}
+              onChange={(value) => handleNetworkFilterChange(activeTab, value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -772,11 +1153,31 @@ export function DashboardTabs() {
               data={data.main}
               canEditPreApprovals={canViewGlobal}
               onPreApprovalSaved={handlePreApprovalSaved}
+              networkFilter={networkFilters.main}
+              onNetworkFilterChange={(value) => handleNetworkFilterChange('main', value)}
             />
           ) : null}
-          {activeTab === 'mc' ? <McDashboard data={data.mc} /> : null}
-          {activeTab === 'agent' ? <AgentDashboard data={data.agent} /> : null}
-          {activeTab === 'admin' ? <AdminDashboard data={data.admin} /> : null}
+          {activeTab === 'mc' ? (
+            <McDashboard
+              data={data.mc}
+              networkFilter={networkFilters.mc}
+              onNetworkFilterChange={(value) => handleNetworkFilterChange('mc', value)}
+            />
+          ) : null}
+          {activeTab === 'agent' ? (
+            <AgentDashboard
+              data={data.agent}
+              networkFilter={networkFilters.agent}
+              onNetworkFilterChange={(value) => handleNetworkFilterChange('agent', value)}
+            />
+          ) : null}
+          {activeTab === 'admin' ? (
+            <AdminDashboard
+              data={data.admin}
+              networkFilter={networkFilters.admin}
+              onNetworkFilterChange={(value) => handleNetworkFilterChange('admin', value)}
+            />
+          ) : null}
         </div>
       ) : null}
     </div>
