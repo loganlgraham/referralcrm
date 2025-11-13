@@ -281,6 +281,7 @@ export function ReferralHeader({
   const effectiveAgentContact = agentContact ?? fallbackAgentContact;
   const effectiveMcContact = mcContact ?? fallbackMcContact;
   const canEditBucket = viewerRole === 'admin' || viewerRole === 'manager';
+  const showBucketSummary = viewerRole !== 'agent';
 
   const propertyLabel = useMemo(() => {
     if (effectivePropertyAddress && effectivePropertyAddress.trim().length > 0) {
@@ -575,7 +576,7 @@ export function ReferralHeader({
             <span className="rounded-full bg-amber-500/10 px-3 py-1 text-amber-600">{daysInStatus} days in stage</span>
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className={`grid gap-3 ${showBucketSummary ? 'sm:grid-cols-2' : ''}`}>
           <section className="flex h-full flex-col justify-between rounded-lg border border-brand/20 bg-white/80 p-4 shadow-sm">
             <div className="space-y-2">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-brand">{primaryAmountLabel}</h2>
@@ -583,26 +584,28 @@ export function ReferralHeader({
             </div>
             <p className="text-xs font-medium text-slate-500">Referral Fee Due {formattedReferralFeeDue}</p>
           </section>
-          <section className="flex h-full flex-col justify-between rounded-lg border border-slate-200 bg-slate-900/5 p-4">
-            <div className="space-y-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Agent bucket</h2>
-              <p className="text-xs text-slate-500">{bucketDescription}</p>
-            </div>
-            {canEditBucket ? (
-              <select
-                value={ahaBucket}
-                onChange={handleBucketChange}
-                disabled={savingBucket}
-                className="mt-2 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
-              >
-                <option value="">Not set</option>
-                <option value="AHA">AHA</option>
-                <option value="AHA_OOS">AHA OOS</option>
-              </select>
-            ) : (
-              <p className="mt-3 text-lg font-semibold text-slate-900">{bucketLabel}</p>
-            )}
-          </section>
+          {showBucketSummary && (
+            <section className="flex h-full flex-col justify-between rounded-lg border border-slate-200 bg-slate-900/5 p-4">
+              <div className="space-y-2">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Agent bucket</h2>
+                <p className="text-xs text-slate-500">{bucketDescription}</p>
+              </div>
+              {canEditBucket ? (
+                <select
+                  value={ahaBucket}
+                  onChange={handleBucketChange}
+                  disabled={savingBucket}
+                  className="mt-2 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+                >
+                  <option value="">Not set</option>
+                  <option value="AHA">AHA</option>
+                  <option value="AHA_OOS">AHA OOS</option>
+                </select>
+              ) : (
+                <p className="mt-3 text-lg font-semibold text-slate-900">{bucketLabel}</p>
+              )}
+            </section>
+          )}
         </div>
       </div>
       <SLAWidget referral={{ ...referral, status, audit: auditEntries }} />
