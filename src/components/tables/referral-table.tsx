@@ -5,6 +5,7 @@ import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import clsx from 'clsx';
 
 import { REFERRAL_STATUSES, ReferralStatus } from '@/constants/referrals';
 import { formatCurrency, formatNumber } from '@/utils/formatters';
@@ -454,26 +455,66 @@ interface ReferralSummaryMetrics {
   total: number;
   closedDeals: number;
   closeRate: number;
+  activeReferrals: number;
 }
 
-export function ReferralSummary({ summary }: { summary: ReferralSummaryMetrics }) {
-  const { total, closedDeals, closeRate } = summary;
+type ReferralSummaryMode = 'mc' | 'agent';
+
+export function ReferralSummary({
+  summary,
+  mode
+}: {
+  summary: ReferralSummaryMetrics;
+  mode: ReferralSummaryMode;
+}) {
+  const { total, closedDeals, closeRate, activeReferrals } = summary;
+
+  const metrics =
+    mode === 'agent'
+      ? [
+          {
+            label: 'Total Referrals',
+            value: formatNumber(total)
+          },
+          {
+            label: 'Active Referrals',
+            value: formatNumber(activeReferrals)
+          },
+          {
+            label: 'Closed Referrals',
+            value: formatNumber(closedDeals)
+          },
+          {
+            label: 'Close Rate',
+            value: `${closeRate.toFixed(1)}%`
+          }
+        ]
+      : [
+          {
+            label: 'Total Referrals',
+            value: formatNumber(total)
+          },
+          {
+            label: 'Closed Deals',
+            value: formatNumber(closedDeals)
+          },
+          {
+            label: 'Close Rate',
+            value: `${closeRate.toFixed(1)}%`
+          }
+        ];
+
+  const columnClass = mode === 'agent' ? 'md:grid-cols-4' : 'md:grid-cols-3';
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <dl className="grid gap-4 md:grid-cols-3">
-        <div>
-          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Referrals</dt>
-          <dd className="mt-1 text-2xl font-semibold text-slate-900">{formatNumber(total)}</dd>
-        </div>
-        <div>
-          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Closed Deals</dt>
-          <dd className="mt-1 text-2xl font-semibold text-slate-900">{formatNumber(closedDeals)}</dd>
-        </div>
-        <div>
-          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Close Rate</dt>
-          <dd className="mt-1 text-2xl font-semibold text-slate-900">{closeRate.toFixed(1)}%</dd>
-        </div>
+      <dl className={clsx('grid gap-4', columnClass)}>
+        {metrics.map((metric) => (
+          <div key={metric.label}>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{metric.label}</dt>
+            <dd className="mt-1 text-2xl font-semibold text-slate-900">{metric.value}</dd>
+          </div>
+        ))}
       </dl>
     </div>
   );

@@ -7,6 +7,7 @@ import { Payment } from '@/models/payment';
 import { differenceInDays } from 'date-fns';
 import { Types } from 'mongoose';
 import { getCurrentSession } from '@/lib/auth';
+import { ACTIVE_REFERRAL_STATUSES } from '@/constants/referrals';
 
 interface GetReferralsParams {
   session: Session | null;
@@ -132,7 +133,13 @@ export async function getReferrals(params: GetReferralsParams) {
     return acc;
   }, {});
 
-  const [items, total, closedDealAggregation] = await Promise.all([
+  const activeQuery: Record<string, unknown> = { ...query };
+
+  if (!('status' in activeQuery)) {
+    activeQuery.status = { $in: ACTIVE_REFERRAL_STATUSES };
+  }
+
+  const [items, total, closedDealAggregation, activeReferrals] = await Promise.all([
     Referral.find(query)
       .populate<{ assignedAgent: PopulatedAgent }>('assignedAgent', 'name email phone')
       .populate<{ lender: PopulatedLender }>('lender', 'name email phone')
@@ -159,7 +166,8 @@ export async function getReferrals(params: GetReferralsParams) {
       },
       { $group: { _id: '$referralId' } },
       { $group: { _id: null, count: { $sum: 1 } } }
-    ])
+    ]),
+    Referral.countDocuments(activeQuery)
   ]);
 
   const closedDeals = closedDealAggregation[0]?.count ?? 0;
@@ -198,7 +206,8 @@ export async function getReferrals(params: GetReferralsParams) {
     summary: {
       total,
       closedDeals,
-      closeRate
+      closeRate,
+      activeReferrals
     }
   };
 }
