@@ -217,7 +217,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       .filter((email): email is string => Boolean(email));
 
     if (adminEmails.length > 0) {
-      const referral = await Referral.findById(existingPayment.referralId).lean();
+      const referral = await Referral.findById(existingPayment.referralId)
+        .select('borrower referralFeeDueCents')
+        .lean<Pick<ReferralSummary, '_id' | 'borrower' | 'referralFeeDueCents'> | null>();
       const borrowerName = referral?.borrower?.name ?? 'a referral client';
       const amountCents = payment.expectedAmountCents ?? referral?.referralFeeDueCents ?? 0;
       const formattedAmount = amountCents
