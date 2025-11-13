@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useId, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
+import { differenceInYears, parseISO } from 'date-fns';
 
 import { fetcher } from '@/utils/fetcher';
 import { useCoverageSuggestions } from '@/hooks/use-coverage-suggestions';
@@ -22,6 +23,8 @@ interface AgentProfileResponse {
   closingRatePercentage?: number | null;
   npsScore?: number | null;
   avgResponseHours?: number | null;
+  experienceSince?: string | null;
+  specialties?: string[];
 }
 
 interface McProfileResponse {
@@ -54,6 +57,19 @@ type FormState = {
   closingRatePercentage: string;
   avgResponseHours: string;
   npsScore: string;
+  experienceSince: string;
+  specialties: string;
+};
+
+const formatPhoneInput = (value: string): string => {
+  const digits = value.replace(/\D/g, '').slice(0, 10);
+  if (digits.length <= 3) {
+    return digits;
+  }
+  if (digits.length <= 6) {
+    return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  }
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
 };
 
 export function ProfileForm() {
@@ -77,6 +93,8 @@ export function ProfileForm() {
         closingRatePercentage: '',
         avgResponseHours: '',
         npsScore: '',
+        experienceSince: '',
+        specialties: '',
       };
     }
 
@@ -95,6 +113,8 @@ export function ProfileForm() {
           typeof data.closingRatePercentage === 'number' ? String(data.closingRatePercentage) : '',
         avgResponseHours: typeof data.avgResponseHours === 'number' ? String(data.avgResponseHours) : '',
         npsScore: typeof data.npsScore === 'number' ? String(data.npsScore) : '',
+        experienceSince: data.experienceSince ? data.experienceSince.slice(0, 10) : '',
+        specialties: (data.specialties ?? []).join(', '),
       };
     }
 
@@ -112,6 +132,8 @@ export function ProfileForm() {
         closingRatePercentage: '',
         avgResponseHours: '',
         npsScore: '',
+        experienceSince: '',
+        specialties: '',
       };
     }
 
@@ -128,6 +150,8 @@ export function ProfileForm() {
       closingRatePercentage: '',
       avgResponseHours: '',
       npsScore: '',
+      experienceSince: '',
+      specialties: '',
     };
   }, [data]);
 
@@ -159,6 +183,11 @@ export function ProfileForm() {
   }, [data]);
 
   const handleChange = (field: keyof FormState) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (field === 'phone') {
+      const formatted = formatPhoneInput(event.target.value);
+      setForm((previous) => ({ ...previous, phone: formatted }));
+      return;
+    }
     setForm((previous) => ({ ...previous, [field]: event.target.value }));
   };
 
@@ -239,6 +268,19 @@ export function ProfileForm() {
         } else {
           payload.npsScore = null;
         }
+
+        payload.specialties = parseList(form.specialties);
+
+        const experienceValue = form.experienceSince.trim();
+        if (experienceValue) {
+          const parsedDate = parseISO(experienceValue);
+          if (Number.isNaN(parsedDate.getTime())) {
+            throw new Error('Experience start date must be a valid date.');
+          }
+          payload.experienceSince = parsedDate.toISOString();
+        } else {
+          payload.experienceSince = null;
+        }
       }
 
       if (data.role === 'mc') {
@@ -291,30 +333,13 @@ export function ProfileForm() {
   };
 
   const readOnlyAgent = (profile: AgentProfileResponse) => {
-    const productionHighlights = [
-      {
-        label: 'Closings (last 12 months)',
-        value: typeof profile.closings12mo === 'number' ? profile.closings12mo.toLocaleString() : 'Not set',
-      },
-      {
-        label: 'Closing rate',
-        value:
-          typeof profile.closingRatePercentage === 'number'
-            ? `${profile.closingRatePercentage.toFixed(1)}%`
-            : 'Not set',
-      },
-      {
-        label: 'Average response time',
-        value:
-          typeof profile.avgResponseHours === 'number'
-            ? `${profile.avgResponseHours.toFixed(1)} hrs`
-            : 'Not set',
-      },
-      {
-        label: 'NPS score',
-        value: typeof profile.npsScore === 'number' ? profile.npsScore.toString() : 'Not set',
-      },
-    ];
+    const yearsExperience = profile.experienceSince
+      ? Math.max(differenceInYears(new Date(), new Date(profile.experienceSince)), 0)
+      : null;
+    const yearsExperienceLabel =
+      yearsExperience === null
+        ? 'Not provided'
+        : `${yearsExperience} ${yearsExperience === 1 ? 'year' : 'years'}`;
 
     return (
       <div className="space-y-8">
@@ -347,6 +372,10 @@ export function ProfileForm() {
                 {profile.licenseNumber ? profile.licenseNumber : 'Not provided'}
               </p>
             </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-slate-400">Years of experience</p>
+              <p className="mt-1 text-base font-medium text-slate-900">{yearsExperienceLabel}</p>
+            </div>
           </div>
         </section>
 
@@ -365,18 +394,10 @@ export function ProfileForm() {
               <p className="text-xs uppercase tracking-wide text-slate-400">Primary markets</p>
               <div className="mt-2">{renderBadgeList(profile.markets)}</div>
             </div>
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Production indicators</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {productionHighlights.map((highlight) => (
-              <div key={highlight.label} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{highlight.label}</p>
-                <p className="mt-2 text-lg font-semibold text-slate-900">{highlight.value}</p>
-              </div>
-            ))}
+            <div className="sm:col-span-2">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Specialties</p>
+              <div className="mt-2">{renderBadgeList(profile.specialties)}</div>
+            </div>
           </div>
         </section>
       </div>
@@ -434,9 +455,6 @@ export function ProfileForm() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-brand">Referral CRM</p>
           <h1 className="mt-2 text-2xl font-semibold text-slate-900">My profile</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Keep your contact, coverage, and production details current for your partners.
-          </p>
         </div>
         {canEdit && !isEditing && (
           <button
@@ -451,10 +469,6 @@ export function ProfileForm() {
 
       {isEditing ? (
         <form onSubmit={handleSubmit} className="mt-6 space-y-8">
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            Share a complete profile so lenders and teammates know how and when to loop you into opportunities.
-          </div>
-
           <section className="space-y-4">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Contact & basics</h2>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -557,7 +571,34 @@ export function ProfileForm() {
               </section>
 
               <section className="space-y-4">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Production indicators</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Experience & specialties</h2>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="text-sm font-semibold text-slate-600">
+                    Experience start date
+                    <input
+                      type="date"
+                      value={form.experienceSince}
+                      onChange={handleChange('experienceSince')}
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      disabled={saving}
+                    />
+                  </label>
+                  <label className="text-sm font-semibold text-slate-600 sm:col-span-2">
+                    Specialties (comma separated)
+                    <textarea
+                      value={form.specialties}
+                      onChange={handleChange('specialties')}
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      placeholder="First-time homebuyers, Relocation, Luxury"
+                      rows={2}
+                      disabled={saving}
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Performance metrics</h2>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="text-sm font-semibold text-slate-600">
                     Closings (last 12 months)
