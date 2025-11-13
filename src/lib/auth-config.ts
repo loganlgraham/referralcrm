@@ -135,7 +135,12 @@ export const authOptions: NextAuthOptions = {
         // @ts-ignore
         token.role = (user as any).role ?? token.role;
       }
-      if (!('role' in token) && token.sub) {
+
+      const role = (token as any).role;
+      const shouldRefreshRole =
+        (!role || role === 'viewer') && typeof token.sub === 'string' && token.sub.length > 0;
+
+      if (shouldRefreshRole) {
         try {
           await connectMongo();
           const u = await User.findById(token.sub).select('role').lean();
