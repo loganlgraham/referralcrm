@@ -13,9 +13,9 @@ export async function GET(): Promise<NextResponse> {
   }
 
   await connectMongo();
-  const suggestions = await CoverageSuggestion.find()
+  const suggestions = await CoverageSuggestion.find<{ _id: Types.ObjectId; value: string }>()
     .select('value')
-    .lean<{ _id: Types.ObjectId; value: string }>();
+    .lean();
   const sorted = sortCoverageSuggestions(suggestions);
   return NextResponse.json({ suggestions: sorted });
 }
