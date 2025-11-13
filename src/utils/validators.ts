@@ -69,7 +69,7 @@ export const createReferralNoteSchema = z.object({
   content: z.string().min(1),
   hiddenFromAgent: z.boolean().optional(),
   hiddenFromMc: z.boolean().optional(),
-  emailTargets: z.array(z.enum(['agent', 'mc'])).optional()
+  emailTargets: z.array(z.enum(['agent', 'mc', 'admin'])).optional()
 });
 
 export const createAgentNoteSchema = z.object({

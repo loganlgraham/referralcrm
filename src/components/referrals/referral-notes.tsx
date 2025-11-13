@@ -12,7 +12,7 @@ interface ReferralNote {
   createdAt: string;
   hiddenFromAgent?: boolean;
   hiddenFromMc?: boolean;
-  emailedTargets?: ('agent' | 'mc')[];
+  emailedTargets?: ('agent' | 'mc' | 'admin')[];
 }
 
 type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknown';
@@ -30,6 +30,7 @@ interface Props {
   viewerRole: ViewerRole;
   agentContact?: { name?: string | null; email?: string | null } | null;
   mcContact?: { name?: string | null; email?: string | null } | null;
+  adminContacts?: { name?: string | null; email?: string | null }[];
 }
 
 const formatTimestamp = (value: string) => {
@@ -87,7 +88,8 @@ export function ReferralNotes({
   initialNotes,
   viewerRole,
   agentContact,
-  mcContact
+  mcContact,
+  adminContacts,
 }: Props) {
   const [notes, setNotes] = useState<ReferralNote[]>(() => [...initialNotes]);
   const [content, setContent] = useState('');
@@ -95,6 +97,7 @@ export function ReferralNotes({
   const [hiddenFromMc, setHiddenFromMc] = useState(false);
   const [emailAgent, setEmailAgent] = useState(false);
   const [emailMc, setEmailMc] = useState(false);
+  const [emailAdmin, setEmailAdmin] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showNotesDropdown, setShowNotesDropdown] = useState(false);
   const { mutate } = useSWRConfig();
@@ -104,8 +107,12 @@ export function ReferralNotes({
   const canControlVisibility = viewerRole === 'admin' || viewerRole === 'manager';
   const hasAgentEmail = Boolean(agentContact?.email);
   const hasMcEmail = Boolean(mcContact?.email);
+  const hasAdminEmails = Array.isArray(adminContacts)
+    ? adminContacts.some((contact) => contact?.email)
+    : false;
   const agentEmailDisabled = saving || hiddenFromAgent || !hasAgentEmail;
   const mcEmailDisabled = saving || hiddenFromMc || !hasMcEmail;
+  const adminEmailDisabled = saving || !hasAdminEmails;
 
   const sortedNotes = useMemo(
     () =>
@@ -125,12 +132,19 @@ export function ReferralNotes({
     }
   }, [hiddenFromMc, emailMc]);
 
+  useEffect(() => {
+    if (!hasAdminEmails && emailAdmin) {
+      setEmailAdmin(false);
+    }
+  }, [hasAdminEmails, emailAdmin]);
+
   const resetForm = () => {
     setContent('');
     setHiddenFromAgent(false);
     setHiddenFromMc(false);
     setEmailAgent(false);
     setEmailMc(false);
+    setEmailAdmin(false);
   };
 
   const handleDropdownToggle = () => {
@@ -144,12 +158,15 @@ export function ReferralNotes({
       return;
     }
 
-    const emailTargets: ('agent' | 'mc')[] = [];
+    const emailTargets: ('agent' | 'mc' | 'admin')[] = [];
     if (emailAgent && hasAgentEmail && !hiddenFromAgent) {
       emailTargets.push('agent');
     }
     if (emailMc && hasMcEmail && !hiddenFromMc) {
       emailTargets.push('mc');
+    }
+    if (emailAdmin && hasAdminEmails) {
+      emailTargets.push('admin');
     }
 
     setSaving(true);
@@ -183,11 +200,20 @@ export function ReferralNotes({
       resetForm();
       void mutate(activityFeedKey);
 
-      const emailSummary = Array.isArray(notePayload.emailedTargets) && notePayload.emailedTargets.length > 0
-        ? ` Email sent to ${notePayload.emailedTargets
-            .map((target) => (target === 'agent' ? agentContact?.name || 'agent' : mcContact?.name || 'MC'))
-            .join(' & ')}.`
-        : '';
+      const emailSummary =
+        Array.isArray(notePayload.emailedTargets) && notePayload.emailedTargets.length > 0
+          ? ` Email sent to ${notePayload.emailedTargets
+              .map((target) => {
+                if (target === 'agent') {
+                  return agentContact?.name || 'agent';
+                }
+                if (target === 'mc') {
+                  return mcContact?.name || 'MC';
+                }
+                return 'admins';
+              })
+              .join(' & ')}.`
+          : '';
       toast.success(`Note added.${emailSummary}`.trim());
 
       if (deliveryFailed && emailTargets.length > 0) {
@@ -244,7 +270,7 @@ export function ReferralNotes({
             />
           )}
           <ToggleControl
-            label="Email agent"
+            label={viewerRole === 'agent' ? 'Email myself this note' : 'Email agent'}
             checked={emailAgent}
             onChange={(value) => setEmailAgent(value)}
             disabled={agentEmailDisabled}
@@ -255,16 +281,32 @@ export function ReferralNotes({
             onChange={(value) => setEmailMc(value)}
             disabled={mcEmailDisabled}
           />
+          <ToggleControl
+            label="Email admin"
+            checked={emailAdmin}
+            onChange={(value) => setEmailAdmin(value)}
+            disabled={adminEmailDisabled}
+          />
         </div>
-        {(!hasAgentEmail || !hasMcEmail) && (
-          <p className="text-xs text-slate-400">
-            {!hasAgentEmail && !hasMcEmail
-              ? 'Assign an agent or MC with an email address to send notes automatically.'
-              : !hasAgentEmail
-                ? 'Assign an agent with an email address to notify them automatically.'
-                : 'Assign an MC with an email address to notify them automatically.'}
-          </p>
-        )}
+        {(() => {
+          const missingMessages: string[] = [];
+          if (!hasAgentEmail) {
+            missingMessages.push('Assign an agent with an email address to notify them automatically.');
+          }
+          if (!hasMcEmail) {
+            missingMessages.push('Assign an MC with an email address to notify them automatically.');
+          }
+          if (!hasAdminEmails) {
+            missingMessages.push('Add an admin user with an email address to notify them automatically.');
+          }
+          return missingMessages.length > 0 ? (
+            <ul className="space-y-1 text-xs text-slate-400">
+              {missingMessages.map((message) => (
+                <li key={message}>{message}</li>
+              ))}
+            </ul>
+          ) : null;
+        })()}
         <div className="flex flex-wrap gap-2">
           <button
             type="submit"
@@ -333,7 +375,15 @@ export function ReferralNotes({
                           {showEmailBadge && (
                             <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700">
                               {`Emailed: ${note.emailedTargets
-                                ?.map((target) => (target === 'agent' ? 'Agent' : 'MC'))
+                                ?.map((target) => {
+                                  if (target === 'agent') {
+                                    return 'Agent';
+                                  }
+                                  if (target === 'mc') {
+                                    return 'MC';
+                                  }
+                                  return 'Admin';
+                                })
                                 .join(' & ')}`}
                             </span>
                           )}

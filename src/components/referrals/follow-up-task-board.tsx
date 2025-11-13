@@ -1,11 +1,12 @@
 'use client';
 
 import { useMemo } from 'react';
-import { CheckCircle2, Circle } from 'lucide-react';
+import { CalendarPlus, CheckCircle2, Circle, Loader2 } from 'lucide-react';
 
 import { useFollowUpTaskContext } from '@/components/referrals/follow-up-task-provider';
 import { useFollowUpTasks } from '@/components/referrals/use-follow-up-tasks';
 import { computeSlaInsights, sortRecommendations, type ReferralLike } from '@/utils/sla-insights';
+import { useCalendarTaskSubmission } from '@/components/referrals/use-calendar-task-submission';
 
 interface BoardReferral {
   _id: string;
@@ -85,7 +86,9 @@ export function FollowUpTasksBoard({ referrals }: FollowUpTasksBoardProps) {
 function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
   const referralLike = toReferralLike(referral);
   const tasks = useFollowUpTasks(referralLike);
-  const outstanding = tasks.filter((task) => !task.completed).length;
+  const { submitTasks, addingTaskId, bulkAdding } = useCalendarTaskSubmission();
+  const incompleteTasks = useMemo(() => tasks.filter((task) => !task.completed), [tasks]);
+  const outstanding = incompleteTasks.length;
 
   return (
     <section className="space-y-3 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
@@ -99,8 +102,21 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
               : 'Agent assignment pending'}
           </p>
         </div>
-        <div className="rounded-full bg-slate-900/5 px-3 py-1 text-xs font-semibold text-slate-600">
-          {outstanding} open task{outstanding === 1 ? '' : 's'}
+        <div className="flex flex-col items-end gap-2">
+          <div className="rounded-full bg-slate-900/5 px-3 py-1 text-xs font-semibold text-slate-600">
+            {outstanding} open task{outstanding === 1 ? '' : 's'}
+          </div>
+          {outstanding > 0 ? (
+            <button
+              type="button"
+              onClick={() => submitTasks(incompleteTasks, 'bulk')}
+              disabled={bulkAdding || addingTaskId !== null}
+              className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {bulkAdding ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />}
+              {outstanding > 1 ? 'Add outstanding tasks to Google Calendar' : 'Add task to Google Calendar'}
+            </button>
+          ) : null}
         </div>
       </div>
       {tasks.length > 0 ? (
@@ -128,6 +144,23 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
                 <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                   {task.supportingMetric && <span>{task.supportingMetric}</span>}
                   {task.dueAt && <span>Due {new Date(task.dueAt).toLocaleString()}</span>}
+                </div>
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => submitTasks([task], 'single')}
+                    disabled={
+                      bulkAdding || (addingTaskId !== null && addingTaskId !== task.taskId)
+                    }
+                    className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {addingTaskId === task.taskId ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CalendarPlus className="h-4 w-4" />
+                    )}
+                    {addingTaskId === task.taskId ? 'Adding…' : 'Add to Google Calendar'}
+                  </button>
                 </div>
               </div>
             </li>

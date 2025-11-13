@@ -8,6 +8,7 @@ import { differenceInDays } from 'date-fns';
 import { Types } from 'mongoose';
 import { getCurrentSession } from '@/lib/auth';
 import { ACTIVE_REFERRAL_STATUSES } from '@/constants/referrals';
+import { User } from '@/models/user';
 
 interface GetReferralsParams {
   session: Session | null;
@@ -234,6 +235,13 @@ export async function getReferralById(id: string) {
   const daysInStatus = differenceInDays(new Date(), referral.statusLastUpdated ?? referral.createdAt);
 
   const viewerRole = session?.user?.role ?? 'viewer';
+  const adminUsers = (await User.find({ role: 'admin', email: { $ne: null } })
+    .select('name email')
+    .lean()) as Array<{ name?: string | null; email?: string | null }>;
+  const adminContacts = adminUsers.map((admin) => ({
+    name: typeof admin.name === 'string' && admin.name.trim() ? admin.name : null,
+    email: typeof admin.email === 'string' && admin.email ? admin.email : null,
+  }));
   const notes = (referral.notes ?? []).map((note: any) => ({
     id: note._id.toString(),
     authorName: note.authorName,
@@ -301,6 +309,7 @@ export async function getReferralById(id: string) {
         }))
       : [],
     notes: filteredNotes,
+    adminContacts,
     viewerRole
   };
 }

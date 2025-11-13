@@ -52,7 +52,7 @@ interface ReferralDetailNote {
   createdAt: string;
   hiddenFromAgent?: boolean;
   hiddenFromMc?: boolean;
-  emailedTargets?: ('agent' | 'mc')[];
+  emailedTargets?: ('agent' | 'mc' | 'admin')[];
 }
 
 interface ReferralDetail {
@@ -90,6 +90,7 @@ interface ReferralDetail {
   viewerRole?: string;
   ahaBucket?: 'AHA' | 'AHA_OOS' | '' | null;
   org?: string;
+  adminContacts?: { name?: string | null; email?: string | null }[];
   audit?: {
     field?: string | null;
     newValue?: unknown;
@@ -1119,6 +1120,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
           name: mcContact?.name ?? null,
           email: mcContact?.email ?? null
         }}
+        adminContacts={referral.adminContacts ?? []}
       />
       {showDeals && <DealCard referral={dealReferral} overrides={dealOverrides} />}
       <ReferralTimeline referralId={referralId} />
