@@ -259,6 +259,17 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         }
       : null
   );
+  const handleAgentContactChange = (contact: Contact | null) => {
+    setAgentContact(contact);
+    router.refresh();
+    void mutate(activityFeedKey);
+  };
+
+  const handleMcContactChange = (contact: Contact | null) => {
+    setMcContact(contact);
+    router.refresh();
+    void mutate(activityFeedKey);
+  };
   const initialPropertyState = initialReferral.propertyState
     ? String(initialReferral.propertyState).toUpperCase()
     : undefined;
@@ -459,6 +470,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       }
       toast.success('Referral deleted');
       router.replace('/referrals');
+      router.refresh();
       void mutate('/api/referrals?summary=true');
       void mutate('/api/referrals?leaderboard=true');
     } catch (error) {
@@ -605,6 +617,26 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     daysInStatus?: number;
   }) => {
     const statusChanged = snapshot.status !== financials.status;
+    const preApprovalChanged =
+      snapshot.preApprovalAmountCents !== undefined &&
+      snapshot.preApprovalAmountCents !== financials.preApprovalAmountCents;
+    const contractValueChanged =
+      snapshot.contractPriceCents !== undefined &&
+      snapshot.contractPriceCents !== financials.contractPriceCents;
+    const referralFeeChanged =
+      snapshot.referralFeeDueCents !== undefined &&
+      snapshot.referralFeeDueCents !== financials.referralFeeDueCents;
+    const commissionChanged =
+      snapshot.commissionBasisPoints !== undefined &&
+      snapshot.commissionBasisPoints !== financials.commissionBasisPoints;
+    const referralFeeBasisChanged =
+      snapshot.referralFeeBasisPoints !== undefined &&
+      snapshot.referralFeeBasisPoints !== financials.referralFeeBasisPoints;
+    const propertyFieldsTouched =
+      snapshot.propertyAddress !== undefined ||
+      snapshot.propertyCity !== undefined ||
+      snapshot.propertyState !== undefined ||
+      snapshot.propertyPostalCode !== undefined;
     setFinancials((previous) => {
       const next = {
         status: snapshot.status ?? previous.status,
@@ -664,7 +696,15 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       return next;
     });
 
-    if (statusChanged) {
+    if (
+      statusChanged ||
+      preApprovalChanged ||
+      contractValueChanged ||
+      referralFeeChanged ||
+      commissionChanged ||
+      referralFeeBasisChanged ||
+      propertyFieldsTouched
+    ) {
       void mutate(activityFeedKey);
     }
 
@@ -894,8 +934,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         onContractDraftChange={handleDraftChange}
         agentContact={agentContact}
         mcContact={mcContact}
-        onAgentContactChange={setAgentContact}
-        onMcContactChange={setMcContact}
+        onAgentContactChange={handleAgentContactChange}
+        onMcContactChange={handleMcContactChange}
       />
       <ReferralFollowUpCard referral={followUpReferral} />
       <section className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">

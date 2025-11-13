@@ -215,7 +215,7 @@ export async function getReferrals(params: GetReferralsParams) {
 export async function getReferralById(id: string) {
   const session = await getCurrentSession();
   await connectMongo();
-  const referral = await Referral.findById(id)
+  const referral = await Referral.findOne({ _id: id, deletedAt: null })
     .populate<{ assignedAgent: { _id: Types.ObjectId; name: string; email?: string; phone?: string } }>(
       'assignedAgent',
       'name email phone'
@@ -276,6 +276,11 @@ export async function getReferralById(id: string) {
       agentAttribution: payment.agentAttribution ?? null,
       usedAfc: Boolean(payment.usedAfc),
     })),
+    preApprovalAmountCents: typeof referral.preApprovalAmountCents === 'number' ? referral.preApprovalAmountCents : 0,
+    estPurchasePriceCents: typeof referral.estPurchasePriceCents === 'number' ? referral.estPurchasePriceCents : 0,
+    referralFeeDueCents: typeof referral.referralFeeDueCents === 'number' ? referral.referralFeeDueCents : 0,
+    commissionBasisPoints: typeof referral.commissionBasisPoints === 'number' ? referral.commissionBasisPoints : 0,
+    referralFeeBasisPoints: typeof referral.referralFeeBasisPoints === 'number' ? referral.referralFeeBasisPoints : 0,
     daysInStatus,
     statusLastUpdated: referral.statusLastUpdated ? referral.statusLastUpdated.toISOString() : null,
     audit: Array.isArray(referral.audit)

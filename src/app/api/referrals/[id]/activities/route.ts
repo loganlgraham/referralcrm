@@ -41,6 +41,7 @@ type LeanReferralAccess = {
         userId?: Types.ObjectId | string | null;
       };
   org: 'AFC' | 'AHA';
+  deletedAt?: Date | null;
 };
 
 const serializeActivity = (activity: LeanActivity) => ({
@@ -57,11 +58,14 @@ export async function GET(_: NextRequest, { params }: Params): Promise<NextRespo
   }
   await connectMongo();
   const referral = await Referral.findById(params.id)
-    .select('assignedAgent lender org')
+    .select('assignedAgent lender org deletedAt')
     .populate('assignedAgent', 'userId')
     .populate('lender', 'userId')
     .lean<LeanReferralAccess>();
   if (!referral) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+  if (referral.deletedAt) {
     return new NextResponse('Not found', { status: 404 });
   }
   const accessScope = {
@@ -92,11 +96,14 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   await connectMongo();
   const referral = await Referral.findById(params.id)
-    .select('assignedAgent lender org')
+    .select('assignedAgent lender org deletedAt')
     .populate('assignedAgent', 'userId')
     .populate('lender', 'userId')
     .lean<LeanReferralAccess>();
   if (!referral) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+  if (referral.deletedAt) {
     return new NextResponse('Not found', { status: 404 });
   }
   const accessScope = {
