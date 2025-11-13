@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Types } from 'mongoose';
 import { z } from 'zod';
 
 import { connectMongo } from '@/lib/mongoose';
@@ -29,23 +30,38 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   await connectMongo();
-  const agents = await Agent.find(filter).lean();
+
+  type AgentLean = {
+    _id: Types.ObjectId;
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    licenseNumber?: string | null;
+    brokerage?: string | null;
+    statesLicensed?: string[] | null;
+    zipCoverage?: string[] | null;
+    npsScore?: number | null;
+  };
+
+  const agents = await Agent.find(filter).lean<AgentLean>();
 
   const agentIds = agents.map((agent) => agent._id);
   const npsScores = new Map<string, number | null>();
   agents.forEach((agent) => {
-    npsScores.set(agent._id.toString(), agent.npsScore ?? null);
+    const id = agent._id.toString();
+    npsScores.set(id, agent.npsScore ?? null);
   });
 
   const metricsMap = await computeAgentMetrics(agentIds, npsScores);
 
   const payload = agents.map((agent) => {
-    const metrics = metricsMap.get(agent._id.toString()) ?? {
+    const id = agent._id.toString();
+    const metrics = metricsMap.get(id) ?? {
       ...EMPTY_AGENT_METRICS,
       npsScore: agent.npsScore ?? null
     };
     return {
-      _id: agent._id.toString(),
+      _id: id,
       name: agent.name ?? '',
       email: agent.email ?? '',
       phone: agent.phone ?? '',
