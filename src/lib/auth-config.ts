@@ -5,6 +5,7 @@ import GoogleProvider from 'next-auth/providers/google';
 import bcrypt from 'bcryptjs';
 import type { NextAuthOptions } from 'next-auth';
 import { Resend } from 'resend';
+import { ObjectId } from 'mongodb';
 import { getClientPromise } from '@/lib/mongodb-client';
 import { connectMongo } from '@/lib/mongoose';
 import { User } from '@/models/user';
@@ -112,6 +113,14 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       allowDangerousEmailAccountLinking: true,
+      authorization: {
+        params: {
+          scope: 'openid email profile https://www.googleapis.com/auth/calendar.events',
+          access_type: 'offline',
+          prompt: 'consent',
+          include_granted_scopes: 'true',
+        },
+      },
     })
   );
 }
@@ -130,10 +139,20 @@ export const authOptions: NextAuthOptions = {
   providers,
   debug: process.env.NODE_ENV === 'development',
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user) {
         // @ts-ignore
         token.role = (user as any).role ?? token.role;
+      }
+
+      if (account?.provider === 'google') {
+        (token as any).googleCalendarConnected = Boolean(
+          account.scope?.includes('https://www.googleapis.com/auth/calendar.events')
+        );
+      }
+
+      if ((token as any).googleCalendarConnected === undefined) {
+        (token as any).googleCalendarConnected = null;
       }
 
       const role = (token as any).role;
@@ -148,6 +167,21 @@ export const authOptions: NextAuthOptions = {
           token.role = u?.role ?? null;
         } catch {}
       }
+
+      if ((token as any).googleCalendarConnected === null && typeof token.sub === 'string') {
+        try {
+          const client = await getClientPromise();
+          const accounts = client.db().collection('accounts');
+          const objectId = new ObjectId(token.sub);
+          const accountDoc = await accounts.findOne({ provider: 'google', userId: objectId });
+          (token as any).googleCalendarConnected = Boolean(
+            accountDoc?.scope?.includes('https://www.googleapis.com/auth/calendar.events')
+          );
+        } catch {
+          (token as any).googleCalendarConnected = false;
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {
@@ -156,6 +190,10 @@ export const authOptions: NextAuthOptions = {
       session.user.id = token.sub as string;
       // @ts-ignore
       session.user.role = (token as any).role ?? null;
+      const sessionUser = session.user as typeof session.user & {
+        googleCalendarConnected?: boolean;
+      };
+      sessionUser.googleCalendarConnected = Boolean((token as any).googleCalendarConnected);
       return session;
     },
   },
