@@ -1,3 +1,4 @@
+import { Types } from 'mongoose';
 import { NextResponse } from 'next/server';
 
 import { getCurrentSession } from '@/lib/auth';
@@ -12,7 +13,9 @@ export async function GET(): Promise<NextResponse> {
   }
 
   await connectMongo();
-  const suggestions = await CoverageSuggestion.find().select('value').lean();
+  const suggestions = await CoverageSuggestion.find()
+    .select('value')
+    .lean<{ _id: Types.ObjectId; value: string }>();
   const sorted = sortCoverageSuggestions(suggestions);
   return NextResponse.json({ suggestions: sorted });
 }
