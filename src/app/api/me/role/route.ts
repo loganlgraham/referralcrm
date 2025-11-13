@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-config';
 import { connectMongo } from '@/lib/mongoose';
 import { User } from '@/models/user';
+import { Agent } from '@/models/agent';
+import { LenderMC } from '@/models/lender';
 
 export const runtime = 'nodejs';
 
@@ -21,8 +23,8 @@ export async function POST(req: NextRequest) {
 
   await connectMongo();
   const user = await User.findOne({ email: session.user.email })
-    .select('_id role')
-    .lean<{ _id: any; role?: string | null }>();
+    .select('_id role name email')
+    .lean<{ _id: any; role?: string | null; name?: string | null; email: string }>();
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
   if (user?.role) {
@@ -30,5 +32,45 @@ export async function POST(req: NextRequest) {
   }
 
   await User.updateOne({ _id: user._id }, { $set: { role } });
+
+  try {
+    if (role === 'agent') {
+      await Agent.findOneAndUpdate(
+        { $or: [{ userId: user._id }, { email: user.email }] },
+        {
+          userId: user._id,
+          name: session.user.name ?? user.name ?? '',
+          email: user.email,
+          phone: '',
+          statesLicensed: [],
+          zipCoverage: [],
+          closings12mo: 0,
+          closingRatePercentage: null,
+          npsScore: null,
+          avgResponseHours: null,
+          active: true,
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+    } else if (role === 'mortgage-consultant') {
+      await LenderMC.findOneAndUpdate(
+        { $or: [{ userId: user._id }, { email: user.email }] },
+        {
+          userId: user._id,
+          name: session.user.name ?? user.name ?? '',
+          email: user.email,
+          phone: '',
+          nmlsId: '',
+          licensedStates: [],
+          team: '',
+          region: '',
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+    }
+  } catch (error) {
+    console.error('Failed to provision profile for role selection', error);
+  }
+
   return NextResponse.json({ ok: true });
 }
