@@ -1,6 +1,6 @@
 'use client';
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
 import { differenceInYears, parseISO } from 'date-fns';
@@ -60,6 +60,21 @@ type FormState = {
   experienceSince: string;
   specialties: string[];
   languages: string[];
+};
+
+type AgentProfilePayload = {
+  name: string;
+  email: string;
+  phone: string;
+  statesLicensed: string[];
+  coverageAreas: string[];
+  coverageLocations: CoverageLocation[];
+  markets: string[];
+  licenseNumber: string;
+  brokerage: string;
+  specialties: string[];
+  languages: string[];
+  experienceSince: string | null;
 };
 
 const formatPhoneInput = (value: string): string => {
@@ -215,14 +230,59 @@ export function ProfileForm() {
   const [form, setForm] = useState<FormState>(initialState);
   const [isEditing, setIsEditing] = useState(true);
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
-  const [manualLocationLabel, setManualLocationLabel] = useState('');
-  const [manualLocationZipInput, setManualLocationZipInput] = useState('');
+  const [coverageProgress, setCoverageProgress] = useState(0);
+  const [isPersistingCoverage, setIsPersistingCoverage] = useState(false);
 
   useEffect(() => {
     setForm(initialState);
-    setManualLocationLabel('');
-    setManualLocationZipInput('');
   }, [initialState]);
+
+  useEffect(() => {
+    if (!isGeneratingCoverage) {
+      return;
+    }
+
+    setCoverageProgress((value) => (value < 12 ? 12 : value));
+    const interval = window.setInterval(() => {
+      setCoverageProgress((value) => {
+        if (value >= 88) {
+          return 88;
+        }
+        return value + 4;
+      });
+    }, 400);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [isGeneratingCoverage]);
+
+  useEffect(() => {
+    if (isGeneratingCoverage || coverageProgress === 0) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setCoverageProgress(0);
+    }, 700);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [isGeneratingCoverage, coverageProgress]);
+
+  const coverageButtonStyles = useMemo<CSSProperties | undefined>(() => {
+    if (!isGeneratingCoverage && coverageProgress === 0) {
+      return undefined;
+    }
+
+    const progress = Math.min(Math.max(coverageProgress, 0), 100);
+
+    return {
+      backgroundImage: `linear-gradient(90deg, #0b365d 0%, #0b365d ${progress}%, #0f4c81 ${progress}%, #2f6aa3 100%)`,
+      transition: 'background-image 250ms linear',
+    };
+  }, [coverageProgress, isGeneratingCoverage]);
 
   useEffect(() => {
     if (!data) return;
@@ -348,28 +408,93 @@ export function ProfileForm() {
     updateCoverageLocations((current) => mergeCoverageLocations(current, locations));
   };
 
-  const handleManualCoverageAdd = () => {
-    const label = manualLocationLabel.trim();
-    const zipInput = manualLocationZipInput.trim();
+  const createAgentPatchPayload = (coverageLocations: CoverageLocation[]): AgentProfilePayload => {
+    const normalizedCoverageLocations = mergeCoverageLocations([], coverageLocations);
+    const coverageZipCodes = deriveZipCodes(normalizedCoverageLocations);
 
-    if (!label) {
-      toast.error('Add a city, town, or county name first.');
+    const payload: AgentProfilePayload = {
+      name: form.name.trim(),
+      email: form.email.trim().toLowerCase(),
+      phone: form.phone.trim(),
+      statesLicensed: parseList(form.states, (value) => value.toUpperCase()),
+      coverageAreas: coverageZipCodes,
+      coverageLocations: normalizedCoverageLocations,
+      markets: parseList(form.markets),
+      licenseNumber: form.licenseNumber.trim(),
+      brokerage: form.brokerage.trim(),
+      specialties: form.specialties,
+      languages: form.languages,
+      experienceSince: null,
+    };
+
+    const experienceValue = form.experienceSince.trim();
+    if (experienceValue) {
+      const parsedDate = parseISO(experienceValue);
+      if (Number.isNaN(parsedDate.getTime())) {
+        throw new Error('Experience start date must be a valid date.');
+      }
+      payload.experienceSince = parsedDate.toISOString();
+    }
+
+    return payload;
+  };
+
+  const persistCoverageUpdate = async (
+    mergedLocations: CoverageLocation[],
+    successMessage: string
+  ) => {
+    if (data.role !== 'agent') {
+      toast.success(successMessage);
       return;
     }
 
-    const zipCodes = zipInput
-      .split(/[,\s]+/)
-      .map((value) => normalizeZipCode(value))
-      .filter((zip: string | null): zip is string => Boolean(zip));
+    setIsPersistingCoverage(true);
+    try {
+      const payload = createAgentPatchPayload(mergedLocations);
+      const response = await fetch('/api/me/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    if (zipCodes.length === 0) {
-      toast.error('Provide at least one ZIP code for the location.');
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        const message =
+          typeof payload?.error === 'string'
+            ? payload.error
+            : payload?.error?.message ??
+              payload?.message ??
+              'Unable to save generated coverage areas.';
+        throw new Error(message);
+      }
+
+      toast.success(successMessage);
+    } catch (error) {
+      console.error(error);
+      toast.error(
+        error instanceof Error ? error.message : 'Unable to save generated coverage areas.'
+      );
+    } finally {
+      setIsPersistingCoverage(false);
+    }
+  };
+
+  const applyCoverageWithPersistence = async (
+    incoming: CoverageLocation[],
+    successMessage: string
+  ) => {
+    if (incoming.length === 0) {
       return;
     }
 
-    addCoverageLocations([{ label, zipCodes }]);
-    setManualLocationLabel('');
-    setManualLocationZipInput('');
+    let mergedLocations: CoverageLocation[] = [];
+    setForm((previous) => {
+      const nextLocations = mergeCoverageLocations(previous.coverageLocations, incoming);
+      mergedLocations = nextLocations;
+      return { ...previous, coverageLocations: nextLocations };
+    });
+
+    await persistCoverageUpdate(mergedLocations, successMessage);
   };
 
   const generateCoverageLocations = async () => {
@@ -380,6 +505,7 @@ export function ProfileForm() {
     }
 
     setIsGeneratingCoverage(true);
+    setCoverageProgress(12);
     try {
       const response = await fetch('/api/coverage/zip-codes', {
         method: 'POST',
@@ -424,18 +550,22 @@ export function ProfileForm() {
           return;
         }
 
-        addCoverageLocations(fallbackLocations);
-        toast.success('ZIP codes added as coverage placeholders.');
+        await applyCoverageWithPersistence(
+          fallbackLocations,
+          'ZIP codes saved as coverage placeholders.'
+        );
         return;
       }
 
-      addCoverageLocations(normalizedLocations);
-
-      toast.success('Coverage locations added to your profile.');
+      await applyCoverageWithPersistence(
+        normalizedLocations,
+        'Coverage locations saved to your profile.'
+      );
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Unable to generate coverage locations');
     } finally {
+      setCoverageProgress(100);
       setIsGeneratingCoverage(false);
     }
   };
@@ -450,39 +580,15 @@ export function ProfileForm() {
 
     setSaving(true);
     try {
-      const payload: Record<string, unknown> = {
-        name: form.name.trim(),
-        email: form.email.trim().toLowerCase(),
-        phone: form.phone.trim(),
-      };
-
-      if (data.role === 'agent') {
-        const normalizedCoverageLocations = mergeCoverageLocations([], form.coverageLocations);
-        const coverageZipCodes = deriveZipCodes(normalizedCoverageLocations);
-        payload.statesLicensed = parseList(form.states, (value) => value.toUpperCase());
-        payload.coverageAreas = coverageZipCodes;
-        payload.coverageLocations = normalizedCoverageLocations;
-        payload.markets = parseList(form.markets);
-        payload.licenseNumber = form.licenseNumber.trim();
-        payload.brokerage = form.brokerage.trim();
-        payload.specialties = form.specialties;
-        payload.languages = form.languages;
-
-        const experienceValue = form.experienceSince.trim();
-        if (experienceValue) {
-          const parsedDate = parseISO(experienceValue);
-          if (Number.isNaN(parsedDate.getTime())) {
-            throw new Error('Experience start date must be a valid date.');
-          }
-          payload.experienceSince = parsedDate.toISOString();
-        } else {
-          payload.experienceSince = null;
-        }
-      }
-
-      if (data.role === 'mc') {
-        payload.licensedStates = parseList(form.states, (value) => value.toUpperCase());
-      }
+      const payload: Record<string, unknown> =
+        data.role === 'agent'
+          ? createAgentPatchPayload(form.coverageLocations)
+          : {
+              name: form.name.trim(),
+              email: form.email.trim().toLowerCase(),
+              phone: form.phone.trim(),
+              licensedStates: parseList(form.states, (value) => value.toUpperCase()),
+            };
 
       const response = await fetch('/api/me/profile', {
         method: 'PATCH',
@@ -507,8 +613,6 @@ export function ProfileForm() {
 
   const cancelEditing = () => {
     setForm(initialState);
-    setManualLocationLabel('');
-    setManualLocationZipInput('');
     setIsEditing(false);
   };
 
@@ -746,25 +850,27 @@ export function ProfileForm() {
                     />
                   </label>
                   <div className="sm:col-span-2">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <label className="flex-1 text-sm font-semibold text-slate-600">
-                        Areas covered
-                        <textarea
-                          value={form.coverageDescription}
-                          onChange={handleChange('coverageDescription')}
-                          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
-                          placeholder="Describe neighborhoods, cities, and counties you serve"
-                          rows={3}
-                          disabled={saving || isGeneratingCoverage}
-                        />
-                      </label>
+                    <label htmlFor="profile-coverage-description" className="text-sm font-semibold text-slate-600">
+                      Areas covered
+                    </label>
+                    <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-4">
+                      <textarea
+                        id="profile-coverage-description"
+                        value={form.coverageDescription}
+                        onChange={handleChange('coverageDescription')}
+                        className="w-full flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40 sm:min-h-[5.5rem]"
+                        placeholder="Describe neighborhoods, cities, and counties you serve"
+                        rows={3}
+                        disabled={saving || isGeneratingCoverage || isPersistingCoverage}
+                      />
                       <button
                         type="button"
                         onClick={generateCoverageLocations}
-                        className="inline-flex shrink-0 items-center justify-center rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70"
-                        disabled={saving || isGeneratingCoverage}
+                        className="flex shrink-0 items-center justify-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 sm:h-full sm:min-h-[5.5rem] sm:self-stretch"
+                        style={coverageButtonStyles}
+                        disabled={saving || isGeneratingCoverage || isPersistingCoverage}
                       >
-                        {isGeneratingCoverage ? 'Generating…' : 'Generate locations'}
+                        {isGeneratingCoverage ? 'Generating…' : 'Save Service Areas'}
                       </button>
                     </div>
                   </div>
@@ -785,56 +891,13 @@ export function ProfileForm() {
                               onClick={() => removeCoverageLocation(location.label)}
                               className="text-slate-500 transition hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
                               aria-label={`Remove ${location.label}`}
-                              disabled={saving}
+                              disabled={saving || isPersistingCoverage}
                             >
                               ×
                             </button>
                           </span>
                         ))
                       )}
-                    </div>
-                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                      <input
-                        type="text"
-                        value={manualLocationLabel}
-                        onChange={(event) => setManualLocationLabel(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault();
-                            handleManualCoverageAdd();
-                          }
-                        }}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
-                        placeholder="Add a city, town, or county"
-                        disabled={saving}
-                      />
-                      <input
-                        type="text"
-                        value={manualLocationZipInput}
-                        onChange={(event) => setManualLocationZipInput(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault();
-                            handleManualCoverageAdd();
-                          }
-                        }}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
-                        placeholder="Associated ZIP codes (e.g. 78701, 78702)"
-                        disabled={saving}
-                        inputMode="text"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleManualCoverageAdd}
-                        className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70"
-                        disabled={
-                          saving ||
-                          manualLocationLabel.trim().length === 0 ||
-                          manualLocationZipInput.trim().length === 0
-                        }
-                      >
-                        Add location
-                      </button>
                     </div>
                   </div>
                 </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChangeEvent, FormEvent, useMemo, useState } from 'react';
+import { ChangeEvent, CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
@@ -86,9 +86,54 @@ export function AgentsTable() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<AgentFormState>(() => createEmptyForm());
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
-  const [manualLocationLabel, setManualLocationLabel] = useState('');
-  const [manualLocationZipInput, setManualLocationZipInput] = useState('');
+  const [coverageProgress, setCoverageProgress] = useState(0);
 
+  useEffect(() => {
+    if (!isGeneratingCoverage) {
+      return;
+    }
+
+    setCoverageProgress((value) => (value < 12 ? 12 : value));
+    const interval = window.setInterval(() => {
+      setCoverageProgress((value) => {
+        if (value >= 88) {
+          return 88;
+        }
+        return value + 4;
+      });
+    }, 400);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [isGeneratingCoverage]);
+
+  useEffect(() => {
+    if (isGeneratingCoverage || coverageProgress === 0) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setCoverageProgress(0);
+    }, 700);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [isGeneratingCoverage, coverageProgress]);
+
+  const coverageButtonStyles = useMemo<CSSProperties | undefined>(() => {
+    if (!isGeneratingCoverage && coverageProgress === 0) {
+      return undefined;
+    }
+
+    const progress = Math.min(Math.max(coverageProgress, 0), 100);
+
+    return {
+      backgroundImage: `linear-gradient(90deg, #0b365d 0%, #0b365d ${progress}%, #0f4c81 ${progress}%, #2f6aa3 100%)`,
+      transition: 'background-image 250ms linear',
+    };
+  }, [coverageProgress, isGeneratingCoverage]);
   const formDisabled = saving;
 
   const agents = useMemo(() => data ?? [], [data]);
@@ -199,30 +244,6 @@ export function AgentsTable() {
     updateCoverageLocations((current) => mergeCoverageLocations(current, locations));
   };
 
-  const handleManualCoverageAdd = () => {
-    const label = manualLocationLabel.trim();
-    const zipInput = manualLocationZipInput.trim();
-
-    if (!label) {
-      toast.error('Add a city, town, or county name first.');
-      return;
-    }
-
-    const zipCodes = zipInput
-      .split(/[,\s]+/)
-      .map((value) => normalizeZipCode(value))
-      .filter((zip: string | null): zip is string => Boolean(zip));
-
-    if (zipCodes.length === 0) {
-      toast.error('Provide at least one ZIP code for the location.');
-      return;
-    }
-
-    addCoverageLocations([{ label, zipCodes }]);
-    setManualLocationLabel('');
-    setManualLocationZipInput('');
-  };
-
   const generateCoverageLocations = async () => {
     const description = form.coverageDescription.trim();
     if (!description) {
@@ -231,6 +252,7 @@ export function AgentsTable() {
     }
 
     setIsGeneratingCoverage(true);
+    setCoverageProgress(12);
     try {
       const response = await fetch('/api/coverage/zip-codes', {
         method: 'POST',
@@ -287,6 +309,7 @@ export function AgentsTable() {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Unable to generate coverage locations');
     } finally {
+      setCoverageProgress(100);
       setIsGeneratingCoverage(false);
     }
   };
@@ -327,8 +350,6 @@ export function AgentsTable() {
 
       toast.success('Agent added');
       setForm(createEmptyForm());
-      setManualLocationLabel('');
-      setManualLocationZipInput('');
       setShowForm(false);
       await mutate();
       await mutateSuggestions();
@@ -439,25 +460,30 @@ export function AgentsTable() {
                 />
               </label>
               <div className="md:col-span-2 space-y-2">
-                <div className="flex flex-col gap-2 md:flex-row md:items-start md:gap-3">
-                  <label className="flex-1 text-xs font-semibold text-slate-600">
-                    Areas covered
-                    <textarea
-                      value={form.coverageDescription}
-                      onChange={handleChange('coverageDescription')}
-                      className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                      placeholder="Describe the neighborhoods, cities, and counties this agent serves"
-                      rows={3}
-                      disabled={formDisabled || isGeneratingCoverage}
-                    />
-                  </label>
+                <label
+                  htmlFor="new-agent-coverage-description"
+                  className="text-xs font-semibold text-slate-600"
+                >
+                  Areas covered
+                </label>
+                <div className="flex flex-col gap-2 md:flex-row md:items-stretch md:gap-3">
+                  <textarea
+                    id="new-agent-coverage-description"
+                    value={form.coverageDescription}
+                    onChange={handleChange('coverageDescription')}
+                    className="w-full flex-1 rounded border border-slate-200 px-3 py-2 text-sm md:min-h-[5.5rem]"
+                    placeholder="Describe the neighborhoods, cities, and counties this agent serves"
+                    rows={3}
+                    disabled={formDisabled || isGeneratingCoverage}
+                  />
                   <button
                     type="button"
                     onClick={generateCoverageLocations}
-                    className="inline-flex shrink-0 items-center justify-center rounded border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70"
+                    className="flex shrink-0 items-center justify-center rounded bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 md:h-full md:min-h-[5.5rem] md:self-stretch"
+                    style={coverageButtonStyles}
                     disabled={formDisabled || isGeneratingCoverage}
                   >
-                    {isGeneratingCoverage ? 'Generating…' : 'Generate locations'}
+                    {isGeneratingCoverage ? 'Generating…' : 'Save Service Areas'}
                   </button>
                 </div>
               </div>
@@ -485,48 +511,6 @@ export function AgentsTable() {
                       </span>
                     ))
                   )}
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <input
-                    type="text"
-                    value={manualLocationLabel}
-                    onChange={(event) => setManualLocationLabel(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        handleManualCoverageAdd();
-                      }
-                    }}
-                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="Add a city, town, or county"
-                    disabled={formDisabled}
-                  />
-                  <input
-                    type="text"
-                    value={manualLocationZipInput}
-                    onChange={(event) => setManualLocationZipInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        handleManualCoverageAdd();
-                      }
-                    }}
-                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="Associated ZIP codes (e.g. 98101, 98102)"
-                    disabled={formDisabled}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleManualCoverageAdd}
-                    className="inline-flex items-center justify-center rounded border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70"
-                    disabled={
-                      formDisabled ||
-                      manualLocationLabel.trim().length === 0 ||
-                      manualLocationZipInput.trim().length === 0
-                    }
-                  >
-                    Add location
-                  </button>
                 </div>
               </div>
               <div className="md:col-span-2 grid gap-3">
