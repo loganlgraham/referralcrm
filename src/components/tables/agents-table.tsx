@@ -134,9 +134,6 @@ export function AgentsTable() {
       transition: 'background-image 250ms linear',
     };
   }, [coverageProgress, isGeneratingCoverage]);
-  const [manualLocationLabel, setManualLocationLabel] = useState('');
-  const [manualLocationZipInput, setManualLocationZipInput] = useState('');
-
   const formDisabled = saving;
 
   const agents = useMemo(() => data ?? [], [data]);
@@ -247,30 +244,6 @@ export function AgentsTable() {
     updateCoverageLocations((current) => mergeCoverageLocations(current, locations));
   };
 
-  const handleManualCoverageAdd = () => {
-    const label = manualLocationLabel.trim();
-    const zipInput = manualLocationZipInput.trim();
-
-    if (!label) {
-      toast.error('Add a city, town, or county name first.');
-      return;
-    }
-
-    const zipCodes = zipInput
-      .split(/[,\s]+/)
-      .map((value) => normalizeZipCode(value))
-      .filter((zip: string | null): zip is string => Boolean(zip));
-
-    if (zipCodes.length === 0) {
-      toast.error('Provide at least one ZIP code for the location.');
-      return;
-    }
-
-    addCoverageLocations([{ label, zipCodes }]);
-    setManualLocationLabel('');
-    setManualLocationZipInput('');
-  };
-
   const generateCoverageLocations = async () => {
     const description = form.coverageDescription.trim();
     if (!description) {
@@ -377,8 +350,6 @@ export function AgentsTable() {
 
       toast.success('Agent added');
       setForm(createEmptyForm());
-      setManualLocationLabel('');
-      setManualLocationZipInput('');
       setShowForm(false);
       await mutate();
       await mutateSuggestions();
@@ -540,48 +511,6 @@ export function AgentsTable() {
                       </span>
                     ))
                   )}
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-3">
-                  <input
-                    type="text"
-                    value={manualLocationLabel}
-                    onChange={(event) => setManualLocationLabel(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        handleManualCoverageAdd();
-                      }
-                    }}
-                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="Add a city, town, or county"
-                    disabled={formDisabled}
-                  />
-                  <input
-                    type="text"
-                    value={manualLocationZipInput}
-                    onChange={(event) => setManualLocationZipInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        handleManualCoverageAdd();
-                      }
-                    }}
-                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="Associated ZIP codes (e.g. 98101, 98102)"
-                    disabled={formDisabled}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleManualCoverageAdd}
-                    className="inline-flex h-11 items-center justify-center rounded bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 sm:self-stretch"
-                    disabled={
-                      formDisabled ||
-                      manualLocationLabel.trim().length === 0 ||
-                      manualLocationZipInput.trim().length === 0
-                    }
-                  >
-                    Add location
-                  </button>
                 </div>
               </div>
               <div className="md:col-span-2 grid gap-3">

@@ -230,15 +230,11 @@ export function ProfileForm() {
   const [form, setForm] = useState<FormState>(initialState);
   const [isEditing, setIsEditing] = useState(true);
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
-  const [manualLocationLabel, setManualLocationLabel] = useState('');
-  const [manualLocationZipInput, setManualLocationZipInput] = useState('');
   const [coverageProgress, setCoverageProgress] = useState(0);
   const [isPersistingCoverage, setIsPersistingCoverage] = useState(false);
 
   useEffect(() => {
     setForm(initialState);
-    setManualLocationLabel('');
-    setManualLocationZipInput('');
   }, [initialState]);
 
   useEffect(() => {
@@ -501,30 +497,6 @@ export function ProfileForm() {
     await persistCoverageUpdate(mergedLocations, successMessage);
   };
 
-  const handleManualCoverageAdd = () => {
-    const label = manualLocationLabel.trim();
-    const zipInput = manualLocationZipInput.trim();
-
-    if (!label) {
-      toast.error('Add a city, town, or county name first.');
-      return;
-    }
-
-    const zipCodes = zipInput
-      .split(/[,\s]+/)
-      .map((value) => normalizeZipCode(value))
-      .filter((zip: string | null): zip is string => Boolean(zip));
-
-    if (zipCodes.length === 0) {
-      toast.error('Provide at least one ZIP code for the location.');
-      return;
-    }
-
-    addCoverageLocations([{ label, zipCodes }]);
-    setManualLocationLabel('');
-    setManualLocationZipInput('');
-  };
-
   const generateCoverageLocations = async () => {
     const description = form.coverageDescription.trim();
     if (!description) {
@@ -641,8 +613,6 @@ export function ProfileForm() {
 
   const cancelEditing = () => {
     setForm(initialState);
-    setManualLocationLabel('');
-    setManualLocationZipInput('');
     setIsEditing(false);
   };
 
@@ -928,50 +898,6 @@ export function ProfileForm() {
                           </span>
                         ))
                       )}
-                    </div>
-                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-3">
-                      <input
-                        type="text"
-                        value={manualLocationLabel}
-                        onChange={(event) => setManualLocationLabel(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault();
-                            handleManualCoverageAdd();
-                          }
-                        }}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
-                        placeholder="Add a city, town, or county"
-                        disabled={saving || isPersistingCoverage}
-                      />
-                      <input
-                        type="text"
-                        value={manualLocationZipInput}
-                        onChange={(event) => setManualLocationZipInput(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault();
-                            handleManualCoverageAdd();
-                          }
-                        }}
-                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
-                        placeholder="Associated ZIP codes (e.g. 78701, 78702)"
-                        disabled={saving || isPersistingCoverage}
-                        inputMode="text"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleManualCoverageAdd}
-                        className="inline-flex h-11 items-center justify-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 sm:self-stretch"
-                        disabled={
-                          saving ||
-                          isPersistingCoverage ||
-                          manualLocationLabel.trim().length === 0 ||
-                          manualLocationZipInput.trim().length === 0
-                        }
-                      >
-                        Add location
-                      </button>
                     </div>
                   </div>
                 </div>
