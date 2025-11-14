@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/referralcrm';
+const MONGODB_URI =
+  process.env.MONGODB_URI ??
+  (process.env.NODE_ENV === 'development' ? 'mongodb://localhost:27017/referralcrm' : undefined);
 
 let modelsRegistered = false;
 
