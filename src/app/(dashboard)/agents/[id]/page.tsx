@@ -101,7 +101,15 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
           </div>
           <div>
             <p className="text-xs uppercase text-slate-400">Areas Covered</p>
-            <p className="font-medium text-slate-900">{agent.coverageAreas?.slice(0, 10).join(', ') || '—'}</p>
+            <p className="font-medium text-slate-900">
+              {(() => {
+                const labels =
+                  Array.isArray(agent.coverageLocations) && agent.coverageLocations.length > 0
+                    ? agent.coverageLocations.map((location) => location.label)
+                    : agent.coverageAreas ?? [];
+                return labels.slice(0, 10).join(', ') || '—';
+              })()}
+            </p>
           </div>
         </div>
         <div className="mt-6 grid gap-4 text-sm text-slate-600 md:grid-cols-3">

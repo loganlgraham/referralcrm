@@ -7,6 +7,11 @@ import { differenceInYears, parseISO } from 'date-fns';
 
 import { fetcher } from '@/utils/fetcher';
 
+interface CoverageLocation {
+  label: string;
+  zipCodes: string[];
+}
+
 interface AgentProfileResponse {
   role: 'agent';
   _id: string;
@@ -15,6 +20,7 @@ interface AgentProfileResponse {
   phone: string;
   statesLicensed: string[];
   coverageAreas: string[];
+  coverageLocations?: CoverageLocation[];
   licenseNumber?: string;
   brokerage?: string;
   markets?: string[];
@@ -45,7 +51,7 @@ type FormState = {
   phone: string;
   states: string;
   coverageDescription: string;
-  coverageZipCodes: string[];
+  coverageLocations: CoverageLocation[];
   licenseNumber: string;
   brokerage: string;
   markets: string;
@@ -68,6 +74,69 @@ export function ProfileForm() {
   const { data, mutate } = useSWR<ProfileResponse>('/api/me/profile', fetcher);
   const [saving, setSaving] = useState(false);
 
+  const normalizeZipCode = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length < 5) {
+      return null;
+    }
+    return digits.slice(0, 5);
+  };
+
+  const sanitizeCoverageLocations = (
+    locations: CoverageLocation[] | undefined,
+    fallbackZipCodes: string[] = []
+  ): CoverageLocation[] => {
+    const uniqueByLabel = new Map<string, CoverageLocation>();
+
+    if (Array.isArray(locations)) {
+      locations.forEach((location) => {
+        const label = location?.label?.trim();
+        if (!label) {
+          return;
+        }
+
+        const normalizedZipCodes = Array.from(
+          new Set(
+            (Array.isArray(location.zipCodes) ? location.zipCodes : [])
+              .map((zip) => normalizeZipCode(zip))
+              .filter((zip: string | null): zip is string => Boolean(zip))
+          )
+        );
+
+        if (normalizedZipCodes.length === 0) {
+          return;
+        }
+
+        const key = label.toLowerCase();
+        const existing = uniqueByLabel.get(key);
+        if (existing) {
+          const merged = Array.from(new Set([...existing.zipCodes, ...normalizedZipCodes]));
+          uniqueByLabel.set(key, { label: existing.label, zipCodes: merged });
+        } else {
+          uniqueByLabel.set(key, { label, zipCodes: normalizedZipCodes });
+        }
+      });
+    }
+
+    if (uniqueByLabel.size > 0) {
+      return Array.from(uniqueByLabel.values());
+    }
+
+    const normalizedFallback = Array.from(
+      new Set(
+        fallbackZipCodes
+          .map((zip) => normalizeZipCode(zip))
+          .filter((zip: string | null): zip is string => Boolean(zip))
+      )
+    );
+
+    if (normalizedFallback.length === 0) {
+      return [];
+    }
+
+    return normalizedFallback.map((zip) => ({ label: zip, zipCodes: [zip] }));
+  };
+
   const initialState = useMemo<FormState>(() => {
     if (!data) {
       return {
@@ -76,7 +145,7 @@ export function ProfileForm() {
         phone: '',
         states: '',
         coverageDescription: '',
-        coverageZipCodes: [],
+        coverageLocations: [],
         licenseNumber: '',
         brokerage: '',
         markets: '',
@@ -86,13 +155,17 @@ export function ProfileForm() {
     }
 
     if (data.role === 'agent') {
+      const coverageLocations = sanitizeCoverageLocations(
+        data.coverageLocations,
+        data.coverageAreas ?? []
+      );
       return {
         name: data.name,
         email: data.email,
         phone: data.phone ?? '',
         states: (data.statesLicensed ?? []).join(', '),
         coverageDescription: '',
-        coverageZipCodes: Array.from(new Set(data.coverageAreas ?? [])),
+        coverageLocations,
         licenseNumber: data.licenseNumber ?? '',
         brokerage: data.brokerage ?? '',
         markets: (data.markets ?? []).join(', '),
@@ -108,7 +181,7 @@ export function ProfileForm() {
         phone: data.phone ?? '',
         states: (data.licensedStates ?? []).join(', '),
         coverageDescription: '',
-        coverageZipCodes: [],
+        coverageLocations: [],
         licenseNumber: '',
         brokerage: '',
         markets: '',
@@ -123,7 +196,7 @@ export function ProfileForm() {
       phone: '',
       states: '',
       coverageDescription: '',
-      coverageZipCodes: [],
+      coverageLocations: [],
       licenseNumber: '',
       brokerage: '',
       markets: '',
@@ -135,11 +208,13 @@ export function ProfileForm() {
   const [form, setForm] = useState<FormState>(initialState);
   const [isEditing, setIsEditing] = useState(true);
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
-  const [manualZipInput, setManualZipInput] = useState('');
+  const [manualLocationLabel, setManualLocationLabel] = useState('');
+  const [manualLocationZipInput, setManualLocationZipInput] = useState('');
 
   useEffect(() => {
     setForm(initialState);
-    setManualZipInput('');
+    setManualLocationLabel('');
+    setManualLocationZipInput('');
   }, [initialState]);
 
   useEffect(() => {
@@ -162,7 +237,7 @@ export function ProfileForm() {
     setIsEditing(false);
   }, [data]);
 
-  type TextField = Exclude<keyof FormState, 'coverageZipCodes'>;
+  type TextField = Exclude<keyof FormState, 'coverageLocations'>;
 
   const handleChange = (field: TextField) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (field === 'phone') {
@@ -184,40 +259,98 @@ export function ProfileForm() {
       .filter(Boolean)
       .map((entry) => (transform ? transform(entry) : entry));
 
-  const normalizeZipCode = (value: string) => {
-    const digits = value.replace(/\D/g, '');
-    if (digits.length < 5) {
-      return null;
-    }
-    return digits.slice(0, 5);
+  const deriveZipCodes = (locations: CoverageLocation[]): string[] =>
+    Array.from(new Set(locations.flatMap((location) => location.zipCodes)));
+
+  const mergeCoverageLocations = (
+    existing: CoverageLocation[],
+    incoming: CoverageLocation[]
+  ): CoverageLocation[] => {
+    const merged = new Map<string, CoverageLocation>();
+
+    existing.forEach((location) => {
+      merged.set(location.label.toLowerCase(), {
+        label: location.label,
+        zipCodes: Array.from(new Set(location.zipCodes)),
+      });
+    });
+
+    incoming.forEach((location) => {
+      const label = location.label?.trim();
+      if (!label) {
+        return;
+      }
+
+      const normalizedZipCodes = Array.from(
+        new Set(
+          (Array.isArray(location.zipCodes) ? location.zipCodes : [])
+            .map((zip) => normalizeZipCode(zip))
+            .filter((zip: string | null): zip is string => Boolean(zip))
+        )
+      );
+
+      if (normalizedZipCodes.length === 0) {
+        return;
+      }
+
+      const key = label.toLowerCase();
+      const existingLocation = merged.get(key);
+      if (existingLocation) {
+        merged.set(key, {
+          label: existingLocation.label,
+          zipCodes: Array.from(new Set([...existingLocation.zipCodes, ...normalizedZipCodes])),
+        });
+      } else {
+        merged.set(key, { label, zipCodes: normalizedZipCodes });
+      }
+    });
+
+    return Array.from(merged.values());
   };
 
-  const updateCoverageZipCodes = (updater: (current: string[]) => string[]) => {
+  const updateCoverageLocations = (updater: (current: CoverageLocation[]) => CoverageLocation[]) => {
     setForm((previous) => ({
       ...previous,
-      coverageZipCodes: updater(previous.coverageZipCodes),
+      coverageLocations: updater(previous.coverageLocations),
     }));
   };
 
-  const removeZipCode = (zip: string) => {
-    updateCoverageZipCodes((current) => current.filter((value) => value !== zip));
+  const removeCoverageLocation = (label: string) => {
+    const normalized = label.toLowerCase();
+    updateCoverageLocations((current) =>
+      current.filter((location) => location.label.toLowerCase() !== normalized)
+    );
   };
 
-  const addZipCode = (zip: string) => {
-    const normalized = normalizeZipCode(zip);
-    if (!normalized) {
-      toast.error('Zip codes must be 5 digits.');
+  const addCoverageLocations = (locations: CoverageLocation[]) => {
+    updateCoverageLocations((current) => mergeCoverageLocations(current, locations));
+  };
+
+  const handleManualCoverageAdd = () => {
+    const label = manualLocationLabel.trim();
+    const zipInput = manualLocationZipInput.trim();
+
+    if (!label) {
+      toast.error('Add a city, town, or county name first.');
       return;
     }
-    updateCoverageZipCodes((current) => {
-      if (current.includes(normalized)) {
-        return current;
-      }
-      return [...current, normalized];
-    });
+
+    const zipCodes = zipInput
+      .split(/[,\s]+/)
+      .map((value) => normalizeZipCode(value))
+      .filter((zip: string | null): zip is string => Boolean(zip));
+
+    if (zipCodes.length === 0) {
+      toast.error('Provide at least one ZIP code for the location.');
+      return;
+    }
+
+    addCoverageLocations([{ label, zipCodes }]);
+    setManualLocationLabel('');
+    setManualLocationZipInput('');
   };
 
-  const generateZipCodes = async () => {
+  const generateCoverageLocations = async () => {
     const description = form.coverageDescription.trim();
     if (!description) {
       toast.error('Describe the areas you cover first.');
@@ -238,38 +371,40 @@ export function ProfileForm() {
       }
 
       const payload = await response.json();
-      const receivedZipCodes = Array.isArray(payload?.zipCodes) ? payload.zipCodes : [];
-      const normalized = receivedZipCodes
-        .map((zip: string) => normalizeZipCode(zip))
-        .filter((zip: string | null): zip is string => Boolean(zip));
+      const receivedLocations = Array.isArray(payload?.locations) ? payload.locations : [];
+      const normalizedLocations = receivedLocations
+        .map((location: CoverageLocation) => ({
+          label: location.label,
+          zipCodes: Array.isArray(location.zipCodes) ? location.zipCodes : [],
+        }))
+        .filter((location) => location.label && location.zipCodes.length > 0);
 
-      if (normalized.length === 0) {
-        toast.info('No ZIP codes were identified. Try adding more detail.');
+      if (normalizedLocations.length === 0) {
+        const fallbackZipCodes = Array.isArray(payload?.zipCodes) ? payload.zipCodes : [];
+        const fallbackLocations = fallbackZipCodes
+          .map((zip: string) => normalizeZipCode(zip))
+          .filter((zip: string | null): zip is string => Boolean(zip))
+          .map((zip) => ({ label: zip, zipCodes: [zip] }));
+
+        if (fallbackLocations.length === 0) {
+          toast.info('No coverage locations were identified. Try adding more detail.');
+          return;
+        }
+
+        addCoverageLocations(fallbackLocations);
+        toast.success('ZIP codes added as coverage placeholders.');
         return;
       }
 
-      updateCoverageZipCodes((current) => {
-        const existing = new Set(current);
-        normalized.forEach((zip: string) => existing.add(zip));
-        return Array.from(existing);
-      });
+      addCoverageLocations(normalizedLocations);
 
-      toast.success('ZIP codes added to your coverage.');
+      toast.success('Coverage locations added to your profile.');
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : 'Unable to generate ZIP codes');
+      toast.error(error instanceof Error ? error.message : 'Unable to generate coverage locations');
     } finally {
       setIsGeneratingCoverage(false);
     }
-  };
-
-  const handleManualZipAdd = () => {
-    if (!manualZipInput.trim()) {
-      return;
-    }
-
-    addZipCode(manualZipInput);
-    setManualZipInput('');
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -289,8 +424,10 @@ export function ProfileForm() {
       };
 
       if (data.role === 'agent') {
+        const coverageZipCodes = deriveZipCodes(form.coverageLocations);
         payload.statesLicensed = parseList(form.states, (value) => value.toUpperCase());
-        payload.coverageAreas = form.coverageZipCodes;
+        payload.coverageAreas = coverageZipCodes;
+        payload.coverageLocations = form.coverageLocations;
         payload.markets = parseList(form.markets);
         payload.licenseNumber = form.licenseNumber.trim();
         payload.brokerage = form.brokerage.trim();
@@ -336,7 +473,8 @@ export function ProfileForm() {
 
   const cancelEditing = () => {
     setForm(initialState);
-    setManualZipInput('');
+    setManualLocationLabel('');
+    setManualLocationZipInput('');
     setIsEditing(false);
   };
 
@@ -415,7 +553,9 @@ export function ProfileForm() {
             </div>
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-400">Areas covered</p>
-              <div className="mt-2">{renderBadgeList(profile.coverageAreas)}</div>
+              <div className="mt-2">
+                {renderBadgeList(profile.coverageLocations?.map((location) => location.label))}
+              </div>
             </div>
             <div className="sm:col-span-2">
               <p className="text-xs uppercase tracking-wide text-slate-400">Specialties</p>
@@ -582,34 +722,34 @@ export function ProfileForm() {
                       </label>
                       <button
                         type="button"
-                        onClick={generateZipCodes}
+                        onClick={generateCoverageLocations}
                         className="inline-flex shrink-0 items-center justify-center rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70"
                         disabled={saving || isGeneratingCoverage}
                       >
-                        {isGeneratingCoverage ? 'Generating…' : 'Generate ZIP codes'}
+                        {isGeneratingCoverage ? 'Generating…' : 'Generate locations'}
                       </button>
                     </div>
                     <p className="mt-2 text-xs text-slate-500">
-                      We'll use AI to translate your description into relevant ZIP codes.
+                      We'll use AI to translate your description into coverage locations and remember the ZIP codes behind the scenes.
                     </p>
                   </div>
                   <div className="sm:col-span-2">
-                    <p className="text-sm font-semibold text-slate-600">ZIP codes</p>
+                    <p className="text-sm font-semibold text-slate-600">Cities, towns & counties</p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {form.coverageZipCodes.length === 0 ? (
-                        <p className="text-sm text-slate-500">No ZIP codes added yet.</p>
+                      {form.coverageLocations.length === 0 ? (
+                        <p className="text-sm text-slate-500">No coverage locations added yet.</p>
                       ) : (
-                        form.coverageZipCodes.map((zip) => (
+                        form.coverageLocations.map((location) => (
                           <span
-                            key={zip}
+                            key={location.label}
                             className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"
                           >
-                            {zip}
+                            {location.label}
                             <button
                               type="button"
-                              onClick={() => removeZipCode(zip)}
+                              onClick={() => removeCoverageLocation(location.label)}
                               className="text-slate-500 transition hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
-                              aria-label={`Remove ${zip}`}
+                              aria-label={`Remove ${location.label}`}
                               disabled={saving}
                             >
                               ×
@@ -618,30 +758,50 @@ export function ProfileForm() {
                         ))
                       )}
                     </div>
+                    <p className="mt-2 text-xs text-slate-500">
+                      ZIP codes for each location are saved for future lead routing.
+                    </p>
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                       <input
                         type="text"
-                        value={manualZipInput}
-                        onChange={(event) => setManualZipInput(event.target.value)}
+                        value={manualLocationLabel}
+                        onChange={(event) => setManualLocationLabel(event.target.value)}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter') {
                             event.preventDefault();
-                            handleManualZipAdd();
+                            handleManualCoverageAdd();
                           }
                         }}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
-                        placeholder="Add a ZIP code manually"
+                        placeholder="Add a city, town, or county"
                         disabled={saving}
-                        inputMode="numeric"
-                        pattern="\\d*"
+                      />
+                      <input
+                        type="text"
+                        value={manualLocationZipInput}
+                        onChange={(event) => setManualLocationZipInput(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            handleManualCoverageAdd();
+                          }
+                        }}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                        placeholder="Associated ZIP codes (e.g. 78701, 78702)"
+                        disabled={saving}
+                        inputMode="text"
                       />
                       <button
                         type="button"
-                        onClick={handleManualZipAdd}
+                        onClick={handleManualCoverageAdd}
                         className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70"
-                        disabled={saving || manualZipInput.trim().length === 0}
+                        disabled={
+                          saving ||
+                          manualLocationLabel.trim().length === 0 ||
+                          manualLocationZipInput.trim().length === 0
+                        }
                       >
-                        Add ZIP code
+                        Add location
                       </button>
                     </div>
                   </div>

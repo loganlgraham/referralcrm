@@ -9,6 +9,14 @@ import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/em
 import { computeAgentMetrics, EMPTY_AGENT_METRICS } from '@/lib/server/agent-metrics';
 import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
 
+const coverageLocationSchema = z.object({
+  label: z.string().trim().min(1),
+  zipCodes: z
+    .array(z.string().trim().regex(/^\d{5}$/))
+    .min(1)
+    .transform((zipCodes) => Array.from(new Set(zipCodes))),
+});
+
 const createAgentSchema = z.object({
   name: z.string().trim().min(1),
   email: z.string().trim().email().transform((value) => value.toLowerCase()),
@@ -17,6 +25,7 @@ const createAgentSchema = z.object({
   brokerage: z.string().trim().optional(),
   statesLicensed: z.array(z.string().trim().min(2)).optional().default([]),
   coverageAreas: z.array(z.string().trim().min(1)).optional().default([]),
+  coverageLocations: z.array(coverageLocationSchema).optional().default([]),
 });
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -40,6 +49,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     brokerage?: string | null;
     statesLicensed?: string[] | null;
     zipCoverage?: string[] | null;
+    coverageLocations?: { label: string; zipCodes: string[] }[] | null;
     npsScore?: number | null;
   };
 
@@ -69,6 +79,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       brokerage: agent.brokerage ?? '',
       statesLicensed: Array.isArray(agent.statesLicensed) ? agent.statesLicensed : [],
       coverageAreas: Array.isArray(agent.zipCoverage) ? agent.zipCoverage : [],
+      coverageLocations: Array.isArray(agent.coverageLocations) ? agent.coverageLocations : [],
       metrics,
       npsScore: metrics.npsScore,
     };
@@ -91,6 +102,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   await connectMongo();
 
+  const combinedZipCoverage = Array.from(
+    new Set([
+      ...parsed.data.coverageAreas,
+      ...parsed.data.coverageLocations.flatMap((location) => location.zipCodes),
+    ])
+  );
+
   const agent = await Agent.create({
     name: parsed.data.name,
     email: parsed.data.email,
@@ -98,12 +116,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     licenseNumber: parsed.data.licenseNumber ?? '',
     brokerage: parsed.data.brokerage ?? '',
     statesLicensed: parsed.data.statesLicensed,
-    zipCoverage: parsed.data.coverageAreas,
+    zipCoverage: combinedZipCoverage,
+    coverageLocations: parsed.data.coverageLocations,
     active: true,
   });
 
-  if (parsed.data.coverageAreas.length > 0) {
-    await rememberCoverageSuggestions(parsed.data.coverageAreas);
+  const coverageSuggestionLabels = parsed.data.coverageLocations.map((location) => location.label);
+  if (coverageSuggestionLabels.length > 0) {
+    await rememberCoverageSuggestions(coverageSuggestionLabels);
+  } else if (combinedZipCoverage.length > 0) {
+    await rememberCoverageSuggestions(combinedZipCoverage);
   }
 
   const baseUrl = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');

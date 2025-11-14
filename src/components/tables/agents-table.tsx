@@ -10,6 +10,11 @@ import { fetcher } from '@/utils/fetcher';
 import { useCoverageSuggestions } from '@/hooks/use-coverage-suggestions';
 import { formatCurrency, formatDecimal, formatPhoneNumber } from '@/utils/formatters';
 
+interface CoverageLocation {
+  label: string;
+  zipCodes: string[];
+}
+
 interface AgentRow {
   _id: string;
   name: string;
@@ -19,6 +24,7 @@ interface AgentRow {
   brokerage?: string;
   statesLicensed: string[];
   coverageAreas?: string[];
+  coverageLocations?: CoverageLocation[];
   metrics: {
     closingsLast12Months: number;
     closingRate: number;
@@ -42,7 +48,7 @@ type AgentFormState = {
   brokerage: string;
   states: string;
   coverageDescription: string;
-  coverageZipCodes: string[];
+  coverageLocations: CoverageLocation[];
 };
 
 const createEmptyForm = (): AgentFormState => ({
@@ -53,7 +59,7 @@ const createEmptyForm = (): AgentFormState => ({
   brokerage: '',
   states: '',
   coverageDescription: '',
-  coverageZipCodes: [],
+  coverageLocations: [],
 });
 
 export function AgentsTable() {
@@ -66,7 +72,8 @@ export function AgentsTable() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<AgentFormState>(() => createEmptyForm());
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
-  const [manualZipInput, setManualZipInput] = useState('');
+  const [manualLocationLabel, setManualLocationLabel] = useState('');
+  const [manualLocationZipInput, setManualLocationZipInput] = useState('');
 
   const formDisabled = saving;
 
@@ -76,7 +83,7 @@ export function AgentsTable() {
     return <div className="rounded-lg bg-white p-4 shadow-sm">Loading agents…</div>;
   }
 
-  type TextField = Exclude<keyof AgentFormState, 'coverageZipCodes'>;
+  type TextField = Exclude<keyof AgentFormState, 'coverageLocations'>;
 
   const handleChange = (field: TextField) => (
     event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -92,33 +99,98 @@ export function AgentsTable() {
     return digits.slice(0, 5);
   };
 
-  const updateCoverageZipCodes = (updater: (current: string[]) => string[]) => {
+  const deriveZipCodes = (locations: CoverageLocation[]): string[] =>
+    Array.from(new Set(locations.flatMap((location) => location.zipCodes)));
+
+  const mergeCoverageLocations = (
+    existing: CoverageLocation[],
+    incoming: CoverageLocation[]
+  ): CoverageLocation[] => {
+    const merged = new Map<string, CoverageLocation>();
+
+    existing.forEach((location) => {
+      merged.set(location.label.toLowerCase(), {
+        label: location.label,
+        zipCodes: Array.from(new Set(location.zipCodes)),
+      });
+    });
+
+    incoming.forEach((location) => {
+      const label = location.label?.trim();
+      if (!label) {
+        return;
+      }
+
+      const normalizedZipCodes = Array.from(
+        new Set(
+          (Array.isArray(location.zipCodes) ? location.zipCodes : [])
+            .map((zip) => normalizeZipCode(zip))
+            .filter((zip: string | null): zip is string => Boolean(zip))
+        )
+      );
+
+      if (normalizedZipCodes.length === 0) {
+        return;
+      }
+
+      const key = label.toLowerCase();
+      const existingLocation = merged.get(key);
+      if (existingLocation) {
+        merged.set(key, {
+          label: existingLocation.label,
+          zipCodes: Array.from(new Set([...existingLocation.zipCodes, ...normalizedZipCodes])),
+        });
+      } else {
+        merged.set(key, { label, zipCodes: normalizedZipCodes });
+      }
+    });
+
+    return Array.from(merged.values());
+  };
+
+  const updateCoverageLocations = (updater: (current: CoverageLocation[]) => CoverageLocation[]) => {
     setForm((previous) => ({
       ...previous,
-      coverageZipCodes: updater(previous.coverageZipCodes),
+      coverageLocations: updater(previous.coverageLocations),
     }));
   };
 
-  const removeZipCode = (zip: string) => {
-    updateCoverageZipCodes((current) => current.filter((value) => value !== zip));
+  const removeCoverageLocation = (label: string) => {
+    const normalized = label.toLowerCase();
+    updateCoverageLocations((current) =>
+      current.filter((location) => location.label.toLowerCase() !== normalized)
+    );
   };
 
-  const addZipCode = (zip: string) => {
-    const normalized = normalizeZipCode(zip);
-    if (!normalized) {
-      toast.error('Zip codes must be 5 digits.');
+  const addCoverageLocations = (locations: CoverageLocation[]) => {
+    updateCoverageLocations((current) => mergeCoverageLocations(current, locations));
+  };
+
+  const handleManualCoverageAdd = () => {
+    const label = manualLocationLabel.trim();
+    const zipInput = manualLocationZipInput.trim();
+
+    if (!label) {
+      toast.error('Add a city, town, or county name first.');
       return;
     }
 
-    updateCoverageZipCodes((current) => {
-      if (current.includes(normalized)) {
-        return current;
-      }
-      return [...current, normalized];
-    });
+    const zipCodes = zipInput
+      .split(/[,\s]+/)
+      .map((value) => normalizeZipCode(value))
+      .filter((zip: string | null): zip is string => Boolean(zip));
+
+    if (zipCodes.length === 0) {
+      toast.error('Provide at least one ZIP code for the location.');
+      return;
+    }
+
+    addCoverageLocations([{ label, zipCodes }]);
+    setManualLocationLabel('');
+    setManualLocationZipInput('');
   };
 
-  const generateZipCodes = async () => {
+  const generateCoverageLocations = async () => {
     const description = form.coverageDescription.trim();
     if (!description) {
       toast.error('Describe the agent’s coverage areas first.');
@@ -139,38 +211,40 @@ export function AgentsTable() {
       }
 
       const payload = await response.json();
-      const receivedZipCodes = Array.isArray(payload?.zipCodes) ? payload.zipCodes : [];
-      const normalized = receivedZipCodes
-        .map((zip: string) => normalizeZipCode(zip))
-        .filter((zip: string | null): zip is string => Boolean(zip));
+      const receivedLocations = Array.isArray(payload?.locations) ? payload.locations : [];
+      const normalizedLocations = receivedLocations
+        .map((location: CoverageLocation) => ({
+          label: location.label,
+          zipCodes: Array.isArray(location.zipCodes) ? location.zipCodes : [],
+        }))
+        .filter((location) => location.label && location.zipCodes.length > 0);
 
-      if (normalized.length === 0) {
-        toast.info('No ZIP codes were identified. Try adding more detail.');
+      if (normalizedLocations.length === 0) {
+        const fallbackZipCodes = Array.isArray(payload?.zipCodes) ? payload.zipCodes : [];
+        const fallbackLocations = fallbackZipCodes
+          .map((zip: string) => normalizeZipCode(zip))
+          .filter((zip: string | null): zip is string => Boolean(zip))
+          .map((zip) => ({ label: zip, zipCodes: [zip] }));
+
+        if (fallbackLocations.length === 0) {
+          toast.info('No coverage locations were identified. Try adding more detail.');
+          return;
+        }
+
+        addCoverageLocations(fallbackLocations);
+        toast.success('ZIP codes added as coverage placeholders.');
         return;
       }
 
-      updateCoverageZipCodes((current) => {
-        const merged = new Set(current);
-        normalized.forEach((zip: string) => merged.add(zip));
-        return Array.from(merged);
-      });
+      addCoverageLocations(normalizedLocations);
 
-      toast.success('ZIP codes added to the agent.');
+      toast.success('Coverage locations added to the agent.');
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : 'Unable to generate ZIP codes');
+      toast.error(error instanceof Error ? error.message : 'Unable to generate coverage locations');
     } finally {
       setIsGeneratingCoverage(false);
     }
-  };
-
-  const handleManualZipAdd = () => {
-    if (!manualZipInput.trim()) {
-      return;
-    }
-
-    addZipCode(manualZipInput);
-    setManualZipInput('');
   };
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
@@ -182,6 +256,7 @@ export function AgentsTable() {
         .split(',')
         .map((value) => value.trim().toUpperCase())
         .filter(Boolean);
+      const coverageZipCodes = deriveZipCodes(form.coverageLocations);
       const response = await fetch('/api/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -192,7 +267,8 @@ export function AgentsTable() {
           licenseNumber: form.licenseNumber,
           brokerage: form.brokerage,
           statesLicensed,
-          coverageAreas: form.coverageZipCodes,
+          coverageAreas: coverageZipCodes,
+          coverageLocations: form.coverageLocations,
         }),
       });
 
@@ -203,7 +279,8 @@ export function AgentsTable() {
 
       toast.success('Agent added');
       setForm(createEmptyForm());
-      setManualZipInput('');
+      setManualLocationLabel('');
+      setManualLocationZipInput('');
       setShowForm(false);
       await mutate();
       await mutateSuggestions();
@@ -312,34 +389,34 @@ export function AgentsTable() {
                   </label>
                   <button
                     type="button"
-                    onClick={generateZipCodes}
+                    onClick={generateCoverageLocations}
                     className="inline-flex shrink-0 items-center justify-center rounded border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70"
                     disabled={formDisabled || isGeneratingCoverage}
                   >
-                    {isGeneratingCoverage ? 'Generating…' : 'Generate ZIP codes'}
+                    {isGeneratingCoverage ? 'Generating…' : 'Generate locations'}
                   </button>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  We'll use AI to translate the description into relevant ZIP codes.
+                  We'll use AI to translate the description into coverage locations and remember the ZIP codes for routing later.
                 </p>
               </div>
               <div className="md:col-span-2 space-y-2">
-                <p className="text-xs font-semibold text-slate-600">ZIP codes</p>
+                <p className="text-xs font-semibold text-slate-600">Cities, towns & counties</p>
                 <div className="flex flex-wrap gap-2">
-                  {form.coverageZipCodes.length === 0 ? (
-                    <p className="text-xs text-slate-500">No ZIP codes added yet.</p>
+                  {form.coverageLocations.length === 0 ? (
+                    <p className="text-xs text-slate-500">No coverage locations added yet.</p>
                   ) : (
-                    form.coverageZipCodes.map((zip) => (
+                    form.coverageLocations.map((location) => (
                       <span
-                        key={zip}
+                        key={location.label}
                         className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-700"
                       >
-                        {zip}
+                        {location.label}
                         <button
                           type="button"
-                          onClick={() => removeZipCode(zip)}
+                          onClick={() => removeCoverageLocation(location.label)}
                           className="text-slate-400 transition hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
-                          aria-label={`Remove ${zip}`}
+                          aria-label={`Remove ${location.label}`}
                           disabled={formDisabled}
                         >
                           ×
@@ -348,30 +425,49 @@ export function AgentsTable() {
                     ))
                   )}
                 </div>
+                <p className="text-[11px] text-slate-500">
+                  ZIP codes for each location are saved for future lead routing, even though they’re hidden here.
+                </p>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <input
                     type="text"
-                    value={manualZipInput}
-                    onChange={(event) => setManualZipInput(event.target.value)}
+                    value={manualLocationLabel}
+                    onChange={(event) => setManualLocationLabel(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') {
                         event.preventDefault();
-                        handleManualZipAdd();
+                        handleManualCoverageAdd();
                       }
                     }}
                     className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="Add a ZIP code manually"
+                    placeholder="Add a city, town, or county"
                     disabled={formDisabled}
-                    inputMode="numeric"
-                    pattern="\\d*"
+                  />
+                  <input
+                    type="text"
+                    value={manualLocationZipInput}
+                    onChange={(event) => setManualLocationZipInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        handleManualCoverageAdd();
+                      }
+                    }}
+                    className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                    placeholder="Associated ZIP codes (e.g. 98101, 98102)"
+                    disabled={formDisabled}
                   />
                   <button
                     type="button"
-                    onClick={handleManualZipAdd}
+                    onClick={handleManualCoverageAdd}
                     className="inline-flex items-center justify-center rounded border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70"
-                    disabled={formDisabled || manualZipInput.trim().length === 0}
+                    disabled={
+                      formDisabled ||
+                      manualLocationLabel.trim().length === 0 ||
+                      manualLocationZipInput.trim().length === 0
+                    }
                   >
-                    Add ZIP code
+                    Add location
                   </button>
                 </div>
               </div>
@@ -463,7 +559,13 @@ export function AgentsTable() {
                 <td className="px-4 py-3 text-sm text-slate-700">{agent.brokerage || '—'}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">{agent.statesLicensed.join(', ') || '—'}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">
-                  {(agent.coverageAreas ?? []).slice(0, 5).join(', ') || '—'}
+                  {(() => {
+                    const labels =
+                      Array.isArray(agent.coverageLocations) && agent.coverageLocations.length > 0
+                        ? agent.coverageLocations.map((location) => location.label)
+                        : agent.coverageAreas ?? [];
+                    return labels.slice(0, 5).join(', ') || '—';
+                  })()}
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{agent.metrics.closingsLast12Months}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">

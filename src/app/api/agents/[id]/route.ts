@@ -8,6 +8,14 @@ import { getCurrentSession } from '@/lib/auth';
 import { computeAgentMetrics, EMPTY_AGENT_METRICS } from '@/lib/server/agent-metrics';
 import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
 
+const coverageLocationSchema = z.object({
+  label: z.string().trim().min(1),
+  zipCodes: z
+    .array(z.string().trim().regex(/^\d{5}$/))
+    .min(1)
+    .transform((zipCodes) => Array.from(new Set(zipCodes))),
+});
+
 const updateAgentSchema = z.object({
   name: z.string().trim().min(1).optional(),
   email: z.string().trim().email().transform((value) => value.toLowerCase()).optional(),
@@ -16,6 +24,7 @@ const updateAgentSchema = z.object({
   brokerage: z.string().trim().optional(),
   statesLicensed: z.array(z.string().trim().min(2)).optional(),
   coverageAreas: z.array(z.string().trim().min(1)).optional(),
+  coverageLocations: z.array(coverageLocationSchema).optional(),
   npsScore: z.number().min(-100).max(100).nullable().optional(),
 });
 
@@ -68,8 +77,13 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
   if (parsed.data.statesLicensed !== undefined) {
     update.statesLicensed = parsed.data.statesLicensed;
   }
-  if (parsed.data.coverageAreas !== undefined) {
-    update.zipCoverage = parsed.data.coverageAreas;
+  if (parsed.data.coverageLocations !== undefined) {
+    const zippedFromLocations = parsed.data.coverageLocations.flatMap((location) => location.zipCodes);
+    const zippedFromPayload = parsed.data.coverageAreas ?? [];
+    update.coverageLocations = parsed.data.coverageLocations;
+    update.zipCoverage = Array.from(new Set([...zippedFromPayload, ...zippedFromLocations]));
+  } else if (parsed.data.coverageAreas !== undefined) {
+    update.zipCoverage = Array.from(new Set(parsed.data.coverageAreas));
   }
   if (parsed.data.npsScore !== undefined) {
     if (!isAdmin) {
@@ -84,7 +98,9 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     return new NextResponse('Not found', { status: 404 });
   }
 
-  if (parsed.data.coverageAreas && parsed.data.coverageAreas.length > 0) {
+  if (parsed.data.coverageLocations && parsed.data.coverageLocations.length > 0) {
+    await rememberCoverageSuggestions(parsed.data.coverageLocations.map((location) => location.label));
+  } else if (parsed.data.coverageAreas && parsed.data.coverageAreas.length > 0) {
     await rememberCoverageSuggestions(parsed.data.coverageAreas);
   }
 
@@ -118,6 +134,7 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     brokerage: updatedAgent.brokerage ?? '',
     statesLicensed: updatedAgent.statesLicensed ?? [],
     coverageAreas: updatedAgent.zipCoverage ?? [],
+    coverageLocations: Array.isArray(updatedAgent.coverageLocations) ? updatedAgent.coverageLocations : [],
     metrics,
     npsScore: metrics.npsScore,
   });
