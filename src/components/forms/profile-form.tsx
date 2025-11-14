@@ -746,7 +746,7 @@ export function ProfileForm() {
                     />
                   </label>
                   <div className="sm:col-span-2">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-4">
                       <label className="flex-1 text-sm font-semibold text-slate-600">
                         Areas covered
                         <textarea
@@ -761,7 +761,7 @@ export function ProfileForm() {
                       <button
                         type="button"
                         onClick={generateCoverageLocations}
-                        className="inline-flex h-11 shrink-0 items-center justify-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70"
+                        className="inline-flex h-11 shrink-0 items-center justify-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 sm:h-full sm:self-stretch"
                         disabled={saving || isGeneratingCoverage}
                       >
                         {isGeneratingCoverage ? 'Generating…' : 'Save Service Areas'}

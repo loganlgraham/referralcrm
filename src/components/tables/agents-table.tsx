@@ -439,7 +439,7 @@ export function AgentsTable() {
                 />
               </label>
               <div className="md:col-span-2 space-y-2">
-                <div className="flex flex-col gap-2 md:flex-row md:items-end md:gap-3">
+                <div className="flex flex-col gap-2 md:flex-row md:items-stretch md:gap-3">
                   <label className="flex-1 text-xs font-semibold text-slate-600">
                     Areas covered
                     <textarea
@@ -454,7 +454,7 @@ export function AgentsTable() {
                   <button
                     type="button"
                     onClick={generateCoverageLocations}
-                    className="inline-flex h-11 shrink-0 items-center justify-center rounded bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70"
+                    className="inline-flex h-11 shrink-0 items-center justify-center rounded bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 md:h-full md:self-stretch"
                     disabled={formDisabled || isGeneratingCoverage}
                   >
                     {isGeneratingCoverage ? 'Generating…' : 'Save Service Areas'}
