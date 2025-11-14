@@ -746,22 +746,23 @@ export function ProfileForm() {
                     />
                   </label>
                   <div className="sm:col-span-2">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-4">
-                      <label className="flex-1 text-sm font-semibold text-slate-600">
-                        Areas covered
-                        <textarea
-                          value={form.coverageDescription}
-                          onChange={handleChange('coverageDescription')}
-                          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
-                          placeholder="Describe neighborhoods, cities, and counties you serve"
-                          rows={3}
-                          disabled={saving || isGeneratingCoverage}
-                        />
-                      </label>
+                    <label htmlFor="profile-coverage-description" className="text-sm font-semibold text-slate-600">
+                      Areas covered
+                    </label>
+                    <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-4">
+                      <textarea
+                        id="profile-coverage-description"
+                        value={form.coverageDescription}
+                        onChange={handleChange('coverageDescription')}
+                        className="w-full flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40 sm:min-h-[7.25rem]"
+                        placeholder="Describe neighborhoods, cities, and counties you serve"
+                        rows={3}
+                        disabled={saving || isGeneratingCoverage}
+                      />
                       <button
                         type="button"
                         onClick={generateCoverageLocations}
-                        className="inline-flex h-11 shrink-0 items-center justify-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 sm:h-full sm:self-stretch"
+                        className="inline-flex shrink-0 items-center justify-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 sm:h-full sm:self-stretch"
                         disabled={saving || isGeneratingCoverage}
                       >
                         {isGeneratingCoverage ? 'Generating…' : 'Save Service Areas'}
