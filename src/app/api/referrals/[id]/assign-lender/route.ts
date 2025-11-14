@@ -72,12 +72,12 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   const previousLenderDoc = previousLender
     ? await LenderMC.findById(previousLender)
-        .select('name')
-        .lean<{ _id: Types.ObjectId; name?: string }>()
+        .select('name email')
+        .lean<{ _id: Types.ObjectId; name?: string; email?: string }>()
     : null;
   const nextLenderDoc = await LenderMC.findById(parsed.data.lenderId)
-    .select('name')
-    .lean<{ _id: Types.ObjectId; name?: string }>();
+    .select('name email')
+    .lean<{ _id: Types.ObjectId; name?: string; email?: string }>();
 
   const previousLabel = previousLenderDoc?.name?.trim() || 'Unassigned';
   const nextLabel = nextLenderDoc?.name?.trim() || 'Unassigned';
