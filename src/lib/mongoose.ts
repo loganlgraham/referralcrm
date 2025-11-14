@@ -1,6 +1,14 @@
 import mongoose from 'mongoose';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/referralcrm';
+const resolvedMongoUri =
+  process.env.MONGODB_URI ??
+  (process.env.NODE_ENV === 'development' ? 'mongodb://localhost:27017/referralcrm' : undefined);
+
+if (!resolvedMongoUri) {
+  throw new Error('Missing MONGODB_URI environment variable');
+}
+
+const MONGODB_URI = resolvedMongoUri;
 
 let modelsRegistered = false;
 
@@ -24,10 +32,6 @@ const registerModels = async () => {
 
   modelsRegistered = true;
 };
-
-if (!MONGODB_URI) {
-  throw new Error('Missing MONGODB_URI environment variable');
-}
 
 interface GlobalWithMongoose {
   conn: typeof mongoose | null;
