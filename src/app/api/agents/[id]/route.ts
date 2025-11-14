@@ -7,6 +7,7 @@ import { User } from '@/models/user';
 import { getCurrentSession } from '@/lib/auth';
 import { computeAgentMetrics, EMPTY_AGENT_METRICS } from '@/lib/server/agent-metrics';
 import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
+import { mergeAndNormalizeZipCodes, syncAgentZipCoverage } from '@/lib/server/zip-coverage';
 
 const coverageLocationSchema = z.object({
   label: z.string().trim().min(1),
@@ -81,9 +82,12 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     const zippedFromLocations = parsed.data.coverageLocations.flatMap((location) => location.zipCodes);
     const zippedFromPayload = parsed.data.coverageAreas ?? [];
     update.coverageLocations = parsed.data.coverageLocations;
-    update.zipCoverage = Array.from(new Set([...zippedFromPayload, ...zippedFromLocations]));
+    update.zipCoverage = mergeAndNormalizeZipCodes([
+      ...zippedFromPayload,
+      ...zippedFromLocations,
+    ]);
   } else if (parsed.data.coverageAreas !== undefined) {
-    update.zipCoverage = Array.from(new Set(parsed.data.coverageAreas));
+    update.zipCoverage = mergeAndNormalizeZipCodes(parsed.data.coverageAreas);
   }
   if (parsed.data.npsScore !== undefined) {
     if (!isAdmin) {
@@ -116,6 +120,14 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
       await User.findByIdAndUpdate(updated.userId, { $set: userUpdate });
     }
   }
+
+  await syncAgentZipCoverage({
+    agentId: updated._id,
+    coverageLocations: Array.isArray(updated.coverageLocations)
+      ? updated.coverageLocations
+      : [],
+    explicitZipCodes: Array.isArray(updated.zipCoverage) ? updated.zipCoverage : [],
+  });
 
   const metricsMap = await computeAgentMetrics([updated._id], new Map([[updated._id.toString(), updated.npsScore ?? null]]));
   const metrics = metricsMap.get(updated._id.toString()) ?? {

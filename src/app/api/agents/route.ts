@@ -8,6 +8,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { computeAgentMetrics, EMPTY_AGENT_METRICS } from '@/lib/server/agent-metrics';
 import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
+import { mergeAndNormalizeZipCodes, syncAgentZipCoverage } from '@/lib/server/zip-coverage';
 
 const coverageLocationSchema = z.object({
   label: z.string().trim().min(1),
@@ -102,12 +103,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   await connectMongo();
 
-  const combinedZipCoverage = Array.from(
-    new Set([
-      ...parsed.data.coverageAreas,
-      ...parsed.data.coverageLocations.flatMap((location) => location.zipCodes),
-    ])
-  );
+  const combinedZipCoverage = mergeAndNormalizeZipCodes([
+    ...parsed.data.coverageAreas,
+    ...parsed.data.coverageLocations.flatMap((location) => location.zipCodes),
+  ]);
 
   const agent = await Agent.create({
     name: parsed.data.name,
@@ -119,6 +118,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     zipCoverage: combinedZipCoverage,
     coverageLocations: parsed.data.coverageLocations,
     active: true,
+  });
+
+  await syncAgentZipCoverage({
+    agentId: agent._id,
+    coverageLocations: parsed.data.coverageLocations,
+    explicitZipCodes: combinedZipCoverage,
   });
 
   const coverageSuggestionLabels = parsed.data.coverageLocations.map((location) => location.label);

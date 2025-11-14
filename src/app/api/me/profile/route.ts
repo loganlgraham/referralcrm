@@ -8,6 +8,7 @@ import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { User } from '@/models/user';
 import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
+import { mergeAndNormalizeZipCodes, syncAgentZipCoverage } from '@/lib/server/zip-coverage';
 
 const coverageLocationSchema = z.object({
   label: z.string().trim().min(1),
@@ -125,12 +126,10 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     agent.statesLicensed = parsed.data.statesLicensed;
     const coverageLocations = parsed.data.coverageLocations;
     const coverageAreas = parsed.data.coverageAreas;
-    const combinedZipCoverage = Array.from(
-      new Set([
-        ...coverageAreas,
-        ...coverageLocations.flatMap((location) => location.zipCodes),
-      ])
-    );
+    const combinedZipCoverage = mergeAndNormalizeZipCodes([
+      ...coverageAreas,
+      ...coverageLocations.flatMap((location) => location.zipCodes),
+    ]);
     agent.zipCoverage = combinedZipCoverage;
     agent.coverageLocations = coverageLocations;
     agent.markets = parsed.data.markets;
@@ -147,6 +146,11 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       agent.experienceSince = null;
     }
     await agent.save();
+    await syncAgentZipCoverage({
+      agentId: agent._id,
+      coverageLocations,
+      explicitZipCodes: combinedZipCoverage,
+    });
 
     const coverageSuggestionLabels = coverageLocations.map((location) => location.label);
     if (coverageSuggestionLabels.length > 0) {
