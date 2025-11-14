@@ -589,7 +589,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     (fields.estimatedprice || fields.estimatedpurchaseprice || fields.price || '').trim()
   );
   const lookingInZipRaw = (fields.ziplookingin || fields.zip || '').trim();
-  const lookingInZip = lookingInZipRaw.replace(/[^0-9]/g, '');
+  const lookingInZips = Array.from(
+    new Set(
+      lookingInZipRaw
+        .split(/[,\s]+/)
+        .map((value) => value.replace(/[^0-9]/g, '').slice(0, 5))
+        .filter((zip) => zip.length === 5)
+    )
+  );
+  const primaryLookingZip = lookingInZips[0] ?? '';
   const borrowerAddress = (fields.borroweraddress || '').trim();
   const stageOnTransfer = (fields.stageontransfer || '').trim();
   const loanType = (fields.loantype || '').trim();
@@ -602,7 +610,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const clientTypeRaw = (fields.dealtype || '').toLowerCase();
   const clientType: 'Seller' | 'Buyer' = clientTypeRaw.includes('sell') ? 'Seller' : 'Buyer';
 
-  if (!borrowerName || !borrowerEmail || !borrowerEmail.includes('@') || !borrowerPhone || !lookingInZip || !loanFileNumber) {
+  if (
+    !borrowerName ||
+    !borrowerEmail ||
+    !borrowerEmail.includes('@') ||
+    !borrowerPhone ||
+    lookingInZips.length === 0 ||
+    !loanFileNumber
+  ) {
     return NextResponse.json({ error: 'Inbound email is missing borrower contact details or loan number.' }, { status: 400 });
   }
 
@@ -675,7 +690,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         email: borrowerEmail,
         phone: borrowerPhone
       },
-      lookingInZip,
+      lookingInZip: primaryLookingZip,
+      lookingInZips,
       borrowerCurrentAddress: borrowerAddress,
       stageOnTransfer,
       initialNotes,
@@ -697,7 +713,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const summaryFields = [
       `Deal Type: ${clientType}`,
-      `Zip: ${lookingInZip}`,
+      `Zip${lookingInZips.length > 1 ? 's' : ''}: ${lookingInZips.join(', ')}`,
       mcValue ? `MC: ${mcValue}` : null,
       stageOnTransfer ? `Stage: ${stageOnTransfer}` : null
     ].filter(Boolean) as string[];

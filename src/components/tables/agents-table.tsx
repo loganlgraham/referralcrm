@@ -9,6 +9,11 @@ import { toast } from 'sonner';
 import { fetcher } from '@/utils/fetcher';
 import { useCoverageSuggestions } from '@/hooks/use-coverage-suggestions';
 import { formatCurrency, formatDecimal, formatPhoneNumber } from '@/utils/formatters';
+import {
+  AGENT_AHA_CLASSIFICATION_OPTIONS,
+  AGENT_LANGUAGE_OPTIONS,
+  AGENT_SPECIALTY_OPTIONS,
+} from '@/constants/agent-options';
 
 interface CoverageLocation {
   label: string;
@@ -25,6 +30,9 @@ interface AgentRow {
   statesLicensed: string[];
   coverageAreas?: string[];
   coverageLocations?: CoverageLocation[];
+  specialties?: string[];
+  languages?: string[];
+  ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
   metrics: {
     closingsLast12Months: number;
     closingRate: number;
@@ -49,6 +57,9 @@ type AgentFormState = {
   states: string;
   coverageDescription: string;
   coverageLocations: CoverageLocation[];
+  specialties: string[];
+  languages: string[];
+  ahaDesignation: '' | 'AHA' | 'AHA_OOS';
 };
 
 const createEmptyForm = (): AgentFormState => ({
@@ -60,6 +71,9 @@ const createEmptyForm = (): AgentFormState => ({
   states: '',
   coverageDescription: '',
   coverageLocations: [],
+  specialties: [],
+  languages: [],
+  ahaDesignation: '',
 });
 
 export function AgentsTable() {
@@ -83,12 +97,23 @@ export function AgentsTable() {
     return <div className="rounded-lg bg-white p-4 shadow-sm">Loading agents…</div>;
   }
 
-  type TextField = Exclude<keyof AgentFormState, 'coverageLocations'>;
+  type TextField = Exclude<keyof AgentFormState, 'coverageLocations' | 'specialties' | 'languages'>;
 
   const handleChange = (field: TextField) => (
     event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     setForm((previous) => ({ ...previous, [field]: event.target.value }));
+  };
+
+  const handleSelectChange = (field: 'specialties' | 'languages') => (
+    event: ChangeEvent<HTMLSelectElement>
+  ) => {
+    const selected = Array.from(event.target.selectedOptions).map((option) => option.value);
+    setForm((previous) => ({ ...previous, [field]: selected }));
+  };
+
+  const handleAhaChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    setForm((previous) => ({ ...previous, ahaDesignation: event.target.value as AgentFormState['ahaDesignation'] }));
   };
 
   const normalizeZipCode = (value: string) => {
@@ -100,7 +125,15 @@ export function AgentsTable() {
   };
 
   const deriveZipCodes = (locations: CoverageLocation[]): string[] =>
-    Array.from(new Set(locations.flatMap((location) => location.zipCodes)));
+    Array.from(
+      new Set(
+        locations.flatMap((location) =>
+          (Array.isArray(location.zipCodes) ? location.zipCodes : [])
+            .map((zip) => normalizeZipCode(zip))
+            .filter((zip: string | null): zip is string => Boolean(zip))
+        )
+      )
+    );
 
   const mergeCoverageLocations = (
     existing: CoverageLocation[],
@@ -267,7 +300,8 @@ export function AgentsTable() {
         .split(',')
         .map((value) => value.trim().toUpperCase())
         .filter(Boolean);
-      const coverageZipCodes = deriveZipCodes(form.coverageLocations);
+      const normalizedCoverageLocations = mergeCoverageLocations([], form.coverageLocations);
+      const coverageZipCodes = deriveZipCodes(normalizedCoverageLocations);
       const response = await fetch('/api/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -279,7 +313,10 @@ export function AgentsTable() {
           brokerage: form.brokerage,
           statesLicensed,
           coverageAreas: coverageZipCodes,
-          coverageLocations: form.coverageLocations,
+          coverageLocations: normalizedCoverageLocations,
+          specialties: form.specialties,
+          languages: form.languages,
+          ahaDesignation: form.ahaDesignation || null,
         }),
       });
 
@@ -375,6 +412,22 @@ export function AgentsTable() {
                 />
               </label>
               <label className="text-xs font-semibold text-slate-600">
+                AHA classification
+                <select
+                  value={form.ahaDesignation}
+                  onChange={handleAhaChange}
+                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                  disabled={formDisabled}
+                >
+                  <option value="">Not set</option>
+                  {AGENT_AHA_CLASSIFICATION_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option === 'AHA_OOS' ? 'AHA OOS' : option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-slate-600">
                 States (comma separated)
                 <input
                   type="text"
@@ -407,9 +460,6 @@ export function AgentsTable() {
                     {isGeneratingCoverage ? 'Generating…' : 'Generate locations'}
                   </button>
                 </div>
-                <p className="text-[11px] text-slate-500">
-                  We'll use AI to translate the description into coverage locations and remember the ZIP codes for routing later.
-                </p>
               </div>
               <div className="md:col-span-2 space-y-2">
                 <p className="text-xs font-semibold text-slate-600">Cities, towns & counties</p>
@@ -436,9 +486,6 @@ export function AgentsTable() {
                     ))
                   )}
                 </div>
-                <p className="text-[11px] text-slate-500">
-                  ZIP codes for each location are saved for future lead routing, even though they’re hidden here.
-                </p>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <input
                     type="text"
@@ -481,6 +528,48 @@ export function AgentsTable() {
                     Add location
                   </button>
                 </div>
+              </div>
+              <div className="md:col-span-2 grid gap-3">
+                <label className="text-xs font-semibold text-slate-600">
+                  Specialties
+                  <select
+                    multiple
+                    value={form.specialties}
+                    onChange={handleSelectChange('specialties')}
+                    className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                    size={6}
+                    disabled={formDisabled}
+                  >
+                    {AGENT_SPECIALTY_OPTIONS.map((specialty) => (
+                      <option key={specialty} value={specialty}>
+                        {specialty}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-[11px] font-normal text-slate-500">
+                    Hold Ctrl (Windows) or Command (Mac) to select multiple specialties.
+                  </span>
+                </label>
+                <label className="text-xs font-semibold text-slate-600">
+                  Languages spoken
+                  <select
+                    multiple
+                    value={form.languages}
+                    onChange={handleSelectChange('languages')}
+                    className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                    size={5}
+                    disabled={formDisabled}
+                  >
+                    {AGENT_LANGUAGE_OPTIONS.map((language) => (
+                      <option key={language} value={language}>
+                        {language}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-[11px] font-normal text-slate-500">
+                    Hold Ctrl (Windows) or Command (Mac) to select multiple languages.
+                  </span>
+                </label>
               </div>
               <div className="md:col-span-2">
                 <button
@@ -540,6 +629,7 @@ export function AgentsTable() {
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">License</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Brokerage</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">AHA</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">States</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Areas covered</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Closings (12mo)</th>
@@ -568,6 +658,13 @@ export function AgentsTable() {
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{agent.licenseNumber || '—'}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">{agent.brokerage || '—'}</td>
+                <td className="px-4 py-3 text-sm text-slate-700">
+                  {agent.ahaDesignation === 'AHA'
+                    ? 'AHA'
+                    : agent.ahaDesignation === 'AHA_OOS'
+                    ? 'AHA OOS'
+                    : '—'}
+                </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{agent.statesLicensed.join(', ') || '—'}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">
                   {(() => {

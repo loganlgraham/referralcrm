@@ -27,6 +27,13 @@ const createAgentSchema = z.object({
   statesLicensed: z.array(z.string().trim().min(2)).optional().default([]),
   coverageAreas: z.array(z.string().trim().min(1)).optional().default([]),
   coverageLocations: z.array(coverageLocationSchema).optional().default([]),
+  specialties: z.array(z.string().trim().min(1)).optional().default([]),
+  languages: z.array(z.string().trim().min(1)).optional().default([]),
+  ahaDesignation: z
+    .enum(['AHA', 'AHA_OOS'])
+    .optional()
+    .nullable()
+    .default(null),
 });
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -52,6 +59,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     zipCoverage?: string[] | null;
     coverageLocations?: { label: string; zipCodes: string[] }[] | null;
     npsScore?: number | null;
+    specialties?: string[] | null;
+    languages?: string[] | null;
+    ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
   };
 
   const agents = await Agent.find(filter).lean<AgentLean[]>();
@@ -81,6 +91,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       statesLicensed: Array.isArray(agent.statesLicensed) ? agent.statesLicensed : [],
       coverageAreas: Array.isArray(agent.zipCoverage) ? agent.zipCoverage : [],
       coverageLocations: Array.isArray(agent.coverageLocations) ? agent.coverageLocations : [],
+      specialties: Array.isArray(agent.specialties) ? agent.specialties : [],
+      languages: Array.isArray(agent.languages) ? agent.languages : [],
+      ahaDesignation:
+        agent.ahaDesignation === 'AHA' || agent.ahaDesignation === 'AHA_OOS'
+          ? agent.ahaDesignation
+          : null,
       metrics,
       npsScore: metrics.npsScore,
     };
@@ -117,6 +133,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     statesLicensed: parsed.data.statesLicensed,
     zipCoverage: combinedZipCoverage,
     coverageLocations: parsed.data.coverageLocations,
+    specialties: parsed.data.specialties,
+    languages: parsed.data.languages,
+    ahaDesignation: parsed.data.ahaDesignation,
     active: true,
   });
 

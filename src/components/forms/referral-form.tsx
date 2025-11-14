@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { toast } from 'sonner';
+import { useSession } from 'next-auth/react';
 
 const STAGE_OPTIONS = ['Pre-Approval TBD', 'Pre-Approval'] as const;
 const CLIENT_TYPE_OPTIONS = [
@@ -15,6 +16,8 @@ const CLIENT_TYPE_OPTIONS = [
 type StageOption = (typeof STAGE_OPTIONS)[number];
 type ClientTypeOption = (typeof CLIENT_TYPE_OPTIONS)[number]['value'];
 
+const zipListPattern = /^\s*\d{5}(?:\s*,\s*\d{5})*\s*$/u;
+
 const referralSchema = z.object({
   borrowerFirstName: z.string().min(1, 'Enter the borrower\'s first name'),
   borrowerLastName: z.string().min(1, 'Enter the borrower\'s last name'),
@@ -22,12 +25,12 @@ const referralSchema = z.object({
   borrowerPhone: z
     .string()
     .regex(/^[0-9]{3}-[0-9]{3}-[0-9]{4}$/u, 'Enter a 10-digit phone number'),
-  source: z.string().min(1, 'Add a referral source'),
-  endorser: z.string().min(1, 'Add an endorser'),
+  source: z.string().optional(),
+  endorser: z.string().optional(),
   clientType: z.enum(['Seller', 'Buyer', 'Both']),
   lookingInZip: z
     .string()
-    .regex(/^[0-9]{5}(?:-[0-9]{4})?$/u, 'Enter a valid ZIP code'),
+    .regex(zipListPattern, 'Enter one or more 5-digit ZIP codes separated by commas'),
   borrowerCurrentAddress: z.string().min(1, 'Add the borrower\'s current address'),
   stageOnTransfer: z.enum(STAGE_OPTIONS),
   loanFileNumber: z.string().min(1, 'Loan file number is required'),
@@ -61,10 +64,23 @@ const formatPhoneNumber = (value: string) => {
 
 export function ReferralForm() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
   const [borrowerPhone, setBorrowerPhone] = useState('');
   const [selectedStage, setSelectedStage] = useState<StageOption>('Pre-Approval TBD');
   const stageOptions = useMemo(() => STAGE_OPTIONS, []);
+  const userRole = session?.user?.role ?? null;
+  const isAgent = userRole === 'agent';
+
+  const parseZipList = (value: string): string[] =>
+    Array.from(
+      new Set(
+        value
+          .split(',')
+          .map((zip) => zip.trim())
+          .filter((zip) => /^\d{5}$/u.test(zip))
+      )
+    );
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -95,19 +111,40 @@ export function ReferralForm() {
       return;
     }
 
+    const zipList = parseZipList(result.data.lookingInZip);
+    if (zipList.length === 0) {
+      toast.error('Add at least one 5-digit ZIP code.');
+      return;
+    }
+
+    if (!isAgent) {
+      if (!result.data.source?.trim()) {
+        toast.error('Add a referral source');
+        return;
+      }
+      if (!result.data.endorser?.trim()) {
+        toast.error('Add an endorser');
+        return;
+      }
+    }
+
     const body: Record<string, unknown> = {
       borrowerFirstName: result.data.borrowerFirstName,
       borrowerLastName: result.data.borrowerLastName,
       borrowerEmail: result.data.borrowerEmail,
       borrowerPhone: result.data.borrowerPhone,
-      source: result.data.source,
-      endorser: result.data.endorser,
       clientType: result.data.clientType,
-      lookingInZip: result.data.lookingInZip,
+      lookingInZip: zipList[0],
+      lookingInZips: zipList,
       borrowerCurrentAddress: result.data.borrowerCurrentAddress,
       stageOnTransfer: result.data.stageOnTransfer,
       loanFileNumber: result.data.loanFileNumber,
     };
+
+    if (!isAgent) {
+      body.source = result.data.source?.trim() ?? '';
+      body.endorser = result.data.endorser?.trim() ?? '';
+    }
 
     if (result.data.loanType?.trim()) {
       body.loanType = result.data.loanType.trim();
@@ -157,8 +194,9 @@ export function ReferralForm() {
         <div className="border-b border-slate-200/80 bg-gradient-to-r from-slate-50 to-slate-100 px-6 py-6 sm:px-8">
           <h1 className="text-2xl font-semibold text-slate-900">Start a new referral</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-600">
-            Capture the borrower\'s details, context, and pre-approval information so teammates can
-            jump in without missing a beat.
+            {isAgent
+              ? 'Share your client’s details so our mortgage consultants can connect quickly and keep you in the loop.'
+              : "Capture the borrower's details, context, and pre-approval information so teammates can jump in without missing a beat."}
           </p>
         </div>
 
@@ -218,24 +256,26 @@ export function ReferralForm() {
               Referral details
             </legend>
             <div className="grid gap-4 md:grid-cols-2">
-              <label className={labelClasses}>
-                Source
-                <input
-                  name="source"
-                  required
-                  placeholder="e.g. Past client, Open house"
-                  className={inputClasses}
-                />
-              </label>
-              <label className={labelClasses}>
-                Endorser
-                <input
-                  name="endorser"
-                  required
-                  placeholder="Who sent this referral?"
-                  className={inputClasses}
-                />
-              </label>
+              {!isAgent && (
+                <>
+                  <label className={labelClasses}>
+                    Source
+                    <input
+                      name="source"
+                      placeholder="e.g. Past client, Open house"
+                      className={inputClasses}
+                    />
+                  </label>
+                  <label className={labelClasses}>
+                    Endorser
+                    <input
+                      name="endorser"
+                      placeholder="Who sent this referral?"
+                      className={inputClasses}
+                    />
+                  </label>
+                </>
+              )}
               <label className={labelClasses}>
                 Client type
                 <select
@@ -296,6 +336,7 @@ export function ReferralForm() {
                   name="lookingInZip"
                   required
                   autoComplete="postal-code"
+                  placeholder="e.g. 80202, 80216, 80021"
                   className={inputClasses}
                 />
               </label>

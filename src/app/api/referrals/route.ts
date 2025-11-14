@@ -882,6 +882,46 @@ export async function POST(request: Request) {
   const referralFeeBasisPoints =
     preApprovalAmount > 400000 ? 3500 : DEFAULT_REFERRAL_FEE_BPS;
 
+  const origin: 'agent' | 'mc' | 'admin' =
+    session.user.role === 'agent' ? 'agent' : session.user.role === 'mc' ? 'mc' : 'admin';
+
+  const normalizedZips = Array.isArray(parsed.data.lookingInZips)
+    ? Array.from(
+        new Set(
+          parsed.data.lookingInZips
+            .map((zip) => zip.trim())
+            .filter((zip) => /^\d{5}$/u.test(zip))
+        )
+      )
+    : [];
+  const primaryZipCandidate = parsed.data.lookingInZip;
+  const lookingInZips = normalizedZips.length > 0
+    ? normalizedZips
+    : primaryZipCandidate
+    ? [primaryZipCandidate]
+    : [];
+
+  if (lookingInZips.length === 0) {
+    return NextResponse.json({ error: 'Add at least one valid ZIP code.' }, { status: 400 });
+  }
+
+  const primaryZip = lookingInZips[0];
+
+  const providedSource = typeof parsed.data.source === 'string' ? parsed.data.source.trim() : '';
+  const providedEndorser = typeof parsed.data.endorser === 'string' ? parsed.data.endorser.trim() : '';
+
+  if (origin !== 'agent') {
+    if (!providedSource) {
+      return NextResponse.json({ error: 'Referral source is required.' }, { status: 400 });
+    }
+    if (!providedEndorser) {
+      return NextResponse.json({ error: 'Endorser is required.' }, { status: 400 });
+    }
+  }
+
+  const source = origin === 'agent' ? '' : providedSource;
+  const endorser = origin === 'agent' ? '' : providedEndorser;
+
   const referralData: Record<string, unknown> = {
     borrower: {
       name: borrowerName,
@@ -890,10 +930,11 @@ export async function POST(request: Request) {
       email: parsed.data.borrowerEmail,
       phone: parsed.data.borrowerPhone
     },
-    source: parsed.data.source,
-    endorser: parsed.data.endorser,
+    source,
+    endorser,
     clientType: parsed.data.clientType,
-    lookingInZip: parsed.data.lookingInZip,
+    lookingInZip: primaryZip,
+    lookingInZips,
     borrowerCurrentAddress: parsed.data.borrowerCurrentAddress,
     stageOnTransfer: parsed.data.stageOnTransfer,
     loanFileNumber: parsed.data.loanFileNumber,
@@ -901,12 +942,15 @@ export async function POST(request: Request) {
     estPurchasePriceCents: preApprovalAmountCents,
     preApprovalAmountCents,
     commissionBasisPoints: DEFAULT_AGENT_COMMISSION_BPS,
-    referralFeeBasisPoints,
-    referralFeeDueCents: calculateReferralFeeDue(
-      preApprovalAmountCents,
-      DEFAULT_AGENT_COMMISSION_BPS,
-      referralFeeBasisPoints
-    ),
+    referralFeeBasisPoints: origin === 'agent' ? 0 : referralFeeBasisPoints,
+    referralFeeDueCents:
+      origin === 'agent'
+        ? 0
+        : calculateReferralFeeDue(
+            preApprovalAmountCents,
+            DEFAULT_AGENT_COMMISSION_BPS,
+            referralFeeBasisPoints
+          ),
     audit: [
       {
         ...(auditActorId ? { actorId: auditActorId } : {}),
@@ -917,7 +961,8 @@ export async function POST(request: Request) {
         timestamp: new Date(),
         ip: ''
       }
-    ]
+    ],
+    origin,
   };
 
   if (session.user.role === 'mc') {

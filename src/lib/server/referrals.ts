@@ -50,6 +50,7 @@ interface ReferralListItem {
   endorser?: string;
   clientType: 'Seller' | 'Buyer' | 'Both';
   lookingInZip: string;
+  lookingInZips?: string[];
   borrowerCurrentAddress?: string;
   propertyAddress?: string;
   stageOnTransfer?: string;
@@ -68,6 +69,7 @@ interface ReferralListItem {
   preApprovalAmountCents?: number;
   dealStatus?: string | null;
   dealStatusLabel?: string | null;
+  origin?: 'agent' | 'mc' | 'admin';
 }
 
 const PAGE_SIZE = 20;
@@ -79,8 +81,17 @@ export async function getReferrals(params: GetReferralsParams) {
   const query: Record<string, unknown> = { deletedAt: null };
 
   if (status) query.status = status;
-  if (zip) query.lookingInZip = zip;
-  if (state) query.lookingInZip = new RegExp(`^${state}`, 'i');
+  const orFilters: Record<string, unknown>[] = [];
+  if (zip) {
+    orFilters.push({ lookingInZip: zip }, { lookingInZips: zip });
+  }
+  if (state) {
+    const regex = new RegExp(`^${state}`, 'i');
+    orFilters.push({ lookingInZip: regex }, { lookingInZips: regex });
+  }
+  if (orFilters.length > 0) {
+    query.$or = orFilters;
+  }
   if (ahaBucket === 'AHA' || ahaBucket === 'AHA_OOS') query.ahaBucket = ahaBucket;
 
   if (session?.user?.role === 'mc') {
@@ -132,10 +143,20 @@ export async function getReferrals(params: GetReferralsParams) {
     }
   }
 
-  const paymentMatch = Object.entries(query).reduce<Record<string, unknown>>((acc, [key, value]) => {
-    acc[`referral.${key}`] = value;
-    return acc;
-  }, {});
+  const paymentMatch: Record<string, unknown> = {};
+  Object.entries(query).forEach(([key, value]) => {
+    if (key === '$or' && Array.isArray(value)) {
+      paymentMatch.$or = value.map((clause) => {
+        const scoped = Object.entries(clause).map(([innerKey, innerValue]) => [
+          `referral.${innerKey}`,
+          innerValue,
+        ]);
+        return Object.fromEntries(scoped);
+      });
+      return;
+    }
+    paymentMatch[`referral.${key}`] = value;
+  });
 
   const activeQuery: Record<string, unknown> = { ...query };
 
@@ -216,7 +237,12 @@ export async function getReferrals(params: GetReferralsParams) {
         borrowerPhone: item.borrower.phone,
         endorser: item.endorser,
         clientType: item.clientType,
-        lookingInZip: item.lookingInZip,
+        lookingInZip: item.lookingInZip ?? '',
+        lookingInZips: Array.isArray(item.lookingInZips)
+          ? item.lookingInZips
+          : item.lookingInZip
+          ? [item.lookingInZip]
+          : [],
         borrowerCurrentAddress: item.borrowerCurrentAddress,
         propertyAddress: item.propertyAddress,
         stageOnTransfer: item.stageOnTransfer,
@@ -234,7 +260,11 @@ export async function getReferrals(params: GetReferralsParams) {
         referralFeeDueCents: item.referralFeeDueCents,
         preApprovalAmountCents: item.preApprovalAmountCents,
         dealStatus,
-        dealStatusLabel
+        dealStatusLabel,
+        origin:
+          item.origin === 'agent' || item.origin === 'mc' || item.origin === 'admin'
+            ? item.origin
+            : undefined
       } as ReferralListItem;
     }),
     total,
@@ -329,6 +359,15 @@ export async function getReferralById(id: string) {
     commissionBasisPoints: typeof referral.commissionBasisPoints === 'number' ? referral.commissionBasisPoints : 0,
     referralFeeBasisPoints: typeof referral.referralFeeBasisPoints === 'number' ? referral.referralFeeBasisPoints : 0,
     dealSide: referral.dealSide ?? 'buy',
+    lookingInZips: Array.isArray(referral.lookingInZips)
+      ? referral.lookingInZips
+      : referral.lookingInZip
+      ? [referral.lookingInZip]
+      : [],
+    origin:
+      referral.origin === 'agent' || referral.origin === 'mc' || referral.origin === 'admin'
+        ? referral.origin
+        : 'admin',
     daysInStatus,
     statusLastUpdated: referral.statusLastUpdated ? referral.statusLastUpdated.toISOString() : null,
     audit: Array.isArray(referral.audit)

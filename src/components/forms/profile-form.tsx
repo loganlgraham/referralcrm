@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { differenceInYears, parseISO } from 'date-fns';
 
 import { fetcher } from '@/utils/fetcher';
+import { AGENT_LANGUAGE_OPTIONS, AGENT_SPECIALTY_OPTIONS } from '@/constants/agent-options';
 
 interface CoverageLocation {
   label: string;
@@ -26,6 +27,7 @@ interface AgentProfileResponse {
   markets?: string[];
   experienceSince?: string | null;
   specialties?: string[];
+  languages?: string[];
 }
 
 interface McProfileResponse {
@@ -56,7 +58,8 @@ type FormState = {
   brokerage: string;
   markets: string;
   experienceSince: string;
-  specialties: string;
+  specialties: string[];
+  languages: string[];
 };
 
 const formatPhoneInput = (value: string): string => {
@@ -150,7 +153,8 @@ export function ProfileForm() {
         brokerage: '',
         markets: '',
         experienceSince: '',
-        specialties: '',
+        specialties: [],
+        languages: [],
       };
     }
 
@@ -170,7 +174,8 @@ export function ProfileForm() {
         brokerage: data.brokerage ?? '',
         markets: (data.markets ?? []).join(', '),
         experienceSince: data.experienceSince ? data.experienceSince.slice(0, 10) : '',
-        specialties: (data.specialties ?? []).join(', '),
+        specialties: Array.isArray(data.specialties) ? data.specialties : [],
+        languages: Array.isArray(data.languages) ? data.languages : [],
       };
     }
 
@@ -186,7 +191,8 @@ export function ProfileForm() {
         brokerage: '',
         markets: '',
         experienceSince: '',
-        specialties: '',
+        specialties: [],
+        languages: [],
       };
     }
 
@@ -201,7 +207,8 @@ export function ProfileForm() {
       brokerage: '',
       markets: '',
       experienceSince: '',
-      specialties: '',
+      specialties: [],
+      languages: [],
     };
   }, [data]);
 
@@ -237,7 +244,7 @@ export function ProfileForm() {
     setIsEditing(false);
   }, [data]);
 
-  type TextField = Exclude<keyof FormState, 'coverageLocations'>;
+  type TextField = Exclude<keyof FormState, 'coverageLocations' | 'specialties' | 'languages'>;
 
   const handleChange = (field: TextField) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     if (field === 'phone') {
@@ -246,6 +253,13 @@ export function ProfileForm() {
       return;
     }
     setForm((previous) => ({ ...previous, [field]: event.target.value }));
+  };
+
+  const handleSelectChange = (field: 'specialties' | 'languages') => (
+    event: ChangeEvent<HTMLSelectElement>
+  ) => {
+    const selected = Array.from(event.target.selectedOptions).map((option) => option.value);
+    setForm((previous) => ({ ...previous, [field]: selected }));
   };
 
   if (!data) {
@@ -260,7 +274,15 @@ export function ProfileForm() {
       .map((entry) => (transform ? transform(entry) : entry));
 
   const deriveZipCodes = (locations: CoverageLocation[]): string[] =>
-    Array.from(new Set(locations.flatMap((location) => location.zipCodes)));
+    Array.from(
+      new Set(
+        locations.flatMap((location) =>
+          (Array.isArray(location.zipCodes) ? location.zipCodes : [])
+            .map((zip) => normalizeZipCode(zip))
+            .filter((zip: string | null): zip is string => Boolean(zip))
+        )
+      )
+    );
 
   const mergeCoverageLocations = (
     existing: CoverageLocation[],
@@ -435,15 +457,16 @@ export function ProfileForm() {
       };
 
       if (data.role === 'agent') {
-        const coverageZipCodes = deriveZipCodes(form.coverageLocations);
+        const normalizedCoverageLocations = mergeCoverageLocations([], form.coverageLocations);
+        const coverageZipCodes = deriveZipCodes(normalizedCoverageLocations);
         payload.statesLicensed = parseList(form.states, (value) => value.toUpperCase());
         payload.coverageAreas = coverageZipCodes;
-        payload.coverageLocations = form.coverageLocations;
+        payload.coverageLocations = normalizedCoverageLocations;
         payload.markets = parseList(form.markets);
         payload.licenseNumber = form.licenseNumber.trim();
         payload.brokerage = form.brokerage.trim();
-
-        payload.specialties = parseList(form.specialties);
+        payload.specialties = form.specialties;
+        payload.languages = form.languages;
 
         const experienceValue = form.experienceSince.trim();
         if (experienceValue) {
@@ -571,6 +594,10 @@ export function ProfileForm() {
             <div className="sm:col-span-2">
               <p className="text-xs uppercase tracking-wide text-slate-400">Specialties</p>
               <div className="mt-2">{renderBadgeList(profile.specialties)}</div>
+            </div>
+            <div className="sm:col-span-2">
+              <p className="text-xs uppercase tracking-wide text-slate-400">Languages</p>
+              <div className="mt-2">{renderBadgeList(profile.languages, 'No languages listed')}</div>
             </div>
           </div>
         </section>
@@ -740,9 +767,6 @@ export function ProfileForm() {
                         {isGeneratingCoverage ? 'Generating…' : 'Generate locations'}
                       </button>
                     </div>
-                    <p className="mt-2 text-xs text-slate-500">
-                      We'll use AI to translate your description into coverage locations and remember the ZIP codes behind the scenes.
-                    </p>
                   </div>
                   <div className="sm:col-span-2">
                     <p className="text-sm font-semibold text-slate-600">Cities, towns & counties</p>
@@ -769,9 +793,6 @@ export function ProfileForm() {
                         ))
                       )}
                     </div>
-                    <p className="mt-2 text-xs text-slate-500">
-                      ZIP codes for each location are saved for future lead routing.
-                    </p>
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                       <input
                         type="text"
@@ -820,7 +841,9 @@ export function ProfileForm() {
               </section>
 
               <section className="space-y-4">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Experience & specialties</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                  Experience, specialties & languages
+                </h2>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="text-sm font-semibold text-slate-600">
                     Experience start date
@@ -833,15 +856,44 @@ export function ProfileForm() {
                     />
                   </label>
                   <label className="text-sm font-semibold text-slate-600 sm:col-span-2">
-                    Specialties (comma separated)
-                    <textarea
+                    Specialties
+                    <select
+                      multiple
                       value={form.specialties}
-                      onChange={handleChange('specialties')}
+                      onChange={handleSelectChange('specialties')}
                       className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
-                      placeholder="First-time homebuyers, Relocation, Luxury"
-                      rows={2}
+                      size={6}
                       disabled={saving}
-                    />
+                    >
+                      {AGENT_SPECIALTY_OPTIONS.map((specialty) => (
+                        <option key={specialty} value={specialty}>
+                          {specialty}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="mt-1 block text-xs font-normal text-slate-500">
+                      Hold Ctrl (Windows) or Command (Mac) to select multiple specialties.
+                    </span>
+                  </label>
+                  <label className="text-sm font-semibold text-slate-600 sm:col-span-2">
+                    Languages spoken
+                    <select
+                      multiple
+                      value={form.languages}
+                      onChange={handleSelectChange('languages')}
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      size={5}
+                      disabled={saving}
+                    >
+                      {AGENT_LANGUAGE_OPTIONS.map((language) => (
+                        <option key={language} value={language}>
+                          {language}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="mt-1 block text-xs font-normal text-slate-500">
+                      Hold Ctrl (Windows) or Command (Mac) to select multiple languages.
+                    </span>
                   </label>
                 </div>
               </section>

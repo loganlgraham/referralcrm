@@ -66,6 +66,7 @@ interface ReferralDetail {
   endorser?: string | null;
   clientType?: ReferralClientType | null;
   lookingInZip?: string | null;
+  lookingInZips?: string[] | null;
   borrowerCurrentAddress?: string | null;
   stageOnTransfer?: string | null;
   borrower: {
@@ -93,6 +94,7 @@ interface ReferralDetail {
   viewerRole?: string;
   ahaBucket?: 'AHA' | 'AHA_OOS' | '' | null;
   org?: string;
+  origin?: 'agent' | 'mc' | 'admin' | null;
   adminContacts?: { name?: string | null; email?: string | null }[];
   audit?: {
     field?: string | null;
@@ -181,12 +183,32 @@ const normalizeStageOnTransfer = (value: unknown): TransferStage => {
   return 'Pre-Approval TBD';
 };
 
+const parseZipList = (value: string): string[] =>
+  Array.from(
+    new Set(
+      value
+        .split(/[,\s]+/)
+        .map((zip) => zip.trim())
+        .filter((zip) => /^\d{5}$/u.test(zip))
+    )
+  );
+
+const formatZipList = (values: string[]): string => values.join(', ');
+
 const createDetailDraft = (referral: ReferralDetail): DetailDraft => ({
   loanFileNumber: ensureString(referral?.loanFileNumber),
   source: normalizeSource(referral?.source),
   endorser: ensureString(referral?.endorser),
   clientType: normalizeClientType(referral?.clientType),
-  lookingInZip: ensureString(referral?.lookingInZip),
+  lookingInZip: (() => {
+    const values = Array.isArray(referral?.lookingInZips)
+      ? referral.lookingInZips.filter((zip): zip is string => typeof zip === 'string' && zip.trim().length > 0)
+      : [];
+    if (values.length > 0) {
+      return formatZipList(values.map((zip) => zip.trim()));
+    }
+    return ensureString(referral?.lookingInZip);
+  })(),
   borrowerCurrentAddress: ensureString(referral?.borrowerCurrentAddress),
   stageOnTransfer: normalizeStageOnTransfer(referral?.stageOnTransfer),
 });
@@ -196,7 +218,7 @@ const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
   source: draft.source.trim(),
   endorser: draft.endorser.trim(),
   clientType: draft.clientType,
-  lookingInZip: draft.lookingInZip.trim(),
+  lookingInZip: formatZipList(parseZipList(draft.lookingInZip)),
   borrowerCurrentAddress: draft.borrowerCurrentAddress.trim(),
   stageOnTransfer: normalizeStageOnTransfer(draft.stageOnTransfer),
 });
@@ -256,6 +278,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const { mutate } = useSWRConfig();
   const activityFeedKey = `/api/referrals/${referralId}/activities`;
   const [referral, setReferral] = useState<ReferralDetail>(initialReferral);
+  const origin = referral.origin ?? initialReferral.origin ?? null;
+  const isAgentOrigin = origin === 'agent';
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [detailsDraft, setDetailsDraft] = useState<DetailDraft>(() => createDetailDraft(initialReferral));
   const [savingDetails, setSavingDetails] = useState(false);
@@ -368,6 +392,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       referral.endorser,
       referral.clientType,
       referral.lookingInZip,
+      referral.lookingInZips,
       referral.borrowerCurrentAddress,
       referral.stageOnTransfer,
     ]
@@ -376,6 +401,16 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     () => DETAIL_FIELD_KEYS.some((field) => normalizedDetailDraft[field] !== normalizedCurrentDetails[field]),
     [normalizedDetailDraft, normalizedCurrentDetails]
   );
+
+  const lookingInZipDisplay = useMemo(() => {
+    const values = Array.isArray(referral.lookingInZips)
+      ? referral.lookingInZips.filter((zip) => typeof zip === 'string' && zip.trim().length > 0)
+      : [];
+    if (values.length > 0) {
+      return values.join(', ');
+    }
+    return referral.lookingInZip ?? '';
+  }, [referral.lookingInZips, referral.lookingInZip]);
 
   const canDelete = viewerRole === 'admin' || viewerRole === 'manager';
   const canEditDetails = viewerRole !== 'viewer';
@@ -395,6 +430,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referral.endorser,
     referral.clientType,
     referral.lookingInZip,
+    referral.lookingInZips,
     referral.borrowerCurrentAddress,
     referral.stageOnTransfer,
   ]);
@@ -573,12 +609,13 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       toast.error('Loan file number is required.');
       return;
     }
-    if (!normalizedDraft.endorser) {
+    if (!isAgentOrigin && !normalizedDraft.endorser) {
       toast.error('Endorser is required.');
       return;
     }
-    if (!normalizedDraft.lookingInZip || normalizedDraft.lookingInZip.length < 5) {
-      toast.error('Looking in zip must be at least 5 characters.');
+    const parsedZips = parseZipList(normalizedDraft.lookingInZip);
+    if (parsedZips.length === 0) {
+      toast.error('Add at least one 5-digit ZIP code.');
       return;
     }
     if (!normalizedDraft.borrowerCurrentAddress) {
@@ -596,6 +633,16 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         payload[field] = normalizedDraft[field];
       }
     });
+
+    if (payload.lookingInZip) {
+      payload.lookingInZips = parsedZips;
+      payload.lookingInZip = parsedZips[0];
+    }
+
+    if (isAgentOrigin) {
+      delete payload.source;
+      delete payload.endorser;
+    }
 
     if (Object.keys(payload).length === 0) {
       toast.info('No changes to save');
@@ -660,7 +707,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         source: normalizedDraft.source,
         endorser: normalizedDraft.endorser,
         clientType: normalizedDraft.clientType,
-        lookingInZip: normalizedDraft.lookingInZip,
+        lookingInZip: parsedZips[0] ?? '',
+        lookingInZips: parsedZips,
         borrowerCurrentAddress: normalizedDraft.borrowerCurrentAddress,
         stageOnTransfer: normalizedDraft.stageOnTransfer,
       }));
@@ -910,6 +958,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined
       ) ?? financials.propertyAddress ?? referral.propertyAddress ?? undefined,
     lookingInZip: referral.lookingInZip ?? null,
+    lookingInZips: Array.isArray(referral.lookingInZips) ? referral.lookingInZips : null,
+    origin: referral.origin ?? null,
     referralFeeDueCents: financials.referralFeeDueCents ?? referral.referralFeeDueCents ?? null,
     payments: normalizedDeals,
     ahaBucket:
@@ -1144,28 +1194,30 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                 />
               </label>
-              <label className="space-y-1 text-sm font-medium text-slate-600">
-                <span>Source</span>
-                <input
-                  name="source"
-                  value={detailsDraft.source}
-                  onChange={handleDetailInputChange('source')}
-                  required
-                  disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-                />
-              </label>
-              <label className="space-y-1 text-sm font-medium text-slate-600">
-                <span>Endorser</span>
-                <input
-                  name="endorser"
-                  value={detailsDraft.endorser}
-                  onChange={handleDetailInputChange('endorser')}
-                  required
-                  disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-                />
-              </label>
+              {!isAgentOrigin && (
+                <>
+                  <label className="space-y-1 text-sm font-medium text-slate-600">
+                    <span>Source</span>
+                    <input
+                      name="source"
+                      value={detailsDraft.source}
+                      onChange={handleDetailInputChange('source')}
+                      disabled={savingDetails}
+                      className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm font-medium text-slate-600">
+                    <span>Endorser</span>
+                    <input
+                      name="endorser"
+                      value={detailsDraft.endorser}
+                      onChange={handleDetailInputChange('endorser')}
+                      disabled={savingDetails}
+                      className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                    />
+                  </label>
+                </>
+              )}
               <label className="space-y-1 text-sm font-medium text-slate-600">
                 <span>Client Type</span>
                 <select
@@ -1240,21 +1292,25 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               <dt className="text-xs uppercase text-slate-500">Loan File #</dt>
               <dd className="text-sm font-semibold text-slate-900">{referral.loanFileNumber || '—'}</dd>
             </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Source</dt>
-              <dd className="text-sm text-slate-700">{referral.source ?? '—'}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Endorser</dt>
-              <dd className="text-sm text-slate-700">{referral.endorser?.trim() ? referral.endorser : '—'}</dd>
-            </div>
+            {!isAgentOrigin && (
+              <>
+                <div className="space-y-1">
+                  <dt className="text-xs uppercase text-slate-500">Source</dt>
+                  <dd className="text-sm text-slate-700">{referral.source ?? '—'}</dd>
+                </div>
+                <div className="space-y-1">
+                  <dt className="text-xs uppercase text-slate-500">Endorser</dt>
+                  <dd className="text-sm text-slate-700">{referral.endorser?.trim() ? referral.endorser : '—'}</dd>
+                </div>
+              </>
+            )}
             <div className="space-y-1">
               <dt className="text-xs uppercase text-slate-500">Client Type</dt>
               <dd className="text-sm text-slate-700">{referral.clientType ?? '—'}</dd>
             </div>
             <div className="space-y-1">
               <dt className="text-xs uppercase text-slate-500">Looking In (Zip)</dt>
-              <dd className="text-sm text-slate-700">{referral.lookingInZip?.trim() ? referral.lookingInZip : '—'}</dd>
+              <dd className="text-sm text-slate-700">{lookingInZipDisplay ? lookingInZipDisplay : '—'}</dd>
             </div>
             <div className="space-y-1">
               <dt className="text-xs uppercase text-slate-500">Stage on Transfer</dt>

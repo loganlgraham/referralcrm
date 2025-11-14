@@ -60,6 +60,8 @@ export interface ReferralDealProps {
     _id: string;
     propertyAddress?: string;
     lookingInZip?: string | null;
+    lookingInZips?: string[] | null;
+    origin?: 'agent' | 'mc' | 'admin' | null;
     referralFeeDueCents?: number | null;
     payments?: DealRecord[] | null;
     ahaBucket?: AgentSelectValue | null;
@@ -213,10 +215,22 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
     return DEAL_STATUS_OPTIONS;
   }, [viewerRole]);
 
+  const isAgentOrigin = referral.origin === 'agent';
+
+  const locationLabel = useMemo(() => {
+    const zips = Array.isArray(referral.lookingInZips)
+      ? referral.lookingInZips.filter((zip) => typeof zip === 'string' && zip.trim().length > 0)
+      : [];
+    if (zips.length > 0) {
+      return zips.join(', ');
+    }
+    return referral.lookingInZip ?? '';
+  }, [referral.lookingInZip, referral.lookingInZips]);
+
   const propertyLabel =
     overrides?.propertyAddress ||
     referral.propertyAddress ||
-    (referral.lookingInZip ? `Looking in ${referral.lookingInZip}` : 'Pending address');
+    (locationLabel ? `Looking in ${locationLabel}` : 'Pending address');
 
   const summaryBorrower = summary?.borrowerName?.trim() ? summary.borrowerName.trim() : null;
   const summaryStatusLabel = summary?.statusLabel?.trim() ? summary.statusLabel.trim() : null;
@@ -353,24 +367,23 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
     const draft = detailDraftMap[deal._id] ?? getDefaultDraft(deal);
     const contractPriceCents = parseCurrencyInput(draft.contractPrice);
     const commissionBasisPoints = parsePercentInput(draft.commissionPercent);
-    const referralFeeBasisPoints = parsePercentInput(draft.referralFeePercent);
+    const referralFeeBasisPoints = isAgentOrigin ? 0 : parsePercentInput(draft.referralFeePercent);
 
-    if (
-      contractPriceCents == null ||
-      commissionBasisPoints == null ||
-      referralFeeBasisPoints == null
-    ) {
-      toast.error('Enter the contract price, commission %, and referral fee % before saving.');
+    if (contractPriceCents == null || commissionBasisPoints == null) {
+      toast.error('Enter the contract price and commission % before saving.');
       return;
     }
 
-    const expectedAmountCents = deriveReferralFeeCents(
-      contractPriceCents,
-      commissionBasisPoints,
-      referralFeeBasisPoints
-    );
+    if (!isAgentOrigin && referralFeeBasisPoints == null) {
+      toast.error('Enter the referral fee % before saving.');
+      return;
+    }
 
-    if (!expectedAmountCents || expectedAmountCents <= 0) {
+    const expectedAmountCents = isAgentOrigin
+      ? 0
+      : deriveReferralFeeCents(contractPriceCents, commissionBasisPoints, referralFeeBasisPoints ?? 0);
+
+    if (!isAgentOrigin && (!expectedAmountCents || expectedAmountCents <= 0)) {
       toast.error('Enter valid deal details to calculate the referral fee.');
       return;
     }
@@ -385,7 +398,7 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
           id: deal._id,
           contractPriceCents,
           commissionBasisPoints,
-          referralFeeBasisPoints,
+          referralFeeBasisPoints: referralFeeBasisPoints ?? 0,
           side: draft.side,
           expectedAmountCents,
         }),
@@ -538,6 +551,9 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
   })();
 
   const computeExpectedAmount = (deal: DealRecord, isPrimary: boolean): number => {
+    if (isAgentOrigin) {
+      return 0;
+    }
     const status = getStatusForDeal(deal);
     if (status === 'terminated') {
       return 0;
@@ -582,7 +598,7 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
     const isPrimaryDeal = activeDealId ? deal._id === activeDealId : deals[0]?._id === deal._id;
     const expectedAmountCents = computeExpectedAmount(deal, Boolean(isPrimaryDeal));
 
-    if (nextStatus !== 'terminated' && expectedAmountCents <= 0) {
+    if (!isAgentOrigin && nextStatus !== 'terminated' && expectedAmountCents <= 0) {
       toast.error('Add contract details before updating deal status.');
       selectEl.value = previousStatus;
       return;
@@ -940,18 +956,20 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
                     disabled={isDetailSaving}
                   />
                 </label>
-                <label className="flex flex-col gap-1 text-xs uppercase text-slate-400">
-                  Referral Fee %
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={draft.referralFeePercent}
-                    onChange={handleDraftChange('referralFeePercent')}
-                    className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
-                    placeholder="25"
-                    disabled={isDetailSaving}
-                  />
-                </label>
+                {!isAgentOrigin && (
+                  <label className="flex flex-col gap-1 text-xs uppercase text-slate-400">
+                    Referral Fee %
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={draft.referralFeePercent}
+                      onChange={handleDraftChange('referralFeePercent')}
+                      className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+                      placeholder="25"
+                      disabled={isDetailSaving}
+                    />
+                  </label>
+                )}
                 <label className="flex flex-col gap-1 text-xs uppercase text-slate-400">
                   Deal Side
                   <select
@@ -966,10 +984,14 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
                 </label>
               </div>
               <div className="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                <p>
-                  Projected Referral Fee:{' '}
-                  <span className="text-sm font-semibold text-slate-900">{draftReferralFeeDisplay}</span>
-                </p>
+                {isAgentOrigin ? (
+                  <p>No referral fee is collected for agent-sourced deals.</p>
+                ) : (
+                  <p>
+                    Projected Referral Fee:{' '}
+                    <span className="text-sm font-semibold text-slate-900">{draftReferralFeeDisplay}</span>
+                  </p>
+                )}
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -1009,10 +1031,12 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
                   </label>
                 ) : (
                   <p className="text-xs text-slate-500">
-                    Update the contract and percentage details to keep this referral fee accurate for reporting.
+                    {isAgentOrigin
+                      ? 'Update the contract details to keep this deal accurate for reporting.'
+                      : 'Update the contract and percentage details to keep this referral fee accurate for reporting.'}
                   </p>
                 )}
-                {expectedAmountCents <= 0 && status !== 'terminated' && (
+                {expectedAmountCents <= 0 && status !== 'terminated' && !isAgentOrigin && (
                   <p className="mt-2 text-xs text-amber-600">
                     Enter contract details to calculate the referral fee before updating deal status.
                   </p>
@@ -1083,7 +1107,11 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Deals</h2>
-          <p className="text-sm text-slate-500">Track referral revenue from contract through payout</p>
+          <p className="text-sm text-slate-500">
+            {isAgentOrigin
+              ? 'Track deal milestones from contract through payout.'
+              : 'Track referral revenue from contract through payout.'}
+          </p>
         </div>
         {typeof onAddDeal === 'function' && (
           <button
@@ -1118,14 +1146,18 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
               <dt className="text-xs uppercase text-slate-400">Agent Commission %</dt>
               <dd className="text-sm font-medium text-slate-900">{summaryCommissionPercentDisplay}</dd>
             </div>
-            <div>
-              <dt className="text-xs uppercase text-slate-400">Referral Fee %</dt>
-              <dd className="text-sm font-medium text-slate-900">{summaryReferralFeePercentDisplay}</dd>
-            </div>
-            <div>
-              <dt className="text-xs uppercase text-slate-400">Referral Fee</dt>
-              <dd className="text-sm font-medium text-slate-900">{summaryReferralFeeDisplay}</dd>
-            </div>
+            {!isAgentOrigin && (
+              <div>
+                <dt className="text-xs uppercase text-slate-400">Referral Fee %</dt>
+                <dd className="text-sm font-medium text-slate-900">{summaryReferralFeePercentDisplay}</dd>
+              </div>
+            )}
+            {!isAgentOrigin && (
+              <div>
+                <dt className="text-xs uppercase text-slate-400">Referral Fee</dt>
+                <dd className="text-sm font-medium text-slate-900">{summaryReferralFeeDisplay}</dd>
+              </div>
+            )}
             <div>
               <dt className="text-xs uppercase text-slate-400">Net Commission</dt>
               <dd className="text-sm font-medium text-slate-900">{summaryNetCommissionDisplay}</dd>

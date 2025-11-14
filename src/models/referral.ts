@@ -66,7 +66,7 @@ const inboundEmailSchema = new Schema(
 const referralSchema = new Schema(
   {
     createdAt: { type: Date, default: Date.now, index: true },
-    source: { type: String, required: true, trim: true },
+    source: { type: String, trim: true, default: '' },
     endorser: { type: String, default: '' },
     clientType: {
       type: String,
@@ -89,6 +89,7 @@ const referralSchema = new Schema(
         return this.isNew;
       }
     },
+    lookingInZips: { type: [String], default: [] },
     borrowerCurrentAddress: { type: String, default: '' },
     propertyAddress: { type: String, default: '' },
     propertyCity: { type: String, default: '' },
@@ -148,6 +149,11 @@ const referralSchema = new Schema(
       enum: ['AHA', 'AHA_OOS'],
       default: null,
     },
+    origin: {
+      type: String,
+      enum: ['agent', 'mc', 'admin'],
+      default: 'admin',
+    },
     deletedAt: { type: Date, default: null }
   },
   {
@@ -179,6 +185,7 @@ export interface ReferralDocument {
   endorser?: string;
   clientType: 'Seller' | 'Buyer' | 'Both';
   lookingInZip: string;
+  lookingInZips?: string[];
   borrowerCurrentAddress?: string;
   propertyAddress?: string;
   propertyCity?: string;
@@ -225,6 +232,7 @@ export interface ReferralDocument {
   lender?: Types.ObjectId;
   org: 'AFC' | 'AHA';
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
+  origin?: 'agent' | 'mc' | 'admin';
   deletedAt?: Date;
   audit?: AuditEntry[];
   inboundEmail?: {
