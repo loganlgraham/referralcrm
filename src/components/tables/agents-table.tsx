@@ -235,7 +235,7 @@ export function AgentsTable() {
         const fallbackLocations = fallbackZipCodes
           .map((zip: string) => normalizeZipCode(zip))
           .filter((zip: string | null): zip is string => Boolean(zip))
-          .map((zip) => ({ label: zip, zipCodes: [zip] }));
+          .map((zip: string) => ({ label: zip, zipCodes: [zip] }));
 
         if (fallbackLocations.length === 0) {
           toast.info('No coverage locations were identified. Try adding more detail.');

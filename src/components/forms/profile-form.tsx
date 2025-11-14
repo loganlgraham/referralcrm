@@ -125,7 +125,7 @@ export function ProfileForm() {
     const normalizedFallback = Array.from(
       new Set(
         fallbackZipCodes
-          .map((zip) => normalizeZipCode(zip))
+          .map((zip: string) => normalizeZipCode(zip))
           .filter((zip: string | null): zip is string => Boolean(zip))
       )
     );
@@ -134,7 +134,7 @@ export function ProfileForm() {
       return [];
     }
 
-    return normalizedFallback.map((zip) => ({ label: zip, zipCodes: [zip] }));
+    return normalizedFallback.map((zip: string) => ({ label: zip, zipCodes: [zip] }));
   };
 
   const initialState = useMemo<FormState>(() => {
@@ -395,7 +395,7 @@ export function ProfileForm() {
         const fallbackLocations = fallbackZipCodes
           .map((zip: string) => normalizeZipCode(zip))
           .filter((zip: string | null): zip is string => Boolean(zip))
-          .map((zip) => ({ label: zip, zipCodes: [zip] }));
+          .map((zip: string) => ({ label: zip, zipCodes: [zip] }));
 
         if (fallbackLocations.length === 0) {
           toast.info('No coverage locations were identified. Try adding more detail.');
