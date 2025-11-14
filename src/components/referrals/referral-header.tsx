@@ -37,6 +37,9 @@ const formatFullAddress = (
   return [trimmedStreet, localityParts.join(', ')].filter((part) => part && part.length > 0).join(', ');
 };
 
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === 'string' && value.trim().length > 0;
+
 interface FinancialSnapshot {
   status: ReferralStatus;
   preApprovalAmountCents?: number;
@@ -333,9 +336,7 @@ export function ReferralHeader({
 
   const locationLabel = useMemo(() => {
     const zips = Array.isArray(referral.lookingInZips)
-      ? referral.lookingInZips.filter(
-          (zip): zip is string => typeof zip === 'string' && zip.trim().length > 0,
-        )
+      ? referral.lookingInZips.filter(isNonEmptyString)
       : [];
     if (zips.length > 0) {
       return zips.join(', ');
