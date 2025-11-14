@@ -226,7 +226,7 @@ export function AgentsTable() {
           return { label, zipCodes };
         })
         .filter(
-          (location): location is CoverageLocation =>
+          (location: { label: string; zipCodes: string[] }): location is CoverageLocation =>
             Boolean(location.label) && location.zipCodes.length > 0
         );
 
