@@ -250,7 +250,7 @@ export function ProfileForm() {
 
       updateCoverageZipCodes((current) => {
         const existing = new Set(current);
-        normalized.forEach((zip) => existing.add(zip));
+        normalized.forEach((zip: string) => existing.add(zip));
         return Array.from(existing);
       });
 

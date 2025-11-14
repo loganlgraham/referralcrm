@@ -151,7 +151,7 @@ export function AgentsTable() {
 
       updateCoverageZipCodes((current) => {
         const merged = new Set(current);
-        normalized.forEach((zip) => merged.add(zip));
+        normalized.forEach((zip: string) => merged.add(zip));
         return Array.from(merged);
       });
 
