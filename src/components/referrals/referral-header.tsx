@@ -333,7 +333,9 @@ export function ReferralHeader({
 
   const locationLabel = useMemo(() => {
     const zips = Array.isArray(referral.lookingInZips)
-      ? referral.lookingInZips.filter((zip) => typeof zip === 'string' && zip.trim().length > 0)
+      ? referral.lookingInZips.filter(
+          (zip): zip is string => typeof zip === 'string' && zip.trim().length > 0,
+        )
       : [];
     if (zips.length > 0) {
       return zips.join(', ');
