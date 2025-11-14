@@ -373,11 +373,22 @@ export function ProfileForm() {
       const payload = await response.json();
       const receivedLocations = Array.isArray(payload?.locations) ? payload.locations : [];
       const normalizedLocations = receivedLocations
-        .map((location: CoverageLocation) => ({
-          label: location.label,
-          zipCodes: Array.isArray(location.zipCodes) ? location.zipCodes : [],
-        }))
-        .filter((location) => location.label && location.zipCodes.length > 0);
+        .map((location: CoverageLocation | null | undefined) => {
+          const label = location?.label?.trim() ?? '';
+          const zipCodes = Array.from(
+            new Set(
+              (Array.isArray(location?.zipCodes) ? location.zipCodes : [])
+                .map((zip) => normalizeZipCode(zip))
+                .filter((zip: string | null): zip is string => Boolean(zip))
+            )
+          );
+
+          return { label, zipCodes };
+        })
+        .filter(
+          (location): location is CoverageLocation =>
+            Boolean(location.label) && location.zipCodes.length > 0
+        );
 
       if (normalizedLocations.length === 0) {
         const fallbackZipCodes = Array.isArray(payload?.zipCodes) ? payload.zipCodes : [];
