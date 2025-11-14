@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChangeEvent, FormEvent, useMemo, useState } from 'react';
+import { ChangeEvent, CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
@@ -86,6 +86,49 @@ export function AgentsTable() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<AgentFormState>(() => createEmptyForm());
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
+  const [coverageProgress, setCoverageProgress] = useState(0);
+
+  useEffect(() => {
+    if (!isGeneratingCoverage) {
+      return;
+    }
+
+    setCoverageProgress(5);
+    const interval = window.setInterval(() => {
+      setCoverageProgress((value) => (value >= 90 ? 90 : value + 5));
+    }, 200);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [isGeneratingCoverage]);
+
+  useEffect(() => {
+    if (isGeneratingCoverage || coverageProgress === 0) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setCoverageProgress(0);
+    }, 400);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [isGeneratingCoverage, coverageProgress]);
+
+  const coverageButtonStyles = useMemo<CSSProperties | undefined>(() => {
+    if (!isGeneratingCoverage && coverageProgress === 0) {
+      return undefined;
+    }
+
+    const progress = Math.min(Math.max(coverageProgress, 0), 100);
+
+    return {
+      backgroundImage: `linear-gradient(90deg, #0b365d 0%, #0b365d ${progress}%, #0f4c81 ${progress}%, #2f6aa3 100%)`,
+      transition: 'background-image 150ms linear',
+    };
+  }, [coverageProgress, isGeneratingCoverage]);
   const [manualLocationLabel, setManualLocationLabel] = useState('');
   const [manualLocationZipInput, setManualLocationZipInput] = useState('');
 
@@ -231,6 +274,7 @@ export function AgentsTable() {
     }
 
     setIsGeneratingCoverage(true);
+    setCoverageProgress(5);
     try {
       const response = await fetch('/api/coverage/zip-codes', {
         method: 'POST',
@@ -287,6 +331,7 @@ export function AgentsTable() {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Unable to generate coverage locations');
     } finally {
+      setCoverageProgress(100);
       setIsGeneratingCoverage(false);
     }
   };
@@ -450,7 +495,7 @@ export function AgentsTable() {
                     id="new-agent-coverage-description"
                     value={form.coverageDescription}
                     onChange={handleChange('coverageDescription')}
-                    className="w-full flex-1 rounded border border-slate-200 px-3 py-2 text-sm md:min-h-[7.25rem]"
+                    className="w-full flex-1 rounded border border-slate-200 px-3 py-2 text-sm md:min-h-[5.5rem]"
                     placeholder="Describe the neighborhoods, cities, and counties this agent serves"
                     rows={3}
                     disabled={formDisabled || isGeneratingCoverage}
@@ -458,7 +503,8 @@ export function AgentsTable() {
                   <button
                     type="button"
                     onClick={generateCoverageLocations}
-                    className="flex shrink-0 items-center justify-center rounded bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 md:h-full md:min-h-[7.25rem] md:self-stretch"
+                    className="flex shrink-0 items-center justify-center rounded bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 md:h-full md:min-h-[5.5rem] md:self-stretch"
+                    style={coverageButtonStyles}
                     disabled={formDisabled || isGeneratingCoverage}
                   >
                     {isGeneratingCoverage ? 'Generating…' : 'Save Service Areas'}

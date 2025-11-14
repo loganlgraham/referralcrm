@@ -1,6 +1,6 @@
 'use client';
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
 import { differenceInYears, parseISO } from 'date-fns';
@@ -217,12 +217,55 @@ export function ProfileForm() {
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
   const [manualLocationLabel, setManualLocationLabel] = useState('');
   const [manualLocationZipInput, setManualLocationZipInput] = useState('');
+  const [coverageProgress, setCoverageProgress] = useState(0);
 
   useEffect(() => {
     setForm(initialState);
     setManualLocationLabel('');
     setManualLocationZipInput('');
   }, [initialState]);
+
+  useEffect(() => {
+    if (!isGeneratingCoverage) {
+      return;
+    }
+
+    setCoverageProgress(5);
+    const interval = window.setInterval(() => {
+      setCoverageProgress((value) => (value >= 90 ? 90 : value + 5));
+    }, 200);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [isGeneratingCoverage]);
+
+  useEffect(() => {
+    if (isGeneratingCoverage || coverageProgress === 0) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setCoverageProgress(0);
+    }, 400);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [isGeneratingCoverage, coverageProgress]);
+
+  const coverageButtonStyles = useMemo<CSSProperties | undefined>(() => {
+    if (!isGeneratingCoverage && coverageProgress === 0) {
+      return undefined;
+    }
+
+    const progress = Math.min(Math.max(coverageProgress, 0), 100);
+
+    return {
+      backgroundImage: `linear-gradient(90deg, #0b365d 0%, #0b365d ${progress}%, #0f4c81 ${progress}%, #2f6aa3 100%)`,
+      transition: 'background-image 150ms linear',
+    };
+  }, [coverageProgress, isGeneratingCoverage]);
 
   useEffect(() => {
     if (!data) return;
@@ -380,6 +423,7 @@ export function ProfileForm() {
     }
 
     setIsGeneratingCoverage(true);
+    setCoverageProgress(5);
     try {
       const response = await fetch('/api/coverage/zip-codes', {
         method: 'POST',
@@ -436,6 +480,7 @@ export function ProfileForm() {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Unable to generate coverage locations');
     } finally {
+      setCoverageProgress(100);
       setIsGeneratingCoverage(false);
     }
   };
@@ -754,7 +799,7 @@ export function ProfileForm() {
                         id="profile-coverage-description"
                         value={form.coverageDescription}
                         onChange={handleChange('coverageDescription')}
-                        className="w-full flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40 sm:min-h-[7.25rem]"
+                        className="w-full flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40 sm:min-h-[5.5rem]"
                         placeholder="Describe neighborhoods, cities, and counties you serve"
                         rows={3}
                         disabled={saving || isGeneratingCoverage}
@@ -762,7 +807,8 @@ export function ProfileForm() {
                       <button
                         type="button"
                         onClick={generateCoverageLocations}
-                        className="flex shrink-0 items-center justify-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 sm:h-full sm:min-h-[7.25rem] sm:self-stretch"
+                        className="flex shrink-0 items-center justify-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 sm:h-full sm:min-h-[5.5rem] sm:self-stretch"
+                        style={coverageButtonStyles}
                         disabled={saving || isGeneratingCoverage}
                       >
                         {isGeneratingCoverage ? 'Generating…' : 'Save Service Areas'}
