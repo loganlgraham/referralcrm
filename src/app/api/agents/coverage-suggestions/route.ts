@@ -12,18 +12,23 @@ export async function GET(): Promise<NextResponse> {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
-  await connectMongo();
-  const suggestions = await CoverageSuggestion.find()
-    .select('value')
-    .lean()
-    .exec();
+  try {
+    await connectMongo();
+    const suggestions = await CoverageSuggestion.find()
+      .select('value')
+      .lean()
+      .exec();
 
-  const normalizedSuggestions = suggestions.map((suggestion) => ({
-    _id: suggestion._id as Types.ObjectId,
-    value: suggestion.value as string
-  }));
+    const normalizedSuggestions = suggestions.map((suggestion) => ({
+      _id: suggestion._id as Types.ObjectId,
+      value: suggestion.value as string
+    }));
 
-  const sorted = sortCoverageSuggestions(normalizedSuggestions);
-  return NextResponse.json({ suggestions: sorted });
+    const sorted = sortCoverageSuggestions(normalizedSuggestions);
+    return NextResponse.json({ suggestions: sorted });
+  } catch (error) {
+    console.error('Failed to load coverage suggestions', error);
+    return NextResponse.json({ suggestions: [] });
+  }
 }
 
