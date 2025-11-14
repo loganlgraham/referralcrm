@@ -762,7 +762,7 @@ export function ProfileForm() {
                       <button
                         type="button"
                         onClick={generateCoverageLocations}
-                        className="inline-flex shrink-0 items-center justify-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 sm:h-full sm:self-stretch"
+                        className="flex shrink-0 items-center justify-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 sm:h-full sm:min-h-[7.25rem] sm:self-stretch"
                         disabled={saving || isGeneratingCoverage}
                       >
                         {isGeneratingCoverage ? 'Generating…' : 'Save Service Areas'}

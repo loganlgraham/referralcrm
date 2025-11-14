@@ -439,12 +439,15 @@ export function AgentsTable() {
                 />
               </label>
               <div className="md:col-span-2 space-y-2">
-                <label htmlFor={`agent-coverage-description-${agent._id}`} className="text-xs font-semibold text-slate-600">
+                <label
+                  htmlFor="new-agent-coverage-description"
+                  className="text-xs font-semibold text-slate-600"
+                >
                   Areas covered
                 </label>
                 <div className="flex flex-col gap-2 md:flex-row md:items-stretch md:gap-3">
                   <textarea
-                    id={`agent-coverage-description-${agent._id}`}
+                    id="new-agent-coverage-description"
                     value={form.coverageDescription}
                     onChange={handleChange('coverageDescription')}
                     className="w-full flex-1 rounded border border-slate-200 px-3 py-2 text-sm md:min-h-[7.25rem]"
@@ -455,7 +458,7 @@ export function AgentsTable() {
                   <button
                     type="button"
                     onClick={generateCoverageLocations}
-                    className="inline-flex shrink-0 items-center justify-center rounded bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 md:h-full md:self-stretch"
+                    className="flex shrink-0 items-center justify-center rounded bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 md:h-full md:min-h-[7.25rem] md:self-stretch"
                     disabled={formDisabled || isGeneratingCoverage}
                   >
                     {isGeneratingCoverage ? 'Generating…' : 'Save Service Areas'}
