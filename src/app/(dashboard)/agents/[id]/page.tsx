@@ -5,6 +5,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { getAgentProfile } from '@/lib/server/people';
 import { PersonNotes } from '@/components/people/person-notes';
 import { AgentNpsEditor } from '@/components/people/agent-nps-editor';
+import { AgentAdminEditor } from '@/components/people/agent-admin-editor';
 import { formatCurrency, formatDecimal, formatPhoneNumber } from '@/utils/formatters';
 
 interface AgentDetailPageProps {
@@ -26,7 +27,9 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
     notFound();
   }
 
-  const canEditNps = session.user.role === 'admin';
+  const isAdmin = session.user.role === 'admin';
+  const canEditNps = isAdmin;
+  const canViewNotes = isAdmin;
 
   const metricCards = [
     { label: 'Closings (12 mo)', value: agent.metrics.closingsLast12Months.toString() },
@@ -93,6 +96,14 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
           <p>Phone: {formatPhoneNumber(agent.phone) || '—'}</p>
           <p>License: {agent.licenseNumber || '—'}</p>
           <p>Brokerage: {agent.brokerage || '—'}</p>
+          <p>
+            AHA Classification:{' '}
+            {agent.ahaDesignation === 'AHA'
+              ? 'AHA'
+              : agent.ahaDesignation === 'AHA_OOS'
+              ? 'AHA OOS'
+              : '—'}
+          </p>
         </div>
         <div className="mt-4 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
           <div>
@@ -111,6 +122,22 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
               })()}
             </p>
           </div>
+          <div>
+            <p className="text-xs uppercase text-slate-400">Specialties</p>
+            <p className="font-medium text-slate-900">
+              {Array.isArray(agent.specialties) && agent.specialties.length > 0
+                ? agent.specialties.join(', ')
+                : '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs uppercase text-slate-400">Languages</p>
+            <p className="font-medium text-slate-900">
+              {Array.isArray(agent.languages) && agent.languages.length > 0
+                ? agent.languages.join(', ')
+                : '—'}
+            </p>
+          </div>
         </div>
         <div className="mt-6 grid gap-4 text-sm text-slate-600 md:grid-cols-3">
           {metricCards.map((card) => (
@@ -126,12 +153,15 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
           </div>
         )}
       </div>
-      <PersonNotes
-        subjectId={params.id}
-        initialNotes={agent.notes}
-        endpoint="/api/agents"
-        description="Only admins and mortgage consultants can view these notes. They remain hidden from the agent by default."
-      />
+      {isAdmin && <AgentAdminEditor agent={agent} />}
+      {canViewNotes && (
+        <PersonNotes
+          subjectId={params.id}
+          initialNotes={agent.notes}
+          endpoint="/api/agents"
+          description="Only admins can view these notes. They remain hidden from the agent by default."
+        />
+      )}
     </div>
   );
 }

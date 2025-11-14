@@ -27,6 +27,9 @@ const updateAgentSchema = z.object({
   coverageAreas: z.array(z.string().trim().min(1)).optional(),
   coverageLocations: z.array(coverageLocationSchema).optional(),
   npsScore: z.number().min(-100).max(100).nullable().optional(),
+  specialties: z.array(z.string().trim().min(1)).optional(),
+  languages: z.array(z.string().trim().min(1)).optional(),
+  ahaDesignation: z.enum(['AHA', 'AHA_OOS']).nullable().optional(),
 });
 
 interface Params {
@@ -95,6 +98,15 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     }
     update.npsScore = parsed.data.npsScore;
   }
+  if (parsed.data.specialties !== undefined) {
+    update.specialties = parsed.data.specialties;
+  }
+  if (parsed.data.languages !== undefined) {
+    update.languages = parsed.data.languages;
+  }
+  if (parsed.data.ahaDesignation !== undefined) {
+    update.ahaDesignation = parsed.data.ahaDesignation;
+  }
 
   const updated = await Agent.findByIdAndUpdate(params.id, { $set: update }, { new: true });
 
@@ -147,6 +159,12 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     statesLicensed: updatedAgent.statesLicensed ?? [],
     coverageAreas: updatedAgent.zipCoverage ?? [],
     coverageLocations: Array.isArray(updatedAgent.coverageLocations) ? updatedAgent.coverageLocations : [],
+    specialties: Array.isArray(updatedAgent.specialties) ? updatedAgent.specialties : [],
+    languages: Array.isArray(updatedAgent.languages) ? updatedAgent.languages : [],
+    ahaDesignation:
+      updatedAgent.ahaDesignation === 'AHA' || updatedAgent.ahaDesignation === 'AHA_OOS'
+        ? updatedAgent.ahaDesignation
+        : null,
     metrics,
     npsScore: metrics.npsScore,
   });
