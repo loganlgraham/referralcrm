@@ -30,6 +30,7 @@ const agentProfileSchema = z.object({
   markets: z.array(z.string().trim().min(1)).optional().default([]),
   experienceSince: z.string().trim().optional().nullable(),
   specialties: z.array(z.string().trim().min(1)).optional().default([]),
+  languages: z.array(z.string().trim().min(1)).optional().default([]),
 });
 
 const lenderProfileSchema = z.object({
@@ -50,7 +51,7 @@ export async function GET(): Promise<NextResponse> {
   if (session.user.role === 'agent') {
     const agent = await Agent.findOne({ $or: [{ userId: session.user.id }, { email: session.user.email }] })
       .select(
-        'name email phone statesLicensed zipCoverage coverageLocations licenseNumber brokerage markets experienceSince specialties'
+        'name email phone statesLicensed zipCoverage coverageLocations licenseNumber brokerage markets experienceSince specialties languages'
       );
     if (!agent) {
       return new NextResponse('Not found', { status: 404 });
@@ -71,6 +72,7 @@ export async function GET(): Promise<NextResponse> {
       experienceSince:
         agentData.experienceSince instanceof Date ? agentData.experienceSince.toISOString() : null,
       specialties: Array.isArray(agentData.specialties) ? agentData.specialties : [],
+      languages: Array.isArray(agentData.languages) ? agentData.languages : [],
     });
   }
 
@@ -136,6 +138,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     agent.licenseNumber = parsed.data.licenseNumber ?? '';
     agent.brokerage = parsed.data.brokerage ?? '';
     agent.specialties = parsed.data.specialties ?? [];
+    agent.languages = parsed.data.languages ?? [];
     if (parsed.data.experienceSince) {
       const experienceDate = parseISO(parsed.data.experienceSince);
       if (Number.isNaN(experienceDate.getTime())) {
@@ -179,6 +182,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       markets: agent.markets ?? [],
       experienceSince: agent.experienceSince instanceof Date ? agent.experienceSince.toISOString() : null,
       specialties: Array.isArray(agent.specialties) ? agent.specialties : [],
+      languages: Array.isArray(agent.languages) ? agent.languages : [],
     });
   }
 

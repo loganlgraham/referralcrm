@@ -27,6 +27,8 @@ const createAgentSchema = z.object({
   statesLicensed: z.array(z.string().trim().min(2)).optional().default([]),
   coverageAreas: z.array(z.string().trim().min(1)).optional().default([]),
   coverageLocations: z.array(coverageLocationSchema).optional().default([]),
+  specialties: z.array(z.string().trim().min(1)).optional().default([]),
+  languages: z.array(z.string().trim().min(1)).optional().default([]),
 });
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -52,6 +54,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     zipCoverage?: string[] | null;
     coverageLocations?: { label: string; zipCodes: string[] }[] | null;
     npsScore?: number | null;
+    specialties?: string[] | null;
+    languages?: string[] | null;
   };
 
   const agents = await Agent.find(filter).lean<AgentLean[]>();
@@ -81,6 +85,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       statesLicensed: Array.isArray(agent.statesLicensed) ? agent.statesLicensed : [],
       coverageAreas: Array.isArray(agent.zipCoverage) ? agent.zipCoverage : [],
       coverageLocations: Array.isArray(agent.coverageLocations) ? agent.coverageLocations : [],
+      specialties: Array.isArray(agent.specialties) ? agent.specialties : [],
+      languages: Array.isArray(agent.languages) ? agent.languages : [],
       metrics,
       npsScore: metrics.npsScore,
     };
@@ -117,6 +123,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     statesLicensed: parsed.data.statesLicensed,
     zipCoverage: combinedZipCoverage,
     coverageLocations: parsed.data.coverageLocations,
+    specialties: parsed.data.specialties,
+    languages: parsed.data.languages,
     active: true,
   });
 

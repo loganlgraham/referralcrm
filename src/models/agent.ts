@@ -38,6 +38,7 @@ const agentSchema = new Schema(
     brokerage: { type: String },
     markets: [{ type: String }],
     specialties: { type: [String], default: [] },
+    languages: { type: [String], default: [] },
     experienceSince: { type: Date },
     notes: { type: [agentNoteSchema], default: [] }
   },

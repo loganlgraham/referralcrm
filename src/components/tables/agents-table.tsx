@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { fetcher } from '@/utils/fetcher';
 import { useCoverageSuggestions } from '@/hooks/use-coverage-suggestions';
 import { formatCurrency, formatDecimal, formatPhoneNumber } from '@/utils/formatters';
+import { AGENT_LANGUAGE_OPTIONS, AGENT_SPECIALTY_OPTIONS } from '@/constants/agent-options';
 
 interface CoverageLocation {
   label: string;
@@ -25,6 +26,8 @@ interface AgentRow {
   statesLicensed: string[];
   coverageAreas?: string[];
   coverageLocations?: CoverageLocation[];
+  specialties?: string[];
+  languages?: string[];
   metrics: {
     closingsLast12Months: number;
     closingRate: number;
@@ -49,6 +52,8 @@ type AgentFormState = {
   states: string;
   coverageDescription: string;
   coverageLocations: CoverageLocation[];
+  specialties: string[];
+  languages: string[];
 };
 
 const createEmptyForm = (): AgentFormState => ({
@@ -60,6 +65,8 @@ const createEmptyForm = (): AgentFormState => ({
   states: '',
   coverageDescription: '',
   coverageLocations: [],
+  specialties: [],
+  languages: [],
 });
 
 export function AgentsTable() {
@@ -83,12 +90,19 @@ export function AgentsTable() {
     return <div className="rounded-lg bg-white p-4 shadow-sm">Loading agents…</div>;
   }
 
-  type TextField = Exclude<keyof AgentFormState, 'coverageLocations'>;
+  type TextField = Exclude<keyof AgentFormState, 'coverageLocations' | 'specialties' | 'languages'>;
 
   const handleChange = (field: TextField) => (
     event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     setForm((previous) => ({ ...previous, [field]: event.target.value }));
+  };
+
+  const handleSelectChange = (field: 'specialties' | 'languages') => (
+    event: ChangeEvent<HTMLSelectElement>
+  ) => {
+    const selected = Array.from(event.target.selectedOptions).map((option) => option.value);
+    setForm((previous) => ({ ...previous, [field]: selected }));
   };
 
   const normalizeZipCode = (value: string) => {
@@ -289,6 +303,8 @@ export function AgentsTable() {
           statesLicensed,
           coverageAreas: coverageZipCodes,
           coverageLocations: normalizedCoverageLocations,
+          specialties: form.specialties,
+          languages: form.languages,
         }),
       });
 
@@ -484,6 +500,48 @@ export function AgentsTable() {
                     Add location
                   </button>
                 </div>
+              </div>
+              <div className="md:col-span-2 grid gap-3">
+                <label className="text-xs font-semibold text-slate-600">
+                  Specialties
+                  <select
+                    multiple
+                    value={form.specialties}
+                    onChange={handleSelectChange('specialties')}
+                    className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                    size={6}
+                    disabled={formDisabled}
+                  >
+                    {AGENT_SPECIALTY_OPTIONS.map((specialty) => (
+                      <option key={specialty} value={specialty}>
+                        {specialty}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-[11px] font-normal text-slate-500">
+                    Hold Ctrl (Windows) or Command (Mac) to select multiple specialties.
+                  </span>
+                </label>
+                <label className="text-xs font-semibold text-slate-600">
+                  Languages spoken
+                  <select
+                    multiple
+                    value={form.languages}
+                    onChange={handleSelectChange('languages')}
+                    className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                    size={5}
+                    disabled={formDisabled}
+                  >
+                    {AGENT_LANGUAGE_OPTIONS.map((language) => (
+                      <option key={language} value={language}>
+                        {language}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-[11px] font-normal text-slate-500">
+                    Hold Ctrl (Windows) or Command (Mac) to select multiple languages.
+                  </span>
+                </label>
               </div>
               <div className="md:col-span-2">
                 <button
