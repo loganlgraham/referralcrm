@@ -142,7 +142,7 @@ export function AgentsTable() {
       const receivedZipCodes = Array.isArray(payload?.zipCodes) ? payload.zipCodes : [];
       const normalized = receivedZipCodes
         .map((zip: string) => normalizeZipCode(zip))
-        .filter((zip): zip is string => Boolean(zip));
+        .filter((zip: string | null): zip is string => Boolean(zip));
 
       if (normalized.length === 0) {
         toast.info('No ZIP codes were identified. Try adding more detail.');

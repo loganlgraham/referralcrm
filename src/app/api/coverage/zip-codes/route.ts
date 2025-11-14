@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
       new Set(
         candidateZipCodes
           .map((zip) => normalizeZipCode(zip))
-          .filter((zip): zip is string => Boolean(zip))
+          .filter((zip: string | null): zip is string => Boolean(zip))
           .slice(0, MAX_ZIP_CODES)
       )
     );
