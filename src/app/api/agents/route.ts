@@ -61,6 +61,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     npsScore?: number | null;
     specialties?: string[] | null;
     languages?: string[] | null;
+    ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
   };
 
   const agents = await Agent.find(filter).lean<AgentLean[]>();
