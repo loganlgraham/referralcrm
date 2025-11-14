@@ -9,7 +9,11 @@ import { toast } from 'sonner';
 import { fetcher } from '@/utils/fetcher';
 import { useCoverageSuggestions } from '@/hooks/use-coverage-suggestions';
 import { formatCurrency, formatDecimal, formatPhoneNumber } from '@/utils/formatters';
-import { AGENT_LANGUAGE_OPTIONS, AGENT_SPECIALTY_OPTIONS } from '@/constants/agent-options';
+import {
+  AGENT_AHA_CLASSIFICATION_OPTIONS,
+  AGENT_LANGUAGE_OPTIONS,
+  AGENT_SPECIALTY_OPTIONS,
+} from '@/constants/agent-options';
 
 interface CoverageLocation {
   label: string;
@@ -28,6 +32,7 @@ interface AgentRow {
   coverageLocations?: CoverageLocation[];
   specialties?: string[];
   languages?: string[];
+  ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
   metrics: {
     closingsLast12Months: number;
     closingRate: number;
@@ -54,6 +59,7 @@ type AgentFormState = {
   coverageLocations: CoverageLocation[];
   specialties: string[];
   languages: string[];
+  ahaDesignation: '' | 'AHA' | 'AHA_OOS';
 };
 
 const createEmptyForm = (): AgentFormState => ({
@@ -67,6 +73,7 @@ const createEmptyForm = (): AgentFormState => ({
   coverageLocations: [],
   specialties: [],
   languages: [],
+  ahaDesignation: '',
 });
 
 export function AgentsTable() {
@@ -103,6 +110,10 @@ export function AgentsTable() {
   ) => {
     const selected = Array.from(event.target.selectedOptions).map((option) => option.value);
     setForm((previous) => ({ ...previous, [field]: selected }));
+  };
+
+  const handleAhaChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    setForm((previous) => ({ ...previous, ahaDesignation: event.target.value as AgentFormState['ahaDesignation'] }));
   };
 
   const normalizeZipCode = (value: string) => {
@@ -305,6 +316,7 @@ export function AgentsTable() {
           coverageLocations: normalizedCoverageLocations,
           specialties: form.specialties,
           languages: form.languages,
+          ahaDesignation: form.ahaDesignation || null,
         }),
       });
 
@@ -398,6 +410,22 @@ export function AgentsTable() {
                   className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
                   disabled={formDisabled}
                 />
+              </label>
+              <label className="text-xs font-semibold text-slate-600">
+                AHA classification
+                <select
+                  value={form.ahaDesignation}
+                  onChange={handleAhaChange}
+                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                  disabled={formDisabled}
+                >
+                  <option value="">Not set</option>
+                  {AGENT_AHA_CLASSIFICATION_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option === 'AHA_OOS' ? 'AHA OOS' : option}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="text-xs font-semibold text-slate-600">
                 States (comma separated)
@@ -601,6 +629,7 @@ export function AgentsTable() {
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">License</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Brokerage</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">AHA</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">States</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Areas covered</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Closings (12mo)</th>
@@ -629,6 +658,13 @@ export function AgentsTable() {
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{agent.licenseNumber || '—'}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">{agent.brokerage || '—'}</td>
+                <td className="px-4 py-3 text-sm text-slate-700">
+                  {agent.ahaDesignation === 'AHA'
+                    ? 'AHA'
+                    : agent.ahaDesignation === 'AHA_OOS'
+                    ? 'AHA OOS'
+                    : '—'}
+                </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{agent.statesLicensed.join(', ') || '—'}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">
                   {(() => {

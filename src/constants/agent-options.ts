@@ -34,3 +34,5 @@ export const AGENT_LANGUAGE_OPTIONS = [
   'Hindi',
   'Arabic'
 ] as const;
+
+export const AGENT_AHA_CLASSIFICATION_OPTIONS = ['AHA', 'AHA_OOS'] as const;

@@ -39,6 +39,11 @@ const agentSchema = new Schema(
     markets: [{ type: String }],
     specialties: { type: [String], default: [] },
     languages: { type: [String], default: [] },
+    ahaDesignation: {
+      type: String,
+      enum: ['AHA', 'AHA_OOS', null],
+      default: null,
+    },
     experienceSince: { type: Date },
     notes: { type: [agentNoteSchema], default: [] }
   },

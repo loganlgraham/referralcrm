@@ -63,6 +63,7 @@ async function main() {
     endorser: 'Morgan Consultant',
     clientType: 'Buyer',
     lookingInZip: '80202',
+    lookingInZips: ['80202'],
     borrowerCurrentAddress: '456 Elm St, Denver, CO 80211',
     propertyAddress: '123 Market St, Denver, CO 80202',
     stageOnTransfer: 'Pre-Approval TBD',
@@ -85,7 +86,8 @@ async function main() {
         timestamp: new Date()
       }
     ],
-    dealSide: 'buy'
+    dealSide: 'buy',
+    origin: 'admin'
   });
 
   await Payment.create({

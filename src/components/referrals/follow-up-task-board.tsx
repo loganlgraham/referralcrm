@@ -16,6 +16,8 @@ interface BoardReferral {
   statusLastUpdated?: string | null;
   daysInStatus?: number;
   assignedAgentName?: string;
+  lenderName?: string | null;
+  origin?: 'agent' | 'mc' | 'admin' | null;
 }
 
 interface FollowUpTasksBoardProps {
@@ -30,6 +32,8 @@ const toReferralLike = (referral: BoardReferral): ReferralLike & { borrower: { n
   daysInStatus: referral.daysInStatus,
   assignedAgent: referral.assignedAgentName ? { name: referral.assignedAgentName } : null,
   assignedAgentName: referral.assignedAgentName,
+  lender: referral.lenderName ? { name: referral.lenderName } : null,
+  origin: referral.origin ?? undefined,
   borrower: { name: referral.borrowerName },
   notes: [],
   payments: [],
@@ -138,6 +142,11 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-medium text-slate-900">{task.title}</p>
                   <span className="text-xs uppercase tracking-wide text-slate-400">{task.category}</span>
+                  {task.isManual && (
+                    <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
+                      Manual
+                    </span>
+                  )}
                   <span className="text-xs font-semibold uppercase text-slate-400">{task.priority}</span>
                 </div>
                 <p className="text-sm text-slate-600">{task.message}</p>
@@ -161,6 +170,15 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
                     )}
                     {addingTaskId === task.taskId ? 'Adding…' : 'Add to Google Calendar'}
                   </button>
+                  {task.isManual && task.remove && (
+                    <button
+                      type="button"
+                      onClick={task.remove}
+                      className="ml-2 inline-flex items-center rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+                    >
+                      Remove task
+                    </button>
+                  )}
                 </div>
               </div>
             </li>

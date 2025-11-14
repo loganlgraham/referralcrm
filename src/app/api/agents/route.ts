@@ -29,6 +29,11 @@ const createAgentSchema = z.object({
   coverageLocations: z.array(coverageLocationSchema).optional().default([]),
   specialties: z.array(z.string().trim().min(1)).optional().default([]),
   languages: z.array(z.string().trim().min(1)).optional().default([]),
+  ahaDesignation: z
+    .enum(['AHA', 'AHA_OOS'])
+    .optional()
+    .nullable()
+    .default(null),
 });
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -87,6 +92,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       coverageLocations: Array.isArray(agent.coverageLocations) ? agent.coverageLocations : [],
       specialties: Array.isArray(agent.specialties) ? agent.specialties : [],
       languages: Array.isArray(agent.languages) ? agent.languages : [],
+      ahaDesignation:
+        agent.ahaDesignation === 'AHA' || agent.ahaDesignation === 'AHA_OOS'
+          ? agent.ahaDesignation
+          : null,
       metrics,
       npsScore: metrics.npsScore,
     };
@@ -125,6 +134,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     coverageLocations: parsed.data.coverageLocations,
     specialties: parsed.data.specialties,
     languages: parsed.data.languages,
+    ahaDesignation: parsed.data.ahaDesignation,
     active: true,
   });
 

@@ -106,6 +106,7 @@ export function ReferralHeader({
   onAgentContactChange,
   onMcContactChange,
 }: ReferralHeaderProps) {
+  const isAgentOrigin = referral.origin === 'agent';
   const [status, setStatus] = useState<ReferralStatus>(referral.status as ReferralStatus);
   const [preApprovalAmountCents, setPreApprovalAmountCents] = useState<number>(
     referral.preApprovalAmountCents ?? 0
@@ -330,6 +331,16 @@ export function ReferralHeader({
   const canEditBucket = viewerRole === 'admin' || viewerRole === 'manager';
   const showBucketSummary = viewerRole !== 'agent';
 
+  const locationLabel = useMemo(() => {
+    const zips = Array.isArray(referral.lookingInZips)
+      ? referral.lookingInZips.filter((zip) => typeof zip === 'string' && zip.trim().length > 0)
+      : [];
+    if (zips.length > 0) {
+      return zips.join(', ');
+    }
+    return referral.lookingInZip ?? '';
+  }, [referral.lookingInZip, referral.lookingInZips]);
+
   const propertyLabel = useMemo(() => {
     if (effectivePropertyAddress && effectivePropertyAddress.trim().length > 0) {
       return effectivePropertyAddress;
@@ -339,8 +350,8 @@ export function ReferralHeader({
     if (savedFallback && savedFallback.trim().length > 0) {
       return savedFallback;
     }
-    return referral.lookingInZip ? `Looking in ${referral.lookingInZip}` : 'Pending location';
-  }, [effectivePropertyAddress, referral.lookingInZip, savedDisplayAddress, savedStreet]);
+    return locationLabel ? `Looking in ${locationLabel}` : 'Pending location';
+  }, [effectivePropertyAddress, locationLabel, savedDisplayAddress, savedStreet]);
 
   const borrowerName = referral.borrower?.name ?? 'Borrower';
   const borrowerEmail = referral.borrower?.email?.trim() ?? '';
@@ -723,27 +734,29 @@ export function ReferralHeader({
         </section>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Financial breakdown</h2>
-        <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="space-y-1">
-            <dt className="text-xs uppercase text-slate-500">Agent Commission</dt>
-            <dd className="text-sm font-semibold text-slate-900">{commissionPercent}</dd>
-          </div>
-          <div className="space-y-1">
-            <dt className="text-xs uppercase text-slate-500">Referral Fee %</dt>
-            <dd className="text-sm font-semibold text-slate-900">{referralFeePercent}</dd>
-          </div>
-          <div className="space-y-1">
-            <dt className="text-xs uppercase text-slate-500">Referral Fee Due</dt>
-            <dd className="text-sm font-semibold text-slate-900">{formattedReferralFeeDue}</dd>
-          </div>
-          <div className="space-y-1">
-            <dt className="text-xs uppercase text-slate-500">Deal Side</dt>
-            <dd className="text-sm font-semibold text-slate-900">{dealSideLabel}</dd>
-          </div>
-        </dl>
-      </div>
+      {!isAgentOrigin && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Financial breakdown</h2>
+          <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-1">
+              <dt className="text-xs uppercase text-slate-500">Agent Commission</dt>
+              <dd className="text-sm font-semibold text-slate-900">{commissionPercent}</dd>
+            </div>
+            <div className="space-y-1">
+              <dt className="text-xs uppercase text-slate-500">Referral Fee %</dt>
+              <dd className="text-sm font-semibold text-slate-900">{referralFeePercent}</dd>
+            </div>
+            <div className="space-y-1">
+              <dt className="text-xs uppercase text-slate-500">Referral Fee Due</dt>
+              <dd className="text-sm font-semibold text-slate-900">{formattedReferralFeeDue}</dd>
+            </div>
+            <div className="space-y-1">
+              <dt className="text-xs uppercase text-slate-500">Deal Side</dt>
+              <dd className="text-sm font-semibold text-slate-900">{dealSideLabel}</dd>
+            </div>
+          </dl>
+        </div>
+      )}
     </div>
   );
 }

@@ -74,6 +74,19 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     return new NextResponse('Forbidden', { status: 403 });
   }
   const updatePayload = parsed.data as Record<string, unknown>;
+  if (Array.isArray(parsed.data.lookingInZips)) {
+    const uniqueZips = Array.from(
+      new Set(
+        parsed.data.lookingInZips
+          .map((zip) => zip.trim())
+          .filter((zip) => /^\d{5}$/u.test(zip))
+      )
+    );
+    updatePayload.lookingInZips = uniqueZips;
+    if (uniqueZips.length > 0) {
+      updatePayload.lookingInZip = uniqueZips[0];
+    }
+  }
   const detailFieldKeys = Object.keys(DETAIL_FIELD_LABELS) as (keyof typeof DETAIL_FIELD_LABELS)[];
   const toComparableString = (value: unknown) => {
     if (value === undefined || value === null) {

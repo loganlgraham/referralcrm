@@ -69,6 +69,8 @@ export interface ReferralLike {
   daysInStatus?: number;
   assignedAgent?: { name?: string | null; fullName?: string | null } | null;
   assignedAgentName?: string;
+  lender?: { name?: string | null } | null;
+  origin?: 'agent' | 'mc' | 'admin';
   borrower?: { name?: string };
   notes?: NoteLike[];
   payments?: DealLike[];
@@ -373,7 +375,7 @@ export const computeSlaDurations = (referral: ReferralLike): SlaDuration[] => {
     ? previousClosedToPaid ?? storedClosedToPaid ?? null
     : previousClosedToPaid ?? null;
 
-  return [
+  const durations: SlaDuration[] = [
     {
       key: 'new-lead-to-paired',
       label: 'New Lead → Paired',
@@ -405,6 +407,12 @@ export const computeSlaDurations = (referral: ReferralLike): SlaDuration[] => {
       formatted: formatDuration(closeToPaidMinutes, closeToPaidPrevious),
     },
   ];
+
+  if (referral.origin === 'agent') {
+    return durations.filter((item) => item.key !== 'close-to-paid');
+  }
+
+  return durations;
 };
 
 const buildRecommendation = (
@@ -418,7 +426,82 @@ const minDueDate = (candidate: Date | null | undefined): string | null => {
   return candidate.toISOString();
 };
 
+const computeAgentReferralRecommendations = (referral: ReferralLike): SlaRecommendation[] => {
+  const createdAt = parseTimestamp(referral.createdAt) ?? new Date();
+  const now = new Date();
+  const status = referral.status ?? 'New Lead';
+  const statusLastUpdated = parseTimestamp(referral.statusLastUpdated) ?? createdAt;
+  const hoursSinceStatusUpdate = differenceInHours(now, statusLastUpdated);
+  const latestNoteAt = getLatestNoteTimestamp(referral.notes);
+  const hoursSinceLastNote = latestNoteAt ? differenceInHours(now, latestNoteAt) : null;
+
+  const recommendations: SlaRecommendation[] = [];
+
+  if (!referral.lender) {
+    const dueBy = addHours(createdAt, 1);
+    recommendations.push(
+      buildRecommendation({
+        id: 'assign-mc-agent-origin',
+        title: 'Assign a mortgage consultant',
+        message: 'Choose the MC who will take this referral so they can contact the borrower without delay.',
+        priority: 'urgent',
+        category: 'assignment',
+        dueAt: minDueDate(dueBy),
+        supportingMetric: 'Awaiting MC assignment',
+      })
+    );
+  }
+
+  if (referral.lender && (status === 'New Lead' || status === 'Paired') && hoursSinceStatusUpdate >= 4) {
+    const dueBy = addHours(statusLastUpdated, 4);
+    recommendations.push(
+      buildRecommendation({
+        id: 'confirm-borrower-intro',
+        title: 'Confirm borrower outreach',
+        message: 'Make sure the MC has introduced themselves to the borrower and acknowledged the referral.',
+        priority: 'high',
+        category: 'communication',
+        dueAt: minDueDate(dueBy),
+        supportingMetric: `${hoursSinceStatusUpdate}h since transfer`,
+      })
+    );
+  }
+
+  if (hoursSinceLastNote !== null && hoursSinceLastNote > 48) {
+    recommendations.push(
+      buildRecommendation({
+        id: 'share-agent-update',
+        title: 'Share an update with the referring agent',
+        message: 'Log a quick note so the referring agent knows how the borrower conversation is progressing.',
+        priority: 'medium',
+        category: 'communication',
+        supportingMetric: `Last update ${hoursSinceLastNote}h ago`,
+      })
+    );
+  }
+
+  if (status === 'In Communication' && hoursSinceStatusUpdate >= 72) {
+    const dueBy = addHours(statusLastUpdated, 72);
+    recommendations.push(
+      buildRecommendation({
+        id: 'plan-next-step',
+        title: 'Plan the borrower’s next milestone',
+        message: 'Suggest documents, education, or follow-ups to keep the borrower moving forward.',
+        priority: 'medium',
+        category: 'pipeline',
+        dueAt: minDueDate(dueBy),
+        supportingMetric: `${hoursSinceStatusUpdate}h in current stage`,
+      })
+    );
+  }
+
+  return recommendations;
+};
+
 export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommendation[] => {
+  if (referral.origin === 'agent') {
+    return computeAgentReferralRecommendations(referral);
+  }
   const createdAt = parseTimestamp(referral.createdAt) ?? new Date();
   const now = new Date();
   const durations = computeSlaDurations(referral);
