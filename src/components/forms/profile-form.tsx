@@ -260,7 +260,15 @@ export function ProfileForm() {
       .map((entry) => (transform ? transform(entry) : entry));
 
   const deriveZipCodes = (locations: CoverageLocation[]): string[] =>
-    Array.from(new Set(locations.flatMap((location) => location.zipCodes)));
+    Array.from(
+      new Set(
+        locations.flatMap((location) =>
+          (Array.isArray(location.zipCodes) ? location.zipCodes : [])
+            .map((zip) => normalizeZipCode(zip))
+            .filter((zip: string | null): zip is string => Boolean(zip))
+        )
+      )
+    );
 
   const mergeCoverageLocations = (
     existing: CoverageLocation[],
@@ -435,10 +443,11 @@ export function ProfileForm() {
       };
 
       if (data.role === 'agent') {
-        const coverageZipCodes = deriveZipCodes(form.coverageLocations);
+        const normalizedCoverageLocations = mergeCoverageLocations([], form.coverageLocations);
+        const coverageZipCodes = deriveZipCodes(normalizedCoverageLocations);
         payload.statesLicensed = parseList(form.states, (value) => value.toUpperCase());
         payload.coverageAreas = coverageZipCodes;
-        payload.coverageLocations = form.coverageLocations;
+        payload.coverageLocations = normalizedCoverageLocations;
         payload.markets = parseList(form.markets);
         payload.licenseNumber = form.licenseNumber.trim();
         payload.brokerage = form.brokerage.trim();
@@ -740,9 +749,6 @@ export function ProfileForm() {
                         {isGeneratingCoverage ? 'Generating…' : 'Generate locations'}
                       </button>
                     </div>
-                    <p className="mt-2 text-xs text-slate-500">
-                      We'll use AI to translate your description into coverage locations and remember the ZIP codes behind the scenes.
-                    </p>
                   </div>
                   <div className="sm:col-span-2">
                     <p className="text-sm font-semibold text-slate-600">Cities, towns & counties</p>
@@ -769,9 +775,6 @@ export function ProfileForm() {
                         ))
                       )}
                     </div>
-                    <p className="mt-2 text-xs text-slate-500">
-                      ZIP codes for each location are saved for future lead routing.
-                    </p>
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                       <input
                         type="text"

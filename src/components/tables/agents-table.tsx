@@ -100,7 +100,15 @@ export function AgentsTable() {
   };
 
   const deriveZipCodes = (locations: CoverageLocation[]): string[] =>
-    Array.from(new Set(locations.flatMap((location) => location.zipCodes)));
+    Array.from(
+      new Set(
+        locations.flatMap((location) =>
+          (Array.isArray(location.zipCodes) ? location.zipCodes : [])
+            .map((zip) => normalizeZipCode(zip))
+            .filter((zip: string | null): zip is string => Boolean(zip))
+        )
+      )
+    );
 
   const mergeCoverageLocations = (
     existing: CoverageLocation[],
@@ -267,7 +275,8 @@ export function AgentsTable() {
         .split(',')
         .map((value) => value.trim().toUpperCase())
         .filter(Boolean);
-      const coverageZipCodes = deriveZipCodes(form.coverageLocations);
+      const normalizedCoverageLocations = mergeCoverageLocations([], form.coverageLocations);
+      const coverageZipCodes = deriveZipCodes(normalizedCoverageLocations);
       const response = await fetch('/api/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -279,7 +288,7 @@ export function AgentsTable() {
           brokerage: form.brokerage,
           statesLicensed,
           coverageAreas: coverageZipCodes,
-          coverageLocations: form.coverageLocations,
+          coverageLocations: normalizedCoverageLocations,
         }),
       });
 
@@ -407,9 +416,6 @@ export function AgentsTable() {
                     {isGeneratingCoverage ? 'Generating…' : 'Generate locations'}
                   </button>
                 </div>
-                <p className="text-[11px] text-slate-500">
-                  We'll use AI to translate the description into coverage locations and remember the ZIP codes for routing later.
-                </p>
               </div>
               <div className="md:col-span-2 space-y-2">
                 <p className="text-xs font-semibold text-slate-600">Cities, towns & counties</p>
@@ -436,9 +442,6 @@ export function AgentsTable() {
                     ))
                   )}
                 </div>
-                <p className="text-[11px] text-slate-500">
-                  ZIP codes for each location are saved for future lead routing, even though they’re hidden here.
-                </p>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <input
                     type="text"
