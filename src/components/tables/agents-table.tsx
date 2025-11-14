@@ -93,10 +93,15 @@ export function AgentsTable() {
       return;
     }
 
-    setCoverageProgress(5);
+    setCoverageProgress((value) => (value < 12 ? 12 : value));
     const interval = window.setInterval(() => {
-      setCoverageProgress((value) => (value >= 90 ? 90 : value + 5));
-    }, 200);
+      setCoverageProgress((value) => {
+        if (value >= 88) {
+          return 88;
+        }
+        return value + 4;
+      });
+    }, 400);
 
     return () => {
       window.clearInterval(interval);
@@ -110,7 +115,7 @@ export function AgentsTable() {
 
     const timeout = window.setTimeout(() => {
       setCoverageProgress(0);
-    }, 400);
+    }, 700);
 
     return () => {
       window.clearTimeout(timeout);
@@ -126,7 +131,7 @@ export function AgentsTable() {
 
     return {
       backgroundImage: `linear-gradient(90deg, #0b365d 0%, #0b365d ${progress}%, #0f4c81 ${progress}%, #2f6aa3 100%)`,
-      transition: 'background-image 150ms linear',
+      transition: 'background-image 250ms linear',
     };
   }, [coverageProgress, isGeneratingCoverage]);
   const [manualLocationLabel, setManualLocationLabel] = useState('');
@@ -274,7 +279,7 @@ export function AgentsTable() {
     }
 
     setIsGeneratingCoverage(true);
-    setCoverageProgress(5);
+    setCoverageProgress(12);
     try {
       const response = await fetch('/api/coverage/zip-codes', {
         method: 'POST',

@@ -62,6 +62,21 @@ type FormState = {
   languages: string[];
 };
 
+type AgentProfilePayload = {
+  name: string;
+  email: string;
+  phone: string;
+  statesLicensed: string[];
+  coverageAreas: string[];
+  coverageLocations: CoverageLocation[];
+  markets: string[];
+  licenseNumber: string;
+  brokerage: string;
+  specialties: string[];
+  languages: string[];
+  experienceSince: string | null;
+};
+
 const formatPhoneInput = (value: string): string => {
   const digits = value.replace(/\D/g, '').slice(0, 10);
   if (digits.length <= 3) {
@@ -218,6 +233,7 @@ export function ProfileForm() {
   const [manualLocationLabel, setManualLocationLabel] = useState('');
   const [manualLocationZipInput, setManualLocationZipInput] = useState('');
   const [coverageProgress, setCoverageProgress] = useState(0);
+  const [isPersistingCoverage, setIsPersistingCoverage] = useState(false);
 
   useEffect(() => {
     setForm(initialState);
@@ -230,10 +246,15 @@ export function ProfileForm() {
       return;
     }
 
-    setCoverageProgress(5);
+    setCoverageProgress((value) => (value < 12 ? 12 : value));
     const interval = window.setInterval(() => {
-      setCoverageProgress((value) => (value >= 90 ? 90 : value + 5));
-    }, 200);
+      setCoverageProgress((value) => {
+        if (value >= 88) {
+          return 88;
+        }
+        return value + 4;
+      });
+    }, 400);
 
     return () => {
       window.clearInterval(interval);
@@ -247,7 +268,7 @@ export function ProfileForm() {
 
     const timeout = window.setTimeout(() => {
       setCoverageProgress(0);
-    }, 400);
+    }, 700);
 
     return () => {
       window.clearTimeout(timeout);
@@ -263,7 +284,7 @@ export function ProfileForm() {
 
     return {
       backgroundImage: `linear-gradient(90deg, #0b365d 0%, #0b365d ${progress}%, #0f4c81 ${progress}%, #2f6aa3 100%)`,
-      transition: 'background-image 150ms linear',
+      transition: 'background-image 250ms linear',
     };
   }, [coverageProgress, isGeneratingCoverage]);
 
@@ -391,6 +412,95 @@ export function ProfileForm() {
     updateCoverageLocations((current) => mergeCoverageLocations(current, locations));
   };
 
+  const createAgentPatchPayload = (coverageLocations: CoverageLocation[]): AgentProfilePayload => {
+    const normalizedCoverageLocations = mergeCoverageLocations([], coverageLocations);
+    const coverageZipCodes = deriveZipCodes(normalizedCoverageLocations);
+
+    const payload: AgentProfilePayload = {
+      name: form.name.trim(),
+      email: form.email.trim().toLowerCase(),
+      phone: form.phone.trim(),
+      statesLicensed: parseList(form.states, (value) => value.toUpperCase()),
+      coverageAreas: coverageZipCodes,
+      coverageLocations: normalizedCoverageLocations,
+      markets: parseList(form.markets),
+      licenseNumber: form.licenseNumber.trim(),
+      brokerage: form.brokerage.trim(),
+      specialties: form.specialties,
+      languages: form.languages,
+      experienceSince: null,
+    };
+
+    const experienceValue = form.experienceSince.trim();
+    if (experienceValue) {
+      const parsedDate = parseISO(experienceValue);
+      if (Number.isNaN(parsedDate.getTime())) {
+        throw new Error('Experience start date must be a valid date.');
+      }
+      payload.experienceSince = parsedDate.toISOString();
+    }
+
+    return payload;
+  };
+
+  const persistCoverageUpdate = async (
+    mergedLocations: CoverageLocation[],
+    successMessage: string
+  ) => {
+    if (data.role !== 'agent') {
+      toast.success(successMessage);
+      return;
+    }
+
+    setIsPersistingCoverage(true);
+    try {
+      const payload = createAgentPatchPayload(mergedLocations);
+      const response = await fetch('/api/me/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        const message =
+          typeof payload?.error === 'string'
+            ? payload.error
+            : payload?.error?.message ??
+              payload?.message ??
+              'Unable to save generated coverage areas.';
+        throw new Error(message);
+      }
+
+      toast.success(successMessage);
+    } catch (error) {
+      console.error(error);
+      toast.error(
+        error instanceof Error ? error.message : 'Unable to save generated coverage areas.'
+      );
+    } finally {
+      setIsPersistingCoverage(false);
+    }
+  };
+
+  const applyCoverageWithPersistence = async (
+    incoming: CoverageLocation[],
+    successMessage: string
+  ) => {
+    if (incoming.length === 0) {
+      return;
+    }
+
+    let mergedLocations: CoverageLocation[] = [];
+    setForm((previous) => {
+      const nextLocations = mergeCoverageLocations(previous.coverageLocations, incoming);
+      mergedLocations = nextLocations;
+      return { ...previous, coverageLocations: nextLocations };
+    });
+
+    await persistCoverageUpdate(mergedLocations, successMessage);
+  };
+
   const handleManualCoverageAdd = () => {
     const label = manualLocationLabel.trim();
     const zipInput = manualLocationZipInput.trim();
@@ -423,7 +533,7 @@ export function ProfileForm() {
     }
 
     setIsGeneratingCoverage(true);
-    setCoverageProgress(5);
+    setCoverageProgress(12);
     try {
       const response = await fetch('/api/coverage/zip-codes', {
         method: 'POST',
@@ -468,14 +578,17 @@ export function ProfileForm() {
           return;
         }
 
-        addCoverageLocations(fallbackLocations);
-        toast.success('ZIP codes added as coverage placeholders.');
+        await applyCoverageWithPersistence(
+          fallbackLocations,
+          'ZIP codes saved as coverage placeholders.'
+        );
         return;
       }
 
-      addCoverageLocations(normalizedLocations);
-
-      toast.success('Coverage locations added to your profile.');
+      await applyCoverageWithPersistence(
+        normalizedLocations,
+        'Coverage locations saved to your profile.'
+      );
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Unable to generate coverage locations');
@@ -495,39 +608,15 @@ export function ProfileForm() {
 
     setSaving(true);
     try {
-      const payload: Record<string, unknown> = {
-        name: form.name.trim(),
-        email: form.email.trim().toLowerCase(),
-        phone: form.phone.trim(),
-      };
-
-      if (data.role === 'agent') {
-        const normalizedCoverageLocations = mergeCoverageLocations([], form.coverageLocations);
-        const coverageZipCodes = deriveZipCodes(normalizedCoverageLocations);
-        payload.statesLicensed = parseList(form.states, (value) => value.toUpperCase());
-        payload.coverageAreas = coverageZipCodes;
-        payload.coverageLocations = normalizedCoverageLocations;
-        payload.markets = parseList(form.markets);
-        payload.licenseNumber = form.licenseNumber.trim();
-        payload.brokerage = form.brokerage.trim();
-        payload.specialties = form.specialties;
-        payload.languages = form.languages;
-
-        const experienceValue = form.experienceSince.trim();
-        if (experienceValue) {
-          const parsedDate = parseISO(experienceValue);
-          if (Number.isNaN(parsedDate.getTime())) {
-            throw new Error('Experience start date must be a valid date.');
-          }
-          payload.experienceSince = parsedDate.toISOString();
-        } else {
-          payload.experienceSince = null;
-        }
-      }
-
-      if (data.role === 'mc') {
-        payload.licensedStates = parseList(form.states, (value) => value.toUpperCase());
-      }
+      const payload: Record<string, unknown> =
+        data.role === 'agent'
+          ? createAgentPatchPayload(form.coverageLocations)
+          : {
+              name: form.name.trim(),
+              email: form.email.trim().toLowerCase(),
+              phone: form.phone.trim(),
+              licensedStates: parseList(form.states, (value) => value.toUpperCase()),
+            };
 
       const response = await fetch('/api/me/profile', {
         method: 'PATCH',
@@ -802,14 +891,14 @@ export function ProfileForm() {
                         className="w-full flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40 sm:min-h-[5.5rem]"
                         placeholder="Describe neighborhoods, cities, and counties you serve"
                         rows={3}
-                        disabled={saving || isGeneratingCoverage}
+                        disabled={saving || isGeneratingCoverage || isPersistingCoverage}
                       />
                       <button
                         type="button"
                         onClick={generateCoverageLocations}
                         className="flex shrink-0 items-center justify-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 sm:h-full sm:min-h-[5.5rem] sm:self-stretch"
                         style={coverageButtonStyles}
-                        disabled={saving || isGeneratingCoverage}
+                        disabled={saving || isGeneratingCoverage || isPersistingCoverage}
                       >
                         {isGeneratingCoverage ? 'Generating…' : 'Save Service Areas'}
                       </button>
@@ -832,7 +921,7 @@ export function ProfileForm() {
                               onClick={() => removeCoverageLocation(location.label)}
                               className="text-slate-500 transition hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
                               aria-label={`Remove ${location.label}`}
-                              disabled={saving}
+                              disabled={saving || isPersistingCoverage}
                             >
                               ×
                             </button>
@@ -853,7 +942,7 @@ export function ProfileForm() {
                         }}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
                         placeholder="Add a city, town, or county"
-                        disabled={saving}
+                        disabled={saving || isPersistingCoverage}
                       />
                       <input
                         type="text"
@@ -867,7 +956,7 @@ export function ProfileForm() {
                         }}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
                         placeholder="Associated ZIP codes (e.g. 78701, 78702)"
-                        disabled={saving}
+                        disabled={saving || isPersistingCoverage}
                         inputMode="text"
                       />
                       <button
@@ -876,6 +965,7 @@ export function ProfileForm() {
                         className="inline-flex h-11 items-center justify-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 sm:self-stretch"
                         disabled={
                           saving ||
+                          isPersistingCoverage ||
                           manualLocationLabel.trim().length === 0 ||
                           manualLocationZipInput.trim().length === 0
                         }
