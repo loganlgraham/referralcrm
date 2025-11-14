@@ -8,6 +8,15 @@ import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { User } from '@/models/user';
 import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
+import { mergeAndNormalizeZipCodes, syncAgentZipCoverage } from '@/lib/server/zip-coverage';
+
+const coverageLocationSchema = z.object({
+  label: z.string().trim().min(1),
+  zipCodes: z
+    .array(z.string().trim().regex(/^\d{5}$/))
+    .min(1)
+    .transform((zipCodes) => Array.from(new Set(zipCodes))),
+});
 
 const agentProfileSchema = z.object({
   name: z.string().trim().min(1),
@@ -17,9 +26,11 @@ const agentProfileSchema = z.object({
   brokerage: z.string().trim().optional(),
   statesLicensed: z.array(z.string().trim().min(2)).optional().default([]),
   coverageAreas: z.array(z.string().trim().min(1)).optional().default([]),
+  coverageLocations: z.array(coverageLocationSchema).optional().default([]),
   markets: z.array(z.string().trim().min(1)).optional().default([]),
   experienceSince: z.string().trim().optional().nullable(),
   specialties: z.array(z.string().trim().min(1)).optional().default([]),
+  languages: z.array(z.string().trim().min(1)).optional().default([]),
 });
 
 const lenderProfileSchema = z.object({
@@ -40,7 +51,7 @@ export async function GET(): Promise<NextResponse> {
   if (session.user.role === 'agent') {
     const agent = await Agent.findOne({ $or: [{ userId: session.user.id }, { email: session.user.email }] })
       .select(
-        'name email phone statesLicensed zipCoverage licenseNumber brokerage markets experienceSince specialties'
+        'name email phone statesLicensed zipCoverage coverageLocations licenseNumber brokerage markets experienceSince specialties languages'
       );
     if (!agent) {
       return new NextResponse('Not found', { status: 404 });
@@ -56,10 +67,12 @@ export async function GET(): Promise<NextResponse> {
       brokerage: agentData.brokerage ?? '',
       statesLicensed: agentData.statesLicensed ?? [],
       coverageAreas: agentData.zipCoverage ?? [],
+      coverageLocations: agentData.coverageLocations ?? [],
       markets: agentData.markets ?? [],
       experienceSince:
         agentData.experienceSince instanceof Date ? agentData.experienceSince.toISOString() : null,
       specialties: Array.isArray(agentData.specialties) ? agentData.specialties : [],
+      languages: Array.isArray(agentData.languages) ? agentData.languages : [],
     });
   }
 
@@ -113,11 +126,19 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     agent.email = parsed.data.email;
     agent.phone = parsed.data.phone ?? '';
     agent.statesLicensed = parsed.data.statesLicensed;
-    agent.zipCoverage = parsed.data.coverageAreas;
+    const coverageLocations = parsed.data.coverageLocations;
+    const coverageAreas = parsed.data.coverageAreas;
+    const combinedZipCoverage = mergeAndNormalizeZipCodes([
+      ...coverageAreas,
+      ...coverageLocations.flatMap((location) => location.zipCodes),
+    ]);
+    agent.zipCoverage = combinedZipCoverage;
+    agent.coverageLocations = coverageLocations;
     agent.markets = parsed.data.markets;
     agent.licenseNumber = parsed.data.licenseNumber ?? '';
     agent.brokerage = parsed.data.brokerage ?? '';
     agent.specialties = parsed.data.specialties ?? [];
+    agent.languages = parsed.data.languages ?? [];
     if (parsed.data.experienceSince) {
       const experienceDate = parseISO(parsed.data.experienceSince);
       if (Number.isNaN(experienceDate.getTime())) {
@@ -128,9 +149,17 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       agent.experienceSince = null;
     }
     await agent.save();
+    await syncAgentZipCoverage({
+      agentId: agent._id,
+      coverageLocations,
+      explicitZipCodes: combinedZipCoverage,
+    });
 
-    if (parsed.data.coverageAreas.length > 0) {
-      await rememberCoverageSuggestions(parsed.data.coverageAreas);
+    const coverageSuggestionLabels = coverageLocations.map((location) => location.label);
+    if (coverageSuggestionLabels.length > 0) {
+      await rememberCoverageSuggestions(coverageSuggestionLabels);
+    } else if (combinedZipCoverage.length > 0) {
+      await rememberCoverageSuggestions(combinedZipCoverage);
     }
 
     if (agent.userId) {
@@ -149,9 +178,11 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       brokerage: agent.brokerage ?? '',
       statesLicensed: agent.statesLicensed,
       coverageAreas: agent.zipCoverage,
+      coverageLocations: agent.coverageLocations ?? [],
       markets: agent.markets ?? [],
       experienceSince: agent.experienceSince instanceof Date ? agent.experienceSince.toISOString() : null,
       specialties: Array.isArray(agent.specialties) ? agent.specialties : [],
+      languages: Array.isArray(agent.languages) ? agent.languages : [],
     });
   }
 

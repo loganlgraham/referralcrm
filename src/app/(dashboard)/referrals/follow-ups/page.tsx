@@ -21,6 +21,8 @@ export default async function FollowUpTasksPage() {
     statusLastUpdated: item.statusLastUpdated ?? null,
     daysInStatus: item.daysInStatus,
     assignedAgentName: item.assignedAgentName,
+    lenderName: item.lenderName ?? null,
+    origin: item.origin ?? null,
   }));
 
   return <FollowUpTasksBoard referrals={referrals} />;

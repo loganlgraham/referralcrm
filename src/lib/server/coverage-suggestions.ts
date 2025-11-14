@@ -18,34 +18,38 @@ export async function rememberCoverageSuggestions(values: string[]): Promise<voi
     return;
   }
 
-  const entries = values
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0)
-    .map((value) => ({ value, normalized: normalizeCoverageValue(value) }));
+  try {
+    const entries = values
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0)
+      .map((value) => ({ value, normalized: normalizeCoverageValue(value) }));
 
-  if (entries.length === 0) {
-    return;
-  }
-
-  const uniqueByNormalized = new Map<string, string>();
-  for (const entry of entries) {
-    if (!uniqueByNormalized.has(entry.normalized)) {
-      uniqueByNormalized.set(entry.normalized, entry.value);
+    if (entries.length === 0) {
+      return;
     }
+
+    const uniqueByNormalized = new Map<string, string>();
+    for (const entry of entries) {
+      if (!uniqueByNormalized.has(entry.normalized)) {
+        uniqueByNormalized.set(entry.normalized, entry.value);
+      }
+    }
+
+    const operations = Array.from(uniqueByNormalized.entries()).map(([normalized, value]) =>
+      CoverageSuggestion.updateOne(
+        { normalized },
+        {
+          $setOnInsert: { normalized },
+          $set: { value }
+        },
+        { upsert: true }
+      )
+    );
+
+    await Promise.all(operations);
+  } catch (error) {
+    console.error('Failed to remember coverage suggestions', error);
   }
-
-  const operations = Array.from(uniqueByNormalized.entries()).map(([normalized, value]) =>
-    CoverageSuggestion.updateOne(
-      { normalized },
-      {
-        $setOnInsert: { normalized },
-        $set: { value }
-      },
-      { upsert: true }
-    )
-  );
-
-  await Promise.all(operations);
 }
 
 export function sortCoverageSuggestions(

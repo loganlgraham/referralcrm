@@ -12,6 +12,14 @@ const agentNoteSchema = new Schema(
   { _id: true }
 );
 
+const coverageLocationSchema = new Schema(
+  {
+    label: { type: String, required: true },
+    zipCodes: [{ type: String, required: true }]
+  },
+  { _id: false }
+);
+
 const agentSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', index: true, sparse: true, unique: true },
@@ -21,6 +29,7 @@ const agentSchema = new Schema(
     licenseNumber: { type: String },
     statesLicensed: [{ type: String, index: true }],
     zipCoverage: [{ type: String, index: true }],
+    coverageLocations: { type: [coverageLocationSchema], default: [] },
     active: { type: Boolean, default: true },
     closings12mo: { type: Number, default: 0 },
     closingRatePercentage: { type: Number, default: null },
@@ -29,6 +38,12 @@ const agentSchema = new Schema(
     brokerage: { type: String },
     markets: [{ type: String }],
     specialties: { type: [String], default: [] },
+    languages: { type: [String], default: [] },
+    ahaDesignation: {
+      type: String,
+      enum: ['AHA', 'AHA_OOS', null],
+      default: null,
+    },
     experienceSince: { type: Date },
     notes: { type: [agentNoteSchema], default: [] }
   },

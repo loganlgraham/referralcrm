@@ -1,15 +1,20 @@
 import { z } from 'zod';
 import { REFERRAL_STATUSES } from '@/constants/referrals';
 
+const zipArraySchema = z
+  .array(z.string().trim().regex(/^\d{5}$/))
+  .transform((zipCodes) => Array.from(new Set(zipCodes)));
+
 export const createReferralSchema = z.object({
   borrowerFirstName: z.string().min(1),
   borrowerLastName: z.string().min(1),
   borrowerEmail: z.string().email(),
   borrowerPhone: z.string().min(7),
-  source: z.string().min(1),
-  endorser: z.string().min(1),
+  source: z.string().trim().min(1).optional(),
+  endorser: z.string().trim().min(1).optional(),
   clientType: z.enum(['Seller', 'Buyer', 'Both']),
-  lookingInZip: z.string().min(5),
+  lookingInZip: z.string().regex(/^\d{5}$/),
+  lookingInZips: zipArraySchema.optional(),
   borrowerCurrentAddress: z.string().min(1),
   stageOnTransfer: z.enum(['Pre-Approval TBD', 'Pre-Approval']),
   loanFileNumber: z.string().min(1),
@@ -23,10 +28,11 @@ export const updateReferralSchema = z.object({
   assignedAgent: z.string().optional(),
   referralFeeBasisPoints: z.number().int().min(0).optional(),
   ahaBucket: z.enum(['AHA', 'AHA_OOS']).nullable().optional(),
-  source: z.string().min(1).optional(),
-  endorser: z.string().min(1).optional(),
+  source: z.string().trim().min(1).optional(),
+  endorser: z.string().trim().min(1).optional(),
   clientType: z.enum(['Seller', 'Buyer', 'Both']).optional(),
-  lookingInZip: z.string().min(5).optional(),
+  lookingInZip: z.string().regex(/^\d{5}$/).optional(),
+  lookingInZips: zipArraySchema.optional(),
   borrowerCurrentAddress: z.string().min(1).optional(),
   stageOnTransfer: z.string().min(1).optional(),
   loanFileNumber: z.string().min(1).optional(),

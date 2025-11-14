@@ -28,6 +28,7 @@ type AgentProfile = {
   brokerage?: string;
   statesLicensed?: string[];
   coverageAreas?: string[];
+  coverageLocations?: { label: string; zipCodes: string[] }[];
   metrics: AgentMetricsSummary;
   notes: NoteSummary[];
 };
@@ -72,6 +73,7 @@ type AgentLean = {
   brokerage?: string | null;
   statesLicensed?: string[] | null;
   zipCoverage?: string[] | null;
+  coverageLocations?: { label: string; zipCodes: string[] }[] | null;
   npsScore?: number | null;
   notes?: NoteRecord[] | null;
 };
@@ -118,6 +120,7 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
     brokerage: agent.brokerage ?? undefined,
     statesLicensed: Array.isArray(agent.statesLicensed) ? agent.statesLicensed : undefined,
     coverageAreas: Array.isArray(agent.zipCoverage) ? agent.zipCoverage : undefined,
+    coverageLocations: Array.isArray(agent.coverageLocations) ? agent.coverageLocations : undefined,
     metrics,
     notes: serializeNotes(agent.notes)
   };

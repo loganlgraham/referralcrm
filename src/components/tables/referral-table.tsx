@@ -19,6 +19,7 @@ export interface ReferralRow {
   endorser?: string;
   clientType: 'Seller' | 'Buyer' | 'Both';
   lookingInZip: string;
+  lookingInZips?: string[];
   borrowerCurrentAddress?: string;
   propertyAddress?: string;
   stageOnTransfer?: string;
@@ -303,6 +304,22 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
     cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString()
   };
 
+  const renderLocation = (row: ReferralRow) => {
+    const zips = Array.isArray(row.lookingInZips)
+      ? row.lookingInZips.filter((zip) => typeof zip === 'string' && zip.trim().length > 0)
+      : [];
+    if (zips.length > 0) {
+      return zips.join(', ');
+    }
+    return row.lookingInZip?.trim() ? row.lookingInZip : '—';
+  };
+
+  const locationColumn: ColumnDef<ReferralRow> = {
+    header: 'Looking In (Zip)',
+    accessorKey: 'lookingInZip',
+    cell: ({ row }) => renderLocation(row.original)
+  };
+
   if (mode === 'agent') {
     return [
       borrowerColumn,
@@ -310,10 +327,7 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
         header: 'Loan File #',
         accessorKey: 'loanFileNumber'
       },
-      {
-        header: 'Looking In (Zip)',
-        accessorKey: 'lookingInZip'
-      },
+      locationColumn,
       {
         header: 'Pre-Approval',
         accessorKey: 'preApprovalAmountCents',
@@ -374,14 +388,11 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
 
   return [
     borrowerColumn,
-    {
-      header: 'Loan File #',
-      accessorKey: 'loanFileNumber'
-    },
-    {
-      header: 'Looking In (Zip)',
-      accessorKey: 'lookingInZip'
-    },
+      {
+        header: 'Loan File #',
+        accessorKey: 'loanFileNumber'
+      },
+      locationColumn,
     {
       header: 'Status',
       accessorKey: 'status',

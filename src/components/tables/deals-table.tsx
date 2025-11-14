@@ -55,6 +55,7 @@ interface DealRow {
     borrowerName?: string | null;
     propertyAddress?: string | null;
     lookingInZip?: string | null;
+    lookingInZips?: string[] | null;
     commissionBasisPoints?: number | null;
     referralFeeBasisPoints?: number | null;
     estPurchasePriceCents?: number | null;
@@ -78,6 +79,19 @@ export function DealsTable() {
   const { data, mutate } = useSWR<DealRow[]>('/api/payments', fetcher);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
+
+  const formatReferralLocation = (referral: DealRow['referral'] | null | undefined) => {
+    if (!referral) {
+      return null;
+    }
+    const zips = Array.isArray(referral.lookingInZips)
+      ? referral.lookingInZips.filter((zip) => typeof zip === 'string' && zip.trim().length > 0)
+      : [];
+    if (zips.length > 0) {
+      return `Looking in ${zips.join(', ')}`;
+    }
+    return referral.lookingInZip?.trim() ? `Looking in ${referral.lookingInZip}` : null;
+  };
   const [reasonDrafts, setReasonDrafts] = useState<Record<string, TerminatedReason>>({});
 
   if (!data) {
@@ -505,7 +519,7 @@ export function DealsTable() {
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">
                   {deal.referral?.propertyAddress ||
-                    (deal.referral?.lookingInZip ? `Looking in ${deal.referral.lookingInZip}` : null) ||
+                    formatReferralLocation(deal.referral) ||
                     '—'}
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(referralFee)}</td>
@@ -618,7 +632,7 @@ export function DealsTable() {
                     {renderReferralLink(deal)}
                     <span className="text-xs text-slate-500">
                       {deal.referral?.propertyAddress ||
-                        (deal.referral?.lookingInZip ? `Looking in ${deal.referral.lookingInZip}` : null) ||
+                        formatReferralLocation(deal.referral) ||
                         deal.referralId}
                     </span>
                   </div>

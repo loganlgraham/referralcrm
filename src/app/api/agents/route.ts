@@ -8,6 +8,15 @@ import { getCurrentSession } from '@/lib/auth';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { computeAgentMetrics, EMPTY_AGENT_METRICS } from '@/lib/server/agent-metrics';
 import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
+import { mergeAndNormalizeZipCodes, syncAgentZipCoverage } from '@/lib/server/zip-coverage';
+
+const coverageLocationSchema = z.object({
+  label: z.string().trim().min(1),
+  zipCodes: z
+    .array(z.string().trim().regex(/^\d{5}$/))
+    .min(1)
+    .transform((zipCodes) => Array.from(new Set(zipCodes))),
+});
 
 const createAgentSchema = z.object({
   name: z.string().trim().min(1),
@@ -17,6 +26,14 @@ const createAgentSchema = z.object({
   brokerage: z.string().trim().optional(),
   statesLicensed: z.array(z.string().trim().min(2)).optional().default([]),
   coverageAreas: z.array(z.string().trim().min(1)).optional().default([]),
+  coverageLocations: z.array(coverageLocationSchema).optional().default([]),
+  specialties: z.array(z.string().trim().min(1)).optional().default([]),
+  languages: z.array(z.string().trim().min(1)).optional().default([]),
+  ahaDesignation: z
+    .enum(['AHA', 'AHA_OOS'])
+    .optional()
+    .nullable()
+    .default(null),
 });
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -40,7 +57,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     brokerage?: string | null;
     statesLicensed?: string[] | null;
     zipCoverage?: string[] | null;
+    coverageLocations?: { label: string; zipCodes: string[] }[] | null;
     npsScore?: number | null;
+    specialties?: string[] | null;
+    languages?: string[] | null;
+    ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
   };
 
   const agents = await Agent.find(filter).lean<AgentLean[]>();
@@ -69,6 +90,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       brokerage: agent.brokerage ?? '',
       statesLicensed: Array.isArray(agent.statesLicensed) ? agent.statesLicensed : [],
       coverageAreas: Array.isArray(agent.zipCoverage) ? agent.zipCoverage : [],
+      coverageLocations: Array.isArray(agent.coverageLocations) ? agent.coverageLocations : [],
+      specialties: Array.isArray(agent.specialties) ? agent.specialties : [],
+      languages: Array.isArray(agent.languages) ? agent.languages : [],
+      ahaDesignation:
+        agent.ahaDesignation === 'AHA' || agent.ahaDesignation === 'AHA_OOS'
+          ? agent.ahaDesignation
+          : null,
       metrics,
       npsScore: metrics.npsScore,
     };
@@ -91,6 +119,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   await connectMongo();
 
+  const combinedZipCoverage = mergeAndNormalizeZipCodes([
+    ...parsed.data.coverageAreas,
+    ...parsed.data.coverageLocations.flatMap((location) => location.zipCodes),
+  ]);
+
   const agent = await Agent.create({
     name: parsed.data.name,
     email: parsed.data.email,
@@ -98,12 +131,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     licenseNumber: parsed.data.licenseNumber ?? '',
     brokerage: parsed.data.brokerage ?? '',
     statesLicensed: parsed.data.statesLicensed,
-    zipCoverage: parsed.data.coverageAreas,
+    zipCoverage: combinedZipCoverage,
+    coverageLocations: parsed.data.coverageLocations,
+    specialties: parsed.data.specialties,
+    languages: parsed.data.languages,
+    ahaDesignation: parsed.data.ahaDesignation,
     active: true,
   });
 
-  if (parsed.data.coverageAreas.length > 0) {
-    await rememberCoverageSuggestions(parsed.data.coverageAreas);
+  await syncAgentZipCoverage({
+    agentId: agent._id,
+    coverageLocations: parsed.data.coverageLocations,
+    explicitZipCodes: combinedZipCoverage,
+  });
+
+  const coverageSuggestionLabels = parsed.data.coverageLocations.map((location) => location.label);
+  if (coverageSuggestionLabels.length > 0) {
+    await rememberCoverageSuggestions(coverageSuggestionLabels);
+  } else if (combinedZipCoverage.length > 0) {
+    await rememberCoverageSuggestions(combinedZipCoverage);
   }
 
   const baseUrl = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');

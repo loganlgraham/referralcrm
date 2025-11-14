@@ -17,15 +17,47 @@ export interface FollowUpTask extends SlaRecommendation {
   referralName?: string;
   completed: boolean;
   toggle: () => void;
+  isManual?: boolean;
+  remove?: () => void;
 }
 
 export function useFollowUpTasks(referral: ReferralLike & { borrower?: { name?: string } }) {
-  const { completions, toggleTask } = useFollowUpTaskContext();
+  const { completions, toggleTask, manualTasks, removeManualTask } = useFollowUpTaskContext();
 
   return useMemo(() => {
     const insights = computeSlaInsights(referral);
     const ordered = sortRecommendations(insights.recommendations);
-    return ordered.map<FollowUpTask>((item) => {
+    const manual = manualTasks[referral._id] ?? [];
+
+    const manualFollowUps = manual.map<FollowUpTask>((task) => {
+      const taskId = `${referral._id}::manual::${task.id}`;
+      const completion = completions[taskId]?.completed ?? false;
+      const handleToggle = () => {
+        toggleTask(taskId, !completion);
+      };
+      const handleRemove = () => {
+        removeManualTask(referral._id, task.id);
+      };
+
+      return {
+        id: task.id,
+        taskId,
+        referralId: referral._id,
+        referralName: referral.borrower?.name,
+        title: task.title,
+        message: task.message,
+        priority: task.priority,
+        category: task.category,
+        dueAt: task.dueAt ?? undefined,
+        completed: completion,
+        toggle: handleToggle,
+        isManual: true,
+        remove: handleRemove,
+        supportingMetric: undefined,
+      };
+    });
+
+    const automated = ordered.map<FollowUpTask>((item) => {
       const taskId = `${referral._id}::${item.id}`;
       const completion = completions[taskId]?.completed ?? false;
       const handleToggle = () => {
@@ -41,5 +73,7 @@ export function useFollowUpTasks(referral: ReferralLike & { borrower?: { name?: 
         toggle: handleToggle,
       };
     });
-  }, [completions, referral, toggleTask]);
+
+    return [...manualFollowUps, ...automated];
+  }, [completions, manualTasks, referral, removeManualTask, toggleTask]);
 }
