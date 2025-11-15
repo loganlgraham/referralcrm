@@ -49,6 +49,10 @@ interface DealRow {
   paidDate?: string | null;
   usedAfc?: boolean | null;
   usedAssignedAgent?: boolean | null;
+  agent?: {
+    id: string;
+    name: string | null;
+  } | null;
   referral?: {
     borrowerName?: string | null;
     propertyAddress?: string | null;
@@ -59,6 +63,7 @@ interface DealRow {
     estPurchasePriceCents?: number | null;
     preApprovalAmountCents?: number | null;
     referralFeeDueCents?: number | null;
+    loanFileNumber?: string | null;
   } | null;
 }
 
@@ -417,6 +422,22 @@ export function DealsTable() {
     );
   };
 
+  const renderAgentLink = (deal: DealRow) => {
+    if (!deal.agent?.id) {
+      return <span className="text-sm text-slate-500">Unassigned</span>;
+    }
+
+    return (
+      <Link
+        prefetch={false}
+        href={`/agents/${deal.agent.id}`}
+        className="text-sm font-medium text-brand transition hover:text-brand-dark hover:underline"
+      >
+        {deal.agent.name || 'Agent'}
+      </Link>
+    );
+  };
+
   const renderStatusControl = (deal: DealRow) => {
     const isTerminated = deal.status === 'terminated';
     const statusLabel = STATUS_LABELS[deal.status] ?? deal.status;
@@ -466,6 +487,7 @@ export function DealsTable() {
         <thead className="bg-slate-50">
           <tr>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Address</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral Fee</th>
@@ -496,9 +518,12 @@ export function DealsTable() {
                 <td className="px-4 py-3 text-sm text-slate-700">
                   <div className="flex flex-col">
                     {renderReferralLink(deal)}
-                    <span className="text-xs text-slate-500">{deal.referralId}</span>
+                    <span className="text-xs text-slate-500">
+                      Loan # {deal.referral?.loanFileNumber || '—'}
+                    </span>
                   </div>
                 </td>
+                <td className="px-4 py-3 text-sm text-slate-700">{renderAgentLink(deal)}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">{renderStatusControl(deal)}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">
                   {deal.referral?.propertyAddress ||
@@ -610,6 +635,7 @@ export function DealsTable() {
           <tr>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Outcome</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral Fee</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               {isAgentView ? 'Referral Fee Paid' : 'Paid'}
@@ -631,6 +657,22 @@ export function DealsTable() {
               ? 0
               : deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents;
             const netCommission = isTerminated ? 0 : commission - paidAmount;
+            const outcome = (() => {
+              if (isTerminated) {
+                return 'Lost';
+              }
+              const basis = isMcView ? deal.usedAfc : deal.usedAssignedAgent;
+              if (basis === null || basis === undefined) {
+                return 'Pending';
+              }
+              return basis ? 'Won' : 'Lost';
+            })();
+            const outcomeColor =
+              outcome === 'Won'
+                ? 'text-emerald-600'
+                : outcome === 'Lost'
+                  ? 'text-rose-600'
+                  : 'text-slate-500';
 
             return (
               <tr key={deal._id} className="hover:bg-slate-50">
@@ -640,11 +682,12 @@ export function DealsTable() {
                     <span className="text-xs text-slate-500">
                       {deal.referral?.propertyAddress ||
                         formatReferralLocation(deal.referral) ||
-                        deal.referralId}
+                        `Loan # ${deal.referral?.loanFileNumber || '—'}`}
                     </span>
                   </div>
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{renderStatusControl(deal)}</td>
+                <td className={`px-4 py-3 text-sm font-medium ${outcomeColor}`}>{outcome}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(paidAmount)}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(commission)}</td>

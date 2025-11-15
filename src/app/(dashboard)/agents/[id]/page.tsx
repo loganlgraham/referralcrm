@@ -6,6 +6,7 @@ import { getAgentProfile } from '@/lib/server/people';
 import { PersonNotes } from '@/components/people/person-notes';
 import { AgentNpsEditor } from '@/components/people/agent-nps-editor';
 import { AgentAdminEditor } from '@/components/people/agent-admin-editor';
+import { PersonDealsTable } from '@/components/people/person-deals-table';
 import { formatCurrency, formatDecimal, formatPhoneNumber } from '@/utils/formatters';
 
 interface AgentDetailPageProps {
@@ -152,6 +153,12 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
             <AgentNpsEditor agentId={agent._id} initialScore={agent.metrics.npsScore ?? null} />
           </div>
         )}
+      </div>
+      <div className="rounded-lg bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Deals</h2>
+        <div className="mt-4">
+          <PersonDealsTable deals={agent.deals} context="agent" />
+        </div>
       </div>
       {isAdmin && <AgentAdminEditor agent={agent} />}
       {canViewNotes && (
