@@ -41,6 +41,7 @@ interface ReferralPayment {
   terminatedReason?: string | null;
   agentAttribution?: string | null;
   usedAfc?: boolean;
+  usedAssignedAgent?: boolean;
   commissionBasisPoints?: number | null;
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
@@ -243,6 +244,7 @@ const normalizeDealPayments = (
       : null,
     agentAttribution: payment.agentAttribution as AgentSelectValue | undefined,
     usedAfc: payment.usedAfc ?? null,
+    usedAssignedAgent: payment.usedAssignedAgent ?? null,
     commissionBasisPoints: payment.commissionBasisPoints ?? null,
     referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
     side: payment.side ?? null,

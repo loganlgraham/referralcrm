@@ -36,6 +36,7 @@ type PaymentWithReferral = {
   terminatedReason?: string | null;
   agentAttribution?: string | null;
   usedAfc?: boolean | null;
+  usedAssignedAgent?: boolean | null;
   invoiceDate?: Date | null;
   paidDate?: Date | null;
   createdAt?: Date | null;
@@ -138,6 +139,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       terminatedReason: payment.terminatedReason ?? null,
       agentAttribution: payment.agentAttribution ?? null,
       usedAfc: Boolean(payment.usedAfc),
+      usedAssignedAgent: Boolean(payment.usedAssignedAgent),
       invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
       paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
       commissionBasisPoints: payment.commissionBasisPoints ?? null,
@@ -194,6 +196,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     terminatedReason: parsed.data.terminatedReason ?? null,
     agentAttribution: parsed.data.agentAttribution ?? null,
     usedAfc: parsed.data.usedAfc ?? false,
+    usedAssignedAgent: parsed.data.usedAssignedAgent ?? false,
     invoiceDate: parsed.data.invoiceDate,
     paidDate: parsed.data.paidDate,
     notes: parsed.data.notes,
@@ -281,6 +284,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   updatePayload.expectedAmountCents = nextExpectedAmountCents;
   if ('usedAfc' in updatePayload && updatePayload.usedAfc === undefined) {
     updatePayload.usedAfc = false;
+  }
+  if ('usedAssignedAgent' in updatePayload && updatePayload.usedAssignedAgent === undefined) {
+    updatePayload.usedAssignedAgent = false;
   }
 
   const payment = await Payment.findByIdAndUpdate(body.id, updatePayload, { new: true });

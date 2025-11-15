@@ -20,8 +20,6 @@ type DealStatus =
   | 'paid'
   | 'terminated';
 type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
-type AgentSelectValue = '' | 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT';
-
 const STATUS_OPTIONS: { value: DealStatus; label: string }[] = [
   { value: 'under_contract', label: 'Under Contract' },
   { value: 'past_inspection', label: 'Past Inspection' },
@@ -49,8 +47,8 @@ interface DealRow {
   terminatedReason?: TerminatedReason | null;
   invoiceDate?: string | null;
   paidDate?: string | null;
-  agentAttribution?: AgentSelectValue | null;
   usedAfc?: boolean | null;
+  usedAssignedAgent?: boolean | null;
   referral?: {
     borrowerName?: string | null;
     propertyAddress?: string | null;
@@ -61,7 +59,6 @@ interface DealRow {
     estPurchasePriceCents?: number | null;
     preApprovalAmountCents?: number | null;
     referralFeeDueCents?: number | null;
-    ahaBucket?: AgentSelectValue | null;
   } | null;
 }
 
@@ -71,6 +68,42 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
       <p className="text-xs uppercase text-slate-400">{label}</p>
       <p className="text-lg font-semibold text-slate-900">{value}</p>
     </div>
+  );
+}
+
+function ToggleSwitch({
+  checked,
+  label,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  label: string;
+  onChange: (nextValue: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => {
+        if (!disabled) {
+          onChange(!checked);
+        }
+      }}
+      disabled={disabled}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+        checked ? 'bg-brand' : 'bg-slate-200'
+      } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+    >
+      <span
+        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+          checked ? 'translate-x-5' : 'translate-x-1'
+        }`}
+      />
+    </button>
   );
 }
 
@@ -198,7 +231,7 @@ export function DealsTable() {
     updates: Partial<
       Pick<
         DealRow,
-        'status' | 'expectedAmountCents' | 'receivedAmountCents' | 'terminatedReason' | 'agentAttribution' | 'usedAfc'
+        'status' | 'expectedAmountCents' | 'receivedAmountCents' | 'terminatedReason' | 'usedAfc' | 'usedAssignedAgent'
       >
     >,
     successMessage: string
@@ -224,11 +257,11 @@ export function DealsTable() {
       if ('terminatedReason' in updates) {
         payload.terminatedReason = updates.terminatedReason ?? null;
       }
-      if ('agentAttribution' in updates) {
-        payload.agentAttribution = updates.agentAttribution ?? null;
-      }
       if ('usedAfc' in updates) {
         payload.usedAfc = updates.usedAfc ?? false;
+      }
+      if ('usedAssignedAgent' in updates) {
+        payload.usedAssignedAgent = updates.usedAssignedAgent ?? false;
       }
 
       const response = await fetch('/api/payments', {
@@ -253,24 +286,20 @@ export function DealsTable() {
     }
   };
 
-  const handleAgentOutcomeChange = async (deal: DealRow, nextValue: AgentSelectValue) => {
-    if ((deal.agentAttribution ?? '') === nextValue) {
-      return;
-    }
-
-    await updateDeal(
-      deal,
-      { agentAttribution: nextValue || null },
-      'Agent outcome updated'
-    );
-  };
-
   const handleAfcUsageChange = async (deal: DealRow, checked: boolean) => {
     if (Boolean(deal.usedAfc) === checked) {
       return;
     }
 
     await updateDeal(deal, { usedAfc: checked }, 'AFC usage updated');
+  };
+
+  const handleUsedAgentToggle = async (deal: DealRow, checked: boolean) => {
+    if (Boolean(deal.usedAssignedAgent) === checked) {
+      return;
+    }
+
+    await updateDeal(deal, { usedAssignedAgent: checked }, 'Assigned agent usage updated');
   };
 
   const handleStatusChange = async (deal: DealRow, nextStatus: DealStatus) => {
@@ -467,12 +496,12 @@ export function DealsTable() {
           <tr>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent Outcome</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Address</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral Fee</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Amount Received</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Paid</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Used AFC</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Used Agent</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Paid</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -484,6 +513,10 @@ export function DealsTable() {
             const receivedDraft = amountDrafts[deal._id];
             const receivedInputValue =
               receivedDraft !== undefined ? receivedDraft : formatCentsForInput(deal.receivedAmountCents ?? 0);
+            const usedAfc = Boolean(deal.usedAfc);
+            const usedAssignedAgent = Boolean(deal.usedAssignedAgent);
+            const isPaid = deal.status === 'paid';
+            const isUpdating = updatingId === deal._id;
 
             return (
               <tr key={deal._id} className="hover:bg-slate-50">
@@ -494,29 +527,6 @@ export function DealsTable() {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{renderStatusControl(deal)}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  <select
-                    value={deal.agentAttribution ?? ''}
-                    onChange={(event) =>
-                      handleAgentOutcomeChange(deal, event.target.value as AgentSelectValue)
-                    }
-                    className="w-full rounded border border-slate-200 px-2 py-1 text-sm text-slate-700"
-                    disabled={updatingId === deal._id}
-                  >
-                    <option value="">Not set</option>
-                    <option value="AHA">Used AHA</option>
-                    <option value="AHA_OOS">Used AHA OOS</option>
-                    <option value="OUTSIDE_AGENT">Outside agent (lost)</option>
-                  </select>
-                  {deal.referral?.ahaBucket &&
-                    deal.agentAttribution &&
-                    deal.agentAttribution !== 'OUTSIDE_AGENT' &&
-                    deal.agentAttribution !== deal.referral.ahaBucket && (
-                      <p className="mt-1 text-xs text-amber-600">
-                        Does not match assigned {deal.referral.ahaBucket === 'AHA' ? 'AHA' : 'AHA OOS'} bucket
-                      </p>
-                    )}
-                </td>
                 <td className="px-4 py-3 text-sm text-slate-700">
                   {deal.referral?.propertyAddress ||
                     formatReferralLocation(deal.referral) ||
@@ -551,7 +561,7 @@ export function DealsTable() {
                           }
                         }}
                         className="w-28 rounded border border-slate-200 px-2 py-1 text-sm text-slate-700 focus:border-brand focus:outline-none"
-                        disabled={updatingId === deal._id}
+                        disabled={isUpdating}
                       />
                     </div>
                   )}
@@ -560,32 +570,45 @@ export function DealsTable() {
                   {isTerminated ? (
                     '—'
                   ) : (
-                    <label className="inline-flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-                        checked={deal.status === 'paid'}
-                        onChange={(event) => handlePaidToggle(deal, event.target.checked)}
-                        disabled={updatingId === deal._id}
+                    <div className="flex items-center gap-2">
+                      <ToggleSwitch
+                        label="Mark referral as using AFC"
+                        checked={usedAfc}
+                        onChange={(nextValue) => handleAfcUsageChange(deal, nextValue)}
+                        disabled={isUpdating}
                       />
-                      <span className="text-sm text-slate-700">{deal.status === 'paid' ? 'Yes' : 'No'}</span>
-                    </label>
+                      <span className="text-sm text-slate-700">{usedAfc ? 'Yes' : 'No'}</span>
+                    </div>
                   )}
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">
                   {isTerminated ? (
                     '—'
                   ) : (
-                    <label className="inline-flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-                        checked={Boolean(deal.usedAfc)}
-                        onChange={(event) => handleAfcUsageChange(deal, event.target.checked)}
-                        disabled={updatingId === deal._id}
+                    <div className="flex items-center gap-2">
+                      <ToggleSwitch
+                        label="Mark referral as using the assigned agent"
+                        checked={usedAssignedAgent}
+                        onChange={(nextValue) => handleUsedAgentToggle(deal, nextValue)}
+                        disabled={isUpdating}
                       />
-                      <span className="text-sm text-slate-700">{Boolean(deal.usedAfc) ? 'Yes' : 'No'}</span>
-                    </label>
+                      <span className="text-sm text-slate-700">{usedAssignedAgent ? 'Yes' : 'No'}</span>
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-sm text-slate-700">
+                  {isTerminated ? (
+                    '—'
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <ToggleSwitch
+                        label="Mark deal as paid"
+                        checked={isPaid}
+                        onChange={(nextValue) => handlePaidToggle(deal, nextValue)}
+                        disabled={isUpdating}
+                      />
+                      <span className="text-sm text-slate-700">{isPaid ? 'Yes' : 'No'}</span>
+                    </div>
                   )}
                 </td>
               </tr>

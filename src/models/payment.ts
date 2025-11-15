@@ -39,6 +39,7 @@ const paymentSchema = new Schema(
       default: null,
     },
     usedAfc: { type: Boolean, default: false },
+    usedAssignedAgent: { type: Boolean, default: false },
     invoiceDate: Date,
     paidDate: Date,
     notes: String
