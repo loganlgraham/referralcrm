@@ -281,7 +281,7 @@ export function ReferralHeader({
       : propertyAddress ?? referral.propertyAddress;
 
   const primaryAmountValue = preApprovalAmountCents ?? 0;
-  const primaryAmountLabel = 'Pre-Approval Amount';
+  const primaryAmountLabel = 'Pre-approval amount';
   const formattedPrimaryAmount = primaryAmountValue ? formatCurrency(primaryAmountValue) : '—';
   const derivedReferralFeeDueCents = (() => {
     if (
@@ -332,7 +332,7 @@ export function ReferralHeader({
   const effectiveAgentContact = agentContact ?? fallbackAgentContact;
   const effectiveMcContact = mcContact ?? fallbackMcContact;
   const canEditBucket = viewerRole === 'admin' || viewerRole === 'manager';
-  const showBucketSummary = viewerRole !== 'agent';
+  const showBucketSummary = viewerRole !== 'agent' && viewerRole !== 'admin';
 
   const locationLabel = useMemo(() => {
     const zips = Array.isArray(referral.lookingInZips)

@@ -30,6 +30,8 @@ interface AgentAdminEditorProps {
     languages?: string[];
     ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
   };
+  variant?: 'standalone' | 'embedded';
+  className?: string;
 }
 
 interface PatchResponse {
@@ -156,7 +158,7 @@ const buildInitialFormState = (agent: AgentAdminEditorProps['agent']): FormState
   };
 };
 
-export function AgentAdminEditor({ agent }: AgentAdminEditorProps) {
+export function AgentAdminEditor({ agent, variant = 'standalone', className }: AgentAdminEditorProps) {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(() => buildInitialFormState(agent));
   const [saving, setSaving] = useState(false);
@@ -385,8 +387,13 @@ export function AgentAdminEditor({ agent }: AgentAdminEditorProps) {
     }
   };
 
+  const wrapperClassName =
+    variant === 'standalone'
+      ? 'rounded-lg border border-slate-200 bg-white p-6 shadow-sm'
+      : className || 'space-y-4';
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+    <div className={wrapperClassName}>
       <h2 className="text-lg font-semibold text-slate-900">Edit agent details</h2>
       <p className="mt-1 text-sm text-slate-500">Update contact info, coverage, specialties, and AHA designation.</p>
       <form onSubmit={handleSubmit} className="mt-4 grid gap-4 md:grid-cols-2">

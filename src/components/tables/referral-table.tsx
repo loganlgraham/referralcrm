@@ -329,7 +329,7 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
       },
       locationColumn,
       {
-        header: 'Pre-Approval',
+        header: 'Pre-approval',
         accessorKey: 'preApprovalAmountCents',
         cell: ({ row }) =>
           row.original.preApprovalAmountCents
