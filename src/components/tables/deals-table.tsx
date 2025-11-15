@@ -20,16 +20,16 @@ type DealStatus =
   | 'paid'
   | 'terminated';
 type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
-const STATUS_OPTIONS: { value: DealStatus; label: string }[] = [
-  { value: 'under_contract', label: 'Under Contract' },
-  { value: 'past_inspection', label: 'Past Inspection' },
-  { value: 'past_appraisal', label: 'Past Appraisal' },
-  { value: 'clear_to_close', label: 'Clear to Close' },
-  { value: 'closed', label: 'Closed' },
-  { value: 'payment_sent', label: 'Payment Sent' },
-  { value: 'paid', label: 'Paid' },
-  { value: 'terminated', label: 'Terminated' }
-];
+const STATUS_LABELS: Record<DealStatus, string> = {
+  under_contract: 'Under Contract',
+  past_inspection: 'Past Inspection',
+  past_appraisal: 'Past Appraisal',
+  clear_to_close: 'Clear to Close',
+  closed: 'Closed',
+  payment_sent: 'Payment Sent',
+  paid: 'Paid',
+  terminated: 'Terminated',
+};
 
 const TERMINATED_REASON_OPTIONS: { value: TerminatedReason; label: string }[] = [
   { value: 'inspection', label: 'Inspection' },
@@ -125,8 +125,6 @@ export function DealsTable() {
     }
     return referral.lookingInZip?.trim() ? `Looking in ${referral.lookingInZip}` : null;
   };
-  const [reasonDrafts, setReasonDrafts] = useState<Record<string, TerminatedReason>>({});
-
   if (!data) {
     return <div className="rounded-lg bg-white p-4 shadow-sm">Loading deals…</div>;
   }
@@ -326,69 +324,21 @@ export function DealsTable() {
     await updateDeal(deal, updates, 'Assigned agent usage updated');
   };
 
-  const handleStatusChange = async (deal: DealRow, nextStatus: DealStatus) => {
-    const updates: Partial<
-      Pick<DealRow, 'status' | 'expectedAmountCents' | 'receivedAmountCents' | 'terminatedReason'>
-    > = {
-      status: nextStatus,
-    };
-
-    if (nextStatus === 'terminated') {
-      updates.expectedAmountCents = 0;
-      updates.receivedAmountCents = 0;
-      const fallbackReason =
-        reasonDrafts[deal._id] ?? deal.terminatedReason ?? 'inspection';
-      updates.terminatedReason = fallbackReason;
-      setReasonDrafts((prev) => ({ ...prev, [deal._id]: fallbackReason }));
-    } else {
-      const fallbackExpected = deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
-      if (fallbackExpected > 0) {
-        updates.expectedAmountCents = fallbackExpected;
-      }
-      updates.terminatedReason = null;
-      setReasonDrafts((prev) => {
-        if (!(deal._id in prev)) {
-          return prev;
-        }
-        const next = { ...prev };
-        delete next[deal._id];
-        return next;
-      });
-    }
-
-    await updateDeal(deal, updates, 'Deal status updated');
-  };
-
-  const handleTerminatedReasonChange = async (deal: DealRow, nextReason: TerminatedReason) => {
-    setReasonDrafts((prev) => ({ ...prev, [deal._id]: nextReason }));
-
-    if (deal.status !== 'terminated' && deal.terminatedReason !== nextReason) {
-      return;
-    }
-
-    if (deal.status === 'terminated' && deal.terminatedReason === nextReason) {
-      return;
-    }
-
-    await updateDeal(deal, { terminatedReason: nextReason }, 'Termination reason updated');
-  };
-
   const handlePaidToggle = async (deal: DealRow, checked: boolean) => {
     if (deal.status === 'terminated') {
       return;
     }
 
-    if (checked && deal.status === 'paid') {
+    if (!checked) {
       return;
     }
 
-    if (!checked && deal.status !== 'paid') {
+    if (deal.status === 'paid') {
       return;
     }
 
-    const nextStatus: DealStatus = checked ? 'paid' : 'closed';
     const updates: Partial<Pick<DealRow, 'status' | 'expectedAmountCents'>> = {
-      status: nextStatus,
+      status: 'paid',
     };
 
     const fallbackExpected = deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
@@ -469,38 +419,19 @@ export function DealsTable() {
 
   const renderStatusControl = (deal: DealRow) => {
     const isTerminated = deal.status === 'terminated';
-    const selectedReason =
-      reasonDrafts[deal._id] ?? deal.terminatedReason ?? 'inspection';
+    const statusLabel = STATUS_LABELS[deal.status] ?? deal.status;
+    const terminatedLabel = deal.terminatedReason
+      ? TERMINATED_REASON_OPTIONS.find((option) => option.value === deal.terminatedReason)?.label ??
+        deal.terminatedReason
+      : null;
 
     return (
-      <div className="space-y-2">
-        <select
-          value={deal.status}
-          onChange={(event) => handleStatusChange(deal, event.target.value as DealStatus)}
-          className="w-full rounded border border-slate-200 px-2 py-1 text-sm text-slate-700"
-          disabled={updatingId === deal._id}
-        >
-          {STATUS_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        {isTerminated && (
-          <select
-            value={selectedReason}
-            onChange={(event) =>
-              handleTerminatedReasonChange(deal, event.target.value as TerminatedReason)
-            }
-            className="w-full rounded border border-slate-200 px-2 py-1 text-sm text-slate-700"
-            disabled={updatingId === deal._id}
-          >
-            {TERMINATED_REASON_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+      <div className="space-y-1">
+        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+          {statusLabel}
+        </span>
+        {isTerminated && terminatedLabel && (
+          <p className="text-xs text-slate-500">Reason: {terminatedLabel}</p>
         )}
       </div>
     );
@@ -511,6 +442,22 @@ export function DealsTable() {
       return '';
     }
     return (value / 100).toFixed(2);
+  };
+
+  const formatCentsForDisplay = (value: number | null | undefined) => {
+    if (value === null || value === undefined) {
+      return '';
+    }
+
+    const dollars = value / 100;
+    if (Number.isInteger(dollars)) {
+      return Number(dollars).toLocaleString('en-US', { maximumFractionDigits: 0 });
+    }
+
+    return Number(dollars).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
   };
 
   const renderAdminTable = () => (
@@ -536,7 +483,9 @@ export function DealsTable() {
               : deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
             const receivedDraft = amountDrafts[deal._id];
             const receivedInputValue =
-              receivedDraft !== undefined ? receivedDraft : formatCentsForInput(deal.receivedAmountCents ?? 0);
+              receivedDraft !== undefined
+                ? receivedDraft
+                : formatCentsForDisplay(deal.receivedAmountCents ?? 0);
             const usedAfc = Boolean(deal.usedAfc);
             const usedAssignedAgent = Boolean(deal.usedAssignedAgent);
             const isPaid = deal.status === 'paid';
@@ -564,13 +513,24 @@ export function DealsTable() {
                     <div className="flex items-center gap-2">
                       <span className="text-slate-400">$</span>
                       <input
-                        type="number"
+                        type="text"
                         inputMode="decimal"
                         min="0"
                         step="0.01"
                         value={receivedInputValue}
                         onChange={(event) => handleAmountChange(deal._id, event.target.value)}
                         onBlur={() => handleAmountBlur(deal)}
+                        onFocus={() => {
+                          setAmountDrafts((prev) => {
+                            if (prev[deal._id] !== undefined) {
+                              return prev;
+                            }
+                            return {
+                              ...prev,
+                              [deal._id]: formatCentsForInput(deal.receivedAmountCents ?? 0),
+                            };
+                          });
+                        }}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter') {
                             event.currentTarget.blur();
@@ -629,7 +589,7 @@ export function DealsTable() {
                         label="Mark deal as paid"
                         checked={isPaid}
                         onChange={(nextValue) => handlePaidToggle(deal, nextValue)}
-                        disabled={isUpdating}
+                        disabled={isUpdating || isPaid}
                       />
                       <span className="text-sm text-slate-700">{isPaid ? 'Yes' : 'No'}</span>
                     </div>
