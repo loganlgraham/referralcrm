@@ -238,6 +238,13 @@ export function DealsTable() {
   ) => {
     const previousSnapshot = data;
     const optimisticRow: DealRow = { ...deal, ...updates };
+    if ('expectedAmountCents' in updates && optimisticRow.referral) {
+      const nextReferralFee = updates.expectedAmountCents ?? optimisticRow.referral.referralFeeDueCents ?? 0;
+      optimisticRow.referral = {
+        ...optimisticRow.referral,
+        referralFeeDueCents: nextReferralFee,
+      };
+    }
     const optimistic = data.map((row) => (row._id === deal._id ? optimisticRow : row));
 
     setUpdatingId(deal._id);
@@ -299,7 +306,24 @@ export function DealsTable() {
       return;
     }
 
-    await updateDeal(deal, { usedAssignedAgent: checked }, 'Assigned agent usage updated');
+    const updates: Partial<
+      Pick<
+        DealRow,
+        'usedAssignedAgent' | 'expectedAmountCents' | 'receivedAmountCents'
+      >
+    > = { usedAssignedAgent: checked };
+
+    if (!checked) {
+      updates.expectedAmountCents = 0;
+      updates.receivedAmountCents = 0;
+    } else {
+      const fallbackAmount = deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
+      if (fallbackAmount > 0) {
+        updates.expectedAmountCents = fallbackAmount;
+      }
+    }
+
+    await updateDeal(deal, updates, 'Assigned agent usage updated');
   };
 
   const handleStatusChange = async (deal: DealRow, nextStatus: DealStatus) => {

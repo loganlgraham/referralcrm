@@ -196,6 +196,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
         side: referral.dealSide,
         contractPriceCents: referral.estPurchasePriceCents ?? null,
+        usedAssignedAgent: true,
       });
       createdDeal = newDeal.toObject();
       activeDeal = createdDeal;
