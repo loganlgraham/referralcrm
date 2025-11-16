@@ -15,7 +15,7 @@ interface CoverageLocation {
   zipCodes: string[];
 }
 
-interface AgentAdminEditorProps {
+export interface AgentAdminEditorProps {
   agent: {
     _id: string;
     name: string;
