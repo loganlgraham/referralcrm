@@ -122,7 +122,7 @@ export function ImportWizard() {
     setUseStandardizedPreview(hasStandardizedRows);
   }, [hasStandardizedRows]);
 
-  const entityFields = IMPORT_ENTITY_CONFIG[entity]?.fields ?? [];
+  const entityFields = (IMPORT_ENTITY_CONFIG[entity]?.fields ?? []) as readonly string[];
   const entityDescription = IMPORT_ENTITY_CONFIG[entity]?.description;
 
   const handleApplyMappingSuggestions = () => {
