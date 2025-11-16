@@ -49,7 +49,11 @@ export function LenderOverviewCard({ lender, isAdmin }: LenderOverviewCardProps)
 
       {isAdmin && showEditor && (
         <div className="mt-6 border-t border-slate-200 pt-6">
-          <LenderAdminEditor lender={lender} className="space-y-4" />
+          <LenderAdminEditor
+            lender={lender}
+            className="space-y-4"
+            onSaved={() => setShowEditor(false)}
+          />
         </div>
       )}
     </div>

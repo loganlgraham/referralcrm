@@ -90,7 +90,12 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
 
       {isAdmin && showEditor && (
         <div className="mt-6 border-t border-slate-200 pt-6">
-          <AgentAdminEditor agent={agent} variant="embedded" className="space-y-4" />
+          <AgentAdminEditor
+            agent={agent}
+            variant="embedded"
+            className="space-y-4"
+            onSaved={() => setShowEditor(false)}
+          />
         </div>
       )}
     </div>

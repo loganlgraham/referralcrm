@@ -14,6 +14,7 @@ interface LenderAdminEditorProps {
     licensedStates?: string[];
   };
   className?: string;
+  onSaved?: () => void;
 }
 
 type FormState = {
@@ -32,7 +33,7 @@ const buildInitialFormState = (lender: LenderAdminEditorProps['lender']): FormSt
   licensedStates: Array.isArray(lender.licensedStates) ? lender.licensedStates.join(', ') : '',
 });
 
-export function LenderAdminEditor({ lender, className }: LenderAdminEditorProps) {
+export function LenderAdminEditor({ lender, className, onSaved }: LenderAdminEditorProps) {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(() => buildInitialFormState(lender));
   const [saving, setSaving] = useState(false);
@@ -72,6 +73,7 @@ export function LenderAdminEditor({ lender, className }: LenderAdminEditorProps)
       }
 
       toast.success('Mortgage consultant updated');
+      onSaved?.();
       router.refresh();
     } catch (error) {
       console.error(error);
