@@ -6,6 +6,7 @@ import { getLenderProfile } from '@/lib/server/people';
 import { PersonNotes } from '@/components/people/person-notes';
 import { PersonDealsTable } from '@/components/people/person-deals-table';
 import { LenderOverviewCard } from '@/components/people/lender-overview-card';
+import { PersonDeleteSection } from '@/components/people/person-delete-section';
 
 interface LenderDetailPageProps {
   params: { id: string };
@@ -43,6 +44,15 @@ export default async function LenderDetailPage({ params }: LenderDetailPageProps
         endpoint="/api/lenders"
         description="Only admins and agents can view these notes. They remain hidden from the mortgage consultant by default."
       />
+      {isAdmin && (
+        <PersonDeleteSection
+          id={params.id}
+          label="mortgage consultant"
+          endpoint="/api/lenders"
+          redirectPath="/lenders"
+          details="Deleting this mortgage consultant removes their profile, notes, and login access. Deals and referrals will stay recorded."
+        />
+      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { PersonNotes } from '@/components/people/person-notes';
 import { AgentNpsEditor } from '@/components/people/agent-nps-editor';
 import { PersonDealsTable } from '@/components/people/person-deals-table';
 import { AgentOverviewCard } from '@/components/people/agent-overview-card';
+import { PersonDeleteSection } from '@/components/people/person-delete-section';
 import { formatCurrency, formatDecimal } from '@/utils/formatters';
 
 interface AgentDetailPageProps {
@@ -114,6 +115,15 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
           initialNotes={agent.notes}
           endpoint="/api/agents"
           description="Only admins can view these notes. They remain hidden from the agent by default."
+        />
+      )}
+      {isAdmin && (
+        <PersonDeleteSection
+          id={params.id}
+          label="agent"
+          endpoint="/api/agents"
+          redirectPath="/agents"
+          details="Deleting this agent removes their profile, notes, and login access. Deals and referrals will stay recorded."
         />
       )}
     </div>

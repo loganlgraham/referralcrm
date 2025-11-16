@@ -5,6 +5,7 @@ import { connectMongo } from '@/lib/mongoose';
 import { LenderMC } from '@/models/lender';
 import { User } from '@/models/user';
 import { getCurrentSession } from '@/lib/auth';
+import { Referral } from '@/models/referral';
 
 const updateLenderSchema = z.object({
   name: z.string().trim().min(1).optional(),
@@ -90,4 +91,28 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     nmlsId: updatedLender.nmlsId,
     licensedStates: updatedLender.licensedStates ?? [],
   });
+}
+
+export async function DELETE(_request: NextRequest, { params }: Params): Promise<NextResponse> {
+  const session = await getCurrentSession();
+  if (!session || session.user.role !== 'admin') {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
+
+  await connectMongo();
+
+  const lender = await LenderMC.findById(params.id);
+  if (!lender) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
+  await Referral.updateMany({ lender: lender._id }, { $unset: { lender: '' } });
+
+  if (lender.userId) {
+    await User.findByIdAndDelete(lender.userId);
+  }
+
+  await LenderMC.findByIdAndDelete(params.id);
+
+  return new NextResponse(null, { status: 204 });
 }
