@@ -46,8 +46,6 @@ type LenderProfile = {
   email: string;
   phone?: string;
   nmlsId?: string;
-  team?: string | null;
-  region?: string | null;
   licensedStates?: string[];
   notes: NoteSummary[];
   deals: PersonDealSnapshot[];
@@ -113,8 +111,6 @@ type LenderLean = {
   email?: string | null;
   phone?: string | null;
   nmlsId?: string | null;
-  team?: string | null;
-  region?: string | null;
   licensedStates?: string[] | null;
   notes?: NoteRecord[] | null;
 };
@@ -386,8 +382,6 @@ export async function getLenderProfile(id: string): Promise<LenderProfile | null
     email: lender.email ?? '',
     phone: lender.phone ?? undefined,
     nmlsId: lender.nmlsId ?? undefined,
-    team: lender.team ?? null,
-    region: lender.region ?? null,
     licensedStates: Array.isArray(lender.licensedStates) ? lender.licensedStates : undefined,
     notes: serializeNotes(lender.notes),
     deals,

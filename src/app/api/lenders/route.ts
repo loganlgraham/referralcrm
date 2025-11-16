@@ -10,8 +10,6 @@ const createLenderSchema = z.object({
   phone: z.string().trim().optional(),
   nmlsId: z.string().trim().min(1),
   licensedStates: z.array(z.string().trim().min(2)).optional().default([]),
-  team: z.string().trim().optional(),
-  region: z.string().trim().optional(),
 });
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -45,8 +43,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     phone: parsed.data.phone ?? '',
     nmlsId: parsed.data.nmlsId,
     licensedStates: parsed.data.licensedStates,
-    team: parsed.data.team ?? '',
-    region: parsed.data.region ?? '',
   });
 
   return NextResponse.json({ id: lender._id.toString() }, { status: 201 });

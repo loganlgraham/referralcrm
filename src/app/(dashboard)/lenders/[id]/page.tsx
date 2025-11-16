@@ -1,9 +1,11 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
+import { getCurrentSession } from '@/lib/auth';
 import { getLenderProfile } from '@/lib/server/people';
 import { PersonNotes } from '@/components/people/person-notes';
 import { PersonDealsTable } from '@/components/people/person-deals-table';
+import { LenderOverviewCard } from '@/components/people/lender-overview-card';
 
 interface LenderDetailPageProps {
   params: { id: string };
@@ -14,36 +16,21 @@ export const metadata: Metadata = {
 };
 
 export default async function LenderDetailPage({ params }: LenderDetailPageProps) {
+  const session = await getCurrentSession();
+  if (!session || (session.user.role !== 'admin' && session.user.role !== 'agent')) {
+    notFound();
+  }
+
   const lender = await getLenderProfile(params.id);
   if (!lender) {
     notFound();
   }
 
+  const isAdmin = session.user.role === 'admin';
+
   return (
     <div className="space-y-6">
-      <div className="rounded-lg bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">{lender.name}</h1>
-        <p className="mt-2 text-sm text-slate-600">{lender.email}</p>
-        <p className="text-sm text-slate-600">{lender.phone || '—'}</p>
-        <div className="mt-4 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
-          <div>
-            <p className="text-xs uppercase text-slate-400">NMLS ID</p>
-            <p className="font-medium text-slate-900">{lender.nmlsId ?? '—'}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase text-slate-400">Licensed States</p>
-            <p className="font-medium text-slate-900">{lender.licensedStates?.join(', ') || '—'}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase text-slate-400">Team</p>
-            <p className="font-medium text-slate-900">{lender.team ?? '—'}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase text-slate-400">Region</p>
-            <p className="font-medium text-slate-900">{lender.region ?? '—'}</p>
-          </div>
-        </div>
-      </div>
+      <LenderOverviewCard lender={lender} isAdmin={isAdmin} />
       <div className="rounded-lg bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Deals</h2>
         <div className="mt-4">

@@ -12,8 +12,6 @@ const updateLenderSchema = z.object({
   phone: z.string().trim().optional(),
   nmlsId: z.string().trim().optional(),
   licensedStates: z.array(z.string().trim().min(2)).optional(),
-  team: z.string().trim().optional(),
-  region: z.string().trim().optional(),
 });
 
 interface Params {
@@ -62,12 +60,6 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
   if (parsed.data.licensedStates !== undefined) {
     update.licensedStates = parsed.data.licensedStates;
   }
-  if (parsed.data.team !== undefined) {
-    update.team = parsed.data.team;
-  }
-  if (parsed.data.region !== undefined) {
-    update.region = parsed.data.region;
-  }
 
   const updated = await LenderMC.findByIdAndUpdate(params.id, { $set: update }, { new: true });
 
@@ -97,7 +89,5 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     phone: updatedLender.phone,
     nmlsId: updatedLender.nmlsId,
     licensedStates: updatedLender.licensedStates ?? [],
-    team: updatedLender.team ?? '',
-    region: updatedLender.region ?? '',
   });
 }

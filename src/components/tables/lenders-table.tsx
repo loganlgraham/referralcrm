@@ -14,8 +14,6 @@ interface LenderRow {
   phone: string;
   nmlsId: string;
   licensedStates?: string[];
-  team?: string;
-  region?: string;
 }
 
 export function LendersTable() {
@@ -30,8 +28,6 @@ export function LendersTable() {
     phone: '',
     nmlsId: '',
     licensedStates: '',
-    team: '',
-    region: '',
   });
 
   if (!data) return <div className="rounded-lg bg-white p-4 shadow-sm">Loading mortgage consultants…</div>;
@@ -58,8 +54,6 @@ export function LendersTable() {
           phone: form.phone,
           nmlsId: form.nmlsId,
           licensedStates,
-          team: form.team,
-          region: form.region,
         }),
       });
 
@@ -68,7 +62,7 @@ export function LendersTable() {
       }
 
       toast.success('Mortgage consultant added');
-      setForm({ name: '', email: '', phone: '', nmlsId: '', licensedStates: '', team: '', region: '' });
+      setForm({ name: '', email: '', phone: '', nmlsId: '', licensedStates: '' });
       setShowForm(false);
       await mutate();
     } catch (error) {
@@ -152,26 +146,6 @@ export function LendersTable() {
                   disabled={saving}
                 />
               </label>
-              <label className="text-xs font-semibold text-slate-600">
-                Team
-                <input
-                  type="text"
-                  value={form.team}
-                  onChange={handleChange('team')}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                  disabled={saving}
-                />
-              </label>
-              <label className="text-xs font-semibold text-slate-600">
-                Region
-                <input
-                  type="text"
-                  value={form.region}
-                  onChange={handleChange('region')}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                  disabled={saving}
-                />
-              </label>
               <div className="md:col-span-2">
                 <button
                   type="submit"
@@ -192,8 +166,6 @@ export function LendersTable() {
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Lender</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">NMLS</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Licensed states</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Team</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Region</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -208,13 +180,11 @@ export function LendersTable() {
                   <div className="text-xs text-slate-500">{lender.email}</div>
                   <div className="text-xs text-slate-500">{lender.phone}</div>
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-700">{lender.nmlsId}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">{(lender.licensedStates ?? []).join(', ') || '—'}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">{lender.team ?? '—'}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">{lender.region ?? '—'}</td>
-              </tr>
-            ))}
-          </tbody>
+              <td className="px-4 py-3 text-sm text-slate-700">{lender.nmlsId}</td>
+              <td className="px-4 py-3 text-sm text-slate-700">{(lender.licensedStates ?? []).join(', ') || '—'}</td>
+            </tr>
+          ))}
+        </tbody>
         </table>
       </div>
     </div>
