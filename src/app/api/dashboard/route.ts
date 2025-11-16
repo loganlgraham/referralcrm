@@ -50,6 +50,7 @@ interface AggregatedPayment {
     | 'terminated';
   expectedAmountCents: number;
   receivedAmountCents: number;
+  terminatedReason?: 'inspection' | 'appraisal' | 'financing' | 'changed_mind' | null;
   paidDate?: Date | null;
   invoiceDate?: Date | null;
   updatedAt: Date;
@@ -92,6 +93,14 @@ const ACTIVE_PIPELINE_STATUSES = new Set<string>([
   'Showing Homes',
   'Under Contract',
 ]);
+
+const TERMINATED_REASON_LABELS: Record<string, string> = {
+  inspection: 'Inspection',
+  appraisal: 'Appraisal',
+  financing: 'Financing',
+  changed_mind: 'Changed Mind',
+  unknown: 'Unknown'
+};
 
 interface TrendPoint {
   key: string;
@@ -449,7 +458,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         unassignedReferrals: 0,
         firstContactWithin24HoursRate: 0,
         firstContactWithin24HoursCount: 0,
-        firstContactSampleSize: 0
+        firstContactSampleSize: 0,
+        preApprovalConversionTrend: [],
+        terminatedDealsByReason: []
       }
     });
   }
@@ -472,7 +483,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     createdAtMatch.$lte = timeframeEnd;
   }
 
-  const [referrals, payments] = await Promise.all([
+  const [referrals, payments, terminatedPayments] = await Promise.all([
     Referral.find({
       ...referralMatch,
       ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
@@ -507,6 +518,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           }
         }
       }
+    ]),
+    Payment.aggregate<AggregatedPayment>([
+      {
+        $lookup: {
+          from: 'referrals',
+          localField: 'referralId',
+          foreignField: '_id',
+          as: 'referral'
+        }
+      },
+      { $unwind: '$referral' },
+      {
+        $match: {
+          ...paymentMatch,
+          status: 'terminated'
+        }
+      }
     ])
   ]);
 
@@ -516,6 +544,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }));
 
   const filteredPayments = paymentsWithMetric.filter((payment) => {
+    if (timeframeStart && payment.metricDate < timeframeStart) {
+      return false;
+    }
+    if (timeframeEnd && payment.metricDate > timeframeEnd) {
+      return false;
+    }
+    return true;
+  });
+
+  const terminatedWithMetric = terminatedPayments.map((payment) => ({
+    ...payment,
+    metricDate: resolveMetricDate(payment)
+  }));
+
+  const terminatedWithinTimeframe = terminatedWithMetric.filter((payment) => {
     if (timeframeStart && payment.metricDate < timeframeStart) {
       return false;
     }
@@ -682,16 +725,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .filter((amount) => amount > 0)
   );
 
-  const pipelineValueCents = revenueEligiblePayments
-    .filter((payment) =>
-      [
-        'under_contract',
-        'past_inspection',
-        'past_appraisal',
-        'clear_to_close',
-      ].includes(payment.status)
-    )
-    .reduce((sum, payment) => sum + (payment.expectedAmountCents ?? 0), 0);
+  const pipelineValueCents = referrals
+    .filter((referral) => ACTIVE_PIPELINE_STATUSES.has((referral.status as string | undefined) ?? ''))
+    .reduce((sum, referral) => sum + (referral.preApprovalAmountCents ?? 0), 0);
 
   const activePipeline = referrals.filter((referral) =>
     ACTIVE_PIPELINE_STATUSES.has((referral.status as string | undefined) ?? '')
@@ -1159,6 +1195,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const adminAverageLeadToContract = daysToContractAvg;
   const adminAverageContractToClose = daysToCloseAvg;
 
+  const terminatedDealsByReason = terminatedWithinTimeframe.reduce((map, payment) => {
+    const reason = payment.terminatedReason ?? 'unknown';
+    map.set(reason, (map.get(reason) ?? 0) + 1);
+    return map;
+  }, new Map<string, number>());
+
+  const terminatedReasonBreakdown = Array.from(terminatedDealsByReason.entries())
+    .map(([reason, value]) => ({
+      label: TERMINATED_REASON_LABELS[reason] ?? reason,
+      value
+    }))
+    .sort((a, b) => b.value - a.value);
+
   const preApprovalConversionTrend = monthlyReferrals
     .filter((entry) => entry.preApprovals > 0)
     .map((entry) => ({
@@ -1266,7 +1315,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       unassignedReferrals,
       firstContactWithin24HoursRate,
       firstContactWithin24HoursCount,
-      firstContactSampleSize: firstContactRecords.length
+      firstContactSampleSize: firstContactRecords.length,
+      preApprovalConversionTrend,
+      terminatedDealsByReason: terminatedReasonBreakdown
     }
   };
 

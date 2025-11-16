@@ -150,6 +150,8 @@ interface DashboardResponse {
     firstContactWithin24HoursRate: number;
     firstContactWithin24HoursCount: number;
     firstContactSampleSize: number;
+    preApprovalConversionTrend: TrendPoint[];
+    terminatedDealsByReason: { label: string; value: number }[];
   };
 }
 
@@ -436,6 +438,92 @@ function LineChartCard({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function PieChartCard({
+  title,
+  data,
+  helper
+}: {
+  title: string;
+  data: { label: string; value: number }[];
+  helper?: string;
+}) {
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+  const colors = ['#0ea5e9', '#38bdf8', '#7dd3fc', '#bae6fd', '#0284c7'];
+
+  const describeArc = (startAngle: number, endAngle: number, radius: number, cx: number, cy: number) => {
+    const start = {
+      x: cx + radius * Math.cos(startAngle),
+      y: cy + radius * Math.sin(startAngle)
+    };
+    const end = {
+      x: cx + radius * Math.cos(endAngle),
+      y: cy + radius * Math.sin(endAngle)
+    };
+    const largeArcFlag = endAngle - startAngle <= Math.PI ? 0 : 1;
+    return `M ${cx} ${cy} L ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y} Z`;
+  };
+
+  let currentAngle = -Math.PI / 2;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+          {helper ? <p className="text-xs text-slate-500">{helper}</p> : null}
+        </div>
+        <p className="text-xs font-semibold text-slate-700">{total > 0 ? `${formatNumber(total)} deals` : '—'}</p>
+      </div>
+      {total > 0 ? (
+        <div className="mt-4 grid gap-4 sm:grid-cols-[1fr,1.2fr] sm:items-center">
+          <div className="flex justify-center">
+            <svg viewBox="0 0 160 160" className="h-48 w-48">
+              {data.map((item, index) => {
+                const sliceAngle = (item.value / total) * Math.PI * 2;
+                const startAngle = currentAngle;
+                const endAngle = currentAngle + sliceAngle;
+                currentAngle = endAngle;
+                const path = describeArc(startAngle, endAngle, 70, 80, 80);
+                return (
+                  <path
+                    key={`${item.label}-${index}`}
+                    d={path}
+                    fill={colors[index % colors.length]}
+                    stroke="#ffffff"
+                    strokeWidth={1}
+                  />
+                );
+              })}
+            </svg>
+          </div>
+          <div className="space-y-2">
+            {data.map((item, index) => {
+              const percentage = total ? ((item.value / total) * 100).toFixed(1) : '0.0';
+              return (
+                <div key={`${item.label}-${index}`} className="flex items-center justify-between gap-3 text-sm text-slate-700">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-3 w-3 rounded-sm"
+                      style={{ backgroundColor: colors[index % colors.length] }}
+                      aria-hidden
+                    />
+                    <span className="font-medium text-slate-900">{item.label}</span>
+                  </div>
+                  <span className="text-slate-600">{`${formatNumber(item.value)} (${percentage}%)`}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-6 flex h-40 items-center justify-center rounded-md bg-slate-50 text-sm text-slate-500">
+          No terminated deals recorded this period.
+        </div>
+      )}
     </div>
   );
 }
@@ -939,7 +1027,13 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
   );
 }
 
-function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
+function AdminDashboard({
+  data,
+  preApprovalConversionTrend
+}: {
+  data: DashboardResponse['admin'];
+  preApprovalConversionTrend: TrendPoint[];
+}) {
   const assignmentRate = data.totalReferrals
     ? (data.assignedReferrals / data.totalReferrals) * 100
     : 0;
@@ -978,6 +1072,19 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
         {cards.map((card) => (
           <SummaryCard key={card.title} title={card.title} value={card.value} helper={card.helper} />
         ))}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <LineChartCard
+          title="Pre-approval ↔ referral handoff"
+          data={preApprovalConversionTrend}
+          formatValue={(value) => `${value.toFixed(1)}%`}
+          helper="Referrals converted from pre-approvals"
+        />
+        <PieChartCard
+          title="Terminated deals by reason"
+          data={data.terminatedDealsByReason}
+          helper="Distribution of terminated deals"
+        />
       </div>
     </div>
   );
@@ -1153,7 +1260,12 @@ export function DashboardTabs() {
           ) : null}
           {activeTab === 'mc' ? <McDashboard data={data.mc} /> : null}
           {activeTab === 'agent' ? <AgentDashboard data={data.agent} /> : null}
-          {activeTab === 'admin' ? <AdminDashboard data={data.admin} /> : null}
+          {activeTab === 'admin' ? (
+            <AdminDashboard
+              data={data.admin}
+              preApprovalConversionTrend={data.admin.preApprovalConversionTrend}
+            />
+          ) : null}
         </div>
       ) : null}
     </div>
