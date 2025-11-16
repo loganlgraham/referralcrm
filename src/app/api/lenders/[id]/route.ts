@@ -5,6 +5,7 @@ import { connectMongo } from '@/lib/mongoose';
 import { LenderMC } from '@/models/lender';
 import { User } from '@/models/user';
 import { getCurrentSession } from '@/lib/auth';
+import { Referral } from '@/models/referral';
 
 const updateLenderSchema = z.object({
   name: z.string().trim().min(1).optional(),
@@ -12,8 +13,6 @@ const updateLenderSchema = z.object({
   phone: z.string().trim().optional(),
   nmlsId: z.string().trim().optional(),
   licensedStates: z.array(z.string().trim().min(2)).optional(),
-  team: z.string().trim().optional(),
-  region: z.string().trim().optional(),
 });
 
 interface Params {
@@ -62,12 +61,6 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
   if (parsed.data.licensedStates !== undefined) {
     update.licensedStates = parsed.data.licensedStates;
   }
-  if (parsed.data.team !== undefined) {
-    update.team = parsed.data.team;
-  }
-  if (parsed.data.region !== undefined) {
-    update.region = parsed.data.region;
-  }
 
   const updated = await LenderMC.findByIdAndUpdate(params.id, { $set: update }, { new: true });
 
@@ -97,7 +90,29 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     phone: updatedLender.phone,
     nmlsId: updatedLender.nmlsId,
     licensedStates: updatedLender.licensedStates ?? [],
-    team: updatedLender.team ?? '',
-    region: updatedLender.region ?? '',
   });
+}
+
+export async function DELETE(_request: NextRequest, { params }: Params): Promise<NextResponse> {
+  const session = await getCurrentSession();
+  if (!session || session.user.role !== 'admin') {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
+
+  await connectMongo();
+
+  const lender = await LenderMC.findById(params.id);
+  if (!lender) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
+  await Referral.updateMany({ lender: lender._id }, { $unset: { lender: '' } });
+
+  if (lender.userId) {
+    await User.findByIdAndDelete(lender.userId);
+  }
+
+  await LenderMC.findByIdAndDelete(params.id);
+
+  return new NextResponse(null, { status: 204 });
 }

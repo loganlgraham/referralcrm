@@ -157,22 +157,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const inviteLink = `${baseUrl}/signup?role=agent&email=${encodeURIComponent(agent.email)}`;
     const html = `
       <p>Hi ${agent.name},</p>
-      <p>You have been added to the Referral CRM platform. Create your login to track referrals, view performance metrics, and collaborate with the team.</p>
-      <p><a href="${inviteLink}">Create your account</a> to set your password and finish onboarding.</p>
+      <p>You have been added to Referral CRM. Please complete your profile and create your password so you can log in.</p>
+      <p><a href="${inviteLink}">Finish your setup</a> to save your login and start collaborating with the team.</p>
       <p>If you were not expecting this invitation, please contact your admin.</p>
     `;
     const text = `Hi ${agent.name},
 
-You have been added to the Referral CRM platform. Create your login to track referrals, view performance metrics, and collaborate with the team.
+You have been added to Referral CRM. Please complete your profile and create your password so you can log in.
 
-Create your account: ${inviteLink}
+Finish your setup: ${inviteLink}
 
 If you were not expecting this invitation, please contact your admin.`;
 
     try {
       await sendTransactionalEmail({
         to: [agent.email],
-        subject: 'Welcome to Referral CRM — create your login',
+        subject: 'Welcome to Referral CRM — complete your profile',
         html,
         text,
       });

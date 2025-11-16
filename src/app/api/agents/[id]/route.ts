@@ -8,6 +8,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { computeAgentMetrics, EMPTY_AGENT_METRICS } from '@/lib/server/agent-metrics';
 import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
 import { mergeAndNormalizeZipCodes, syncAgentZipCoverage } from '@/lib/server/zip-coverage';
+import { Referral } from '@/models/referral';
 
 const coverageLocationSchema = z.object({
   label: z.string().trim().min(1),
@@ -168,4 +169,28 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     metrics,
     npsScore: metrics.npsScore,
   });
+}
+
+export async function DELETE(_request: NextRequest, { params }: Params): Promise<NextResponse> {
+  const session = await getCurrentSession();
+  if (!session || session.user.role !== 'admin') {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
+
+  await connectMongo();
+
+  const agent = await Agent.findById(params.id);
+  if (!agent) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
+  await Referral.updateMany({ assignedAgent: agent._id }, { $unset: { assignedAgent: '' } });
+
+  if (agent.userId) {
+    await User.findByIdAndDelete(agent.userId);
+  }
+
+  await Agent.findByIdAndDelete(params.id);
+
+  return new NextResponse(null, { status: 204 });
 }

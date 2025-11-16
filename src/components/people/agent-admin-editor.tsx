@@ -15,7 +15,7 @@ interface CoverageLocation {
   zipCodes: string[];
 }
 
-interface AgentAdminEditorProps {
+export interface AgentAdminEditorProps {
   agent: {
     _id: string;
     name: string;
@@ -32,6 +32,7 @@ interface AgentAdminEditorProps {
   };
   variant?: 'standalone' | 'embedded';
   className?: string;
+  onSaved?: () => void;
 }
 
 interface PatchResponse {
@@ -158,7 +159,7 @@ const buildInitialFormState = (agent: AgentAdminEditorProps['agent']): FormState
   };
 };
 
-export function AgentAdminEditor({ agent, variant = 'standalone', className }: AgentAdminEditorProps) {
+export function AgentAdminEditor({ agent, variant = 'standalone', className, onSaved }: AgentAdminEditorProps) {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(() => buildInitialFormState(agent));
   const [saving, setSaving] = useState(false);
@@ -378,6 +379,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className }: A
       });
 
       toast.success('Agent details updated');
+      onSaved?.();
       router.refresh();
     } catch (error) {
       console.error(error);

@@ -7,7 +7,7 @@ A production-ready referral CRM built with Next.js 14 (App Router), TypeScript, 
 - 🔐 Email & Google sign-in with role-based access control (admin, manager, mc, agent, viewer)
 - 🧭 Dashboard with KPI cards, leaderboards, and SLA alert scaffolding
 - 📋 Referral intake workflow with audit logging, timeline, SLA clocks, and payments view
-- 📄 CSV/XLSX Import Wizard with header mapping and preview
+- 📄 CSV/XLSX Import Wizard with OpenAI-powered header mapping, cleanup, and preview
 - 💰 Payment tracking with expected vs received rollups
 - 📊 Agents, lenders, and referrals tables with server-side data helpers
 - 🧪 Testing scaffolding (Jest unit + API, Playwright E2E) and seed script
@@ -54,6 +54,7 @@ Required keys:
 - `EMAIL_SERVER` – SMTP connection string (e.g. `smtp://user:pass@smtp.host:587`)
 - `EMAIL_FROM` – default From address
 - `RESEND_API_KEY` / `RESEND_INBOUND_SECRET` – Resend transactional email and inbound webhook signing
+- `OPENAI_API_KEY` – powers the import assistant and MC coverage helper endpoints
 - `GCP_STORAGE_CLIENT_EMAIL`, `GCP_STORAGE_PRIVATE_KEY`, `INBOUND_EMAIL_BUCKET` – Google Cloud Storage service account & bucket for inbound attachments
 - `TZ` – defaults to `America/Denver`
 
@@ -156,8 +157,8 @@ All date computations leverage `date-fns` and default to `America/Denver`. Ensur
 ## Import wizard
 
 1. Upload CSV/XLSX/ZIP files.
-2. Auto-detected headers populate the mapping UI.
-3. Preview the first 20 rows to verify data alignment.
+2. Auto-detected headers populate the mapping UI with OpenAI suggestions/cleanup for referrals, agents, MCs, and deal payouts.
+3. Preview the first 20 rows (and optional AI-standardized rows) to verify data alignment.
 4. Confirm mapping to trigger server-side upsert (scaffolded in `/api/imports`).
 5. Original file metadata is available via logs for re-runs.
 
