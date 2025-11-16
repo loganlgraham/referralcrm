@@ -109,6 +109,18 @@ interface DashboardResponse {
         updatedAt?: string;
       }[];
     };
+    terminatedDeals: {
+      breakdown: { label: string; value: number }[];
+      totalLostReferralFeeCents: number;
+      totalDeals: number;
+      deals: {
+        id: string;
+        reasonKey: string;
+        reasonLabel: string;
+        lostReferralFeeCents: number;
+        address: string;
+      }[];
+    };
   };
   mc: {
     requestTrend: {
@@ -150,8 +162,6 @@ interface DashboardResponse {
     firstContactWithin24HoursRate: number;
     firstContactWithin24HoursCount: number;
     firstContactSampleSize: number;
-    preApprovalConversionTrend: TrendPoint[];
-    terminatedDealsByReason: { label: string; value: number }[];
   };
 }
 
@@ -524,6 +534,46 @@ function PieChartCard({
           No terminated deals recorded this period.
         </div>
       )}
+    </div>
+  );
+}
+
+function TerminatedDealsList({
+  deals,
+  totalLostReferralFeeCents,
+  totalDeals
+}: {
+  deals: DashboardResponse['main']['terminatedDeals']['deals'];
+  totalLostReferralFeeCents: number;
+  totalDeals: number;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-baseline justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Terminated deals</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{formatCurrency(totalLostReferralFeeCents)}</p>
+          <p className="text-xs text-slate-500">{formatNumber(totalDeals)} lost deals</p>
+        </div>
+      </div>
+
+      <div className="mt-4 divide-y divide-slate-100">
+        {deals.length ? (
+          deals.map((deal) => (
+            <div key={deal.id} className="flex items-start justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-slate-900">{deal.address}</p>
+                <p className="text-xs text-slate-500">{deal.reasonLabel}</p>
+              </div>
+              <p className="whitespace-nowrap text-sm font-semibold text-rose-600">
+                {formatCurrency(deal.lostReferralFeeCents)}
+              </p>
+            </div>
+          ))
+        ) : (
+          <p className="py-6 text-center text-sm text-slate-500">No terminated deals this period.</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -928,6 +978,19 @@ function MainDashboard({
         canEdit={canEditPreApprovals}
         onSaved={onPreApprovalSaved}
       />
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <PieChartCard
+          title="Terminated deals by reason"
+          data={data.terminatedDeals.breakdown}
+          helper="Distribution of terminated deals"
+        />
+        <TerminatedDealsList
+          deals={data.terminatedDeals.deals}
+          totalLostReferralFeeCents={data.terminatedDeals.totalLostReferralFeeCents}
+          totalDeals={data.terminatedDeals.totalDeals}
+        />
+      </div>
     </div>
   );
 }
@@ -1027,13 +1090,7 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
   );
 }
 
-function AdminDashboard({
-  data,
-  preApprovalConversionTrend
-}: {
-  data: DashboardResponse['admin'];
-  preApprovalConversionTrend: TrendPoint[];
-}) {
+function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
   const assignmentRate = data.totalReferrals
     ? (data.assignedReferrals / data.totalReferrals) * 100
     : 0;
@@ -1072,19 +1129,6 @@ function AdminDashboard({
         {cards.map((card) => (
           <SummaryCard key={card.title} title={card.title} value={card.value} helper={card.helper} />
         ))}
-      </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <LineChartCard
-          title="Pre-approval ↔ referral handoff"
-          data={preApprovalConversionTrend}
-          formatValue={(value) => `${value.toFixed(1)}%`}
-          helper="Referrals converted from pre-approvals"
-        />
-        <PieChartCard
-          title="Terminated deals by reason"
-          data={data.terminatedDealsByReason}
-          helper="Distribution of terminated deals"
-        />
       </div>
     </div>
   );
@@ -1260,12 +1304,7 @@ export function DashboardTabs() {
           ) : null}
           {activeTab === 'mc' ? <McDashboard data={data.mc} /> : null}
           {activeTab === 'agent' ? <AgentDashboard data={data.agent} /> : null}
-          {activeTab === 'admin' ? (
-            <AdminDashboard
-              data={data.admin}
-              preApprovalConversionTrend={data.admin.preApprovalConversionTrend}
-            />
-          ) : null}
+          {activeTab === 'admin' ? <AdminDashboard data={data.admin} /> : null}
         </div>
       ) : null}
     </div>

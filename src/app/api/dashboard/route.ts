@@ -350,6 +350,16 @@ function computeAverage(values: number[]): number {
   return total / values.length;
 }
 
+function formatTerminatedAddress(referral: AggregatedPayment['referral']): string {
+  const parts = [referral.propertyAddress, referral.propertyCity, referral.propertyState].filter(
+    (part): part is string => Boolean(part && part.toString().trim())
+  );
+  if (parts.length) {
+    return parts.join(', ');
+  }
+  return 'Unknown address';
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   await connectMongo();
   const session = await getCurrentSession();
@@ -426,6 +436,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         preApprovalConversion: {
           trend: [],
           entries: []
+        },
+        terminatedDeals: {
+          breakdown: [],
+          totalLostReferralFeeCents: 0,
+          totalDeals: 0,
+          deals: []
         }
       },
       mc: {
@@ -458,9 +474,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         unassignedReferrals: 0,
         firstContactWithin24HoursRate: 0,
         firstContactWithin24HoursCount: 0,
-        firstContactSampleSize: 0,
-        preApprovalConversionTrend: [],
-        terminatedDealsByReason: []
+        firstContactSampleSize: 0
       }
     });
   }
@@ -1208,6 +1222,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }))
     .sort((a, b) => b.value - a.value);
 
+  const terminatedDeals = terminatedWithinTimeframe.map((payment) => ({
+    id: payment._id.toString(),
+    reasonKey: payment.terminatedReason ?? 'unknown',
+    reasonLabel: TERMINATED_REASON_LABELS[payment.terminatedReason ?? 'unknown'] ?? 'Unknown',
+    lostReferralFeeCents:
+      payment.expectedAmountCents ?? payment.referral?.referralFeeDueCents ?? 0,
+    address: formatTerminatedAddress(payment.referral)
+  }));
+
+  const terminatedDealsSummary = {
+    breakdown: terminatedReasonBreakdown,
+    totalLostReferralFeeCents: terminatedDeals.reduce((sum, deal) => sum + deal.lostReferralFeeCents, 0),
+    totalDeals: terminatedDeals.length,
+    deals: terminatedDeals
+      .sort((a, b) => b.lostReferralFeeCents - a.lostReferralFeeCents)
+      .slice(0, 10)
+  };
+
   const preApprovalConversionTrend = monthlyReferrals
     .filter((entry) => entry.preApprovals > 0)
     .map((entry) => ({
@@ -1282,7 +1314,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       preApprovalConversion: {
         trend: preApprovalConversionTrend,
         entries: preApprovalEntries
-      }
+      },
+      terminatedDeals: terminatedDealsSummary
     },
     mc: {
       requestTrend: mcRequestTrend,
@@ -1315,9 +1348,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       unassignedReferrals,
       firstContactWithin24HoursRate,
       firstContactWithin24HoursCount,
-      firstContactSampleSize: firstContactRecords.length,
-      preApprovalConversionTrend,
-      terminatedDealsByReason: terminatedReasonBreakdown
+      firstContactSampleSize: firstContactRecords.length
     }
   };
 
