@@ -1,12 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { FocusEvent, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
 
-const STAGE_OPTIONS = ['Pre-Approval TBD', 'Pre-Approval'] as const;
+const STAGE_OPTIONS = ['Pre-approval TBD', 'Pre-approved'] as const;
 const CLIENT_TYPE_OPTIONS = [
   { value: 'Buyer', label: 'Buyer' },
   { value: 'Seller', label: 'Seller' },
@@ -62,12 +62,48 @@ const formatPhoneNumber = (value: string) => {
   return `${area}-${prefix}-${line}`;
 };
 
+const formatCurrencyInputValue = (value: string) => {
+  const digits = value.replace(/[^0-9]/g, '');
+  if (!digits) {
+    return '';
+  }
+
+  const amount = Number(digits);
+  if (Number.isNaN(amount)) {
+    return '';
+  }
+
+  return amount.toLocaleString('en-US');
+};
+
+const parseCurrencyInput = (value: FormDataEntryValue | null | undefined) => {
+  if (value == null) {
+    return undefined;
+  }
+
+  const digits = value.toString().replace(/[^0-9]/g, '');
+  if (!digits) {
+    return undefined;
+  }
+
+  const amount = Number(digits);
+  return Number.isNaN(amount) ? undefined : amount;
+};
+
+const handleCurrencyFocus = (event: FocusEvent<HTMLInputElement>) => {
+  event.currentTarget.value = event.currentTarget.value.replace(/,/g, '');
+};
+
+const handleCurrencyBlur = (event: FocusEvent<HTMLInputElement>) => {
+  event.currentTarget.value = formatCurrencyInputValue(event.currentTarget.value);
+};
+
 export function ReferralForm() {
   const router = useRouter();
   const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
   const [borrowerPhone, setBorrowerPhone] = useState('');
-  const [selectedStage, setSelectedStage] = useState<StageOption>('Pre-Approval TBD');
+  const [selectedStage, setSelectedStage] = useState<StageOption>('Pre-approval TBD');
   const stageOptions = useMemo(() => STAGE_OPTIONS, []);
   const userRole = session?.user?.role ?? null;
   const isAgent = userRole === 'agent';
@@ -96,13 +132,11 @@ export function ReferralForm() {
       clientType: (formData.get('clientType')?.toString() as ClientTypeOption) || 'Buyer',
       lookingInZip: (formData.get('lookingInZip')?.toString() ?? '').trim(),
       borrowerCurrentAddress: (formData.get('borrowerCurrentAddress')?.toString() ?? '').trim(),
-      stageOnTransfer: (formData.get('stageOnTransfer')?.toString() as StageOption) || 'Pre-Approval TBD',
+      stageOnTransfer: (formData.get('stageOnTransfer')?.toString() as StageOption) || 'Pre-approval TBD',
       loanFileNumber: (formData.get('loanFileNumber')?.toString() ?? '').trim(),
       initialNotes: formData.get('initialNotes')?.toString(),
       loanType: formData.get('loanType')?.toString(),
-      preApprovalAmount: formData.get('preApprovalAmount')
-        ? Number(formData.get('preApprovalAmount'))
-        : undefined,
+      preApprovalAmount: parseCurrencyInput(formData.get('preApprovalAmount')),
     };
 
     const result = referralSchema.safeParse(payload);
@@ -321,12 +355,13 @@ export function ReferralForm() {
                   </span>
                   <input
                     name="preApprovalAmount"
-                    type="number"
-                    min={0}
-                    step="1000"
-                    inputMode="decimal"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9,]*"
                     className={`${inputClasses} pl-7`}
-                    placeholder="300000"
+                    placeholder="300,000"
+                    onFocus={handleCurrencyFocus}
+                    onBlur={handleCurrencyBlur}
                   />
                 </div>
               </label>

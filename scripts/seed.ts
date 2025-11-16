@@ -66,7 +66,7 @@ async function main() {
     lookingInZips: ['80202'],
     borrowerCurrentAddress: '456 Elm St, Denver, CO 80211',
     propertyAddress: '123 Market St, Denver, CO 80202',
-    stageOnTransfer: 'Pre-Approval TBD',
+    stageOnTransfer: 'Pre-approval TBD',
     loanFileNumber: 'LFN-1001',
     initialNotes: 'Prefers weekend showings.',
     assignedAgent: agents[0]._id,

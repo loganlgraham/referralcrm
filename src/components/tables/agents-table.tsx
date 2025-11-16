@@ -7,7 +7,6 @@ import useSWR from 'swr';
 import { toast } from 'sonner';
 
 import { fetcher } from '@/utils/fetcher';
-import { useCoverageSuggestions } from '@/hooks/use-coverage-suggestions';
 import { formatCurrency, formatDecimal, formatPhoneNumber } from '@/utils/formatters';
 import {
   AGENT_AHA_CLASSIFICATION_OPTIONS,
@@ -81,12 +80,12 @@ export function AgentsTable() {
   const isAdmin = session?.user?.role === 'admin';
 
   const { data, mutate } = useSWR<AgentRow[]>('/api/agents', fetcher);
-  const { suggestions, mutate: mutateSuggestions } = useCoverageSuggestions();
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<AgentFormState>(() => createEmptyForm());
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
   const [coverageProgress, setCoverageProgress] = useState(0);
+  const [ahaFilter, setAhaFilter] = useState<'all' | 'AHA' | 'AHA_OOS'>('all');
 
   useEffect(() => {
     if (!isGeneratingCoverage) {
@@ -136,7 +135,17 @@ export function AgentsTable() {
   }, [coverageProgress, isGeneratingCoverage]);
   const formDisabled = saving;
 
-  const agents = useMemo(() => data ?? [], [data]);
+  const agents = useMemo(() => {
+    if (!data) {
+      return [];
+    }
+
+    if (ahaFilter === 'all') {
+      return data;
+    }
+
+    return data.filter((agent) => agent.ahaDesignation === ahaFilter);
+  }, [data, ahaFilter]);
 
   if (!data) {
     return <div className="rounded-lg bg-white p-4 shadow-sm">Loading agents…</div>;
@@ -352,7 +361,6 @@ export function AgentsTable() {
       setForm(createEmptyForm());
       setShowForm(false);
       await mutate();
-      await mutateSuggestions();
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Unable to save agent');
@@ -569,53 +577,26 @@ export function AgentsTable() {
         </div>
       )}
 
-      {isAdmin && suggestions.length > 0 && (
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-800">Saved coverage suggestions</h3>
-              <p className="text-xs text-slate-500">Click a suggestion to remove it from the list.</p>
-            </div>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {suggestions.map((suggestion) => (
-              <button
-                key={suggestion.id}
-                type="button"
-                onClick={async () => {
-                  try {
-                    const response = await fetch(`/api/agents/coverage-suggestions/${suggestion.id}`, {
-                      method: 'DELETE'
-                    });
-                    if (!response.ok && response.status !== 204) {
-                      throw new Error('Unable to delete suggestion');
-                    }
-                    await mutateSuggestions();
-                    toast.success('Suggestion removed');
-                  } catch (error) {
-                    console.error(error);
-                    toast.error('Unable to delete suggestion');
-                  }
-                }}
-                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
-              >
-                {suggestion.value}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="flex items-center justify-end">
+        <label className="text-xs font-semibold text-slate-600">
+          AHA filter
+          <select
+            value={ahaFilter}
+            onChange={(event) => setAhaFilter(event.target.value as typeof ahaFilter)}
+            className="ml-2 rounded border border-slate-200 px-3 py-1 text-xs"
+          >
+            <option value="all">All agents</option>
+            <option value="AHA">AHA</option>
+            <option value="AHA_OOS">AHA OOS</option>
+          </select>
+        </label>
+      </div>
 
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">License</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Brokerage</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">AHA</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">States</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Areas covered</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Closings (12mo)</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Closing %</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">NPS</th>
@@ -625,61 +606,50 @@ export function AgentsTable() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {agents.map((agent) => (
-              <tr key={agent._id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  <div className="font-medium text-slate-900">
-                    <Link href={`/agents/${agent._id}`} className="text-brand hover:underline">
-                      {agent.name}
-                    </Link>
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    <a href={`mailto:${agent.email}`} className="text-brand hover:underline">
-                      {agent.email}
-                    </a>
-                  </div>
-                  <div className="text-xs text-slate-500">{formatPhoneNumber(agent.phone) || '—'}</div>
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-700">{agent.licenseNumber || '—'}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">{agent.brokerage || '—'}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  {agent.ahaDesignation === 'AHA'
-                    ? 'AHA'
-                    : agent.ahaDesignation === 'AHA_OOS'
-                    ? 'AHA OOS'
-                    : '—'}
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-700">{agent.statesLicensed.join(', ') || '—'}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  {(() => {
-                    const labels =
-                      Array.isArray(agent.coverageLocations) && agent.coverageLocations.length > 0
-                        ? agent.coverageLocations.map((location) => location.label)
-                        : agent.coverageAreas ?? [];
-                    return labels.slice(0, 5).join(', ') || '—';
-                  })()}
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-700">{agent.metrics.closingsLast12Months}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  {(() => {
-                    const closingRate = formatDecimal(agent.metrics.closingRate);
-                    return closingRate === '—' ? '—' : `${closingRate}%`;
-                  })()}
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-700">{agent.metrics.npsScore ?? '—'}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  {agent.metrics.avgResponseHours == null
-                    ? '—'
-                    : `${formatDecimal(agent.metrics.avgResponseHours)} hrs`}
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  {formatCurrency(agent.metrics.totalReferralFeesPaidCents)}
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  {formatCurrency(agent.metrics.totalNetIncomeCents)}
+            {agents.length === 0 ? (
+              <tr>
+                <td className="px-4 py-6 text-center text-sm text-slate-500" colSpan={7}>
+                  No agents match the selected filter.
                 </td>
               </tr>
-            ))}
+            ) : (
+              agents.map((agent) => (
+                <tr key={agent._id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    <div className="font-medium text-slate-900">
+                      <Link href={`/agents/${agent._id}`} className="text-brand hover:underline">
+                        {agent.name}
+                      </Link>
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      <a href={`mailto:${agent.email}`} className="text-brand hover:underline">
+                        {agent.email}
+                      </a>
+                    </div>
+                    <div className="text-xs text-slate-500">{formatPhoneNumber(agent.phone) || '—'}</div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-700">{agent.metrics.closingsLast12Months}</td>
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    {(() => {
+                      const closingRate = formatDecimal(agent.metrics.closingRate);
+                      return closingRate === '—' ? '—' : `${closingRate}%`;
+                    })()}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-700">{agent.metrics.npsScore ?? '—'}</td>
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    {agent.metrics.avgResponseHours == null
+                      ? '—'
+                      : `${formatDecimal(agent.metrics.avgResponseHours)} hrs`}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    {formatCurrency(agent.metrics.totalReferralFeesPaidCents)}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    {formatCurrency(agent.metrics.totalNetIncomeCents)}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

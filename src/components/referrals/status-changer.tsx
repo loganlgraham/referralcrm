@@ -233,7 +233,7 @@ export function StatusChanger({
         </div>
       ) : (
         <div className="space-y-2">
-          <p className="text-xs uppercase text-slate-400">Pre-Approval</p>
+          <p className="text-xs uppercase text-slate-400">Pre-approval</p>
           <label className="text-sm text-slate-600">
             Amount ($)
             <input

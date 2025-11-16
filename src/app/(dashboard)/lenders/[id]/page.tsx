@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { getLenderProfile } from '@/lib/server/people';
 import { PersonNotes } from '@/components/people/person-notes';
+import { PersonDealsTable } from '@/components/people/person-deals-table';
 
 interface LenderDetailPageProps {
   params: { id: string };
@@ -41,6 +42,12 @@ export default async function LenderDetailPage({ params }: LenderDetailPageProps
             <p className="text-xs uppercase text-slate-400">Region</p>
             <p className="font-medium text-slate-900">{lender.region ?? '—'}</p>
           </div>
+        </div>
+      </div>
+      <div className="rounded-lg bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Deals</h2>
+        <div className="mt-4">
+          <PersonDealsTable deals={lender.deals} context="mc" />
         </div>
       </div>
       <PersonNotes

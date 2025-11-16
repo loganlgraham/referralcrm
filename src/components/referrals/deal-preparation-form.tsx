@@ -36,6 +36,7 @@ interface CreatedDealPayload {
   terminatedReason?: string | null;
   agentAttribution?: string | null;
   usedAfc?: boolean;
+  usedAssignedAgent?: boolean;
   commissionBasisPoints?: number | null;
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
@@ -434,6 +435,7 @@ export function DealPreparationForm({
               ? createdDeal.agentAttribution
               : null,
           usedAfc: Boolean(createdDeal.usedAfc),
+          usedAssignedAgent: Boolean(createdDeal.usedAssignedAgent),
           commissionBasisPoints:
             typeof createdDeal.commissionBasisPoints === 'number'
               ? createdDeal.commissionBasisPoints

@@ -19,7 +19,7 @@ import { ReferralFollowUpCard } from '@/components/referrals/referral-follow-up-
 
 type ReferralSource = string;
 type ReferralClientType = 'Seller' | 'Buyer' | 'Both';
-type TransferStage = 'Pre-Approval TBD' | 'Pre-Approval';
+type TransferStage = 'Pre-approval TBD' | 'Pre-approved';
 
 interface ReferralContact {
   _id?: string | null;
@@ -41,6 +41,7 @@ interface ReferralPayment {
   terminatedReason?: string | null;
   agentAttribution?: string | null;
   usedAfc?: boolean;
+  usedAssignedAgent?: boolean;
   commissionBasisPoints?: number | null;
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
@@ -177,10 +178,19 @@ const normalizeClientType = (value: unknown): ReferralClientType => {
 };
 
 const normalizeStageOnTransfer = (value: unknown): TransferStage => {
-  if (value === 'Pre-Approval' || value === 'Pre-Approval TBD') {
-    return value;
+  if (value === 'Pre-approved' || value === 'Pre-approval TBD') {
+    return value as TransferStage;
   }
-  return 'Pre-Approval TBD';
+
+  if (value === 'Pre-Approval') {
+    return 'Pre-approved';
+  }
+
+  if (value === 'Pre-Approval TBD') {
+    return 'Pre-approval TBD';
+  }
+
+  return 'Pre-approval TBD';
 };
 
 const parseZipList = (value: string): string[] =>
@@ -243,6 +253,7 @@ const normalizeDealPayments = (
       : null,
     agentAttribution: payment.agentAttribution as AgentSelectValue | undefined,
     usedAfc: payment.usedAfc ?? null,
+    usedAssignedAgent: payment.usedAssignedAgent ?? null,
     commissionBasisPoints: payment.commissionBasisPoints ?? null,
     referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
     side: payment.side ?? null,
@@ -1252,8 +1263,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   disabled={savingDetails}
                   className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                 >
-                  <option value="Pre-Approval TBD">Pre-Approval TBD</option>
-                  <option value="Pre-Approval">Pre-Approval</option>
+                  <option value="Pre-approval TBD">Pre-approval TBD</option>
+                  <option value="Pre-approved">Pre-approved</option>
                 </select>
               </label>
               <label className="space-y-1 text-sm font-medium text-slate-600 sm:col-span-2 lg:col-span-3">
