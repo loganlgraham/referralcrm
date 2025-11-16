@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { IMPORT_ENTITY_CONFIG, isImportEntity } from '@/constants/imports';
 
 const scalarValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 
@@ -37,13 +38,22 @@ const toStringValue = (value: unknown): string => {
   return typeof value === 'string' ? value : String(value);
 };
 
-const systemPrompt = `You are an import assistant for a CRM platform.
-Given an entity type, a list of column headers, and sample rows from an uploaded spreadsheet,
+const entityPromptContext = Object.entries(IMPORT_ENTITY_CONFIG)
+  .map(([name, config]) => {
+    const fieldList = config.fields.join(', ');
+    return `${name}: ${config.description} Primary fields -> ${fieldList}`;
+  })
+  .join('\n');
+
+const systemPrompt = `You are an import assistant for a referral CRM platform.
+You support the following entity types and fields:
+${entityPromptContext}
+
+Given an entity type, the expected CRM fields, a list of column headers, and sample rows from an uploaded spreadsheet,
 return JSON that:
-- Suggests the best CRM field for each column header when possible.
+- Suggests the best CRM field for each column header when possible (or omit when no match exists).
 - Flags any sample rows that appear malformed, incomplete, or inconsistent with the entity type.
-- Provides standardized versions of the sample rows with formatted phone numbers (E.164) and
-  normalized addresses (title case street, city, state abbreviations, ZIP codes).
+- Provides standardized versions of the sample rows with formatted phone numbers (E.164) and normalized addresses (title case street, city, state abbreviations, ZIP codes).
 - Adds short actionable notes about assumptions or recommendations.
 Only return JSON that matches the provided schema.`;
 
@@ -71,6 +81,15 @@ export async function POST(request: Request) {
   }
 
   const { entity, headers, rows } = parsedBody.data;
+
+  if (!isImportEntity(entity)) {
+    return NextResponse.json(
+      { error: 'Unsupported entity type.' },
+      { status: 400 }
+    );
+  }
+
+  const entityDefinition = IMPORT_ENTITY_CONFIG[entity];
   const sampleRows = rows.map((row) => {
     const normalized: Record<string, string> = {};
     headers.forEach((header) => {
@@ -135,6 +154,8 @@ export async function POST(request: Request) {
             role: 'user',
             content: JSON.stringify({
               entity,
+              entityDescription: entityDefinition.description,
+              targetFields: entityDefinition.fields,
               headers,
               sampleRows
             })

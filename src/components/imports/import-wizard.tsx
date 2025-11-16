@@ -4,42 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Papa from 'papaparse';
 import JSZip from 'jszip';
 import { toast } from 'sonner';
+import { IMPORT_ENTITY_CONFIG, IMPORT_ENTITY_NAMES, type ImportEntity } from '@/constants/imports';
 
 const steps = ['Upload', 'Map Fields', 'Preview', 'Confirm'] as const;
-
-const ENTITY_FIELDS: Record<string, string[]> = {
-  Referral: [
-    'borrowerName',
-    'borrowerEmail',
-    'borrowerPhone',
-    'source',
-    'endorser',
-    'clientType',
-    'lookingInZip',
-    'borrowerCurrentAddress',
-    'stageOnTransfer',
-    'loanFileNumber',
-    'initialNotes',
-    'status',
-    'createdAt'
-  ],
-  Agent: ['name', 'email', 'phone', 'statesLicensed', 'zipCoverage'],
-  'Mortgage Consultant': ['name', 'email', 'phone', 'nmlsId', 'team', 'region'],
-  Deal: [
-    'referralId',
-    'status',
-    'expectedAmountCents',
-    'receivedAmountCents',
-    'invoiceDate',
-    'paidDate',
-    'terminatedReason',
-    'agentOutcome',
-    'usedAfc',
-    'agentAttribution',
-    'agentAttributionType',
-    'notes'
-  ]
-};
 
 type ImportAssistantInsights = {
   mappingSuggestions?: Record<string, string>;
@@ -50,7 +17,7 @@ type ImportAssistantInsights = {
 
 export function ImportWizard() {
   const [step, setStep] = useState<typeof steps[number]>('Upload');
-  const [entity, setEntity] = useState<keyof typeof ENTITY_FIELDS>('Referral');
+  const [entity, setEntity] = useState<ImportEntity>('Referral');
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [rows, setRows] = useState<Record<string, string>[]>([]);
@@ -155,12 +122,15 @@ export function ImportWizard() {
     setUseStandardizedPreview(hasStandardizedRows);
   }, [hasStandardizedRows]);
 
+  const entityFields = IMPORT_ENTITY_CONFIG[entity]?.fields ?? [];
+  const entityDescription = IMPORT_ENTITY_CONFIG[entity]?.description;
+
   const handleApplyMappingSuggestions = () => {
     if (!assistantInsights?.mappingSuggestions) return;
     setMapping((previous) => {
       const next = { ...previous };
       Object.entries(assistantInsights.mappingSuggestions ?? {}).forEach(([column, field]) => {
-        if (ENTITY_FIELDS[entity]?.includes(field)) {
+        if (entityFields.includes(field)) {
           next[column] = field;
         }
       });
@@ -229,13 +199,16 @@ export function ImportWizard() {
             <select
               className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
               value={entity}
-              onChange={(event) => setEntity(event.target.value as keyof typeof ENTITY_FIELDS)}
+              onChange={(event) => setEntity(event.target.value as ImportEntity)}
             >
-              {Object.keys(ENTITY_FIELDS).map((key) => (
+              {IMPORT_ENTITY_NAMES.map((key) => (
                 <option key={key}>{key}</option>
               ))}
             </select>
           </label>
+          {entityDescription && (
+            <p className="text-xs text-slate-500">{entityDescription}</p>
+          )}
           <input type="file" accept=".csv,.xlsx,.xls,.zip" onChange={handleFileChange} />
         </div>
       )}
@@ -251,7 +224,7 @@ export function ImportWizard() {
                 className="rounded border border-slate-200 px-2 py-1 text-sm"
               >
                 <option value="">Ignore</option>
-                {ENTITY_FIELDS[entity].map((field) => (
+                {entityFields.map((field) => (
                   <option key={field} value={field}>
                     {field}
                   </option>
