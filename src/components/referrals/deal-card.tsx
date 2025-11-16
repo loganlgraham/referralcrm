@@ -28,6 +28,7 @@ export interface DealRecord {
   terminatedReason?: TerminatedReason | null;
   agentAttribution?: AgentSelectValue;
   usedAfc?: boolean | null;
+  usedAssignedAgent?: boolean | null;
   commissionBasisPoints?: number | null;
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;

@@ -100,7 +100,7 @@ const referralSchema = new Schema(
       enum: ['buy', 'sell'],
       default: 'buy',
     },
-    stageOnTransfer: { type: String, default: 'Pre-Approval TBD' },
+    stageOnTransfer: { type: String, default: 'Pre-approval TBD' },
     initialNotes: { type: String, default: '' },
     loanFileNumber: {
       type: String,

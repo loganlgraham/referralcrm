@@ -9,6 +9,8 @@ import { Agent } from '@/models/agent';
 import { Referral } from '@/models/referral';
 import { User } from '@/models/user';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
+import { logReferralActivity } from '@/lib/server/activities';
+import { resolveAuditActorId } from '@/lib/server/audit';
 
 type ReferralSummary = {
   _id: Types.ObjectId;
@@ -36,6 +38,7 @@ type PaymentWithReferral = {
   terminatedReason?: string | null;
   agentAttribution?: string | null;
   usedAfc?: boolean | null;
+  usedAssignedAgent?: boolean | null;
   invoiceDate?: Date | null;
   paidDate?: Date | null;
   createdAt?: Date | null;
@@ -118,15 +121,58 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .populate<{ referralId: ReferralSummary }>({
       path: 'referralId',
       select:
-        'borrower propertyAddress lookingInZip lookingInZips assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents ahaBucket',
+        'borrower propertyAddress lookingInZip lookingInZips assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents ahaBucket loanFileNumber',
     })
     .lean<PaymentWithReferral[]>();
+
+  const agentNameMap = new Map<string, string>();
+  const assignedAgentIds = new Set<string>();
+
+  payments.forEach((payment) => {
+    const referral = payment.referralId as ReferralSummary | null;
+    const assignedAgent = referral?.assignedAgent;
+    if (assignedAgent) {
+      const id =
+        typeof assignedAgent === 'string'
+          ? assignedAgent
+          : assignedAgent instanceof Types.ObjectId
+          ? assignedAgent.toString()
+          : '';
+      if (id && !assignedAgentIds.has(id)) {
+        assignedAgentIds.add(id);
+      }
+    }
+  });
+
+  if (assignedAgentIds.size > 0) {
+    const agentObjectIds: Types.ObjectId[] = [];
+    assignedAgentIds.forEach((id) => {
+      if (Types.ObjectId.isValid(id)) {
+        agentObjectIds.push(new Types.ObjectId(id));
+      }
+    });
+
+    if (agentObjectIds.length > 0) {
+      const agentDocs = await Agent.find({ _id: { $in: agentObjectIds } })
+        .select('name')
+        .lean<{ _id: Types.ObjectId; name?: string | null }[]>();
+
+      agentDocs.forEach((agent) => {
+        agentNameMap.set(agent._id.toString(), agent.name ?? '');
+      });
+    }
+  }
 
   const serialized = payments.map((payment) => {
     const referral = payment.referralId ?? null;
     const fallbackReferralId = (payment as any).referralId;
     const referralId = referral?._id?.toString?.() ??
       (fallbackReferralId instanceof Types.ObjectId ? fallbackReferralId.toString() : '');
+    const assignedAgentId = referral?.assignedAgent
+      ? typeof referral.assignedAgent === 'string'
+        ? referral.assignedAgent
+        : referral.assignedAgent?.toString?.() ?? null
+      : null;
 
     return {
       _id: payment._id.toString(),
@@ -138,11 +184,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       terminatedReason: payment.terminatedReason ?? null,
       agentAttribution: payment.agentAttribution ?? null,
       usedAfc: Boolean(payment.usedAfc),
+      usedAssignedAgent: Boolean(payment.usedAssignedAgent),
       invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
       paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
       commissionBasisPoints: payment.commissionBasisPoints ?? null,
       referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
       side: payment.side ?? 'buy',
+      agent: assignedAgentId
+        ? {
+            id: assignedAgentId,
+            name: agentNameMap.get(assignedAgentId) ?? null,
+          }
+        : null,
       referral: referral
         ? {
             borrowerName: referral.borrower?.name ?? null,
@@ -162,6 +215,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             referralFeeDueCents: referral.referralFeeDueCents ?? null,
             ahaBucket: (referral as any).ahaBucket ?? null,
             dealSide: (referral as any).dealSide ?? null,
+            loanFileNumber: (referral as any).loanFileNumber ?? null,
           }
         : null,
     };
@@ -194,6 +248,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     terminatedReason: parsed.data.terminatedReason ?? null,
     agentAttribution: parsed.data.agentAttribution ?? null,
     usedAfc: parsed.data.usedAfc ?? false,
+    usedAssignedAgent: parsed.data.usedAssignedAgent ?? true,
     invoiceDate: parsed.data.invoiceDate,
     paidDate: parsed.data.paidDate,
     notes: parsed.data.notes,
@@ -233,7 +288,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
   const previousStatus = existingPayment.status;
 
-  const nextContractPriceCents =
+  let nextContractPriceCents =
     parsed.data.contractPriceCents !== undefined
       ? parsed.data.contractPriceCents
       : existingPayment.contractPriceCents ?? null;
@@ -249,6 +304,14 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     parsed.data.side !== undefined ? parsed.data.side ?? existingPayment.side : existingPayment.side;
 
   let nextExpectedAmountCents = existingPayment.expectedAmountCents ?? 0;
+  let nextReceivedAmountCents = existingPayment.receivedAmountCents ?? 0;
+  const hasUsedAssignedAgentUpdate = Object.prototype.hasOwnProperty.call(
+    parsed.data,
+    'usedAssignedAgent'
+  );
+  const nextUsedAssignedAgent = hasUsedAssignedAgentUpdate
+    ? Boolean(parsed.data.usedAssignedAgent)
+    : Boolean(existingPayment.usedAssignedAgent);
   const shouldRecalculateReferralFee =
     parsed.data.expectedAmountCents === undefined &&
     (parsed.data.contractPriceCents !== undefined ||
@@ -272,6 +335,15 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     nextExpectedAmountCents = parsed.data.expectedAmountCents ?? nextExpectedAmountCents;
   }
 
+  if (parsed.data.receivedAmountCents !== undefined) {
+    nextReceivedAmountCents = parsed.data.receivedAmountCents ?? nextReceivedAmountCents;
+  }
+
+  if (hasUsedAssignedAgentUpdate && !nextUsedAssignedAgent) {
+    nextExpectedAmountCents = 0;
+    nextReceivedAmountCents = 0;
+  }
+
   const updatePayload: Record<string, unknown> = { ...parsed.data };
   delete updatePayload.referralId;
   updatePayload.contractPriceCents = nextContractPriceCents ?? null;
@@ -279,8 +351,15 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   updatePayload.referralFeeBasisPoints = nextReferralFeeBasisPoints ?? null;
   updatePayload.side = nextSide ?? 'buy';
   updatePayload.expectedAmountCents = nextExpectedAmountCents;
+  updatePayload.receivedAmountCents = nextReceivedAmountCents;
+  if (hasUsedAssignedAgentUpdate) {
+    updatePayload.usedAssignedAgent = nextUsedAssignedAgent;
+  }
   if ('usedAfc' in updatePayload && updatePayload.usedAfc === undefined) {
     updatePayload.usedAfc = false;
+  }
+  if ('usedAssignedAgent' in updatePayload && updatePayload.usedAssignedAgent === undefined) {
+    updatePayload.usedAssignedAgent = false;
   }
 
   const payment = await Payment.findByIdAndUpdate(body.id, updatePayload, { new: true });
@@ -291,8 +370,48 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const referral = await Referral.findById(existingPayment.referralId);
   if (referral) {
     const now = new Date();
+    const previousReferralStatus = referral.status ?? null;
     const sla = (referral.sla ??= {} as any);
     let slaChanged = false;
+    let referralStatusChanged = false;
+
+    if (hasUsedAssignedAgentUpdate && !nextUsedAssignedAgent) {
+      referral.estPurchasePriceCents = 0;
+      referral.referralFeeDueCents = 0;
+      nextContractPriceCents = null;
+      if (sla) {
+        sla.lastUnderContractAt = null;
+        sla.lastClosedAt = null;
+        sla.lastPaidAt = null;
+        slaChanged = true;
+      }
+
+      if (previousReferralStatus !== 'Lost') {
+        const auditEntry: Record<string, unknown> = {
+          actorRole: session.user.role,
+          field: 'status',
+          previousValue: previousReferralStatus,
+          newValue: 'Lost',
+          timestamp: now,
+        };
+        const actorId = resolveAuditActorId(session.user.id);
+        if (actorId) {
+          auditEntry.actorId = actorId;
+        }
+
+        referral.status = 'Lost';
+        referral.statusLastUpdated = now;
+        referral.audit = Array.isArray(referral.audit) ? referral.audit : [];
+        referral.audit.push(auditEntry as any);
+        referral.markModified('audit');
+        referralStatusChanged = true;
+      }
+
+      await Payment.updateMany(
+        { referralId: referral._id },
+        { $set: { expectedAmountCents: 0, receivedAmountCents: 0 } }
+      );
+    }
 
     if (parsed.data.status && parsed.data.status !== previousStatus) {
       const nextStatus = parsed.data.status as string;
@@ -348,6 +467,16 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       referral.markModified('sla');
     }
     await referral.save();
+
+    if (referralStatusChanged && previousReferralStatus !== referral.status) {
+      await logReferralActivity({
+        referralId: referral._id,
+        actorRole: session.user.role,
+        actorId: session.user.id,
+        channel: 'status',
+        content: `Status changed from ${previousReferralStatus ?? 'Unknown'} to ${referral.status}`,
+      });
+    }
   }
 
   if (
