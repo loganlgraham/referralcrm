@@ -365,6 +365,14 @@ export async function getReferralById(id: string) {
       referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
       side: payment.side ?? null,
     })),
+    sla: referral.sla
+      ? {
+          contractToCloseMinutes: referral.sla.contractToCloseMinutes ?? null,
+          closedToPaidMinutes: referral.sla.closedToPaidMinutes ?? null,
+          previousContractToCloseMinutes: referral.sla.previousContractToCloseMinutes ?? null,
+          previousClosedToPaidMinutes: referral.sla.previousClosedToPaidMinutes ?? null,
+        }
+      : null,
     preApprovalAmountCents: typeof referral.preApprovalAmountCents === 'number' ? referral.preApprovalAmountCents : 0,
     estPurchasePriceCents: typeof referral.estPurchasePriceCents === 'number' ? referral.estPurchasePriceCents : 0,
     referralFeeDueCents: typeof referral.referralFeeDueCents === 'number' ? referral.referralFeeDueCents : 0,

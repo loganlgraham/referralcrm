@@ -933,13 +933,6 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
       await handleSaveDealDetails(deal)();
     };
 
-    const closeDateHistory = Array.isArray(deal.closeDateHistory) ? deal.closeDateHistory : [];
-    const closeDatePushCount = closeDateHistory.filter((entry) => {
-      if (!entry?.previousDate || !entry?.nextDate) return false;
-      const previous = new Date(entry.previousDate);
-      const next = new Date(entry.nextDate);
-      return Number.isFinite(previous.getTime()) && Number.isFinite(next.getTime()) && next > previous;
-    }).length;
     const expectedCloseDateLabel = (() => {
       const parsedDate = draft.expectedCloseDate ? parseExpectedCloseDate(draft.expectedCloseDate) : null;
       if (!parsedDate) {
@@ -992,10 +985,6 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
             <div className="flex flex-col rounded border border-slate-200 bg-white px-3 py-2 text-left text-xs text-slate-500 shadow-sm">
               <span className="uppercase">Expected Close</span>
               <span className="text-sm font-semibold text-slate-900">{expectedCloseDateLabel}</span>
-            </div>
-            <div className="flex flex-col rounded border border-slate-200 bg-white px-3 py-2 text-left text-xs text-slate-500 shadow-sm">
-              <span className="uppercase">Close Date Pushes</span>
-              <span className="text-sm font-semibold text-slate-900">{closeDatePushCount}</span>
             </div>
             <label className="flex items-center gap-2 text-xs uppercase text-slate-400">
               Status

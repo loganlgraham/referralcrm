@@ -442,8 +442,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           pipelineValueCents: 0,
           closingThisPeriod: 0,
           closingExpectedRevenueCents: 0,
-          closeDatePushCount: 0,
-          closeDatePushDeals: 0
         },
         trends: {
           revenue: [],
@@ -643,29 +641,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     (sum, payment) => sum + (payment.expectedAmountCents ?? 0),
     0
   );
-  const closeDatePushEvents = filteredPayments.flatMap((payment) => {
-    const history = Array.isArray(payment.closeDateHistory) ? payment.closeDateHistory : [];
-    return history
-      .filter((entry) => {
-        if (!entry?.nextDate || !entry?.previousDate) return false;
-        const next = new Date(entry.nextDate);
-        const previous = new Date(entry.previousDate);
-        if (Number.isNaN(next.getTime()) || Number.isNaN(previous.getTime())) return false;
-        if (next <= previous) return false;
-        const changedAt = entry.changedAt ? new Date(entry.changedAt) : null;
-        if (changedAt && Number.isNaN(changedAt.getTime())) return false;
-        if (timeframeStart && changedAt && changedAt < timeframeStart) return false;
-        if (timeframeEnd && changedAt && changedAt > timeframeEnd) return false;
-        return true;
-      })
-      .map((entry) => ({ entry, payment }));
-  });
-  const closeDatePushCount = closeDatePushEvents.length;
-  const closeDatePushDeals = new Set(
-    closeDatePushEvents
-      .map((item) => item.payment._id?.toString?.())
-      .filter((id): id is string => Boolean(id))
-  ).size;
   const closeRate = totalReferrals === 0 ? 0 : (dealsClosed.length / totalReferrals) * 100;
 
   const revenueEligiblePayments = filteredPayments.filter(
@@ -1358,9 +1333,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         averageReferralFeePaidCents,
         pipelineValueCents,
         closingThisPeriod: closingWithinTimeframe.length,
-        closingExpectedRevenueCents,
-        closeDatePushCount,
-        closeDatePushDeals
+        closingExpectedRevenueCents
       },
       trends: {
         revenue: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.revenueReceivedCents })),
