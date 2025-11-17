@@ -194,3 +194,53 @@ ${referralLink ? `Review the referral: ${referralLink}` : ''}`
     { status: 201 }
   );
 }
+
+export async function GET(_request: NextRequest, { params }: Params): Promise<NextResponse> {
+  const session = await getCurrentSession();
+  if (!session) {
+    return new NextResponse('Unauthorized', { status: 401 });
+  }
+
+  await connectMongo();
+  const referral = await Referral.findById(params.id)
+    .populate('assignedAgent', 'userId email')
+    .populate('lender', 'userId email');
+  if (!referral || referral.deletedAt) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
+  if (
+    !canViewReferral(session, {
+      assignedAgent: referral.assignedAgent,
+      lender: referral.lender,
+      org: referral.org
+    })
+  ) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
+
+  const viewerRole = session.user.role ?? 'viewer';
+  const notes = (referral.notes ?? [])
+    .filter((note: any) => {
+      if (viewerRole === 'agent' && note.hiddenFromAgent) {
+        return false;
+      }
+      if (viewerRole === 'mc' && note.hiddenFromMc) {
+        return false;
+      }
+      return true;
+    })
+    .map((note: any) => ({
+      id: note._id.toString(),
+      authorName: note.authorName,
+      authorRole: note.authorRole,
+      content: note.content,
+      createdAt: note.createdAt instanceof Date ? note.createdAt.toISOString() : new Date(note.createdAt).toISOString(),
+      hiddenFromAgent: note.hiddenFromAgent,
+      hiddenFromMc: note.hiddenFromMc,
+      emailedTargets: Array.isArray(note.emailedTargets) ? note.emailedTargets : []
+    }))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  return NextResponse.json(notes);
+}
