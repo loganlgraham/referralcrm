@@ -1,10 +1,10 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarPlus, CheckCircle2, Circle, Loader2 } from 'lucide-react';
 
 import { useFollowUpTaskContext } from '@/components/referrals/follow-up-task-provider';
-import { useFollowUpTasks } from '@/components/referrals/use-follow-up-tasks';
+import { useFollowUpTasks, type FollowUpTask } from '@/components/referrals/use-follow-up-tasks';
 import { computeSlaInsights, sortRecommendations, type ReferralLike } from '@/utils/sla-insights';
 import { useCalendarTaskSubmission } from '@/components/referrals/use-calendar-task-submission';
 
@@ -18,13 +18,24 @@ interface BoardReferral {
   assignedAgentName?: string;
   lenderName?: string | null;
   origin?: 'agent' | 'mc' | 'admin' | null;
+  dealStatus?: string | null;
+  dealStatusLabel?: string | null;
 }
 
 interface FollowUpTasksBoardProps {
   referrals: BoardReferral[];
+  viewerRole?: 'admin' | 'manager' | 'mc' | 'agent' | 'viewer';
 }
 
-const toReferralLike = (referral: BoardReferral): ReferralLike & { borrower: { name: string } } => ({
+interface TaskSnapshot {
+  outstanding: FollowUpTask[];
+  all: FollowUpTask[];
+}
+
+const toReferralLike = (
+  referral: BoardReferral,
+  viewerRole?: FollowUpTasksBoardProps['viewerRole']
+): ReferralLike & { borrower: { name: string } } => ({
   _id: referral._id,
   createdAt: referral.createdAt,
   status: referral.status,
@@ -34,20 +45,29 @@ const toReferralLike = (referral: BoardReferral): ReferralLike & { borrower: { n
   assignedAgentName: referral.assignedAgentName,
   lender: referral.lenderName ? { name: referral.lenderName } : null,
   origin: referral.origin ?? undefined,
+  viewerRole,
+  dealStatus: referral.dealStatus ?? null,
+  dealStatusLabel: referral.dealStatusLabel ?? null,
   borrower: { name: referral.borrowerName },
   notes: [],
   payments: [],
   audit: [],
 });
 
-export function FollowUpTasksBoard({ referrals }: FollowUpTasksBoardProps) {
+export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoardProps) {
   const { completions } = useFollowUpTaskContext();
+  const [taskSnapshots, setTaskSnapshots] = useState<Record<string, TaskSnapshot>>({});
+  const {
+    submitTasks: submitAllTasks,
+    addingTaskId: addingAllTaskId,
+    bulkAdding: bulkAddingAll,
+  } = useCalendarTaskSubmission();
 
-  const summary = useMemo(() => {
+  const summaryFallback = useMemo(() => {
     return referrals.reduce(
       (acc, referral) => {
-        const referralLike = toReferralLike(referral);
-        const insights = computeSlaInsights(referralLike);
+        const referralLike = toReferralLike(referral, viewerRole);
+        const insights = computeSlaInsights(referralLike, { viewerRole });
         const ordered = sortRecommendations(insights.recommendations);
         const outstanding = ordered.filter((item) => {
           const taskId = `${referral._id}::${item.id}`;
@@ -60,7 +80,34 @@ export function FollowUpTasksBoard({ referrals }: FollowUpTasksBoardProps) {
       },
       { total: 0, outstanding: 0 }
     );
-  }, [completions, referrals]);
+  }, [completions, referrals, viewerRole]);
+
+  const summaryFromSnapshots = useMemo(() => {
+    if (Object.keys(taskSnapshots).length === 0) {
+      return null;
+    }
+    return Object.values(taskSnapshots).reduce(
+      (acc, snapshot) => ({
+        total: acc.total + snapshot.all.length,
+        outstanding: acc.outstanding + snapshot.outstanding.length,
+      }),
+      { total: 0, outstanding: 0 }
+    );
+  }, [taskSnapshots]);
+
+  const summary = summaryFromSnapshots ?? summaryFallback;
+  const outstandingTasks = useMemo(() => {
+    return Object.values(taskSnapshots).flatMap((snapshot) => snapshot?.outstanding ?? []);
+  }, [taskSnapshots]);
+  const addAllDisabled =
+    outstandingTasks.length === 0 || bulkAddingAll || addingAllTaskId !== null;
+
+  const handleTaskSnapshot = useCallback(
+    (referralId: string, all: FollowUpTask[], outstanding: FollowUpTask[]) => {
+      setTaskSnapshots((previous) => ({ ...previous, [referralId]: { all, outstanding } }));
+    },
+    []
+  );
 
   return (
     <div className="space-y-6">
@@ -69,30 +116,64 @@ export function FollowUpTasksBoard({ referrals }: FollowUpTasksBoardProps) {
         <p className="text-sm text-slate-500">
           AI-generated reminders consolidate here so you can coach agents across every active referral.
         </p>
-        <div className="flex flex-wrap gap-3 text-xs">
-          <span className="rounded-full bg-brand/10 px-3 py-1 font-medium text-brand">
-            {summary.outstanding} outstanding
-          </span>
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-brand/10 px-3 py-1 font-medium text-brand">
+              {summary.outstanding} outstanding
+            </span>
+            <button
+              type="button"
+              onClick={() => submitAllTasks(outstandingTasks, 'bulk')}
+              disabled={addAllDisabled}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-brand/30 bg-white text-brand transition hover:bg-brand/10 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Add all outstanding tasks to Google Calendar"
+            >
+              {bulkAddingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarPlus className="h-4 w-4" />}
+            </button>
+          </div>
           <span className="rounded-full bg-slate-200 px-3 py-1 font-medium text-slate-600">
             {summary.total} total suggestions
           </span>
         </div>
       </header>
-      <div className="space-y-5">
-        {referrals.map((referral) => (
-          <FollowUpTaskGroup key={referral._id} referral={referral} />
-        ))}
-      </div>
+      {referrals.length === 0 ? (
+        <div className="rounded-xl border border-slate-200 bg-white/60 p-6 text-sm text-slate-600">
+          No referrals are available for follow-ups right now. If you recently added a referral, refresh in a moment and try again.
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {referrals.map((referral) => (
+            <FollowUpTaskGroup
+              key={referral._id}
+              referral={referral}
+              viewerRole={viewerRole}
+              onTasksSnapshot={handleTaskSnapshot}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
-  const referralLike = toReferralLike(referral);
-  const tasks = useFollowUpTasks(referralLike);
+function FollowUpTaskGroup({
+  referral,
+  viewerRole,
+  onTasksSnapshot,
+}: {
+  referral: BoardReferral;
+  viewerRole?: FollowUpTasksBoardProps['viewerRole'];
+  onTasksSnapshot?: (referralId: string, all: FollowUpTask[], outstanding: FollowUpTask[]) => void;
+}) {
+  const referralLike = toReferralLike(referral, viewerRole);
+  const tasks = useFollowUpTasks(referralLike, { viewerRole });
   const { submitTasks, addingTaskId, bulkAdding } = useCalendarTaskSubmission();
   const incompleteTasks = useMemo(() => tasks.filter((task) => !task.completed), [tasks]);
   const outstanding = incompleteTasks.length;
+
+  useEffect(() => {
+    onTasksSnapshot?.(referral._id, tasks, incompleteTasks);
+  }, [incompleteTasks, onTasksSnapshot, referral._id, tasks]);
 
   return (
     <section className="space-y-3 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
@@ -161,14 +242,14 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
                     disabled={
                       bulkAdding || (addingTaskId !== null && addingTaskId !== task.taskId)
                     }
-                    className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    aria-label="Add this task to Google Calendar"
                   >
                     {addingTaskId === task.taskId ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <CalendarPlus className="h-4 w-4" />
                     )}
-                    {addingTaskId === task.taskId ? 'Adding…' : 'Add to Google Calendar'}
                   </button>
                   {task.isManual && task.remove && (
                     <button

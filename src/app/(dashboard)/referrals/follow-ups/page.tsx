@@ -12,8 +12,41 @@ export const metadata: Metadata = {
 
 export default async function FollowUpTasksPage() {
   const session = await getCurrentSession();
-  const data = await getReferrals({ session, page: 1 });
-  const referrals = data.items.map((item) => ({
+  let loadError = false;
+  const timeoutMs = 4500;
+
+  const referralsPromise = getReferrals({ session, page: 1 }).catch((error) => {
+    console.error('Failed to load referrals for follow-up tasks', error);
+    return null;
+  });
+
+  const { data, timedOut } = (await Promise.race([
+    referralsPromise.then((result) => ({ data: result, timedOut: false })),
+    new Promise<{ data: Awaited<ReturnType<typeof getReferrals>> | null; timedOut: boolean }>((resolve) =>
+      setTimeout(() => resolve({ data: null, timedOut: true }), timeoutMs)
+    ),
+  ])) as { data: Awaited<ReturnType<typeof getReferrals>> | null; timedOut: boolean };
+
+  const safeData = (() => {
+    if (data) {
+      return data;
+    }
+
+    loadError = true;
+
+    if (timedOut) {
+      console.warn(`Follow-up referrals request timed out after ${timeoutMs}ms; rendering fallback data.`);
+    }
+
+    return {
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 0,
+    } satisfies Awaited<ReturnType<typeof getReferrals>>;
+  })();
+
+  const referrals = safeData.items.map((item) => ({
     _id: item._id,
     borrowerName: item.borrowerName,
     status: item.status,
@@ -23,7 +56,18 @@ export default async function FollowUpTasksPage() {
     assignedAgentName: item.assignedAgentName,
     lenderName: item.lenderName ?? null,
     origin: item.origin ?? null,
+    dealStatus: item.dealStatus ?? null,
+    dealStatusLabel: item.dealStatusLabel ?? null,
   }));
 
-  return <FollowUpTasksBoard referrals={referrals} />;
+  return (
+    <div className="space-y-4">
+      {loadError ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          We couldn't load follow-up data right now. Please refresh or try again in a moment.
+        </div>
+      ) : null}
+      <FollowUpTasksBoard referrals={referrals} viewerRole={session?.user.role ?? 'viewer'} />
+    </div>
+  );
 }

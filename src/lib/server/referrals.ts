@@ -164,6 +164,8 @@ export async function getReferrals(params: GetReferralsParams) {
     activeQuery.status = { $in: ACTIVE_REFERRAL_STATUS_VALUES };
   }
 
+  const maxTimeMs = 4000;
+
   const [items, total, closedDealAggregation, activeReferrals] = await Promise.all([
     Referral.find(query)
       .populate<{ assignedAgent: PopulatedAgent }>('assignedAgent', 'name email phone')
@@ -171,8 +173,9 @@ export async function getReferrals(params: GetReferralsParams) {
       .sort({ createdAt: -1 })
       .skip((page - 1) * PAGE_SIZE)
       .limit(PAGE_SIZE)
+      .maxTimeMS(maxTimeMs)
       .lean<PopulatedReferral[]>(),
-    Referral.countDocuments(query),
+    Referral.countDocuments(query).maxTimeMS(maxTimeMs),
     Payment.aggregate([
       {
         $lookup: {
@@ -191,8 +194,8 @@ export async function getReferrals(params: GetReferralsParams) {
       },
       { $group: { _id: '$referralId' } },
       { $group: { _id: null, count: { $sum: 1 } } }
-    ]),
-    Referral.countDocuments(activeQuery)
+    ]).option({ maxTimeMS: maxTimeMs }),
+    Referral.countDocuments(activeQuery).maxTimeMS(maxTimeMs)
   ]);
 
   const closedDeals = closedDealAggregation[0]?.count ?? 0;

@@ -21,11 +21,14 @@ export interface FollowUpTask extends SlaRecommendation {
   remove?: () => void;
 }
 
-export function useFollowUpTasks(referral: ReferralLike & { borrower?: { name?: string } }) {
+export function useFollowUpTasks(
+  referral: ReferralLike & { borrower?: { name?: string } },
+  options?: { viewerRole?: ReferralLike['viewerRole'] }
+) {
   const { completions, toggleTask, manualTasks, removeManualTask } = useFollowUpTaskContext();
 
   return useMemo(() => {
-    const insights = computeSlaInsights(referral);
+    const insights = computeSlaInsights(referral, { viewerRole: options?.viewerRole });
     const ordered = sortRecommendations(insights.recommendations);
     const manual = manualTasks[referral._id] ?? [];
 
@@ -75,5 +78,5 @@ export function useFollowUpTasks(referral: ReferralLike & { borrower?: { name?: 
     });
 
     return [...manualFollowUps, ...automated];
-  }, [completions, manualTasks, referral, removeManualTask, toggleTask]);
+  }, [completions, manualTasks, options?.viewerRole, referral, removeManualTask, toggleTask]);
 }

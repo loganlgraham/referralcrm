@@ -16,6 +16,9 @@ import { DEAL_STATUS_LABELS, type DealStatus } from '@/constants/deals';
 import type { Contact } from '@/components/referrals/contact-assignment';
 import type { ReferralStatus } from '@/constants/referrals';
 import { ReferralFollowUpCard } from '@/components/referrals/referral-follow-up-card';
+import type { ReferralLike } from '@/utils/sla-insights';
+
+type ViewerRole = Exclude<ReferralLike['viewerRole'], undefined>;
 
 type ReferralSource = string;
 type ReferralClientType = 'Seller' | 'Buyer' | 'Both';
@@ -92,7 +95,7 @@ interface ReferralDetail {
   notes?: ReferralDetailNote[];
   statusLastUpdated?: string | null;
   daysInStatus?: number;
-  viewerRole?: string;
+  viewerRole?: ReferralLike['viewerRole'];
   ahaBucket?: 'AHA' | 'AHA_OOS' | '' | null;
   org?: string;
   origin?: 'agent' | 'mc' | 'admin' | null;
@@ -107,7 +110,7 @@ interface ReferralDetail {
 
 interface ReferralDetailClientProps {
   referral: ReferralDetail;
-  viewerRole: string;
+  viewerRole: ReferralLike['viewerRole'];
   notes: ReferralDetailNote[];
   referralId: string;
 }
@@ -1032,18 +1035,24 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const dealPayments = normalizedDeals ?? [];
   const hasTerminatedDeal = dealPayments.some((payment) => payment.status === 'terminated');
   const hasAnyDeals = dealPayments.length > 0;
-  const activeDealStatusLabel = useMemo(() => {
+  const { activeDealStatus, activeDealStatusLabel } = useMemo(() => {
     for (const payment of dealPayments) {
       const status = (payment.status as DealStatus | undefined) ?? 'under_contract';
       if (status !== 'terminated') {
-        return DEAL_STATUS_LABELS[status] ?? null;
+        return {
+          activeDealStatus: status,
+          activeDealStatusLabel: DEAL_STATUS_LABELS[status] ?? null,
+        };
       }
     }
     if (dealPayments[0]?.status) {
       const fallback = dealPayments[0].status as DealStatus;
-      return DEAL_STATUS_LABELS[fallback] ?? null;
+      return {
+        activeDealStatus: fallback,
+        activeDealStatusLabel: DEAL_STATUS_LABELS[fallback] ?? null,
+      };
     }
-    return null;
+    return { activeDealStatus: null, activeDealStatusLabel: null };
   }, [dealPayments]);
 
   const dealSummary: DealCardSummary = {
@@ -1079,6 +1088,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     (!hasAnyDeals && financials.status === 'Under Contract');
 
   const showDeals = contractPrepActive || contractDraft.hasUnsavedChanges || hasTerminatedDeal || hasAnyDeals;
+
+  const normalizedViewerRole = useMemo<ViewerRole>(() => {
+    const allowedRoles: ReferralLike['viewerRole'][] = ['admin', 'manager', 'mc', 'agent', 'viewer'];
+    if (viewerRole && allowedRoles.includes(viewerRole)) {
+      return viewerRole;
+    }
+    return 'viewer';
+  }, [viewerRole]);
 
   const followUpReferral = useMemo(() => {
     const createdAt = (() => {
@@ -1138,6 +1155,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         : null,
       assignedAgentName:
         agentContact?.name ?? referral.assignedAgent?.name ?? undefined,
+      viewerRole: normalizedViewerRole,
+      origin: referral.origin ?? undefined,
+      dealStatus: activeDealStatus ?? null,
+      dealStatusLabel: activeDealStatusLabel ?? null,
       borrower: referral.borrower,
       notes: referral.notes ?? [],
       payments: referral.payments ?? [],
@@ -1155,13 +1176,17 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referral.payments,
     referral.statusLastUpdated,
     referral.assignedAgent?.name,
+    referral.origin,
+    activeDealStatus,
+    activeDealStatusLabel,
+    normalizedViewerRole,
   ]);
 
   return (
     <div className="space-y-8">
       <ReferralHeader
         referral={headerReferral}
-        viewerRole={viewerRole}
+        viewerRole={normalizedViewerRole}
         onFinancialsChange={handleFinancialsChange}
         onContractDraftChange={handleDraftChange}
         onUnderContractIntentChange={setContractPrepActive}
@@ -1339,7 +1364,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       <ReferralNotes
         referralId={referralId}
         initialNotes={notes}
-        viewerRole={viewerRole}
+        viewerRole={normalizedViewerRole}
         agentContact={{
           name: agentContact?.name ?? null,
           email: agentContact?.email ?? null
@@ -1356,7 +1381,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             referral={dealReferral}
             overrides={dealOverrides}
             summary={dealSummary}
-            viewerRole={viewerRole}
+            viewerRole={normalizedViewerRole}
             onAddDeal={handleCreateDealRequest}
           />
           {shouldShowDealPreparation && (
