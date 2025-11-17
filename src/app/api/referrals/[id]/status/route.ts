@@ -12,6 +12,17 @@ import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/consta
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 
+type ContractPayment = {
+  _id: any;
+  expectedCloseDate?: Date | string | null;
+  closeDateHistory?: {
+    previousDate: Date | string | null;
+    nextDate: Date | string | null;
+    changedAt: Date | string;
+    changedBy: string | null;
+  }[];
+};
+
 interface Params {
   params: { id: string };
 }
@@ -196,9 +207,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       }
     );
 
-    let activeDeal = await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
+    let activeDeal = (await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
       .sort({ createdAt: -1 })
-      .lean();
+      .lean()) as ContractPayment | null;
 
     if (!activeDeal) {
       const newDeal = await Payment.create({
