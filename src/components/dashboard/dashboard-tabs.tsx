@@ -65,6 +65,10 @@ interface DashboardSummary {
   averagePaAmountCents: number;
   averageReferralFeePaidCents: number;
   pipelineValueCents: number;
+  closingThisPeriod: number;
+  closingExpectedRevenueCents: number;
+  closeDatePushCount: number;
+  closeDatePushDeals: number;
 }
 
 interface DashboardResponse {
@@ -897,6 +901,11 @@ function MainDashboard({
 
   const highlights = [
     {
+      title: 'Closing this period',
+      value: formatNumber(summary.closingThisPeriod),
+      helper: `Expected revenue ${formatCurrency(summary.closingExpectedRevenueCents)}`
+    },
+    {
       title: 'Realized revenue',
       value: formatCurrency(summary.realizedRevenueCents),
       helper: `Closed, not paid ${formatCurrency(summary.closedNotPaidCents)}`
@@ -928,7 +937,12 @@ function MainDashboard({
     },
     { label: 'AHA attach rate', value: `${summary.ahaAttachRate.toFixed(1)}%` },
     { label: 'AHA OOS attach rate', value: `${summary.ahaOosAttachRate.toFixed(1)}%` },
-    { label: 'Avg. pre-approval amount', value: formatCurrency(summary.averagePaAmountCents) }
+    { label: 'Avg. pre-approval amount', value: formatCurrency(summary.averagePaAmountCents) },
+    {
+      label: 'Close date pushes',
+      value: formatNumber(summary.closeDatePushCount),
+      helper: `${formatNumber(summary.closeDatePushDeals)} deals impacted`
+    }
   ];
 
   const revenueMetrics = [

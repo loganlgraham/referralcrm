@@ -46,6 +46,13 @@ interface ReferralPayment {
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
   contractPriceCents?: number | null;
+  expectedCloseDate?: string | null;
+  closeDateHistory?: {
+    previousDate?: string | null;
+    nextDate?: string | null;
+    changedAt?: string | null;
+    changedBy?: string | null;
+  }[];
 }
 
 interface ReferralDetailNote {

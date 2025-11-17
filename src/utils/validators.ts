@@ -67,7 +67,8 @@ export const updateStatusSchema = z.object({
       contractPrice: z.number().min(0),
       agentCommissionPercentage: z.number().min(0),
       referralFeePercentage: z.number().min(0),
-      dealSide: z.enum(['buy', 'sell'])
+      dealSide: z.enum(['buy', 'sell']),
+      expectedCloseDate: z.string().nullable().optional()
     })
     .optional()
 });
@@ -116,5 +117,6 @@ export const paymentSchema = z.object({
   side: z.enum(['buy', 'sell']).optional(),
   commissionBasisPoints: z.number().int().min(0).optional(),
   referralFeeBasisPoints: z.number().int().min(0).optional(),
-  contractPriceCents: z.number().int().min(0).optional()
+  contractPriceCents: z.number().int().min(0).optional(),
+  expectedCloseDate: z.string().nullable().optional()
 });

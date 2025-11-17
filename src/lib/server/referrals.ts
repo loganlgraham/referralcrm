@@ -348,6 +348,15 @@ export async function getReferralById(id: string) {
       paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
       createdAt: payment.createdAt ? payment.createdAt.toISOString() : null,
       updatedAt: payment.updatedAt ? payment.updatedAt.toISOString() : null,
+      expectedCloseDate: payment.expectedCloseDate ? payment.expectedCloseDate.toISOString() : null,
+      closeDateHistory: Array.isArray(payment.closeDateHistory)
+        ? payment.closeDateHistory.map((entry: any) => ({
+            previousDate: entry?.previousDate ? entry.previousDate.toISOString() : null,
+            nextDate: entry?.nextDate ? entry.nextDate.toISOString() : null,
+            changedAt: entry?.changedAt ? entry.changedAt.toISOString() : null,
+            changedBy: entry?.changedBy ?? null,
+          }))
+        : [],
       terminatedReason: payment.terminatedReason ?? null,
       agentAttribution: payment.agentAttribution ?? null,
       usedAfc: Boolean(payment.usedAfc),

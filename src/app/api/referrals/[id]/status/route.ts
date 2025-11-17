@@ -18,6 +18,15 @@ interface Params {
 
 const PRE_CONTRACT_STATUSES = new Set(['New Lead', 'Paired', 'In Communication', 'Active Lead', 'Showing Homes']);
 
+const parseDateOnly = (value?: string | null): Date | null => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed;
+};
+
 export async function POST(request: NextRequest, { params }: Params): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session) {
@@ -158,6 +167,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     const propertyCity = details.propertyCity.trim();
     const propertyState = details.propertyState.trim().toUpperCase();
     const propertyPostalCode = details.propertyPostalCode.trim();
+    const expectedCloseDate = parseDateOnly(details.expectedCloseDate ?? null);
 
     referral.propertyAddress = propertyAddress;
     referral.propertyCity = propertyCity;
@@ -181,6 +191,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
           referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
           side: referral.dealSide,
           contractPriceCents: referral.estPurchasePriceCents ?? null,
+          expectedCloseDate,
         },
       }
     );
@@ -198,10 +209,35 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
         side: referral.dealSide,
         contractPriceCents: referral.estPurchasePriceCents ?? null,
+        expectedCloseDate,
         usedAssignedAgent: true,
       });
       createdDeal = newDeal.toObject();
       activeDeal = createdDeal;
+    }
+
+    if (activeDeal && expectedCloseDate) {
+      const previousCloseDate = activeDeal.expectedCloseDate
+        ? new Date(activeDeal.expectedCloseDate)
+        : null;
+      const hasChanged =
+        !previousCloseDate || previousCloseDate.getTime() !== expectedCloseDate.getTime();
+      if (hasChanged) {
+        await Payment.updateOne(
+          { _id: activeDeal._id },
+          {
+            $set: { expectedCloseDate },
+            $push: {
+              closeDateHistory: {
+                previousDate: previousCloseDate,
+                nextDate: expectedCloseDate,
+                changedAt: now,
+                changedBy: session.user.role ?? 'unknown',
+              },
+            },
+          }
+        );
+      }
     }
   } else if (parsed.data.status === 'Terminated' || parsed.data.status === 'Lost') {
     referral.estPurchasePriceCents = 0;
@@ -275,6 +311,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             referralFeeBasisPoints: referral.referralFeeBasisPoints ?? 0,
             referralFeeDueCents: referral.referralFeeDueCents ?? 0,
             dealSide: referral.dealSide ?? 'buy',
+            expectedCloseDate: expectedCloseDate ?? referral.expectedCloseDate ?? null,
           }
         : undefined,
     deal:
@@ -292,6 +329,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             referralFeeBasisPoints: createdDeal.referralFeeBasisPoints ?? null,
             side: createdDeal.side ?? null,
             contractPriceCents: createdDeal.contractPriceCents ?? null,
+            expectedCloseDate: createdDeal.expectedCloseDate ?? null,
             createdAt: createdDeal.createdAt instanceof Date
               ? createdDeal.createdAt.toISOString()
               : createdDeal.createdAt ?? null,

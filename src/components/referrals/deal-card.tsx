@@ -33,6 +33,13 @@ export interface DealRecord {
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
   contractPriceCents?: number | null;
+  expectedCloseDate?: string | null;
+  closeDateHistory?: {
+    previousDate?: string | null;
+    nextDate?: string | null;
+    changedAt?: string | null;
+    changedBy?: string | null;
+  }[];
 }
 
 export interface DealOverrides {
@@ -79,6 +86,7 @@ interface DealDraft {
   commissionPercent: string;
   referralFeePercent: string;
   side: 'buy' | 'sell';
+  expectedCloseDate: string;
 }
 
 const deriveReferralFeeCents = (
@@ -127,6 +135,8 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
       referralFeeBasisPoints: deal.referralFeeBasisPoints ?? null,
       side: deal.side ?? null,
       contractPriceCents: deal.contractPriceCents ?? null,
+      expectedCloseDate: deal.expectedCloseDate ?? null,
+      closeDateHistory: Array.isArray(deal.closeDateHistory) ? deal.closeDateHistory : [],
     }))
     .sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -316,6 +326,9 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
         commissionPercent: formatDraftPercent(commissionBps),
         referralFeePercent: formatDraftPercent(referralFeeBps),
         side,
+        expectedCloseDate: deal.expectedCloseDate
+          ? deal.expectedCloseDate.slice(0, 10)
+          : '',
       };
     },
     [
@@ -331,7 +344,10 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
     setDetailDraftMap((previous) => {
       const next: Record<string, DealDraft> = {};
       deals.forEach((deal) => {
-        next[deal._id] = previous[deal._id] ?? getDefaultDraft(deal);
+        const defaultDraft = getDefaultDraft(deal);
+        next[deal._id] = previous[deal._id]
+          ? { ...defaultDraft, ...previous[deal._id] }
+          : defaultDraft;
       });
       return next;
     });
@@ -409,6 +425,7 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
           referralFeeBasisPoints: referralFeeBasisPoints ?? 0,
           side: draft.side,
           expectedAmountCents,
+          expectedCloseDate: draft.expectedCloseDate || null,
         }),
       });
 
@@ -433,6 +450,19 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
                 referralFeeBasisPoints,
                 side: draft.side,
                 expectedAmountCents,
+                expectedCloseDate: draft.expectedCloseDate || null,
+                closeDateHistory:
+                  draft.expectedCloseDate && draft.expectedCloseDate !== deal.expectedCloseDate
+                    ? [
+                        ...(Array.isArray(item.closeDateHistory) ? item.closeDateHistory : []),
+                        {
+                          previousDate: deal.expectedCloseDate ?? null,
+                          nextDate: draft.expectedCloseDate,
+                          changedAt: new Date().toISOString(),
+                          changedBy: viewerRole ?? 'unknown',
+                        },
+                      ]
+                    : item.closeDateHistory,
                 updatedAt: new Date().toISOString(),
               }
             : item
@@ -445,6 +475,7 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
           commissionPercent: formatDraftPercent(commissionBasisPoints),
           referralFeePercent: formatDraftPercent(referralFeeBasisPoints),
           side: draft.side,
+          expectedCloseDate: draft.expectedCloseDate,
         },
       }));
       toast.success('Deal details saved');
@@ -867,6 +898,8 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
           let nextValue: string | 'buy' | 'sell';
           if (field === 'side') {
             nextValue = rawValue === 'sell' ? 'sell' : 'buy';
+          } else if (field === 'expectedCloseDate') {
+            nextValue = rawValue;
           } else {
             nextValue = rawValue.replace(/[^0-9.]/g, '');
           }
@@ -891,6 +924,21 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
       event.preventDefault();
       await handleSaveDealDetails(deal)();
     };
+
+    const closeDateHistory = Array.isArray(deal.closeDateHistory) ? deal.closeDateHistory : [];
+    const closeDatePushCount = closeDateHistory.filter((entry) => {
+      if (!entry?.previousDate || !entry?.nextDate) return false;
+      const previous = new Date(entry.previousDate);
+      const next = new Date(entry.nextDate);
+      return Number.isFinite(previous.getTime()) && Number.isFinite(next.getTime()) && next > previous;
+    }).length;
+    const expectedCloseDateLabel = draft.expectedCloseDate
+      ? new Date(draft.expectedCloseDate).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        })
+      : 'Not set';
 
     return (
       <div key={deal._id} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -928,6 +976,14 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
             </div>
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-3">
+            <div className="flex flex-col rounded border border-slate-200 bg-white px-3 py-2 text-left text-xs text-slate-500 shadow-sm">
+              <span className="uppercase">Expected Close</span>
+              <span className="text-sm font-semibold text-slate-900">{expectedCloseDateLabel}</span>
+            </div>
+            <div className="flex flex-col rounded border border-slate-200 bg-white px-3 py-2 text-left text-xs text-slate-500 shadow-sm">
+              <span className="uppercase">Close Date Pushes</span>
+              <span className="text-sm font-semibold text-slate-900">{closeDatePushCount}</span>
+            </div>
             <label className="flex items-center gap-2 text-xs uppercase text-slate-400">
               Status
               <select
@@ -974,6 +1030,16 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
                     onChange={handleDraftChange('contractPrice')}
                     className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
                     placeholder="350000"
+                    disabled={isDetailSaving}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs uppercase text-slate-400">
+                  Expected Close Date
+                  <input
+                    type="date"
+                    value={draft.expectedCloseDate}
+                    onChange={handleDraftChange('expectedCloseDate')}
+                    className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
                     disabled={isDetailSaving}
                   />
                 </label>

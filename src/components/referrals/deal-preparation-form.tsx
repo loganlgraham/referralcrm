@@ -15,6 +15,7 @@ interface ContractDetails {
   agentCommissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
   dealSide?: 'buy' | 'sell';
+  expectedCloseDate?: string | null;
 }
 
 interface ContractFormState {
@@ -26,6 +27,7 @@ interface ContractFormState {
   agentCommissionPercentage: string;
   referralFeePercentage: string;
   dealSide: 'buy' | 'sell';
+  expectedCloseDate: string;
 }
 
 interface CreatedDealPayload {
@@ -44,6 +46,7 @@ interface CreatedDealPayload {
   createdAt?: string | null;
   updatedAt?: string | null;
   paidDate?: string | null;
+  expectedCloseDate?: string | null;
 }
 
 interface DealPreparationFormProps {
@@ -61,6 +64,7 @@ interface DealPreparationFormProps {
     referralFeeBasisPoints: number;
     referralFeeDueCents: number;
     dealSide: 'buy' | 'sell';
+    expectedCloseDate?: string | null;
   }) => void;
   onStatusChanged?: (status: ReferralStatus, payload?: Record<string, unknown>) => void;
   onContractDraftChange?: (details: {
@@ -73,6 +77,7 @@ interface DealPreparationFormProps {
     referralFeeBasisPoints?: number;
     referralFeeDueCents?: number;
     dealSide?: 'buy' | 'sell';
+    expectedCloseDate?: string;
     hasUnsavedChanges: boolean;
   }) => void;
   onDealCreated?: (deal: CreatedDealPayload) => void;
@@ -91,6 +96,7 @@ const buildInitialFormState = (details?: ContractDetails): ContractFormState => 
     ? (details.referralFeeBasisPoints / 100).toString()
     : '25',
   dealSide: details?.dealSide ?? 'buy',
+  expectedCloseDate: details?.expectedCloseDate ?? '',
 });
 
 const formatFullAddress = (
@@ -183,7 +189,9 @@ export function DealPreparationForm({
         previous.propertyPostalCode !== nextState.propertyPostalCode ||
         previous.contractPrice !== nextState.contractPrice ||
         previous.agentCommissionPercentage !== nextState.agentCommissionPercentage ||
-        previous.referralFeePercentage !== nextState.referralFeePercentage;
+        previous.referralFeePercentage !== nextState.referralFeePercentage ||
+        previous.dealSide !== nextState.dealSide ||
+        previous.expectedCloseDate !== nextState.expectedCloseDate;
 
       if (!hasChanged) {
         return previous;
@@ -231,6 +239,7 @@ export function DealPreparationForm({
         referralFeeDueCents:
           referralFeeAmount && referralFeeAmount > 0 ? Math.round(referralFeeAmount * 100) : undefined,
         dealSide: state.dealSide,
+        expectedCloseDate: state.expectedCloseDate || undefined,
         hasUnsavedChanges,
       });
     },
@@ -300,6 +309,8 @@ export function DealPreparationForm({
         nextValue = sanitized.slice(0, 10);
       } else if (field === 'dealSide') {
         nextValue = value === 'sell' ? 'sell' : 'buy';
+      } else if (field === 'expectedCloseDate') {
+        nextValue = value;
       }
       const next = { ...previous, [field]: nextValue as ContractFormState[typeof field] };
       broadcastDraft(next, true);
@@ -352,6 +363,7 @@ export function DealPreparationForm({
             agentCommissionPercentage: agentCommission,
             referralFeePercentage,
             dealSide: form.dealSide,
+            expectedCloseDate: form.expectedCloseDate || null,
           },
         }),
       });
@@ -391,6 +403,7 @@ export function DealPreparationForm({
           agentCommissionBasisPoints: details.agentCommissionBasisPoints,
           referralFeeBasisPoints: details.referralFeeBasisPoints,
           dealSide: details.dealSide,
+          expectedCloseDate: details.expectedCloseDate ?? '',
         });
         setForm(nextState);
         setDirty(false);
@@ -405,6 +418,7 @@ export function DealPreparationForm({
           referralFeeBasisPoints: details.referralFeeBasisPoints ?? 0,
           referralFeeDueCents: details.referralFeeDueCents ?? 0,
           dealSide: details.dealSide ?? 'buy',
+          expectedCloseDate: details.expectedCloseDate ?? null,
         });
       } else {
         setDirty(false);
@@ -467,6 +481,12 @@ export function DealPreparationForm({
               ? createdDeal.paidDate
               : createdDeal.paidDate instanceof Date
                 ? createdDeal.paidDate.toISOString()
+                : null,
+          expectedCloseDate:
+            typeof createdDeal.expectedCloseDate === 'string'
+              ? createdDeal.expectedCloseDate
+              : createdDeal.expectedCloseDate instanceof Date
+                ? createdDeal.expectedCloseDate.toISOString()
                 : null,
         };
 
@@ -549,6 +569,16 @@ export function DealPreparationForm({
             onChange={handleFieldChange('contractPrice')}
             className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
             placeholder="300,000"
+            disabled={saving}
+          />
+        </label>
+        <label className="block">
+          <span className="text-slate-500">Expected Close Date</span>
+          <input
+            type="date"
+            value={form.expectedCloseDate}
+            onChange={handleFieldChange('expectedCloseDate')}
+            className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
             disabled={saving}
           />
         </label>
