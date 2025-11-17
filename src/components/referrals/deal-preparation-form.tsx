@@ -390,6 +390,7 @@ export function DealPreparationForm({
         referralFeeBasisPoints?: number;
         referralFeeDueCents?: number;
         dealSide?: 'buy' | 'sell';
+        expectedCloseDate?: string | null;
       } | undefined;
       const createdDeal = body.deal as Record<string, unknown> | undefined;
 
