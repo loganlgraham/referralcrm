@@ -82,9 +82,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
     if (leaderboard) {
       return NextResponse.json({
-        mcTransfers: { day: [], week: [], month: [], ytd: [] },
-        agentClosings: { day: [], week: [], month: [], ytd: [] },
-        agentCloseRate: { day: [], week: [], month: [], ytd: [] }
+        mcTransfers: { day: [], week: [], month: [], ytd: [], all: [] },
+        agentClosings: { day: [], week: [], month: [], ytd: [], all: [] },
+        agentCloseRate: { day: [], week: [], month: [], ytd: [], all: [] }
       });
     }
     return NextResponse.json([]);
@@ -597,20 +597,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   if (leaderboard) {
-    if (role !== 'admin' && role !== 'manager') {
-      return NextResponse.json({
-        mcTransfers: { day: [], week: [], month: [], ytd: [] },
-        agentClosings: { day: [], week: [], month: [], ytd: [] },
-        agentCloseRate: { day: [], week: [], month: [], ytd: [] }
-      });
-    }
+      if (role !== 'admin' && role !== 'manager') {
+        return NextResponse.json({
+          mcTransfers: { day: [], week: [], month: [], ytd: [], all: [] },
+          agentClosings: { day: [], week: [], month: [], ytd: [], all: [] },
+          agentCloseRate: { day: [], week: [], month: [], ytd: [], all: [] }
+        });
+      }
 
     const now = new Date();
-    const timeframes: Record<'day' | 'week' | 'month' | 'ytd', Date> = {
+    const timeframes: Record<'day' | 'week' | 'month' | 'ytd' | 'all', Date> = {
       day: startOfDay(now),
       week: startOfWeek(now, { weekStartsOn: 0 }),
       month: startOfMonth(now),
-      ytd: startOfYear(now)
+      ytd: startOfYear(now),
+      all: startOfDay(new Date(0))
     };
 
     const mcTransfers: Record<string, any[]> = {};
@@ -751,11 +752,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       agentNameMap.set(agent._id.toString(), agent.name || 'Unnamed Agent');
     });
 
-    const mcTransfersResponse: Record<'day' | 'week' | 'month' | 'ytd', any[]> = {
+    const mcTransfersResponse: Record<'day' | 'week' | 'month' | 'ytd' | 'all', any[]> = {
       day: [],
       week: [],
       month: [],
-      ytd: []
+      ytd: [],
+      all: []
     };
 
     (Object.keys(mcTransfersResponse) as (keyof typeof mcTransfersResponse)[]).forEach((key) => {
@@ -773,18 +775,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         .slice(0, 5);
     });
 
-    const agentClosingsResponse: Record<'day' | 'week' | 'month' | 'ytd', any[]> = {
+    const agentClosingsResponse: Record<'day' | 'week' | 'month' | 'ytd' | 'all', any[]> = {
       day: [],
       week: [],
       month: [],
-      ytd: []
+      ytd: [],
+      all: []
     };
 
-    const agentCloseRateResponse: Record<'day' | 'week' | 'month' | 'ytd', any[]> = {
+    const agentCloseRateResponse: Record<'day' | 'week' | 'month' | 'ytd' | 'all', any[]> = {
       day: [],
       week: [],
       month: [],
-      ytd: []
+      ytd: [],
+      all: []
     };
 
     (Object.keys(agentClosingsResponse) as (keyof typeof agentClosingsResponse)[]).forEach((key) => {

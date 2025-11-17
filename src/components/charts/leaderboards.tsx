@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatNumber } from '@/utils/formatters';
 
-type Timeframe = 'day' | 'week' | 'month' | 'ytd';
+type Timeframe = 'day' | 'week' | 'month' | 'ytd' | 'all';
 
 interface TransferEntry {
   id: string;
@@ -39,7 +39,8 @@ const TIMEFRAME_OPTIONS: { label: string; value: Timeframe }[] = [
   { label: 'Today', value: 'day' },
   { label: 'This Week', value: 'week' },
   { label: 'This Month', value: 'month' },
-  { label: 'Year to Date', value: 'ytd' }
+  { label: 'Year to Date', value: 'ytd' },
+  { label: 'All time', value: 'all' }
 ];
 
 function LoadingLeaderboard() {

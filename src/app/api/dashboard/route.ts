@@ -20,7 +20,7 @@ import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { PreApprovalMetric } from '@/models/pre-approval-metric';
 
-type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd' | 'custom';
+type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd' | 'all' | 'custom';
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
 
 interface TimeframeInfo {
@@ -114,6 +114,7 @@ const TIMEFRAME_LABELS: Record<TimeframeKey, string> = {
   month: 'This Month',
   year: 'Last 12 Months',
   ytd: 'Year to Date',
+  all: 'All time',
   custom: 'Custom range'
 };
 
@@ -138,6 +139,7 @@ function parseTimeframe(
     value === 'month' ||
     value === 'year' ||
     value === 'ytd' ||
+    value === 'all' ||
     value === 'custom'
       ? (value as TimeframeKey)
       : 'month';
@@ -197,6 +199,12 @@ function parseTimeframe(
         key: 'ytd',
         label: TIMEFRAME_LABELS.ytd,
         start: startOfYear(now),
+        end: endOfDay(now)
+      };
+    case 'all':
+      return {
+        key: 'all',
+        label: TIMEFRAME_LABELS.all,
         end: endOfDay(now)
       };
     case 'month':
