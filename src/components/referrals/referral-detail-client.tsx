@@ -1184,7 +1184,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     <div className="space-y-8">
       <ReferralHeader
         referral={headerReferral}
-        viewerRole={viewerRole}
+        viewerRole={normalizedViewerRole}
         onFinancialsChange={handleFinancialsChange}
         onContractDraftChange={handleDraftChange}
         onUnderContractIntentChange={setContractPrepActive}
