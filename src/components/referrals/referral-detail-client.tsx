@@ -16,6 +16,7 @@ import { DEAL_STATUS_LABELS, type DealStatus } from '@/constants/deals';
 import type { Contact } from '@/components/referrals/contact-assignment';
 import type { ReferralStatus } from '@/constants/referrals';
 import { ReferralFollowUpCard } from '@/components/referrals/referral-follow-up-card';
+import type { ReferralLike } from '@/utils/sla-insights';
 
 type ReferralSource = string;
 type ReferralClientType = 'Seller' | 'Buyer' | 'Both';
@@ -92,7 +93,7 @@ interface ReferralDetail {
   notes?: ReferralDetailNote[];
   statusLastUpdated?: string | null;
   daysInStatus?: number;
-  viewerRole?: string;
+  viewerRole?: ReferralLike['viewerRole'];
   ahaBucket?: 'AHA' | 'AHA_OOS' | '' | null;
   org?: string;
   origin?: 'agent' | 'mc' | 'admin' | null;
@@ -107,7 +108,7 @@ interface ReferralDetail {
 
 interface ReferralDetailClientProps {
   referral: ReferralDetail;
-  viewerRole: string;
+  viewerRole: ReferralLike['viewerRole'];
   notes: ReferralDetailNote[];
   referralId: string;
 }
@@ -1086,6 +1087,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
   const showDeals = contractPrepActive || contractDraft.hasUnsavedChanges || hasTerminatedDeal || hasAnyDeals;
 
+  const normalizedViewerRole = useMemo<ReferralLike['viewerRole']>(() => {
+    const allowedRoles: ReferralLike['viewerRole'][] = ['admin', 'manager', 'mc', 'agent', 'viewer'];
+    if (viewerRole && allowedRoles.includes(viewerRole)) {
+      return viewerRole;
+    }
+    return undefined;
+  }, [viewerRole]);
+
   const followUpReferral = useMemo(() => {
     const createdAt = (() => {
       if (typeof referral.createdAt === 'string') {
@@ -1144,7 +1153,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         : null,
       assignedAgentName:
         agentContact?.name ?? referral.assignedAgent?.name ?? undefined,
-      viewerRole,
+      viewerRole: normalizedViewerRole,
       origin: referral.origin ?? undefined,
       dealStatus: activeDealStatus ?? null,
       dealStatusLabel: activeDealStatusLabel ?? null,
@@ -1168,7 +1177,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referral.origin,
     activeDealStatus,
     activeDealStatusLabel,
-    viewerRole,
+    normalizedViewerRole,
   ]);
 
   return (
