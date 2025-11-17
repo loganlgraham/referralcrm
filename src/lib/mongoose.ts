@@ -61,7 +61,10 @@ export async function connectMongo(): Promise<typeof mongoose> {
 
   if (!cached?.promise) {
     cached!.promise = mongoose.connect(MONGODB_URI, {
-      bufferCommands: false
+      bufferCommands: false,
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 5000,
+      socketTimeoutMS: 5000,
     });
   }
 

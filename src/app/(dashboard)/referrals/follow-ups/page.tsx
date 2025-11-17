@@ -13,43 +13,40 @@ export const metadata: Metadata = {
 export default async function FollowUpTasksPage() {
   const session = await getCurrentSession();
   let loadError = false;
+  const timeoutMs = 4500;
 
-  const data = await new Promise<{ data: Awaited<ReturnType<typeof getReferrals>> | null; timedOut: boolean }>(
-    (resolve) => {
-      const timeout = setTimeout(() => {
-        resolve({ data: null, timedOut: true });
-      }, 5000);
+  const referralsPromise = getReferrals({ session, page: 1 }).catch((error) => {
+    console.error('Failed to load referrals for follow-up tasks', error);
+    return null;
+  });
 
-      getReferrals({ session, page: 1 })
-        .then((result) => {
-          clearTimeout(timeout);
-          resolve({ data: result, timedOut: false });
-        })
-        .catch((error) => {
-          clearTimeout(timeout);
-          console.error('Failed to load referrals for follow-up tasks', error);
-          resolve({ data: null, timedOut: false });
-        });
-    }
-  ).then((result) => {
-    if (result.data) {
-      return result.data;
-    }
+  const { data, timedOut } = (await Promise.race([
+    referralsPromise.then((result) => ({ data: result, timedOut: false })),
+    new Promise<{ data: Awaited<ReturnType<typeof getReferrals>> | null; timedOut: boolean }>((resolve) =>
+      setTimeout(() => resolve({ data: null, timedOut: true }), timeoutMs)
+    ),
+  ])) as { data: Awaited<ReturnType<typeof getReferrals>> | null; timedOut: boolean };
 
-    if (result.timedOut) {
-      console.warn('Follow-up referrals request timed out after 5s; rendering fallback data.');
+  const safeData = (() => {
+    if (data) {
+      return data;
     }
 
     loadError = true;
+
+    if (timedOut) {
+      console.warn(`Follow-up referrals request timed out after ${timeoutMs}ms; rendering fallback data.`);
+    }
+
     return {
       items: [],
       total: 0,
       page: 1,
       pageSize: 0,
-    };
-  });
+    } satisfies Awaited<ReturnType<typeof getReferrals>>;
+  })();
 
-  const referrals = data.items.map((item) => ({
+  const referrals = safeData.items.map((item) => ({
     _id: item._id,
     borrowerName: item.borrowerName,
     status: item.status,
