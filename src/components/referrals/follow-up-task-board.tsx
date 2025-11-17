@@ -136,16 +136,22 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
           </span>
         </div>
       </header>
-      <div className="space-y-5">
-        {referrals.map((referral) => (
-          <FollowUpTaskGroup
-            key={referral._id}
-            referral={referral}
-            viewerRole={viewerRole}
-            onTasksSnapshot={handleTaskSnapshot}
-          />
-        ))}
-      </div>
+      {referrals.length === 0 ? (
+        <div className="rounded-xl border border-slate-200 bg-white/60 p-6 text-sm text-slate-600">
+          No referrals are available for follow-ups right now. If you recently added a referral, refresh in a moment and try again.
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {referrals.map((referral) => (
+            <FollowUpTaskGroup
+              key={referral._id}
+              referral={referral}
+              viewerRole={viewerRole}
+              onTasksSnapshot={handleTaskSnapshot}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
