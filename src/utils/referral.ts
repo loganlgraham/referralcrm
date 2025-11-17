@@ -14,18 +14,19 @@ export function daysInStatus(referral: Pick<ReferralDocument, 'statusLastUpdated
   return differenceInCalendarDays(new Date(), referral.statusLastUpdated ?? new Date());
 }
 
-export function nextStatuses(status: ReferralStatus): ReferralStatus[] {
+export function nextStatuses(status: ReferralStatus | 'Showing Homes'): ReferralStatus[] {
+  const normalizedStatus = status === 'Showing Homes' ? 'Active Lead' : status;
   const pipeline: ReferralStatus[] = [
     'New Lead',
     'Paired',
     'In Communication',
-    'Showing Homes',
+    'Active Lead',
     'Under Contract',
     'Closed',
     'Lost',
     'Terminated'
   ];
-  const currentIndex = pipeline.indexOf(status);
+  const currentIndex = pipeline.indexOf(normalizedStatus);
   if (currentIndex === -1) return pipeline;
   return pipeline.slice(currentIndex);
 }

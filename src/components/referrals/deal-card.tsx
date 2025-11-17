@@ -121,6 +121,7 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
       paidDate: deal.paidDate ?? null,
       terminatedReason: (deal.terminatedReason as TerminatedReason | undefined) ?? null,
       agentAttribution: (deal.agentAttribution as AgentSelectValue | undefined) ?? '',
+      usedAssignedAgent: deal.usedAssignedAgent ?? null,
       usedAfc: deal.usedAfc ?? false,
       commissionBasisPoints: deal.commissionBasisPoints ?? null,
       referralFeeBasisPoints: deal.referralFeeBasisPoints ?? null,
@@ -166,7 +167,13 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
   const initialAgentMap = useMemo(() => {
     const snapshot: Record<string, AgentSelectValue> = {};
     deals.forEach((deal) => {
-      snapshot[deal._id] = (deal.agentAttribution as AgentSelectValue | undefined) ?? '';
+      const attribution = (deal.agentAttribution as AgentSelectValue | undefined) ?? '';
+      if (attribution) {
+        snapshot[deal._id] = attribution;
+        return;
+      }
+
+      snapshot[deal._id] = deal.usedAssignedAgent === false ? 'OUTSIDE_AGENT' : '';
     });
     return snapshot;
   }, [deals]);
@@ -688,41 +695,65 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
     }
   };
 
-  const handleAgentAttributionChange = (deal: DealRecord) => async (event: ChangeEvent<HTMLSelectElement>) => {
-    const nextValue = event.target.value as AgentSelectValue;
-    const previousValue = agentMap[deal._id] ?? '';
-
-    if (nextValue === previousValue) {
-      return;
+  const resolveAssignedAgentOutcome = () => {
+    if (referral.ahaBucket === 'AHA' || referral.ahaBucket === 'AHA_OOS') {
+      return referral.ahaBucket;
     }
+    return null;
+  };
 
-    setAgentMap((prev) => ({ ...prev, [deal._id]: nextValue }));
-    setSavingMap((prev) => ({ ...prev, [deal._id]: true }));
+  const handleAgentOutcomeChange =
+    (deal: DealRecord, expectedAmountCents: number) =>
+    async (event: ChangeEvent<HTMLSelectElement>) => {
+      const nextOutcome = event.target.value as 'USED_AGENT' | 'OUTSIDE_AGENT';
+      const nextAttribution =
+        nextOutcome === 'OUTSIDE_AGENT' ? 'OUTSIDE_AGENT' : resolveAssignedAgentOutcome();
+      const previousValue = agentMap[deal._id] ?? '';
 
-    try {
-      const response = await fetch('/api/payments', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: deal._id, agentAttribution: nextValue || null }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Unable to update agent outcome');
+      if (previousValue === nextAttribution || (nextAttribution === null && previousValue === '')) {
+        return;
       }
 
-      toast.success('Agent outcome saved');
-    } catch (error) {
-      console.error(error);
-      setAgentMap((prev) => ({ ...prev, [deal._id]: previousValue }));
-      toast.error(error instanceof Error ? error.message : 'Unable to update deal');
-    } finally {
-      setSavingMap((prev) => {
-        const next = { ...prev };
-        delete next[deal._id];
-        return next;
-      });
-    }
-  };
+      setAgentMap((prev) => ({ ...prev, [deal._id]: nextAttribution ?? '' }));
+      setSavingMap((prev) => ({ ...prev, [deal._id]: true }));
+
+      try {
+        const payload: Record<string, unknown> = {
+          id: deal._id,
+          agentAttribution: nextAttribution,
+          usedAssignedAgent: nextOutcome !== 'OUTSIDE_AGENT',
+        };
+
+        if (nextOutcome === 'OUTSIDE_AGENT') {
+          payload.expectedAmountCents = 0;
+          payload.receivedAmountCents = 0;
+        } else if (expectedAmountCents > 0) {
+          payload.expectedAmountCents = expectedAmountCents;
+        }
+
+        const response = await fetch('/api/payments', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error('Unable to update agent outcome');
+        }
+
+        toast.success('Agent outcome saved');
+      } catch (error) {
+        console.error(error);
+        setAgentMap((prev) => ({ ...prev, [deal._id]: previousValue }));
+        toast.error(error instanceof Error ? error.message : 'Unable to update deal');
+      } finally {
+        setSavingMap((prev) => {
+          const next = { ...prev };
+          delete next[deal._id];
+          return next;
+        });
+      }
+    };
 
   const handleAfcToggle = (deal: DealRecord) => async (event: ChangeEvent<HTMLInputElement>) => {
     const nextChecked = event.target.checked;
@@ -793,6 +824,7 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
     const statusLabel = DEAL_STATUS_LABELS[status] ?? status;
     const selectedReason = reasonMap[deal._id] ?? deal.terminatedReason ?? 'inspection';
     const agentSelection = agentMap[deal._id] ?? '';
+    const agentOutcomeSelection = agentSelection === 'OUTSIDE_AGENT' ? 'OUTSIDE_AGENT' : 'USED_AGENT';
     const usedAfc = afcMap[deal._id] ?? false;
     const assignedBucket = referral.ahaBucket ?? null;
     const matchesAssigned =
@@ -1060,21 +1092,16 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
                 <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">
                   Agent Outcome
                   <select
-                    value={agentSelection}
-                    onChange={handleAgentAttributionChange(deal)}
+                    value={agentOutcomeSelection}
+                    onChange={handleAgentOutcomeChange(deal, expectedAmountCents)}
                     className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
                     disabled={isSaving || isDetailSaving}
                   >
-                    <option value="">Not Used</option>
-                    <option value="AHA">Used AHA</option>
-                    <option value="AHA_OOS">Used AHA OOS</option>
-                    <option value="OUTSIDE_AGENT">Outside agent (lost)</option>
+                    <option value="USED_AGENT">Used agent</option>
+                    <option value="OUTSIDE_AGENT">Used outside agent</option>
                   </select>
                 </label>
-                {assignedBucket && agentSelection === '' && (
-                  <p className="mt-2 text-xs text-slate-500">Mark whether this deal stayed with the assigned agent bucket.</p>
-                )}
-                {assignedBucket && agentSelection && !matchesAssigned && (
+                {assignedBucket && agentOutcomeSelection === 'USED_AGENT' && agentSelection && !matchesAssigned && (
                   <p className="mt-2 text-xs text-amber-600">
                     This deal did not close with the assigned {assignedBucket === 'AHA' ? 'AHA' : 'AHA OOS'} agent.
                   </p>

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { REFERRAL_STATUSES } from '@/constants/referrals';
+import { REFERRAL_STATUSES, REFERRAL_STATUS_VALUES } from '@/constants/referrals';
 
 const zipArraySchema = z
   .array(z.string().trim().regex(/^\d{5}$/))
@@ -24,7 +24,7 @@ export const createReferralSchema = z.object({
 });
 
 export const updateReferralSchema = z.object({
-  status: z.enum(REFERRAL_STATUSES).optional(),
+  status: z.enum(REFERRAL_STATUS_VALUES).optional(),
   assignedAgent: z.string().optional(),
   referralFeeBasisPoints: z.number().int().min(0).optional(),
   ahaBucket: z.enum(['AHA', 'AHA_OOS']).nullable().optional(),
@@ -52,7 +52,7 @@ export const assignLenderSchema = z.object({
 });
 
 export const updateStatusSchema = z.object({
-  status: z.enum(REFERRAL_STATUSES),
+  status: z.enum(REFERRAL_STATUS_VALUES),
   contractDetails: z
     .object({
       propertyAddress: z.string().min(1),

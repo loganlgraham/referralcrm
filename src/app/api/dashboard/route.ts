@@ -20,7 +20,7 @@ import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { PreApprovalMetric } from '@/models/pre-approval-metric';
 
-type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd' | 'custom';
+type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd' | 'all' | 'custom';
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
 
 interface TimeframeInfo {
@@ -50,6 +50,7 @@ interface AggregatedPayment {
     | 'terminated';
   expectedAmountCents: number;
   receivedAmountCents: number;
+  terminatedReason?: 'inspection' | 'appraisal' | 'financing' | 'changed_mind' | null;
   paidDate?: Date | null;
   invoiceDate?: Date | null;
   updatedAt: Date;
@@ -89,9 +90,18 @@ interface AggregatedPayment {
 const ACTIVE_PIPELINE_STATUSES = new Set<string>([
   'Paired',
   'In Communication',
+  'Active Lead',
   'Showing Homes',
   'Under Contract',
 ]);
+
+const TERMINATED_REASON_LABELS: Record<string, string> = {
+  inspection: 'Inspection',
+  appraisal: 'Appraisal',
+  financing: 'Financing',
+  changed_mind: 'Changed Mind',
+  unknown: 'Unknown'
+};
 
 interface TrendPoint {
   key: string;
@@ -105,6 +115,7 @@ const TIMEFRAME_LABELS: Record<TimeframeKey, string> = {
   month: 'This Month',
   year: 'Last 12 Months',
   ytd: 'Year to Date',
+  all: 'All time',
   custom: 'Custom range'
 };
 
@@ -129,6 +140,7 @@ function parseTimeframe(
     value === 'month' ||
     value === 'year' ||
     value === 'ytd' ||
+    value === 'all' ||
     value === 'custom'
       ? (value as TimeframeKey)
       : 'month';
@@ -188,6 +200,12 @@ function parseTimeframe(
         key: 'ytd',
         label: TIMEFRAME_LABELS.ytd,
         start: startOfYear(now),
+        end: endOfDay(now)
+      };
+    case 'all':
+      return {
+        key: 'all',
+        label: TIMEFRAME_LABELS.all,
         end: endOfDay(now)
       };
     case 'month':
@@ -341,6 +359,16 @@ function computeAverage(values: number[]): number {
   return total / values.length;
 }
 
+function formatTerminatedAddress(referral: AggregatedPayment['referral']): string {
+  const parts = [referral.propertyAddress, referral.propertyCity, referral.propertyState].filter(
+    (part): part is string => Boolean(part && part.toString().trim())
+  );
+  if (parts.length) {
+    return parts.join(', ');
+  }
+  return 'Unknown address';
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   await connectMongo();
   const session = await getCurrentSession();
@@ -417,6 +445,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         preApprovalConversion: {
           trend: [],
           entries: []
+        },
+        terminatedDeals: {
+          breakdown: [],
+          totalLostReferralFeeCents: 0,
+          totalDeals: 0,
+          deals: []
         }
       },
       mc: {
@@ -472,7 +506,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     createdAtMatch.$lte = timeframeEnd;
   }
 
-  const [referrals, payments] = await Promise.all([
+  const [referrals, payments, terminatedPayments] = await Promise.all([
     Referral.find({
       ...referralMatch,
       ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
@@ -507,6 +541,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           }
         }
       }
+    ]),
+    Payment.aggregate<AggregatedPayment>([
+      {
+        $lookup: {
+          from: 'referrals',
+          localField: 'referralId',
+          foreignField: '_id',
+          as: 'referral'
+        }
+      },
+      { $unwind: '$referral' },
+      {
+        $match: {
+          ...paymentMatch,
+          status: 'terminated'
+        }
+      }
     ])
   ]);
 
@@ -516,6 +567,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }));
 
   const filteredPayments = paymentsWithMetric.filter((payment) => {
+    if (timeframeStart && payment.metricDate < timeframeStart) {
+      return false;
+    }
+    if (timeframeEnd && payment.metricDate > timeframeEnd) {
+      return false;
+    }
+    return true;
+  });
+
+  const terminatedWithMetric = terminatedPayments.map((payment) => ({
+    ...payment,
+    metricDate: resolveMetricDate(payment)
+  }));
+
+  const terminatedWithinTimeframe = terminatedWithMetric.filter((payment) => {
     if (timeframeStart && payment.metricDate < timeframeStart) {
       return false;
     }
@@ -682,16 +748,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .filter((amount) => amount > 0)
   );
 
-  const pipelineValueCents = revenueEligiblePayments
-    .filter((payment) =>
-      [
-        'under_contract',
-        'past_inspection',
-        'past_appraisal',
-        'clear_to_close',
-      ].includes(payment.status)
-    )
-    .reduce((sum, payment) => sum + (payment.expectedAmountCents ?? 0), 0);
+  const pipelineValueCents = referrals
+    .filter((referral) => ACTIVE_PIPELINE_STATUSES.has((referral.status as string | undefined) ?? ''))
+    .reduce((sum, referral) => sum + (referral.preApprovalAmountCents ?? 0), 0);
 
   const activePipeline = referrals.filter((referral) =>
     ACTIVE_PIPELINE_STATUSES.has((referral.status as string | undefined) ?? '')
@@ -1159,6 +1218,44 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const adminAverageLeadToContract = daysToContractAvg;
   const adminAverageContractToClose = daysToCloseAvg;
 
+  const terminatedDealsByReason = terminatedWithinTimeframe.reduce((map, payment) => {
+    const reason = payment.terminatedReason;
+    if (!reason) return map;
+    map.set(reason, (map.get(reason) ?? 0) + 1);
+    return map;
+  }, new Map<string, number>());
+
+  const totalTerminatedWithReason = Array.from(terminatedDealsByReason.values()).reduce(
+    (sum, value) => sum + value,
+    0
+  );
+
+  const terminatedReasonBreakdown = Array.from(terminatedDealsByReason.entries())
+    .map(([reason, value]) => ({
+      label: TERMINATED_REASON_LABELS[reason] ?? reason,
+      value,
+      percentage: totalTerminatedWithReason ? (value / totalTerminatedWithReason) * 100 : 0
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  const terminatedDeals = terminatedWithinTimeframe.map((payment) => ({
+    id: payment._id.toString(),
+    reasonKey: payment.terminatedReason ?? 'unknown',
+    reasonLabel: TERMINATED_REASON_LABELS[payment.terminatedReason ?? 'unknown'] ?? 'Unknown',
+    lostReferralFeeCents:
+      payment.expectedAmountCents ?? payment.referral?.referralFeeDueCents ?? 0,
+    address: formatTerminatedAddress(payment.referral)
+  }));
+
+  const terminatedDealsSummary = {
+    breakdown: terminatedReasonBreakdown,
+    totalLostReferralFeeCents: terminatedDeals.reduce((sum, deal) => sum + deal.lostReferralFeeCents, 0),
+    totalDeals: terminatedDeals.length,
+    deals: terminatedDeals
+      .sort((a, b) => b.lostReferralFeeCents - a.lostReferralFeeCents)
+      .slice(0, 10)
+  };
+
   const preApprovalConversionTrend = monthlyReferrals
     .filter((entry) => entry.preApprovals > 0)
     .map((entry) => ({
@@ -1233,7 +1330,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       preApprovalConversion: {
         trend: preApprovalConversionTrend,
         entries: preApprovalEntries
-      }
+      },
+      terminatedDeals: terminatedDealsSummary
     },
     mc: {
       requestTrend: mcRequestTrend,

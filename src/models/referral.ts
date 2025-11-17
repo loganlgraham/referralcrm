@@ -1,6 +1,11 @@
 import { Schema, model, models, Types } from 'mongoose';
 
-import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS, REFERRAL_STATUSES } from '@/constants/referrals';
+import {
+  DEFAULT_AGENT_COMMISSION_BPS,
+  DEFAULT_REFERRAL_FEE_BPS,
+  REFERRAL_STATUSES,
+  REFERRAL_STATUS_VALUES
+} from '@/constants/referrals';
 
 export type ReferralStatus = (typeof REFERRAL_STATUSES)[number];
 
@@ -111,7 +116,7 @@ const referralSchema = new Schema(
     assignedAgent: { type: Schema.Types.ObjectId, ref: 'Agent', index: true },
     status: {
       type: String,
-      enum: REFERRAL_STATUSES,
+      enum: REFERRAL_STATUS_VALUES,
       default: 'New Lead',
       index: true
     },

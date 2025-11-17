@@ -233,6 +233,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return new NextResponse('Forbidden', { status: 403 });
   }
 
+  const role = session.user.role;
+
   const body = await request.json();
   const parsed = paymentSchema.safeParse(body);
   if (!parsed.success) {
@@ -270,6 +272,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     return new NextResponse('Forbidden', { status: 403 });
   }
 
+  const role = session.user.role;
+
   const body = await request.json();
   if (!body.id) {
     return NextResponse.json({ error: 'Missing id' }, { status: 400 });
@@ -278,6 +282,12 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const parsed = paymentSchema.partial().safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
+  }
+
+  const isTerminating = parsed.data.status === 'terminated';
+  const hasTerminationUpdate = isTerminating || parsed.data.terminatedReason !== undefined;
+  if (hasTerminationUpdate && role !== 'admin' && role !== 'agent') {
+    return new NextResponse('Forbidden', { status: 403 });
   }
 
   await connectMongo();
@@ -309,9 +319,13 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     parsed.data,
     'usedAssignedAgent'
   );
-  const nextUsedAssignedAgent = hasUsedAssignedAgentUpdate
+  let nextUsedAssignedAgent = hasUsedAssignedAgentUpdate
     ? Boolean(parsed.data.usedAssignedAgent)
     : Boolean(existingPayment.usedAssignedAgent);
+  const hasAgentAttributionUpdate = Object.prototype.hasOwnProperty.call(parsed.data, 'agentAttribution');
+  const nextAgentAttribution = hasAgentAttributionUpdate
+    ? (parsed.data.agentAttribution as string | null | undefined) ?? null
+    : (existingPayment.agentAttribution as string | null | undefined) ?? null;
   const shouldRecalculateReferralFee =
     parsed.data.expectedAmountCents === undefined &&
     (parsed.data.contractPriceCents !== undefined ||
@@ -344,6 +358,16 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     nextReceivedAmountCents = 0;
   }
 
+  if (hasAgentAttributionUpdate) {
+    if (nextAgentAttribution === 'OUTSIDE_AGENT') {
+      nextUsedAssignedAgent = false;
+      nextExpectedAmountCents = 0;
+      nextReceivedAmountCents = 0;
+    } else if (nextAgentAttribution === 'AHA' || nextAgentAttribution === 'AHA_OOS') {
+      nextUsedAssignedAgent = true;
+    }
+  }
+
   const updatePayload: Record<string, unknown> = { ...parsed.data };
   delete updatePayload.referralId;
   updatePayload.contractPriceCents = nextContractPriceCents ?? null;
@@ -355,11 +379,21 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   if (hasUsedAssignedAgentUpdate) {
     updatePayload.usedAssignedAgent = nextUsedAssignedAgent;
   }
+  if (hasAgentAttributionUpdate) {
+    updatePayload.agentAttribution = nextAgentAttribution;
+    updatePayload.usedAssignedAgent = nextUsedAssignedAgent;
+  }
   if ('usedAfc' in updatePayload && updatePayload.usedAfc === undefined) {
     updatePayload.usedAfc = false;
   }
   if ('usedAssignedAgent' in updatePayload && updatePayload.usedAssignedAgent === undefined) {
     updatePayload.usedAssignedAgent = false;
+  }
+
+  const nextStatusValue = parsed.data.status ?? existingPayment.status;
+  const hasTerminatedReasonUpdate = Object.prototype.hasOwnProperty.call(parsed.data, 'terminatedReason');
+  if (hasTerminatedReasonUpdate && nextStatusValue !== 'terminated') {
+    updatePayload.terminatedReason = null;
   }
 
   const payment = await Payment.findByIdAndUpdate(body.id, updatePayload, { new: true });
@@ -375,7 +409,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     let slaChanged = false;
     let referralStatusChanged = false;
 
-    if (hasUsedAssignedAgentUpdate && !nextUsedAssignedAgent) {
+    const shouldMarkLost = (hasUsedAssignedAgentUpdate || hasAgentAttributionUpdate) && !nextUsedAssignedAgent;
+
+    if (shouldMarkLost) {
       referral.estPurchasePriceCents = 0;
       referral.referralFeeDueCents = 0;
       nextContractPriceCents = null;

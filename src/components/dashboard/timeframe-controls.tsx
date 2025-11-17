@@ -24,7 +24,7 @@ import {
 
 type SelectionPhase = 'start' | 'end';
 
-export type TimeframePreset = 'day' | 'week' | 'month' | 'year' | 'ytd';
+export type TimeframePreset = 'day' | 'week' | 'month' | 'year' | 'ytd' | 'all';
 export type TimeframeKey = TimeframePreset | 'custom';
 export type DateRange = { start: string; end: string };
 
@@ -46,7 +46,8 @@ export const TIMEFRAME_PRESETS: { label: string; value: TimeframePreset }[] = [
   { label: 'This week', value: 'week' },
   { label: 'This month', value: 'month' },
   { label: 'This year', value: 'year' },
-  { label: 'Year to date', value: 'ytd' }
+  { label: 'Year to date', value: 'ytd' },
+  { label: 'All time', value: 'all' }
 ];
 
 function normalizeRange(start: string | null, end: string | null): RangeDraft {
@@ -87,6 +88,10 @@ export function getPresetRange(preset: TimeframePreset): DateRange {
     case 'week': {
       const weekStart = startOfWeek(now, { weekStartsOn: 1 });
       return { start: formatDateInput(weekStart), end };
+    }
+    case 'all': {
+      const epochStart = startOfDay(new Date(0));
+      return { start: formatDateInput(epochStart), end };
     }
     case 'year': {
       const yearStart = startOfDay(subYears(now, 1));

@@ -20,6 +20,7 @@ type DealStatus =
   | 'paid'
   | 'terminated';
 type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
+type AgentAttribution = 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT' | null;
 const STATUS_LABELS: Record<DealStatus, string> = {
   under_contract: 'Under Contract',
   past_inspection: 'Past Inspection',
@@ -49,6 +50,7 @@ interface DealRow {
   paidDate?: string | null;
   usedAfc?: boolean | null;
   usedAssignedAgent?: boolean | null;
+  agentAttribution?: AgentAttribution;
   agent?: {
     id: string;
     name: string | null;
@@ -64,6 +66,7 @@ interface DealRow {
     preApprovalAmountCents?: number | null;
     referralFeeDueCents?: number | null;
     loanFileNumber?: string | null;
+    ahaBucket?: AgentAttribution;
   } | null;
 }
 
@@ -234,7 +237,13 @@ export function DealsTable() {
     updates: Partial<
       Pick<
         DealRow,
-        'status' | 'expectedAmountCents' | 'receivedAmountCents' | 'terminatedReason' | 'usedAfc' | 'usedAssignedAgent'
+        | 'status'
+        | 'expectedAmountCents'
+        | 'receivedAmountCents'
+        | 'terminatedReason'
+        | 'usedAfc'
+        | 'usedAssignedAgent'
+        | 'agentAttribution'
       >
     >,
     successMessage: string
@@ -272,6 +281,9 @@ export function DealsTable() {
       }
       if ('usedAssignedAgent' in updates) {
         payload.usedAssignedAgent = updates.usedAssignedAgent ?? false;
+      }
+      if ('agentAttribution' in updates) {
+        payload.agentAttribution = updates.agentAttribution ?? null;
       }
 
       const response = await fetch('/api/payments', {
@@ -312,9 +324,15 @@ export function DealsTable() {
     const updates: Partial<
       Pick<
         DealRow,
-        'usedAssignedAgent' | 'expectedAmountCents' | 'receivedAmountCents'
+        'usedAssignedAgent' | 'expectedAmountCents' | 'receivedAmountCents' | 'agentAttribution'
       >
     > = { usedAssignedAgent: checked };
+    const agentAttribution: AgentAttribution = checked
+      ? (deal.referral?.ahaBucket === 'AHA' || deal.referral?.ahaBucket === 'AHA_OOS'
+          ? deal.referral.ahaBucket
+          : null)
+      : 'OUTSIDE_AGENT';
+    updates.agentAttribution = agentAttribution;
 
     if (!checked) {
       updates.expectedAmountCents = 0;

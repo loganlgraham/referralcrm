@@ -17,7 +17,7 @@ import { Payment } from '@/models/payment';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 
-type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd' | 'custom';
+type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd' | 'all' | 'custom';
 
 interface TimeframeInfo {
   key: TimeframeKey;
@@ -31,7 +31,8 @@ const TIMEFRAME_LABELS: Record<Exclude<TimeframeKey, 'custom'>, string> = {
   week: 'This week',
   month: 'This month',
   year: 'Last 12 months',
-  ytd: 'Year to date'
+  ytd: 'Year to date',
+  all: 'All time'
 };
 
 const DISPLAY_LABEL_FORMAT = 'MMM d, yyyy';
@@ -57,6 +58,7 @@ function parseTimeframe(request: NextRequest): TimeframeInfo {
     timeframeParam === 'month' ||
     timeframeParam === 'year' ||
     timeframeParam === 'ytd' ||
+    timeframeParam === 'all' ||
     timeframeParam === 'custom'
       ? (timeframeParam as TimeframeKey)
       : 'month';
@@ -97,6 +99,13 @@ function parseTimeframe(request: NextRequest): TimeframeInfo {
         key: 'ytd',
         label: TIMEFRAME_LABELS.ytd,
         start: startOfYear(now),
+        end: endOfDay(now)
+      };
+    case 'all':
+      return {
+        key: 'all',
+        label: TIMEFRAME_LABELS.all,
+        start: startOfDay(new Date(0)),
         end: endOfDay(now)
       };
     case 'month':
