@@ -165,6 +165,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     slaModified = true;
   }
 
+  let expectedCloseDate: Date | null = null;
+
   if (parsed.data.status === 'Under Contract') {
     const details = parsed.data.contractDetails;
     if (!details) {
@@ -178,7 +180,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     const propertyCity = details.propertyCity.trim();
     const propertyState = details.propertyState.trim().toUpperCase();
     const propertyPostalCode = details.propertyPostalCode.trim();
-    const expectedCloseDate = parseDateOnly(details.expectedCloseDate ?? null);
+    expectedCloseDate = parseDateOnly(details.expectedCloseDate ?? null);
 
     referral.propertyAddress = propertyAddress;
     referral.propertyCity = propertyCity;
