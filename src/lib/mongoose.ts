@@ -1,4 +1,9 @@
 import mongoose from 'mongoose';
+import {
+  MongoNetworkError,
+  MongoPoolClearedError,
+  MongoServerSelectionError
+} from 'mongodb';
 
 const resolvedMongoUri =
   process.env.MONGODB_URI ??
@@ -53,8 +58,43 @@ if (!cached) {
   cached = globalWithMongoose.mongooseGlobal = { conn: null, promise: null };
 }
 
-export async function connectMongo(): Promise<typeof mongoose> {
+const shouldRetryConnection = (error: unknown) => {
+  if (
+    error instanceof MongoNetworkError ||
+    error instanceof MongoServerSelectionError ||
+    error instanceof MongoPoolClearedError
+  ) {
+    return true;
+  }
+
+  const candidate = error as { errorLabelSet?: Set<string>; cause?: unknown } | null;
+  if (candidate?.errorLabelSet?.has('ResetPool')) {
+    return true;
+  }
+
+  if (candidate?.cause) {
+    const cause = candidate.cause as { errorLabelSet?: Set<string> } | null;
+    return Boolean(cause?.errorLabelSet?.has('ResetPool'));
+  }
+
+  return false;
+};
+
+const resetCachedConnection = async () => {
   if (cached?.conn) {
+    try {
+      await cached.conn.connection.close(false);
+    } catch {
+      /* ignore close errors while resetting */
+    }
+  }
+
+  cached!.conn = null;
+  cached!.promise = null;
+};
+
+export async function connectMongo(): Promise<typeof mongoose> {
+  if (cached?.conn && cached.conn.connection.readyState === 1) {
     await registerModels();
     return cached.conn;
   }
@@ -75,11 +115,18 @@ export async function connectMongo(): Promise<typeof mongoose> {
     await registerModels();
     return cached!.conn;
   } catch (error) {
-    cached!.conn = null;
-    cached!.promise = null;
-
+    const shouldRetry = shouldRetryConnection(error);
     const message = error instanceof Error ? error.message : 'Unknown Mongo connection error';
+
     console.error('[mongo] Failed to establish connection', error);
+
+    await resetCachedConnection();
+
+    if (shouldRetry) {
+      console.warn('[mongo] Retrying mongoose connection after transient failure');
+      return connectMongo();
+    }
+
     throw new Error(`Failed to connect to MongoDB: ${message}`);
   }
 }
