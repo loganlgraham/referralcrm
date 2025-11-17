@@ -18,6 +18,8 @@ import type { ReferralStatus } from '@/constants/referrals';
 import { ReferralFollowUpCard } from '@/components/referrals/referral-follow-up-card';
 import type { ReferralLike } from '@/utils/sla-insights';
 
+type ViewerRole = Exclude<ReferralLike['viewerRole'], undefined>;
+
 type ReferralSource = string;
 type ReferralClientType = 'Seller' | 'Buyer' | 'Both';
 type TransferStage = 'Pre-approval TBD' | 'Pre-approved';
@@ -1087,7 +1089,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
   const showDeals = contractPrepActive || contractDraft.hasUnsavedChanges || hasTerminatedDeal || hasAnyDeals;
 
-  const normalizedViewerRole = useMemo<ReferralLike['viewerRole']>(() => {
+  const normalizedViewerRole = useMemo<ViewerRole>(() => {
     const allowedRoles: ReferralLike['viewerRole'][] = ['admin', 'manager', 'mc', 'agent', 'viewer'];
     if (viewerRole && allowedRoles.includes(viewerRole)) {
       return viewerRole;
