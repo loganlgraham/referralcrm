@@ -1210,15 +1210,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const adminAverageContractToClose = daysToCloseAvg;
 
   const terminatedDealsByReason = terminatedWithinTimeframe.reduce((map, payment) => {
-    const reason = payment.terminatedReason ?? 'unknown';
+    const reason = payment.terminatedReason;
+    if (!reason) return map;
     map.set(reason, (map.get(reason) ?? 0) + 1);
     return map;
   }, new Map<string, number>());
 
+  const totalTerminatedWithReason = Array.from(terminatedDealsByReason.values()).reduce(
+    (sum, value) => sum + value,
+    0
+  );
+
   const terminatedReasonBreakdown = Array.from(terminatedDealsByReason.entries())
     .map(([reason, value]) => ({
       label: TERMINATED_REASON_LABELS[reason] ?? reason,
-      value
+      value,
+      percentage: totalTerminatedWithReason ? (value / totalTerminatedWithReason) * 100 : 0
     }))
     .sort((a, b) => b.value - a.value);
 

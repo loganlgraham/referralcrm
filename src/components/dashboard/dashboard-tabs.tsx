@@ -110,7 +110,7 @@ interface DashboardResponse {
       }[];
     };
     terminatedDeals: {
-      breakdown: { label: string; value: number }[];
+      breakdown: { label: string; value: number; percentage: number }[];
       totalLostReferralFeeCents: number;
       totalDeals: number;
       deals: {
@@ -458,7 +458,7 @@ function PieChartCard({
   helper
 }: {
   title: string;
-  data: { label: string; value: number }[];
+  data: { label: string; value: number; percentage?: number }[];
   helper?: string;
 }) {
   const total = data.reduce((sum, item) => sum + item.value, 0);
@@ -512,7 +512,7 @@ function PieChartCard({
           </div>
           <div className="space-y-2">
             {data.map((item, index) => {
-              const percentage = total ? ((item.value / total) * 100).toFixed(1) : '0.0';
+              const resolvedPercentage = item.percentage ?? (total ? (item.value / total) * 100 : 0);
               return (
                 <div key={`${item.label}-${index}`} className="flex items-center justify-between gap-3 text-sm text-slate-700">
                   <div className="flex items-center gap-2">
@@ -523,7 +523,7 @@ function PieChartCard({
                     />
                     <span className="font-medium text-slate-900">{item.label}</span>
                   </div>
-                  <span className="text-slate-600">{`${formatNumber(item.value)} (${percentage}%)`}</span>
+                  <span className="text-slate-600">{`${formatNumber(item.value)} (${resolvedPercentage.toFixed(1)}%)`}</span>
                 </div>
               );
             })}
