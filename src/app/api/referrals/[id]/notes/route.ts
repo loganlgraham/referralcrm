@@ -11,6 +11,17 @@ import { User } from '@/models/user';
 
 type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknown';
 
+interface ReferralNoteResponse {
+  id: string;
+  authorName?: string;
+  authorRole?: string;
+  content: string;
+  createdAt: string;
+  hiddenFromAgent?: boolean;
+  hiddenFromMc?: boolean;
+  emailedTargets: Array<'agent' | 'mc' | 'admin'>;
+}
+
 interface Params {
   params: { id: string };
 }
@@ -220,7 +231,7 @@ export async function GET(_request: NextRequest, { params }: Params): Promise<Ne
   }
 
   const viewerRole = session.user.role ?? 'viewer';
-  const notes = (referral.notes ?? [])
+  const notes: ReferralNoteResponse[] = (referral.notes ?? [])
     .filter((note: any) => {
       if (viewerRole === 'agent' && note.hiddenFromAgent) {
         return false;
@@ -230,7 +241,7 @@ export async function GET(_request: NextRequest, { params }: Params): Promise<Ne
       }
       return true;
     })
-    .map((note: any) => ({
+    .map<ReferralNoteResponse>((note: any) => ({
       id: note._id.toString(),
       authorName: note.authorName,
       authorRole: note.authorRole,
