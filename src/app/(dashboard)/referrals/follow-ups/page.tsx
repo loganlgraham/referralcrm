@@ -14,7 +14,21 @@ export default async function FollowUpTasksPage() {
   const session = await getCurrentSession();
   let loadError = false;
 
-  const data = await getReferrals({ session, page: 1 }).catch((error) => {
+  const data = await new Promise<Awaited<ReturnType<typeof getReferrals>>>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('Follow-up referrals request timed out'));
+    }, 5000);
+
+    getReferrals({ session, page: 1 })
+      .then((result) => {
+        clearTimeout(timeout);
+        resolve(result);
+      })
+      .catch((error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+  }).catch((error) => {
     console.error('Failed to load referrals for follow-up tasks', error);
     loadError = true;
     return {
