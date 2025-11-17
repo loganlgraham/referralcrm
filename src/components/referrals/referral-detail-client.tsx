@@ -1364,7 +1364,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       <ReferralNotes
         referralId={referralId}
         initialNotes={notes}
-        viewerRole={viewerRole}
+        viewerRole={normalizedViewerRole}
         agentContact={{
           name: agentContact?.name ?? null,
           email: agentContact?.email ?? null
@@ -1381,7 +1381,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             referral={dealReferral}
             overrides={dealOverrides}
             summary={dealSummary}
-            viewerRole={viewerRole}
+            viewerRole={normalizedViewerRole}
             onAddDeal={handleCreateDealRequest}
           />
           {shouldShowDealPreparation && (
