@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 import {
   MongoNetworkError,
-  MongoPoolClearedError,
   MongoServerSelectionError
 } from 'mongodb';
 
@@ -59,10 +58,13 @@ if (!cached) {
 }
 
 const shouldRetryConnection = (error: unknown) => {
+  const isPoolClearedError = (candidate: unknown) =>
+    (candidate as { name?: string } | null)?.name === 'MongoPoolClearedError';
+
   if (
     error instanceof MongoNetworkError ||
     error instanceof MongoServerSelectionError ||
-    error instanceof MongoPoolClearedError
+    isPoolClearedError(error)
   ) {
     return true;
   }
@@ -73,8 +75,10 @@ const shouldRetryConnection = (error: unknown) => {
   }
 
   if (candidate?.cause) {
-    const cause = candidate.cause as { errorLabelSet?: Set<string> } | null;
-    return Boolean(cause?.errorLabelSet?.has('ResetPool'));
+    const cause = candidate.cause as { errorLabelSet?: Set<string>; name?: string } | null;
+    return Boolean(
+      cause?.errorLabelSet?.has('ResetPool') || isPoolClearedError(cause)
+    );
   }
 
   return false;
