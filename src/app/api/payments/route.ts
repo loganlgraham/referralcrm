@@ -201,7 +201,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         : [],
       terminatedReason: payment.terminatedReason ?? null,
       agentAttribution: payment.agentAttribution ?? null,
-      usedAfc: Boolean(payment.usedAfc),
+      usedAfc: payment.usedAfc !== false,
       usedAssignedAgent: Boolean(payment.usedAssignedAgent),
       invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
       paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
@@ -267,7 +267,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     receivedAmountCents: parsed.data.receivedAmountCents,
     terminatedReason: parsed.data.terminatedReason ?? null,
     agentAttribution: parsed.data.agentAttribution ?? null,
-    usedAfc: parsed.data.usedAfc ?? false,
+    usedAfc: parsed.data.usedAfc ?? true,
     usedAssignedAgent: parsed.data.usedAssignedAgent ?? true,
     invoiceDate: parsed.data.invoiceDate,
     paidDate: parsed.data.paidDate,
@@ -428,7 +428,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     updatePayload.usedAssignedAgent = nextUsedAssignedAgent;
   }
   if ('usedAfc' in updatePayload && updatePayload.usedAfc === undefined) {
-    updatePayload.usedAfc = false;
+    updatePayload.usedAfc = true;
   }
   if ('usedAssignedAgent' in updatePayload && updatePayload.usedAssignedAgent === undefined) {
     updatePayload.usedAssignedAgent = false;

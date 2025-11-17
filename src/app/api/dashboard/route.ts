@@ -685,9 +685,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         'paid',
       ].includes(payment.status)
   );
-  const afcDealsLost = afcRelevant.filter((payment) => !payment.usedAfc).length;
+  const afcDealsLost = afcRelevant.filter((payment) => payment.usedAfc === false).length;
   const afcAttachRate = afcRelevant.length
-    ? (afcRelevant.filter((payment) => Boolean(payment.usedAfc)).length / afcRelevant.length) * 100
+    ? (afcRelevant.filter((payment) => payment.usedAfc !== false).length / afcRelevant.length) * 100
     : 0;
 
   const ahaRelevant = filteredPayments.filter(

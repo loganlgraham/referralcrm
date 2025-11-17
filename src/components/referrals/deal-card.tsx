@@ -130,7 +130,7 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
       terminatedReason: (deal.terminatedReason as TerminatedReason | undefined) ?? null,
       agentAttribution: (deal.agentAttribution as AgentSelectValue | undefined) ?? '',
       usedAssignedAgent: deal.usedAssignedAgent ?? null,
-      usedAfc: deal.usedAfc ?? false,
+      usedAfc: deal.usedAfc ?? true,
       commissionBasisPoints: deal.commissionBasisPoints ?? null,
       referralFeeBasisPoints: deal.referralFeeBasisPoints ?? null,
       side: deal.side ?? null,
@@ -191,7 +191,7 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
   const initialAfcMap = useMemo(() => {
     const snapshot: Record<string, boolean> = {};
     deals.forEach((deal) => {
-      snapshot[deal._id] = Boolean(deal.usedAfc);
+      snapshot[deal._id] = deal.usedAfc !== false;
     });
     return snapshot;
   }, [deals]);
@@ -312,6 +312,14 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
     const value = bps / 100;
     const formatted = value.toFixed(2);
     return formatted.endsWith('.00') ? formatted.slice(0, -3) : formatted;
+  };
+
+  const parseExpectedCloseDate = (value: string): Date | null => {
+    if (!value) {
+      return null;
+    }
+    const parsed = value.length === 10 ? new Date(`${value}T00:00:00`) : new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
   };
 
   const getDefaultDraft = useCallback(
@@ -788,7 +796,7 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
 
   const handleAfcToggle = (deal: DealRecord) => async (event: ChangeEvent<HTMLInputElement>) => {
     const nextChecked = event.target.checked;
-    const previousChecked = afcMap[deal._id] ?? false;
+    const previousChecked = afcMap[deal._id] ?? true;
 
     if (nextChecked === previousChecked) {
       return;
@@ -856,7 +864,7 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
     const selectedReason = reasonMap[deal._id] ?? deal.terminatedReason ?? 'inspection';
     const agentSelection = agentMap[deal._id] ?? '';
     const agentOutcomeSelection = agentSelection === 'OUTSIDE_AGENT' ? 'OUTSIDE_AGENT' : 'USED_AGENT';
-    const usedAfc = afcMap[deal._id] ?? false;
+    const usedAfc = afcMap[deal._id] ?? true;
     const assignedBucket = referral.ahaBucket ?? null;
     const matchesAssigned =
       !assignedBucket || agentSelection === assignedBucket || agentSelection === '';
@@ -932,13 +940,18 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
       const next = new Date(entry.nextDate);
       return Number.isFinite(previous.getTime()) && Number.isFinite(next.getTime()) && next > previous;
     }).length;
-    const expectedCloseDateLabel = draft.expectedCloseDate
-      ? new Date(draft.expectedCloseDate).toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric',
-        })
-      : 'Not set';
+    const expectedCloseDateLabel = (() => {
+      const parsedDate = draft.expectedCloseDate ? parseExpectedCloseDate(draft.expectedCloseDate) : null;
+      if (!parsedDate) {
+        return 'Not set';
+      }
+
+      return parsedDate.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    })();
 
     return (
       <div key={deal._id} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">

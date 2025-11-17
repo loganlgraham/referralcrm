@@ -259,7 +259,7 @@ const normalizeDealPayments = (
       ? (payment.terminatedReason as TerminatedReason)
       : null,
     agentAttribution: payment.agentAttribution as AgentSelectValue | undefined,
-    usedAfc: payment.usedAfc ?? null,
+    usedAfc: payment.usedAfc ?? true,
     usedAssignedAgent: payment.usedAssignedAgent ?? null,
     commissionBasisPoints: payment.commissionBasisPoints ?? null,
     referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,

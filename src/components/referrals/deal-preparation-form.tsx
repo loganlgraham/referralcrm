@@ -449,7 +449,7 @@ export function DealPreparationForm({
             typeof createdDeal.agentAttribution === 'string'
               ? createdDeal.agentAttribution
               : null,
-          usedAfc: Boolean(createdDeal.usedAfc),
+          usedAfc: createdDeal.usedAfc !== false,
           usedAssignedAgent: Boolean(createdDeal.usedAssignedAgent),
           commissionBasisPoints:
             typeof createdDeal.commissionBasisPoints === 'number'

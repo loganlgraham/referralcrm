@@ -223,6 +223,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         side: referral.dealSide,
         contractPriceCents: referral.estPurchasePriceCents ?? null,
         expectedCloseDate,
+        usedAfc: true,
         usedAssignedAgent: true,
       });
       createdDeal = newDeal.toObject();
@@ -336,7 +337,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             receivedAmountCents: createdDeal.receivedAmountCents ?? 0,
             terminatedReason: createdDeal.terminatedReason ?? null,
             agentAttribution: createdDeal.agentAttribution ?? null,
-            usedAfc: Boolean(createdDeal.usedAfc),
+            usedAfc: createdDeal.usedAfc !== false,
             usedAssignedAgent: Boolean(createdDeal.usedAssignedAgent),
             commissionBasisPoints: createdDeal.commissionBasisPoints ?? null,
             referralFeeBasisPoints: createdDeal.referralFeeBasisPoints ?? null,
