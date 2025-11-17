@@ -272,6 +272,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     return new NextResponse('Forbidden', { status: 403 });
   }
 
+  const role = session.user.role;
+
   const body = await request.json();
   if (!body.id) {
     return NextResponse.json({ error: 'Missing id' }, { status: 400 });
