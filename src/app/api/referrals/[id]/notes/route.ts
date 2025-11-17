@@ -22,6 +22,17 @@ interface ReferralNoteResponse {
   emailedTargets: Array<'agent' | 'mc' | 'admin'>;
 }
 
+type StoredReferralNote = {
+  _id: { toString(): string };
+  authorName?: string;
+  authorRole?: string;
+  content: string;
+  createdAt: string | Date;
+  hiddenFromAgent?: boolean;
+  hiddenFromMc?: boolean;
+  emailedTargets?: Array<'agent' | 'mc' | 'admin'>;
+};
+
 interface Params {
   params: { id: string };
 }
@@ -231,8 +242,8 @@ export async function GET(_request: NextRequest, { params }: Params): Promise<Ne
   }
 
   const viewerRole = session.user.role ?? 'viewer';
-  const notes: ReferralNoteResponse[] = (referral.notes ?? [])
-    .filter((note: any) => {
+  const notes: ReferralNoteResponse[] = ((referral.notes ?? []) as StoredReferralNote[])
+    .filter((note) => {
       if (viewerRole === 'agent' && note.hiddenFromAgent) {
         return false;
       }
@@ -241,7 +252,7 @@ export async function GET(_request: NextRequest, { params }: Params): Promise<Ne
       }
       return true;
     })
-    .map<ReferralNoteResponse>((note: any) => ({
+    .map((note): ReferralNoteResponse => ({
       id: note._id.toString(),
       authorName: note.authorName,
       authorRole: note.authorRole,
