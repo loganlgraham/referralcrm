@@ -14,22 +14,32 @@ export default async function FollowUpTasksPage() {
   const session = await getCurrentSession();
   let loadError = false;
 
-  const data = await new Promise<Awaited<ReturnType<typeof getReferrals>>>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(new Error('Follow-up referrals request timed out'));
-    }, 5000);
+  const data = await new Promise<{ data: Awaited<ReturnType<typeof getReferrals>> | null; timedOut: boolean }>(
+    (resolve) => {
+      const timeout = setTimeout(() => {
+        resolve({ data: null, timedOut: true });
+      }, 5000);
 
-    getReferrals({ session, page: 1 })
-      .then((result) => {
-        clearTimeout(timeout);
-        resolve(result);
-      })
-      .catch((error) => {
-        clearTimeout(timeout);
-        reject(error);
-      });
-  }).catch((error) => {
-    console.error('Failed to load referrals for follow-up tasks', error);
+      getReferrals({ session, page: 1 })
+        .then((result) => {
+          clearTimeout(timeout);
+          resolve({ data: result, timedOut: false });
+        })
+        .catch((error) => {
+          clearTimeout(timeout);
+          console.error('Failed to load referrals for follow-up tasks', error);
+          resolve({ data: null, timedOut: false });
+        });
+    }
+  ).then((result) => {
+    if (result.data) {
+      return result.data;
+    }
+
+    if (result.timedOut) {
+      console.warn('Follow-up referrals request timed out after 5s; rendering fallback data.');
+    }
+
     loadError = true;
     return {
       items: [],
