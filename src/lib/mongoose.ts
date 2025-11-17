@@ -60,12 +60,26 @@ export async function connectMongo(): Promise<typeof mongoose> {
   }
 
   if (!cached?.promise) {
-    cached!.promise = mongoose.connect(MONGODB_URI, {
-      bufferCommands: false
-    });
+    cached!.promise = mongoose
+      .connect(MONGODB_URI, {
+        bufferCommands: false
+      })
+      .catch((error) => {
+        cached!.promise = null;
+        throw error;
+      });
   }
 
-  cached!.conn = await cached!.promise;
-  await registerModels();
-  return cached!.conn;
+  try {
+    cached!.conn = await cached!.promise;
+    await registerModels();
+    return cached!.conn;
+  } catch (error) {
+    cached!.conn = null;
+    cached!.promise = null;
+
+    const message = error instanceof Error ? error.message : 'Unknown Mongo connection error';
+    console.error('[mongo] Failed to establish connection', error);
+    throw new Error(`Failed to connect to MongoDB: ${message}`);
+  }
 }
