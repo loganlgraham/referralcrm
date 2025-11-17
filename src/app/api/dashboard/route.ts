@@ -20,6 +20,8 @@ import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { PreApprovalMetric } from '@/models/pre-approval-metric';
 
+export const dynamic = 'force-dynamic';
+
 type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd' | 'all' | 'custom';
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
 
