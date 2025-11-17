@@ -1092,7 +1092,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     if (viewerRole && allowedRoles.includes(viewerRole)) {
       return viewerRole;
     }
-    return undefined;
+    return 'viewer';
   }, [viewerRole]);
 
   const followUpReferral = useMemo(() => {
