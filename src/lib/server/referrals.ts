@@ -7,7 +7,7 @@ import { Payment } from '@/models/payment';
 import { differenceInDays } from 'date-fns';
 import { Types } from 'mongoose';
 import { getCurrentSession } from '@/lib/auth';
-import { ACTIVE_REFERRAL_STATUSES } from '@/constants/referrals';
+import { ACTIVE_REFERRAL_STATUS_VALUES, normalizeReferralStatus } from '@/constants/referrals';
 import { User } from '@/models/user';
 import { DEAL_STATUS_LABELS } from '@/constants/deals';
 
@@ -161,7 +161,7 @@ export async function getReferrals(params: GetReferralsParams) {
   const activeQuery: Record<string, unknown> = { ...query };
 
   if (!('status' in activeQuery)) {
-    activeQuery.status = { $in: ACTIVE_REFERRAL_STATUSES };
+    activeQuery.status = { $in: ACTIVE_REFERRAL_STATUS_VALUES };
   }
 
   const [items, total, closedDealAggregation, activeReferrals] = await Promise.all([
@@ -229,6 +229,8 @@ export async function getReferrals(params: GetReferralsParams) {
         ? DEAL_STATUS_LABELS[dealStatus as keyof typeof DEAL_STATUS_LABELS] ?? null
         : null;
 
+      const normalizedStatus = normalizeReferralStatus(item.status) ?? item.status;
+
       return {
         _id: item._id.toString(),
         createdAt: item.createdAt.toISOString(),
@@ -248,7 +250,7 @@ export async function getReferrals(params: GetReferralsParams) {
         stageOnTransfer: item.stageOnTransfer,
         initialNotes: item.initialNotes,
         loanFileNumber: item.loanFileNumber,
-        status: item.status,
+        status: normalizedStatus,
         statusLastUpdated: item.statusLastUpdated ? item.statusLastUpdated.toISOString() : null,
         daysInStatus: differenceInDays(new Date(), item.statusLastUpdated ?? item.createdAt),
         assignedAgentName: item.assignedAgent?.name,

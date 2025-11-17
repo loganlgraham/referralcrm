@@ -4,7 +4,7 @@ import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from 'rea
 import { differenceInDays } from 'date-fns';
 import { toast } from 'sonner';
 
-import { ReferralStatus, REFERRAL_STATUSES } from '@/constants/referrals';
+import { ReferralStatus, REFERRAL_STATUSES, normalizeReferralStatus } from '@/constants/referrals';
 import { formatCurrency } from '@/utils/formatters';
 import { StatusChanger } from '@/components/referrals/status-changer';
 import { SLAWidget } from '@/components/referrals/sla-widget';
@@ -110,7 +110,8 @@ export function ReferralHeader({
   onMcContactChange,
 }: ReferralHeaderProps) {
   const isAgentOrigin = referral.origin === 'agent';
-  const [status, setStatus] = useState<ReferralStatus>(referral.status as ReferralStatus);
+  const normalizedStatus = normalizeReferralStatus(referral.status) ?? 'New Lead';
+  const [status, setStatus] = useState<ReferralStatus>(normalizedStatus);
   const [preApprovalAmountCents, setPreApprovalAmountCents] = useState<number>(
     referral.preApprovalAmountCents ?? 0
   );
@@ -144,7 +145,10 @@ export function ReferralHeader({
   const [savingBucket, setSavingBucket] = useState(false);
 
   useEffect(() => {
-    setStatus(referral.status as ReferralStatus);
+    const nextStatus = normalizeReferralStatus(referral.status);
+    if (nextStatus) {
+      setStatus(nextStatus);
+    }
   }, [referral.status]);
 
   useEffect(() => {

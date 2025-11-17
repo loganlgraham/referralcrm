@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { normalizeReferralStatus } from '@/constants/referrals';
 import { ReferralStatus } from '@/models/referral';
 import { toast } from 'sonner';
 
@@ -88,17 +89,18 @@ export function StatusChanger({
   onCreateDealRequest,
 }: Props) {
   const router = useRouter();
-  const [currentStatus, setCurrentStatus] = useState(status);
-  const [persistedStatus, setPersistedStatus] = useState(status);
+  const normalizedStatus = useMemo(() => normalizeReferralStatus(status) ?? status, [status]);
+  const [currentStatus, setCurrentStatus] = useState<ReferralStatus>(normalizedStatus);
+  const [persistedStatus, setPersistedStatus] = useState<ReferralStatus>(normalizedStatus);
   const [loading, setLoading] = useState(false);
   const [preApproval, setPreApproval] = useState(() => centsToCurrencyInput(preApprovalAmountCents));
   const [preApprovalDirty, setPreApprovalDirty] = useState(false);
   const [preApprovalSaving, setPreApprovalSaving] = useState(false);
 
   useEffect(() => {
-    setCurrentStatus(status);
-    setPersistedStatus(status);
-  }, [status]);
+    setCurrentStatus(normalizedStatus);
+    setPersistedStatus(normalizedStatus);
+  }, [normalizedStatus]);
 
   useEffect(() => {
     onUnderContractIntentChange?.(currentStatus === 'Under Contract');

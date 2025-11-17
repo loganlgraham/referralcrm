@@ -90,6 +90,7 @@ interface AggregatedPayment {
 const ACTIVE_PIPELINE_STATUSES = new Set<string>([
   'Paired',
   'In Communication',
+  'Active Lead',
   'Showing Homes',
   'Under Contract',
 ]);

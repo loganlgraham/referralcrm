@@ -16,7 +16,7 @@ interface Params {
   params: { id: string };
 }
 
-const PRE_CONTRACT_STATUSES = new Set(['New Lead', 'Paired', 'In Communication', 'Showing Homes']);
+const PRE_CONTRACT_STATUSES = new Set(['New Lead', 'Paired', 'In Communication', 'Active Lead', 'Showing Homes']);
 
 export async function POST(request: NextRequest, { params }: Params): Promise<NextResponse> {
   const session = await getCurrentSession();
@@ -44,8 +44,10 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     return new NextResponse('Forbidden', { status: 403 });
   }
   const now = new Date();
-  const nextStatus = parsed.data.status;
-  const previousStatus = referral.status;
+  const requestedStatus = parsed.data.status;
+  const nextStatus = requestedStatus === 'Showing Homes' ? 'Active Lead' : requestedStatus;
+  const previousStatusRaw = referral.status;
+  const previousStatus = previousStatusRaw === 'Showing Homes' ? 'Active Lead' : previousStatusRaw;
   const previousStatusUpdatedAt =
     referral.statusLastUpdated instanceof Date
       ? referral.statusLastUpdated

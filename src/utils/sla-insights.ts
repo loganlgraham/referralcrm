@@ -87,7 +87,8 @@ const TIME_ZONE = 'America/Denver';
 const BUSINESS_START_HOUR = 8;
 const BUSINESS_END_HOUR = 17;
 
-const PRE_CONTRACT_STATUSES = new Set(['New Lead', 'Paired', 'In Communication', 'Showing Homes']);
+const ACTIVE_LEAD_STATUSES = new Set(['Active Lead', 'Showing Homes']);
+const PRE_CONTRACT_STATUSES = new Set(['New Lead', 'Paired', 'In Communication', 'Active Lead', 'Showing Homes']);
 
 const SLA_THRESHOLDS = {
   minutesToAssignment: 120,
@@ -311,7 +312,7 @@ export const computeSlaDurations = (referral: ReferralLike): SlaDuration[] => {
   const getFirstStatusTimestamp = buildStatusLookup(referral, auditEntries);
   const pairedAt = getFirstStatusTimestamp('Paired');
   const inCommunicationAt = getFirstStatusTimestamp('In Communication');
-  const showingHomesAt = getFirstStatusTimestamp('Showing Homes');
+  const activeLeadAt = getFirstStatusTimestamp('Active Lead') ?? getFirstStatusTimestamp('Showing Homes');
   const underContractAt = getFirstStatusTimestamp('Under Contract');
 
   const deals: DealLike[] = Array.isArray(referral.payments) ? referral.payments : [];
@@ -356,7 +357,7 @@ export const computeSlaDurations = (referral: ReferralLike): SlaDuration[] => {
 
   const newLeadToPaired = minutesBetween(createdAt, pairedAt);
   const pairedToCommunication = minutesBetween(pairedAt, inCommunicationAt);
-  const communicationStart = showingHomesAt ?? inCommunicationAt ?? pairedAt ?? createdAt;
+  const communicationStart = activeLeadAt ?? inCommunicationAt ?? pairedAt ?? createdAt;
   const communicationToContract = minutesBetween(communicationStart, underContractAt);
   const contractToClose = minutesBetween(dealUnderContractAt, dealClosedAt);
   const closeToPaid = minutesBetween(dealClosedAt, dealPaidAt);
@@ -585,7 +586,7 @@ export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommenda
     }
   }
 
-  if (status === 'In Communication' || status === 'Showing Homes') {
+  if (status === 'In Communication' || ACTIVE_LEAD_STATUSES.has(status)) {
     if (statusAgeDays >= SLA_THRESHOLDS.daysWithoutTouchPoint) {
       const dueBy = addDays(statusLastUpdated, SLA_THRESHOLDS.daysWithoutTouchPoint);
       recommendations.push(
@@ -614,7 +615,7 @@ export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommenda
     }
   }
 
-  if (status === 'Showing Homes' || status === 'In Communication') {
+  if (ACTIVE_LEAD_STATUSES.has(status) || status === 'In Communication') {
     if (!underContractMinutes && statusAgeDays >= SLA_THRESHOLDS.daysToUnderContract) {
       const dueBy = addDays(statusLastUpdated, SLA_THRESHOLDS.daysToUnderContract);
       recommendations.push(
