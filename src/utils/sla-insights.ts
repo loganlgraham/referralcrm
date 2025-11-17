@@ -61,6 +61,10 @@ export interface SlaInsights {
   } | null;
 }
 
+interface SlaComputationOptions {
+  viewerRole?: ReferralLike['viewerRole'];
+}
+
 export interface ReferralLike {
   _id: string;
   createdAt?: string | Date;
@@ -71,6 +75,9 @@ export interface ReferralLike {
   assignedAgentName?: string;
   lender?: { name?: string | null } | null;
   origin?: 'agent' | 'mc' | 'admin';
+  viewerRole?: 'admin' | 'manager' | 'mc' | 'agent' | 'viewer';
+  dealStatus?: string | null;
+  dealStatusLabel?: string | null;
   borrower?: { name?: string };
   notes?: NoteLike[];
   payments?: DealLike[];
@@ -427,6 +434,12 @@ const minDueDate = (candidate: Date | null | undefined): string | null => {
   return candidate.toISOString();
 };
 
+const scheduleProactiveDueDate = (anchor: Date | null | undefined, fallbackDays = 7): string | null => {
+  const base = anchor ?? new Date();
+  const proactiveDate = addDays(base, fallbackDays);
+  return minDueDate(proactiveDate);
+};
+
 const computeAgentReferralRecommendations = (referral: ReferralLike): SlaRecommendation[] => {
   const createdAt = parseTimestamp(referral.createdAt) ?? new Date();
   const now = new Date();
@@ -499,10 +512,146 @@ const computeAgentReferralRecommendations = (referral: ReferralLike): SlaRecomme
   return recommendations;
 };
 
-export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommendation[] => {
-  if (referral.origin === 'agent') {
-    return computeAgentReferralRecommendations(referral);
+const buildRoleSpecificRecommendations = (
+  referral: ReferralLike,
+  viewerRole: ReferralLike['viewerRole']
+): SlaRecommendation[] => {
+  const now = new Date();
+  const status = referral.status ?? 'New Lead';
+  const statusLastUpdated = parseTimestamp(referral.statusLastUpdated) ?? parseTimestamp(referral.createdAt) ?? now;
+  const statusAgeDays = referral.daysInStatus ?? differenceInDays(now, statusLastUpdated);
+  const latestNoteAt = getLatestNoteTimestamp(referral.notes);
+  const hoursSinceLastNote = latestNoteAt ? differenceInHours(now, latestNoteAt) : null;
+  const dealStageLabel = referral.dealStatusLabel ?? referral.dealStatus ?? null;
+  const recommendations: SlaRecommendation[] = [];
+  const followUpDueAt = scheduleProactiveDueDate(statusLastUpdated);
+
+  if (viewerRole === 'agent') {
+    recommendations.push(
+      buildRecommendation({
+        id: 'agent-next-touch',
+        title: 'Block your next borrower touchpoint',
+        message: 'Schedule a quick check-in with a market update so the borrower hears from you before momentum fades.',
+        priority: 'medium',
+        category: 'communication',
+        dueAt: followUpDueAt,
+        supportingMetric: `${statusAgeDays} days in ${status}`,
+      })
+    );
+
+    if (dealStageLabel) {
+      recommendations.push(
+        buildRecommendation({
+          id: 'agent-stage-prep',
+          title: `Prep borrower for ${dealStageLabel.toLowerCase()} next steps`,
+          message: 'Share what to expect at this stage—inspections, appraisal prep, or closing logistics—to keep the deal calm.',
+          priority: 'high',
+          category: 'pipeline',
+          dueAt: scheduleProactiveDueDate(statusLastUpdated, 7),
+          supportingMetric: `Deal stage: ${dealStageLabel}`,
+        })
+      );
+    }
   }
+
+  if (viewerRole === 'mc') {
+    if (status === 'Paired' || status === 'In Communication') {
+      recommendations.push(
+        buildRecommendation({
+          id: 'mc-docs-refresh',
+          title: 'Schedule a doc refresh with the borrower',
+          message: 'Proactively block time to collect paystubs, assets, and credit updates before underwriting asks.',
+          priority: 'high',
+          category: 'communication',
+          dueAt: followUpDueAt,
+          supportingMetric: `${statusAgeDays} days since last status change`,
+        })
+      );
+    }
+
+    if (dealStageLabel && dealStageLabel !== 'Payment Received') {
+      recommendations.push(
+        buildRecommendation({
+          id: 'mc-rate-lock-check',
+          title: 'Check rate lock and conditions',
+          message: 'Place a reminder to review conditions and lock timelines about a week before the next milestone.',
+          priority: 'medium',
+          category: 'pipeline',
+          dueAt: scheduleProactiveDueDate(statusLastUpdated, 6),
+          supportingMetric: `Deal stage: ${dealStageLabel}`,
+        })
+      );
+    }
+  }
+
+  if (viewerRole === 'admin' || viewerRole === 'manager') {
+    recommendations.push(
+      buildRecommendation({
+        id: 'admin-escalate-idle',
+        title: 'Escalate idle referral',
+        message: 'Set a proactive reminder to ping the agent/MC before the SLA slips further.',
+        priority: 'high',
+        category: 'ops',
+        dueAt: followUpDueAt,
+        supportingMetric: `${statusAgeDays} days without movement`,
+      })
+    );
+
+    if (dealStageLabel && (dealStageLabel === 'Clear to Close' || dealStageLabel.startsWith('Payment'))) {
+      recommendations.push(
+        buildRecommendation({
+          id: 'admin-invoice-ahead',
+          title: 'Prepare referral fee invoice',
+          message: 'Queue finance to invoice about a week before closing so payment isn’t delayed.',
+          priority: 'medium',
+          category: 'finance',
+          dueAt: scheduleProactiveDueDate(statusLastUpdated, 5),
+          supportingMetric: `Deal stage: ${dealStageLabel}`,
+        })
+      );
+    }
+
+    if (hoursSinceLastNote !== null && hoursSinceLastNote > 72) {
+      recommendations.push(
+        buildRecommendation({
+          id: 'admin-request-update',
+          title: 'Request a written update',
+          message: 'Ask the assignee for a brief note so leadership has current context.',
+          priority: 'medium',
+          category: 'communication',
+          dueAt: scheduleProactiveDueDate(now, 7),
+          supportingMetric: `Last note ${hoursSinceLastNote}h ago`,
+        })
+      );
+    }
+  }
+
+  return recommendations;
+};
+
+const dedupeRecommendations = (items: SlaRecommendation[]): SlaRecommendation[] => {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (seen.has(item.id)) {
+      return false;
+    }
+    seen.add(item.id);
+    return true;
+  });
+};
+
+export const computeSlaRecommendations = (
+  referral: ReferralLike,
+  options?: SlaComputationOptions
+): SlaRecommendation[] => {
+  const viewerRole = options?.viewerRole ?? referral.viewerRole ?? 'viewer';
+
+  if (referral.origin === 'agent') {
+    const agentTasks = computeAgentReferralRecommendations(referral);
+    const roleSpecific = buildRoleSpecificRecommendations(referral, viewerRole);
+    return dedupeRecommendations([...agentTasks, ...roleSpecific]);
+  }
+
   const createdAt = parseTimestamp(referral.createdAt) ?? new Date();
   const now = new Date();
   const durations = computeSlaDurations(referral);
@@ -679,7 +828,8 @@ export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommenda
     );
   }
 
-  return recommendations;
+  const roleSpecific = buildRoleSpecificRecommendations(referral, viewerRole);
+  return dedupeRecommendations([...recommendations, ...roleSpecific]);
 };
 
 export const computeRiskSummary = (referral: ReferralLike, recommendations: SlaRecommendation[]): SlaInsights['riskSummary'] => {
@@ -717,9 +867,12 @@ export const computeRiskSummary = (referral: ReferralLike, recommendations: SlaR
   };
 };
 
-export const computeSlaInsights = (referral: ReferralLike): SlaInsights => {
+export const computeSlaInsights = (
+  referral: ReferralLike,
+  options?: SlaComputationOptions
+): SlaInsights => {
   const durations = computeSlaDurations(referral);
-  const recommendations = computeSlaRecommendations(referral);
+  const recommendations = computeSlaRecommendations(referral, options);
   const riskSummary = computeRiskSummary(referral, recommendations);
 
   return {

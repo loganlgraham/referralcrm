@@ -20,7 +20,7 @@ const PRIORITY_OPTIONS: RecommendationPriority[] = ['urgent', 'high', 'medium', 
 const CATEGORY_OPTIONS: ManualTaskCategory[] = ['assignment', 'communication', 'pipeline', 'finance', 'ops'];
 
 export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
-  const tasks = useFollowUpTasks(referral);
+  const tasks = useFollowUpTasks(referral, { viewerRole: referral.viewerRole });
   const hasTasks = tasks.length > 0;
   const incompleteTasks = useMemo(() => tasks.filter((task) => !task.completed), [tasks]);
   const { submitTasks, addingTaskId, bulkAdding } = useCalendarTaskSubmission();
@@ -211,19 +211,19 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
                     {task.dueAt && <span>Due {new Date(task.dueAt).toLocaleString()}</span>}
                   </div>
                   <div className="mt-3">
-                    <button
-                      type="button"
-                      onClick={() => submitTasks([task], 'single')}
-                      disabled={bulkAdding || (addingTaskId !== null && addingTaskId !== task.taskId)}
-                      className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {addingTaskId === task.taskId ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <CalendarPlus className="h-4 w-4" />
-                      )}
-                      {addingTaskId === task.taskId ? 'Adding…' : 'Add to Google Calendar'}
-                    </button>
+                  <button
+                    type="button"
+                    onClick={() => submitTasks([task], 'single')}
+                    disabled={bulkAdding || (addingTaskId !== null && addingTaskId !== task.taskId)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    aria-label="Add this task to Google Calendar"
+                  >
+                    {addingTaskId === task.taskId ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CalendarPlus className="h-4 w-4" />
+                    )}
+                  </button>
                     {task.isManual && task.remove && (
                       <button
                         type="button"

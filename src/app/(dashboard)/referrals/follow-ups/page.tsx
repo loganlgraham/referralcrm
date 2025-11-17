@@ -23,7 +23,9 @@ export default async function FollowUpTasksPage() {
     assignedAgentName: item.assignedAgentName,
     lenderName: item.lenderName ?? null,
     origin: item.origin ?? null,
+    dealStatus: item.dealStatus ?? null,
+    dealStatusLabel: item.dealStatusLabel ?? null,
   }));
 
-  return <FollowUpTasksBoard referrals={referrals} />;
+  return <FollowUpTasksBoard referrals={referrals} viewerRole={session?.user.role ?? 'viewer'} />;
 }

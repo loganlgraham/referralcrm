@@ -1032,18 +1032,24 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const dealPayments = normalizedDeals ?? [];
   const hasTerminatedDeal = dealPayments.some((payment) => payment.status === 'terminated');
   const hasAnyDeals = dealPayments.length > 0;
-  const activeDealStatusLabel = useMemo(() => {
+  const { activeDealStatus, activeDealStatusLabel } = useMemo(() => {
     for (const payment of dealPayments) {
       const status = (payment.status as DealStatus | undefined) ?? 'under_contract';
       if (status !== 'terminated') {
-        return DEAL_STATUS_LABELS[status] ?? null;
+        return {
+          activeDealStatus: status,
+          activeDealStatusLabel: DEAL_STATUS_LABELS[status] ?? null,
+        };
       }
     }
     if (dealPayments[0]?.status) {
       const fallback = dealPayments[0].status as DealStatus;
-      return DEAL_STATUS_LABELS[fallback] ?? null;
+      return {
+        activeDealStatus: fallback,
+        activeDealStatusLabel: DEAL_STATUS_LABELS[fallback] ?? null,
+      };
     }
-    return null;
+    return { activeDealStatus: null, activeDealStatusLabel: null };
   }, [dealPayments]);
 
   const dealSummary: DealCardSummary = {
@@ -1138,6 +1144,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         : null,
       assignedAgentName:
         agentContact?.name ?? referral.assignedAgent?.name ?? undefined,
+      viewerRole,
+      origin: referral.origin ?? null,
+      dealStatus: activeDealStatus ?? null,
+      dealStatusLabel: activeDealStatusLabel ?? null,
       borrower: referral.borrower,
       notes: referral.notes ?? [],
       payments: referral.payments ?? [],
@@ -1155,6 +1165,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referral.payments,
     referral.statusLastUpdated,
     referral.assignedAgent?.name,
+    referral.origin,
+    activeDealStatus,
+    activeDealStatusLabel,
+    viewerRole,
   ]);
 
   return (
