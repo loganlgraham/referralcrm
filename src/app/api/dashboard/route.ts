@@ -56,6 +56,7 @@ interface AggregatedPayment {
   paidDate?: Date | null;
   invoiceDate?: Date | null;
   updatedAt: Date;
+  side?: 'buy' | 'sell';
   usedAfc?: boolean;
   agentAttribution?: 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT' | null;
   expectedCloseDate?: Date | null;
