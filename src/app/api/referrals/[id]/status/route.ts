@@ -12,11 +12,33 @@ import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/consta
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 
+type ContractPayment = {
+  _id: any;
+  expectedCloseDate?: Date | string | null;
+  closeDateHistory?: {
+    previousDate: Date | string | null;
+    nextDate: Date | string | null;
+    changedAt: Date | string;
+    changedBy: string | null;
+  }[];
+  usedAfc?: boolean | null;
+  usedAssignedAgent?: boolean | null;
+};
+
 interface Params {
   params: { id: string };
 }
 
 const PRE_CONTRACT_STATUSES = new Set(['New Lead', 'Paired', 'In Communication', 'Active Lead', 'Showing Homes']);
+
+const parseDateOnly = (value?: string | null): Date | null => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed;
+};
 
 export async function POST(request: NextRequest, { params }: Params): Promise<NextResponse> {
   const session = await getCurrentSession();
@@ -45,6 +67,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
   const now = new Date();
   const requestedStatus = parsed.data.status;
+  const createNewDeal = Boolean(parsed.data.createNewDeal);
   const nextStatus = requestedStatus === 'Showing Homes' ? 'Active Lead' : requestedStatus;
   const previousStatusRaw = referral.status;
   const previousStatus = previousStatusRaw === 'Showing Homes' ? 'Active Lead' : previousStatusRaw;
@@ -75,6 +98,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   let createdDeal: any = null;
   const sla = (referral.sla ??= {} as any);
   let slaModified = false;
+  let activeDeal: ContractPayment | null = null;
+  const existingUnderContractDeals = await Payment.find({ referralId: referral._id, status: 'under_contract' })
+    .sort({ createdAt: -1 })
+    .lean<ContractPayment[]>();
+  const hasExistingUnderContract = existingUnderContractDeals.length > 0;
 
   if (nextStatus === 'Under Contract') {
     if (sla.contractToCloseMinutes != null) {
@@ -145,6 +173,22 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     slaModified = true;
   }
 
+  let expectedCloseDate: Date | null = null;
+  let contractPayload: {
+    propertyAddress: string;
+    propertyCity: string;
+    propertyState: string;
+    propertyPostalCode: string;
+    contractPriceCents: number;
+    agentCommissionBasisPoints: number;
+    referralFeeBasisPoints: number;
+    referralFeeDueCents: number;
+    dealSide: 'buy' | 'sell';
+    expectedCloseDate: Date | null;
+    usedAfc: boolean;
+    usedAssignedAgent: boolean;
+  } | null = null;
+
   if (parsed.data.status === 'Under Contract') {
     const details = parsed.data.contractDetails;
     if (!details) {
@@ -158,50 +202,119 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     const propertyCity = details.propertyCity.trim();
     const propertyState = details.propertyState.trim().toUpperCase();
     const propertyPostalCode = details.propertyPostalCode.trim();
-
-    referral.propertyAddress = propertyAddress;
-    referral.propertyCity = propertyCity;
-    referral.propertyState = propertyState;
-    referral.propertyPostalCode = propertyPostalCode;
-    referral.estPurchasePriceCents = Math.round(details.contractPrice * 100);
-    referral.commissionBasisPoints = Math.round(details.agentCommissionPercentage * 100);
-    referral.referralFeeBasisPoints = Math.round(details.referralFeePercentage * 100);
-    referral.dealSide = details.dealSide;
+    expectedCloseDate = parseDateOnly(details.expectedCloseDate ?? null);
+    const usedAfc = details.dealSide === 'sell' ? false : details.usedAfc !== false;
+    const usedAssignedAgent = details.usedAssignedAgent !== false;
+    const contractPriceCents = Math.round(details.contractPrice * 100);
+    const commissionBasisPoints = Math.round(details.agentCommissionPercentage * 100);
+    const referralFeeBasisPoints = Math.round(details.referralFeePercentage * 100);
     const commissionRate = details.agentCommissionPercentage / 100;
     const referralRate = details.referralFeePercentage / 100;
-    const referralFeeDue = details.contractPrice * commissionRate * referralRate;
-    referral.referralFeeDueCents = Math.round(referralFeeDue * 100);
+    const referralFeeDueCents = Math.round(details.contractPrice * commissionRate * referralRate * 100);
+    contractPayload = {
+      propertyAddress,
+      propertyCity,
+      propertyState,
+      propertyPostalCode,
+      contractPriceCents,
+      agentCommissionBasisPoints: commissionBasisPoints,
+      referralFeeBasisPoints,
+      referralFeeDueCents,
+      dealSide: details.dealSide,
+      expectedCloseDate,
+      usedAfc,
+      usedAssignedAgent,
+    };
 
-    await Payment.updateMany(
-      { referralId: referral._id, status: 'under_contract' },
-      {
-        $set: {
-          expectedAmountCents: referral.referralFeeDueCents ?? 0,
-          commissionBasisPoints: referral.commissionBasisPoints ?? null,
-          referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
-          side: referral.dealSide,
-          contractPriceCents: referral.estPurchasePriceCents ?? null,
-        },
-      }
-    );
+    if (!contractPayload) {
+      return NextResponse.json({ error: 'Unable to save contract details' }, { status: 500 });
+    }
 
-    let activeDeal = await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
-      .sort({ createdAt: -1 })
-      .lean();
+    if (!createNewDeal && hasExistingUnderContract) {
+      await Payment.updateMany(
+        { referralId: referral._id, status: 'under_contract' },
+        {
+          $set: {
+            expectedAmountCents: contractPayload.referralFeeDueCents ?? 0,
+            commissionBasisPoints: contractPayload.agentCommissionBasisPoints ?? null,
+            referralFeeBasisPoints: contractPayload.referralFeeBasisPoints ?? null,
+            side: contractPayload.dealSide,
+            contractPriceCents: contractPayload.contractPriceCents ?? null,
+            expectedCloseDate,
+            usedAfc,
+            usedAssignedAgent,
+          },
+        }
+      );
+
+      activeDeal = existingUnderContractDeals[0] ?? null;
+    }
 
     if (!activeDeal) {
       const newDeal = await Payment.create({
         referralId: referral._id,
         status: 'under_contract',
-        expectedAmountCents: referral.referralFeeDueCents ?? 0,
-        commissionBasisPoints: referral.commissionBasisPoints ?? null,
-        referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
-        side: referral.dealSide,
-        contractPriceCents: referral.estPurchasePriceCents ?? null,
-        usedAssignedAgent: true,
+        expectedAmountCents: contractPayload.referralFeeDueCents ?? 0,
+        commissionBasisPoints: contractPayload.agentCommissionBasisPoints ?? null,
+        referralFeeBasisPoints: contractPayload.referralFeeBasisPoints ?? null,
+        side: contractPayload.dealSide,
+        contractPriceCents: contractPayload.contractPriceCents ?? null,
+        expectedCloseDate,
+        usedAfc,
+        usedAssignedAgent,
       });
       createdDeal = newDeal.toObject();
       activeDeal = createdDeal;
+    }
+
+    if (activeDeal) {
+      await Payment.updateOne(
+        { _id: activeDeal._id },
+        {
+          $set: {
+            usedAfc,
+            usedAssignedAgent,
+          },
+        }
+      );
+    }
+
+    referral.propertyAddress = propertyAddress;
+    referral.propertyCity = propertyCity;
+    referral.propertyState = propertyState;
+    referral.propertyPostalCode = propertyPostalCode;
+    referral.dealSide = contractPayload.dealSide;
+    referral.expectedCloseDate = expectedCloseDate;
+
+    if (!hasExistingUnderContract || !createNewDeal) {
+      referral.estPurchasePriceCents = contractPayload.contractPriceCents;
+      referral.commissionBasisPoints = contractPayload.agentCommissionBasisPoints;
+      referral.referralFeeBasisPoints = contractPayload.referralFeeBasisPoints;
+      referral.referralFeeDueCents = contractPayload.referralFeeDueCents;
+    }
+
+    if (activeDeal && expectedCloseDate) {
+      const previousCloseDate = activeDeal.expectedCloseDate
+        ? new Date(activeDeal.expectedCloseDate)
+        : null;
+      const hasChanged =
+        !previousCloseDate || previousCloseDate.getTime() !== expectedCloseDate.getTime();
+      if (hasChanged) {
+        await Payment.updateOne(
+          { _id: activeDeal._id },
+          {
+            $set: { expectedCloseDate },
+            $push: {
+              closeDateHistory: {
+                previousDate: previousCloseDate,
+                nextDate: expectedCloseDate,
+                changedAt: now,
+                changedBy: session.user.role ?? 'unknown',
+              },
+            },
+          }
+        );
+      }
     }
   } else if (parsed.data.status === 'Terminated' || parsed.data.status === 'Lost') {
     referral.estPurchasePriceCents = 0;
@@ -266,15 +379,20 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     contractDetails:
       parsed.data.status === 'Under Contract'
         ? {
-            propertyAddress: referral.propertyAddress ?? '',
-            propertyCity: referral.propertyCity ?? '',
-            propertyState: referral.propertyState ?? '',
-            propertyPostalCode: referral.propertyPostalCode ?? '',
-            contractPriceCents: referral.estPurchasePriceCents ?? 0,
-            agentCommissionBasisPoints: referral.commissionBasisPoints ?? 0,
-            referralFeeBasisPoints: referral.referralFeeBasisPoints ?? 0,
-            referralFeeDueCents: referral.referralFeeDueCents ?? 0,
-            dealSide: referral.dealSide ?? 'buy',
+            propertyAddress: contractPayload?.propertyAddress ?? referral.propertyAddress ?? '',
+            propertyCity: contractPayload?.propertyCity ?? referral.propertyCity ?? '',
+            propertyState: contractPayload?.propertyState ?? referral.propertyState ?? '',
+            propertyPostalCode: contractPayload?.propertyPostalCode ?? referral.propertyPostalCode ?? '',
+            contractPriceCents: contractPayload?.contractPriceCents ?? referral.estPurchasePriceCents ?? 0,
+            agentCommissionBasisPoints:
+              contractPayload?.agentCommissionBasisPoints ?? referral.commissionBasisPoints ?? 0,
+            referralFeeBasisPoints: contractPayload?.referralFeeBasisPoints ?? referral.referralFeeBasisPoints ?? 0,
+            referralFeeDueCents: contractPayload?.referralFeeDueCents ?? referral.referralFeeDueCents ?? 0,
+            dealSide: contractPayload?.dealSide ?? referral.dealSide ?? 'buy',
+            expectedCloseDate: contractPayload?.expectedCloseDate ?? referral.expectedCloseDate ?? null,
+            usedAfc:
+              contractPayload?.usedAfc ?? (activeDeal ? activeDeal.usedAfc !== false : referral?.dealSide !== 'sell'),
+            usedAssignedAgent: contractPayload?.usedAssignedAgent ?? activeDeal?.usedAssignedAgent !== false,
           }
         : undefined,
     deal:
@@ -286,12 +404,13 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             receivedAmountCents: createdDeal.receivedAmountCents ?? 0,
             terminatedReason: createdDeal.terminatedReason ?? null,
             agentAttribution: createdDeal.agentAttribution ?? null,
-            usedAfc: Boolean(createdDeal.usedAfc),
+            usedAfc: createdDeal.usedAfc !== false,
             usedAssignedAgent: Boolean(createdDeal.usedAssignedAgent),
             commissionBasisPoints: createdDeal.commissionBasisPoints ?? null,
             referralFeeBasisPoints: createdDeal.referralFeeBasisPoints ?? null,
             side: createdDeal.side ?? null,
             contractPriceCents: createdDeal.contractPriceCents ?? null,
+            expectedCloseDate: createdDeal.expectedCloseDate ?? null,
             createdAt: createdDeal.createdAt instanceof Date
               ? createdDeal.createdAt.toISOString()
               : createdDeal.createdAt ?? null,

@@ -1,23 +1,9 @@
-import { format } from 'date-fns';
-
 import {
   computeSlaInsights,
   sortRecommendations,
   type SlaRecommendation,
 } from '@/utils/sla-insights';
-
-const formatDueDate = (dueAt?: string | null) => {
-  if (!dueAt) {
-    return null;
-  }
-
-  const date = new Date(dueAt);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return format(date, "MMM d 'at' h:mmaaa");
-};
+import { formatTaskDueDate } from '@/utils/task-time';
 
 const badgeStyles: Record<SlaRecommendation['priority'], string> = {
   urgent: 'bg-rose-100 text-rose-700',
@@ -71,7 +57,7 @@ export function SLAWidget({ referral }: { referral: any }) {
         {topRecommendations.length > 0 ? (
           <ul className="space-y-3">
             {topRecommendations.map((item) => {
-              const dueLabel = formatDueDate(item.dueAt);
+              const dueLabel = formatTaskDueDate(item.dueAt);
               return (
                 <li key={item.id} className="rounded-md border border-slate-200 px-3 py-2 text-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">

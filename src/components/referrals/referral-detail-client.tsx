@@ -46,6 +46,13 @@ interface ReferralPayment {
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
   contractPriceCents?: number | null;
+  expectedCloseDate?: string | null;
+  closeDateHistory?: {
+    previousDate?: string | null;
+    nextDate?: string | null;
+    changedAt?: string | null;
+    changedBy?: string | null;
+  }[];
 }
 
 interface ReferralDetailNote {
@@ -81,6 +88,7 @@ interface ReferralDetail {
   referralFeeDueCents?: number;
   commissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
+  expectedCloseDate?: string | null;
   dealSide?: 'buy' | 'sell';
   propertyAddress?: string;
   propertyCity?: string | null;
@@ -125,12 +133,32 @@ interface FinancialState {
   referralFeeDueCents: number;
   commissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
+  expectedCloseDate?: string | null;
   propertyAddress?: string;
   propertyCity?: string;
   propertyState?: string;
   propertyPostalCode?: string;
   dealSide?: 'buy' | 'sell';
 }
+
+const getLatestExpectedCloseDate = (payments?: ReferralPayment[]): string | null => {
+  if (!Array.isArray(payments) || payments.length === 0) {
+    return null;
+  }
+
+  const sorted = [...payments].sort((a, b) => {
+    const getTimestamp = (payment: ReferralPayment) => {
+      const candidate = payment.updatedAt ?? payment.createdAt ?? null;
+      if (!candidate) return 0;
+      const parsed = new Date(candidate);
+      return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+    };
+    return getTimestamp(b) - getTimestamp(a);
+  });
+
+  const withDate = sorted.find((payment) => Boolean(payment.expectedCloseDate));
+  return withDate?.expectedCloseDate ?? null;
+};
 
 interface DraftState {
   propertyAddress?: string;
@@ -252,7 +280,7 @@ const normalizeDealPayments = (
       ? (payment.terminatedReason as TerminatedReason)
       : null,
     agentAttribution: payment.agentAttribution as AgentSelectValue | undefined,
-    usedAfc: payment.usedAfc ?? null,
+    usedAfc: payment.usedAfc ?? true,
     usedAssignedAgent: payment.usedAssignedAgent ?? null,
     commissionBasisPoints: payment.commissionBasisPoints ?? null,
     referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
@@ -335,6 +363,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referralFeeDueCents: initialReferral.referralFeeDueCents ?? 0,
     commissionBasisPoints: initialReferral.commissionBasisPoints ?? undefined,
     referralFeeBasisPoints: initialReferral.referralFeeBasisPoints ?? undefined,
+    expectedCloseDate:
+      initialReferral.expectedCloseDate ?? getLatestExpectedCloseDate(initialReferral.payments) ?? undefined,
     propertyAddress: initialReferral.propertyAddress ?? undefined,
     propertyCity: initialReferral.propertyCity ?? undefined,
     propertyState: initialPropertyState,
@@ -346,9 +376,11 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   });
   const [contractDraft, setContractDraft] = useState<DraftState>({ hasUnsavedChanges: false });
   const [contractPrepActive, setContractPrepActive] = useState(false);
+  const [creatingAdditionalDeal, setCreatingAdditionalDeal] = useState(false);
   const dealSectionRef = useRef<HTMLDivElement | null>(null);
   const handleCreateDealRequest = useCallback(() => {
     setContractPrepActive(true);
+    setCreatingAdditionalDeal(true);
     if (typeof window !== 'undefined') {
       window.requestAnimationFrame(() => {
         dealSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -362,7 +394,13 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       }
 
       setContractPrepActive(false);
+      setCreatingAdditionalDeal(false);
       setContractDraft({ hasUnsavedChanges: false });
+
+      setFinancials((previous) => ({
+        ...previous,
+        expectedCloseDate: deal.expectedCloseDate ?? previous.expectedCloseDate,
+      }));
 
       setReferral((previous) => {
         const existingPayments = Array.isArray(previous.payments) ? previous.payments : [];
@@ -388,6 +426,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       agentCommissionBasisPoints: number;
       referralFeeBasisPoints: number;
       referralFeeDueCents: number;
+      expectedCloseDate?: string | null;
       dealSide: 'buy' | 'sell';
     }) => void;
     onContractDraftChange: (draft: DraftState) => void;
@@ -466,6 +505,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         referral.referralFeeBasisPoints != null
           ? referral.referralFeeBasisPoints
           : previous.referralFeeBasisPoints;
+      const nextExpectedCloseDate =
+        referral.expectedCloseDate ?? getLatestExpectedCloseDate(referral.payments) ?? previous.expectedCloseDate;
       const nextDealSide =
         referral.dealSide === 'sell' || referral.dealSide === 'buy'
           ? referral.dealSide
@@ -491,6 +532,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         previous.referralFeeDueCents === nextReferralFeeDue &&
         previous.commissionBasisPoints === nextCommission &&
         previous.referralFeeBasisPoints === nextReferralFeeBasis &&
+        previous.expectedCloseDate === nextExpectedCloseDate &&
         previous.propertyAddress === nextPropertyAddress &&
         previous.propertyCity === nextPropertyCity &&
         previous.propertyState === nextPropertyState &&
@@ -507,6 +549,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         referralFeeDueCents: nextReferralFeeDue,
         commissionBasisPoints: nextCommission,
         referralFeeBasisPoints: nextReferralFeeBasis,
+        expectedCloseDate: nextExpectedCloseDate,
         propertyAddress: nextPropertyAddress,
         propertyCity: nextPropertyCity,
         propertyState: nextPropertyState,
@@ -743,6 +786,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referralFeeDueCents?: number;
     commissionBasisPoints?: number;
     referralFeeBasisPoints?: number;
+    expectedCloseDate?: string | null;
     propertyAddress?: string;
     propertyCity?: string;
     propertyState?: string;
@@ -767,6 +811,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     const referralFeeBasisChanged =
       snapshot.referralFeeBasisPoints !== undefined &&
       snapshot.referralFeeBasisPoints !== financials.referralFeeBasisPoints;
+    const expectedCloseChanged =
+      snapshot.expectedCloseDate !== undefined && snapshot.expectedCloseDate !== financials.expectedCloseDate;
     const dealSideChanged =
       snapshot.dealSide !== undefined && snapshot.dealSide !== financials.dealSide;
     const propertyFieldsTouched =
@@ -797,6 +843,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
           snapshot.referralFeeBasisPoints !== undefined
             ? snapshot.referralFeeBasisPoints
             : previous.referralFeeBasisPoints,
+        expectedCloseDate:
+          snapshot.expectedCloseDate !== undefined
+            ? snapshot.expectedCloseDate
+            : previous.expectedCloseDate,
         propertyAddress:
           snapshot.propertyAddress !== undefined ? snapshot.propertyAddress : previous.propertyAddress,
         propertyCity:
@@ -826,6 +876,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         next.referralFeeDueCents === previous.referralFeeDueCents &&
         next.commissionBasisPoints === previous.commissionBasisPoints &&
         next.referralFeeBasisPoints === previous.referralFeeBasisPoints &&
+        next.expectedCloseDate === previous.expectedCloseDate &&
         next.propertyAddress === previous.propertyAddress &&
         next.propertyCity === previous.propertyCity &&
         next.propertyState === previous.propertyState &&
@@ -845,6 +896,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       referralFeeChanged ||
       commissionChanged ||
       referralFeeBasisChanged ||
+      expectedCloseChanged ||
       dealSideChanged ||
       propertyFieldsTouched
     ) {
@@ -1072,6 +1124,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       setContractPrepActive(false);
     }
   }, [contractDraft.hasUnsavedChanges, financials.status, hasAnyDeals]);
+
+  useEffect(() => {
+    if (!contractPrepActive && !contractDraft.hasUnsavedChanges) {
+      setCreatingAdditionalDeal(false);
+    }
+  }, [contractPrepActive, contractDraft.hasUnsavedChanges]);
 
   const shouldShowDealPreparation =
     contractPrepActive ||
@@ -1364,6 +1422,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               referralId={referralId}
               previousStatus={financials.status}
               visible={shouldShowDealPreparation}
+              forceCreateNewDeal={creatingAdditionalDeal}
               contractDetails={{
                 propertyAddress: financials.propertyAddress ?? referral.propertyAddress ?? undefined,
                 propertyCity: financials.propertyCity ?? referral.propertyCity ?? undefined,
@@ -1375,6 +1434,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                 agentCommissionBasisPoints: financials.commissionBasisPoints,
                 referralFeeBasisPoints: financials.referralFeeBasisPoints,
                 dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
+                expectedCloseDate:
+                  financials.expectedCloseDate ??
+                  getLatestExpectedCloseDate(referral.payments) ??
+                  undefined,
               }}
               onContractDraftChange={(draft) => {
                 contractHandlersRef.current?.onContractDraftChange(draft);

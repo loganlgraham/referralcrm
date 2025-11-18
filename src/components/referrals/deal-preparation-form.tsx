@@ -15,6 +15,9 @@ interface ContractDetails {
   agentCommissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
   dealSide?: 'buy' | 'sell';
+  expectedCloseDate?: string | null;
+  usedAfc?: boolean;
+  usedAssignedAgent?: boolean;
 }
 
 interface ContractFormState {
@@ -26,6 +29,9 @@ interface ContractFormState {
   agentCommissionPercentage: string;
   referralFeePercentage: string;
   dealSide: 'buy' | 'sell';
+  expectedCloseDate: string;
+  usedAfc: boolean;
+  usedAssignedAgent: boolean;
 }
 
 interface CreatedDealPayload {
@@ -44,6 +50,7 @@ interface CreatedDealPayload {
   createdAt?: string | null;
   updatedAt?: string | null;
   paidDate?: string | null;
+  expectedCloseDate?: string | null;
 }
 
 interface DealPreparationFormProps {
@@ -51,6 +58,7 @@ interface DealPreparationFormProps {
   previousStatus: ReferralStatus;
   visible: boolean;
   contractDetails?: ContractDetails;
+  forceCreateNewDeal?: boolean;
   onContractSaved?: (details: {
     propertyAddress: string;
     propertyCity: string;
@@ -61,6 +69,9 @@ interface DealPreparationFormProps {
     referralFeeBasisPoints: number;
     referralFeeDueCents: number;
     dealSide: 'buy' | 'sell';
+    expectedCloseDate?: string | null;
+    usedAfc?: boolean;
+    usedAssignedAgent?: boolean;
   }) => void;
   onStatusChanged?: (status: ReferralStatus, payload?: Record<string, unknown>) => void;
   onContractDraftChange?: (details: {
@@ -73,6 +84,9 @@ interface DealPreparationFormProps {
     referralFeeBasisPoints?: number;
     referralFeeDueCents?: number;
     dealSide?: 'buy' | 'sell';
+    expectedCloseDate?: string;
+    usedAfc?: boolean;
+    usedAssignedAgent?: boolean;
     hasUnsavedChanges: boolean;
   }) => void;
   onDealCreated?: (deal: CreatedDealPayload) => void;
@@ -91,6 +105,9 @@ const buildInitialFormState = (details?: ContractDetails): ContractFormState => 
     ? (details.referralFeeBasisPoints / 100).toString()
     : '25',
   dealSide: details?.dealSide ?? 'buy',
+  expectedCloseDate: details?.expectedCloseDate ?? '',
+  usedAfc: details?.dealSide === 'sell' ? false : details?.usedAfc !== false,
+  usedAssignedAgent: details?.usedAssignedAgent !== false,
 });
 
 const formatFullAddress = (
@@ -153,6 +170,7 @@ export function DealPreparationForm({
   previousStatus,
   visible,
   contractDetails,
+  forceCreateNewDeal = false,
   onContractSaved,
   onStatusChanged,
   onContractDraftChange,
@@ -183,7 +201,11 @@ export function DealPreparationForm({
         previous.propertyPostalCode !== nextState.propertyPostalCode ||
         previous.contractPrice !== nextState.contractPrice ||
         previous.agentCommissionPercentage !== nextState.agentCommissionPercentage ||
-        previous.referralFeePercentage !== nextState.referralFeePercentage;
+        previous.referralFeePercentage !== nextState.referralFeePercentage ||
+        previous.dealSide !== nextState.dealSide ||
+        previous.expectedCloseDate !== nextState.expectedCloseDate ||
+        previous.usedAfc !== nextState.usedAfc ||
+        previous.usedAssignedAgent !== nextState.usedAssignedAgent;
 
       if (!hasChanged) {
         return previous;
@@ -231,11 +253,28 @@ export function DealPreparationForm({
         referralFeeDueCents:
           referralFeeAmount && referralFeeAmount > 0 ? Math.round(referralFeeAmount * 100) : undefined,
         dealSide: state.dealSide,
+        expectedCloseDate: state.expectedCloseDate || undefined,
+        usedAfc: state.usedAfc,
+        usedAssignedAgent: state.usedAssignedAgent,
         hasUnsavedChanges,
       });
     },
     [onContractDraftChange]
   );
+
+  useEffect(() => {
+    if (form.dealSide === 'sell' && form.usedAfc) {
+      setForm((previous) => {
+        if (previous.dealSide === 'sell' && previous.usedAfc) {
+          const next = { ...previous, usedAfc: false };
+          broadcastDraft(next, true);
+          return next;
+        }
+        return previous;
+      });
+      setDirty(true);
+    }
+  }, [broadcastDraft, form.dealSide, form.usedAfc]);
 
   useEffect(() => {
     if (!visible) {
@@ -286,7 +325,9 @@ export function DealPreparationForm({
     return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }, [form.contractPrice, form.agentCommissionPercentage, form.referralFeePercentage]);
 
-  const handleFieldChange = (field: keyof ContractFormState) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleFieldChange = (
+    field: Exclude<keyof ContractFormState, 'usedAfc' | 'usedAssignedAgent'>
+  ) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const value = event.target.value;
     setForm((previous) => {
       let nextValue = value;
@@ -300,8 +341,20 @@ export function DealPreparationForm({
         nextValue = sanitized.slice(0, 10);
       } else if (field === 'dealSide') {
         nextValue = value === 'sell' ? 'sell' : 'buy';
+      } else if (field === 'expectedCloseDate') {
+        nextValue = value;
       }
       const next = { ...previous, [field]: nextValue as ContractFormState[typeof field] };
+      broadcastDraft(next, true);
+      return next;
+    });
+    setDirty(true);
+  };
+
+  const handleToggleChange = (field: 'usedAfc' | 'usedAssignedAgent') => () => {
+    setForm((previous) => {
+      const nextValue = field === 'usedAfc' && previous.dealSide === 'sell' ? false : !previous[field];
+      const next = { ...previous, [field]: nextValue } as ContractFormState;
       broadcastDraft(next, true);
       return next;
     });
@@ -343,6 +396,7 @@ export function DealPreparationForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'Under Contract',
+          createNewDeal: forceCreateNewDeal,
           contractDetails: {
             propertyAddress: propertyStreet,
             propertyCity,
@@ -352,6 +406,9 @@ export function DealPreparationForm({
             agentCommissionPercentage: agentCommission,
             referralFeePercentage,
             dealSide: form.dealSide,
+            expectedCloseDate: form.expectedCloseDate || null,
+            usedAfc: form.usedAfc,
+            usedAssignedAgent: form.usedAssignedAgent,
           },
         }),
       });
@@ -378,6 +435,9 @@ export function DealPreparationForm({
         referralFeeBasisPoints?: number;
         referralFeeDueCents?: number;
         dealSide?: 'buy' | 'sell';
+        expectedCloseDate?: string | null;
+        usedAfc?: boolean;
+        usedAssignedAgent?: boolean;
       } | undefined;
       const createdDeal = body.deal as Record<string, unknown> | undefined;
 
@@ -391,6 +451,7 @@ export function DealPreparationForm({
           agentCommissionBasisPoints: details.agentCommissionBasisPoints,
           referralFeeBasisPoints: details.referralFeeBasisPoints,
           dealSide: details.dealSide,
+          expectedCloseDate: details.expectedCloseDate ?? '',
         });
         setForm(nextState);
         setDirty(false);
@@ -405,6 +466,9 @@ export function DealPreparationForm({
           referralFeeBasisPoints: details.referralFeeBasisPoints ?? 0,
           referralFeeDueCents: details.referralFeeDueCents ?? 0,
           dealSide: details.dealSide ?? 'buy',
+          expectedCloseDate: details.expectedCloseDate ?? null,
+          usedAfc: details.usedAfc !== false,
+          usedAssignedAgent: details.usedAssignedAgent !== false,
         });
       } else {
         setDirty(false);
@@ -434,7 +498,7 @@ export function DealPreparationForm({
             typeof createdDeal.agentAttribution === 'string'
               ? createdDeal.agentAttribution
               : null,
-          usedAfc: Boolean(createdDeal.usedAfc),
+          usedAfc: createdDeal.usedAfc !== false,
           usedAssignedAgent: Boolean(createdDeal.usedAssignedAgent),
           commissionBasisPoints:
             typeof createdDeal.commissionBasisPoints === 'number'
@@ -467,6 +531,12 @@ export function DealPreparationForm({
               ? createdDeal.paidDate
               : createdDeal.paidDate instanceof Date
                 ? createdDeal.paidDate.toISOString()
+                : null,
+          expectedCloseDate:
+            typeof createdDeal.expectedCloseDate === 'string'
+              ? createdDeal.expectedCloseDate
+              : createdDeal.expectedCloseDate instanceof Date
+                ? createdDeal.expectedCloseDate.toISOString()
                 : null,
         };
 
@@ -552,6 +622,16 @@ export function DealPreparationForm({
             disabled={saving}
           />
         </label>
+        <label className="block">
+          <span className="text-slate-500">Expected Close Date</span>
+          <input
+            type="date"
+            value={form.expectedCloseDate}
+            onChange={handleFieldChange('expectedCloseDate')}
+            className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+            disabled={saving}
+          />
+        </label>
         <div className="grid gap-3 md:grid-cols-2">
           <label className="block">
             <span className="text-slate-500">Agent Commission %</span>
@@ -579,6 +659,58 @@ export function DealPreparationForm({
               disabled={saving}
             />
           </label>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 md:gap-4">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={form.usedAssignedAgent}
+            onClick={handleToggleChange('usedAssignedAgent')}
+            disabled={saving}
+            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+              form.usedAssignedAgent
+                ? 'border-brand bg-brand/10 text-brand'
+                : 'border-slate-200 text-slate-700 hover:border-brand hover:text-brand'
+            } ${saving ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
+          >
+            <span>Used agent</span>
+            <span
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                form.usedAssignedAgent ? 'bg-brand' : 'bg-slate-200'
+              }`}
+            >
+              <span
+                className={`h-4 w-4 rounded-full bg-white shadow transition transform ${
+                  form.usedAssignedAgent ? 'translate-x-4' : 'translate-x-1'
+                }`}
+              />
+            </span>
+          </button>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={form.usedAfc}
+            onClick={handleToggleChange('usedAfc')}
+            disabled={saving || form.dealSide === 'sell'}
+            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+              form.usedAfc
+                ? 'border-brand bg-brand/10 text-brand'
+                : 'border-slate-200 text-slate-700 hover:border-brand hover:text-brand'
+            } ${saving || form.dealSide === 'sell' ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
+          >
+            <span>{form.dealSide === 'sell' ? 'AFC (N/A seller side)' : 'Used AFC'}</span>
+            <span
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                form.usedAfc ? 'bg-brand' : 'bg-slate-200'
+              }`}
+            >
+              <span
+                className={`h-4 w-4 rounded-full bg-white shadow transition transform ${
+                  form.usedAfc ? 'translate-x-4' : 'translate-x-1'
+                }`}
+              />
+            </span>
+          </button>
         </div>
         <label className="block">
           <span className="text-slate-500">Deal Side</span>

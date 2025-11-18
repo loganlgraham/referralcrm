@@ -348,16 +348,34 @@ export async function getReferralById(id: string) {
       paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
       createdAt: payment.createdAt ? payment.createdAt.toISOString() : null,
       updatedAt: payment.updatedAt ? payment.updatedAt.toISOString() : null,
+      expectedCloseDate: payment.expectedCloseDate ? payment.expectedCloseDate.toISOString() : null,
+      closeDateHistory: Array.isArray(payment.closeDateHistory)
+        ? payment.closeDateHistory.map((entry: any) => ({
+            previousDate: entry?.previousDate ? entry.previousDate.toISOString() : null,
+            nextDate: entry?.nextDate ? entry.nextDate.toISOString() : null,
+            changedAt: entry?.changedAt ? entry.changedAt.toISOString() : null,
+            changedBy: entry?.changedBy ?? null,
+          }))
+        : [],
       terminatedReason: payment.terminatedReason ?? null,
       agentAttribution: payment.agentAttribution ?? null,
-      usedAfc: Boolean(payment.usedAfc),
+      usedAfc: payment.usedAfc !== false,
       usedAssignedAgent: Boolean(payment.usedAssignedAgent),
       commissionBasisPoints: payment.commissionBasisPoints ?? null,
       referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
       side: payment.side ?? null,
     })),
+    sla: referral.sla
+      ? {
+          contractToCloseMinutes: referral.sla.contractToCloseMinutes ?? null,
+          closedToPaidMinutes: referral.sla.closedToPaidMinutes ?? null,
+          previousContractToCloseMinutes: referral.sla.previousContractToCloseMinutes ?? null,
+          previousClosedToPaidMinutes: referral.sla.previousClosedToPaidMinutes ?? null,
+        }
+      : null,
     preApprovalAmountCents: typeof referral.preApprovalAmountCents === 'number' ? referral.preApprovalAmountCents : 0,
     estPurchasePriceCents: typeof referral.estPurchasePriceCents === 'number' ? referral.estPurchasePriceCents : 0,
+    expectedCloseDate: referral.expectedCloseDate ? referral.expectedCloseDate.toISOString() : null,
     referralFeeDueCents: typeof referral.referralFeeDueCents === 'number' ? referral.referralFeeDueCents : 0,
     commissionBasisPoints: typeof referral.commissionBasisPoints === 'number' ? referral.commissionBasisPoints : 0,
     referralFeeBasisPoints: typeof referral.referralFeeBasisPoints === 'number' ? referral.referralFeeBasisPoints : 0,

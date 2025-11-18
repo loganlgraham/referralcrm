@@ -9,6 +9,7 @@ import { useCalendarTaskSubmission } from '@/components/referrals/use-calendar-t
 import { useFollowUpTaskContext, type ManualTaskCategory } from '@/components/referrals/follow-up-task-provider';
 import type { RecommendationPriority } from '@/utils/sla-insights';
 import { toast } from 'sonner';
+import { formatTaskDueDate, toTaskIsoString } from '@/utils/task-time';
 
 interface ReferralFollowUpCardProps {
   referral: ReferralLike & {
@@ -41,13 +42,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
       return;
     }
 
-    let dueAt: string | null = null;
-    if (manualDueAt) {
-      const dueDate = new Date(manualDueAt);
-      if (!Number.isNaN(dueDate.getTime())) {
-        dueAt = dueDate.toISOString();
-      }
-    }
+    const dueAt = manualDueAt ? toTaskIsoString(manualDueAt) : null;
 
     addManualTask(referral._id, {
       title,
@@ -208,7 +203,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
                   <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                     <span className="font-medium uppercase text-slate-400">{task.priority}</span>
                     {task.supportingMetric && <span>{task.supportingMetric}</span>}
-                    {task.dueAt && <span>Due {new Date(task.dueAt).toLocaleString()}</span>}
+                    {task.dueAt && <span>Due {formatTaskDueDate(task.dueAt)}</span>}
                   </div>
                   <div className="mt-3">
                     <button

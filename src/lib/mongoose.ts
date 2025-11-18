@@ -1,4 +1,8 @@
 import mongoose from 'mongoose';
+import {
+  MongoNetworkError,
+  MongoServerSelectionError
+} from 'mongodb';
 
 const resolvedMongoUri =
   process.env.MONGODB_URI ??
@@ -11,6 +15,12 @@ if (!resolvedMongoUri) {
 const MONGODB_URI = resolvedMongoUri;
 
 let modelsRegistered = false;
+
+const MAX_CONNECTION_RETRIES = 4;
+const RETRY_BASE_DELAY_MS = 500;
+let retryAttempt = 1;
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const registerModels = async () => {
   if (modelsRegistered) {
@@ -53,19 +63,108 @@ if (!cached) {
   cached = globalWithMongoose.mongooseGlobal = { conn: null, promise: null };
 }
 
-export async function connectMongo(): Promise<typeof mongoose> {
+const shouldRetryConnection = (error: unknown) => {
+  const isPoolClearedError = (candidate: unknown) =>
+    (candidate as { name?: string } | null)?.name === 'MongoPoolClearedError';
+
+  const hasPoolRetryLabel = (candidate: unknown) => {
+    if (!candidate || typeof candidate !== 'object') {
+      return false;
+    }
+
+    const labels = (candidate as { errorLabelSet?: Set<string> }).errorLabelSet;
+    return labels?.has('ResetPool') || labels?.has('PoolRequstedRetry') || false;
+  };
+
+  if (error instanceof MongoNetworkError || isPoolClearedError(error)) {
+    return true;
+  }
+
+  if (error instanceof MongoServerSelectionError) {
+    // Only retry server selection failures when the driver marks them as transient
+    return hasPoolRetryLabel(error);
+  }
+
+  const candidate = error as { errorLabelSet?: Set<string>; cause?: unknown } | null;
+  if (hasPoolRetryLabel(candidate)) {
+    return true;
+  }
+
+  if (candidate?.cause) {
+    const cause = candidate.cause as { errorLabelSet?: Set<string>; name?: string } | null;
+    return Boolean(hasPoolRetryLabel(cause) || isPoolClearedError(cause));
+  }
+
+  return false;
+};
+
+const resetCachedConnection = async () => {
   if (cached?.conn) {
+    try {
+      await cached.conn.connection.close(false);
+    } catch {
+      /* ignore close errors while resetting */
+    }
+  }
+
+  cached!.conn = null;
+  cached!.promise = null;
+};
+
+export async function connectMongo(): Promise<typeof mongoose> {
+  if (cached?.conn && cached.conn.connection.readyState === 1) {
+    retryAttempt = 1;
     await registerModels();
     return cached.conn;
   }
 
   if (!cached?.promise) {
-    cached!.promise = mongoose.connect(MONGODB_URI, {
-      bufferCommands: false
-    });
+    cached!.promise = mongoose
+      .connect(MONGODB_URI, {
+        bufferCommands: false,
+        serverSelectionTimeoutMS: 5000
+      })
+      .catch((error) => {
+        cached!.promise = null;
+        throw error;
+      });
   }
 
-  cached!.conn = await cached!.promise;
-  await registerModels();
-  return cached!.conn;
+  try {
+    cached!.conn = await cached!.promise;
+    retryAttempt = 1;
+    await registerModels();
+    return cached!.conn;
+  } catch (error) {
+    const shouldRetry = shouldRetryConnection(error);
+    const message = error instanceof Error ? error.message : 'Unknown Mongo connection error';
+
+    console.error('[mongo] Failed to establish connection', error);
+
+    await resetCachedConnection();
+
+    if (shouldRetry && retryAttempt <= MAX_CONNECTION_RETRIES) {
+      const backoffMs = Math.min(RETRY_BASE_DELAY_MS * 2 ** (retryAttempt - 1), 5000);
+      console.warn(
+        `[mongo] Retrying mongoose connection after transient failure (attempt ${retryAttempt} of ${MAX_CONNECTION_RETRIES}) after ${backoffMs}ms`
+      );
+      retryAttempt += 1;
+
+      cached!.promise = mongoose
+        .connect(MONGODB_URI, {
+          bufferCommands: false,
+          serverSelectionTimeoutMS: 5000
+        })
+        .catch((connectError) => {
+          cached!.promise = null;
+          throw connectError;
+        });
+
+      await delay(backoffMs);
+      return connectMongo();
+    }
+
+    retryAttempt = 1;
+    throw new Error(`Failed to connect to MongoDB: ${message}`);
+  }
 }

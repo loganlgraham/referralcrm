@@ -47,6 +47,7 @@ interface FinancialSnapshot {
   referralFeeDueCents?: number;
   commissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
+  expectedCloseDate?: string | null;
   propertyAddress?: string;
   propertyCity?: string;
   propertyState?: string;
@@ -85,6 +86,7 @@ type ReferralHeaderProps = {
       agentCommissionBasisPoints: number;
       referralFeeBasisPoints: number;
       referralFeeDueCents: number;
+      expectedCloseDate?: string | null;
       dealSide: 'buy' | 'sell';
     }) => void;
     onContractDraftChange: (draft: ContractDraftSnapshot) => void;
@@ -117,6 +119,9 @@ export function ReferralHeader({
   );
   const [contractPriceCents, setContractPriceCents] = useState<number | undefined>(
     referral.estPurchasePriceCents
+  );
+  const [expectedCloseDate, setExpectedCloseDate] = useState<string | null>(
+    referral.expectedCloseDate ?? null
   );
   const [referralFeeDueCents, setReferralFeeDueCents] = useState<number>(
     referral.referralFeeDueCents ?? 0
@@ -287,33 +292,6 @@ export function ReferralHeader({
   const primaryAmountValue = preApprovalAmountCents ?? 0;
   const primaryAmountLabel = 'Pre-approval amount';
   const formattedPrimaryAmount = primaryAmountValue ? formatCurrency(primaryAmountValue) : '—';
-  const derivedReferralFeeDueCents = (() => {
-    if (
-      effectiveContractPriceCents &&
-      effectiveCommissionBasisPoints &&
-      effectiveReferralFeeBasisPoints
-    ) {
-      const computed =
-        (effectiveContractPriceCents * effectiveCommissionBasisPoints * effectiveReferralFeeBasisPoints) /
-        100_000_000;
-      if (Number.isFinite(computed) && computed > 0) {
-        return Math.round(computed);
-      }
-    }
-    if (effectiveReferralFeeDueCents != null) {
-      return effectiveReferralFeeDueCents;
-    }
-    return null;
-  })();
-  const formattedReferralFeeDue =
-    derivedReferralFeeDueCents != null ? formatCurrency(derivedReferralFeeDueCents) : '—';
-  const commissionPercent = effectiveCommissionBasisPoints
-    ? `${(effectiveCommissionBasisPoints / 100).toFixed(2)}%`
-    : '—';
-  const referralFeePercent = effectiveReferralFeeBasisPoints
-    ? `${(effectiveReferralFeeBasisPoints / 100).toFixed(2)}%`
-    : '—';
-  const dealSideLabel = dealSide === 'sell' ? 'Sell-side' : 'Buy-side';
   const isAgentView = viewerRole === 'agent';
   const canAssignAgent = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'mc';
   const canAssignMc = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'agent';
@@ -399,6 +377,7 @@ export function ReferralHeader({
       agentCommissionBasisPoints: number;
       referralFeeBasisPoints: number;
       referralFeeDueCents: number;
+      expectedCloseDate?: string | null;
       dealSide: 'buy' | 'sell';
     }) => {
       setPropertyAddress(details.propertyAddress);
@@ -409,6 +388,7 @@ export function ReferralHeader({
       setCommissionBasisPoints(details.agentCommissionBasisPoints);
       setReferralFeeBasisPoints(details.referralFeeBasisPoints);
       setReferralFeeDueCents(details.referralFeeDueCents ?? 0);
+      setExpectedCloseDate(details.expectedCloseDate ?? null);
       setDealSide(details.dealSide);
       setDraftContract({ hasUnsavedChanges: false });
       onFinancialsChange?.({
@@ -418,6 +398,7 @@ export function ReferralHeader({
         referralFeeDueCents: details.referralFeeDueCents,
         commissionBasisPoints: details.agentCommissionBasisPoints,
         referralFeeBasisPoints: details.referralFeeBasisPoints,
+        expectedCloseDate: details.expectedCloseDate ?? null,
         propertyAddress: details.propertyAddress,
         propertyCity: details.propertyCity,
         propertyState: details.propertyState,
@@ -626,7 +607,7 @@ export function ReferralHeader({
 
   return (
     <div className="space-y-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
-      <div className="grid gap-4 rounded-xl bg-gradient-to-r from-brand/5 via-white to-slate-50 p-5 lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-center">
+      <div className="grid gap-4 rounded-xl bg-gradient-to-r from-brand/5 via-white to-slate-50 p-5 lg:grid-cols-[minmax(0,1.05fr),auto] lg:items-start">
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-brand">Borrower</p>
           <div>
@@ -662,13 +643,15 @@ export function ReferralHeader({
           </div>
         </div>
         <div
-          className={`grid gap-3 ${showBucketSummary ? 'sm:grid-cols-2' : ''} ${
+          className={`grid items-start gap-3 ${showBucketSummary ? 'sm:grid-cols-2' : ''} ${
             isAgentView ? 'lg:justify-items-end' : ''
           }`}
         >
           <section
-            className={`flex h-full flex-col justify-between rounded-lg border border-brand/20 bg-white/80 p-4 shadow-sm ${
-              isAgentView ? 'self-end sm:max-w-sm lg:max-w-xs lg:ml-auto' : ''
+            className={`flex w-full max-w-[260px] flex-col gap-2 rounded-lg border border-brand/20 bg-white/80 p-3 shadow-sm ${
+              isAgentView
+                ? 'self-start lg:ml-auto'
+                : 'self-start lg:justify-self-end'
             }`}
           >
             <div className="space-y-2">
@@ -741,29 +724,6 @@ export function ReferralHeader({
         </section>
       </div>
 
-      {!isAgentOrigin && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Financial breakdown</h2>
-          <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Agent Commission</dt>
-              <dd className="text-sm font-semibold text-slate-900">{commissionPercent}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Referral Fee %</dt>
-              <dd className="text-sm font-semibold text-slate-900">{referralFeePercent}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Referral Fee Due</dt>
-              <dd className="text-sm font-semibold text-slate-900">{formattedReferralFeeDue}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Deal Side</dt>
-              <dd className="text-sm font-semibold text-slate-900">{dealSideLabel}</dd>
-            </div>
-          </dl>
-        </div>
-      )}
     </div>
   );
 }

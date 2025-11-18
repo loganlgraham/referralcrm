@@ -33,6 +33,13 @@ export interface DealRecord {
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
   contractPriceCents?: number | null;
+  expectedCloseDate?: string | null;
+  closeDateHistory?: {
+    previousDate?: string | null;
+    nextDate?: string | null;
+    changedAt?: string | null;
+    changedBy?: string | null;
+  }[];
 }
 
 export interface DealOverrides {
@@ -79,6 +86,7 @@ interface DealDraft {
   commissionPercent: string;
   referralFeePercent: string;
   side: 'buy' | 'sell';
+  expectedCloseDate: string;
 }
 
 const deriveReferralFeeCents = (
@@ -122,11 +130,13 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
       terminatedReason: (deal.terminatedReason as TerminatedReason | undefined) ?? null,
       agentAttribution: (deal.agentAttribution as AgentSelectValue | undefined) ?? '',
       usedAssignedAgent: deal.usedAssignedAgent ?? null,
-      usedAfc: deal.usedAfc ?? false,
+      usedAfc: deal.usedAfc ?? true,
       commissionBasisPoints: deal.commissionBasisPoints ?? null,
       referralFeeBasisPoints: deal.referralFeeBasisPoints ?? null,
       side: deal.side ?? null,
       contractPriceCents: deal.contractPriceCents ?? null,
+      expectedCloseDate: deal.expectedCloseDate ?? null,
+      closeDateHistory: Array.isArray(deal.closeDateHistory) ? deal.closeDateHistory : [],
     }))
     .sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -181,7 +191,7 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
   const initialAfcMap = useMemo(() => {
     const snapshot: Record<string, boolean> = {};
     deals.forEach((deal) => {
-      snapshot[deal._id] = Boolean(deal.usedAfc);
+      snapshot[deal._id] = deal.side === 'sell' ? false : deal.usedAfc !== false;
     });
     return snapshot;
   }, [deals]);
@@ -304,6 +314,14 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
     return formatted.endsWith('.00') ? formatted.slice(0, -3) : formatted;
   };
 
+  const parseExpectedCloseDate = (value: string): Date | null => {
+    if (!value) {
+      return null;
+    }
+    const parsed = value.length === 10 ? new Date(`${value}T00:00:00`) : new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
   const getDefaultDraft = useCallback(
     (deal: DealRecord): DealDraft => {
       const priceCents = deal.contractPriceCents ?? summaryContractPriceCents ?? null;
@@ -316,6 +334,9 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
         commissionPercent: formatDraftPercent(commissionBps),
         referralFeePercent: formatDraftPercent(referralFeeBps),
         side,
+        expectedCloseDate: deal.expectedCloseDate
+          ? deal.expectedCloseDate.slice(0, 10)
+          : '',
       };
     },
     [
@@ -331,7 +352,10 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
     setDetailDraftMap((previous) => {
       const next: Record<string, DealDraft> = {};
       deals.forEach((deal) => {
-        next[deal._id] = previous[deal._id] ?? getDefaultDraft(deal);
+        const defaultDraft = getDefaultDraft(deal);
+        next[deal._id] = previous[deal._id]
+          ? { ...defaultDraft, ...previous[deal._id] }
+          : defaultDraft;
       });
       return next;
     });
@@ -409,6 +433,7 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
           referralFeeBasisPoints: referralFeeBasisPoints ?? 0,
           side: draft.side,
           expectedAmountCents,
+          expectedCloseDate: draft.expectedCloseDate || null,
         }),
       });
 
@@ -433,6 +458,19 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
                 referralFeeBasisPoints,
                 side: draft.side,
                 expectedAmountCents,
+                expectedCloseDate: draft.expectedCloseDate || null,
+                closeDateHistory:
+                  draft.expectedCloseDate && draft.expectedCloseDate !== deal.expectedCloseDate
+                    ? [
+                        ...(Array.isArray(item.closeDateHistory) ? item.closeDateHistory : []),
+                        {
+                          previousDate: deal.expectedCloseDate ?? null,
+                          nextDate: draft.expectedCloseDate,
+                          changedAt: new Date().toISOString(),
+                          changedBy: viewerRole ?? 'unknown',
+                        },
+                      ]
+                    : item.closeDateHistory,
                 updatedAt: new Date().toISOString(),
               }
             : item
@@ -445,6 +483,7 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
           commissionPercent: formatDraftPercent(commissionBasisPoints),
           referralFeePercent: formatDraftPercent(referralFeeBasisPoints),
           side: draft.side,
+          expectedCloseDate: draft.expectedCloseDate,
         },
       }));
       toast.success('Deal details saved');
@@ -755,13 +794,13 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
       }
     };
 
-  const handleAfcToggle = (deal: DealRecord) => async (event: ChangeEvent<HTMLInputElement>) => {
-    const nextChecked = event.target.checked;
-    const previousChecked = afcMap[deal._id] ?? false;
-
-    if (nextChecked === previousChecked) {
+  const handleAfcToggle = (deal: DealRecord) => async () => {
+    if (deal.side === 'sell') {
       return;
     }
+
+    const previousChecked = afcMap[deal._id] ?? true;
+    const nextChecked = !previousChecked;
 
     setAfcMap((prev) => ({ ...prev, [deal._id]: nextChecked }));
     setSavingMap((prev) => ({ ...prev, [deal._id]: true }));
@@ -825,7 +864,7 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
     const selectedReason = reasonMap[deal._id] ?? deal.terminatedReason ?? 'inspection';
     const agentSelection = agentMap[deal._id] ?? '';
     const agentOutcomeSelection = agentSelection === 'OUTSIDE_AGENT' ? 'OUTSIDE_AGENT' : 'USED_AGENT';
-    const usedAfc = afcMap[deal._id] ?? false;
+    const usedAfc = afcMap[deal._id] ?? true;
     const assignedBucket = referral.ahaBucket ?? null;
     const matchesAssigned =
       !assignedBucket || agentSelection === assignedBucket || agentSelection === '';
@@ -852,6 +891,53 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
       setExpandedMap((previous) => ({ ...previous, [deal._id]: !isExpanded }));
     };
 
+    const toggleAgentOutcome = async () => {
+      const nextOutcome = agentOutcomeSelection === 'USED_AGENT' ? 'OUTSIDE_AGENT' : 'USED_AGENT';
+      const nextAttribution =
+        nextOutcome === 'OUTSIDE_AGENT' ? 'OUTSIDE_AGENT' : resolveAssignedAgentOutcome();
+      const previousValue = agentMap[deal._id] ?? '';
+
+      setAgentMap((prev) => ({ ...prev, [deal._id]: nextAttribution ?? '' }));
+      setSavingMap((prev) => ({ ...prev, [deal._id]: true }));
+
+      try {
+        const payload: Record<string, unknown> = {
+          id: deal._id,
+          agentAttribution: nextAttribution,
+          usedAssignedAgent: nextOutcome !== 'OUTSIDE_AGENT',
+        };
+
+        if (nextOutcome === 'OUTSIDE_AGENT') {
+          payload.expectedAmountCents = 0;
+          payload.receivedAmountCents = 0;
+        } else if (expectedAmountCents > 0) {
+          payload.expectedAmountCents = expectedAmountCents;
+        }
+
+        const response = await fetch('/api/payments', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error('Unable to update agent outcome');
+        }
+
+        toast.success('Agent outcome saved');
+      } catch (error) {
+        console.error(error);
+        setAgentMap((prev) => ({ ...prev, [deal._id]: previousValue }));
+        toast.error(error instanceof Error ? error.message : 'Unable to update deal');
+      } finally {
+        setSavingMap((prev) => {
+          const next = { ...prev };
+          delete next[deal._id];
+          return next;
+        });
+      }
+    };
+
     const handleDeleteClick = async (event: MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
       event.stopPropagation();
@@ -867,6 +953,8 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
           let nextValue: string | 'buy' | 'sell';
           if (field === 'side') {
             nextValue = rawValue === 'sell' ? 'sell' : 'buy';
+          } else if (field === 'expectedCloseDate') {
+            nextValue = rawValue;
           } else {
             nextValue = rawValue.replace(/[^0-9.]/g, '');
           }
@@ -891,6 +979,19 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
       event.preventDefault();
       await handleSaveDealDetails(deal)();
     };
+
+    const expectedCloseDateLabel = (() => {
+      const parsedDate = draft.expectedCloseDate ? parseExpectedCloseDate(draft.expectedCloseDate) : null;
+      if (!parsedDate) {
+        return 'Not set';
+      }
+
+      return parsedDate.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+    })();
 
     return (
       <div key={deal._id} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -928,6 +1029,10 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
             </div>
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-3">
+            <div className="flex flex-col rounded border border-slate-200 bg-white px-3 py-2 text-left text-xs text-slate-500 shadow-sm">
+              <span className="uppercase">Expected Close</span>
+              <span className="text-sm font-semibold text-slate-900">{expectedCloseDateLabel}</span>
+            </div>
             <label className="flex items-center gap-2 text-xs uppercase text-slate-400">
               Status
               <select
@@ -974,6 +1079,16 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
                     onChange={handleDraftChange('contractPrice')}
                     className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
                     placeholder="350000"
+                    disabled={isDetailSaving}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs uppercase text-slate-400">
+                  Expected Close Date
+                  <input
+                    type="date"
+                    value={draft.expectedCloseDate}
+                    onChange={handleDraftChange('expectedCloseDate')}
+                    className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
                     disabled={isDetailSaving}
                   />
                 </label>
@@ -1087,43 +1202,66 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
                 )}
               </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">
-                  Agent Outcome
-                  <select
-                    value={agentOutcomeSelection}
-                    onChange={handleAgentOutcomeChange(deal, expectedAmountCents)}
-                    className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
-                    disabled={isSaving || isDetailSaving}
-                  >
-                    <option value="USED_AGENT">Used agent</option>
-                    <option value="OUTSIDE_AGENT">Used outside agent</option>
-                  </select>
-                </label>
-                {assignedBucket && agentOutcomeSelection === 'USED_AGENT' && agentSelection && !matchesAssigned && (
-                  <p className="mt-2 text-xs text-amber-600">
-                    This deal did not close with the assigned {assignedBucket === 'AHA' ? 'AHA' : 'AHA OOS'} agent.
-                  </p>
-                )}
-              </div>
-              <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs uppercase text-slate-400">Mortgage Company</p>
-                <label className="mt-2 inline-flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-                    checked={usedAfc}
-                    onChange={handleAfcToggle(deal)}
-                    disabled={isSaving}
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={agentOutcomeSelection === 'USED_AGENT'}
+                onClick={toggleAgentOutcome}
+                disabled={isSaving || isDetailSaving}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+                  agentOutcomeSelection === 'USED_AGENT'
+                    ? 'border-brand bg-brand/10 text-brand'
+                    : 'border-slate-200 text-slate-700 hover:border-brand hover:text-brand'
+                } ${isSaving || isDetailSaving ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
+              >
+                <span>Used agent</span>
+                <span
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                    agentOutcomeSelection === 'USED_AGENT' ? 'bg-brand' : 'bg-slate-200'
+                  }`}
+                >
+                  <span
+                    className={`h-4 w-4 rounded-full bg-white shadow transition transform ${
+                      agentOutcomeSelection === 'USED_AGENT' ? 'translate-x-4' : 'translate-x-1'
+                    }`}
                   />
-                  Used AFC
-                </label>
-                {!usedAfc && (
-                  <p className="mt-2 text-xs text-slate-500">Track whether AFC handled this deal.</p>
-                )}
-              </div>
+                </span>
+              </button>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={usedAfc}
+                onClick={handleAfcToggle(deal)}
+                disabled={isSaving || isDetailSaving || deal.side === 'sell'}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+                  usedAfc
+                    ? 'border-brand bg-brand/10 text-brand'
+                    : 'border-slate-200 text-slate-700 hover:border-brand hover:text-brand'
+                } ${isSaving || isDetailSaving || deal.side === 'sell' ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
+              >
+                <span>{deal.side === 'sell' ? 'AFC (N/A seller side)' : 'Used AFC'}</span>
+                <span
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                    usedAfc ? 'bg-brand' : 'bg-slate-200'
+                  }`}
+                >
+                  <span
+                    className={`h-4 w-4 rounded-full bg-white shadow transition transform ${
+                      usedAfc ? 'translate-x-4' : 'translate-x-1'
+                    }`}
+                  />
+                </span>
+              </button>
             </div>
+            {assignedBucket && agentOutcomeSelection === 'USED_AGENT' && agentSelection && !matchesAssigned && (
+              <p className="text-xs text-amber-600">
+                This deal did not close with the assigned {assignedBucket === 'AHA' ? 'AHA' : 'AHA OOS'} agent.
+              </p>
+            )}
+            {deal.side === 'sell' && (
+              <p className="text-xs text-slate-500">AFC tracking is skipped for seller-side deals.</p>
+            )}
           </div>
         )}
       </div>

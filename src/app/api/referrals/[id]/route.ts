@@ -164,29 +164,34 @@ export async function DELETE(request: NextRequest, context: RouteContext): Promi
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
-  await connectMongo();
-  const referral = await Referral.findById(context.params.id)
-    .populate('assignedAgent', 'userId')
-    .populate('lender', 'userId');
-  if (!referral) {
-    return new NextResponse('Not found', { status: 404 });
-  }
-  if (referral.deletedAt) {
-    return new NextResponse('Not found', { status: 404 });
-  }
-  if (!canViewReferral(session, { assignedAgent: referral.assignedAgent, lender: referral.lender, org: referral.org })) {
-    return new NextResponse('Forbidden', { status: 403 });
-  }
-  await Payment.deleteMany({ referralId: referral._id });
-  await Referral.findByIdAndUpdate(context.params.id, { deletedAt: new Date() });
+  try {
+    await connectMongo();
+    const referral = await Referral.findById(context.params.id)
+      .populate('assignedAgent', 'userId')
+      .populate('lender', 'userId');
+    if (!referral) {
+      return new NextResponse('Not found', { status: 404 });
+    }
+    if (referral.deletedAt) {
+      return new NextResponse('Not found', { status: 404 });
+    }
+    if (!canViewReferral(session, { assignedAgent: referral.assignedAgent, lender: referral.lender, org: referral.org })) {
+      return new NextResponse('Forbidden', { status: 403 });
+    }
+    await Payment.deleteMany({ referralId: referral._id });
+    await Referral.findByIdAndUpdate(context.params.id, { deletedAt: new Date() });
 
-  const auditActorId = resolveAuditActorId(session.user.id);
-  await logReferralActivity({
-    referralId: referral._id,
-    actorRole: session.user.role,
-    actorId: auditActorId ?? session.user.id,
-    channel: 'update',
-    content: 'Archived referral',
-  });
-  return new NextResponse(null, { status: 204 });
+    const auditActorId = resolveAuditActorId(session.user.id);
+    await logReferralActivity({
+      referralId: referral._id,
+      actorRole: session.user.role,
+      actorId: auditActorId ?? session.user.id,
+      channel: 'update',
+      content: 'Archived referral',
+    });
+    return new NextResponse(null, { status: 204 });
+  } catch (error) {
+    console.error('[referral-delete] failed', error);
+    return NextResponse.json({ error: 'Unable to delete referral' }, { status: 503 });
+  }
 }

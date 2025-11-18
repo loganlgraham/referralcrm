@@ -38,7 +38,19 @@ const paymentSchema = new Schema(
       enum: ['AHA', 'AHA_OOS', 'OUTSIDE_AGENT'],
       default: null,
     },
-    usedAfc: { type: Boolean, default: false },
+    expectedCloseDate: { type: Date, default: null },
+    closeDateHistory: {
+      type: [
+        {
+          previousDate: { type: Date, default: null },
+          nextDate: { type: Date, default: null },
+          changedAt: { type: Date, default: Date.now },
+          changedBy: { type: String, default: null },
+        }
+      ],
+      default: [],
+    },
+    usedAfc: { type: Boolean, default: true },
     usedAssignedAgent: { type: Boolean, default: true },
     invoiceDate: Date,
     paidDate: Date,

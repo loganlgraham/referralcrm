@@ -7,6 +7,7 @@ import { useFollowUpTaskContext } from '@/components/referrals/follow-up-task-pr
 import { useFollowUpTasks } from '@/components/referrals/use-follow-up-tasks';
 import { computeSlaInsights, sortRecommendations, type ReferralLike } from '@/utils/sla-insights';
 import { useCalendarTaskSubmission } from '@/components/referrals/use-calendar-task-submission';
+import { formatTaskDueDate } from '@/utils/task-time';
 
 interface BoardReferral {
   _id: string;
@@ -152,7 +153,7 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
                 <p className="text-sm text-slate-600">{task.message}</p>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                   {task.supportingMetric && <span>{task.supportingMetric}</span>}
-                  {task.dueAt && <span>Due {new Date(task.dueAt).toLocaleString()}</span>}
+                  {task.dueAt && <span>Due {formatTaskDueDate(task.dueAt)}</span>}
                 </div>
                 <div className="pt-2">
                   <button

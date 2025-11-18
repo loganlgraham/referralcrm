@@ -276,9 +276,9 @@ export function DealsTable() {
       if ('terminatedReason' in updates) {
         payload.terminatedReason = updates.terminatedReason ?? null;
       }
-      if ('usedAfc' in updates) {
-        payload.usedAfc = updates.usedAfc ?? false;
-      }
+    if ('usedAfc' in updates) {
+      payload.usedAfc = updates.usedAfc ?? true;
+    }
       if ('usedAssignedAgent' in updates) {
         payload.usedAssignedAgent = updates.usedAssignedAgent ?? false;
       }
@@ -309,7 +309,8 @@ export function DealsTable() {
   };
 
   const handleAfcUsageChange = async (deal: DealRow, checked: boolean) => {
-    if (Boolean(deal.usedAfc) === checked) {
+    const currentUsedAfc = deal.usedAfc !== false;
+    if (currentUsedAfc === checked) {
       return;
     }
 
@@ -526,7 +527,7 @@ export function DealsTable() {
               receivedDraft !== undefined
                 ? receivedDraft
                 : formatCentsForDisplay(deal.receivedAmountCents ?? 0);
-            const usedAfc = Boolean(deal.usedAfc);
+            const usedAfc = deal.usedAfc !== false;
             const usedAssignedAgent = Boolean(deal.usedAssignedAgent);
             const isPaid = deal.status === 'paid';
             const isUpdating = updatingId === deal._id;

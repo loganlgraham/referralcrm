@@ -45,6 +45,15 @@ type PaymentWithReferral = {
   commissionBasisPoints?: number | null;
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
+  expectedCloseDate?: Date | null;
+  closeDateHistory?:
+    | {
+        previousDate?: Date | null;
+        nextDate?: Date | null;
+        changedAt?: Date | null;
+        changedBy?: string | null;
+      }[]
+    | null;
 };
 
 const toDate = (value?: Date | string | null): Date | null => {
@@ -181,9 +190,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       expectedAmountCents: payment.expectedAmountCents ?? 0,
       receivedAmountCents: payment.receivedAmountCents ?? 0,
       contractPriceCents: payment.contractPriceCents ?? null,
+      expectedCloseDate: payment.expectedCloseDate ? payment.expectedCloseDate.toISOString() : null,
+      closeDateHistory: Array.isArray(payment.closeDateHistory)
+        ? payment.closeDateHistory.map((entry) => ({
+            previousDate: entry?.previousDate ? entry.previousDate.toISOString() : null,
+            nextDate: entry?.nextDate ? entry.nextDate.toISOString() : null,
+            changedAt: entry?.changedAt ? entry.changedAt.toISOString() : null,
+            changedBy: entry?.changedBy ?? null,
+          }))
+        : [],
       terminatedReason: payment.terminatedReason ?? null,
       agentAttribution: payment.agentAttribution ?? null,
-      usedAfc: Boolean(payment.usedAfc),
+      usedAfc: payment.usedAfc !== false,
       usedAssignedAgent: Boolean(payment.usedAssignedAgent),
       invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
       paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
@@ -242,6 +260,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   await connectMongo();
+  const normalizedSide = parsed.data.side ?? 'buy';
   const payment = await Payment.create({
     referralId: parsed.data.referralId,
     status: parsed.data.status,
@@ -249,15 +268,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     receivedAmountCents: parsed.data.receivedAmountCents,
     terminatedReason: parsed.data.terminatedReason ?? null,
     agentAttribution: parsed.data.agentAttribution ?? null,
-    usedAfc: parsed.data.usedAfc ?? false,
+    usedAfc: normalizedSide === 'sell' ? false : parsed.data.usedAfc ?? true,
     usedAssignedAgent: parsed.data.usedAssignedAgent ?? true,
     invoiceDate: parsed.data.invoiceDate,
     paidDate: parsed.data.paidDate,
     notes: parsed.data.notes,
     commissionBasisPoints: parsed.data.commissionBasisPoints ?? null,
     referralFeeBasisPoints: parsed.data.referralFeeBasisPoints ?? null,
-    side: parsed.data.side ?? 'buy',
+    side: normalizedSide,
     contractPriceCents: parsed.data.contractPriceCents ?? null,
+    expectedCloseDate: parsed.data.expectedCloseDate ?? null,
   });
 
   return NextResponse.json({ id: payment._id.toString() }, { status: 201 });
@@ -368,6 +388,28 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     }
   }
 
+  const previousExpectedCloseDate = existingPayment.expectedCloseDate
+    ? toDate(existingPayment.expectedCloseDate)
+    : null;
+  const hasExpectedCloseDateUpdate = Object.prototype.hasOwnProperty.call(
+    parsed.data,
+    'expectedCloseDate'
+  );
+  const nextExpectedCloseDate = hasExpectedCloseDateUpdate
+    ? toDate(parsed.data.expectedCloseDate as any)
+    : previousExpectedCloseDate;
+  const expectedCloseChanged =
+    hasExpectedCloseDateUpdate &&
+    ((nextExpectedCloseDate?.getTime() ?? null) !== (previousExpectedCloseDate?.getTime() ?? null));
+  const closeDateHistoryEntry = expectedCloseChanged
+    ? {
+        previousDate: previousExpectedCloseDate,
+        nextDate: nextExpectedCloseDate,
+        changedAt: new Date(),
+        changedBy: session.user.role ?? 'unknown',
+      }
+    : null;
+
   const updatePayload: Record<string, unknown> = { ...parsed.data };
   delete updatePayload.referralId;
   updatePayload.contractPriceCents = nextContractPriceCents ?? null;
@@ -376,6 +418,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   updatePayload.side = nextSide ?? 'buy';
   updatePayload.expectedAmountCents = nextExpectedAmountCents;
   updatePayload.receivedAmountCents = nextReceivedAmountCents;
+  if (hasExpectedCloseDateUpdate) {
+    updatePayload.expectedCloseDate = nextExpectedCloseDate;
+  }
   if (hasUsedAssignedAgentUpdate) {
     updatePayload.usedAssignedAgent = nextUsedAssignedAgent;
   }
@@ -384,7 +429,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     updatePayload.usedAssignedAgent = nextUsedAssignedAgent;
   }
   if ('usedAfc' in updatePayload && updatePayload.usedAfc === undefined) {
-    updatePayload.usedAfc = false;
+    updatePayload.usedAfc = updatePayload.side === 'sell' ? false : true;
   }
   if ('usedAssignedAgent' in updatePayload && updatePayload.usedAssignedAgent === undefined) {
     updatePayload.usedAssignedAgent = false;
@@ -399,6 +444,13 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const payment = await Payment.findByIdAndUpdate(body.id, updatePayload, { new: true });
   if (!payment) {
     return new NextResponse('Not found', { status: 404 });
+  }
+
+  if (closeDateHistoryEntry) {
+    await Payment.updateOne(
+      { _id: payment._id },
+      { $push: { closeDateHistory: closeDateHistoryEntry } }
+    );
   }
 
   const referral = await Referral.findById(existingPayment.referralId);

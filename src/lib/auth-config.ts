@@ -37,7 +37,12 @@ providers.push(
 
       const { identifier, password } = parsed.data;
 
-      await connectMongo();
+      try {
+        await connectMongo();
+      } catch (error) {
+        console.error('[auth] Failed to connect to MongoDB during login', error);
+        throw new Error('Unable to reach the database right now. Please try again in a moment.');
+      }
 
       const normalizedIdentifier = identifier.toLowerCase();
       const isEmail = /@/.test(normalizedIdentifier);

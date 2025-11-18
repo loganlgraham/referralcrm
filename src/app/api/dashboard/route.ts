@@ -20,6 +20,8 @@ import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { PreApprovalMetric } from '@/models/pre-approval-metric';
 
+export const dynamic = 'force-dynamic';
+
 type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd' | 'all' | 'custom';
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
 
@@ -54,8 +56,17 @@ interface AggregatedPayment {
   paidDate?: Date | null;
   invoiceDate?: Date | null;
   updatedAt: Date;
+  side?: 'buy' | 'sell';
   usedAfc?: boolean;
   agentAttribution?: 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT' | null;
+  expectedCloseDate?: Date | null;
+  closeDateHistory?:
+    | {
+        previousDate?: Date | null;
+        nextDate?: Date | null;
+        changedAt?: Date | null;
+      }[]
+    | null;
   referral: {
     _id: Types.ObjectId;
     createdAt: Date;
@@ -429,7 +440,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           totalVolumeClosedCents: 0,
           averagePaAmountCents: 0,
           averageReferralFeePaidCents: 0,
-          pipelineValueCents: 0
+          pipelineValueCents: 0,
+          closingThisPeriod: 0,
+          closingExpectedRevenueCents: 0,
         },
         trends: {
           revenue: [],
@@ -617,6 +630,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       'clear_to_close',
     ].includes(payment.status)
   );
+  const closingWithinTimeframe = dealsUnderContract.filter((payment) => {
+    if (!payment.expectedCloseDate) return false;
+    const closeDate = new Date(payment.expectedCloseDate);
+    if (Number.isNaN(closeDate.getTime())) return false;
+    if (timeframeStart && closeDate < timeframeStart) return false;
+    if (timeframeEnd && closeDate > timeframeEnd) return false;
+    return true;
+  });
+  const closingExpectedRevenueCents = closingWithinTimeframe.reduce(
+    (sum, payment) => sum + (payment.expectedAmountCents ?? 0),
+    0
+  );
   const closeRate = totalReferrals === 0 ? 0 : (dealsClosed.length / totalReferrals) * 100;
 
   const revenueEligiblePayments = filteredPayments.filter(
@@ -626,6 +651,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const afcRelevant = filteredPayments.filter(
     (payment) =>
       payment.referral?.org === 'AFC' &&
+      payment.side !== 'sell' &&
       [
         'under_contract',
         'past_inspection',
@@ -636,9 +662,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         'paid',
       ].includes(payment.status)
   );
-  const afcDealsLost = afcRelevant.filter((payment) => !payment.usedAfc).length;
+  const afcDealsLost = afcRelevant.filter((payment) => payment.usedAfc === false).length;
   const afcAttachRate = afcRelevant.length
-    ? (afcRelevant.filter((payment) => Boolean(payment.usedAfc)).length / afcRelevant.length) * 100
+    ? (afcRelevant.filter((payment) => payment.usedAfc !== false).length / afcRelevant.length) * 100
     : 0;
 
   const ahaRelevant = filteredPayments.filter(
@@ -1307,7 +1333,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         totalVolumeClosedCents,
         averagePaAmountCents,
         averageReferralFeePaidCents,
-        pipelineValueCents
+        pipelineValueCents,
+        closingThisPeriod: closingWithinTimeframe.length,
+        closingExpectedRevenueCents
       },
       trends: {
         revenue: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.revenueReceivedCents })),
