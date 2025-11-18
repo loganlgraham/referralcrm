@@ -46,6 +46,13 @@ interface ReferralPayment {
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
   contractPriceCents?: number | null;
+  dealAgentId?: string | null;
+  agent?: {
+    id?: string | null;
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  } | null;
 }
 
 interface ReferralDetailNote {
@@ -258,6 +265,15 @@ const normalizeDealPayments = (
     referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
     side: payment.side ?? null,
     contractPriceCents: payment.contractPriceCents ?? null,
+    dealAgentId: payment.dealAgentId ?? payment.agent?.id ?? null,
+    agent: payment.agent
+      ? {
+          id: payment.agent.id ?? null,
+          name: payment.agent.name ?? null,
+          email: payment.agent.email ?? null,
+          phone: payment.agent.phone ?? null,
+        }
+      : null,
   }));
 };
 
@@ -978,6 +994,15 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         ? null
         : (referral.ahaBucket as AgentSelectValue),
     dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
+    assignedAgent: referral.assignedAgent
+      ? {
+          id: referral.assignedAgent._id ?? referral.assignedAgent.id ?? null,
+          _id: referral.assignedAgent._id ?? referral.assignedAgent.id ?? null,
+          name: referral.assignedAgent.name ?? null,
+          email: referral.assignedAgent.email ?? null,
+          phone: referral.assignedAgent.phone ?? null,
+        }
+      : null,
   };
 
   const baseOverrideAddress =
