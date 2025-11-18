@@ -14,8 +14,14 @@ const shouldRetryConnection = (error: unknown) => {
   const isPoolClearedError = (candidate: unknown) =>
     (candidate as { name?: string } | null)?.name === 'MongoPoolClearedError';
 
-  const hasPoolRetryLabel = (candidate: { errorLabelSet?: Set<string> } | null | undefined) =>
-    candidate?.errorLabelSet?.has('ResetPool') || candidate?.errorLabelSet?.has('PoolRequstedRetry');
+  const hasPoolRetryLabel = (candidate: unknown) => {
+    if (!candidate || typeof candidate !== 'object') {
+      return false;
+    }
+
+    const labels = (candidate as { errorLabelSet?: Set<string> }).errorLabelSet;
+    return labels?.has('ResetPool') || labels?.has('PoolRequstedRetry') || false;
+  };
 
   if (error instanceof MongoNetworkError || isPoolClearedError(error)) {
     return true;
