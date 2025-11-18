@@ -299,7 +299,34 @@ export async function getReferralById(id: string) {
 
   const payments = await Payment.find({ referralId: referral._id })
     .sort({ createdAt: -1 })
+    .populate('dealAgentId', 'name email phone')
     .lean();
+
+  const normalizeAgent = (
+    agent:
+      | Types.ObjectId
+      | string
+      | { _id?: Types.ObjectId; name?: string | null; email?: string | null; phone?: string | null }
+      | null
+      | undefined
+  ) => {
+    if (!agent) return { id: null, name: null, email: null, phone: null } as const;
+
+    if (typeof agent === 'string') {
+      return { id: agent, name: null, email: null, phone: null } as const;
+    }
+
+    if (agent instanceof Types.ObjectId) {
+      return { id: agent.toString(), name: null, email: null, phone: null } as const;
+    }
+
+    return {
+      id: agent._id?.toString?.() ?? null,
+      name: agent.name ?? null,
+      email: agent.email ?? null,
+      phone: agent.phone ?? null,
+    } as const;
+  };
   const daysInStatus = differenceInDays(new Date(), referral.statusLastUpdated ?? referral.createdAt);
 
   const viewerRole = session?.user?.role ?? 'viewer';
@@ -339,23 +366,31 @@ export async function getReferralById(id: string) {
       ? { ...referral.assignedAgent, _id: referral.assignedAgent._id.toString() }
       : null,
     lender: referral.lender ? { ...referral.lender, _id: referral.lender._id.toString() } : null,
-    payments: payments.map((payment: any) => ({
-      _id: payment._id.toString(),
-      status: payment.status,
-      expectedAmountCents: payment.expectedAmountCents ?? 0,
-      receivedAmountCents: payment.receivedAmountCents ?? 0,
-      invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
-      paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
-      createdAt: payment.createdAt ? payment.createdAt.toISOString() : null,
-      updatedAt: payment.updatedAt ? payment.updatedAt.toISOString() : null,
-      terminatedReason: payment.terminatedReason ?? null,
-      agentAttribution: payment.agentAttribution ?? null,
-      usedAfc: Boolean(payment.usedAfc),
-      usedAssignedAgent: Boolean(payment.usedAssignedAgent),
-      commissionBasisPoints: payment.commissionBasisPoints ?? null,
-      referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
-      side: payment.side ?? null,
-    })),
+    payments: payments.map((payment: any) => {
+      const dealAgent = normalizeAgent(payment.dealAgentId);
+      const assignedAgent = normalizeAgent(referral.assignedAgent);
+      const agent = dealAgent.id ? dealAgent : assignedAgent.id ? assignedAgent : null;
+
+      return {
+        _id: payment._id.toString(),
+        status: payment.status,
+        expectedAmountCents: payment.expectedAmountCents ?? 0,
+        receivedAmountCents: payment.receivedAmountCents ?? 0,
+        invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
+        paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
+        createdAt: payment.createdAt ? payment.createdAt.toISOString() : null,
+        updatedAt: payment.updatedAt ? payment.updatedAt.toISOString() : null,
+        terminatedReason: payment.terminatedReason ?? null,
+        agentAttribution: payment.agentAttribution ?? null,
+        usedAfc: Boolean(payment.usedAfc),
+        usedAssignedAgent: Boolean(payment.usedAssignedAgent),
+        commissionBasisPoints: payment.commissionBasisPoints ?? null,
+        referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
+        side: payment.side ?? null,
+        dealAgentId: dealAgent.id ?? null,
+        agent,
+      };
+    }),
     preApprovalAmountCents: typeof referral.preApprovalAmountCents === 'number' ? referral.preApprovalAmountCents : 0,
     estPurchasePriceCents: typeof referral.estPurchasePriceCents === 'number' ? referral.estPurchasePriceCents : 0,
     referralFeeDueCents: typeof referral.referralFeeDueCents === 'number' ? referral.referralFeeDueCents : 0,

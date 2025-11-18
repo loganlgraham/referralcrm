@@ -12,13 +12,20 @@ import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/em
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 
+type AgentSummary = {
+  _id: Types.ObjectId;
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+};
+
 type ReferralSummary = {
   _id: Types.ObjectId;
   borrower?: { name?: string | null } | null;
   propertyAddress?: string | null;
   lookingInZip?: string | null;
   lookingInZips?: string[] | null;
-  assignedAgent?: Types.ObjectId | string | null;
+  assignedAgent?: Types.ObjectId | string | AgentSummary | null;
   commissionBasisPoints?: number | null;
   referralFeeBasisPoints?: number | null;
   estPurchasePriceCents?: number | null;
@@ -45,6 +52,7 @@ type PaymentWithReferral = {
   commissionBasisPoints?: number | null;
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
+  dealAgentId?: Types.ObjectId | AgentSummary | null;
 };
 
 const toDate = (value?: Date | string | null): Date | null => {
@@ -67,6 +75,35 @@ const minutesBetweenDates = (start: Date | null, end: Date | null): number | nul
   }
 
   return Math.round(diff / 60000);
+};
+
+const normalizeAgent = (
+  agent:
+    | Types.ObjectId
+    | string
+    | AgentSummary
+    | { _id: Types.ObjectId; name?: string | null; email?: string | null; phone?: string | null }
+    | null
+    | undefined
+) => {
+  if (!agent) {
+    return { id: null, name: null, email: null, phone: null } as const;
+  }
+
+  if (typeof agent === 'string') {
+    return { id: agent, name: null, email: null, phone: null } as const;
+  }
+
+  if (agent instanceof Types.ObjectId) {
+    return { id: agent.toString(), name: null, email: null, phone: null } as const;
+  }
+
+  return {
+    id: agent._id?.toString?.() ?? null,
+    name: agent.name ?? null,
+    email: agent.email ?? null,
+    phone: agent.phone ?? null,
+  } as const;
 };
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -118,61 +155,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const payments = await Payment.find(filter)
     .sort({ createdAt: -1 })
     .limit(200)
-    .populate<{ referralId: ReferralSummary }>({
+    .populate<{ dealAgentId: AgentSummary | null }>({
+      path: 'dealAgentId',
+      select: 'name email phone',
+    })
+    .populate<{ referralId: ReferralSummary & { assignedAgent?: AgentSummary | Types.ObjectId | string | null } }>({
       path: 'referralId',
       select:
         'borrower propertyAddress lookingInZip lookingInZips assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents ahaBucket loanFileNumber',
+      populate: { path: 'assignedAgent', select: 'name email phone' },
     })
     .lean<PaymentWithReferral[]>();
-
-  const agentNameMap = new Map<string, string>();
-  const assignedAgentIds = new Set<string>();
-
-  payments.forEach((payment) => {
-    const referral = payment.referralId as ReferralSummary | null;
-    const assignedAgent = referral?.assignedAgent;
-    if (assignedAgent) {
-      const id =
-        typeof assignedAgent === 'string'
-          ? assignedAgent
-          : assignedAgent instanceof Types.ObjectId
-          ? assignedAgent.toString()
-          : '';
-      if (id && !assignedAgentIds.has(id)) {
-        assignedAgentIds.add(id);
-      }
-    }
-  });
-
-  if (assignedAgentIds.size > 0) {
-    const agentObjectIds: Types.ObjectId[] = [];
-    assignedAgentIds.forEach((id) => {
-      if (Types.ObjectId.isValid(id)) {
-        agentObjectIds.push(new Types.ObjectId(id));
-      }
-    });
-
-    if (agentObjectIds.length > 0) {
-      const agentDocs = await Agent.find({ _id: { $in: agentObjectIds } })
-        .select('name')
-        .lean<{ _id: Types.ObjectId; name?: string | null }[]>();
-
-      agentDocs.forEach((agent) => {
-        agentNameMap.set(agent._id.toString(), agent.name ?? '');
-      });
-    }
-  }
 
   const serialized = payments.map((payment) => {
     const referral = payment.referralId ?? null;
     const fallbackReferralId = (payment as any).referralId;
     const referralId = referral?._id?.toString?.() ??
       (fallbackReferralId instanceof Types.ObjectId ? fallbackReferralId.toString() : '');
-    const assignedAgentId = referral?.assignedAgent
-      ? typeof referral.assignedAgent === 'string'
-        ? referral.assignedAgent
-        : referral.assignedAgent?.toString?.() ?? null
-      : null;
+    const assignedAgent = normalizeAgent(referral?.assignedAgent);
+    const dealAgent = normalizeAgent(payment.dealAgentId);
+    const agent = dealAgent.id ? dealAgent : assignedAgent.id ? assignedAgent : null;
 
     return {
       _id: payment._id.toString(),
@@ -190,12 +192,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       commissionBasisPoints: payment.commissionBasisPoints ?? null,
       referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
       side: payment.side ?? 'buy',
-      agent: assignedAgentId
-        ? {
-            id: assignedAgentId,
-            name: agentNameMap.get(assignedAgentId) ?? null,
-          }
-        : null,
+      dealAgentId: dealAgent.id ?? null,
+      agent: agent,
       referral: referral
         ? {
             borrowerName: referral.borrower?.name ?? null,
@@ -204,10 +202,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             lookingInZips: Array.isArray((referral as any).lookingInZips)
               ? (referral as any).lookingInZips
               : null,
-            assignedAgentId:
-              typeof referral.assignedAgent === 'string'
-                ? referral.assignedAgent
-                : referral.assignedAgent?.toString?.() ?? null,
+            assignedAgentId: assignedAgent.id,
             commissionBasisPoints: referral.commissionBasisPoints ?? null,
             referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
             estPurchasePriceCents: referral.estPurchasePriceCents ?? null,
@@ -251,6 +246,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     agentAttribution: parsed.data.agentAttribution ?? null,
     usedAfc: parsed.data.usedAfc ?? false,
     usedAssignedAgent: parsed.data.usedAssignedAgent ?? true,
+    dealAgentId: parsed.data.dealAgentId ?? null,
     invoiceDate: parsed.data.invoiceDate,
     paidDate: parsed.data.paidDate,
     notes: parsed.data.notes,
@@ -326,6 +322,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const nextAgentAttribution = hasAgentAttributionUpdate
     ? (parsed.data.agentAttribution as string | null | undefined) ?? null
     : (existingPayment.agentAttribution as string | null | undefined) ?? null;
+  const hasDealAgentUpdate = Object.prototype.hasOwnProperty.call(parsed.data, 'dealAgentId');
   const shouldRecalculateReferralFee =
     parsed.data.expectedAmountCents === undefined &&
     (parsed.data.contractPriceCents !== undefined ||
@@ -370,6 +367,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
   const updatePayload: Record<string, unknown> = { ...parsed.data };
   delete updatePayload.referralId;
+  if (hasDealAgentUpdate) {
+    updatePayload.dealAgentId = parsed.data.dealAgentId ?? null;
+  }
   updatePayload.contractPriceCents = nextContractPriceCents ?? null;
   updatePayload.commissionBasisPoints = nextCommissionBasisPoints ?? null;
   updatePayload.referralFeeBasisPoints = nextReferralFeeBasisPoints ?? null;

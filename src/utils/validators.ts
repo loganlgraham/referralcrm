@@ -116,5 +116,11 @@ export const paymentSchema = z.object({
   side: z.enum(['buy', 'sell']).optional(),
   commissionBasisPoints: z.number().int().min(0).optional(),
   referralFeeBasisPoints: z.number().int().min(0).optional(),
-  contractPriceCents: z.number().int().min(0).optional()
+  contractPriceCents: z.number().int().min(0).optional(),
+  dealAgentId: z
+    .string()
+    .trim()
+    .regex(/^[a-fA-F0-9]{24}$/)
+    .optional()
+    .nullable()
 });
