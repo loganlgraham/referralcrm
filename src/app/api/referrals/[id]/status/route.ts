@@ -196,13 +196,15 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       createdDeal = newDeal.toObject();
       activeDeal = createdDeal;
     } else {
+      const activeDealId = (activeDeal as any)?._id;
+
       await Payment.updateOne(
-        { _id: activeDeal._id },
+        { _id: activeDealId },
         {
           $set: dealFields,
         }
       );
-      activeDeal = await Payment.findById(activeDeal._id).lean();
+      activeDeal = await Payment.findById(activeDealId).lean();
     }
   } else if (parsed.data.status === 'Terminated' || parsed.data.status === 'Lost') {
     referral.estPurchasePriceCents = 0;
