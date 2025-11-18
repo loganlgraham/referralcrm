@@ -690,6 +690,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       const response = await fetch(`/api/referrals/${referralId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
@@ -1415,6 +1416,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               previousStatus={financials.status}
               visible={shouldShowDealPreparation}
               createNewDeal={creatingNewDeal}
+              existingDealCount={dealPayments.length}
               contractDetails={{
                 propertyAddress: financials.propertyAddress ?? referral.propertyAddress ?? undefined,
                 propertyCity: financials.propertyCity ?? referral.propertyCity ?? undefined,

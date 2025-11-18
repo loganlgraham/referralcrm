@@ -53,6 +53,7 @@ interface DealPreparationFormProps {
   previousStatus: ReferralStatus;
   visible: boolean;
   createNewDeal?: boolean;
+  existingDealCount?: number;
   contractDetails?: ContractDetails;
   onContractSaved?: (details: {
     propertyAddress: string;
@@ -159,6 +160,7 @@ export function DealPreparationForm({
   previousStatus,
   visible,
   createNewDeal,
+  existingDealCount = 0,
   contractDetails,
   onContractSaved,
   onStatusChanged,
@@ -340,6 +342,7 @@ export function DealPreparationForm({
     }
 
     setSaving(true);
+    const shouldCreateNewDeal = createNewDeal || existingDealCount > 0;
     try {
       const propertyStreet = form.propertyAddress.trim();
       const propertyCity = form.propertyCity.trim();
@@ -349,6 +352,7 @@ export function DealPreparationForm({
       const response = await fetch(`/api/referrals/${referralId}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           status: 'Under Contract',
           contractDetails: {
@@ -361,7 +365,7 @@ export function DealPreparationForm({
             referralFeePercentage,
             dealSide: form.dealSide,
           },
-          createNewDeal: createNewDeal ? true : undefined,
+          createNewDeal: shouldCreateNewDeal ? true : undefined,
         }),
       });
 
