@@ -322,7 +322,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
               const assignedId =
                 typeof assigned?._id === 'string'
                   ? assigned._id
-                  : assigned?._id && 'toString' in assigned._id
+                  : assigned?._id && typeof assigned._id === 'object' && 'toString' in assigned._id
                   ? (assigned._id as any).toString?.()
                   : null;
               const fromAssigned = assignedId === id ? assigned : null;
