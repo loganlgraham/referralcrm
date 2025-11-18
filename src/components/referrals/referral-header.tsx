@@ -599,7 +599,7 @@ export function ReferralHeader({
 
   return (
     <div className="space-y-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
-      <div className="grid gap-4 rounded-xl bg-gradient-to-r from-brand/5 via-white to-slate-50 p-5 lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-center">
+      <div className="grid gap-4 rounded-xl bg-gradient-to-r from-brand/5 via-white to-slate-50 p-5 lg:grid-cols-[minmax(0,1.05fr),auto] lg:items-start">
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-brand">Borrower</p>
           <div>
@@ -635,15 +635,15 @@ export function ReferralHeader({
           </div>
         </div>
         <div
-          className={`grid gap-3 ${showBucketSummary ? 'sm:grid-cols-2' : ''} ${
+          className={`grid items-start gap-3 ${showBucketSummary ? 'sm:grid-cols-2' : ''} ${
             isAgentView ? 'lg:justify-items-end' : ''
           }`}
         >
           <section
-            className={`flex flex-col gap-2 rounded-lg border border-brand/20 bg-white/80 p-4 shadow-sm ${
+            className={`flex w-full max-w-[260px] flex-col gap-2 rounded-lg border border-brand/20 bg-white/80 p-3 shadow-sm ${
               isAgentView
-                ? 'self-end sm:max-w-sm lg:max-w-xs lg:ml-auto'
-                : 'self-start sm:max-w-sm lg:max-w-xs lg:justify-self-end'
+                ? 'self-start lg:ml-auto'
+                : 'self-start lg:justify-self-end'
             }`}
           >
             <div className="space-y-2">

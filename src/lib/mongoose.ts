@@ -16,6 +16,9 @@ const MONGODB_URI = resolvedMongoUri;
 
 let modelsRegistered = false;
 
+const MAX_CONNECTION_RETRIES = 2;
+let retryAttempt = 1;
+
 const registerModels = async () => {
   if (modelsRegistered) {
     return;
@@ -99,6 +102,7 @@ const resetCachedConnection = async () => {
 
 export async function connectMongo(): Promise<typeof mongoose> {
   if (cached?.conn && cached.conn.connection.readyState === 1) {
+    retryAttempt = 1;
     await registerModels();
     return cached.conn;
   }
@@ -116,6 +120,7 @@ export async function connectMongo(): Promise<typeof mongoose> {
 
   try {
     cached!.conn = await cached!.promise;
+    retryAttempt = 1;
     await registerModels();
     return cached!.conn;
   } catch (error) {
@@ -126,11 +131,25 @@ export async function connectMongo(): Promise<typeof mongoose> {
 
     await resetCachedConnection();
 
-    if (shouldRetry) {
-      console.warn('[mongo] Retrying mongoose connection after transient failure');
+    if (shouldRetry && retryAttempt <= MAX_CONNECTION_RETRIES) {
+      console.warn(
+        `[mongo] Retrying mongoose connection after transient failure (attempt ${retryAttempt} of ${MAX_CONNECTION_RETRIES})`
+      );
+      retryAttempt += 1;
+
+      cached!.promise = mongoose
+        .connect(MONGODB_URI, {
+          bufferCommands: false
+        })
+        .catch((connectError) => {
+          cached!.promise = null;
+          throw connectError;
+        });
+
       return connectMongo();
     }
 
+    retryAttempt = 1;
     throw new Error(`Failed to connect to MongoDB: ${message}`);
   }
 }

@@ -7,6 +7,8 @@ import {
 let client: MongoClient | null = null;
 let clientPromise: Promise<MongoClient> | null = null;
 
+const MAX_CONNECTION_RETRIES = 2;
+
 const shouldRetryConnection = (error: unknown) => {
   const isPoolClearedError = (candidate: unknown) =>
     (candidate as { name?: string } | null)?.name === 'MongoPoolClearedError';
@@ -63,25 +65,31 @@ export function getMongoClient(): MongoClient {
   return client;
 }
 
+const connectWithRetry = async (attempt = 1): Promise<MongoClient> => {
+  const mongoClient = getMongoClient();
+
+  try {
+    return await mongoClient.connect();
+  } catch (error) {
+    const shouldRetry = shouldRetryConnection(error);
+    const message = error instanceof Error ? error.message : 'Unknown Mongo connection error';
+
+    console.error('[mongo] Failed to establish connection via MongoClient', error);
+
+    await resetClientState();
+
+    if (shouldRetry && attempt <= MAX_CONNECTION_RETRIES) {
+      console.warn(`[mongo] Retrying MongoClient connection after transient failure (attempt ${attempt} of ${MAX_CONNECTION_RETRIES})`);
+      return connectWithRetry(attempt + 1);
+    }
+
+    throw new Error(`Failed to connect to MongoDB: ${message}`);
+  }
+};
+
 export function getClientPromise(): Promise<MongoClient> {
   if (!clientPromise) {
-    const mongoClient = getMongoClient();
-
-    clientPromise = mongoClient.connect().catch(async (error) => {
-      const shouldRetry = shouldRetryConnection(error);
-      const message = error instanceof Error ? error.message : 'Unknown Mongo connection error';
-
-      console.error('[mongo] Failed to establish connection via MongoClient', error);
-
-      await resetClientState();
-
-      if (shouldRetry) {
-        console.warn('[mongo] Retrying MongoClient connection after transient failure');
-        return getClientPromise();
-      }
-
-      throw new Error(`Failed to connect to MongoDB: ${message}`);
-    });
+    clientPromise = connectWithRetry();
   }
 
   return clientPromise;
