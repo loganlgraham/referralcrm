@@ -44,6 +44,8 @@ interface CreatedDealPayload {
   createdAt?: string | null;
   updatedAt?: string | null;
   paidDate?: string | null;
+  dealAgentId?: string | null;
+  dealAgent?: { id?: string | null; name?: string | null } | null;
 }
 
 interface DealPreparationFormProps {
@@ -78,7 +80,10 @@ interface DealPreparationFormProps {
   onDealCreated?: (deal: CreatedDealPayload) => void;
 }
 
-const buildInitialFormState = (details?: ContractDetails): ContractFormState => ({
+const buildInitialFormState = (
+  details?: ContractDetails,
+  fallbackDealSide: 'buy' | 'sell' = 'buy'
+): ContractFormState => ({
   propertyAddress: details?.propertyAddress ?? '',
   propertyCity: details?.propertyCity ?? '',
   propertyState: details?.propertyState ? details.propertyState.toUpperCase() : '',
@@ -90,7 +95,7 @@ const buildInitialFormState = (details?: ContractDetails): ContractFormState => 
   referralFeePercentage: details?.referralFeeBasisPoints
     ? (details.referralFeeBasisPoints / 100).toString()
     : '25',
-  dealSide: details?.dealSide ?? 'buy',
+  dealSide: details?.dealSide ?? fallbackDealSide,
 });
 
 const formatFullAddress = (
@@ -183,7 +188,8 @@ export function DealPreparationForm({
         previous.propertyPostalCode !== nextState.propertyPostalCode ||
         previous.contractPrice !== nextState.contractPrice ||
         previous.agentCommissionPercentage !== nextState.agentCommissionPercentage ||
-        previous.referralFeePercentage !== nextState.referralFeePercentage;
+        previous.referralFeePercentage !== nextState.referralFeePercentage ||
+        previous.dealSide !== nextState.dealSide;
 
       if (!hasChanged) {
         return previous;
@@ -468,6 +474,20 @@ export function DealPreparationForm({
               : createdDeal.paidDate instanceof Date
                 ? createdDeal.paidDate.toISOString()
                 : null,
+          dealAgentId:
+            typeof createdDeal.dealAgentId === 'string'
+              ? createdDeal.dealAgentId
+              : (createdDeal.dealAgentId as any)?._id?.toString?.() ?? null,
+          dealAgent:
+            createdDeal.dealAgentId
+              ? {
+                  id:
+                    typeof createdDeal.dealAgentId === 'string'
+                      ? createdDeal.dealAgentId
+                      : (createdDeal.dealAgentId as any)?._id?.toString?.() ?? null,
+                  name: (createdDeal as any).dealAgent?.name ?? null,
+                }
+              : null,
         };
 
         onDealCreated?.(payload);

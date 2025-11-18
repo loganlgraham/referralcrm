@@ -89,6 +89,7 @@ export const createLenderNoteSchema = z.object({
 
 export const paymentSchema = z.object({
   referralId: z.string().min(1),
+  dealAgentId: z.string().min(1).optional().nullable(),
   status: z
     .enum([
       'under_contract',

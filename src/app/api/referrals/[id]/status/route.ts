@@ -199,6 +199,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         side: referral.dealSide,
         contractPriceCents: referral.estPurchasePriceCents ?? null,
         usedAssignedAgent: true,
+        dealAgentId: referral.assignedAgent?._id ?? null,
       });
       createdDeal = newDeal.toObject();
       activeDeal = createdDeal;
@@ -301,6 +302,19 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             paidDate: createdDeal.paidDate instanceof Date
               ? createdDeal.paidDate.toISOString()
               : createdDeal.paidDate ?? null,
+            dealAgentId:
+              typeof createdDeal.dealAgentId === 'string'
+                ? createdDeal.dealAgentId
+                : (createdDeal.dealAgentId as any)?._id?.toString?.() ?? null,
+            dealAgent: createdDeal.dealAgentId
+              ? {
+                  id:
+                    typeof createdDeal.dealAgentId === 'string'
+                      ? createdDeal.dealAgentId
+                      : (createdDeal.dealAgentId as any)?._id?.toString?.() ?? null,
+                  name: (createdDeal as any).dealAgent?.name ?? null,
+                }
+              : null,
           }
         : undefined,
     preApprovalAmountCents: referral.preApprovalAmountCents ?? 0,
