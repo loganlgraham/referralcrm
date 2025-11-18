@@ -48,7 +48,7 @@ export interface DealRecord {
   side?: 'buy' | 'sell' | null;
   contractPriceCents?: number | null;
   dealAgentId?: string | null;
-  dealAgent?: { id: string; name?: string | null } | null;
+  dealAgent?: { id: string; name?: string | null; email?: string | null; phone?: string | null } | null;
 }
 
 export interface DealOverrides {
@@ -147,7 +147,12 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
       contractPriceCents: deal.contractPriceCents ?? null,
       dealAgentId: deal.dealAgentId ?? deal.dealAgent?.id ?? null,
       dealAgent: deal.dealAgent?.id
-        ? { id: deal.dealAgent.id, name: deal.dealAgent.name ?? null }
+        ? {
+            id: deal.dealAgent.id,
+            name: deal.dealAgent.name ?? null,
+            email: deal.dealAgent.email ?? null,
+            phone: deal.dealAgent.phone ?? null,
+          }
         : null,
     }))
     .sort((a, b) => {
@@ -496,9 +501,16 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
                     ? {
                         id: selectedDealAgentId,
                         name: agentOptions?.find((option) => option._id === selectedDealAgentId)?.name ?? null,
+                        email: deal.dealAgent?.email ?? null,
+                        phone: deal.dealAgent?.phone ?? null,
                       }
                     : selectedDealAgentId
-                      ? { id: selectedDealAgentId, name: deal.dealAgent?.name ?? referral.assignedAgentName ?? null }
+                      ? {
+                          id: selectedDealAgentId,
+                          name: deal.dealAgent?.name ?? referral.assignedAgentName ?? null,
+                          email: deal.dealAgent?.email ?? null,
+                          phone: deal.dealAgent?.phone ?? null,
+                        }
                       : null,
                 updatedAt: new Date().toISOString(),
               }

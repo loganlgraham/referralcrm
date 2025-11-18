@@ -47,7 +47,7 @@ interface ReferralPayment {
   side?: 'buy' | 'sell' | null;
   contractPriceCents?: number | null;
   dealAgentId?: string | null;
-  dealAgent?: { id?: string | null; name?: string | null } | null;
+  dealAgent?: { id?: string | null; name?: string | null; email?: string | null; phone?: string | null } | null;
 }
 
 interface ReferralDetailNote {
@@ -262,7 +262,12 @@ const normalizeDealPayments = (
     contractPriceCents: payment.contractPriceCents ?? null,
     dealAgentId: payment.dealAgentId ?? payment.dealAgent?.id ?? null,
     dealAgent: payment.dealAgent?.id
-      ? { id: payment.dealAgent.id, name: payment.dealAgent.name ?? null }
+      ? {
+          id: payment.dealAgent.id,
+          name: payment.dealAgent.name ?? null,
+          email: payment.dealAgent.email ?? null,
+          phone: payment.dealAgent.phone ?? null,
+        }
       : null,
   }));
 };

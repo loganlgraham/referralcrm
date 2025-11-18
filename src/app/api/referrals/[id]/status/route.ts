@@ -32,7 +32,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   await connectMongo();
   const referral = await Referral.findById(params.id)
-    .populate('assignedAgent', 'userId')
+    .populate('assignedAgent', 'name email phone userId')
     .populate('lender', 'userId');
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
@@ -306,15 +306,37 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
               typeof createdDeal.dealAgentId === 'string'
                 ? createdDeal.dealAgentId
                 : (createdDeal.dealAgentId as any)?._id?.toString?.() ?? null,
-            dealAgent: createdDeal.dealAgentId
-              ? {
-                  id:
-                    typeof createdDeal.dealAgentId === 'string'
-                      ? createdDeal.dealAgentId
-                      : (createdDeal.dealAgentId as any)?._id?.toString?.() ?? null,
-                  name: (createdDeal as any).dealAgent?.name ?? null,
-                }
-              : null,
+            dealAgent: (() => {
+              const id =
+                typeof createdDeal.dealAgentId === 'string'
+                  ? createdDeal.dealAgentId
+                  : (createdDeal.dealAgentId as any)?._id?.toString?.() ?? null;
+              if (!id) {
+                return null;
+              }
+
+              const assigned = referral.assignedAgent as
+                | { _id?: unknown; name?: string | null; email?: string | null; phone?: string | null }
+                | null
+                | undefined;
+              const assignedId =
+                typeof assigned?._id === 'string'
+                  ? assigned._id
+                  : assigned?._id && 'toString' in assigned._id
+                  ? (assigned._id as any).toString?.()
+                  : null;
+              const fromAssigned = assignedId === id ? assigned : null;
+
+              const dealAgent = (createdDeal as any).dealAgent as
+                | { name?: string | null; email?: string | null; phone?: string | null }
+                | undefined;
+              return {
+                id,
+                name: dealAgent?.name ?? fromAssigned?.name ?? null,
+                email: dealAgent?.email ?? fromAssigned?.email ?? null,
+                phone: dealAgent?.phone ?? fromAssigned?.phone ?? null,
+              };
+            })(),
           }
         : undefined,
     preApprovalAmountCents: referral.preApprovalAmountCents ?? 0,

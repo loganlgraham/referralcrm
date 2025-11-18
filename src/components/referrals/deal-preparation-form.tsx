@@ -45,7 +45,7 @@ interface CreatedDealPayload {
   updatedAt?: string | null;
   paidDate?: string | null;
   dealAgentId?: string | null;
-  dealAgent?: { id?: string | null; name?: string | null } | null;
+  dealAgent?: { id?: string | null; name?: string | null; email?: string | null; phone?: string | null } | null;
 }
 
 interface DealPreparationFormProps {
@@ -486,6 +486,8 @@ export function DealPreparationForm({
                       ? createdDeal.dealAgentId
                       : (createdDeal.dealAgentId as any)?._id?.toString?.() ?? null,
                   name: (createdDeal as any).dealAgent?.name ?? null,
+                  email: (createdDeal as any).dealAgent?.email ?? null,
+                  phone: (createdDeal as any).dealAgent?.phone ?? null,
                 }
               : null,
         };

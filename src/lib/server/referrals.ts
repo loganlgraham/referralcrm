@@ -405,9 +405,14 @@ export async function getReferralById(id: string) {
         }
 
         const details = dealAgentMap.get(dealAgentId);
+        const agent = (payment as any).dealAgent as
+          | { name?: string | null; email?: string | null; phone?: string | null }
+          | undefined;
         return {
           id: dealAgentId,
-          name: (payment as any).dealAgent?.name ?? details?.name ?? null,
+          name: agent?.name ?? details?.name ?? null,
+          email: agent?.email ?? details?.email ?? null,
+          phone: agent?.phone ?? details?.phone ?? null,
         };
       })(),
     })),
