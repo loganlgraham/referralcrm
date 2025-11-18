@@ -62,7 +62,9 @@ export function getMongoClient(): MongoClient {
   }
 
   if (!client) {
-    client = new MongoClient(uri, {});
+    client = new MongoClient(uri, {
+      serverSelectionTimeoutMS: 5000,
+    });
   }
 
   return client;
@@ -98,7 +100,11 @@ const connectWithRetry = async (attempt = 1): Promise<MongoClient> => {
 
 export function getClientPromise(): Promise<MongoClient> {
   if (!clientPromise) {
-    clientPromise = connectWithRetry();
+    clientPromise = connectWithRetry().catch((error) => {
+      // Ensure subsequent requests can retry after a failure
+      clientPromise = null;
+      throw error;
+    });
   }
 
   return clientPromise;

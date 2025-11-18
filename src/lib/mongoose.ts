@@ -115,7 +115,8 @@ export async function connectMongo(): Promise<typeof mongoose> {
   if (!cached?.promise) {
     cached!.promise = mongoose
       .connect(MONGODB_URI, {
-        bufferCommands: false
+        bufferCommands: false,
+        serverSelectionTimeoutMS: 5000
       })
       .catch((error) => {
         cached!.promise = null;
@@ -145,7 +146,8 @@ export async function connectMongo(): Promise<typeof mongoose> {
 
       cached!.promise = mongoose
         .connect(MONGODB_URI, {
-          bufferCommands: false
+          bufferCommands: false,
+          serverSelectionTimeoutMS: 5000
         })
         .catch((connectError) => {
           cached!.promise = null;
