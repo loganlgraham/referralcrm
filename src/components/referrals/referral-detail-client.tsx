@@ -357,9 +357,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   });
   const [contractDraft, setContractDraft] = useState<DraftState>({ hasUnsavedChanges: false });
   const [contractPrepActive, setContractPrepActive] = useState(false);
+  const [creatingNewDeal, setCreatingNewDeal] = useState(false);
   const dealSectionRef = useRef<HTMLDivElement | null>(null);
   const handleCreateDealRequest = useCallback(() => {
     setContractPrepActive(true);
+    setCreatingNewDeal(true);
+    setContractDraft({ hasUnsavedChanges: false });
     if (typeof window !== 'undefined') {
       window.requestAnimationFrame(() => {
         dealSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -373,6 +376,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       }
 
       setContractPrepActive(false);
+      setCreatingNewDeal(false);
       setContractDraft({ hasUnsavedChanges: false });
 
       setReferral((previous) => {
@@ -440,6 +444,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   useEffect(() => {
     setReferral(initialReferral);
   }, [initialReferral]);
+
+  useEffect(() => {
+    if (!contractPrepActive && creatingNewDeal) {
+      setCreatingNewDeal(false);
+    }
+  }, [contractPrepActive, creatingNewDeal]);
 
   useEffect(() => {
     if (!isEditingDetails) {
@@ -598,7 +608,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
     setDeleting(true);
     try {
-      const response = await fetch(`/api/referrals/${referralId}`, { method: 'DELETE' });
+      const response = await fetch(`/api/referrals/${referralId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
       if (!response.ok) {
         throw new Error('Unable to delete referral');
       }
@@ -1401,6 +1414,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               referralId={referralId}
               previousStatus={financials.status}
               visible={shouldShowDealPreparation}
+              createNewDeal={creatingNewDeal}
               contractDetails={{
                 propertyAddress: financials.propertyAddress ?? referral.propertyAddress ?? undefined,
                 propertyCity: financials.propertyCity ?? referral.propertyCity ?? undefined,

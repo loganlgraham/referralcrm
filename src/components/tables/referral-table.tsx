@@ -173,6 +173,7 @@ function NoteComposer({ referralId }: { referralId: string }) {
       const response = await fetch(`/api/referrals/${referralId}/activities`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ channel: 'note', content: note.trim() })
       });
 

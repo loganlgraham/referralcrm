@@ -52,6 +52,7 @@ interface DealPreparationFormProps {
   referralId: string;
   previousStatus: ReferralStatus;
   visible: boolean;
+  createNewDeal?: boolean;
   contractDetails?: ContractDetails;
   onContractSaved?: (details: {
     propertyAddress: string;
@@ -157,6 +158,7 @@ export function DealPreparationForm({
   referralId,
   previousStatus,
   visible,
+  createNewDeal,
   contractDetails,
   onContractSaved,
   onStatusChanged,
@@ -359,6 +361,7 @@ export function DealPreparationForm({
             referralFeePercentage,
             dealSide: form.dealSide,
           },
+          createNewDeal: createNewDeal ? true : undefined,
         }),
       });
 
