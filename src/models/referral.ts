@@ -124,6 +124,7 @@ const referralSchema = new Schema(
     loanType: String,
     preApprovalAmountCents: { type: Number, default: 0 },
     estPurchasePriceCents: { type: Number, default: 0 },
+    expectedCloseDate: { type: Date, default: null },
     commissionBasisPoints: { type: Number, default: DEFAULT_AGENT_COMMISSION_BPS },
     referralFeeBasisPoints: { type: Number, default: DEFAULT_REFERRAL_FEE_BPS },
     closedPriceCents: { type: Number, default: 0 },
@@ -205,6 +206,7 @@ export interface ReferralDocument {
   loanType?: string;
   preApprovalAmountCents?: number;
   estPurchasePriceCents?: number;
+  expectedCloseDate?: Date | null;
   commissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
   dealSide?: 'buy' | 'sell';

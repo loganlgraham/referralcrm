@@ -47,6 +47,7 @@ interface FinancialSnapshot {
   referralFeeDueCents?: number;
   commissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
+  expectedCloseDate?: string | null;
   propertyAddress?: string;
   propertyCity?: string;
   propertyState?: string;
@@ -85,6 +86,7 @@ type ReferralHeaderProps = {
       agentCommissionBasisPoints: number;
       referralFeeBasisPoints: number;
       referralFeeDueCents: number;
+      expectedCloseDate?: string | null;
       dealSide: 'buy' | 'sell';
     }) => void;
     onContractDraftChange: (draft: ContractDraftSnapshot) => void;
@@ -117,6 +119,9 @@ export function ReferralHeader({
   );
   const [contractPriceCents, setContractPriceCents] = useState<number | undefined>(
     referral.estPurchasePriceCents
+  );
+  const [expectedCloseDate, setExpectedCloseDate] = useState<string | null>(
+    referral.expectedCloseDate ?? null
   );
   const [referralFeeDueCents, setReferralFeeDueCents] = useState<number>(
     referral.referralFeeDueCents ?? 0
@@ -372,6 +377,7 @@ export function ReferralHeader({
       agentCommissionBasisPoints: number;
       referralFeeBasisPoints: number;
       referralFeeDueCents: number;
+      expectedCloseDate?: string | null;
       dealSide: 'buy' | 'sell';
     }) => {
       setPropertyAddress(details.propertyAddress);
@@ -382,6 +388,7 @@ export function ReferralHeader({
       setCommissionBasisPoints(details.agentCommissionBasisPoints);
       setReferralFeeBasisPoints(details.referralFeeBasisPoints);
       setReferralFeeDueCents(details.referralFeeDueCents ?? 0);
+      setExpectedCloseDate(details.expectedCloseDate ?? null);
       setDealSide(details.dealSide);
       setDraftContract({ hasUnsavedChanges: false });
       onFinancialsChange?.({
@@ -391,6 +398,7 @@ export function ReferralHeader({
         referralFeeDueCents: details.referralFeeDueCents,
         commissionBasisPoints: details.agentCommissionBasisPoints,
         referralFeeBasisPoints: details.referralFeeBasisPoints,
+        expectedCloseDate: details.expectedCloseDate ?? null,
         propertyAddress: details.propertyAddress,
         propertyCity: details.propertyCity,
         propertyState: details.propertyState,
