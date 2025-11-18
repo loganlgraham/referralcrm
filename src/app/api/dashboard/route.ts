@@ -650,6 +650,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const afcRelevant = filteredPayments.filter(
     (payment) =>
       payment.referral?.org === 'AFC' &&
+      payment.side !== 'sell' &&
       [
         'under_contract',
         'past_inspection',

@@ -191,7 +191,7 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
   const initialAfcMap = useMemo(() => {
     const snapshot: Record<string, boolean> = {};
     deals.forEach((deal) => {
-      snapshot[deal._id] = deal.usedAfc !== false;
+      snapshot[deal._id] = deal.side === 'sell' ? false : deal.usedAfc !== false;
     });
     return snapshot;
   }, [deals]);
@@ -794,13 +794,13 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
       }
     };
 
-  const handleAfcToggle = (deal: DealRecord) => async (event: ChangeEvent<HTMLInputElement>) => {
-    const nextChecked = event.target.checked;
-    const previousChecked = afcMap[deal._id] ?? true;
-
-    if (nextChecked === previousChecked) {
+  const handleAfcToggle = (deal: DealRecord) => async () => {
+    if (deal.side === 'sell') {
       return;
     }
+
+    const previousChecked = afcMap[deal._id] ?? true;
+    const nextChecked = !previousChecked;
 
     setAfcMap((prev) => ({ ...prev, [deal._id]: nextChecked }));
     setSavingMap((prev) => ({ ...prev, [deal._id]: true }));
@@ -889,6 +889,53 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
 
     const toggleExpanded = () => {
       setExpandedMap((previous) => ({ ...previous, [deal._id]: !isExpanded }));
+    };
+
+    const toggleAgentOutcome = async () => {
+      const nextOutcome = agentOutcomeSelection === 'USED_AGENT' ? 'OUTSIDE_AGENT' : 'USED_AGENT';
+      const nextAttribution =
+        nextOutcome === 'OUTSIDE_AGENT' ? 'OUTSIDE_AGENT' : resolveAssignedAgentOutcome();
+      const previousValue = agentMap[deal._id] ?? '';
+
+      setAgentMap((prev) => ({ ...prev, [deal._id]: nextAttribution ?? '' }));
+      setSavingMap((prev) => ({ ...prev, [deal._id]: true }));
+
+      try {
+        const payload: Record<string, unknown> = {
+          id: deal._id,
+          agentAttribution: nextAttribution,
+          usedAssignedAgent: nextOutcome !== 'OUTSIDE_AGENT',
+        };
+
+        if (nextOutcome === 'OUTSIDE_AGENT') {
+          payload.expectedAmountCents = 0;
+          payload.receivedAmountCents = 0;
+        } else if (expectedAmountCents > 0) {
+          payload.expectedAmountCents = expectedAmountCents;
+        }
+
+        const response = await fetch('/api/payments', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          throw new Error('Unable to update agent outcome');
+        }
+
+        toast.success('Agent outcome saved');
+      } catch (error) {
+        console.error(error);
+        setAgentMap((prev) => ({ ...prev, [deal._id]: previousValue }));
+        toast.error(error instanceof Error ? error.message : 'Unable to update deal');
+      } finally {
+        setSavingMap((prev) => {
+          const next = { ...prev };
+          delete next[deal._id];
+          return next;
+        });
+      }
     };
 
     const handleDeleteClick = async (event: MouseEvent<HTMLButtonElement>) => {
@@ -1155,43 +1202,66 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
                 )}
               </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">
-                  Agent Outcome
-                  <select
-                    value={agentOutcomeSelection}
-                    onChange={handleAgentOutcomeChange(deal, expectedAmountCents)}
-                    className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
-                    disabled={isSaving || isDetailSaving}
-                  >
-                    <option value="USED_AGENT">Used agent</option>
-                    <option value="OUTSIDE_AGENT">Used outside agent</option>
-                  </select>
-                </label>
-                {assignedBucket && agentOutcomeSelection === 'USED_AGENT' && agentSelection && !matchesAssigned && (
-                  <p className="mt-2 text-xs text-amber-600">
-                    This deal did not close with the assigned {assignedBucket === 'AHA' ? 'AHA' : 'AHA OOS'} agent.
-                  </p>
-                )}
-              </div>
-              <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs uppercase text-slate-400">Mortgage Company</p>
-                <label className="mt-2 inline-flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-                    checked={usedAfc}
-                    onChange={handleAfcToggle(deal)}
-                    disabled={isSaving}
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={agentOutcomeSelection === 'USED_AGENT'}
+                onClick={toggleAgentOutcome}
+                disabled={isSaving || isDetailSaving}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+                  agentOutcomeSelection === 'USED_AGENT'
+                    ? 'border-brand bg-brand/10 text-brand'
+                    : 'border-slate-200 text-slate-700 hover:border-brand hover:text-brand'
+                } ${isSaving || isDetailSaving ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
+              >
+                <span>Used agent</span>
+                <span
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                    agentOutcomeSelection === 'USED_AGENT' ? 'bg-brand' : 'bg-slate-200'
+                  }`}
+                >
+                  <span
+                    className={`h-4 w-4 rounded-full bg-white shadow transition transform ${
+                      agentOutcomeSelection === 'USED_AGENT' ? 'translate-x-4' : 'translate-x-1'
+                    }`}
                   />
-                  Used AFC
-                </label>
-                {!usedAfc && (
-                  <p className="mt-2 text-xs text-slate-500">Track whether AFC handled this deal.</p>
-                )}
-              </div>
+                </span>
+              </button>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={usedAfc}
+                onClick={handleAfcToggle(deal)}
+                disabled={isSaving || isDetailSaving || deal.side === 'sell'}
+                className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+                  usedAfc
+                    ? 'border-brand bg-brand/10 text-brand'
+                    : 'border-slate-200 text-slate-700 hover:border-brand hover:text-brand'
+                } ${isSaving || isDetailSaving || deal.side === 'sell' ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
+              >
+                <span>{deal.side === 'sell' ? 'AFC (N/A seller side)' : 'Used AFC'}</span>
+                <span
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                    usedAfc ? 'bg-brand' : 'bg-slate-200'
+                  }`}
+                >
+                  <span
+                    className={`h-4 w-4 rounded-full bg-white shadow transition transform ${
+                      usedAfc ? 'translate-x-4' : 'translate-x-1'
+                    }`}
+                  />
+                </span>
+              </button>
             </div>
+            {assignedBucket && agentOutcomeSelection === 'USED_AGENT' && agentSelection && !matchesAssigned && (
+              <p className="text-xs text-amber-600">
+                This deal did not close with the assigned {assignedBucket === 'AHA' ? 'AHA' : 'AHA OOS'} agent.
+              </p>
+            )}
+            {deal.side === 'sell' && (
+              <p className="text-xs text-slate-500">AFC tracking is skipped for seller-side deals.</p>
+            )}
           </div>
         )}
       </div>

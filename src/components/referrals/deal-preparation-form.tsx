@@ -58,6 +58,7 @@ interface DealPreparationFormProps {
   previousStatus: ReferralStatus;
   visible: boolean;
   contractDetails?: ContractDetails;
+  forceCreateNewDeal?: boolean;
   onContractSaved?: (details: {
     propertyAddress: string;
     propertyCity: string;
@@ -105,7 +106,7 @@ const buildInitialFormState = (details?: ContractDetails): ContractFormState => 
     : '25',
   dealSide: details?.dealSide ?? 'buy',
   expectedCloseDate: details?.expectedCloseDate ?? '',
-  usedAfc: details?.usedAfc !== false,
+  usedAfc: details?.dealSide === 'sell' ? false : details?.usedAfc !== false,
   usedAssignedAgent: details?.usedAssignedAgent !== false,
 });
 
@@ -169,6 +170,7 @@ export function DealPreparationForm({
   previousStatus,
   visible,
   contractDetails,
+  forceCreateNewDeal = false,
   onContractSaved,
   onStatusChanged,
   onContractDraftChange,
@@ -261,6 +263,20 @@ export function DealPreparationForm({
   );
 
   useEffect(() => {
+    if (form.dealSide === 'sell' && form.usedAfc) {
+      setForm((previous) => {
+        if (previous.dealSide === 'sell' && previous.usedAfc) {
+          const next = { ...previous, usedAfc: false };
+          broadcastDraft(next, true);
+          return next;
+        }
+        return previous;
+      });
+      setDirty(true);
+    }
+  }, [broadcastDraft, form.dealSide, form.usedAfc]);
+
+  useEffect(() => {
     if (!visible) {
       return;
     }
@@ -335,16 +351,15 @@ export function DealPreparationForm({
     setDirty(true);
   };
 
-  const handleToggleChange = (field: 'usedAfc' | 'usedAssignedAgent') =>
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const nextValue = event.target.checked;
-      setForm((previous) => {
-        const next = { ...previous, [field]: nextValue } as ContractFormState;
-        broadcastDraft(next, true);
-        return next;
-      });
-      setDirty(true);
-    };
+  const handleToggleChange = (field: 'usedAfc' | 'usedAssignedAgent') => () => {
+    setForm((previous) => {
+      const nextValue = field === 'usedAfc' && previous.dealSide === 'sell' ? false : !previous[field];
+      const next = { ...previous, [field]: nextValue } as ContractFormState;
+      broadcastDraft(next, true);
+      return next;
+    });
+    setDirty(true);
+  };
 
   const handleSave = async () => {
     if (!contractFieldsValid) {
@@ -381,6 +396,7 @@ export function DealPreparationForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'Under Contract',
+          createNewDeal: forceCreateNewDeal,
           contractDetails: {
             propertyAddress: propertyStreet,
             propertyCity,
@@ -645,26 +661,56 @@ export function DealPreparationForm({
           </label>
         </div>
         <div className="flex flex-wrap items-center gap-3 md:gap-4">
-          <label className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm">
-            <span className="text-slate-600">Used agent</span>
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-              checked={form.usedAssignedAgent}
-              onChange={handleToggleChange('usedAssignedAgent')}
-              disabled={saving}
-            />
-          </label>
-          <label className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm">
-            <span className="text-slate-600">Used AFC</span>
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-              checked={form.usedAfc}
-              onChange={handleToggleChange('usedAfc')}
-              disabled={saving}
-            />
-          </label>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={form.usedAssignedAgent}
+            onClick={handleToggleChange('usedAssignedAgent')}
+            disabled={saving}
+            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+              form.usedAssignedAgent
+                ? 'border-brand bg-brand/10 text-brand'
+                : 'border-slate-200 text-slate-700 hover:border-brand hover:text-brand'
+            } ${saving ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
+          >
+            <span>Used agent</span>
+            <span
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                form.usedAssignedAgent ? 'bg-brand' : 'bg-slate-200'
+              }`}
+            >
+              <span
+                className={`h-4 w-4 rounded-full bg-white shadow transition transform ${
+                  form.usedAssignedAgent ? 'translate-x-4' : 'translate-x-1'
+                }`}
+              />
+            </span>
+          </button>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={form.usedAfc}
+            onClick={handleToggleChange('usedAfc')}
+            disabled={saving || form.dealSide === 'sell'}
+            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+              form.usedAfc
+                ? 'border-brand bg-brand/10 text-brand'
+                : 'border-slate-200 text-slate-700 hover:border-brand hover:text-brand'
+            } ${saving || form.dealSide === 'sell' ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}
+          >
+            <span>{form.dealSide === 'sell' ? 'AFC (N/A seller side)' : 'Used AFC'}</span>
+            <span
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                form.usedAfc ? 'bg-brand' : 'bg-slate-200'
+              }`}
+            >
+              <span
+                className={`h-4 w-4 rounded-full bg-white shadow transition transform ${
+                  form.usedAfc ? 'translate-x-4' : 'translate-x-1'
+                }`}
+              />
+            </span>
+          </button>
         </div>
         <label className="block">
           <span className="text-slate-500">Deal Side</span>

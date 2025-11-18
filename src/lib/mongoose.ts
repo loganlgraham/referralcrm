@@ -73,14 +73,16 @@ const shouldRetryConnection = (error: unknown) => {
   }
 
   const candidate = error as { errorLabelSet?: Set<string>; cause?: unknown } | null;
-  if (candidate?.errorLabelSet?.has('ResetPool')) {
+  if (candidate?.errorLabelSet?.has('ResetPool') || candidate?.errorLabelSet?.has('PoolRequstedRetry')) {
     return true;
   }
 
   if (candidate?.cause) {
     const cause = candidate.cause as { errorLabelSet?: Set<string>; name?: string } | null;
     return Boolean(
-      cause?.errorLabelSet?.has('ResetPool') || isPoolClearedError(cause)
+      cause?.errorLabelSet?.has('ResetPool') ||
+      cause?.errorLabelSet?.has('PoolRequstedRetry') ||
+      isPoolClearedError(cause)
     );
   }
 

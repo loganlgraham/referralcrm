@@ -260,6 +260,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   await connectMongo();
+  const normalizedSide = parsed.data.side ?? 'buy';
   const payment = await Payment.create({
     referralId: parsed.data.referralId,
     status: parsed.data.status,
@@ -267,14 +268,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     receivedAmountCents: parsed.data.receivedAmountCents,
     terminatedReason: parsed.data.terminatedReason ?? null,
     agentAttribution: parsed.data.agentAttribution ?? null,
-    usedAfc: parsed.data.usedAfc ?? true,
+    usedAfc: normalizedSide === 'sell' ? false : parsed.data.usedAfc ?? true,
     usedAssignedAgent: parsed.data.usedAssignedAgent ?? true,
     invoiceDate: parsed.data.invoiceDate,
     paidDate: parsed.data.paidDate,
     notes: parsed.data.notes,
     commissionBasisPoints: parsed.data.commissionBasisPoints ?? null,
     referralFeeBasisPoints: parsed.data.referralFeeBasisPoints ?? null,
-    side: parsed.data.side ?? 'buy',
+    side: normalizedSide,
     contractPriceCents: parsed.data.contractPriceCents ?? null,
     expectedCloseDate: parsed.data.expectedCloseDate ?? null,
   });
@@ -428,7 +429,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     updatePayload.usedAssignedAgent = nextUsedAssignedAgent;
   }
   if ('usedAfc' in updatePayload && updatePayload.usedAfc === undefined) {
-    updatePayload.usedAfc = true;
+    updatePayload.usedAfc = updatePayload.side === 'sell' ? false : true;
   }
   if ('usedAssignedAgent' in updatePayload && updatePayload.usedAssignedAgent === undefined) {
     updatePayload.usedAssignedAgent = false;

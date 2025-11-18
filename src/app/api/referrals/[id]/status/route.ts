@@ -67,6 +67,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
   const now = new Date();
   const requestedStatus = parsed.data.status;
+  const createNewDeal = Boolean(parsed.data.createNewDeal);
   const nextStatus = requestedStatus === 'Showing Homes' ? 'Active Lead' : requestedStatus;
   const previousStatusRaw = referral.status;
   const previousStatus = previousStatusRaw === 'Showing Homes' ? 'Active Lead' : previousStatusRaw;
@@ -184,7 +185,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     const propertyState = details.propertyState.trim().toUpperCase();
     const propertyPostalCode = details.propertyPostalCode.trim();
     expectedCloseDate = parseDateOnly(details.expectedCloseDate ?? null);
-    const usedAfc = details.usedAfc !== false;
+    const usedAfc = details.dealSide === 'sell' ? false : details.usedAfc !== false;
     const usedAssignedAgent = details.usedAssignedAgent !== false;
 
     referral.propertyAddress = propertyAddress;
@@ -200,25 +201,27 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     const referralFeeDue = details.contractPrice * commissionRate * referralRate;
     referral.referralFeeDueCents = Math.round(referralFeeDue * 100);
 
-    await Payment.updateMany(
-      { referralId: referral._id, status: 'under_contract' },
-      {
-        $set: {
-          expectedAmountCents: referral.referralFeeDueCents ?? 0,
-          commissionBasisPoints: referral.commissionBasisPoints ?? null,
-          referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
-          side: referral.dealSide,
-          contractPriceCents: referral.estPurchasePriceCents ?? null,
-          expectedCloseDate,
-          usedAfc,
-          usedAssignedAgent,
-        },
-      }
-    );
+    if (!createNewDeal) {
+      await Payment.updateMany(
+        { referralId: referral._id, status: 'under_contract' },
+        {
+          $set: {
+            expectedAmountCents: referral.referralFeeDueCents ?? 0,
+            commissionBasisPoints: referral.commissionBasisPoints ?? null,
+            referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
+            side: referral.dealSide,
+            contractPriceCents: referral.estPurchasePriceCents ?? null,
+            expectedCloseDate,
+            usedAfc,
+            usedAssignedAgent,
+          },
+        }
+      );
 
-    activeDeal = (await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
-      .sort({ createdAt: -1 })
-      .lean()) as ContractPayment | null;
+      activeDeal = (await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
+        .sort({ createdAt: -1 })
+        .lean()) as ContractPayment | null;
+    }
 
     if (!activeDeal) {
       const newDeal = await Payment.create({

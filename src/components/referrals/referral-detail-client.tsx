@@ -353,9 +353,11 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   });
   const [contractDraft, setContractDraft] = useState<DraftState>({ hasUnsavedChanges: false });
   const [contractPrepActive, setContractPrepActive] = useState(false);
+  const [creatingAdditionalDeal, setCreatingAdditionalDeal] = useState(false);
   const dealSectionRef = useRef<HTMLDivElement | null>(null);
   const handleCreateDealRequest = useCallback(() => {
     setContractPrepActive(true);
+    setCreatingAdditionalDeal(true);
     if (typeof window !== 'undefined') {
       window.requestAnimationFrame(() => {
         dealSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -369,6 +371,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       }
 
       setContractPrepActive(false);
+      setCreatingAdditionalDeal(false);
       setContractDraft({ hasUnsavedChanges: false });
 
       setReferral((previous) => {
@@ -1080,6 +1083,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     }
   }, [contractDraft.hasUnsavedChanges, financials.status, hasAnyDeals]);
 
+  useEffect(() => {
+    if (!contractPrepActive && !contractDraft.hasUnsavedChanges) {
+      setCreatingAdditionalDeal(false);
+    }
+  }, [contractPrepActive, contractDraft.hasUnsavedChanges]);
+
   const shouldShowDealPreparation =
     contractPrepActive ||
     contractDraft.hasUnsavedChanges ||
@@ -1371,6 +1380,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               referralId={referralId}
               previousStatus={financials.status}
               visible={shouldShowDealPreparation}
+              forceCreateNewDeal={creatingAdditionalDeal}
               contractDetails={{
                 propertyAddress: financials.propertyAddress ?? referral.propertyAddress ?? undefined,
                 propertyCity: financials.propertyCity ?? referral.propertyCity ?? undefined,
