@@ -640,8 +640,10 @@ export function ReferralHeader({
           }`}
         >
           <section
-            className={`flex h-full flex-col justify-between rounded-lg border border-brand/20 bg-white/80 p-4 shadow-sm ${
-              isAgentView ? 'self-end sm:max-w-sm lg:max-w-xs lg:ml-auto' : ''
+            className={`flex flex-col gap-2 rounded-lg border border-brand/20 bg-white/80 p-4 shadow-sm ${
+              isAgentView
+                ? 'self-end sm:max-w-sm lg:max-w-xs lg:ml-auto'
+                : 'self-start sm:max-w-sm lg:max-w-xs lg:justify-self-end'
             }`}
           >
             <div className="space-y-2">

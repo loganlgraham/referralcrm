@@ -644,12 +644,9 @@ export function DealPreparationForm({
             />
           </label>
         </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="flex items-center justify-between rounded border border-slate-200 px-3 py-2">
-            <div className="flex flex-col text-sm">
-              <span className="text-slate-500">Agent Outcome</span>
-              <span className="text-xs text-slate-500">Used assigned agent</span>
-            </div>
+        <div className="flex flex-wrap items-center gap-3 md:gap-4">
+          <label className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm">
+            <span className="text-slate-600">Used agent</span>
             <input
               type="checkbox"
               className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
@@ -658,11 +655,8 @@ export function DealPreparationForm({
               disabled={saving}
             />
           </label>
-          <label className="flex items-center justify-between rounded border border-slate-200 px-3 py-2">
-            <div className="flex flex-col text-sm">
-              <span className="text-slate-500">Mortgage Company</span>
-              <span className="text-xs text-slate-500">Used AFC</span>
-            </div>
+          <label className="flex items-center gap-2 rounded border border-slate-200 px-3 py-2 text-sm">
+            <span className="text-slate-600">Used AFC</span>
             <input
               type="checkbox"
               className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
