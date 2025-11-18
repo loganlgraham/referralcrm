@@ -16,6 +16,8 @@ interface ContractDetails {
   referralFeeBasisPoints?: number;
   dealSide?: 'buy' | 'sell';
   expectedCloseDate?: string | null;
+  usedAfc?: boolean;
+  usedAssignedAgent?: boolean;
 }
 
 interface ContractFormState {
@@ -28,6 +30,8 @@ interface ContractFormState {
   referralFeePercentage: string;
   dealSide: 'buy' | 'sell';
   expectedCloseDate: string;
+  usedAfc: boolean;
+  usedAssignedAgent: boolean;
 }
 
 interface CreatedDealPayload {
@@ -65,6 +69,8 @@ interface DealPreparationFormProps {
     referralFeeDueCents: number;
     dealSide: 'buy' | 'sell';
     expectedCloseDate?: string | null;
+    usedAfc?: boolean;
+    usedAssignedAgent?: boolean;
   }) => void;
   onStatusChanged?: (status: ReferralStatus, payload?: Record<string, unknown>) => void;
   onContractDraftChange?: (details: {
@@ -78,6 +84,8 @@ interface DealPreparationFormProps {
     referralFeeDueCents?: number;
     dealSide?: 'buy' | 'sell';
     expectedCloseDate?: string;
+    usedAfc?: boolean;
+    usedAssignedAgent?: boolean;
     hasUnsavedChanges: boolean;
   }) => void;
   onDealCreated?: (deal: CreatedDealPayload) => void;
@@ -97,6 +105,8 @@ const buildInitialFormState = (details?: ContractDetails): ContractFormState => 
     : '25',
   dealSide: details?.dealSide ?? 'buy',
   expectedCloseDate: details?.expectedCloseDate ?? '',
+  usedAfc: details?.usedAfc !== false,
+  usedAssignedAgent: details?.usedAssignedAgent !== false,
 });
 
 const formatFullAddress = (
@@ -191,7 +201,9 @@ export function DealPreparationForm({
         previous.agentCommissionPercentage !== nextState.agentCommissionPercentage ||
         previous.referralFeePercentage !== nextState.referralFeePercentage ||
         previous.dealSide !== nextState.dealSide ||
-        previous.expectedCloseDate !== nextState.expectedCloseDate;
+        previous.expectedCloseDate !== nextState.expectedCloseDate ||
+        previous.usedAfc !== nextState.usedAfc ||
+        previous.usedAssignedAgent !== nextState.usedAssignedAgent;
 
       if (!hasChanged) {
         return previous;
@@ -240,6 +252,8 @@ export function DealPreparationForm({
           referralFeeAmount && referralFeeAmount > 0 ? Math.round(referralFeeAmount * 100) : undefined,
         dealSide: state.dealSide,
         expectedCloseDate: state.expectedCloseDate || undefined,
+        usedAfc: state.usedAfc,
+        usedAssignedAgent: state.usedAssignedAgent,
         hasUnsavedChanges,
       });
     },
@@ -295,7 +309,9 @@ export function DealPreparationForm({
     return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }, [form.contractPrice, form.agentCommissionPercentage, form.referralFeePercentage]);
 
-  const handleFieldChange = (field: keyof ContractFormState) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleFieldChange = (
+    field: Exclude<keyof ContractFormState, 'usedAfc' | 'usedAssignedAgent'>
+  ) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const value = event.target.value;
     setForm((previous) => {
       let nextValue = value;
@@ -318,6 +334,17 @@ export function DealPreparationForm({
     });
     setDirty(true);
   };
+
+  const handleToggleChange = (field: 'usedAfc' | 'usedAssignedAgent') =>
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const nextValue = event.target.checked;
+      setForm((previous) => {
+        const next = { ...previous, [field]: nextValue } as ContractFormState;
+        broadcastDraft(next, true);
+        return next;
+      });
+      setDirty(true);
+    };
 
   const handleSave = async () => {
     if (!contractFieldsValid) {
@@ -364,6 +391,8 @@ export function DealPreparationForm({
             referralFeePercentage,
             dealSide: form.dealSide,
             expectedCloseDate: form.expectedCloseDate || null,
+            usedAfc: form.usedAfc,
+            usedAssignedAgent: form.usedAssignedAgent,
           },
         }),
       });
@@ -391,6 +420,8 @@ export function DealPreparationForm({
         referralFeeDueCents?: number;
         dealSide?: 'buy' | 'sell';
         expectedCloseDate?: string | null;
+        usedAfc?: boolean;
+        usedAssignedAgent?: boolean;
       } | undefined;
       const createdDeal = body.deal as Record<string, unknown> | undefined;
 
@@ -420,6 +451,8 @@ export function DealPreparationForm({
           referralFeeDueCents: details.referralFeeDueCents ?? 0,
           dealSide: details.dealSide ?? 'buy',
           expectedCloseDate: details.expectedCloseDate ?? null,
+          usedAfc: details.usedAfc !== false,
+          usedAssignedAgent: details.usedAssignedAgent !== false,
         });
       } else {
         setDirty(false);
@@ -607,6 +640,34 @@ export function DealPreparationForm({
               onChange={handleFieldChange('referralFeePercentage')}
               className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
               placeholder="25"
+              disabled={saving}
+            />
+          </label>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="flex items-center justify-between rounded border border-slate-200 px-3 py-2">
+            <div className="flex flex-col text-sm">
+              <span className="text-slate-500">Agent Outcome</span>
+              <span className="text-xs text-slate-500">Used assigned agent</span>
+            </div>
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+              checked={form.usedAssignedAgent}
+              onChange={handleToggleChange('usedAssignedAgent')}
+              disabled={saving}
+            />
+          </label>
+          <label className="flex items-center justify-between rounded border border-slate-200 px-3 py-2">
+            <div className="flex flex-col text-sm">
+              <span className="text-slate-500">Mortgage Company</span>
+              <span className="text-xs text-slate-500">Used AFC</span>
+            </div>
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+              checked={form.usedAfc}
+              onChange={handleToggleChange('usedAfc')}
               disabled={saving}
             />
           </label>

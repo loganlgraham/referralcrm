@@ -68,7 +68,9 @@ export const updateStatusSchema = z.object({
       agentCommissionPercentage: z.number().min(0),
       referralFeePercentage: z.number().min(0),
       dealSide: z.enum(['buy', 'sell']),
-      expectedCloseDate: z.string().nullable().optional()
+      expectedCloseDate: z.string().nullable().optional(),
+      usedAfc: z.boolean().optional(),
+      usedAssignedAgent: z.boolean().optional()
     })
     .optional()
 });

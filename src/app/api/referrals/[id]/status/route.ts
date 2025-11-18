@@ -21,6 +21,8 @@ type ContractPayment = {
     changedAt: Date | string;
     changedBy: string | null;
   }[];
+  usedAfc?: boolean | null;
+  usedAssignedAgent?: boolean | null;
 };
 
 interface Params {
@@ -95,6 +97,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   let createdDeal: any = null;
   const sla = (referral.sla ??= {} as any);
   let slaModified = false;
+  let activeDeal: ContractPayment | null = null;
 
   if (nextStatus === 'Under Contract') {
     if (sla.contractToCloseMinutes != null) {
@@ -181,6 +184,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     const propertyState = details.propertyState.trim().toUpperCase();
     const propertyPostalCode = details.propertyPostalCode.trim();
     expectedCloseDate = parseDateOnly(details.expectedCloseDate ?? null);
+    const usedAfc = details.usedAfc !== false;
+    const usedAssignedAgent = details.usedAssignedAgent !== false;
 
     referral.propertyAddress = propertyAddress;
     referral.propertyCity = propertyCity;
@@ -205,11 +210,13 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
           side: referral.dealSide,
           contractPriceCents: referral.estPurchasePriceCents ?? null,
           expectedCloseDate,
+          usedAfc,
+          usedAssignedAgent,
         },
       }
     );
 
-    let activeDeal = (await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
+    activeDeal = (await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
       .sort({ createdAt: -1 })
       .lean()) as ContractPayment | null;
 
@@ -223,11 +230,23 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         side: referral.dealSide,
         contractPriceCents: referral.estPurchasePriceCents ?? null,
         expectedCloseDate,
-        usedAfc: true,
-        usedAssignedAgent: true,
+        usedAfc,
+        usedAssignedAgent,
       });
       createdDeal = newDeal.toObject();
       activeDeal = createdDeal;
+    }
+
+    if (activeDeal) {
+      await Payment.updateOne(
+        { _id: activeDeal._id },
+        {
+          $set: {
+            usedAfc,
+            usedAssignedAgent,
+          },
+        }
+      );
     }
 
     if (activeDeal && expectedCloseDate) {
@@ -326,6 +345,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             referralFeeDueCents: referral.referralFeeDueCents ?? 0,
             dealSide: referral.dealSide ?? 'buy',
             expectedCloseDate: expectedCloseDate ?? referral.expectedCloseDate ?? null,
+            usedAfc: activeDeal?.usedAfc !== false,
+            usedAssignedAgent: activeDeal?.usedAssignedAgent !== false,
           }
         : undefined,
     deal:
