@@ -247,34 +247,39 @@ const normalizeDealPayments = (
     return null;
   }
 
-  return payments.map<DealCardDeal>((payment) => ({
-    _id: payment._id,
-    status: (payment.status as DealStatus | undefined) ?? null,
-    expectedAmountCents: payment.expectedAmountCents ?? null,
-    receivedAmountCents: payment.receivedAmountCents ?? null,
-    createdAt: payment.createdAt ?? null,
-    updatedAt: payment.updatedAt ?? null,
-    paidDate: payment.paidDate ?? null,
-    terminatedReason: payment.terminatedReason
-      ? (payment.terminatedReason as TerminatedReason)
-      : null,
-    agentAttribution: payment.agentAttribution as AgentSelectValue | undefined,
-    usedAfc: payment.usedAfc ?? null,
-    usedAssignedAgent: payment.usedAssignedAgent ?? null,
-    commissionBasisPoints: payment.commissionBasisPoints ?? null,
-    referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
-    side: payment.side ?? null,
-    contractPriceCents: payment.contractPriceCents ?? null,
-    dealAgentId: payment.dealAgentId ?? payment.agent?.id ?? null,
-    agent: payment.agent
-      ? {
-          id: payment.agent.id ?? null,
-          name: payment.agent.name ?? null,
-          email: payment.agent.email ?? null,
-          phone: payment.agent.phone ?? null,
-        }
-      : null,
-  }));
+  return payments.map<DealCardDeal>((payment) => {
+    const agentDetails =
+      payment.agent && typeof payment.agent.id === 'string'
+        ? {
+            id: payment.agent.id,
+            name: payment.agent.name ?? null,
+            email: payment.agent.email ?? null,
+            phone: payment.agent.phone ?? null,
+          }
+        : null;
+
+    return {
+      _id: payment._id,
+      status: (payment.status as DealStatus | undefined) ?? null,
+      expectedAmountCents: payment.expectedAmountCents ?? null,
+      receivedAmountCents: payment.receivedAmountCents ?? null,
+      createdAt: payment.createdAt ?? null,
+      updatedAt: payment.updatedAt ?? null,
+      paidDate: payment.paidDate ?? null,
+      terminatedReason: payment.terminatedReason
+        ? (payment.terminatedReason as TerminatedReason)
+        : null,
+      agentAttribution: payment.agentAttribution as AgentSelectValue | undefined,
+      usedAfc: payment.usedAfc ?? null,
+      usedAssignedAgent: payment.usedAssignedAgent ?? null,
+      commissionBasisPoints: payment.commissionBasisPoints ?? null,
+      referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
+      side: payment.side ?? null,
+      contractPriceCents: payment.contractPriceCents ?? null,
+      dealAgentId: payment.dealAgentId ?? agentDetails?.id ?? null,
+      agent: agentDetails,
+    };
+  });
 };
 
 const formatFullAddress = (
