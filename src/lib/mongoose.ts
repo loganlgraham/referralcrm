@@ -16,8 +16,11 @@ const MONGODB_URI = resolvedMongoUri;
 
 let modelsRegistered = false;
 
-const MAX_CONNECTION_RETRIES = 2;
+const MAX_CONNECTION_RETRIES = 4;
+const RETRY_BASE_DELAY_MS = 500;
 let retryAttempt = 1;
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const registerModels = async () => {
   if (modelsRegistered) {
@@ -134,8 +137,9 @@ export async function connectMongo(): Promise<typeof mongoose> {
     await resetCachedConnection();
 
     if (shouldRetry && retryAttempt <= MAX_CONNECTION_RETRIES) {
+      const backoffMs = Math.min(RETRY_BASE_DELAY_MS * 2 ** (retryAttempt - 1), 5000);
       console.warn(
-        `[mongo] Retrying mongoose connection after transient failure (attempt ${retryAttempt} of ${MAX_CONNECTION_RETRIES})`
+        `[mongo] Retrying mongoose connection after transient failure (attempt ${retryAttempt} of ${MAX_CONNECTION_RETRIES}) after ${backoffMs}ms`
       );
       retryAttempt += 1;
 
@@ -148,6 +152,7 @@ export async function connectMongo(): Promise<typeof mongoose> {
           throw connectError;
         });
 
+      await delay(backoffMs);
       return connectMongo();
     }
 

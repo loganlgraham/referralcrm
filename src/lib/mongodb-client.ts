@@ -7,7 +7,8 @@ import {
 let client: MongoClient | null = null;
 let clientPromise: Promise<MongoClient> | null = null;
 
-const MAX_CONNECTION_RETRIES = 2;
+const MAX_CONNECTION_RETRIES = 4;
+const RETRY_BASE_DELAY_MS = 500;
 
 const shouldRetryConnection = (error: unknown) => {
   const isPoolClearedError = (candidate: unknown) =>
@@ -67,6 +68,8 @@ export function getMongoClient(): MongoClient {
   return client;
 }
 
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const connectWithRetry = async (attempt = 1): Promise<MongoClient> => {
   const mongoClient = getMongoClient();
 
@@ -81,7 +84,11 @@ const connectWithRetry = async (attempt = 1): Promise<MongoClient> => {
     await resetClientState();
 
     if (shouldRetry && attempt <= MAX_CONNECTION_RETRIES) {
-      console.warn(`[mongo] Retrying MongoClient connection after transient failure (attempt ${attempt} of ${MAX_CONNECTION_RETRIES})`);
+      const backoffMs = Math.min(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), 5000);
+      console.warn(
+        `[mongo] Retrying MongoClient connection after transient failure (attempt ${attempt} of ${MAX_CONNECTION_RETRIES}) after ${backoffMs}ms`
+      );
+      await delay(backoffMs);
       return connectWithRetry(attempt + 1);
     }
 
