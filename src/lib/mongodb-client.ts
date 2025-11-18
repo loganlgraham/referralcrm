@@ -14,26 +14,26 @@ const shouldRetryConnection = (error: unknown) => {
   const isPoolClearedError = (candidate: unknown) =>
     (candidate as { name?: string } | null)?.name === 'MongoPoolClearedError';
 
-  if (
-    error instanceof MongoNetworkError ||
-    error instanceof MongoServerSelectionError ||
-    isPoolClearedError(error)
-  ) {
+  const hasPoolRetryLabel = (candidate: { errorLabelSet?: Set<string> } | null | undefined) =>
+    candidate?.errorLabelSet?.has('ResetPool') || candidate?.errorLabelSet?.has('PoolRequstedRetry');
+
+  if (error instanceof MongoNetworkError || isPoolClearedError(error)) {
     return true;
   }
 
+  if (error instanceof MongoServerSelectionError) {
+    // Treat server selection errors as transient only when flagged by the driver
+    return hasPoolRetryLabel(error);
+  }
+
   const candidate = error as { errorLabelSet?: Set<string>; cause?: unknown } | null;
-  if (candidate?.errorLabelSet?.has('ResetPool') || candidate?.errorLabelSet?.has('PoolRequstedRetry')) {
+  if (hasPoolRetryLabel(candidate)) {
     return true;
   }
 
   if (candidate?.cause) {
     const cause = candidate.cause as { errorLabelSet?: Set<string>; name?: string } | null;
-    return Boolean(
-      cause?.errorLabelSet?.has('ResetPool') ||
-      cause?.errorLabelSet?.has('PoolRequstedRetry') ||
-      isPoolClearedError(cause)
-    );
+    return Boolean(hasPoolRetryLabel(cause) || isPoolClearedError(cause));
   }
 
   return false;
