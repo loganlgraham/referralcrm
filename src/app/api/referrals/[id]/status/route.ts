@@ -30,6 +30,13 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   }
 
+  if (parsed.data.createNewDeal && parsed.data.status !== 'Under Contract') {
+    return NextResponse.json(
+      { error: { createNewDeal: ['Deal creation is only supported when moving Under Contract.'] } },
+      { status: 400 }
+    );
+  }
+
   await connectMongo();
   const referral = await Referral.findById(params.id)
     .populate('assignedAgent', 'userId')
@@ -56,6 +63,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const now = new Date();
   const requestedStatus = parsed.data.status;
   const nextStatus = requestedStatus === 'Showing Homes' ? 'Active Lead' : requestedStatus;
+  const createNewDeal = Boolean(parsed.data.createNewDeal);
   const previousStatusRaw = referral.status;
   const previousStatus = previousStatusRaw === 'Showing Homes' ? 'Active Lead' : previousStatusRaw;
   const previousStatusUpdatedAt =
@@ -182,24 +190,42 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     const referralFeeDue = details.contractPrice * commissionRate * referralRate;
     referral.referralFeeDueCents = Math.round(referralFeeDue * 100);
 
-    await Payment.updateMany(
-      { referralId: referral._id, status: 'under_contract' },
-      {
-        $set: {
+    if (!createNewDeal) {
+      await Payment.updateMany(
+        { referralId: referral._id, status: 'under_contract' },
+        {
+          $set: {
+            expectedAmountCents: referral.referralFeeDueCents ?? 0,
+            commissionBasisPoints: referral.commissionBasisPoints ?? null,
+            referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
+            side: referral.dealSide,
+            contractPriceCents: referral.estPurchasePriceCents ?? null,
+          },
+        }
+      );
+
+      const activeDeal = await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
+        .sort({ createdAt: -1 })
+        .lean();
+
+      if (!activeDeal) {
+        const newDeal = await Payment.create({
+          referralId: referral._id,
+          status: 'under_contract',
           expectedAmountCents: referral.referralFeeDueCents ?? 0,
           commissionBasisPoints: referral.commissionBasisPoints ?? null,
           referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
           side: referral.dealSide,
           contractPriceCents: referral.estPurchasePriceCents ?? null,
-        },
+          usedAssignedAgent: true,
+          agentId:
+            referral.assignedAgent && typeof (referral.assignedAgent as any) === 'object'
+              ? ((referral.assignedAgent as any)._id ?? null)
+              : referral.assignedAgent ?? null,
+        });
+        createdDeal = newDeal.toObject();
       }
-    );
-
-    let activeDeal = await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
-      .sort({ createdAt: -1 })
-      .lean();
-
-    if (!activeDeal) {
+    } else {
       const newDeal = await Payment.create({
         referralId: referral._id,
         status: 'under_contract',
@@ -208,14 +234,13 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
         side: referral.dealSide,
         contractPriceCents: referral.estPurchasePriceCents ?? null,
-        usedAssignedAgent: true,
-        agentId:
-          referral.assignedAgent && typeof (referral.assignedAgent as any) === 'object'
-            ? ((referral.assignedAgent as any)._id ?? null)
-            : referral.assignedAgent ?? null,
+          usedAssignedAgent: true,
+          agentId:
+            referral.assignedAgent && typeof (referral.assignedAgent as any) === 'object'
+              ? ((referral.assignedAgent as any)._id ?? null)
+              : referral.assignedAgent ?? null,
       });
       createdDeal = newDeal.toObject();
-      activeDeal = createdDeal;
     }
   } else if (parsed.data.status === 'Terminated' || parsed.data.status === 'Lost') {
     referral.estPurchasePriceCents = 0;

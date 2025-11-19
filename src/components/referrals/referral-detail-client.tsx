@@ -1262,6 +1262,42 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     contractDraft.hasUnsavedChanges ||
     (!hasAnyDeals && financials.status === 'Under Contract');
 
+  const dealPreparationDetails = useMemo(() => {
+    if (hasAnyDeals && contractPrepActive && !contractDraft.hasUnsavedChanges) {
+      return undefined;
+    }
+
+    return {
+      propertyAddress: financials.propertyAddress ?? referral.propertyAddress ?? undefined,
+      propertyCity: financials.propertyCity ?? referral.propertyCity ?? undefined,
+      propertyState:
+        financials.propertyState ??
+        (referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined),
+      propertyPostalCode: financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
+      contractPriceCents: financials.contractPriceCents,
+      agentCommissionBasisPoints: financials.commissionBasisPoints,
+      referralFeeBasisPoints: financials.referralFeeBasisPoints,
+      dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
+    };
+  }, [
+    contractDraft.hasUnsavedChanges,
+    contractPrepActive,
+    financials.commissionBasisPoints,
+    financials.contractPriceCents,
+    financials.dealSide,
+    financials.propertyAddress,
+    financials.propertyCity,
+    financials.propertyPostalCode,
+    financials.propertyState,
+    financials.referralFeeBasisPoints,
+    hasAnyDeals,
+    referral.dealSide,
+    referral.propertyAddress,
+    referral.propertyCity,
+    referral.propertyPostalCode,
+    referral.propertyState,
+  ]);
+
   const showDeals = contractPrepActive || contractDraft.hasUnsavedChanges || hasTerminatedDeal || hasAnyDeals;
 
   const followUpReferral = useMemo(() => {
@@ -1568,18 +1604,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               referralId={referralId}
               previousStatus={financials.status}
               visible={shouldShowDealPreparation}
-              contractDetails={{
-                propertyAddress: financials.propertyAddress ?? referral.propertyAddress ?? undefined,
-                propertyCity: financials.propertyCity ?? referral.propertyCity ?? undefined,
-                propertyState:
-                  financials.propertyState ??
-                  (referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined),
-                propertyPostalCode: financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
-                contractPriceCents: financials.contractPriceCents,
-                agentCommissionBasisPoints: financials.commissionBasisPoints,
-                referralFeeBasisPoints: financials.referralFeeBasisPoints,
-                dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
-              }}
+              contractDetails={dealPreparationDetails}
               defaultAgentId={referral.assignedAgent?._id ?? referral.assignedAgent?.id ?? null}
               onContractDraftChange={(draft) => {
                 contractHandlersRef.current?.onContractDraftChange(draft);
