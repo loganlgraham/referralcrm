@@ -46,6 +46,8 @@ interface ReferralPayment {
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
   contractPriceCents?: number | null;
+  agent?: { id: string; name: string | null } | null;
+  agentId?: string | null;
 }
 
 interface ReferralDetailNote {
@@ -260,6 +262,12 @@ const normalizeDealPayments = (
     referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
     side: payment.side ?? null,
     contractPriceCents: payment.contractPriceCents ?? null,
+    agent:
+      payment.agent && payment.agent.id
+        ? payment.agent
+        : payment.agentId
+        ? { id: payment.agentId, name: payment.agent?.name ?? null }
+        : null,
   }));
 };
 
@@ -1485,6 +1493,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                 referralFeeBasisPoints: financials.referralFeeBasisPoints,
                 dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
               }}
+              defaultAgentId={referral.assignedAgent?._id ?? referral.assignedAgent?.id ?? null}
               onContractDraftChange={(draft) => {
                 contractHandlersRef.current?.onContractDraftChange(draft);
               }}

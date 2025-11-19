@@ -393,6 +393,7 @@ export async function getReferralById(id: string) {
 
   const payments = await Payment.find({ referralId: referral._id })
     .sort({ createdAt: -1 })
+    .populate('agentId', 'name')
     .lean();
   const daysInStatus = differenceInDays(new Date(), referral.statusLastUpdated ?? referral.createdAt);
 
@@ -450,11 +451,32 @@ export async function getReferralById(id: string) {
       updatedAt: payment.updatedAt ? payment.updatedAt.toISOString() : null,
       terminatedReason: payment.terminatedReason ?? null,
       agentAttribution: payment.agentAttribution ?? null,
+      agent:
+        payment.agentId
+          ? {
+              id:
+                typeof payment.agentId === 'string'
+                  ? payment.agentId
+                  : payment.agentId instanceof Types.ObjectId
+                  ? payment.agentId.toString()
+                  : payment.agentId._id?.toString?.() ?? '',
+              name:
+                typeof payment.agentId === 'object' && payment.agentId !== null && 'name' in payment.agentId
+                  ? (payment.agentId as { name?: string | null }).name ?? null
+                  : null,
+            }
+          : null,
       usedAfc: Boolean(payment.usedAfc),
       usedAssignedAgent: Boolean(payment.usedAssignedAgent),
       commissionBasisPoints: payment.commissionBasisPoints ?? null,
       referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
       side: payment.side ?? null,
+      agentId:
+        typeof payment.agentId === 'string'
+          ? payment.agentId
+          : payment.agentId instanceof Types.ObjectId
+          ? payment.agentId.toString()
+          : payment.agentId?._id?.toString?.() ?? null,
     })),
     preApprovalAmountCents: typeof referral.preApprovalAmountCents === 'number' ? referral.preApprovalAmountCents : 0,
     estPurchasePriceCents: typeof referral.estPurchasePriceCents === 'number' ? referral.estPurchasePriceCents : 0,
