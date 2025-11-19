@@ -553,6 +553,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   ]);
   const [contractDraft, setContractDraft] = useState<DraftState>({ hasUnsavedChanges: false });
   const [contractPrepActive, setContractPrepActive] = useState(false);
+  const [dealPrepSession, setDealPrepSession] = useState(0);
   const [dealPrepMode, setDealPrepMode] = useState<'new' | 'existing'>('new');
   const dealSectionRef = useRef<HTMLDivElement | null>(null);
   const scrollDealSectionIntoView = useCallback(() => {
@@ -566,6 +567,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   }, []);
   const handleCreateDealRequest = useCallback(() => {
     setContractDraft({ hasUnsavedChanges: false });
+    setDealPrepSession((value) => value + 1);
     setContractPrepActive(true);
     setDealPrepMode('new');
     scrollDealSectionIntoView();
@@ -1681,6 +1683,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
           />
           {shouldShowDealPreparation && (
             <DealPreparationForm
+              key={`deal-prep-${dealPrepSession}`}
               referralId={referralId}
               previousStatus={financials.status}
               visible={shouldShowDealPreparation}
