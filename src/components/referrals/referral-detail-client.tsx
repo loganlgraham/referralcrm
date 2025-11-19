@@ -526,15 +526,20 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const [contractDraft, setContractDraft] = useState<DraftState>({ hasUnsavedChanges: false });
   const [contractPrepActive, setContractPrepActive] = useState(false);
   const dealSectionRef = useRef<HTMLDivElement | null>(null);
+  const scrollDealSectionIntoView = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      dealSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, []);
   const handleCreateDealRequest = useCallback(() => {
     setContractDraft({ hasUnsavedChanges: false });
     setContractPrepActive(true);
-    if (typeof window !== 'undefined') {
-      window.requestAnimationFrame(() => {
-        dealSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-    }
-  }, []);
+    scrollDealSectionIntoView();
+  }, [scrollDealSectionIntoView]);
   const lastStatusRef = useRef<ReferralStatus | null>(null);
   const handleDealCreated = useCallback(
     (deal: ReferralPayment) => {
@@ -1312,27 +1317,25 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
   };
 
-  useEffect(() => {
-    if (hasAnyDeals && contractPrepActive) {
-      setContractPrepActive(false);
-      return;
-    }
-
-    if (financials.status !== 'Under Contract' && contractPrepActive && !contractDraft.hasUnsavedChanges) {
-      setContractPrepActive(false);
-    }
-  }, [contractPrepActive, contractDraft.hasUnsavedChanges, financials.status, hasAnyDeals]);
+  const showDeals = true;
 
   useEffect(() => {
-    if (financials.status === 'Under Contract' && lastStatusRef.current !== 'Under Contract' && !hasAnyDeals) {
-      handleCreateDealRequest();
+    if (financials.status === 'Under Contract' && lastStatusRef.current !== 'Under Contract') {
+      scrollDealSectionIntoView();
     }
     lastStatusRef.current = financials.status;
-  }, [financials.status, handleCreateDealRequest, hasAnyDeals]);
+  }, [financials.status, scrollDealSectionIntoView]);
 
   const shouldShowDealPreparation = contractPrepActive;
 
-  const showDeals = true;
+  const handleUnderContractIntentChange = useCallback(
+    (isUnderContract: boolean) => {
+      if (isUnderContract) {
+        scrollDealSectionIntoView();
+      }
+    },
+    [scrollDealSectionIntoView]
+  );
 
   const followUpReferral = useMemo(() => {
     const createdAt = (() => {
@@ -1435,7 +1438,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         viewerRole={viewerRole}
         onFinancialsChange={handleFinancialsChange}
         onContractDraftChange={handleDraftChange}
-        onUnderContractIntentChange={setContractPrepActive}
+        onUnderContractIntentChange={handleUnderContractIntentChange}
         onContractHandlersReady={(handlers) => {
           contractHandlersRef.current = handlers;
         }}
