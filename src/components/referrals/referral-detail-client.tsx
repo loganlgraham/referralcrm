@@ -280,6 +280,9 @@ const mapDealRecordsToReferralPayments = (
   return deals.map((deal) => {
     const previous = previousById.get(deal._id);
 
+    const usedAfc = deal.usedAfc ?? previous?.usedAfc;
+    const usedAssignedAgent = deal.usedAssignedAgent ?? previous?.usedAssignedAgent;
+
     return {
       _id: deal._id,
       status: deal.status ?? previous?.status ?? null,
@@ -291,8 +294,8 @@ const mapDealRecordsToReferralPayments = (
       updatedAt: deal.updatedAt ?? previous?.updatedAt ?? null,
       terminatedReason: deal.terminatedReason ?? previous?.terminatedReason ?? null,
       agentAttribution: deal.agentAttribution ?? previous?.agentAttribution ?? null,
-      usedAfc: deal.usedAfc ?? previous?.usedAfc ?? null,
-      usedAssignedAgent: deal.usedAssignedAgent ?? previous?.usedAssignedAgent ?? null,
+      usedAfc: usedAfc ?? undefined,
+      usedAssignedAgent: usedAssignedAgent ?? undefined,
       commissionBasisPoints: deal.commissionBasisPoints ?? previous?.commissionBasisPoints ?? null,
       referralFeeBasisPoints: deal.referralFeeBasisPoints ?? previous?.referralFeeBasisPoints ?? null,
       side: deal.side ?? previous?.side ?? null,
