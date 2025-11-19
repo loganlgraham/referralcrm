@@ -263,6 +263,44 @@ const normalizeDealPayments = (
   }));
 };
 
+const mapDealRecordsToReferralPayments = (
+  deals: DealCardDeal[] | undefined,
+  previousPayments: ReferralPayment[] | null | undefined
+): ReferralPayment[] => {
+  if (!Array.isArray(deals)) {
+    return Array.isArray(previousPayments) ? previousPayments : [];
+  }
+
+  const previousById = new Map(
+    Array.isArray(previousPayments)
+      ? previousPayments.map((payment) => [payment._id, payment] as const)
+      : []
+  );
+
+  return deals.map((deal) => {
+    const previous = previousById.get(deal._id);
+
+    return {
+      _id: deal._id,
+      status: deal.status ?? previous?.status ?? null,
+      expectedAmountCents: deal.expectedAmountCents ?? previous?.expectedAmountCents ?? null,
+      receivedAmountCents: deal.receivedAmountCents ?? previous?.receivedAmountCents ?? null,
+      invoiceDate: previous?.invoiceDate ?? null,
+      paidDate: deal.paidDate ?? previous?.paidDate ?? null,
+      createdAt: deal.createdAt ?? previous?.createdAt ?? null,
+      updatedAt: deal.updatedAt ?? previous?.updatedAt ?? null,
+      terminatedReason: deal.terminatedReason ?? previous?.terminatedReason ?? null,
+      agentAttribution: deal.agentAttribution ?? previous?.agentAttribution ?? null,
+      usedAfc: deal.usedAfc ?? previous?.usedAfc ?? null,
+      usedAssignedAgent: deal.usedAssignedAgent ?? previous?.usedAssignedAgent ?? null,
+      commissionBasisPoints: deal.commissionBasisPoints ?? previous?.commissionBasisPoints ?? null,
+      referralFeeBasisPoints: deal.referralFeeBasisPoints ?? previous?.referralFeeBasisPoints ?? null,
+      side: deal.side ?? previous?.side ?? null,
+      contractPriceCents: deal.contractPriceCents ?? previous?.contractPriceCents ?? null,
+    };
+  });
+};
+
 const formatFullAddress = (
   street?: string | null,
   city?: string | null,
@@ -476,6 +514,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     },
     []
   );
+  const handleDealsChange = useCallback((updatedDeals: DealCardDeal[]) => {
+    setReferral((previous) => ({
+      ...previous,
+      payments: mapDealRecordsToReferralPayments(updatedDeals, previous.payments),
+    }));
+  }, []);
   const contractHandlersRef = useRef<{
     onContractSaved: (details: {
       propertyAddress: string;
@@ -1467,6 +1511,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             summary={dealSummary}
             viewerRole={viewerRole}
             onAddDeal={handleCreateDealRequest}
+            onDealsChange={handleDealsChange}
           />
           {shouldShowDealPreparation && (
             <DealPreparationForm

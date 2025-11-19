@@ -72,6 +72,7 @@ export interface ReferralDealProps {
   summary?: DealSummaryInfo;
   viewerRole?: string;
   onAddDeal?: () => void;
+  onDealsChange?: (deals: DealRecord[]) => void;
 }
 
 interface DealDraft {
@@ -135,7 +136,14 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
     });
 };
 
-export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }: ReferralDealProps) {
+export function DealCard({
+  referral,
+  overrides,
+  summary,
+  viewerRole,
+  onAddDeal,
+  onDealsChange,
+}: ReferralDealProps) {
   const router = useRouter();
   const [deals, setDeals] = useState<DealRecord[]>(() => normalizeDeals(referral.payments));
 
@@ -647,6 +655,37 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
         throw new Error('Unable to update deal');
       }
 
+      const updatedAt = new Date().toISOString();
+      setDeals((previous) => {
+        const nextDeals = previous.map((item) => {
+          if (item._id !== deal._id) {
+            return item;
+          }
+
+          const nextTerminatedReason =
+            nextStatus === 'terminated'
+              ? reasonMap[deal._id] ?? deal.terminatedReason ?? 'inspection'
+              : null;
+
+          const nextExpectedAmount =
+            nextStatus === 'terminated'
+              ? 0
+              : (payload.expectedAmountCents as number | undefined) ?? expectedAmountCents;
+
+          return {
+            ...item,
+            status: nextStatus,
+            expectedAmountCents: nextExpectedAmount,
+            receivedAmountCents: nextStatus === 'terminated' ? 0 : item.receivedAmountCents,
+            terminatedReason: nextTerminatedReason,
+            updatedAt,
+          };
+        });
+
+        onDealsChange?.(nextDeals);
+        return nextDeals;
+      });
+
       toast.success('Deal status saved');
     } catch (error) {
       console.error(error);
@@ -681,6 +720,20 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
       if (!response.ok) {
         throw new Error('Unable to update deal');
       }
+
+      setDeals((previous) => {
+        const nextDeals = previous.map((item) =>
+          item._id === deal._id
+            ? {
+                ...item,
+                terminatedReason: nextReason,
+              }
+            : item
+        );
+
+        onDealsChange?.(nextDeals);
+        return nextDeals;
+      });
 
       toast.success('Termination reason saved');
     } catch (error) {
