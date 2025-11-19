@@ -551,6 +551,15 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       setContractPrepActive(false);
       setContractDraft({ hasUnsavedChanges: false });
 
+      setFinancials((previous) => ({
+        ...previous,
+        contractPriceCents: deal.contractPriceCents ?? previous.contractPriceCents,
+        referralFeeDueCents: deal.expectedAmountCents ?? previous.referralFeeDueCents,
+        commissionBasisPoints: deal.commissionBasisPoints ?? previous.commissionBasisPoints,
+        referralFeeBasisPoints: deal.referralFeeBasisPoints ?? previous.referralFeeBasisPoints,
+        dealSide: deal.side ?? previous.dealSide,
+      }));
+
       setReferral((previous) => {
         const existingPayments = Array.isArray(previous.payments) ? previous.payments : [];
         if (existingPayments.some((payment) => payment._id === deal._id)) {
@@ -571,6 +580,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         ? Array.from(new Map(updatedDeals.map((deal) => [deal._id, deal] as const)).values())
         : [];
       const hasDeals = normalized.length > 0;
+      const primaryDeal = normalized.find((deal) => deal.status !== 'terminated') ?? normalized[0];
 
       setReferral((previous) => ({
         ...previous,
@@ -585,6 +595,21 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         referralFeeBasisPoints: hasDeals ? previous.referralFeeBasisPoints : undefined,
         dealSide: hasDeals ? previous.dealSide : undefined,
       }));
+
+      if (primaryDeal) {
+        setFinancials((previous) => ({
+          ...previous,
+          contractPriceCents:
+            primaryDeal.contractPriceCents ?? previous.contractPriceCents ?? referral.estPurchasePriceCents,
+          referralFeeDueCents:
+            primaryDeal.expectedAmountCents ?? previous.referralFeeDueCents ?? referral.referralFeeDueCents ?? 0,
+          commissionBasisPoints:
+            primaryDeal.commissionBasisPoints ?? previous.commissionBasisPoints ?? referral.commissionBasisPoints,
+          referralFeeBasisPoints:
+            primaryDeal.referralFeeBasisPoints ?? previous.referralFeeBasisPoints ?? referral.referralFeeBasisPoints,
+          dealSide: primaryDeal.side ?? previous.dealSide ?? referral.dealSide,
+        }));
+      }
 
       if (!hasDeals) {
         setContractDraft({ hasUnsavedChanges: false });
@@ -604,7 +629,16 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       }
       void mutate(activityFeedKey);
     },
-    [activityFeedKey, financials.status, mutate]
+    [
+      activityFeedKey,
+      financials.status,
+      mutate,
+      referral.commissionBasisPoints,
+      referral.dealSide,
+      referral.estPurchasePriceCents,
+      referral.referralFeeBasisPoints,
+      referral.referralFeeDueCents,
+    ]
   );
   const contractHandlersRef = useRef<{
     onContractSaved: (details: {
