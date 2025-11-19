@@ -114,25 +114,36 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
   }
 
   return deals
-    .map((deal) => ({
-      _id: deal._id,
-      status: (deal.status as DealStatus | undefined) ?? 'under_contract',
-      expectedAmountCents: deal.expectedAmountCents ?? 0,
-      receivedAmountCents: deal.receivedAmountCents ?? 0,
-      createdAt: deal.createdAt ?? null,
-      updatedAt: deal.updatedAt ?? null,
-      paidDate: deal.paidDate ?? null,
-      terminatedReason: (deal.terminatedReason as TerminatedReason | undefined) ?? null,
-      agentAttribution: (deal.agentAttribution as AgentSelectValue | undefined) ?? '',
-      usedAssignedAgent: deal.usedAssignedAgent ?? null,
-      usedAfc: deal.usedAfc ?? false,
-      commissionBasisPoints: deal.commissionBasisPoints ?? null,
-      referralFeeBasisPoints: deal.referralFeeBasisPoints ?? null,
-      side: deal.side ?? null,
-      contractPriceCents: deal.contractPriceCents ?? null,
-      agent: deal.agent ?? (deal.agentId ? { id: deal.agentId, name: deal.agent?.name ?? null } : null),
-      agentId: deal.agent?.id ?? deal.agentId ?? null,
-    }))
+    .map((deal) => {
+      const legacyAgent =
+        (deal.agent as { id?: string | null; name?: string | null } | null | undefined) ?? null;
+      const normalizedAgent =
+        legacyAgent?.id
+          ? { id: legacyAgent.id, name: legacyAgent.name ?? null }
+          : deal.agentId
+            ? { id: deal.agentId, name: legacyAgent?.name ?? null }
+            : null;
+
+      return {
+        _id: deal._id,
+        status: (deal.status as DealStatus | undefined) ?? 'under_contract',
+        expectedAmountCents: deal.expectedAmountCents ?? 0,
+        receivedAmountCents: deal.receivedAmountCents ?? 0,
+        createdAt: deal.createdAt ?? null,
+        updatedAt: deal.updatedAt ?? null,
+        paidDate: deal.paidDate ?? null,
+        terminatedReason: (deal.terminatedReason as TerminatedReason | undefined) ?? null,
+        agentAttribution: (deal.agentAttribution as AgentSelectValue | undefined) ?? '',
+        usedAssignedAgent: deal.usedAssignedAgent ?? null,
+        usedAfc: deal.usedAfc ?? false,
+        commissionBasisPoints: deal.commissionBasisPoints ?? null,
+        referralFeeBasisPoints: deal.referralFeeBasisPoints ?? null,
+        side: deal.side ?? null,
+        contractPriceCents: deal.contractPriceCents ?? null,
+        agent: normalizedAgent,
+        agentId: normalizedAgent?.id ?? null,
+      };
+    })
     .sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
