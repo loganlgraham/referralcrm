@@ -259,7 +259,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     agentId: parsed.data.agentId ?? null,
   });
 
-  return NextResponse.json({ id: payment._id.toString() }, { status: 201 });
+  return NextResponse.json(
+    {
+      id: payment._id.toString(),
+      createdAt: payment.createdAt instanceof Date ? payment.createdAt.toISOString() : new Date().toISOString(),
+      expectedAmountCents: payment.expectedAmountCents ?? 0,
+      receivedAmountCents: payment.receivedAmountCents ?? 0,
+      status: payment.status,
+    },
+    { status: 201 }
+  );
 }
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
