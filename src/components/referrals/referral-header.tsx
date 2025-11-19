@@ -356,7 +356,37 @@ export function ReferralHeader({
   const allowAssignedFallback = !fallbackBuySideContact && !fallbackSellSideContact;
   const canUseAssignedForBuySide = allowAssignedFallback && referral.clientType !== 'Seller';
   const canUseAssignedForSellSide = allowAssignedFallback && referral.clientType !== 'Buyer';
-  const primarySide: 'buy' | 'sell' = referral.clientType === 'Seller' ? 'sell' : 'buy';
+  const primarySide = useMemo<'buy' | 'sell'>(() => {
+    if (dealSide === 'sell') {
+      return 'sell';
+    }
+    if (dealSide === 'buy') {
+      if (buySideAgentContact || fallbackBuySideContact) {
+        return 'buy';
+      }
+      if (!buySideAgentContact && !fallbackBuySideContact && (sellSideAgentContact || fallbackSellSideContact)) {
+        return 'sell';
+      }
+      return 'buy';
+    }
+    if (referral.clientType === 'Seller') {
+      return 'sell';
+    }
+    if (referral.clientType === 'Buyer') {
+      return 'buy';
+    }
+    if (!buySideAgentContact && !fallbackBuySideContact && (sellSideAgentContact || fallbackSellSideContact)) {
+      return 'sell';
+    }
+    return 'buy';
+  }, [
+    buySideAgentContact,
+    dealSide,
+    fallbackBuySideContact,
+    fallbackSellSideContact,
+    referral.clientType,
+    sellSideAgentContact,
+  ]);
   const effectiveBuySideContact =
     buySideAgentContact ??
     fallbackBuySideContact ??

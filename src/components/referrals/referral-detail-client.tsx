@@ -348,37 +348,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     };
   };
 
-  const primarySide: 'buy' | 'sell' = referral.clientType === 'Seller' ? 'sell' : 'buy';
   const hasSideAssignments = Boolean(
     buySideAgentContact ||
       sellSideAgentContact ||
       referral.buySideAgent ||
       referral.sellSideAgent
   );
-
-  const primaryAgentContact = useMemo(() => {
-    const preferredStateContact = primarySide === 'sell' ? sellSideAgentContact : buySideAgentContact;
-    if (preferredStateContact) return preferredStateContact;
-
-    const preferredReferralContact =
-      primarySide === 'sell' ? referral.sellSideAgent : referral.buySideAgent;
-    const mappedPreferred = mapReferralContact(preferredReferralContact);
-    if (mappedPreferred) return mappedPreferred;
-
-    if (!hasSideAssignments) {
-      return mapReferralContact(referral.assignedAgent);
-    }
-
-    return null;
-  }, [
-    buySideAgentContact,
-    hasSideAssignments,
-    primarySide,
-    referral.assignedAgent,
-    referral.buySideAgent,
-    referral.sellSideAgent,
-    sellSideAgentContact,
-  ]);
 
   const handleMcContactChange = (contact: Contact | null) => {
     setMcContact(contact);
@@ -404,6 +379,69 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         ? initialReferral.dealSide
         : 'buy',
   });
+  const primarySide = useMemo<'buy' | 'sell'>(() => {
+    if (financials.dealSide === 'sell') {
+      return 'sell';
+    }
+    if (financials.dealSide === 'buy') {
+      if (buySideAgentContact || referral.buySideAgent) {
+        return 'buy';
+      }
+      if (!buySideAgentContact && !referral.buySideAgent && (sellSideAgentContact || referral.sellSideAgent)) {
+        return 'sell';
+      }
+      return 'buy';
+    }
+    if (referral.dealSide === 'sell') {
+      return 'sell';
+    }
+    if (referral.dealSide === 'buy') {
+      return 'buy';
+    }
+    if (referral.clientType === 'Seller') {
+      return 'sell';
+    }
+    if (referral.clientType === 'Buyer') {
+      return 'buy';
+    }
+    if (!buySideAgentContact && !referral.buySideAgent && (sellSideAgentContact || referral.sellSideAgent)) {
+      return 'sell';
+    }
+    return 'buy';
+  }, [
+    buySideAgentContact,
+    financials.dealSide,
+    referral.buySideAgent,
+    referral.clientType,
+    referral.dealSide,
+    referral.sellSideAgent,
+    sellSideAgentContact,
+  ]);
+
+  const primaryAgentContact = useMemo(() => {
+    const buyContact = buySideAgentContact ?? mapReferralContact(referral.buySideAgent);
+    const sellContact = sellSideAgentContact ?? mapReferralContact(referral.sellSideAgent);
+    const preferred = primarySide === 'sell' ? sellContact : buyContact;
+    if (preferred) {
+      return preferred;
+    }
+    const alternate = primarySide === 'sell' ? buyContact : sellContact;
+    if (alternate) {
+      return alternate;
+    }
+    if (!hasSideAssignments) {
+      return mapReferralContact(referral.assignedAgent);
+    }
+    return null;
+  }, [
+    buySideAgentContact,
+    hasSideAssignments,
+    primarySide,
+    referral.assignedAgent,
+    referral.buySideAgent,
+    referral.sellSideAgent,
+    sellSideAgentContact,
+  ]);
   const [contractDraft, setContractDraft] = useState<DraftState>({ hasUnsavedChanges: false });
   const [contractPrepActive, setContractPrepActive] = useState(false);
   const dealSectionRef = useRef<HTMLDivElement | null>(null);
@@ -893,15 +931,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       return next;
     });
 
+    const shouldRefreshActivityFeed = Boolean(
+      snapshot.statusLastUpdated || snapshot.daysInStatus !== undefined
+    );
     if (
-      statusChanged ||
-      preApprovalChanged ||
-      contractValueChanged ||
-      referralFeeChanged ||
-      commissionChanged ||
-      referralFeeBasisChanged ||
-      dealSideChanged ||
-      propertyFieldsTouched
+      shouldRefreshActivityFeed &&
+      (statusChanged || snapshot.statusLastUpdated || snapshot.daysInStatus !== undefined)
     ) {
       void mutate(activityFeedKey);
     }
@@ -1186,6 +1221,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       status: financials.status,
       statusLastUpdated: referral.statusLastUpdated,
       daysInStatus: referral.daysInStatus,
+      clientType: referral.clientType ?? null,
+      dealSide:
+        financials.dealSide ??
+        (referral.dealSide === 'sell' || referral.dealSide === 'buy' ? referral.dealSide : null),
       assignedAgent: primaryAgentContact?.name
         ? { name: primaryAgentContact.name }
         : referral.assignedAgent?.name
@@ -1193,6 +1232,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         : null,
       assignedAgentName:
         primaryAgentContact?.name ?? referral.assignedAgent?.name ?? undefined,
+      buySideAgent: referral.buySideAgent
+        ? { name: referral.buySideAgent.name ?? null, fullName: referral.buySideAgent.name ?? null }
+        : null,
+      sellSideAgent: referral.sellSideAgent
+        ? { name: referral.sellSideAgent.name ?? null, fullName: referral.sellSideAgent.name ?? null }
+        : null,
+      buySideAgentName: referral.buySideAgent?.name ?? undefined,
+      sellSideAgentName: referral.sellSideAgent?.name ?? undefined,
       borrower: referral.borrower,
       notes: referral.notes ?? [],
       payments: referral.payments ?? [],
@@ -1201,12 +1248,17 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   }, [
     primaryAgentContact?.name,
     financials.status,
+    financials.dealSide,
     referral._id,
     referral.audit,
+    referral.clientType,
     referral.borrower,
     referral.createdAt,
     referral.daysInStatus,
+    referral.dealSide,
     referral.notes,
+    referral.buySideAgent,
+    referral.sellSideAgent,
     referral.payments,
     referral.statusLastUpdated,
     referral.assignedAgent?.name,

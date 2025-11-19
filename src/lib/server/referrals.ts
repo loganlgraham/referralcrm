@@ -52,6 +52,7 @@ interface ReferralListItem {
   borrowerPhone: string;
   endorser?: string;
   clientType: 'Seller' | 'Buyer' | 'Both';
+  dealSide?: 'buy' | 'sell' | null;
   lookingInZip: string;
   lookingInZips?: string[];
   borrowerCurrentAddress?: string;
@@ -63,6 +64,8 @@ interface ReferralListItem {
   statusLastUpdated?: string | null;
   daysInStatus?: number;
   assignedAgentName?: string;
+  buySideAgentName?: string;
+  sellSideAgentName?: string;
   assignedAgentEmail?: string;
   assignedAgentPhone?: string;
   lenderName?: string;
@@ -246,7 +249,38 @@ export async function getReferrals(params: GetReferralsParams) {
   const closeRate = total === 0 ? 0 : (closedDeals / total) * 100;
 
   const referralIds = items.map((item) => item._id);
-  const resolveAgent = (item: PopulatedReferral) => item.buySideAgent ?? item.sellSideAgent ?? item.assignedAgent;
+  const resolveAgent = (item: PopulatedReferral) => {
+    const buyAgent = item.buySideAgent ?? null;
+    const sellAgent = item.sellSideAgent ?? null;
+    const hasBuyAgent = Boolean(buyAgent);
+    const hasSellAgent = Boolean(sellAgent);
+    const preferredSide: 'buy' | 'sell' = (() => {
+      if (item.dealSide === 'sell') {
+        return 'sell';
+      }
+      if (item.dealSide === 'buy') {
+        if (hasBuyAgent || !hasSellAgent) {
+          return 'buy';
+        }
+        return 'sell';
+      }
+      if (item.clientType === 'Seller') {
+        return 'sell';
+      }
+      if (item.clientType === 'Buyer') {
+        return 'buy';
+      }
+      if (!hasBuyAgent && hasSellAgent) {
+        return 'sell';
+      }
+      return 'buy';
+    })();
+
+    if (preferredSide === 'sell') {
+      return sellAgent ?? buyAgent ?? item.assignedAgent ?? null;
+    }
+    return buyAgent ?? sellAgent ?? item.assignedAgent ?? null;
+  };
   const paymentDocs = await Payment.find({ referralId: { $in: referralIds } })
     .sort({ createdAt: -1 })
     .select('referralId status')
@@ -303,6 +337,8 @@ export async function getReferrals(params: GetReferralsParams) {
         statusLastUpdated: item.statusLastUpdated ? item.statusLastUpdated.toISOString() : null,
         daysInStatus: differenceInDays(new Date(), item.statusLastUpdated ?? item.createdAt),
         assignedAgentName: agent?.name,
+        buySideAgentName: item.buySideAgent?.name,
+        sellSideAgentName: item.sellSideAgent?.name,
         assignedAgentEmail: agent?.email,
         assignedAgentPhone: agent?.phone,
         lenderName: item.lender?.name,
@@ -310,6 +346,7 @@ export async function getReferrals(params: GetReferralsParams) {
         lenderPhone: item.lender?.phone,
         referralFeeDueCents: item.referralFeeDueCents,
         preApprovalAmountCents: item.preApprovalAmountCents,
+        dealSide: item.dealSide === 'sell' ? 'sell' : 'buy',
         dealStatus,
         dealStatusLabel,
         origin:

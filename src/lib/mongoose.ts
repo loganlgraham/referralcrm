@@ -9,6 +9,7 @@ if (!resolvedMongoUri) {
 }
 
 const MONGODB_URI = resolvedMongoUri;
+const ALLOW_INSECURE_TLS = process.env.MONGODB_ALLOW_INVALID_CERTS === 'true';
 
 let modelsRegistered = false;
 
@@ -60,9 +61,15 @@ export async function connectMongo(): Promise<typeof mongoose> {
   }
 
   if (!cached?.promise) {
-    cached!.promise = mongoose.connect(MONGODB_URI, {
-      bufferCommands: false
-    });
+    const connectionOptions: Parameters<typeof mongoose.connect>[1] = {
+      bufferCommands: false,
+      serverSelectionTimeoutMS: 15000,
+    };
+    if (ALLOW_INSECURE_TLS) {
+      connectionOptions.tlsAllowInvalidCertificates = true;
+      connectionOptions.tlsAllowInvalidHostnames = true;
+    }
+    cached!.promise = mongoose.connect(MONGODB_URI, connectionOptions);
   }
 
   cached!.conn = await cached!.promise;
