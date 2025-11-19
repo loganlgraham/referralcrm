@@ -296,13 +296,23 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [detailsDraft, setDetailsDraft] = useState<DetailDraft>(() => createDetailDraft(initialReferral));
   const [savingDetails, setSavingDetails] = useState(false);
-  const [agentContact, setAgentContact] = useState<Contact | null>(() =>
-    initialReferral.assignedAgent
+  const [buySideAgentContact, setBuySideAgentContact] = useState<Contact | null>(() =>
+    initialReferral.buySideAgent
       ? {
-          id: initialReferral.assignedAgent._id ?? initialReferral.assignedAgent.id ?? null,
-          name: initialReferral.assignedAgent.name ?? null,
-          email: initialReferral.assignedAgent.email ?? null,
-          phone: initialReferral.assignedAgent.phone ?? null,
+          id: initialReferral.buySideAgent._id ?? initialReferral.buySideAgent.id ?? null,
+          name: initialReferral.buySideAgent.name ?? null,
+          email: initialReferral.buySideAgent.email ?? null,
+          phone: initialReferral.buySideAgent.phone ?? null,
+        }
+      : null
+  );
+  const [sellSideAgentContact, setSellSideAgentContact] = useState<Contact | null>(() =>
+    initialReferral.sellSideAgent
+      ? {
+          id: initialReferral.sellSideAgent._id ?? initialReferral.sellSideAgent.id ?? null,
+          name: initialReferral.sellSideAgent.name ?? null,
+          email: initialReferral.sellSideAgent.email ?? null,
+          phone: initialReferral.sellSideAgent.phone ?? null,
         }
       : null
   );
@@ -316,11 +326,59 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         }
       : null
   );
-  const handleAgentContactChange = (contact: Contact | null) => {
-    setAgentContact(contact);
+  const handleBuySideAgentContactChange = (contact: Contact | null) => {
+    setBuySideAgentContact(contact);
     router.refresh();
     void mutate(activityFeedKey);
   };
+
+  const handleSellSideAgentContactChange = (contact: Contact | null) => {
+    setSellSideAgentContact(contact);
+    router.refresh();
+    void mutate(activityFeedKey);
+  };
+
+  const mapReferralContact = (contact: ReferralContact | null | undefined): Contact | null => {
+    if (!contact) return null;
+    return {
+      id: contact._id ?? contact.id ?? null,
+      name: contact.name ?? null,
+      email: contact.email ?? null,
+      phone: contact.phone ?? null,
+    };
+  };
+
+  const primarySide: 'buy' | 'sell' = referral.clientType === 'Seller' ? 'sell' : 'buy';
+  const hasSideAssignments = Boolean(
+    buySideAgentContact ||
+      sellSideAgentContact ||
+      referral.buySideAgent ||
+      referral.sellSideAgent
+  );
+
+  const primaryAgentContact = useMemo(() => {
+    const preferredStateContact = primarySide === 'sell' ? sellSideAgentContact : buySideAgentContact;
+    if (preferredStateContact) return preferredStateContact;
+
+    const preferredReferralContact =
+      primarySide === 'sell' ? referral.sellSideAgent : referral.buySideAgent;
+    const mappedPreferred = mapReferralContact(preferredReferralContact);
+    if (mappedPreferred) return mappedPreferred;
+
+    if (!hasSideAssignments) {
+      return mapReferralContact(referral.assignedAgent);
+    }
+
+    return null;
+  }, [
+    buySideAgentContact,
+    hasSideAssignments,
+    primarySide,
+    referral.assignedAgent,
+    referral.buySideAgent,
+    referral.sellSideAgent,
+    sellSideAgentContact,
+  ]);
 
   const handleMcContactChange = (contact: Contact | null) => {
     setMcContact(contact);
@@ -1133,20 +1191,20 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       status: financials.status,
       statusLastUpdated: referral.statusLastUpdated,
       daysInStatus: referral.daysInStatus,
-      assignedAgent: agentContact?.name
-        ? { name: agentContact.name }
+      assignedAgent: primaryAgentContact?.name
+        ? { name: primaryAgentContact.name }
         : referral.assignedAgent?.name
         ? { name: referral.assignedAgent.name }
         : null,
       assignedAgentName:
-        agentContact?.name ?? referral.assignedAgent?.name ?? undefined,
+        primaryAgentContact?.name ?? referral.assignedAgent?.name ?? undefined,
       borrower: referral.borrower,
       notes: referral.notes ?? [],
       payments: referral.payments ?? [],
       audit: auditEntries,
     };
   }, [
-    agentContact?.name,
+    primaryAgentContact?.name,
     financials.status,
     referral._id,
     referral.audit,
@@ -1171,9 +1229,11 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
           contractHandlersRef.current = handlers;
         }}
         onCreateDealRequest={handleCreateDealRequest}
-        agentContact={agentContact}
+        buySideAgentContact={buySideAgentContact}
+        sellSideAgentContact={sellSideAgentContact}
         mcContact={mcContact}
-        onAgentContactChange={handleAgentContactChange}
+        onBuySideAgentContactChange={handleBuySideAgentContactChange}
+        onSellSideAgentContactChange={handleSellSideAgentContactChange}
         onMcContactChange={handleMcContactChange}
       />
       <ReferralFollowUpCard referral={followUpReferral} />
@@ -1343,8 +1403,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         initialNotes={notes}
         viewerRole={viewerRole}
         agentContact={{
-          name: agentContact?.name ?? null,
-          email: agentContact?.email ?? null
+          name: primaryAgentContact?.name ?? null,
+          email: primaryAgentContact?.email ?? null
         }}
         mcContact={{
           name: mcContact?.name ?? null,

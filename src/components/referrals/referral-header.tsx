@@ -90,9 +90,11 @@ type ReferralHeaderProps = {
     onContractDraftChange: (draft: ContractDraftSnapshot) => void;
   }) => void;
   onCreateDealRequest?: () => void;
-  agentContact?: Contact | null;
+  buySideAgentContact?: Contact | null;
+  sellSideAgentContact?: Contact | null;
   mcContact?: Contact | null;
-  onAgentContactChange?: (contact: Contact | null) => void;
+  onBuySideAgentContactChange?: (contact: Contact | null) => void;
+  onSellSideAgentContactChange?: (contact: Contact | null) => void;
   onMcContactChange?: (contact: Contact | null) => void;
 };
 
@@ -104,9 +106,11 @@ export function ReferralHeader({
   onUnderContractIntentChange,
   onContractHandlersReady,
   onCreateDealRequest,
-  agentContact,
+  buySideAgentContact,
+  sellSideAgentContact,
   mcContact,
-  onAgentContactChange,
+  onBuySideAgentContactChange,
+  onSellSideAgentContactChange,
   onMcContactChange,
 }: ReferralHeaderProps) {
   const isAgentOrigin = referral.origin === 'agent';
@@ -354,11 +358,11 @@ export function ReferralHeader({
   const canUseAssignedForSellSide = allowAssignedFallback && referral.clientType !== 'Buyer';
   const primarySide: 'buy' | 'sell' = referral.clientType === 'Seller' ? 'sell' : 'buy';
   const effectiveBuySideContact =
-    agentContact ??
+    buySideAgentContact ??
     fallbackBuySideContact ??
     (canUseAssignedForBuySide ? fallbackAgentContact : null);
   const effectiveSellSideContact =
-    agentContact ??
+    sellSideAgentContact ??
     fallbackSellSideContact ??
     (canUseAssignedForSellSide ? fallbackAgentContact : null);
   const effectiveAgentContact = primarySide === 'sell' ? effectiveSellSideContact : effectiveBuySideContact;
@@ -760,7 +764,7 @@ export function ReferralHeader({
                 side="buy"
                 contact={effectiveBuySideContact}
                 canAssign={canAssignAgent}
-                onContactChange={onAgentContactChange}
+                onContactChange={onBuySideAgentContactChange}
               />
               <ContactAssignment
                 referralId={referral._id}
@@ -768,7 +772,7 @@ export function ReferralHeader({
                 side="sell"
                 contact={effectiveSellSideContact}
                 canAssign={canAssignAgent}
-                onContactChange={onAgentContactChange}
+                onContactChange={onSellSideAgentContactChange}
               />
             </>
           ) : (
@@ -778,7 +782,11 @@ export function ReferralHeader({
               side={primarySide}
               contact={effectiveAgentContact}
               canAssign={canAssignAgent}
-              onContactChange={onAgentContactChange}
+              onContactChange={
+                primarySide === 'sell'
+                  ? onSellSideAgentContactChange
+                  : onBuySideAgentContactChange
+              }
             />
           )}
           <ContactAssignment
