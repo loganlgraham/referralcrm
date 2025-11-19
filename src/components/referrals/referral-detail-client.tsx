@@ -536,12 +536,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     }
   }, []);
   const lastStatusRef = useRef<ReferralStatus | null>(null);
-  useEffect(() => {
-    if (financials.status === 'Under Contract' && lastStatusRef.current !== 'Under Contract') {
-      handleCreateDealRequest();
-    }
-    lastStatusRef.current = financials.status;
-  }, [financials.status, handleCreateDealRequest]);
   const handleDealCreated = useCallback(
     (deal: ReferralPayment) => {
       if (!deal?._id) {
@@ -1319,17 +1313,24 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   };
 
   useEffect(() => {
-    if (hasAnyDeals && !contractDraft.hasUnsavedChanges) {
+    if (hasAnyDeals && contractPrepActive) {
       setContractPrepActive(false);
       return;
     }
 
-    if (financials.status !== 'Under Contract' && !contractDraft.hasUnsavedChanges) {
+    if (financials.status !== 'Under Contract' && contractPrepActive && !contractDraft.hasUnsavedChanges) {
       setContractPrepActive(false);
     }
-  }, [contractDraft.hasUnsavedChanges, financials.status, hasAnyDeals]);
+  }, [contractPrepActive, contractDraft.hasUnsavedChanges, financials.status, hasAnyDeals]);
 
-  const shouldShowDealPreparation = contractPrepActive || contractDraft.hasUnsavedChanges;
+  useEffect(() => {
+    if (financials.status === 'Under Contract' && lastStatusRef.current !== 'Under Contract' && !hasAnyDeals) {
+      handleCreateDealRequest();
+    }
+    lastStatusRef.current = financials.status;
+  }, [financials.status, handleCreateDealRequest, hasAnyDeals]);
+
+  const shouldShowDealPreparation = contractPrepActive;
 
   const showDeals = true;
 
