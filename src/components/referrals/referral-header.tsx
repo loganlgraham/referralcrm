@@ -349,9 +349,18 @@ export function ReferralHeader({
         phone: referral.lender.phone ?? null,
       }
     : null;
+  const allowAssignedFallback = !fallbackBuySideContact && !fallbackSellSideContact;
+  const canUseAssignedForBuySide = allowAssignedFallback && referral.clientType !== 'Seller';
+  const canUseAssignedForSellSide = allowAssignedFallback && referral.clientType !== 'Buyer';
   const primarySide: 'buy' | 'sell' = referral.clientType === 'Seller' ? 'sell' : 'buy';
-  const effectiveBuySideContact = agentContact ?? fallbackBuySideContact ?? fallbackAgentContact;
-  const effectiveSellSideContact = agentContact ?? fallbackSellSideContact ?? fallbackAgentContact;
+  const effectiveBuySideContact =
+    agentContact ??
+    fallbackBuySideContact ??
+    (canUseAssignedForBuySide ? fallbackAgentContact : null);
+  const effectiveSellSideContact =
+    agentContact ??
+    fallbackSellSideContact ??
+    (canUseAssignedForSellSide ? fallbackAgentContact : null);
   const effectiveAgentContact = primarySide === 'sell' ? effectiveSellSideContact : effectiveBuySideContact;
   const effectiveMcContact = mcContact ?? fallbackMcContact;
   const canEditBucket = viewerRole === 'admin' || viewerRole === 'manager';
