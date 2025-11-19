@@ -57,6 +57,7 @@ interface DealPreparationFormProps {
   visible: boolean;
   contractDetails?: ContractDetails;
   defaultAgentId?: string | null;
+  defaultAgentIds?: { buy?: string | null; sell?: string | null };
   onContractSaved?: (details: {
     propertyAddress: string;
     propertyCity: string;
@@ -86,7 +87,8 @@ interface DealPreparationFormProps {
 
 const buildInitialFormState = (
   details?: ContractDetails,
-  defaultAgentId?: string | null
+  defaultAgentId?: string | null,
+  defaultAgentIds?: { buy?: string | null; sell?: string | null }
 ): ContractFormState => ({
   propertyAddress: details?.propertyAddress ?? '',
   propertyCity: details?.propertyCity ?? '',
@@ -100,7 +102,11 @@ const buildInitialFormState = (
     ? (details.referralFeeBasisPoints / 100).toString()
     : '25',
   dealSide: details?.dealSide ?? 'buy',
-  agentId: details?.agentId ?? defaultAgentId ?? '',
+  agentId:
+    details?.agentId ??
+    (details?.dealSide === 'sell' ? defaultAgentIds?.sell : defaultAgentIds?.buy) ??
+    defaultAgentId ??
+    '',
 });
 
 const formatFullAddress = (
@@ -164,6 +170,7 @@ export function DealPreparationForm({
   visible,
   contractDetails,
   defaultAgentId,
+  defaultAgentIds,
   onContractSaved,
   onStatusChanged,
   onContractDraftChange,
@@ -171,7 +178,7 @@ export function DealPreparationForm({
 }: DealPreparationFormProps) {
   const router = useRouter();
   const [form, setForm] = useState<ContractFormState>(() =>
-    buildInitialFormState(contractDetails, defaultAgentId)
+    buildInitialFormState(contractDetails, defaultAgentId, defaultAgentIds)
   );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -191,7 +198,7 @@ export function DealPreparationForm({
       return;
     }
 
-    const nextState = buildInitialFormState(contractDetails, defaultAgentId);
+    const nextState = buildInitialFormState(contractDetails, defaultAgentId, defaultAgentIds);
     setForm((previous) => {
       const hasChanged =
         previous.propertyAddress !== nextState.propertyAddress ||
@@ -318,6 +325,16 @@ export function DealPreparationForm({
         nextValue = sanitized.slice(0, 10);
       } else if (field === 'dealSide') {
         nextValue = value === 'sell' ? 'sell' : 'buy';
+        if (!previous.agentId) {
+          const defaultForSide = value === 'sell' ? defaultAgentIds?.sell : defaultAgentIds?.buy;
+          const nextDraft = {
+            ...previous,
+            dealSide: nextValue as ContractFormState['dealSide'],
+            agentId: defaultForSide ?? previous.agentId,
+          };
+          broadcastDraft(nextDraft, true);
+          return nextDraft;
+        }
       }
       const next = { ...previous, [field]: nextValue as ContractFormState[typeof field] };
       broadcastDraft(next, true);
@@ -414,7 +431,7 @@ export function DealPreparationForm({
           referralFeeBasisPoints: details.referralFeeBasisPoints,
           dealSide: details.dealSide,
           agentId: form.agentId,
-        }, defaultAgentId);
+        }, defaultAgentId, defaultAgentIds);
         setForm(nextState);
         setDirty(false);
         broadcastDraft(nextState, false);

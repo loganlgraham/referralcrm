@@ -397,6 +397,34 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         }
       : null
   );
+  const defaultDealAgents = useMemo(
+    () => ({
+      buy:
+        referral.buySideAgent?._id ??
+        referral.buySideAgent?.id ??
+        buySideAgentContact?.id ??
+        referral.assignedAgent?._id ??
+        referral.assignedAgent?.id ??
+        null,
+      sell:
+        referral.sellSideAgent?._id ??
+        referral.sellSideAgent?.id ??
+        sellSideAgentContact?.id ??
+        referral.assignedAgent?._id ??
+        referral.assignedAgent?.id ??
+        null,
+    }),
+    [
+      buySideAgentContact?.id,
+      referral.assignedAgent?._id,
+      referral.assignedAgent?.id,
+      referral.buySideAgent?._id,
+      referral.buySideAgent?.id,
+      referral.sellSideAgent?._id,
+      referral.sellSideAgent?.id,
+      sellSideAgentContact?.id,
+    ]
+  );
   const [mcContact, setMcContact] = useState<Contact | null>(() =>
     initialReferral.lender
       ? {
@@ -525,6 +553,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   ]);
   const [contractDraft, setContractDraft] = useState<DraftState>({ hasUnsavedChanges: false });
   const [contractPrepActive, setContractPrepActive] = useState(false);
+  const [dealPrepMode, setDealPrepMode] = useState<'new' | 'existing'>('new');
   const dealSectionRef = useRef<HTMLDivElement | null>(null);
   const scrollDealSectionIntoView = useCallback(() => {
     if (typeof window === 'undefined') {
@@ -538,6 +567,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const handleCreateDealRequest = useCallback(() => {
     setContractDraft({ hasUnsavedChanges: false });
     setContractPrepActive(true);
+    setDealPrepMode('new');
     scrollDealSectionIntoView();
   }, [scrollDealSectionIntoView]);
   const lastStatusRef = useRef<ReferralStatus | null>(null);
@@ -1327,6 +1357,19 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   }, [financials.status, scrollDealSectionIntoView]);
 
   const shouldShowDealPreparation = contractPrepActive;
+  const dealPrepContractDetails = dealPrepMode === 'new'
+    ? undefined
+    : {
+        propertyAddress: financials.propertyAddress ?? referral.propertyAddress ?? undefined,
+        propertyCity: financials.propertyCity ?? referral.propertyCity ?? undefined,
+        propertyState:
+          financials.propertyState ?? (referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined),
+        propertyPostalCode: financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
+        contractPriceCents: financials.contractPriceCents,
+        agentCommissionBasisPoints: financials.commissionBasisPoints,
+        referralFeeBasisPoints: financials.referralFeeBasisPoints,
+        dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
+      };
 
   const handleUnderContractIntentChange = useCallback(
     (isUnderContract: boolean) => {
@@ -1641,19 +1684,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               referralId={referralId}
               previousStatus={financials.status}
               visible={shouldShowDealPreparation}
-              contractDetails={{
-                propertyAddress: financials.propertyAddress ?? referral.propertyAddress ?? undefined,
-                propertyCity: financials.propertyCity ?? referral.propertyCity ?? undefined,
-                propertyState:
-                  financials.propertyState ??
-                  (referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined),
-                propertyPostalCode: financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
-                contractPriceCents: financials.contractPriceCents,
-                agentCommissionBasisPoints: financials.commissionBasisPoints,
-                referralFeeBasisPoints: financials.referralFeeBasisPoints,
-                dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
-              }}
+              contractDetails={dealPrepContractDetails}
               defaultAgentId={referral.assignedAgent?._id ?? referral.assignedAgent?.id ?? null}
+              defaultAgentIds={defaultDealAgents}
               onContractDraftChange={(draft) => {
                 contractHandlersRef.current?.onContractDraftChange(draft);
               }}

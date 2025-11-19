@@ -63,6 +63,9 @@ export interface ReferralDealProps {
   referral: {
     _id: string;
     propertyAddress?: string;
+    propertyCity?: string | null;
+    propertyState?: string | null;
+    propertyPostalCode?: string | null;
     lookingInZip?: string | null;
     lookingInZips?: string[] | null;
     origin?: 'agent' | 'mc' | 'admin' | null;
@@ -88,6 +91,10 @@ interface DealDraft {
   commissionPercent: string;
   referralFeePercent: string;
   side: 'buy' | 'sell';
+  propertyAddress: string;
+  propertyCity: string;
+  propertyState: string;
+  propertyPostalCode: string;
 }
 
 const deriveReferralFeeCents = (
@@ -365,12 +372,28 @@ export function DealCard({
       const commissionBps = deal.commissionBasisPoints ?? summaryCommissionBasisPoints ?? null;
       const referralFeeBps = deal.referralFeeBasisPoints ?? summaryReferralFeeBasisPoints ?? null;
       const side = deal.side ?? overrides?.dealSide ?? summaryDealSide ?? 'buy';
+      const address = overrides?.propertyAddress ?? summaryAddress ?? referral.propertyAddress ?? '';
+      const [street = '', locality = ''] = address.split(',').map((value) => value.trim());
+      const cityFromReferral = referral.propertyCity ?? '';
+      const stateFromReferral = referral.propertyState ?? '';
+      const postalFromReferral = referral.propertyPostalCode ?? '';
+      const [cityPart = cityFromReferral, statePostalPart = `${stateFromReferral} ${postalFromReferral}`] = locality
+        .split(',')
+        .map((value) => value.trim());
+      const [statePart = stateFromReferral, postalPart = postalFromReferral] = statePostalPart
+        .split(' ')
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0);
 
       return {
         contractPrice: formatDraftCurrency(priceCents),
         commissionPercent: formatDraftPercent(commissionBps),
         referralFeePercent: formatDraftPercent(referralFeeBps),
         side,
+        propertyAddress: street,
+        propertyCity: cityPart,
+        propertyState: statePart,
+        propertyPostalCode: postalPart,
       };
     },
     [
@@ -428,9 +451,23 @@ export function DealCard({
 
   const handleSaveDealDetails = (deal: DealRecord) => async () => {
     const draft = detailDraftMap[deal._id] ?? getDefaultDraft(deal);
+    const trimmedAddress = draft.propertyAddress.trim();
+    const trimmedCity = draft.propertyCity.trim();
+    const trimmedState = draft.propertyState.trim().toUpperCase();
+    const trimmedPostal = draft.propertyPostalCode.trim();
     const contractPriceCents = parseCurrencyInput(draft.contractPrice);
     const commissionBasisPoints = parsePercentInput(draft.commissionPercent);
     const referralFeeBasisPoints = isAgentOrigin ? 0 : parsePercentInput(draft.referralFeePercent);
+
+    if (!trimmedAddress || !trimmedCity || !trimmedState || !trimmedPostal) {
+      toast.error('Enter the property address, city, state, and ZIP before saving.');
+      return;
+    }
+
+    if (!/^[A-Za-z]{2}$/.test(trimmedState) || !/^\d{5}(?:-\d{4})?$/.test(trimmedPostal)) {
+      toast.error('Enter a valid state code and ZIP for this deal.');
+      return;
+    }
 
     if (contractPriceCents == null || commissionBasisPoints == null) {
       toast.error('Enter the contract price and commission % before saving.');
@@ -505,9 +542,34 @@ export function DealCard({
           commissionPercent: formatDraftPercent(commissionBasisPoints),
           referralFeePercent: formatDraftPercent(referralFeeBasisPoints),
           side: draft.side,
+          propertyAddress: trimmedAddress,
+          propertyCity: trimmedCity,
+          propertyState: trimmedState,
+          propertyPostalCode: trimmedPostal,
         },
       }));
       toast.success('Deal details saved');
+      try {
+        await fetch(`/api/referrals/${referral._id}/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'Under Contract',
+            contractDetails: {
+              propertyAddress: trimmedAddress,
+              propertyCity: trimmedCity,
+              propertyState: trimmedState,
+              propertyPostalCode: trimmedPostal,
+              contractPrice: contractPriceCents / 100,
+              agentCommissionPercentage: commissionBasisPoints / 100,
+              referralFeePercentage: (referralFeeBasisPoints ?? 0) / 100,
+              dealSide: draft.side,
+            },
+          }),
+        });
+      } catch (error) {
+        console.error(error);
+      }
       router.refresh();
     } catch (error) {
       console.error(error);
@@ -811,58 +873,57 @@ export function DealCard({
     return null;
   };
 
-  const handleAgentOutcomeChange =
-    (deal: DealRecord, expectedAmountCents: number) =>
-    async (event: ChangeEvent<HTMLSelectElement>) => {
-      const nextOutcome = event.target.value as 'USED_AGENT' | 'OUTSIDE_AGENT';
-      const nextAttribution =
-        nextOutcome === 'OUTSIDE_AGENT' ? 'OUTSIDE_AGENT' : resolveAssignedAgentOutcome();
-      const previousValue = agentMap[deal._id] ?? '';
+  const handleUsedAgentToggle = (deal: DealRecord, expectedAmountCents: number) => async (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const nextChecked = event.target.checked;
+    const nextAttribution = nextChecked ? resolveAssignedAgentOutcome() : 'OUTSIDE_AGENT';
+    const previousValue = agentMap[deal._id] ?? '';
 
-      if (previousValue === nextAttribution || (nextAttribution === null && previousValue === '')) {
-        return;
+    if (!nextChecked && previousValue === 'OUTSIDE_AGENT') {
+      return;
+    }
+
+    setAgentMap((prev) => ({ ...prev, [deal._id]: nextAttribution ?? '' }));
+    setSavingMap((prev) => ({ ...prev, [deal._id]: true }));
+
+    try {
+      const payload: Record<string, unknown> = {
+        id: deal._id,
+        agentAttribution: nextAttribution,
+        usedAssignedAgent: nextChecked,
+      };
+
+      if (!nextChecked) {
+        payload.expectedAmountCents = 0;
+        payload.receivedAmountCents = 0;
+      } else if (expectedAmountCents > 0) {
+        payload.expectedAmountCents = expectedAmountCents;
       }
 
-      setAgentMap((prev) => ({ ...prev, [deal._id]: nextAttribution ?? '' }));
-      setSavingMap((prev) => ({ ...prev, [deal._id]: true }));
+      const response = await fetch('/api/payments', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-      try {
-        const payload: Record<string, unknown> = {
-          id: deal._id,
-          agentAttribution: nextAttribution,
-          usedAssignedAgent: nextOutcome !== 'OUTSIDE_AGENT',
-        };
-
-        if (nextOutcome === 'OUTSIDE_AGENT') {
-          payload.expectedAmountCents = 0;
-          payload.receivedAmountCents = 0;
-        } else if (expectedAmountCents > 0) {
-          payload.expectedAmountCents = expectedAmountCents;
-        }
-
-        const response = await fetch('/api/payments', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          throw new Error('Unable to update agent outcome');
-        }
-
-        toast.success('Agent outcome saved');
-      } catch (error) {
-        console.error(error);
-        setAgentMap((prev) => ({ ...prev, [deal._id]: previousValue }));
-        toast.error(error instanceof Error ? error.message : 'Unable to update deal');
-      } finally {
-        setSavingMap((prev) => {
-          const next = { ...prev };
-          delete next[deal._id];
-          return next;
-        });
+      if (!response.ok) {
+        throw new Error('Unable to update agent usage');
       }
-    };
+
+      toast.success('Used agent saved');
+    } catch (error) {
+      console.error(error);
+      setAgentMap((prev) => ({ ...prev, [deal._id]: previousValue }));
+      toast.error(error instanceof Error ? error.message : 'Unable to update deal');
+    } finally {
+      setSavingMap((prev) => {
+        const next = { ...prev };
+        delete next[deal._id];
+        return next;
+      });
+    }
+  };
 
   const handleDealAgentChange = (deal: DealRecord) => async (event: ChangeEvent<HTMLSelectElement>) => {
     const nextAgentId = event.target.value.trim();
@@ -987,7 +1048,7 @@ export function DealCard({
     const statusLabel = DEAL_STATUS_LABELS[status] ?? status;
     const selectedReason = reasonMap[deal._id] ?? deal.terminatedReason ?? 'inspection';
     const agentSelection = agentMap[deal._id] ?? '';
-    const agentOutcomeSelection = agentSelection === 'OUTSIDE_AGENT' ? 'OUTSIDE_AGENT' : 'USED_AGENT';
+    const usedAgent = agentSelection !== 'OUTSIDE_AGENT';
     const usedAfc = afcMap[deal._id] ?? false;
     const assignedBucket = referral.ahaBucket ?? null;
     const matchesAssigned =
@@ -1036,6 +1097,13 @@ export function DealCard({
           let nextValue: string | 'buy' | 'sell';
           if (field === 'side') {
             nextValue = rawValue === 'sell' ? 'sell' : 'buy';
+          } else if (
+            field === 'propertyAddress' ||
+            field === 'propertyCity' ||
+            field === 'propertyState' ||
+            field === 'propertyPostalCode'
+          ) {
+            nextValue = rawValue;
           } else {
             nextValue = rawValue.replace(/[^0-9.]/g, '');
           }
@@ -1148,6 +1216,53 @@ export function DealCard({
         {isExpanded && (
           <div className="space-y-4 border-t border-slate-200 bg-white px-4 py-4 text-sm">
             <form onSubmit={handleSubmitDetails} className="space-y-3">
+              <div className="grid gap-3 md:grid-cols-[minmax(0,2fr),repeat(3,minmax(0,1fr))]">
+                <label className="flex flex-col gap-1 text-xs uppercase text-slate-400">
+                  Property Address
+                  <input
+                    type="text"
+                    value={draft.propertyAddress}
+                    onChange={handleDraftChange('propertyAddress')}
+                    className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                    placeholder="123 Main St"
+                    disabled={isDetailSaving}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs uppercase text-slate-400">
+                  City
+                  <input
+                    type="text"
+                    value={draft.propertyCity}
+                    onChange={handleDraftChange('propertyCity')}
+                    className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                    placeholder="Austin"
+                    disabled={isDetailSaving}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs uppercase text-slate-400">
+                  State
+                  <input
+                    type="text"
+                    value={draft.propertyState}
+                    onChange={handleDraftChange('propertyState')}
+                    className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                    placeholder="TX"
+                    maxLength={2}
+                    disabled={isDetailSaving}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs uppercase text-slate-400">
+                  ZIP
+                  <input
+                    type="text"
+                    value={draft.propertyPostalCode}
+                    onChange={handleDraftChange('propertyPostalCode')}
+                    className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                    placeholder="73301"
+                    disabled={isDetailSaving}
+                  />
+                </label>
+              </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="flex flex-col gap-1 text-xs uppercase text-slate-400">
                   Contract Price (USD)
@@ -1273,19 +1388,17 @@ export function DealCard({
             </div>
             <div className="grid gap-3 md:grid-cols-3">
               <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">
-                  Agent Outcome
-                  <select
-                    value={agentOutcomeSelection}
-                    onChange={handleAgentOutcomeChange(deal, expectedAmountCents)}
-                    className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+                  <span className="text-xs uppercase text-slate-400">Used Agent</span>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                    checked={usedAgent}
+                    onChange={handleUsedAgentToggle(deal, expectedAmountCents)}
                     disabled={isSaving || isDetailSaving}
-                  >
-                    <option value="USED_AGENT">Used agent</option>
-                    <option value="OUTSIDE_AGENT">Used outside agent</option>
-                  </select>
+                  />
                 </label>
-                {assignedBucket && agentOutcomeSelection === 'USED_AGENT' && agentSelection && !matchesAssigned && (
+                {assignedBucket && usedAgent && agentSelection && !matchesAssigned && (
                   <p className="mt-2 text-xs text-amber-600">
                     This deal did not close with the assigned {assignedBucket === 'AHA' ? 'AHA' : 'AHA OOS'} agent.
                   </p>
@@ -1313,8 +1426,8 @@ export function DealCard({
                 </p>
               </div>
               <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs uppercase text-slate-400">Mortgage Company</p>
-                <label className="mt-2 inline-flex items-center gap-2 text-sm text-slate-700">
+                <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
+                  <span className="text-xs uppercase text-slate-400">Used AFC</span>
                   <input
                     type="checkbox"
                     className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
@@ -1322,7 +1435,6 @@ export function DealCard({
                     onChange={handleAfcToggle(deal)}
                     disabled={isSaving}
                   />
-                  Used AFC
                 </label>
                 {!usedAfc && (
                   <p className="mt-2 text-xs text-slate-500">Track whether AFC handled this deal.</p>
