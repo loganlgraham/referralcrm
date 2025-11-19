@@ -583,7 +583,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       setFinancials((previous) => ({
         ...previous,
         contractPriceCents: undefined,
-        referralFeeDueCents: undefined,
+        referralFeeDueCents: 0,
         commissionBasisPoints: undefined,
         referralFeeBasisPoints: undefined,
         propertyAddress: undefined,
