@@ -533,6 +533,13 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       });
     }
   }, []);
+  const lastStatusRef = useRef<ReferralStatus | null>(null);
+  useEffect(() => {
+    if (financials.status === 'Under Contract' && lastStatusRef.current !== 'Under Contract') {
+      handleCreateDealRequest();
+    }
+    lastStatusRef.current = financials.status;
+  }, [financials.status, handleCreateDealRequest]);
   const handleDealCreated = useCallback(
     (deal: ReferralPayment) => {
       if (!deal?._id) {
@@ -557,10 +564,34 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     []
   );
   const handleDealsChange = useCallback((updatedDeals: DealCardDeal[]) => {
+    const hasDeals = Array.isArray(updatedDeals) && updatedDeals.length > 0;
+
     setReferral((previous) => ({
       ...previous,
       payments: mapDealRecordsToReferralPayments(updatedDeals, previous.payments),
+      propertyAddress: hasDeals ? previous.propertyAddress : undefined,
+      propertyCity: hasDeals ? previous.propertyCity : undefined,
+      propertyState: hasDeals ? previous.propertyState : undefined,
+      propertyPostalCode: hasDeals ? previous.propertyPostalCode : undefined,
+      estPurchasePriceCents: hasDeals ? previous.estPurchasePriceCents : undefined,
+      referralFeeDueCents: hasDeals ? previous.referralFeeDueCents : undefined,
+      commissionBasisPoints: hasDeals ? previous.commissionBasisPoints : undefined,
+      referralFeeBasisPoints: hasDeals ? previous.referralFeeBasisPoints : undefined,
     }));
+
+    if (!hasDeals) {
+      setFinancials((previous) => ({
+        ...previous,
+        contractPriceCents: undefined,
+        referralFeeDueCents: undefined,
+        commissionBasisPoints: undefined,
+        referralFeeBasisPoints: undefined,
+        propertyAddress: undefined,
+        propertyCity: undefined,
+        propertyState: undefined,
+        propertyPostalCode: undefined,
+      }));
+    }
     void mutate(activityFeedKey);
   }, [activityFeedKey, mutate]);
   const contractHandlersRef = useRef<{

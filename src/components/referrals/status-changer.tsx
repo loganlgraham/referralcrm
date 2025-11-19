@@ -221,17 +221,10 @@ export function StatusChanger({
 
       {currentStatus === 'Under Contract' ? (
         <div className="space-y-3 rounded border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600">
-          <p>Use the deal preparation form in the Deals section to add contract details and create the deal.</p>
-          <button
-            type="button"
-            onClick={() => {
-              onUnderContractIntentChange?.(true);
-              onCreateDealRequest?.();
-            }}
-            className="inline-flex items-center justify-center rounded border border-brand/30 bg-white px-3 py-2 text-sm font-medium text-brand shadow-sm transition hover:border-brand hover:bg-brand/10"
-          >
-            Create deal
-          </button>
+          <p>
+            Use the deal preparation form in the Deals section to add contract details. Click the Add deal button
+            in that section whenever you need to capture a new deal.
+          </p>
         </div>
       ) : (
         <div className="space-y-2">
