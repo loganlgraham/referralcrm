@@ -1316,14 +1316,41 @@ export function DealCard({
                 </label>
               </div>
               <div className="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                {isAgentOrigin ? (
-                  <p>No referral fee is collected for agent-sourced deals.</p>
-                ) : (
-                  <p>
-                    Projected Referral Fee:{' '}
-                    <span className="text-sm font-semibold text-slate-900">{draftReferralFeeDisplay}</span>
-                  </p>
-                )}
+                <div className="flex flex-wrap items-center gap-3">
+                  {isAgentOrigin ? (
+                    <span>No referral fee is collected for agent-sourced deals.</span>
+                  ) : (
+                    <span>
+                      Projected Referral Fee:{' '}
+                      <span className="text-sm font-semibold text-slate-900">{draftReferralFeeDisplay}</span>
+                    </span>
+                  )}
+                  <label className="flex items-center gap-2 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs uppercase text-slate-500 shadow-sm">
+                    Used Agent
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                      checked={usedAgent}
+                      onChange={handleUsedAgentToggle(deal, expectedAmountCents)}
+                      disabled={isSaving || isDetailSaving}
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs uppercase text-slate-500 shadow-sm">
+                    Used AFC
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                      checked={usedAfc}
+                      onChange={handleAfcToggle(deal)}
+                      disabled={isSaving}
+                    />
+                  </label>
+                  {assignedBucket && usedAgent && agentSelection && !matchesAssigned && (
+                    <p className="text-xs text-amber-600">
+                      This deal did not close with the assigned {assignedBucket === 'AHA' ? 'AHA' : 'AHA OOS'} agent.
+                    </p>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -1361,15 +1388,9 @@ export function DealCard({
                       ))}
                     </select>
                   </label>
-                ) : (
-                  <p className="text-xs text-slate-500">
-                    {isAgentOrigin
-                      ? 'Update the contract details to keep this deal accurate for reporting.'
-                      : 'Update the contract and percentage details to keep this referral fee accurate for reporting.'}
-                  </p>
-                )}
+                ) : null}
                 {expectedAmountCents <= 0 && status !== 'terminated' && !isAgentOrigin && (
-                  <p className="mt-2 text-xs text-amber-600">
+                  <p className="text-xs text-amber-600">
                     Enter contract details to calculate the referral fee before updating deal status.
                   </p>
                 )}
@@ -1381,65 +1402,28 @@ export function DealCard({
                 {status === 'paid' && (
                   <p className="text-emerald-600">Payment received and confirmed by admin.</p>
                 )}
-                {status !== 'payment_sent' && status !== 'paid' && (
-                  <p>Track the payment journey from contract through payout for this referral.</p>
-                )}
               </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
-                  <span className="text-xs uppercase text-slate-400">Used Agent</span>
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-                    checked={usedAgent}
-                    onChange={handleUsedAgentToggle(deal, expectedAmountCents)}
-                    disabled={isSaving || isDetailSaving}
-                  />
-                </label>
-                {assignedBucket && usedAgent && agentSelection && !matchesAssigned && (
-                  <p className="mt-2 text-xs text-amber-600">
-                    This deal did not close with the assigned {assignedBucket === 'AHA' ? 'AHA' : 'AHA OOS'} agent.
-                  </p>
-                )}
-              </div>
-              <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">
-                  Deal Agent
-                  <select
-                    value={selectedAgentId}
-                    onChange={handleDealAgentChange(deal)}
-                    className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
-                    disabled={agentSelectDisabled}
-                  >
-                    <option value="">Select agent</option>
-                    {agentOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <p className="mt-2 text-xs text-slate-500">
-                  {selectedAgentName ? `Currently: ${selectedAgentName}` : 'No agent selected'}
-                </p>
-              </div>
-              <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                <label className="flex items-center justify-between gap-2 text-sm text-slate-700">
-                  <span className="text-xs uppercase text-slate-400">Used AFC</span>
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-                    checked={usedAfc}
-                    onChange={handleAfcToggle(deal)}
-                    disabled={isSaving}
-                  />
-                </label>
-                {!usedAfc && (
-                  <p className="mt-2 text-xs text-slate-500">Track whether AFC handled this deal.</p>
-                )}
-              </div>
+            <div className="rounded border border-slate-200 bg-slate-50 p-3">
+              <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">
+                Deal Agent
+                <select
+                  value={selectedAgentId}
+                  onChange={handleDealAgentChange(deal)}
+                  className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                  disabled={agentSelectDisabled}
+                >
+                  <option value="">Select agent</option>
+                  {agentOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="mt-2 text-xs text-slate-500">
+                {selectedAgentName ? `Currently: ${selectedAgentName}` : 'No agent selected'}
+              </p>
             </div>
           </div>
         )}
