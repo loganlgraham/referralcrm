@@ -613,7 +613,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
       if (!hasDeals) {
         setContractDraft({ hasUnsavedChanges: false });
-        setContractPrepActive(financials.status === 'Under Contract');
+        setContractPrepActive(false);
         setFinancials((previous) => ({
           ...previous,
           contractPriceCents: undefined,
@@ -1319,11 +1319,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   };
 
   useEffect(() => {
-    if (financials.status === 'Under Contract' && !hasAnyDeals) {
-      setContractPrepActive(true);
-      return;
-    }
-
     if (hasAnyDeals && !contractDraft.hasUnsavedChanges) {
       setContractPrepActive(false);
       return;
@@ -1334,10 +1329,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     }
   }, [contractDraft.hasUnsavedChanges, financials.status, hasAnyDeals]);
 
-  const shouldShowDealPreparation =
-    contractPrepActive ||
-    contractDraft.hasUnsavedChanges ||
-    (!hasAnyDeals && financials.status === 'Under Contract');
+  const shouldShowDealPreparation = contractPrepActive || contractDraft.hasUnsavedChanges;
 
   const showDeals = true;
 

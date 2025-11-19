@@ -1356,7 +1356,7 @@ export function DealCard({
           </button>
         )}
       </div>
-      {sortedDeals.length === 0 || overrides?.hasUnsavedContractChanges ? (
+      {(sortedDeals.length > 0 || overrides?.hasUnsavedContractChanges) && (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
           <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div>
@@ -1425,14 +1425,8 @@ export function DealCard({
             </p>
           )}
         </div>
-      ) : null}
-      {sortedDeals.length === 0 ? (
-        <div className="rounded border border-dashed border-slate-300 p-4 text-sm text-slate-600">
-          <p>Use the deal preparation form below to create the first deal for this referral.</p>
-        </div>
-      ) : (
-        <div className="space-y-4">{sortedDeals.map(renderDeal)}</div>
       )}
+      {sortedDeals.length > 0 && <div className="space-y-4">{sortedDeals.map(renderDeal)}</div>}
     </div>
   );
 }
