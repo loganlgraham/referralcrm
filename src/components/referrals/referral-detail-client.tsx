@@ -272,46 +272,6 @@ const normalizeDealPayments = (
   }));
 };
 
-const mapDealRecordsToReferralPayments = (
-  deals: DealRecord[],
-  previous?: ReferralPayment[] | null
-): ReferralPayment[] => {
-  const previousMap = new Map(
-    Array.isArray(previous) ? previous.map((payment) => [payment._id, payment]) : []
-  );
-
-  return deals.map<ReferralPayment>((deal) => {
-    const prior = previousMap.get(deal._id);
-    const resolvedAgent = deal.agent
-      ? { id: deal.agent.id, name: deal.agent.name ?? null }
-      : deal.agentId
-      ? { id: deal.agentId, name: prior?.agent?.name ?? null }
-      : prior?.agent ?? null;
-    const agentId = deal.agentId ?? resolvedAgent?.id ?? prior?.agentId ?? null;
-
-    return {
-      _id: deal._id,
-      status: deal.status ?? prior?.status ?? null,
-      expectedAmountCents: deal.expectedAmountCents ?? prior?.expectedAmountCents ?? null,
-      receivedAmountCents: deal.receivedAmountCents ?? prior?.receivedAmountCents ?? null,
-      invoiceDate: prior?.invoiceDate ?? null,
-      paidDate: deal.paidDate ?? prior?.paidDate ?? null,
-      createdAt: deal.createdAt ?? prior?.createdAt ?? null,
-      updatedAt: deal.updatedAt ?? prior?.updatedAt ?? null,
-      terminatedReason: deal.terminatedReason ?? prior?.terminatedReason ?? null,
-      agentAttribution: deal.agentAttribution ?? prior?.agentAttribution ?? null,
-      usedAfc: deal.usedAfc ?? prior?.usedAfc ?? false,
-      usedAssignedAgent: deal.usedAssignedAgent ?? prior?.usedAssignedAgent ?? false,
-      commissionBasisPoints: deal.commissionBasisPoints ?? prior?.commissionBasisPoints ?? null,
-      referralFeeBasisPoints: deal.referralFeeBasisPoints ?? prior?.referralFeeBasisPoints ?? null,
-      side: deal.side ?? prior?.side ?? null,
-      contractPriceCents: deal.contractPriceCents ?? prior?.contractPriceCents ?? null,
-      agent: resolvedAgent,
-      agentId,
-    };
-  });
-};
-
 const serializeReferralPayments = (payments: ReferralPayment[] | undefined | null) => {
   if (!Array.isArray(payments)) {
     return '[]';
