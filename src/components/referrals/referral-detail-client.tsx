@@ -263,6 +263,47 @@ const normalizeDealPayments = (
   }));
 };
 
+const mapDealRecordsToReferralPayments = (
+  deals: DealCardDeal[] | undefined,
+  previousPayments: ReferralPayment[] | null | undefined
+): ReferralPayment[] => {
+  if (!Array.isArray(deals)) {
+    return Array.isArray(previousPayments) ? previousPayments : [];
+  }
+
+  const previousById = new Map(
+    Array.isArray(previousPayments)
+      ? previousPayments.map((payment) => [payment._id, payment] as const)
+      : []
+  );
+
+  return deals.map((deal) => {
+    const previous = previousById.get(deal._id);
+
+    const usedAfc = deal.usedAfc ?? previous?.usedAfc;
+    const usedAssignedAgent = deal.usedAssignedAgent ?? previous?.usedAssignedAgent;
+
+    return {
+      _id: deal._id,
+      status: deal.status ?? previous?.status ?? null,
+      expectedAmountCents: deal.expectedAmountCents ?? previous?.expectedAmountCents ?? null,
+      receivedAmountCents: deal.receivedAmountCents ?? previous?.receivedAmountCents ?? null,
+      invoiceDate: previous?.invoiceDate ?? null,
+      paidDate: deal.paidDate ?? previous?.paidDate ?? null,
+      createdAt: deal.createdAt ?? previous?.createdAt ?? null,
+      updatedAt: deal.updatedAt ?? previous?.updatedAt ?? null,
+      terminatedReason: deal.terminatedReason ?? previous?.terminatedReason ?? null,
+      agentAttribution: deal.agentAttribution ?? previous?.agentAttribution ?? null,
+      usedAfc: usedAfc ?? undefined,
+      usedAssignedAgent: usedAssignedAgent ?? undefined,
+      commissionBasisPoints: deal.commissionBasisPoints ?? previous?.commissionBasisPoints ?? null,
+      referralFeeBasisPoints: deal.referralFeeBasisPoints ?? previous?.referralFeeBasisPoints ?? null,
+      side: deal.side ?? previous?.side ?? null,
+      contractPriceCents: deal.contractPriceCents ?? previous?.contractPriceCents ?? null,
+    };
+  });
+};
+
 const formatFullAddress = (
   street?: string | null,
   city?: string | null,
@@ -446,6 +487,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const [contractPrepActive, setContractPrepActive] = useState(false);
   const dealSectionRef = useRef<HTMLDivElement | null>(null);
   const handleCreateDealRequest = useCallback(() => {
+    setContractDraft({ hasUnsavedChanges: false });
     setContractPrepActive(true);
     if (typeof window !== 'undefined') {
       window.requestAnimationFrame(() => {
@@ -476,6 +518,13 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     },
     []
   );
+  const handleDealsChange = useCallback((updatedDeals: DealCardDeal[]) => {
+    setReferral((previous) => ({
+      ...previous,
+      payments: mapDealRecordsToReferralPayments(updatedDeals, previous.payments),
+    }));
+    void mutate(activityFeedKey);
+  }, [activityFeedKey, mutate]);
   const contractHandlersRef = useRef<{
     onContractSaved: (details: {
       propertyAddress: string;
@@ -1068,6 +1117,13 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         ? null
         : (referral.ahaBucket as AgentSelectValue),
     dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
+    assignedAgent: primaryAgentContact
+      ? {
+          name: primaryAgentContact.name,
+          email: primaryAgentContact.email,
+          phone: primaryAgentContact.phone,
+        }
+      : null,
   };
 
   const baseOverrideAddress =
@@ -1467,6 +1523,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             summary={dealSummary}
             viewerRole={viewerRole}
             onAddDeal={handleCreateDealRequest}
+            onDealsChange={handleDealsChange}
           />
           {shouldShowDealPreparation && (
             <DealPreparationForm

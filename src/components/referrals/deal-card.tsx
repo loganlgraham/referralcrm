@@ -67,11 +67,17 @@ export interface ReferralDealProps {
     payments?: DealRecord[] | null;
     ahaBucket?: AgentSelectValue | null;
     dealSide?: 'buy' | 'sell' | null;
+    assignedAgent?: {
+      name?: string | null;
+      email?: string | null;
+      phone?: string | null;
+    } | null;
   };
   overrides?: DealOverrides;
   summary?: DealSummaryInfo;
   viewerRole?: string;
   onAddDeal?: () => void;
+  onDealsChange?: (deals: DealRecord[]) => void;
 }
 
 interface DealDraft {
@@ -135,7 +141,14 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
     });
 };
 
-export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }: ReferralDealProps) {
+export function DealCard({
+  referral,
+  overrides,
+  summary,
+  viewerRole,
+  onAddDeal,
+  onDealsChange,
+}: ReferralDealProps) {
   const router = useRouter();
   const [deals, setDeals] = useState<DealRecord[]>(() => normalizeDeals(referral.payments));
 
@@ -285,6 +298,14 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
     ? `${(summaryReferralFeeBasisPoints / 100).toFixed(2)}%`
     : '—';
   const summaryDealSideDisplay = summaryDealSide === 'sell' ? 'Sell-side' : 'Buy-side';
+  const assignedAgentName = referral.assignedAgent?.name?.trim();
+  const assignedAgentEmail = referral.assignedAgent?.email?.trim();
+  const assignedAgentPhone = referral.assignedAgent?.phone?.trim();
+  const assignedAgentHref = assignedAgentEmail
+    ? `mailto:${assignedAgentEmail}`
+    : assignedAgentPhone
+      ? `tel:${assignedAgentPhone.replace(/[^0-9+]/g, '')}`
+      : null;
 
   const formatDraftCurrency = (cents?: number | null) => {
     if (!cents || cents <= 0) {
@@ -480,7 +501,11 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
         throw new Error('Unable to delete deal');
       }
 
-      setDeals((previous) => previous.filter((item) => item._id !== deal._id));
+      setDeals((previous) => {
+        const nextDeals = previous.filter((item) => item._id !== deal._id);
+        onDealsChange?.(nextDeals);
+        return nextDeals;
+      });
       setStatusMap((previous) => {
         const next = { ...previous };
         delete next[deal._id];
@@ -647,6 +672,37 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
         throw new Error('Unable to update deal');
       }
 
+      const updatedAt = new Date().toISOString();
+      setDeals((previous) => {
+        const nextDeals = previous.map((item) => {
+          if (item._id !== deal._id) {
+            return item;
+          }
+
+          const nextTerminatedReason =
+            nextStatus === 'terminated'
+              ? reasonMap[deal._id] ?? deal.terminatedReason ?? 'inspection'
+              : null;
+
+          const nextExpectedAmount =
+            nextStatus === 'terminated'
+              ? 0
+              : (payload.expectedAmountCents as number | undefined) ?? expectedAmountCents;
+
+          return {
+            ...item,
+            status: nextStatus,
+            expectedAmountCents: nextExpectedAmount,
+            receivedAmountCents: nextStatus === 'terminated' ? 0 : item.receivedAmountCents,
+            terminatedReason: nextTerminatedReason,
+            updatedAt,
+          };
+        });
+
+        onDealsChange?.(nextDeals);
+        return nextDeals;
+      });
+
       toast.success('Deal status saved');
     } catch (error) {
       console.error(error);
@@ -681,6 +737,20 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
       if (!response.ok) {
         throw new Error('Unable to update deal');
       }
+
+      setDeals((previous) => {
+        const nextDeals = previous.map((item) =>
+          item._id === deal._id
+            ? {
+                ...item,
+                terminatedReason: nextReason,
+              }
+            : item
+        );
+
+        onDealsChange?.(nextDeals);
+        return nextDeals;
+      });
 
       toast.success('Termination reason saved');
     } catch (error) {
@@ -925,6 +995,21 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
             <div className="flex flex-col text-sm text-slate-600 sm:flex-row sm:items-center sm:gap-2">
               <span className="font-medium text-slate-900">{formattedAmount}</span>
               <span className="text-xs text-slate-500">{propertyLabel}</span>
+              {assignedAgentName && (
+                <span className="text-xs text-slate-500">
+                  Agent:{' '}
+                  {assignedAgentHref ? (
+                    <a
+                      href={assignedAgentHref}
+                      className="text-brand underline-offset-2 hover:underline"
+                    >
+                      {assignedAgentName}
+                    </a>
+                  ) : (
+                    assignedAgentName
+                  )}
+                </span>
+              )}
             </div>
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-3">
@@ -1173,6 +1258,25 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
             <div>
               <dt className="text-xs uppercase text-slate-400">Agent Commission %</dt>
               <dd className="text-sm font-medium text-slate-900">{summaryCommissionPercentDisplay}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase text-slate-400">Agent</dt>
+              <dd className="text-sm font-medium text-slate-900">
+                {assignedAgentName ? (
+                  assignedAgentHref ? (
+                    <a
+                      href={assignedAgentHref}
+                      className="text-brand underline-offset-2 hover:underline"
+                    >
+                      {assignedAgentName}
+                    </a>
+                  ) : (
+                    assignedAgentName
+                  )
+                ) : (
+                  '—'
+                )}
+              </dd>
             </div>
             {!isAgentOrigin && (
               <div>
