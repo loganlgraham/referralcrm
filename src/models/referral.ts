@@ -68,6 +68,18 @@ const inboundEmailSchema = new Schema(
   { _id: false }
 );
 
+const DealSchema = new Schema({
+  loanAmount: Number,
+  loanType: String,
+  status: {
+    type: String,
+    enum: ['active', 'closed', 'lost'],
+    default: 'active',
+  },
+  commission: Number,
+  closeDate: Date,
+});
+
 const referralSchema = new Schema(
   {
     createdAt: { type: Date, default: Date.now, index: true },
@@ -161,7 +173,8 @@ const referralSchema = new Schema(
       enum: ['agent', 'mc', 'admin'],
       default: 'admin',
     },
-    deletedAt: { type: Date, default: null }
+    deletedAt: { type: Date, default: null },
+    deals: [DealSchema], // Ensure this is an array
   },
   {
     timestamps: true
