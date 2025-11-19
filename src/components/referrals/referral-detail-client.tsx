@@ -1282,7 +1282,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   }, [
     contractDraft.hasUnsavedChanges,
     contractPrepActive,
-    financials.agentCommissionBasisPoints,
+    financials.commissionBasisPoints,
     financials.contractPriceCents,
     financials.dealSide,
     financials.propertyAddress,
