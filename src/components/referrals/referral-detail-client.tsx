@@ -589,17 +589,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   ]);
 
   useEffect(() => {
-    setAgentContact(
-      referral.assignedAgent
-        ? {
-            id: referral.assignedAgent._id ?? referral.assignedAgent.id ?? null,
-            name: referral.assignedAgent.name ?? null,
-            email: referral.assignedAgent.email ?? null,
-            phone: referral.assignedAgent.phone ?? null,
-          }
-        : null
-    );
-  }, [referral.assignedAgent]);
+    setBuySideAgentContact(mapReferralContact(referral.buySideAgent));
+  }, [referral.buySideAgent]);
+
+  useEffect(() => {
+    setSellSideAgentContact(mapReferralContact(referral.sellSideAgent));
+  }, [referral.sellSideAgent]);
 
   useEffect(() => {
     setMcContact(
