@@ -75,6 +75,7 @@ export interface ReferralDealProps {
   summary?: DealSummaryInfo;
   viewerRole?: string;
   onAddDeal?: () => void;
+  onDealsChange?: (deals: DealRecord[]) => void;
 }
 
 interface DealDraft {
@@ -151,7 +152,14 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
     });
 };
 
-export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }: ReferralDealProps) {
+export function DealCard({
+  referral,
+  overrides,
+  summary,
+  viewerRole,
+  onAddDeal,
+  onDealsChange,
+}: ReferralDealProps) {
   const router = useRouter();
   const [deals, setDeals] = useState<DealRecord[]>(() => normalizeDeals(referral.payments));
   const { options: agentOptions, isLoading: loadingAgentOptions } = useAgentOptions(true);
@@ -457,8 +465,9 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
         throw new Error(message);
       }
 
-      setDeals((previous) =>
-        previous.map((item) =>
+      let updatedDeals: DealRecord[] | null = null;
+      setDeals((previous) => {
+        updatedDeals = previous.map((item) =>
           item._id === deal._id
             ? {
                 ...item,
@@ -470,8 +479,12 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
                 updatedAt: new Date().toISOString(),
               }
             : item
-        )
-      );
+        );
+        return updatedDeals;
+      });
+      if (updatedDeals && onDealsChange) {
+        onDealsChange(updatedDeals);
+      }
       setDetailDraftMap((previous) => ({
         ...previous,
         [deal._id]: {
@@ -514,7 +527,14 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
         throw new Error('Unable to delete deal');
       }
 
-      setDeals((previous) => previous.filter((item) => item._id !== deal._id));
+      let updatedDeals: DealRecord[] | null = null;
+      setDeals((previous) => {
+        updatedDeals = previous.filter((item) => item._id !== deal._id);
+        return updatedDeals;
+      });
+      if (updatedDeals && onDealsChange) {
+        onDealsChange(updatedDeals);
+      }
       setStatusMap((previous) => {
         const next = { ...previous };
         delete next[deal._id];
@@ -811,8 +831,9 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
         throw new Error('Unable to update deal agent');
       }
 
-      setDeals((previous) =>
-        previous.map((item) =>
+      let updatedDeals: DealRecord[] | null = null;
+      setDeals((previous) => {
+        updatedDeals = previous.map((item) =>
           item._id === deal._id
             ? {
                 ...item,
@@ -822,8 +843,12 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
                 agentId: nextAgentId || null,
               }
             : item
-        )
-      );
+        );
+        return updatedDeals;
+      });
+      if (updatedDeals && onDealsChange) {
+        onDealsChange(updatedDeals);
+      }
       toast.success('Deal agent saved');
     } catch (error) {
       console.error(error);

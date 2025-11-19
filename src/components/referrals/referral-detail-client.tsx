@@ -10,6 +10,7 @@ import { ReferralHeader } from '@/components/referrals/referral-header';
 import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import { DealCard } from '@/components/referrals/deal-card';
+import type { DealRecord } from '@/components/referrals/deal-card';
 import { DealPreparationForm } from '@/components/referrals/deal-preparation-form';
 import type { AgentSelectValue, TerminatedReason } from '@/components/referrals/deal-card';
 import { DEAL_STATUS_LABELS, type DealStatus } from '@/constants/deals';
@@ -271,6 +272,75 @@ const normalizeDealPayments = (
   }));
 };
 
+const mapDealRecordsToReferralPayments = (
+  deals: DealRecord[],
+  previous?: ReferralPayment[] | null
+): ReferralPayment[] => {
+  const previousMap = new Map(
+    Array.isArray(previous) ? previous.map((payment) => [payment._id, payment]) : []
+  );
+
+  return deals.map<ReferralPayment>((deal) => {
+    const prior = previousMap.get(deal._id);
+    const resolvedAgent = deal.agent
+      ? { id: deal.agent.id, name: deal.agent.name ?? null }
+      : deal.agentId
+      ? { id: deal.agentId, name: prior?.agent?.name ?? null }
+      : prior?.agent ?? null;
+    const agentId = deal.agentId ?? resolvedAgent?.id ?? prior?.agentId ?? null;
+
+    return {
+      _id: deal._id,
+      status: deal.status ?? prior?.status ?? null,
+      expectedAmountCents: deal.expectedAmountCents ?? prior?.expectedAmountCents ?? null,
+      receivedAmountCents: deal.receivedAmountCents ?? prior?.receivedAmountCents ?? null,
+      invoiceDate: prior?.invoiceDate ?? null,
+      paidDate: deal.paidDate ?? prior?.paidDate ?? null,
+      createdAt: deal.createdAt ?? prior?.createdAt ?? null,
+      updatedAt: deal.updatedAt ?? prior?.updatedAt ?? null,
+      terminatedReason: deal.terminatedReason ?? prior?.terminatedReason ?? null,
+      agentAttribution: deal.agentAttribution ?? prior?.agentAttribution ?? null,
+      usedAfc: deal.usedAfc ?? prior?.usedAfc ?? false,
+      usedAssignedAgent: deal.usedAssignedAgent ?? prior?.usedAssignedAgent ?? false,
+      commissionBasisPoints: deal.commissionBasisPoints ?? prior?.commissionBasisPoints ?? null,
+      referralFeeBasisPoints: deal.referralFeeBasisPoints ?? prior?.referralFeeBasisPoints ?? null,
+      side: deal.side ?? prior?.side ?? null,
+      contractPriceCents: deal.contractPriceCents ?? prior?.contractPriceCents ?? null,
+      agent: resolvedAgent,
+      agentId,
+    };
+  });
+};
+
+const serializeReferralPayments = (payments: ReferralPayment[] | undefined | null) => {
+  if (!Array.isArray(payments)) {
+    return '[]';
+  }
+
+  const canonical = payments.map((payment) => ({
+    _id: payment._id,
+    status: payment.status ?? null,
+    expectedAmountCents: payment.expectedAmountCents ?? null,
+    receivedAmountCents: payment.receivedAmountCents ?? null,
+    terminatedReason: payment.terminatedReason ?? null,
+    agentAttribution: payment.agentAttribution ?? null,
+    usedAfc: Boolean(payment.usedAfc),
+    usedAssignedAgent: Boolean(payment.usedAssignedAgent),
+    commissionBasisPoints: payment.commissionBasisPoints ?? null,
+    referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
+    side: payment.side ?? null,
+    contractPriceCents: payment.contractPriceCents ?? null,
+    createdAt: payment.createdAt ?? null,
+    updatedAt: payment.updatedAt ?? null,
+    paidDate: payment.paidDate ?? null,
+    invoiceDate: payment.invoiceDate ?? null,
+    agentId: payment.agentId ?? payment.agent?.id ?? null,
+    agentName: payment.agent?.name ?? null,
+  }));
+
+  return JSON.stringify(canonical);
+};
+
 const formatFullAddress = (
   street?: string | null,
   city?: string | null,
@@ -484,6 +554,17 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     },
     []
   );
+  const handleDealsChange = useCallback((nextDeals: DealRecord[]) => {
+    setReferral((previous) => {
+      const nextPayments = mapDealRecordsToReferralPayments(nextDeals, previous.payments);
+      const currentSignature = serializeReferralPayments(previous.payments);
+      const nextSignature = serializeReferralPayments(nextPayments);
+      if (currentSignature === nextSignature) {
+        return previous;
+      }
+      return { ...previous, payments: nextPayments };
+    });
+  }, []);
   const contractHandlersRef = useRef<{
     onContractSaved: (details: {
       propertyAddress: string;
@@ -1475,6 +1556,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             summary={dealSummary}
             viewerRole={viewerRole}
             onAddDeal={handleCreateDealRequest}
+            onDealsChange={handleDealsChange}
           />
           {shouldShowDealPreparation && (
             <DealPreparationForm
