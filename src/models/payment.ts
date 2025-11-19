@@ -38,6 +38,7 @@ const paymentSchema = new Schema(
       enum: ['AHA', 'AHA_OOS', 'OUTSIDE_AGENT'],
       default: null,
     },
+    agentId: { type: Schema.Types.ObjectId, ref: 'Agent', default: null },
     usedAfc: { type: Boolean, default: false },
     usedAssignedAgent: { type: Boolean, default: true },
     invoiceDate: Date,

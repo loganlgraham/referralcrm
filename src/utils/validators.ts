@@ -109,6 +109,9 @@ export const paymentSchema = z.object({
     .nullable()
     .optional(),
   agentAttribution: z.enum(['AHA', 'AHA_OOS', 'OUTSIDE_AGENT']).nullable().optional(),
+  agentId: z
+    .union([z.string().trim().regex(/^[0-9a-fA-F]{24}$/), z.literal(null)])
+    .optional(),
   usedAfc: z.boolean().optional(),
   usedAssignedAgent: z.boolean().optional(),
   invoiceDate: z.string().optional(),
