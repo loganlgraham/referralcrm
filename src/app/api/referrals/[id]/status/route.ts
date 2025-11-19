@@ -30,6 +30,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   }
 
+  const createNewDeal = parsed.data.createNewDeal === true;
+
   await connectMongo();
   const referral = await Referral.findById(params.id)
     .populate('assignedAgent', 'userId')
@@ -182,22 +184,26 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     const referralFeeDue = details.contractPrice * commissionRate * referralRate;
     referral.referralFeeDueCents = Math.round(referralFeeDue * 100);
 
-    await Payment.updateMany(
-      { referralId: referral._id, status: 'under_contract' },
-      {
-        $set: {
-          expectedAmountCents: referral.referralFeeDueCents ?? 0,
-          commissionBasisPoints: referral.commissionBasisPoints ?? null,
-          referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
-          side: referral.dealSide,
-          contractPriceCents: referral.estPurchasePriceCents ?? null,
-        },
-      }
-    );
+    if (!createNewDeal) {
+      await Payment.updateMany(
+        { referralId: referral._id, status: 'under_contract' },
+        {
+          $set: {
+            expectedAmountCents: referral.referralFeeDueCents ?? 0,
+            commissionBasisPoints: referral.commissionBasisPoints ?? null,
+            referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
+            side: referral.dealSide,
+            contractPriceCents: referral.estPurchasePriceCents ?? null,
+          },
+        }
+      );
+    }
 
-    let activeDeal = await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
-      .sort({ createdAt: -1 })
-      .lean();
+    let activeDeal = createNewDeal
+      ? null
+      : await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
+          .sort({ createdAt: -1 })
+          .lean();
 
     if (!activeDeal) {
       const newDeal = await Payment.create({

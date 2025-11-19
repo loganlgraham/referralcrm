@@ -382,6 +382,7 @@ export function DealPreparationForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'Under Contract',
+          createNewDeal: true,
           contractDetails: {
             propertyAddress: propertyStreet,
             propertyCity,
