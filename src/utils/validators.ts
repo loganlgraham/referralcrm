@@ -69,7 +69,8 @@ export const updateStatusSchema = z.object({
       referralFeePercentage: z.number().min(0),
       dealSide: z.enum(['buy', 'sell'])
     })
-    .optional()
+    .optional(),
+  createNewDeal: z.boolean().optional()
 });
 
 export const createReferralNoteSchema = z.object({
@@ -89,6 +90,7 @@ export const createLenderNoteSchema = z.object({
 
 export const paymentSchema = z.object({
   referralId: z.string().min(1),
+  dealAgentId: z.string().min(1).optional().nullable(),
   status: z
     .enum([
       'under_contract',

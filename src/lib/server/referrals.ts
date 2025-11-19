@@ -300,6 +300,37 @@ export async function getReferralById(id: string) {
   const payments = await Payment.find({ referralId: referral._id })
     .sort({ createdAt: -1 })
     .lean();
+  const dealAgentIds = new Set<string>();
+  payments.forEach((payment: any) => {
+    const dealAgent = payment?.dealAgentId;
+    const dealAgentId =
+      typeof dealAgent === 'string'
+        ? dealAgent
+        : dealAgent instanceof Types.ObjectId
+        ? dealAgent.toString()
+        : dealAgent?._id?.toString?.();
+    if (dealAgentId) {
+      dealAgentIds.add(dealAgentId);
+    }
+  });
+  const dealAgentMap = new Map<string, { name?: string | null; email?: string | null; phone?: string | null }>();
+  if (dealAgentIds.size > 0) {
+    const agentIds = [...dealAgentIds]
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
+    if (agentIds.length > 0) {
+      const dealAgents = await Agent.find({ _id: { $in: agentIds } })
+        .select('name email phone')
+        .lean<{ _id: Types.ObjectId; name?: string | null; email?: string | null; phone?: string | null }[]>();
+      dealAgents.forEach((agent) => {
+        dealAgentMap.set(agent._id.toString(), {
+          name: agent.name ?? null,
+          email: agent.email ?? null,
+          phone: agent.phone ?? null,
+        });
+      });
+    }
+  }
   const daysInStatus = differenceInDays(new Date(), referral.statusLastUpdated ?? referral.createdAt);
 
   const viewerRole = session?.user?.role ?? 'viewer';
@@ -355,6 +386,35 @@ export async function getReferralById(id: string) {
       commissionBasisPoints: payment.commissionBasisPoints ?? null,
       referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
       side: payment.side ?? null,
+      dealAgentId:
+        typeof payment.dealAgentId === 'string'
+          ? payment.dealAgentId
+          : payment.dealAgentId instanceof Types.ObjectId
+            ? payment.dealAgentId.toString()
+            : payment.dealAgentId?._id?.toString?.() ?? null,
+      dealAgent: (() => {
+        const dealAgentRaw = payment.dealAgentId;
+        const dealAgentId =
+          typeof dealAgentRaw === 'string'
+            ? dealAgentRaw
+            : dealAgentRaw instanceof Types.ObjectId
+              ? dealAgentRaw.toString()
+              : dealAgentRaw?._id?.toString?.();
+        if (!dealAgentId) {
+          return null;
+        }
+
+        const details = dealAgentMap.get(dealAgentId);
+        const agent = (payment as any).dealAgent as
+          | { name?: string | null; email?: string | null; phone?: string | null }
+          | undefined;
+        return {
+          id: dealAgentId,
+          name: agent?.name ?? details?.name ?? null,
+          email: agent?.email ?? details?.email ?? null,
+          phone: agent?.phone ?? details?.phone ?? null,
+        };
+      })(),
     })),
     preApprovalAmountCents: typeof referral.preApprovalAmountCents === 'number' ? referral.preApprovalAmountCents : 0,
     estPurchasePriceCents: typeof referral.estPurchasePriceCents === 'number' ? referral.estPurchasePriceCents : 0,

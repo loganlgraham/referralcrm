@@ -46,6 +46,8 @@ interface ReferralPayment {
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
   contractPriceCents?: number | null;
+  dealAgentId?: string | null;
+  dealAgent?: { id?: string | null; name?: string | null; email?: string | null; phone?: string | null } | null;
 }
 
 interface ReferralDetailNote {
@@ -258,6 +260,15 @@ const normalizeDealPayments = (
     referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
     side: payment.side ?? null,
     contractPriceCents: payment.contractPriceCents ?? null,
+    dealAgentId: payment.dealAgentId ?? payment.dealAgent?.id ?? null,
+    dealAgent: payment.dealAgent?.id
+      ? {
+          id: payment.dealAgent.id,
+          name: payment.dealAgent.name ?? null,
+          email: payment.dealAgent.email ?? null,
+          phone: payment.dealAgent.phone ?? null,
+        }
+      : null,
   }));
 };
 
@@ -342,13 +353,16 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     dealSide:
       initialReferral.dealSide === 'sell' || initialReferral.dealSide === 'buy'
         ? initialReferral.dealSide
-        : 'buy',
+        : undefined,
   });
   const [contractDraft, setContractDraft] = useState<DraftState>({ hasUnsavedChanges: false });
   const [contractPrepActive, setContractPrepActive] = useState(false);
+  const [creatingNewDeal, setCreatingNewDeal] = useState(false);
   const dealSectionRef = useRef<HTMLDivElement | null>(null);
   const handleCreateDealRequest = useCallback(() => {
     setContractPrepActive(true);
+    setCreatingNewDeal(true);
+    setContractDraft({ hasUnsavedChanges: false });
     if (typeof window !== 'undefined') {
       window.requestAnimationFrame(() => {
         dealSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -362,6 +376,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       }
 
       setContractPrepActive(false);
+      setCreatingNewDeal(false);
       setContractDraft({ hasUnsavedChanges: false });
 
       setReferral((previous) => {
@@ -431,6 +446,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   }, [initialReferral]);
 
   useEffect(() => {
+    if (!contractPrepActive && creatingNewDeal) {
+      setCreatingNewDeal(false);
+    }
+  }, [contractPrepActive, creatingNewDeal]);
+
+  useEffect(() => {
     if (!isEditingDetails) {
       setDetailsDraft(createDetailDraft(referral));
     }
@@ -469,7 +490,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       const nextDealSide =
         referral.dealSide === 'sell' || referral.dealSide === 'buy'
           ? referral.dealSide
-          : previous.dealSide ?? 'buy';
+          : previous.dealSide;
       const nextPropertyAddress =
         referral.propertyAddress !== undefined
           ? referral.propertyAddress ?? undefined
@@ -587,7 +608,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
     setDeleting(true);
     try {
-      const response = await fetch(`/api/referrals/${referralId}`, { method: 'DELETE' });
+      const response = await fetch(`/api/referrals/${referralId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
       if (!response.ok) {
         throw new Error('Unable to delete referral');
       }
@@ -666,6 +690,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       const response = await fetch(`/api/referrals/${referralId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
@@ -939,6 +964,37 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     });
   };
 
+  const normalizedDeals = useMemo(
+    () => normalizeDealPayments(referral.payments),
+    [referral.payments]
+  );
+
+  const dealPayments = normalizedDeals ?? [];
+  const primaryDealSide = useMemo(() => {
+    const activeDeal = dealPayments.find(
+      (payment) => payment.status !== 'terminated' && (payment.side === 'buy' || payment.side === 'sell')
+    );
+
+    if (activeDeal?.side === 'buy' || activeDeal?.side === 'sell') {
+      return activeDeal.side;
+    }
+
+    const firstWithSide = dealPayments.find((payment) => payment.side === 'buy' || payment.side === 'sell');
+    if (firstWithSide?.side === 'buy' || firstWithSide?.side === 'sell') {
+      return firstWithSide.side;
+    }
+
+    if (contractDraft.dealSide === 'buy' || contractDraft.dealSide === 'sell') {
+      return contractDraft.dealSide;
+    }
+
+    if (financials.dealSide === 'buy' || financials.dealSide === 'sell') {
+      return financials.dealSide;
+    }
+
+    return null;
+  }, [contractDraft.dealSide, dealPayments, financials.dealSide]);
+
   const headerReferral = {
     ...referral,
     status: financials.status,
@@ -951,13 +1007,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     propertyCity: financials.propertyCity ?? referral.propertyCity,
     propertyState: financials.propertyState ?? referral.propertyState,
     propertyPostalCode: financials.propertyPostalCode ?? referral.propertyPostalCode,
-    dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
+    dealSide: financials.dealSide ?? primaryDealSide ?? undefined,
   };
-
-  const normalizedDeals = useMemo(
-    () => normalizeDealPayments(referral.payments),
-    [referral.payments]
-  );
 
   const dealReferral: DealCardReferral = {
     _id: referral._id,
@@ -977,7 +1028,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       referral.ahaBucket === null || referral.ahaBucket === undefined
         ? null
         : (referral.ahaBucket as AgentSelectValue),
-    dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
+    dealSide: primaryDealSide,
+    assignedAgentId: referral.assignedAgent?._id ?? referral.assignedAgent?.id ?? null,
+    assignedAgentName: referral.assignedAgent?.name ?? null,
   };
 
   const baseOverrideAddress =
@@ -1016,7 +1069,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
           contractDraft.referralFeeBasisPoints !== undefined
             ? contractDraft.referralFeeBasisPoints
             : financials.referralFeeBasisPoints,
-        dealSide: contractDraft.dealSide ?? financials.dealSide ?? 'buy',
+        dealSide: contractDraft.dealSide ?? financials.dealSide ?? primaryDealSide ?? undefined,
         hasUnsavedContractChanges: true,
       }
     : {
@@ -1025,11 +1078,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         contractPriceCents: financials.contractPriceCents,
         commissionBasisPoints: financials.commissionBasisPoints,
         referralFeeBasisPoints: financials.referralFeeBasisPoints,
-        dealSide: financials.dealSide ?? 'buy',
+        dealSide: financials.dealSide ?? primaryDealSide ?? undefined,
         hasUnsavedContractChanges: false,
       };
-
-  const dealPayments = normalizedDeals ?? [];
   const hasTerminatedDeal = dealPayments.some((payment) => payment.status === 'terminated');
   const hasAnyDeals = dealPayments.length > 0;
   const activeDealStatusLabel = useMemo(() => {
@@ -1054,7 +1105,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referralFeeDueCents: financials.referralFeeDueCents ?? referral.referralFeeDueCents ?? null,
     commissionBasisPoints: financials.commissionBasisPoints ?? referral.commissionBasisPoints ?? null,
     referralFeeBasisPoints: financials.referralFeeBasisPoints ?? referral.referralFeeBasisPoints ?? null,
-    dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
+    dealSide: primaryDealSide,
   };
 
   useEffect(() => {
@@ -1364,6 +1415,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               referralId={referralId}
               previousStatus={financials.status}
               visible={shouldShowDealPreparation}
+              createNewDeal={creatingNewDeal}
+              existingDealCount={dealPayments.length}
               contractDetails={{
                 propertyAddress: financials.propertyAddress ?? referral.propertyAddress ?? undefined,
                 propertyCity: financials.propertyCity ?? referral.propertyCity ?? undefined,
@@ -1374,7 +1427,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                 contractPriceCents: financials.contractPriceCents,
                 agentCommissionBasisPoints: financials.commissionBasisPoints,
                 referralFeeBasisPoints: financials.referralFeeBasisPoints,
-                dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
+                dealSide: contractDraft.dealSide ?? primaryDealSide ?? undefined,
               }}
               onContractDraftChange={(draft) => {
                 contractHandlersRef.current?.onContractDraftChange(draft);

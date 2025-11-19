@@ -33,6 +33,7 @@ const paymentSchema = new Schema(
       enum: ['buy', 'sell'],
       default: 'buy',
     },
+    dealAgentId: { type: Schema.Types.ObjectId, ref: 'Agent', default: null },
     agentAttribution: {
       type: String,
       enum: ['AHA', 'AHA_OOS', 'OUTSIDE_AGENT'],

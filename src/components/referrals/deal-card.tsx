@@ -4,11 +4,17 @@ import { type ChangeEvent, type FormEvent, MouseEvent, useCallback, useEffect, u
 import { useRouter } from 'next/navigation';
 import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import useSWR from 'swr';
 
 import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/constants/deals';
 import { formatCurrency } from '@/utils/formatters';
 export type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
 export type AgentSelectValue = '' | 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT';
+
+interface AgentOption {
+  _id: string;
+  name: string;
+}
 
 const TERMINATED_REASON_OPTIONS: { value: TerminatedReason; label: string }[] = [
   { value: 'inspection', label: 'Inspection' },
@@ -16,6 +22,14 @@ const TERMINATED_REASON_OPTIONS: { value: TerminatedReason; label: string }[] = 
   { value: 'financing', label: 'Financing' },
   { value: 'changed_mind', label: 'Changed Mind' },
 ];
+
+const fetcher = (url: string) =>
+  fetch(url).then((response) => {
+    if (!response.ok) {
+      throw new Error('Failed to load agents');
+    }
+    return response.json();
+  });
 
 export interface DealRecord {
   _id: string;
@@ -33,6 +47,8 @@ export interface DealRecord {
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
   contractPriceCents?: number | null;
+  dealAgentId?: string | null;
+  dealAgent?: { id: string; name?: string | null; email?: string | null; phone?: string | null } | null;
 }
 
 export interface DealOverrides {
@@ -67,6 +83,8 @@ export interface ReferralDealProps {
     payments?: DealRecord[] | null;
     ahaBucket?: AgentSelectValue | null;
     dealSide?: 'buy' | 'sell' | null;
+    assignedAgentId?: string | null;
+    assignedAgentName?: string | null;
   };
   overrides?: DealOverrides;
   summary?: DealSummaryInfo;
@@ -127,6 +145,15 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
       referralFeeBasisPoints: deal.referralFeeBasisPoints ?? null,
       side: deal.side ?? null,
       contractPriceCents: deal.contractPriceCents ?? null,
+      dealAgentId: deal.dealAgentId ?? deal.dealAgent?.id ?? null,
+      dealAgent: deal.dealAgent?.id
+        ? {
+            id: deal.dealAgent.id,
+            name: deal.dealAgent.name ?? null,
+            email: deal.dealAgent.email ?? null,
+            phone: deal.dealAgent.phone ?? null,
+          }
+        : null,
     }))
     .sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -164,6 +191,14 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
   const [statusMap, setStatusMap] = useState<Record<string, DealStatus>>(initialStatusMap);
   const [savingMap, setSavingMap] = useState<Record<string, boolean>>({});
   const [reasonMap, setReasonMap] = useState<Record<string, TerminatedReason>>(initialReasonMap);
+  const initialDealAgentMap = useMemo(() => {
+    const snapshot: Record<string, string> = {};
+    deals.forEach((deal) => {
+      snapshot[deal._id] = deal.dealAgentId ?? referral.assignedAgentId ?? '';
+    });
+    return snapshot;
+  }, [deals, referral.assignedAgentId]);
+  const [dealAgentMap, setDealAgentMap] = useState<Record<string, string>>(initialDealAgentMap);
   const initialAgentMap = useMemo(() => {
     const snapshot: Record<string, AgentSelectValue> = {};
     deals.forEach((deal) => {
@@ -199,6 +234,10 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
   }, [initialReasonMap]);
 
   useEffect(() => {
+    setDealAgentMap(initialDealAgentMap);
+  }, [initialDealAgentMap]);
+
+  useEffect(() => {
     setAgentMap(initialAgentMap);
   }, [initialAgentMap]);
 
@@ -215,6 +254,9 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
       return next;
     });
   }, [deals]);
+
+  const hasExpandedDeal = useMemo(() => Object.values(expandedMap).some(Boolean), [expandedMap]);
+  const { data: agentOptions } = useSWR<AgentOption[]>(hasExpandedDeal ? '/api/agents' : null, fetcher);
 
   const statusOptions = useMemo(() => {
     if (viewerRole === 'agent') {
@@ -260,7 +302,25 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
     summary?.referralFeeDueCents ??
     referral.referralFeeDueCents ??
     null;
-  const summaryDealSide = overrides?.dealSide ?? summary?.dealSide ?? referral.dealSide ?? 'buy';
+  const primaryDealSide = useMemo(() => {
+    const statusForDeal = (deal: DealRecord) =>
+      statusMap[deal._id] ?? ((deal.status as DealStatus | undefined) ?? 'under_contract');
+
+    const activeDeal = deals.find(
+      (deal) => statusForDeal(deal) !== 'terminated' && (deal.side === 'buy' || deal.side === 'sell')
+    );
+    if (activeDeal?.side === 'buy' || activeDeal?.side === 'sell') {
+      return activeDeal.side;
+    }
+
+    const firstWithSide = deals.find((deal) => deal.side === 'buy' || deal.side === 'sell');
+    if (firstWithSide?.side === 'buy' || firstWithSide?.side === 'sell') {
+      return firstWithSide.side;
+    }
+
+    return null;
+  }, [deals, statusMap]);
+  const summaryDealSide = overrides?.dealSide ?? summary?.dealSide ?? primaryDealSide ?? 'buy';
 
   const summaryContractPriceDisplay = summaryContractPriceCents
     ? formatCurrency(summaryContractPriceCents)
@@ -376,6 +436,7 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
     const contractPriceCents = parseCurrencyInput(draft.contractPrice);
     const commissionBasisPoints = parsePercentInput(draft.commissionPercent);
     const referralFeeBasisPoints = isAgentOrigin ? 0 : parsePercentInput(draft.referralFeePercent);
+    const selectedDealAgentId = (dealAgentMap[deal._id] ?? '').trim();
 
     if (contractPriceCents == null || commissionBasisPoints == null) {
       toast.error('Enter the contract price and commission % before saving.');
@@ -409,6 +470,7 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
           referralFeeBasisPoints: referralFeeBasisPoints ?? 0,
           side: draft.side,
           expectedAmountCents,
+          dealAgentId: selectedDealAgentId || null,
         }),
       });
 
@@ -433,10 +495,27 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
                 referralFeeBasisPoints,
                 side: draft.side,
                 expectedAmountCents,
+                dealAgentId: selectedDealAgentId || null,
+                dealAgent:
+                  selectedDealAgentId && (agentOptions?.length ?? 0) > 0
+                    ? {
+                        id: selectedDealAgentId,
+                        name: agentOptions?.find((option) => option._id === selectedDealAgentId)?.name ?? null,
+                        email: deal.dealAgent?.email ?? null,
+                        phone: deal.dealAgent?.phone ?? null,
+                      }
+                    : selectedDealAgentId
+                      ? {
+                          id: selectedDealAgentId,
+                          name: deal.dealAgent?.name ?? referral.assignedAgentName ?? null,
+                          email: deal.dealAgent?.email ?? null,
+                          phone: deal.dealAgent?.phone ?? null,
+                        }
+                      : null,
                 updatedAt: new Date().toISOString(),
               }
             : item
-        )
+      )
       );
       setDetailDraftMap((previous) => ({
         ...previous,
@@ -791,6 +870,11 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
     }
   };
 
+  const handleDealAgentSelectChange = (deal: DealRecord) => (event: ChangeEvent<HTMLSelectElement>) => {
+    const nextValue = event.target.value;
+    setDealAgentMap((previous) => ({ ...previous, [deal._id]: nextValue }));
+  };
+
   const sortedDeals = useMemo(() => {
     return [...deals].sort((a, b) => {
       const statusA = getStatusForDeal(a);
@@ -825,6 +909,7 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
     const selectedReason = reasonMap[deal._id] ?? deal.terminatedReason ?? 'inspection';
     const agentSelection = agentMap[deal._id] ?? '';
     const agentOutcomeSelection = agentSelection === 'OUTSIDE_AGENT' ? 'OUTSIDE_AGENT' : 'USED_AGENT';
+    const selectedDealAgentId = dealAgentMap[deal._id] ?? '';
     const usedAfc = afcMap[deal._id] ?? false;
     const assignedBucket = referral.ahaBucket ?? null;
     const matchesAssigned =
@@ -847,6 +932,32 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
         : null;
     const draftReferralFeeDisplay =
       draftReferralFeeCents != null ? formatCurrency(draftReferralFeeCents) : '—';
+
+    const agentOptionMap = new Map<string, AgentOption>();
+    (agentOptions ?? []).forEach((option) => {
+      if (option?._id) {
+        agentOptionMap.set(option._id, { _id: option._id, name: option.name });
+      }
+    });
+    if (referral.assignedAgentId) {
+      agentOptionMap.set(referral.assignedAgentId, {
+        _id: referral.assignedAgentId,
+        name: referral.assignedAgentName ?? 'Assigned agent',
+      });
+    }
+    if (deal.dealAgentId) {
+      agentOptionMap.set(deal.dealAgentId, {
+        _id: deal.dealAgentId,
+        name: deal.dealAgent?.name ?? referral.assignedAgentName ?? 'Selected agent',
+      });
+    }
+    if (selectedDealAgentId && !agentOptionMap.has(selectedDealAgentId)) {
+      agentOptionMap.set(selectedDealAgentId, {
+        _id: selectedDealAgentId,
+        name: deal.dealAgent?.name ?? referral.assignedAgentName ?? 'Selected agent',
+      });
+    }
+    const agentOptionList = Array.from(agentOptionMap.values());
 
     const toggleExpanded = () => {
       setExpandedMap((previous) => ({ ...previous, [deal._id]: !isExpanded }));
@@ -1014,6 +1125,25 @@ export function DealCard({ referral, overrides, summary, viewerRole, onAddDeal }
                     <option value="buy">Buy-side</option>
                     <option value="sell">Sell-side</option>
                   </select>
+                </label>
+                <label className="flex flex-col gap-1 text-xs uppercase text-slate-400">
+                  Deal Agent
+                  <select
+                    value={selectedDealAgentId}
+                    onChange={handleDealAgentSelectChange(deal)}
+                    className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+                    disabled={isDetailSaving || !agentOptionList}
+                  >
+                    <option value="">Unassigned</option>
+                    {agentOptionList.map((option) => (
+                      <option key={option._id} value={option._id}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[11px] normal-case text-slate-500">
+                    Defaults to the assigned agent when available.
+                  </span>
                 </label>
               </div>
               <div className="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">

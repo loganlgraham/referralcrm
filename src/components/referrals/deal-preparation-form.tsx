@@ -44,12 +44,16 @@ interface CreatedDealPayload {
   createdAt?: string | null;
   updatedAt?: string | null;
   paidDate?: string | null;
+  dealAgentId?: string | null;
+  dealAgent?: { id?: string | null; name?: string | null; email?: string | null; phone?: string | null } | null;
 }
 
 interface DealPreparationFormProps {
   referralId: string;
   previousStatus: ReferralStatus;
   visible: boolean;
+  createNewDeal?: boolean;
+  existingDealCount?: number;
   contractDetails?: ContractDetails;
   onContractSaved?: (details: {
     propertyAddress: string;
@@ -78,7 +82,10 @@ interface DealPreparationFormProps {
   onDealCreated?: (deal: CreatedDealPayload) => void;
 }
 
-const buildInitialFormState = (details?: ContractDetails): ContractFormState => ({
+const buildInitialFormState = (
+  details?: ContractDetails,
+  fallbackDealSide: 'buy' | 'sell' = 'buy'
+): ContractFormState => ({
   propertyAddress: details?.propertyAddress ?? '',
   propertyCity: details?.propertyCity ?? '',
   propertyState: details?.propertyState ? details.propertyState.toUpperCase() : '',
@@ -90,7 +97,7 @@ const buildInitialFormState = (details?: ContractDetails): ContractFormState => 
   referralFeePercentage: details?.referralFeeBasisPoints
     ? (details.referralFeeBasisPoints / 100).toString()
     : '25',
-  dealSide: details?.dealSide ?? 'buy',
+  dealSide: details?.dealSide ?? fallbackDealSide,
 });
 
 const formatFullAddress = (
@@ -152,6 +159,8 @@ export function DealPreparationForm({
   referralId,
   previousStatus,
   visible,
+  createNewDeal,
+  existingDealCount = 0,
   contractDetails,
   onContractSaved,
   onStatusChanged,
@@ -183,7 +192,8 @@ export function DealPreparationForm({
         previous.propertyPostalCode !== nextState.propertyPostalCode ||
         previous.contractPrice !== nextState.contractPrice ||
         previous.agentCommissionPercentage !== nextState.agentCommissionPercentage ||
-        previous.referralFeePercentage !== nextState.referralFeePercentage;
+        previous.referralFeePercentage !== nextState.referralFeePercentage ||
+        previous.dealSide !== nextState.dealSide;
 
       if (!hasChanged) {
         return previous;
@@ -332,6 +342,7 @@ export function DealPreparationForm({
     }
 
     setSaving(true);
+    const shouldCreateNewDeal = createNewDeal || existingDealCount > 0;
     try {
       const propertyStreet = form.propertyAddress.trim();
       const propertyCity = form.propertyCity.trim();
@@ -341,6 +352,7 @@ export function DealPreparationForm({
       const response = await fetch(`/api/referrals/${referralId}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           status: 'Under Contract',
           contractDetails: {
@@ -353,6 +365,7 @@ export function DealPreparationForm({
             referralFeePercentage,
             dealSide: form.dealSide,
           },
+          createNewDeal: shouldCreateNewDeal ? true : undefined,
         }),
       });
 
@@ -468,6 +481,22 @@ export function DealPreparationForm({
               : createdDeal.paidDate instanceof Date
                 ? createdDeal.paidDate.toISOString()
                 : null,
+          dealAgentId:
+            typeof createdDeal.dealAgentId === 'string'
+              ? createdDeal.dealAgentId
+              : (createdDeal.dealAgentId as any)?._id?.toString?.() ?? null,
+          dealAgent:
+            createdDeal.dealAgentId
+              ? {
+                  id:
+                    typeof createdDeal.dealAgentId === 'string'
+                      ? createdDeal.dealAgentId
+                      : (createdDeal.dealAgentId as any)?._id?.toString?.() ?? null,
+                  name: (createdDeal as any).dealAgent?.name ?? null,
+                  email: (createdDeal as any).dealAgent?.email ?? null,
+                  phone: (createdDeal as any).dealAgent?.phone ?? null,
+                }
+              : null,
         };
 
         onDealCreated?.(payload);

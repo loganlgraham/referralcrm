@@ -32,7 +32,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   await connectMongo();
   const referral = await Referral.findById(params.id)
-    .populate('assignedAgent', 'userId')
+    .populate('assignedAgent', 'name email phone userId')
     .populate('lender', 'userId');
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
@@ -73,6 +73,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   referral.audit.push(auditEntry as any);
 
   let createdDeal: any = null;
+  const createNewDeal = parsed.data.createNewDeal === true;
   const sla = (referral.sla ??= {} as any);
   let slaModified = false;
 
@@ -172,36 +173,38 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     const referralFeeDue = details.contractPrice * commissionRate * referralRate;
     referral.referralFeeDueCents = Math.round(referralFeeDue * 100);
 
-    await Payment.updateMany(
-      { referralId: referral._id, status: 'under_contract' },
-      {
-        $set: {
-          expectedAmountCents: referral.referralFeeDueCents ?? 0,
-          commissionBasisPoints: referral.commissionBasisPoints ?? null,
-          referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
-          side: referral.dealSide,
-          contractPriceCents: referral.estPurchasePriceCents ?? null,
-        },
-      }
-    );
+    const dealFields = {
+      expectedAmountCents: referral.referralFeeDueCents ?? 0,
+      commissionBasisPoints: referral.commissionBasisPoints ?? null,
+      referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
+      side: referral.dealSide,
+      contractPriceCents: referral.estPurchasePriceCents ?? null,
+    } as const;
 
     let activeDeal = await Payment.findOne({ referralId: referral._id, status: 'under_contract' })
       .sort({ createdAt: -1 })
       .lean();
 
-    if (!activeDeal) {
+    if (!activeDeal || createNewDeal) {
       const newDeal = await Payment.create({
         referralId: referral._id,
         status: 'under_contract',
-        expectedAmountCents: referral.referralFeeDueCents ?? 0,
-        commissionBasisPoints: referral.commissionBasisPoints ?? null,
-        referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
-        side: referral.dealSide,
-        contractPriceCents: referral.estPurchasePriceCents ?? null,
+        ...dealFields,
         usedAssignedAgent: true,
+        dealAgentId: referral.assignedAgent?._id ?? null,
       });
       createdDeal = newDeal.toObject();
       activeDeal = createdDeal;
+    } else {
+      const activeDealId = (activeDeal as any)?._id;
+
+      await Payment.updateOne(
+        { _id: activeDealId },
+        {
+          $set: dealFields,
+        }
+      );
+      activeDeal = await Payment.findById(activeDealId).lean();
     }
   } else if (parsed.data.status === 'Terminated' || parsed.data.status === 'Lost') {
     referral.estPurchasePriceCents = 0;
@@ -301,6 +304,41 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             paidDate: createdDeal.paidDate instanceof Date
               ? createdDeal.paidDate.toISOString()
               : createdDeal.paidDate ?? null,
+            dealAgentId:
+              typeof createdDeal.dealAgentId === 'string'
+                ? createdDeal.dealAgentId
+                : (createdDeal.dealAgentId as any)?._id?.toString?.() ?? null,
+            dealAgent: (() => {
+              const id =
+                typeof createdDeal.dealAgentId === 'string'
+                  ? createdDeal.dealAgentId
+                  : (createdDeal.dealAgentId as any)?._id?.toString?.() ?? null;
+              if (!id) {
+                return null;
+              }
+
+              const assigned = referral.assignedAgent as
+                | { _id?: unknown; name?: string | null; email?: string | null; phone?: string | null }
+                | null
+                | undefined;
+              const assignedId =
+                typeof assigned?._id === 'string'
+                  ? assigned._id
+                  : assigned?._id && typeof assigned._id === 'object' && 'toString' in assigned._id
+                  ? (assigned._id as any).toString?.()
+                  : null;
+              const fromAssigned = assignedId === id ? assigned : null;
+
+              const dealAgent = (createdDeal as any).dealAgent as
+                | { name?: string | null; email?: string | null; phone?: string | null }
+                | undefined;
+              return {
+                id,
+                name: dealAgent?.name ?? fromAssigned?.name ?? null,
+                email: dealAgent?.email ?? fromAssigned?.email ?? null,
+                phone: dealAgent?.phone ?? fromAssigned?.phone ?? null,
+              };
+            })(),
           }
         : undefined,
     preApprovalAmountCents: referral.preApprovalAmountCents ?? 0,

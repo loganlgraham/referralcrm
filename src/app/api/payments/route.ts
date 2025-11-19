@@ -31,6 +31,7 @@ type ReferralSummary = {
 type PaymentWithReferral = {
   _id: Types.ObjectId;
   referralId: ReferralSummary | null;
+  dealAgentId?: Types.ObjectId | { _id: Types.ObjectId; name?: string | null; email?: string | null; phone?: string | null } | null;
   status: string;
   expectedAmountCents?: number | null;
   receivedAmountCents?: number | null;
@@ -125,8 +126,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     })
     .lean<PaymentWithReferral[]>();
 
-  const agentNameMap = new Map<string, string>();
+  const agentDetailsMap = new Map<string, { name?: string | null; email?: string | null; phone?: string | null }>();
   const assignedAgentIds = new Set<string>();
+  const dealAgentIds = new Set<string>();
 
   payments.forEach((payment) => {
     const referral = payment.referralId as ReferralSummary | null;
@@ -142,11 +144,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         assignedAgentIds.add(id);
       }
     }
+
+    const dealAgent = (payment as any).dealAgentId;
+    const dealAgentId =
+      typeof dealAgent === 'string'
+        ? dealAgent
+        : dealAgent instanceof Types.ObjectId
+        ? dealAgent.toString()
+        : dealAgent?._id?.toString?.() ?? '';
+    if (dealAgentId) {
+      dealAgentIds.add(dealAgentId);
+    }
   });
 
-  if (assignedAgentIds.size > 0) {
+  if (assignedAgentIds.size > 0 || dealAgentIds.size > 0) {
     const agentObjectIds: Types.ObjectId[] = [];
-    assignedAgentIds.forEach((id) => {
+    [...assignedAgentIds, ...dealAgentIds].forEach((id) => {
       if (Types.ObjectId.isValid(id)) {
         agentObjectIds.push(new Types.ObjectId(id));
       }
@@ -154,11 +167,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     if (agentObjectIds.length > 0) {
       const agentDocs = await Agent.find({ _id: { $in: agentObjectIds } })
-        .select('name')
-        .lean<{ _id: Types.ObjectId; name?: string | null }[]>();
+        .select('name email phone')
+        .lean<{ _id: Types.ObjectId; name?: string | null; email?: string | null; phone?: string | null }[]>();
 
       agentDocs.forEach((agent) => {
-        agentNameMap.set(agent._id.toString(), agent.name ?? '');
+        agentDetailsMap.set(agent._id.toString(), {
+          name: agent.name ?? '',
+          email: agent.email ?? null,
+          phone: agent.phone ?? null,
+        });
       });
     }
   }
@@ -173,6 +190,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         ? referral.assignedAgent
         : referral.assignedAgent?.toString?.() ?? null
       : null;
+
+    const dealAgentRaw = (payment as any).dealAgentId;
+    const dealAgentId =
+      typeof dealAgentRaw === 'string'
+        ? dealAgentRaw
+        : dealAgentRaw instanceof Types.ObjectId
+        ? dealAgentRaw.toString()
+        : dealAgentRaw?._id?.toString?.() ?? null;
+    const dealAgentDetails = dealAgentId ? agentDetailsMap.get(dealAgentId) : null;
 
     return {
       _id: payment._id.toString(),
@@ -190,10 +216,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       commissionBasisPoints: payment.commissionBasisPoints ?? null,
       referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
       side: payment.side ?? 'buy',
+      dealAgentId: dealAgentId ?? null,
+      dealAgent: dealAgentId
+        ? {
+            id: dealAgentId,
+            name:
+              dealAgentDetails?.name ??
+              (typeof dealAgentRaw === 'object' && dealAgentRaw?.name ? dealAgentRaw.name : null) ??
+              null,
+            email: dealAgentDetails?.email ?? (dealAgentRaw as any)?.email ?? null,
+            phone: dealAgentDetails?.phone ?? (dealAgentRaw as any)?.phone ?? null,
+          }
+        : null,
       agent: assignedAgentId
         ? {
             id: assignedAgentId,
-            name: agentNameMap.get(assignedAgentId) ?? null,
+            name: agentDetailsMap.get(assignedAgentId)?.name ?? null,
           }
         : null,
       referral: referral
@@ -242,8 +280,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   await connectMongo();
+  const normalizedDealAgentId =
+    parsed.data.dealAgentId && Types.ObjectId.isValid(parsed.data.dealAgentId)
+      ? new Types.ObjectId(parsed.data.dealAgentId)
+      : parsed.data.dealAgentId ?? null;
   const payment = await Payment.create({
     referralId: parsed.data.referralId,
+    dealAgentId: normalizedDealAgentId,
     status: parsed.data.status,
     expectedAmountCents: parsed.data.expectedAmountCents,
     receivedAmountCents: parsed.data.receivedAmountCents,
@@ -326,6 +369,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const nextAgentAttribution = hasAgentAttributionUpdate
     ? (parsed.data.agentAttribution as string | null | undefined) ?? null
     : (existingPayment.agentAttribution as string | null | undefined) ?? null;
+  const hasDealAgentUpdate = Object.prototype.hasOwnProperty.call(parsed.data, 'dealAgentId');
+  const nextDealAgentIdRaw = hasDealAgentUpdate ? parsed.data.dealAgentId : undefined;
   const shouldRecalculateReferralFee =
     parsed.data.expectedAmountCents === undefined &&
     (parsed.data.contractPriceCents !== undefined ||
@@ -376,6 +421,17 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   updatePayload.side = nextSide ?? 'buy';
   updatePayload.expectedAmountCents = nextExpectedAmountCents;
   updatePayload.receivedAmountCents = nextReceivedAmountCents;
+  if (hasDealAgentUpdate) {
+    const normalizedDealAgentId =
+      typeof nextDealAgentIdRaw === 'string' && nextDealAgentIdRaw.trim().length > 0
+        ? Types.ObjectId.isValid(nextDealAgentIdRaw)
+          ? new Types.ObjectId(nextDealAgentIdRaw)
+          : nextDealAgentIdRaw
+        : nextDealAgentIdRaw === null
+        ? null
+        : null;
+    updatePayload.dealAgentId = normalizedDealAgentId;
+  }
   if (hasUsedAssignedAgentUpdate) {
     updatePayload.usedAssignedAgent = nextUsedAssignedAgent;
   }
