@@ -487,6 +487,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const [contractPrepActive, setContractPrepActive] = useState(false);
   const dealSectionRef = useRef<HTMLDivElement | null>(null);
   const handleCreateDealRequest = useCallback(() => {
+    setContractDraft({ hasUnsavedChanges: false });
     setContractPrepActive(true);
     if (typeof window !== 'undefined') {
       window.requestAnimationFrame(() => {
@@ -522,7 +523,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       ...previous,
       payments: mapDealRecordsToReferralPayments(updatedDeals, previous.payments),
     }));
-  }, []);
+    void mutate(activityFeedKey);
+  }, [activityFeedKey, mutate]);
   const contractHandlersRef = useRef<{
     onContractSaved: (details: {
       propertyAddress: string;
@@ -1115,6 +1117,13 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         ? null
         : (referral.ahaBucket as AgentSelectValue),
     dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
+    assignedAgent: primaryAgentContact
+      ? {
+          name: primaryAgentContact.name,
+          email: primaryAgentContact.email,
+          phone: primaryAgentContact.phone,
+        }
+      : null,
   };
 
   const baseOverrideAddress =
