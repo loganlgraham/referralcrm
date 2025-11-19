@@ -981,13 +981,11 @@ export async function POST(request: Request) {
     if (agent) {
       if (parsed.data.clientType === 'Seller') {
         referralData.sellSideAgent = agent._id;
+        referralData.assignedAgent = referralData.sellSideAgent;
       } else if (parsed.data.clientType === 'Buyer') {
         referralData.buySideAgent = agent._id;
-      } else {
-        referralData.buySideAgent = agent._id;
-        referralData.sellSideAgent = agent._id;
+        referralData.assignedAgent = referralData.buySideAgent;
       }
-      referralData.assignedAgent = referralData.buySideAgent ?? referralData.sellSideAgent;
     }
   }
 

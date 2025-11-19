@@ -56,9 +56,6 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const previousAgent = previousAgentValue ? previousAgentValue.toString() : null;
   if (assignmentSide === 'sell') {
     referral.sellSideAgent = parsed.data.agentId as any;
-  } else if (referral.clientType === 'Both' && !parsed.data.side) {
-    referral.buySideAgent = parsed.data.agentId as any;
-    referral.sellSideAgent = referral.sellSideAgent ?? (parsed.data.agentId as any);
   } else {
     referral.buySideAgent = parsed.data.agentId as any;
   }
