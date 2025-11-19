@@ -355,6 +355,10 @@ export function DealPreparationForm({
       const propertyCity = form.propertyCity.trim();
       const propertyState = form.propertyState.trim().toUpperCase();
       const propertyPostalCode = form.propertyPostalCode.trim();
+      const contractPriceCents = Math.round(contractPrice * 100);
+      const commissionBasisPoints = Math.round(agentCommission * 100);
+      const referralFeeBasisPoints = Math.round(referralFeePercentage * 100);
+      const expectedAmountCents = Math.round(referralFeeAmount * 100);
 
       const response = await fetch(`/api/referrals/${referralId}/status`, {
         method: 'POST',
@@ -430,8 +434,9 @@ export function DealPreparationForm({
         broadcastDraft(form, false);
       }
 
+      let nextDealPayload: CreatedDealPayload | null = null;
       if (createdDeal && typeof createdDeal === 'object' && createdDeal !== null) {
-        const payload: CreatedDealPayload = {
+        nextDealPayload = {
           _id: String(createdDeal._id ?? ''),
           status:
             typeof createdDeal.status === 'string'
@@ -440,7 +445,7 @@ export function DealPreparationForm({
           expectedAmountCents:
             typeof createdDeal.expectedAmountCents === 'number'
               ? createdDeal.expectedAmountCents
-              : 0,
+              : expectedAmountCents,
           receivedAmountCents:
             typeof createdDeal.receivedAmountCents === 'number'
               ? createdDeal.receivedAmountCents
@@ -458,29 +463,29 @@ export function DealPreparationForm({
           commissionBasisPoints:
             typeof createdDeal.commissionBasisPoints === 'number'
               ? createdDeal.commissionBasisPoints
-              : null,
+              : commissionBasisPoints,
           referralFeeBasisPoints:
             typeof createdDeal.referralFeeBasisPoints === 'number'
               ? createdDeal.referralFeeBasisPoints
-              : null,
+              : referralFeeBasisPoints,
           side:
             createdDeal.side === 'sell'
               ? 'sell'
               : createdDeal.side === 'buy'
                 ? 'buy'
-                : null,
+                : form.dealSide,
           createdAt:
             typeof createdDeal.createdAt === 'string'
               ? createdDeal.createdAt
               : createdDeal.createdAt instanceof Date
                 ? createdDeal.createdAt.toISOString()
-                : null,
+                : new Date().toISOString(),
           updatedAt:
             typeof createdDeal.updatedAt === 'string'
               ? createdDeal.updatedAt
               : createdDeal.updatedAt instanceof Date
                 ? createdDeal.updatedAt.toISOString()
-                : null,
+                : new Date().toISOString(),
           paidDate:
             typeof createdDeal.paidDate === 'string'
               ? createdDeal.paidDate
@@ -500,21 +505,21 @@ export function DealPreparationForm({
               : null,
         };
 
-        if (form.agentId && payload._id) {
+        if (form.agentId && nextDealPayload._id && !nextDealPayload.agentId) {
           try {
             const response = await fetch('/api/payments', {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: payload._id, agentId: form.agentId }),
+              body: JSON.stringify({ id: nextDealPayload._id, agentId: form.agentId }),
             });
             if (!response.ok) {
               throw new Error('Unable to save agent selection for this deal.');
             }
-            payload.agent = {
+            nextDealPayload.agent = {
               id: form.agentId,
               name: agentNameMap.get(form.agentId) ?? null,
             };
-            payload.agentId = form.agentId;
+            nextDealPayload.agentId = form.agentId;
           } catch (error) {
             console.error(error);
             toast.error(
@@ -524,8 +529,63 @@ export function DealPreparationForm({
             );
           }
         }
+      } else {
+        try {
+          const response = await fetch('/api/payments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              referralId,
+              status: 'under_contract',
+              expectedAmountCents,
+              receivedAmountCents: 0,
+              terminatedReason: null,
+              usedAfc: false,
+              usedAssignedAgent: true,
+              commissionBasisPoints,
+              referralFeeBasisPoints,
+              side: form.dealSide,
+              contractPriceCents,
+              agentId: form.agentId || null,
+            }),
+          });
 
-        onDealCreated?.(payload);
+          if (!response.ok) {
+            throw new Error('Unable to create deal');
+          }
+
+          const { id } = (await response.json()) as { id?: string };
+          const createdAt = new Date().toISOString();
+          nextDealPayload = {
+            _id: id ?? '',
+            status: 'under_contract',
+            expectedAmountCents,
+            receivedAmountCents: 0,
+            terminatedReason: null,
+            agentAttribution: null,
+            usedAfc: false,
+            usedAssignedAgent: true,
+            commissionBasisPoints,
+            referralFeeBasisPoints,
+            side: form.dealSide,
+            contractPriceCents,
+            createdAt,
+            updatedAt: createdAt,
+            paidDate: null,
+            agent:
+              form.agentId && agentNameMap.has(form.agentId)
+                ? { id: form.agentId, name: agentNameMap.get(form.agentId) ?? null }
+                : null,
+            agentId: form.agentId || null,
+          };
+        } catch (error) {
+          console.error(error);
+          toast.error(error instanceof Error ? error.message : 'Unable to create deal');
+        }
+      }
+
+      if (nextDealPayload) {
+        onDealCreated?.(nextDealPayload);
       }
 
       onStatusChanged?.('Under Contract', { ...body, previousStatus });
