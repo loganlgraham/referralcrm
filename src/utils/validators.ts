@@ -44,7 +44,8 @@ export const createActivitySchema = z.object({
 });
 
 export const assignAgentSchema = z.object({
-  agentId: z.string().min(1)
+  agentId: z.string().min(1),
+  side: z.enum(['buy', 'sell']).optional()
 });
 
 export const assignLenderSchema = z.object({

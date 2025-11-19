@@ -58,10 +58,12 @@ export async function GET(_: NextRequest, { params }: Params): Promise<NextRespo
   }
   await connectMongo();
   const referral = await Referral.findById(params.id)
-    .select('assignedAgent lender org deletedAt')
+    .select('assignedAgent buySideAgent sellSideAgent lender org deletedAt')
     .populate('assignedAgent', 'userId')
+    .populate('buySideAgent', 'userId')
+    .populate('sellSideAgent', 'userId')
     .populate('lender', 'userId')
-    .lean<LeanReferralAccess>();
+    .lean<LeanReferralAccess & { buySideAgent?: unknown; sellSideAgent?: unknown }>();
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
   }
@@ -70,6 +72,8 @@ export async function GET(_: NextRequest, { params }: Params): Promise<NextRespo
   }
   const accessScope = {
     assignedAgent: referral.assignedAgent,
+    buySideAgent: (referral as any).buySideAgent,
+    sellSideAgent: (referral as any).sellSideAgent,
     lender: referral.lender,
     org: referral.org
   };

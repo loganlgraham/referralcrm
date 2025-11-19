@@ -87,6 +87,8 @@ interface ReferralDetail {
   propertyState?: string | null;
   propertyPostalCode?: string | null;
   assignedAgent?: ReferralContact | null;
+  buySideAgent?: ReferralContact | null;
+  sellSideAgent?: ReferralContact | null;
   lender?: ReferralContact | null;
   payments?: ReferralPayment[];
   notes?: ReferralDetailNote[];

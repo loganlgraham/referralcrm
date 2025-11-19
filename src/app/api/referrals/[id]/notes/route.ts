@@ -30,6 +30,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   await connectMongo();
   const referral = await Referral.findById(params.id)
     .populate('assignedAgent', 'userId name email')
+    .populate('buySideAgent', 'userId name email')
+    .populate('sellSideAgent', 'userId name email')
     .populate('lender', 'userId name email');
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
@@ -41,6 +43,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   if (
     !canViewReferral(session, {
       assignedAgent: referral.assignedAgent,
+      buySideAgent: referral.buySideAgent,
+      sellSideAgent: referral.sellSideAgent,
       lender: referral.lender,
       org: referral.org
     })

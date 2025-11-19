@@ -325,6 +325,22 @@ export function ReferralHeader({
         phone: referral.assignedAgent.phone ?? null,
       }
     : null;
+  const fallbackBuySideContact: Contact | null = referral.buySideAgent
+    ? {
+        id: referral.buySideAgent._id ?? referral.buySideAgent.id ?? null,
+        name: referral.buySideAgent.name ?? null,
+        email: referral.buySideAgent.email ?? null,
+        phone: referral.buySideAgent.phone ?? null,
+      }
+    : null;
+  const fallbackSellSideContact: Contact | null = referral.sellSideAgent
+    ? {
+        id: referral.sellSideAgent._id ?? referral.sellSideAgent.id ?? null,
+        name: referral.sellSideAgent.name ?? null,
+        email: referral.sellSideAgent.email ?? null,
+        phone: referral.sellSideAgent.phone ?? null,
+      }
+    : null;
   const fallbackMcContact: Contact | null = referral.lender
     ? {
         id: referral.lender._id ?? referral.lender.id ?? null,
@@ -333,7 +349,10 @@ export function ReferralHeader({
         phone: referral.lender.phone ?? null,
       }
     : null;
-  const effectiveAgentContact = agentContact ?? fallbackAgentContact;
+  const primarySide: 'buy' | 'sell' = referral.clientType === 'Seller' ? 'sell' : 'buy';
+  const effectiveBuySideContact = agentContact ?? fallbackBuySideContact ?? fallbackAgentContact;
+  const effectiveSellSideContact = agentContact ?? fallbackSellSideContact ?? fallbackAgentContact;
+  const effectiveAgentContact = primarySide === 'sell' ? effectiveSellSideContact : effectiveBuySideContact;
   const effectiveMcContact = mcContact ?? fallbackMcContact;
   const canEditBucket = viewerRole === 'admin' || viewerRole === 'manager';
   const showBucketSummary = viewerRole !== 'agent' && viewerRole !== 'admin';
@@ -724,13 +743,35 @@ export function ReferralHeader({
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Team assignments</h2>
             <p className="text-xs text-slate-500">Keep the right partners aligned on this referral.</p>
           </div>
-          <ContactAssignment
-            referralId={referral._id}
-            type="agent"
-            contact={effectiveAgentContact}
-            canAssign={canAssignAgent}
-            onContactChange={onAgentContactChange}
-          />
+          {referral.clientType === 'Both' ? (
+            <>
+              <ContactAssignment
+                referralId={referral._id}
+                type="agent"
+                side="buy"
+                contact={effectiveBuySideContact}
+                canAssign={canAssignAgent}
+                onContactChange={onAgentContactChange}
+              />
+              <ContactAssignment
+                referralId={referral._id}
+                type="agent"
+                side="sell"
+                contact={effectiveSellSideContact}
+                canAssign={canAssignAgent}
+                onContactChange={onAgentContactChange}
+              />
+            </>
+          ) : (
+            <ContactAssignment
+              referralId={referral._id}
+              type="agent"
+              side={primarySide}
+              contact={effectiveAgentContact}
+              canAssign={canAssignAgent}
+              onContactChange={onAgentContactChange}
+            />
+          )}
           <ContactAssignment
             referralId={referral._id}
             type="mc"

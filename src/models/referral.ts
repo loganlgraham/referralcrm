@@ -114,6 +114,8 @@ const referralSchema = new Schema(
       }
     },
     assignedAgent: { type: Schema.Types.ObjectId, ref: 'Agent', index: true },
+    buySideAgent: { type: Schema.Types.ObjectId, ref: 'Agent', index: true },
+    sellSideAgent: { type: Schema.Types.ObjectId, ref: 'Agent', index: true },
     status: {
       type: String,
       enum: REFERRAL_STATUS_VALUES,
@@ -200,6 +202,8 @@ export interface ReferralDocument {
   initialNotes?: string;
   loanFileNumber: string;
   assignedAgent?: Types.ObjectId;
+  buySideAgent?: Types.ObjectId | null;
+  sellSideAgent?: Types.ObjectId | null;
   status: ReferralStatus;
   statusLastUpdated?: Date;
   loanType?: string;
