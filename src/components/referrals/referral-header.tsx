@@ -267,20 +267,6 @@ export function ReferralHeader({
         return formatFullAddress(savedStreet, draftCity, draftState, draftPostal);
       })()
     : null;
-  const effectiveContractPriceCents = allowDraftPreview && draftContract.contractPriceCents !== undefined
-    ? draftContract.contractPriceCents
-    : contractPriceCents;
-  const effectiveReferralFeeDueCents = allowDraftPreview && draftContract.referralFeeDueCents !== undefined
-    ? draftContract.referralFeeDueCents
-    : referralFeeDueCents;
-  const effectiveCommissionBasisPoints =
-    allowDraftPreview && draftContract.agentCommissionBasisPoints !== undefined
-      ? draftContract.agentCommissionBasisPoints
-      : commissionBasisPoints;
-  const effectiveReferralFeeBasisPoints =
-    allowDraftPreview && draftContract.referralFeeBasisPoints !== undefined
-      ? draftContract.referralFeeBasisPoints
-      : referralFeeBasisPoints;
   const effectivePropertyAddress =
     draftDisplayAddress && draftDisplayAddress.trim().length > 0
       ? draftDisplayAddress
@@ -291,33 +277,6 @@ export function ReferralHeader({
   const primaryAmountValue = preApprovalAmountCents ?? 0;
   const primaryAmountLabel = 'Pre-approval amount';
   const formattedPrimaryAmount = primaryAmountValue ? formatCurrency(primaryAmountValue) : '—';
-  const derivedReferralFeeDueCents = (() => {
-    if (
-      effectiveContractPriceCents &&
-      effectiveCommissionBasisPoints &&
-      effectiveReferralFeeBasisPoints
-    ) {
-      const computed =
-        (effectiveContractPriceCents * effectiveCommissionBasisPoints * effectiveReferralFeeBasisPoints) /
-        100_000_000;
-      if (Number.isFinite(computed) && computed > 0) {
-        return Math.round(computed);
-      }
-    }
-    if (effectiveReferralFeeDueCents != null) {
-      return effectiveReferralFeeDueCents;
-    }
-    return null;
-  })();
-  const formattedReferralFeeDue =
-    derivedReferralFeeDueCents != null ? formatCurrency(derivedReferralFeeDueCents) : '—';
-  const commissionPercent = effectiveCommissionBasisPoints
-    ? `${(effectiveCommissionBasisPoints / 100).toFixed(2)}%`
-    : '—';
-  const referralFeePercent = effectiveReferralFeeBasisPoints
-    ? `${(effectiveReferralFeeBasisPoints / 100).toFixed(2)}%`
-    : '—';
-  const dealSideLabel = dealSide === 'sell' ? 'Sell-side' : 'Buy-side';
   const isAgentView = viewerRole === 'agent';
   const canAssignAgent = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'mc';
   const canAssignMc = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'agent';
@@ -829,29 +788,6 @@ export function ReferralHeader({
         </section>
       </div>
 
-      {!isAgentOrigin && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Financial breakdown</h2>
-          <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Agent Commission</dt>
-              <dd className="text-sm font-semibold text-slate-900">{commissionPercent}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Referral Fee %</dt>
-              <dd className="text-sm font-semibold text-slate-900">{referralFeePercent}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Referral Fee Due</dt>
-              <dd className="text-sm font-semibold text-slate-900">{formattedReferralFeeDue}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Deal Side</dt>
-              <dd className="text-sm font-semibold text-slate-900">{dealSideLabel}</dd>
-            </div>
-          </dl>
-        </div>
-      )}
     </div>
   );
 }

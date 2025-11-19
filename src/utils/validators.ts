@@ -54,6 +54,7 @@ export const assignLenderSchema = z.object({
 
 export const updateStatusSchema = z.object({
   status: z.enum(REFERRAL_STATUS_VALUES),
+  createNewDeal: z.boolean().optional(),
   contractDetails: z
     .object({
       propertyAddress: z.string().min(1),

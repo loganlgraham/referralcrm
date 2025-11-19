@@ -242,7 +242,7 @@ const normalizeDealPayments = (
   payments: ReferralPayment[] | undefined
 ): DealCardReferral['payments'] => {
   if (!Array.isArray(payments)) {
-    return null;
+    return [];
   }
 
   return payments.map<DealCardDeal>((payment) => ({
@@ -315,7 +315,9 @@ const mapDealRecordsToReferralPayments = (
       : []
   );
 
-  return deals.map((deal) => {
+  const uniqueDeals = Array.from(new Map(deals.map((deal) => [deal._id, deal] as const)).values());
+
+  return uniqueDeals.map((deal) => {
     const previous = previousById.get(deal._id);
 
     const usedAfc = deal.usedAfc ?? previous?.usedAfc;
@@ -394,6 +396,34 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
           phone: initialReferral.sellSideAgent.phone ?? null,
         }
       : null
+  );
+  const defaultDealAgents = useMemo(
+    () => ({
+      buy:
+        referral.buySideAgent?._id ??
+        referral.buySideAgent?.id ??
+        buySideAgentContact?.id ??
+        referral.assignedAgent?._id ??
+        referral.assignedAgent?.id ??
+        null,
+      sell:
+        referral.sellSideAgent?._id ??
+        referral.sellSideAgent?.id ??
+        sellSideAgentContact?.id ??
+        referral.assignedAgent?._id ??
+        referral.assignedAgent?.id ??
+        null,
+    }),
+    [
+      buySideAgentContact?.id,
+      referral.assignedAgent?._id,
+      referral.assignedAgent?.id,
+      referral.buySideAgent?._id,
+      referral.buySideAgent?.id,
+      referral.sellSideAgent?._id,
+      referral.sellSideAgent?.id,
+      sellSideAgentContact?.id,
+    ]
   );
   const [mcContact, setMcContact] = useState<Contact | null>(() =>
     initialReferral.lender
@@ -523,16 +553,26 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   ]);
   const [contractDraft, setContractDraft] = useState<DraftState>({ hasUnsavedChanges: false });
   const [contractPrepActive, setContractPrepActive] = useState(false);
+  const [dealPrepSession, setDealPrepSession] = useState(0);
+  const [dealPrepMode, setDealPrepMode] = useState<'new' | 'existing'>('new');
   const dealSectionRef = useRef<HTMLDivElement | null>(null);
+  const scrollDealSectionIntoView = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      dealSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, []);
   const handleCreateDealRequest = useCallback(() => {
     setContractDraft({ hasUnsavedChanges: false });
+    setDealPrepSession((value) => value + 1);
     setContractPrepActive(true);
-    if (typeof window !== 'undefined') {
-      window.requestAnimationFrame(() => {
-        dealSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-    }
-  }, []);
+    setDealPrepMode('new');
+    scrollDealSectionIntoView();
+  }, [scrollDealSectionIntoView]);
+  const lastStatusRef = useRef<ReferralStatus | null>(null);
   const handleDealCreated = useCallback(
     (deal: ReferralPayment) => {
       if (!deal?._id) {
@@ -541,6 +581,15 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
       setContractPrepActive(false);
       setContractDraft({ hasUnsavedChanges: false });
+
+      setFinancials((previous) => ({
+        ...previous,
+        contractPriceCents: deal.contractPriceCents ?? previous.contractPriceCents,
+        referralFeeDueCents: deal.expectedAmountCents ?? previous.referralFeeDueCents,
+        commissionBasisPoints: deal.commissionBasisPoints ?? previous.commissionBasisPoints,
+        referralFeeBasisPoints: deal.referralFeeBasisPoints ?? previous.referralFeeBasisPoints,
+        dealSide: deal.side ?? previous.dealSide,
+      }));
 
       setReferral((previous) => {
         const existingPayments = Array.isArray(previous.payments) ? previous.payments : [];
@@ -556,13 +605,72 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     },
     []
   );
-  const handleDealsChange = useCallback((updatedDeals: DealCardDeal[]) => {
-    setReferral((previous) => ({
-      ...previous,
-      payments: mapDealRecordsToReferralPayments(updatedDeals, previous.payments),
-    }));
-    void mutate(activityFeedKey);
-  }, [activityFeedKey, mutate]);
+  const handleDealsChange = useCallback(
+    (updatedDeals: DealCardDeal[]) => {
+      const normalized = Array.isArray(updatedDeals)
+        ? Array.from(new Map(updatedDeals.map((deal) => [deal._id, deal] as const)).values())
+        : [];
+      const hasDeals = normalized.length > 0;
+      const primaryDeal = normalized.find((deal) => deal.status !== 'terminated') ?? normalized[0];
+
+      setReferral((previous) => ({
+        ...previous,
+        payments: mapDealRecordsToReferralPayments(normalized, previous.payments),
+        propertyAddress: hasDeals ? previous.propertyAddress : undefined,
+        propertyCity: hasDeals ? previous.propertyCity : undefined,
+        propertyState: hasDeals ? previous.propertyState : undefined,
+        propertyPostalCode: hasDeals ? previous.propertyPostalCode : undefined,
+        estPurchasePriceCents: hasDeals ? previous.estPurchasePriceCents : undefined,
+        referralFeeDueCents: hasDeals ? previous.referralFeeDueCents : undefined,
+        commissionBasisPoints: hasDeals ? previous.commissionBasisPoints : undefined,
+        referralFeeBasisPoints: hasDeals ? previous.referralFeeBasisPoints : undefined,
+        dealSide: hasDeals ? previous.dealSide : undefined,
+      }));
+
+      if (primaryDeal) {
+        setFinancials((previous) => ({
+          ...previous,
+          contractPriceCents:
+            primaryDeal.contractPriceCents ?? previous.contractPriceCents ?? referral.estPurchasePriceCents,
+          referralFeeDueCents:
+            primaryDeal.expectedAmountCents ?? previous.referralFeeDueCents ?? referral.referralFeeDueCents ?? 0,
+          commissionBasisPoints:
+            primaryDeal.commissionBasisPoints ?? previous.commissionBasisPoints ?? referral.commissionBasisPoints,
+          referralFeeBasisPoints:
+            primaryDeal.referralFeeBasisPoints ?? previous.referralFeeBasisPoints ?? referral.referralFeeBasisPoints,
+          dealSide: primaryDeal.side ?? previous.dealSide ?? referral.dealSide,
+        }));
+      }
+
+      if (!hasDeals) {
+        setContractDraft({ hasUnsavedChanges: false });
+        setContractPrepActive(false);
+        setFinancials((previous) => ({
+          ...previous,
+          contractPriceCents: undefined,
+          referralFeeDueCents: 0,
+          commissionBasisPoints: undefined,
+          referralFeeBasisPoints: undefined,
+          propertyAddress: undefined,
+          propertyCity: undefined,
+          propertyState: undefined,
+          propertyPostalCode: undefined,
+          dealSide: undefined,
+        }));
+      }
+      void mutate(activityFeedKey);
+    },
+    [
+      activityFeedKey,
+      financials.status,
+      mutate,
+      referral.commissionBasisPoints,
+      referral.dealSide,
+      referral.estPurchasePriceCents,
+      referral.referralFeeBasisPoints,
+      referral.referralFeeDueCents,
+    ]
+  );
   const contractHandlersRef = useRef<{
     onContractSaved: (details: {
       propertyAddress: string;
@@ -1241,28 +1349,38 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
   };
 
+  const showDeals = true;
+
   useEffect(() => {
-    if (financials.status === 'Under Contract' && !hasAnyDeals) {
-      setContractPrepActive(true);
-      return;
+    if (financials.status === 'Under Contract' && lastStatusRef.current !== 'Under Contract') {
+      scrollDealSectionIntoView();
     }
+    lastStatusRef.current = financials.status;
+  }, [financials.status, scrollDealSectionIntoView]);
 
-    if (hasAnyDeals && !contractDraft.hasUnsavedChanges) {
-      setContractPrepActive(false);
-      return;
-    }
+  const shouldShowDealPreparation = contractPrepActive;
+  const dealPrepContractDetails = dealPrepMode === 'new'
+    ? undefined
+    : {
+        propertyAddress: financials.propertyAddress ?? referral.propertyAddress ?? undefined,
+        propertyCity: financials.propertyCity ?? referral.propertyCity ?? undefined,
+        propertyState:
+          financials.propertyState ?? (referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined),
+        propertyPostalCode: financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
+        contractPriceCents: financials.contractPriceCents,
+        agentCommissionBasisPoints: financials.commissionBasisPoints,
+        referralFeeBasisPoints: financials.referralFeeBasisPoints,
+        dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
+      };
 
-    if (financials.status !== 'Under Contract' && !contractDraft.hasUnsavedChanges) {
-      setContractPrepActive(false);
-    }
-  }, [contractDraft.hasUnsavedChanges, financials.status, hasAnyDeals]);
-
-  const shouldShowDealPreparation =
-    contractPrepActive ||
-    contractDraft.hasUnsavedChanges ||
-    (!hasAnyDeals && financials.status === 'Under Contract');
-
-  const showDeals = contractPrepActive || contractDraft.hasUnsavedChanges || hasTerminatedDeal || hasAnyDeals;
+  const handleUnderContractIntentChange = useCallback(
+    (isUnderContract: boolean) => {
+      if (isUnderContract) {
+        scrollDealSectionIntoView();
+      }
+    },
+    [scrollDealSectionIntoView]
+  );
 
   const followUpReferral = useMemo(() => {
     const createdAt = (() => {
@@ -1365,7 +1483,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         viewerRole={viewerRole}
         onFinancialsChange={handleFinancialsChange}
         onContractDraftChange={handleDraftChange}
-        onUnderContractIntentChange={setContractPrepActive}
+        onUnderContractIntentChange={handleUnderContractIntentChange}
         onContractHandlersReady={(handlers) => {
           contractHandlersRef.current = handlers;
         }}
@@ -1565,22 +1683,13 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
           />
           {shouldShowDealPreparation && (
             <DealPreparationForm
+              key={`deal-prep-${dealPrepSession}`}
               referralId={referralId}
               previousStatus={financials.status}
               visible={shouldShowDealPreparation}
-              contractDetails={{
-                propertyAddress: financials.propertyAddress ?? referral.propertyAddress ?? undefined,
-                propertyCity: financials.propertyCity ?? referral.propertyCity ?? undefined,
-                propertyState:
-                  financials.propertyState ??
-                  (referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined),
-                propertyPostalCode: financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
-                contractPriceCents: financials.contractPriceCents,
-                agentCommissionBasisPoints: financials.commissionBasisPoints,
-                referralFeeBasisPoints: financials.referralFeeBasisPoints,
-                dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
-              }}
+              contractDetails={dealPrepContractDetails}
               defaultAgentId={referral.assignedAgent?._id ?? referral.assignedAgent?.id ?? null}
+              defaultAgentIds={defaultDealAgents}
               onContractDraftChange={(draft) => {
                 contractHandlersRef.current?.onContractDraftChange(draft);
               }}

@@ -16,6 +16,9 @@ type ReferralSummary = {
   _id: Types.ObjectId;
   borrower?: { name?: string | null } | null;
   propertyAddress?: string | null;
+  propertyCity?: string | null;
+  propertyState?: string | null;
+  propertyPostalCode?: string | null;
   lookingInZip?: string | null;
   lookingInZips?: string[] | null;
   assignedAgent?: Types.ObjectId | string | null;
@@ -73,6 +76,44 @@ const minutesBetweenDates = (start: Date | null, end: Date | null): number | nul
   }
 
   return Math.round(diff / 60000);
+};
+
+const formatReferralAddress = (referral?: {
+  propertyAddress?: string | null;
+  propertyCity?: string | null;
+  propertyState?: string | null;
+  propertyPostalCode?: string | null;
+  lookingInZip?: string | null;
+  lookingInZips?: string[] | null;
+} | null) => {
+  if (!referral) {
+    return '';
+  }
+
+  const street = referral.propertyAddress?.trim();
+  const city = referral.propertyCity?.trim();
+  const state = referral.propertyState?.trim();
+  const postal = referral.propertyPostalCode?.trim();
+
+  const localityParts = [city, [state, postal].filter(Boolean).join(' ')].filter((part) => part && part.length > 0);
+  if (street || localityParts.length > 0) {
+    return [street, localityParts.join(', ')].filter(Boolean).join(', ');
+  }
+
+  const zips = Array.isArray(referral.lookingInZips)
+    ? referral.lookingInZips.filter((zip) => typeof zip === 'string' && zip.trim()).join(', ')
+    : referral.lookingInZip?.trim();
+
+  return zips ? `Zip ${zips}` : '';
+};
+
+const formatCurrencyFromCents = (value?: number | null) => {
+  if (value === null || value === undefined) {
+    return 'not set';
+  }
+
+  const dollars = value / 100;
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(dollars);
 };
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -259,6 +300,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     agentId: parsed.data.agentId ?? null,
   });
 
+  const referral = await Referral.findById(parsed.data.referralId)
+    .select(
+      'borrower propertyAddress propertyCity propertyState propertyPostalCode lookingInZip lookingInZips'
+    )
+    .lean<ReferralSummary | null>();
+  const addressLabel = formatReferralAddress(referral) || 'this referral';
+  const borrowerName = referral?.borrower?.name ?? 'the client';
+
+  await logReferralActivity({
+    referralId: parsed.data.referralId,
+    actorRole: role,
+    actorId: session.user.id,
+    channel: 'update',
+    content: `Deal created for ${borrowerName} (${addressLabel}) with status ${parsed.data.status}.`,
+  });
+
   return NextResponse.json({ id: payment._id.toString() }, { status: 201 });
 }
 
@@ -412,6 +469,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     const sla = (referral.sla ??= {} as any);
     let slaChanged = false;
     let referralStatusChanged = false;
+    const changeDescriptions: string[] = [];
 
     const shouldMarkLost = (hasUsedAssignedAgentUpdate || hasAgentAttributionUpdate) && !nextUsedAssignedAgent;
 
@@ -455,6 +513,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
     if (parsed.data.status && parsed.data.status !== previousStatus) {
       const nextStatus = parsed.data.status as string;
+      changeDescriptions.push(`status ${previousStatus ?? 'unknown'} → ${nextStatus}`);
 
       if (nextStatus === 'under_contract') {
         sla.lastUnderContractAt = now;
@@ -492,17 +551,30 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
     if (nextContractPriceCents != null) {
       referral.estPurchasePriceCents = nextContractPriceCents;
+      changeDescriptions.push(
+        `contract price ${formatCurrencyFromCents(existingPayment.contractPriceCents)} → ${formatCurrencyFromCents(nextContractPriceCents)}`
+      );
     }
     if (nextCommissionBasisPoints != null) {
       referral.commissionBasisPoints = nextCommissionBasisPoints;
+      changeDescriptions.push(`agent commission ${(existingPayment.commissionBasisPoints ?? 0) / 100}% → ${
+        (nextCommissionBasisPoints ?? 0) / 100
+      }%`);
     }
     if (nextReferralFeeBasisPoints != null) {
       referral.referralFeeBasisPoints = nextReferralFeeBasisPoints;
+      changeDescriptions.push(`referral fee ${(existingPayment.referralFeeBasisPoints ?? 0) / 100}% → ${
+        (nextReferralFeeBasisPoints ?? 0) / 100
+      }%`);
     }
     if (nextSide) {
       referral.dealSide = nextSide;
+      changeDescriptions.push(`side ${existingPayment.side ?? 'buy'} → ${nextSide}`);
     }
     referral.referralFeeDueCents = nextExpectedAmountCents;
+    changeDescriptions.push(
+      `referral fee ${formatCurrencyFromCents(existingPayment.expectedAmountCents ?? existingPayment.receivedAmountCents)} → ${formatCurrencyFromCents(nextExpectedAmountCents)}`
+    );
     if (slaChanged) {
       referral.markModified('sla');
     }
@@ -515,6 +587,17 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         actorId: session.user.id,
         channel: 'status',
         content: `Status changed from ${previousReferralStatus ?? 'Unknown'} to ${referral.status}`,
+      });
+    }
+
+    const addressLabel = formatReferralAddress(referral);
+    if (changeDescriptions.length > 0) {
+      await logReferralActivity({
+        referralId: referral._id,
+        actorRole: session.user.role,
+        actorId: session.user.id,
+        channel: 'update',
+        content: `${addressLabel ? `Deal for ${addressLabel}` : 'Deal'} updated: ${changeDescriptions.join('; ')}.`,
       });
     }
   }
@@ -594,7 +677,43 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
     return new NextResponse('Not found', { status: 404 });
   }
 
+  const referral = await Referral.findById(payment.referralId);
+  const addressLabel = formatReferralAddress(referral);
+
   await payment.deleteOne();
+
+  if (referral) {
+    const remainingDeal = await Payment.findOne({ referralId: referral._id });
+    if (!remainingDeal) {
+      referral.estPurchasePriceCents = null;
+      referral.referralFeeDueCents = null;
+      referral.commissionBasisPoints = null;
+      referral.referralFeeBasisPoints = null;
+      referral.propertyAddress = '';
+      referral.propertyCity = '';
+      referral.propertyState = '';
+      referral.propertyPostalCode = '';
+      await referral.save();
+    }
+
+    await logReferralActivity({
+      referralId: referral._id,
+      actorRole: session.user.role,
+      actorId: session.user.id,
+      channel: 'update',
+      content: `${addressLabel ? `Deal for ${addressLabel}` : 'Deal'} deleted.`,
+    });
+  }
+
+  if (!referral) {
+    await logReferralActivity({
+      referralId: payment.referralId,
+      actorRole: session.user.role,
+      actorId: session.user.id,
+      channel: 'update',
+      content: 'Deal deleted.',
+    });
+  }
 
   return NextResponse.json({ id });
 }
