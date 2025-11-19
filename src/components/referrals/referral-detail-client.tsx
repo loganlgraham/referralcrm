@@ -1039,7 +1039,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         referral={headerReferral}
         viewerRole={viewerRole}
         onFinancialsChange={handleFinancialsChange}
-        onCreateDealRequest={handleCreateDealRequest}
         buySideAgentContact={buySideAgentContact}
         sellSideAgentContact={sellSideAgentContact}
         mcContact={mcContact}
