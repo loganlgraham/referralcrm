@@ -393,6 +393,34 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     });
     void mutate(activityFeedKey);
   }, [activityFeedKey, mutate]);
+  const handleDealUpdated = useCallback((deal: ReferralPayment) => {
+    if (!deal?._id) {
+      return;
+    }
+
+    setReferral((previous) => {
+      const existingPayments = Array.isArray(previous.payments) ? previous.payments : [];
+      const updatedPayments = existingPayments.map((payment) =>
+        payment._id === deal._id ? { ...payment, ...deal } : payment
+      );
+
+      return {
+        ...previous,
+        payments: updatedPayments,
+      };
+    });
+  }, []);
+
+  const handleDealDeleted = useCallback((id: string) => {
+    if (!id) return;
+    setReferral((previous) => {
+      const existingPayments = Array.isArray(previous.payments) ? previous.payments : [];
+      return {
+        ...previous,
+        payments: existingPayments.filter((payment) => payment._id !== id),
+      };
+    });
+  }, []);
   const [deleting, setDeleting] = useState(false);
 
   const normalizedDetailDraft = useMemo(() => normalizeDetailDraft(detailsDraft), [detailsDraft]);
@@ -1226,6 +1254,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         referralId={referralId}
         deals={referralDeals}
         onDealCreated={handleDealCreated}
+        onDealUpdated={handleDealUpdated}
+        onDealDeleted={handleDealDeleted}
         viewerRole={viewerRole}
       />
       <ReferralTimeline referralId={referralId} />

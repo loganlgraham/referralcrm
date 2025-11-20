@@ -15,6 +15,8 @@ export interface ReferralPayment {
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
   contractPriceCents?: number | null;
+  netReferralFeePaidCents?: number | null;
+  propertyAddress?: string | null;
   agent?: { id: string; name: string | null } | null;
   agentId?: string | null;
 }
