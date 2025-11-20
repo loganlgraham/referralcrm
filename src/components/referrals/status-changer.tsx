@@ -209,8 +209,8 @@ export function StatusChanger({
 
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 p-3">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
-        <div className="flex-1 space-y-1">
+      <div className="space-y-3">
+        <div className="space-y-1">
           <p className="text-[11px] uppercase tracking-wide text-slate-400">Pipeline Status</p>
           <select
             value={currentStatus}
@@ -226,20 +226,8 @@ export function StatusChanger({
           </select>
         </div>
 
-        <div className="w-full max-w-xs space-y-1">
-          <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-slate-400">
-            <span>Pre-approval</span>
-            {!editingPreApproval && (
-              <button
-                type="button"
-                onClick={() => setEditingPreApproval(true)}
-                className="inline-flex items-center justify-center rounded p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
-                aria-label="Edit pre-approval"
-              >
-                <Pencil className="h-4 w-4" aria-hidden="true" />
-              </button>
-            )}
-          </div>
+        <div className="space-y-1">
+          <div className="text-[11px] uppercase tracking-wide text-slate-400">Pre-approval</div>
           {editingPreApproval ? (
             <div className="space-y-2">
               <input
