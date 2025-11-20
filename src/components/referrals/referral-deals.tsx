@@ -109,8 +109,8 @@ function DealCard({
   const [usedAfc, setUsedAfc] = useState(Boolean(deal.usedAfc));
   const [usedAssignedAgent, setUsedAssignedAgent] = useState(Boolean(deal.usedAssignedAgent));
   const [markPaid, setMarkPaid] = useState(deal.status === 'paid');
-  const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | ''>(
-    (deal.terminatedReason as TerminatedReason | undefined) ?? ''
+  const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | null>(
+    (deal.terminatedReason as TerminatedReason | undefined) ?? null
   );
 
   const populateFromDeal = useCallback(() => {
@@ -128,7 +128,7 @@ function DealCard({
     setUsedAfc(Boolean(deal.usedAfc));
     setUsedAssignedAgent(Boolean(deal.usedAssignedAgent));
     setMarkPaid(deal.status === 'paid');
-    setTerminatedReason((deal.terminatedReason as TerminatedReason | undefined) ?? '');
+    setTerminatedReason((deal.terminatedReason as TerminatedReason | undefined) ?? null);
   }, [deal]);
 
   useEffect(() => {
@@ -259,8 +259,12 @@ function DealCard({
             <label className="block text-xs font-semibold text-slate-600">
               <span className="mr-2">Termination reason</span>
               <select
-                value={terminatedReason}
-                onChange={(event) => setTerminatedReason(event.target.value as TerminatedReason)}
+                value={terminatedReason ?? ''}
+                onChange={(event) =>
+                  setTerminatedReason(
+                    event.target.value ? (event.target.value as TerminatedReason) : null
+                  )
+                }
                 disabled={!canManage || statusUpdating}
                 className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs shadow-sm focus:border-brand focus:outline-none"
               >
@@ -437,8 +441,12 @@ function DealCard({
               <label className="space-y-1 text-sm font-medium text-slate-700">
                 <span>Termination reason</span>
                 <select
-                  value={terminatedReason}
-                  onChange={(event) => setTerminatedReason(event.target.value as TerminatedReason)}
+                  value={terminatedReason ?? ''}
+                  onChange={(event) =>
+                    setTerminatedReason(
+                      event.target.value ? (event.target.value as TerminatedReason) : null
+                    )
+                  }
                   className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                   disabled={saving}
                 >
@@ -588,7 +596,7 @@ export function ReferralDeals({
   const [usedAfc, setUsedAfc] = useState(false);
   const [usedAssignedAgent, setUsedAssignedAgent] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | ''>('');
+  const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | null>(null);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
   const [deleting, setDeleting] = useState<Record<string, boolean>>({});
@@ -743,7 +751,7 @@ export function ReferralDeals({
         setUsedAssignedAgent(true);
         setMarkPaid(false);
         setStatus('under_contract');
-        setTerminatedReason('');
+        setTerminatedReason(null);
         setShowForm(false);
         toast.success('Deal added');
     } catch (error) {
@@ -994,8 +1002,12 @@ export function ReferralDeals({
               <label className="space-y-1 text-sm font-medium text-slate-700">
                 <span>Termination reason</span>
                 <select
-                  value={terminatedReason}
-                  onChange={(event) => setTerminatedReason(event.target.value as TerminatedReason)}
+                  value={terminatedReason ?? ''}
+                  onChange={(event) =>
+                    setTerminatedReason(
+                      event.target.value ? (event.target.value as TerminatedReason) : null
+                    )
+                  }
                   className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                   disabled={submitting}
                 >
