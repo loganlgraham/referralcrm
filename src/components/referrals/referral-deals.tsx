@@ -43,13 +43,6 @@ const toCents = (value: string): number => {
   return Math.round(numeric * 100);
 };
 
-const formatDate = (value?: string | null) => {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '—';
-  return parsed.toLocaleDateString();
-};
-
 const formatPercent = (basisPoints?: number | null) => {
   if (basisPoints == null) return '—';
   return `${(basisPoints / 100).toFixed(2)}%`;
