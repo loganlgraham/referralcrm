@@ -50,6 +50,7 @@ interface AggregatedPayment {
     | 'terminated';
   expectedAmountCents: number;
   receivedAmountCents: number;
+  closingDate?: Date | null;
   terminatedReason?: 'inspection' | 'appraisal' | 'financing' | 'changed_mind' | null;
   paidDate?: Date | null;
   invoiceDate?: Date | null;
