@@ -44,6 +44,8 @@ type PaymentWithReferral = {
   agentAttribution?: string | null;
   usedAfc?: boolean | null;
   usedAssignedAgent?: boolean | null;
+  netReferralFeePaidCents?: number | null;
+  propertyAddress?: string | null;
   invoiceDate?: Date | null;
   paidDate?: Date | null;
   createdAt?: Date | null;
@@ -178,6 +180,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       expectedAmountCents: payment.expectedAmountCents ?? 0,
       receivedAmountCents: payment.receivedAmountCents ?? 0,
       contractPriceCents: payment.contractPriceCents ?? null,
+      netReferralFeePaidCents: payment.netReferralFeePaidCents ?? null,
+      propertyAddress: payment.propertyAddress ?? null,
       terminatedReason: payment.terminatedReason ?? null,
       agentAttribution: payment.agentAttribution ?? null,
       usedAfc: Boolean(payment.usedAfc),
@@ -249,6 +253,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     agentAttribution: parsed.data.agentAttribution ?? null,
     usedAfc: parsed.data.usedAfc ?? false,
     usedAssignedAgent: parsed.data.usedAssignedAgent ?? true,
+    netReferralFeePaidCents: parsed.data.netReferralFeePaidCents ?? null,
+    propertyAddress: parsed.data.propertyAddress ?? null,
     invoiceDate: parsed.data.invoiceDate,
     paidDate: parsed.data.paidDate,
     notes: parsed.data.notes,
@@ -259,7 +265,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     agentId: parsed.data.agentId ?? null,
   });
 
-  return NextResponse.json({ id: payment._id.toString() }, { status: 201 });
+  return NextResponse.json(
+    {
+      id: payment._id.toString(),
+      createdAt: payment.createdAt instanceof Date ? payment.createdAt.toISOString() : new Date().toISOString(),
+      expectedAmountCents: payment.expectedAmountCents ?? 0,
+      receivedAmountCents: payment.receivedAmountCents ?? 0,
+      status: payment.status,
+    },
+    { status: 201 }
+  );
 }
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {

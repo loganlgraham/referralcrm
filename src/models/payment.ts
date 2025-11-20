@@ -33,6 +33,8 @@ const paymentSchema = new Schema(
       enum: ['buy', 'sell'],
       default: 'buy',
     },
+    netReferralFeePaidCents: { type: Number, default: null },
+    propertyAddress: { type: String, default: null },
     agentAttribution: {
       type: String,
       enum: ['AHA', 'AHA_OOS', 'OUTSIDE_AGENT'],

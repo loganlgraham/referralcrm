@@ -121,5 +121,7 @@ export const paymentSchema = z.object({
   side: z.enum(['buy', 'sell']).optional(),
   commissionBasisPoints: z.number().int().min(0).optional(),
   referralFeeBasisPoints: z.number().int().min(0).optional(),
-  contractPriceCents: z.number().int().min(0).optional()
+  contractPriceCents: z.number().int().min(0).optional(),
+  netReferralFeePaidCents: z.number().int().min(0).optional(),
+  propertyAddress: z.union([z.string().trim().min(1), z.null()]).optional()
 });

@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Pencil } from 'lucide-react';
 import { normalizeReferralStatus } from '@/constants/referrals';
 import { ReferralStatus } from '@/models/referral';
 import { toast } from 'sonner';
@@ -14,7 +15,6 @@ interface Props {
   onStatusChanged?: (status: ReferralStatus, payload?: Record<string, unknown>) => void;
   onPreApprovalSaved?: (details: { preApprovalAmountCents: number; referralFeeDueCents: number }) => void;
   onUnderContractIntentChange?: (isPreparing: boolean) => void;
-  onCreateDealRequest?: () => void;
 }
 
 const centsToCurrencyInput = (value?: number | null) => {
@@ -86,7 +86,6 @@ export function StatusChanger({
   onStatusChanged,
   onPreApprovalSaved,
   onUnderContractIntentChange,
-  onCreateDealRequest,
 }: Props) {
   const router = useRouter();
   const normalizedStatus = useMemo(() => normalizeReferralStatus(status) ?? status, [status]);
@@ -96,6 +95,7 @@ export function StatusChanger({
   const [preApproval, setPreApproval] = useState(() => centsToCurrencyInput(preApprovalAmountCents));
   const [preApprovalDirty, setPreApprovalDirty] = useState(false);
   const [preApprovalSaving, setPreApprovalSaving] = useState(false);
+  const [editingPreApproval, setEditingPreApproval] = useState(false);
 
   useEffect(() => {
     setCurrentStatus(normalizedStatus);
@@ -153,13 +153,8 @@ export function StatusChanger({
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const nextStatus = event.target.value as ReferralStatus;
 
-    if (nextStatus === 'Under Contract') {
-      setCurrentStatus(nextStatus);
-      return;
-    }
-
     setCurrentStatus(nextStatus);
-    onUnderContractIntentChange?.(false);
+    onUnderContractIntentChange?.(nextStatus === 'Under Contract');
     void submitStatus(nextStatus, persistedStatus);
   };
 
@@ -188,6 +183,7 @@ export function StatusChanger({
       const body = (await response.json()) as { preApprovalAmountCents: number; referralFeeDueCents: number };
       toast.success('Pre-approval updated');
       setPreApprovalDirty(false);
+      setEditingPreApproval(false);
       onPreApprovalSaved?.({
         preApprovalAmountCents: body.preApprovalAmountCents,
         referralFeeDueCents: body.referralFeeDueCents,
@@ -201,63 +197,82 @@ export function StatusChanger({
     }
   };
 
-  return (
-    <div className="space-y-4 rounded-lg border border-slate-200 p-4">
-      <div>
-        <p className="text-xs uppercase text-slate-400">Pipeline Status</p>
-        <select
-          value={currentStatus}
-          onChange={handleChange}
-          className="mt-2 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-          disabled={loading}
-        >
-          {pipelineOptions.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-      </div>
+  const formattedPreApprovalDisplay = preApproval
+    ? `$${formatCurrencyInputDisplay(preApproval)}`
+    : 'No pre-approval';
 
-      {currentStatus === 'Under Contract' ? (
-        <div className="space-y-3 rounded border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600">
-          <p>Use the deal preparation form in the Deals section to add contract details and create the deal.</p>
-          <button
-            type="button"
-            onClick={() => {
-              onUnderContractIntentChange?.(true);
-              onCreateDealRequest?.();
-            }}
-            className="inline-flex items-center justify-center rounded border border-brand/30 bg-white px-3 py-2 text-sm font-medium text-brand shadow-sm transition hover:border-brand hover:bg-brand/10"
+  const handlePreApprovalCancel = () => {
+    setPreApproval(centsToCurrencyInput(preApprovalAmountCents));
+    setPreApprovalDirty(false);
+    setEditingPreApproval(false);
+  };
+
+  return (
+    <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <p className="text-[11px] uppercase tracking-wide text-slate-400">Pipeline Status</p>
+          <select
+            value={currentStatus}
+            onChange={handleChange}
+            className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            disabled={loading}
           >
-            Create deal
-          </button>
+            {pipelineOptions.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
         </div>
-      ) : (
-        <div className="space-y-2">
-          <p className="text-xs uppercase text-slate-400">Pre-approval</p>
-          <label className="text-sm text-slate-600">
-            Amount ($)
-            <input
-              type="text"
-              inputMode="decimal"
-              value={formatCurrencyInputDisplay(preApproval)}
-              onChange={handlePreApprovalChange}
-              className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
-              placeholder="300,000"
-              disabled={preApprovalSaving || loading}
-            />
-          </label>
-          <button
-            type="button"
-            onClick={handlePreApprovalSave}
-            disabled={preApprovalSaving || !preApprovalDirty}
-            className="inline-flex w-full items-center justify-center rounded bg-brand px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {preApprovalSaving ? 'Saving…' : 'Save pre-approval'}
-          </button>
+
+        <div className="space-y-1">
+          <div className="text-[11px] uppercase tracking-wide text-slate-400">Pre-approval</div>
+          {editingPreApproval ? (
+            <div className="space-y-2">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={formatCurrencyInputDisplay(preApproval)}
+                onChange={handlePreApprovalChange}
+                className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                placeholder="300,000"
+                disabled={preApprovalSaving || loading}
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePreApprovalSave}
+                  disabled={preApprovalSaving || !preApprovalDirty}
+                  className="inline-flex flex-1 items-center justify-center rounded bg-brand px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {preApprovalSaving ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePreApprovalCancel}
+                  disabled={preApprovalSaving || loading}
+                  className="inline-flex items-center justify-center rounded border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between rounded border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
+              <span>{formattedPreApprovalDisplay}</span>
+              <button
+                type="button"
+                onClick={() => setEditingPreApproval(true)}
+                className="inline-flex items-center justify-center rounded p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Edit pre-approval"
+              >
+                <Pencil className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
