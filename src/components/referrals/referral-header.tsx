@@ -5,7 +5,6 @@ import { differenceInDays } from 'date-fns';
 import { toast } from 'sonner';
 
 import { ReferralStatus, REFERRAL_STATUSES, normalizeReferralStatus } from '@/constants/referrals';
-import { formatCurrency } from '@/utils/formatters';
 import { StatusChanger } from '@/components/referrals/status-changer';
 import { SLAWidget } from '@/components/referrals/sla-widget';
 import { ContactAssignment, type Contact } from '@/components/referrals/contact-assignment';
@@ -290,36 +289,6 @@ export function ReferralHeader({
       ? savedDisplayAddress
       : propertyAddress ?? referral.propertyAddress;
 
-  const primaryAmountValue = preApprovalAmountCents ?? 0;
-  const primaryAmountLabel = 'Pre-approval amount';
-  const formattedPrimaryAmount = primaryAmountValue ? formatCurrency(primaryAmountValue) : '—';
-  const derivedReferralFeeDueCents = (() => {
-    if (
-      effectiveContractPriceCents &&
-      effectiveCommissionBasisPoints &&
-      effectiveReferralFeeBasisPoints
-    ) {
-      const computed =
-        (effectiveContractPriceCents * effectiveCommissionBasisPoints * effectiveReferralFeeBasisPoints) /
-        100_000_000;
-      if (Number.isFinite(computed) && computed > 0) {
-        return Math.round(computed);
-      }
-    }
-    if (effectiveReferralFeeDueCents != null) {
-      return effectiveReferralFeeDueCents;
-    }
-    return null;
-  })();
-  const formattedReferralFeeDue =
-    derivedReferralFeeDueCents != null ? formatCurrency(derivedReferralFeeDueCents) : '—';
-  const commissionPercent = effectiveCommissionBasisPoints
-    ? `${(effectiveCommissionBasisPoints / 100).toFixed(2)}%`
-    : '—';
-  const referralFeePercent = effectiveReferralFeeBasisPoints
-    ? `${(effectiveReferralFeeBasisPoints / 100).toFixed(2)}%`
-    : '—';
-  const dealSideLabel = dealSide === 'sell' ? 'Sell-side' : 'Buy-side';
   const isAgentView = viewerRole === 'agent';
   const canAssignAgent = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'mc';
   const canAssignMc = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'agent';
@@ -730,17 +699,7 @@ export function ReferralHeader({
             isAgentView ? 'lg:justify-end' : ''
           }`}
         >
-          <section
-            className={`flex h-full min-w-[240px] flex-1 flex-col justify-between rounded-lg border border-brand/20 bg-white/80 p-3 shadow-sm sm:max-w-xs ${
-              isAgentView ? 'self-end lg:ml-auto' : ''
-            }`}
-          >
-            <div className="space-y-1">
-              <h2 className="text-[11px] font-semibold uppercase tracking-wide text-brand">{primaryAmountLabel}</h2>
-              <p className="text-xl font-semibold text-slate-900">{formattedPrimaryAmount}</p>
-            </div>
-          </section>
-          <section className="h-full min-w-[280px] flex-1 rounded-lg border border-slate-200 bg-white/80 p-3 shadow-sm sm:max-w-md">
+          <section className="h-full min-w-[280px] flex-1 rounded-lg border border-slate-200 bg-white/80 p-3 shadow-sm sm:max-w-lg">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-700">Status &amp; progress</h2>
               <span className="text-[11px] uppercase tracking-wide text-slate-400">Pipeline</span>

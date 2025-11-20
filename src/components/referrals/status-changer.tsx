@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Pencil } from 'lucide-react';
 import { normalizeReferralStatus } from '@/constants/referrals';
 import { ReferralStatus } from '@/models/referral';
 import { toast } from 'sonner';
@@ -94,6 +95,7 @@ export function StatusChanger({
   const [preApproval, setPreApproval] = useState(() => centsToCurrencyInput(preApprovalAmountCents));
   const [preApprovalDirty, setPreApprovalDirty] = useState(false);
   const [preApprovalSaving, setPreApprovalSaving] = useState(false);
+  const [editingPreApproval, setEditingPreApproval] = useState(false);
 
   useEffect(() => {
     setCurrentStatus(normalizedStatus);
@@ -181,6 +183,7 @@ export function StatusChanger({
       const body = (await response.json()) as { preApprovalAmountCents: number; referralFeeDueCents: number };
       toast.success('Pre-approval updated');
       setPreApprovalDirty(false);
+      setEditingPreApproval(false);
       onPreApprovalSaved?.({
         preApprovalAmountCents: body.preApprovalAmountCents,
         referralFeeDueCents: body.referralFeeDueCents,
@@ -194,46 +197,93 @@ export function StatusChanger({
     }
   };
 
+  const formattedPreApprovalDisplay = preApproval
+    ? `$${formatCurrencyInputDisplay(preApproval)}`
+    : 'No pre-approval';
+
+  const handlePreApprovalCancel = () => {
+    setPreApproval(centsToCurrencyInput(preApprovalAmountCents));
+    setPreApprovalDirty(false);
+    setEditingPreApproval(false);
+  };
+
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 p-3">
-      <div className="space-y-1">
-        <p className="text-[11px] uppercase tracking-wide text-slate-400">Pipeline Status</p>
-        <select
-          value={currentStatus}
-          onChange={handleChange}
-          className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
-          disabled={loading}
-        >
-          {pipelineOptions.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-      </div>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4">
+        <div className="flex-1 space-y-1">
+          <p className="text-[11px] uppercase tracking-wide text-slate-400">Pipeline Status</p>
+          <select
+            value={currentStatus}
+            onChange={handleChange}
+            className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            disabled={loading}
+          >
+            {pipelineOptions.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      <div className="space-y-1">
-        <p className="text-[11px] uppercase tracking-wide text-slate-400">Pre-approval</p>
-        <label className="flex flex-col gap-1 text-sm text-slate-600">
-          <span className="text-[13px] text-slate-500">Amount ($)</span>
-          <input
-            type="text"
-            inputMode="decimal"
-            value={formatCurrencyInputDisplay(preApproval)}
-            onChange={handlePreApprovalChange}
-            className="w-full rounded border border-slate-200 px-3 py-2"
-            placeholder="300,000"
-            disabled={preApprovalSaving || loading}
-          />
-        </label>
-        <button
-          type="button"
-          onClick={handlePreApprovalSave}
-          disabled={preApprovalSaving || !preApprovalDirty}
-          className="inline-flex w-full items-center justify-center rounded bg-brand px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          {preApprovalSaving ? 'Saving…' : 'Save pre-approval'}
-        </button>
+        <div className="w-full max-w-xs space-y-1">
+          <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-slate-400">
+            <span>Pre-approval</span>
+            {!editingPreApproval && (
+              <button
+                type="button"
+                onClick={() => setEditingPreApproval(true)}
+                className="inline-flex items-center justify-center rounded p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Edit pre-approval"
+              >
+                <Pencil className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          {editingPreApproval ? (
+            <div className="space-y-2">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={formatCurrencyInputDisplay(preApproval)}
+                onChange={handlePreApprovalChange}
+                className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                placeholder="300,000"
+                disabled={preApprovalSaving || loading}
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePreApprovalSave}
+                  disabled={preApprovalSaving || !preApprovalDirty}
+                  className="inline-flex flex-1 items-center justify-center rounded bg-brand px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {preApprovalSaving ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePreApprovalCancel}
+                  disabled={preApprovalSaving || loading}
+                  className="inline-flex items-center justify-center rounded border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between rounded border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
+              <span>{formattedPreApprovalDisplay}</span>
+              <button
+                type="button"
+                onClick={() => setEditingPreApproval(true)}
+                className="inline-flex items-center justify-center rounded p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Edit pre-approval"
+              >
+                <Pencil className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
