@@ -726,26 +726,26 @@ export function ReferralHeader({
           </div>
         </div>
         <div
-          className={`grid gap-3 sm:grid-cols-2 ${
-            isAgentView ? 'lg:justify-items-end' : ''
+          className={`flex flex-col items-stretch gap-3 sm:flex-row sm:justify-end ${
+            isAgentView ? 'lg:justify-end' : ''
           }`}
         >
           <section
-            className={`flex h-full flex-col justify-between rounded-lg border border-brand/20 bg-white/80 p-4 shadow-sm ${
-              isAgentView ? 'self-end sm:max-w-sm lg:max-w-xs lg:ml-auto' : ''
+            className={`flex h-full min-w-[240px] flex-1 flex-col justify-between rounded-lg border border-brand/20 bg-white/80 p-3 shadow-sm sm:max-w-xs ${
+              isAgentView ? 'self-end lg:ml-auto' : ''
             }`}
           >
-            <div className="space-y-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-brand">{primaryAmountLabel}</h2>
-              <p className="text-2xl font-semibold text-slate-900">{formattedPrimaryAmount}</p>
+            <div className="space-y-1">
+              <h2 className="text-[11px] font-semibold uppercase tracking-wide text-brand">{primaryAmountLabel}</h2>
+              <p className="text-xl font-semibold text-slate-900">{formattedPrimaryAmount}</p>
             </div>
           </section>
-          <section className="h-full rounded-lg border border-slate-200 bg-white/80 p-4 shadow-sm">
-            <div className="space-y-1">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-700">Status &amp; progress</h2>
-              <p className="text-xs text-slate-500">Update borrower stage and pre-approval.</p>
+          <section className="h-full min-w-[280px] flex-1 rounded-lg border border-slate-200 bg-white/80 p-3 shadow-sm sm:max-w-md">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-700">Status &amp; progress</h2>
+              <span className="text-[11px] uppercase tracking-wide text-slate-400">Pipeline</span>
             </div>
-            <div className="mt-3">
+            <div className="mt-2">
               <StatusChanger
                 referralId={referral._id}
                 status={status}

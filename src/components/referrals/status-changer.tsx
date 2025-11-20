@@ -195,13 +195,13 @@ export function StatusChanger({
   };
 
   return (
-    <div className="space-y-4 rounded-lg border border-slate-200 p-4">
-      <div>
-        <p className="text-xs uppercase text-slate-400">Pipeline Status</p>
+    <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+      <div className="space-y-1">
+        <p className="text-[11px] uppercase tracking-wide text-slate-400">Pipeline Status</p>
         <select
           value={currentStatus}
           onChange={handleChange}
-          className="mt-2 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+          className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
           disabled={loading}
         >
           {pipelineOptions.map((item) => (
@@ -212,16 +212,16 @@ export function StatusChanger({
         </select>
       </div>
 
-      <div className="space-y-2">
-        <p className="text-xs uppercase text-slate-400">Pre-approval</p>
-        <label className="text-sm text-slate-600">
-          Amount ($)
+      <div className="space-y-1">
+        <p className="text-[11px] uppercase tracking-wide text-slate-400">Pre-approval</p>
+        <label className="flex flex-col gap-1 text-sm text-slate-600">
+          <span className="text-[13px] text-slate-500">Amount ($)</span>
           <input
             type="text"
             inputMode="decimal"
             value={formatCurrencyInputDisplay(preApproval)}
             onChange={handlePreApprovalChange}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+            className="w-full rounded border border-slate-200 px-3 py-2"
             placeholder="300,000"
             disabled={preApprovalSaving || loading}
           />
