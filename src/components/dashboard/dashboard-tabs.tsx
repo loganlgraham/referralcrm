@@ -1230,65 +1230,19 @@ function MainDashboard({
 }
 
 function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
-  const [requestFilter, setRequestFilter] = useState<'all' | 'AHA' | 'AHA_OOS'>('all');
-
-  const filterOptions: { label: string; value: 'all' | 'AHA' | 'AHA_OOS' }[] = [
-    { label: 'All', value: 'all' },
-    { label: 'AHA', value: 'AHA' },
-    { label: 'AHA OOS', value: 'AHA_OOS' }
-  ];
-
-  const selectedTrend = useMemo(() => {
-    if (requestFilter === 'AHA') return data.requestTrend.aha;
-    if (requestFilter === 'AHA_OOS') return data.requestTrend.ahaOos;
-    return data.requestTrend.all;
-  }, [data.requestTrend, requestFilter]);
-
-  const selectedLeaderboard = useMemo(() => {
-    if (requestFilter === 'AHA') return data.requestLeaderboard.aha;
-    if (requestFilter === 'AHA_OOS') return data.requestLeaderboard.ahaOos;
-    return data.requestLeaderboard.all;
-  }, [data.requestLeaderboard, requestFilter]);
-
-  const filterLabel = filterOptions.find((option) => option.value === requestFilter)?.label ?? 'All';
-
-  const renderFilterButtons = () => (
-    <div className="flex gap-1">
-      {filterOptions.map((option) => {
-        const isActive = requestFilter === option.value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => setRequestFilter(option.value)}
-            className={`rounded border px-2 py-1 text-xs font-medium transition ${
-              isActive
-                ? 'border-transparent bg-slate-900 text-white'
-                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-            }`}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-
   return (
     <div className="space-y-6">
       <LineChartCard
         title="Requests received"
-        data={selectedTrend}
+        data={data.requestTrend.all}
         formatValue={(value) => formatNumber(Math.round(value))}
-        helper={`Trend of referral requests routed to MCs (${filterLabel})`}
-        actions={renderFilterButtons()}
+        helper="Trend of referral requests routed to MCs (network filter applied above)"
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <LeaderboardTable
           title="Referral requests by MC"
-          entries={selectedLeaderboard}
+          entries={data.requestLeaderboard.all}
           valueLabel="Requests"
-          actions={renderFilterButtons()}
         />
         <LeaderboardTable title="Revenue by MC" entries={data.revenueLeaderboard} valueLabel="Revenue" />
         <LeaderboardTable title="Close rate by MC" entries={data.closeRateLeaderboard} valueLabel="Close rate" />
