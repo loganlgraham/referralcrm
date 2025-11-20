@@ -117,11 +117,12 @@ export const paymentSchema = z.object({
   usedAssignedAgent: z.boolean().optional(),
   invoiceDate: z.string().optional(),
   paidDate: z.string().optional(),
+  closingDate: z.string().nullable().optional(),
   notes: z.string().optional(),
   side: z.enum(['buy', 'sell']).optional(),
-  commissionBasisPoints: z.number().int().min(0).optional(),
-  referralFeeBasisPoints: z.number().int().min(0).optional(),
-  contractPriceCents: z.number().int().min(0).optional(),
+  commissionBasisPoints: z.number().int().min(0).nullable().optional(),
+  referralFeeBasisPoints: z.number().int().min(0).nullable().optional(),
+  contractPriceCents: z.number().int().min(0).nullable().optional(),
   netReferralFeePaidCents: z.number().int().min(0).optional(),
   propertyAddress: z.union([z.string().trim().min(1), z.null()]).optional()
 });

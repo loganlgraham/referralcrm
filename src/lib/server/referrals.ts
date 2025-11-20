@@ -447,6 +447,7 @@ export async function getReferralById(id: string) {
       receivedAmountCents: payment.receivedAmountCents ?? 0,
       invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
       paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
+      closingDate: payment.closingDate ? payment.closingDate.toISOString() : null,
       createdAt: payment.createdAt ? payment.createdAt.toISOString() : null,
       updatedAt: payment.updatedAt ? payment.updatedAt.toISOString() : null,
       terminatedReason: payment.terminatedReason ?? null,

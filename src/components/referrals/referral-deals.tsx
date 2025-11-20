@@ -5,7 +5,7 @@ import type { FormEvent } from 'react';
 import { toast } from 'sonner';
 
 import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/constants/deals';
-import { formatCurrency } from '@/utils/formatters';
+import { formatCurrency, formatDate } from '@/utils/formatters';
 import type { ReferralPayment } from '@/types/referral-payment';
 
 interface ReferralDealsProps {
@@ -28,6 +28,7 @@ type DealUpdatePayload = {
   referralFeeBasisPoints: number | null;
   propertyAddress: string | null;
   agentId: string | null;
+  closingDate: string | null;
   side: 'buy' | 'sell';
   usedAfc: boolean;
   usedAssignedAgent: boolean;
@@ -40,13 +41,6 @@ const toCents = (value: string): number => {
     return 0;
   }
   return Math.round(numeric * 100);
-};
-
-const formatDate = (value?: string | null) => {
-  if (!value) return '—';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return '—';
-  return parsed.toLocaleDateString();
 };
 
 const formatPercent = (basisPoints?: number | null) => {
@@ -99,6 +93,7 @@ function DealCard({
     basisPointsToDisplay(deal.referralFeeBasisPoints)
   );
   const [propertyAddress, setPropertyAddress] = useState(deal.propertyAddress ?? '');
+  const [closingDate, setClosingDate] = useState(deal.closingDate ? deal.closingDate.slice(0, 10) : '');
   const [agentId, setAgentId] = useState(deal.agentId ?? deal.agent?.id ?? '');
   const [side, setSide] = useState<'buy' | 'sell'>(deal.side ?? 'buy');
   const [usedAfc, setUsedAfc] = useState(Boolean(deal.usedAfc));
@@ -114,6 +109,7 @@ function DealCard({
     setCommissionPercentage(basisPointsToDisplay(deal.commissionBasisPoints));
     setReferralFeePercentage(basisPointsToDisplay(deal.referralFeeBasisPoints));
     setPropertyAddress(deal.propertyAddress ?? '');
+    setClosingDate(deal.closingDate ? deal.closingDate.slice(0, 10) : '');
     setAgentId(deal.agentId ?? deal.agent?.id ?? '');
     setSide(deal.side ?? 'buy');
     setUsedAfc(Boolean(deal.usedAfc));
@@ -174,6 +170,7 @@ function DealCard({
       commissionBasisPoints,
       referralFeeBasisPoints,
       propertyAddress: propertyAddress.trim() || null,
+      closingDate: closingDate ? new Date(closingDate).toISOString() : null,
       agentId: agentId || null,
       side,
       usedAfc,
@@ -204,6 +201,9 @@ function DealCard({
             <p className="text-xs uppercase text-slate-500">Status</p>
             <p className="text-sm font-semibold text-slate-900">{statusLabel}</p>
             <p className="text-xs text-slate-500">Created {formatDate(deal.createdAt)}</p>
+            <p className="text-xs text-slate-500">
+              Closing date: {deal.closingDate ? formatDate(deal.closingDate) : '—'}
+            </p>
           </div>
           <label className="block text-xs font-semibold text-slate-600">
             <span className="mr-2">Update stage</span>
@@ -375,10 +375,20 @@ function DealCard({
             >
               {DEAL_STATUS_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+                {option.label}
+              </option>
+            ))}
             </select>
+          </label>
+          <label className="space-y-1 text-sm font-medium text-slate-700">
+            <span>Closing date</span>
+            <input
+              type="date"
+              value={closingDate}
+              onChange={(event) => setClosingDate(event.target.value)}
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              disabled={saving}
+            />
           </label>
           <label className="space-y-1 text-sm font-medium text-slate-700">
             <span>Property address</span>
@@ -501,6 +511,7 @@ export function ReferralDeals({
   const [commissionPercentage, setCommissionPercentage] = useState('');
   const [referralFeePercentage, setReferralFeePercentage] = useState('');
   const [propertyAddress, setPropertyAddress] = useState('');
+  const [closingDate, setClosingDate] = useState('');
   const [agentId, setAgentId] = useState('');
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [usedAfc, setUsedAfc] = useState(false);
@@ -599,14 +610,15 @@ export function ReferralDeals({
           status: statusToSend,
           expectedAmountCents: finalExpectedAmountCents,
           receivedAmountCents: netReferralFeePaidCents,
-          netReferralFeePaidCents,
-          contractPriceCents,
-          commissionBasisPoints,
-          referralFeeBasisPoints,
-          propertyAddress: propertyAddress.trim() || null,
-          agentId: agentId || null,
-          usedAfc,
-          usedAssignedAgent,
+      netReferralFeePaidCents,
+      contractPriceCents,
+      commissionBasisPoints,
+      referralFeeBasisPoints,
+      propertyAddress: propertyAddress.trim() || null,
+      closingDate: closingDate ? new Date(closingDate).toISOString() : null,
+      agentId: agentId || null,
+      usedAfc,
+      usedAssignedAgent,
           side,
         }),
       });
@@ -627,6 +639,7 @@ export function ReferralDeals({
         commissionBasisPoints,
         referralFeeBasisPoints,
         propertyAddress: propertyAddress.trim() || null,
+        closingDate: closingDate ? new Date(closingDate).toISOString() : null,
         agent: agentId ? { id: agentId, name: agents.find((option) => option.id === agentId)?.name ?? null } : null,
         agentId: agentId || null,
         usedAfc,
@@ -644,6 +657,7 @@ export function ReferralDeals({
       setCommissionPercentage('');
       setReferralFeePercentage('');
       setPropertyAddress('');
+      setClosingDate('');
       setAgentId('');
       setSide('buy');
       setUsedAfc(false);
@@ -746,6 +760,7 @@ export function ReferralDeals({
         commissionBasisPoints: payload.commissionBasisPoints ?? null,
         referralFeeBasisPoints: payload.referralFeeBasisPoints ?? null,
         propertyAddress: payload.propertyAddress ?? null,
+        closingDate: payload.closingDate ?? null,
         agentId: payload.agentId ?? null,
         agent: payload.agentId
           ? { id: payload.agentId, name: agentName }
@@ -872,10 +887,20 @@ export function ReferralDeals({
             >
               {DEAL_STATUS_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+                {option.label}
+              </option>
+            ))}
             </select>
+          </label>
+          <label className="space-y-1 text-sm font-medium text-slate-700">
+            <span>Closing date</span>
+            <input
+              type="date"
+              value={closingDate}
+              onChange={(event) => setClosingDate(event.target.value)}
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              disabled={submitting}
+            />
           </label>
           <label className="space-y-1 text-sm font-medium text-slate-700 sm:col-span-2 lg:col-span-4">
             <span>Property address</span>

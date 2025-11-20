@@ -26,6 +26,7 @@ const paymentSchema = new Schema(
       enum: ['inspection', 'appraisal', 'financing', 'changed_mind'],
       default: null,
     },
+    closingDate: { type: Date, default: null },
     commissionBasisPoints: { type: Number, default: null },
     referralFeeBasisPoints: { type: Number, default: null },
     side: {

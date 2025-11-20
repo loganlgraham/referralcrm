@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 
 import { DEFAULT_AGENT_COMMISSION_BPS } from '@/constants/referrals';
 import { fetcher } from '@/utils/fetcher';
-import { formatCurrency } from '@/utils/formatters';
+import { formatCurrency, formatDate } from '@/utils/formatters';
 
 type DealStatus =
   | 'under_contract'
@@ -46,6 +46,7 @@ interface DealRow {
   expectedAmountCents: number;
   receivedAmountCents: number;
   terminatedReason?: TerminatedReason | null;
+  closingDate?: string | null;
   invoiceDate?: string | null;
   paidDate?: string | null;
   usedAfc?: boolean | null;
@@ -476,6 +477,10 @@ export function DealsTable() {
     );
   };
 
+  const renderClosingDate = (value?: string | null) => {
+    return value ? formatDate(value) : '—';
+  };
+
   const formatCentsForInput = (value: number | null | undefined) => {
     if (value === null || value === undefined) {
       return '';
@@ -507,6 +512,7 @@ export function DealsTable() {
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Closing date</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Address</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral Fee</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Amount Received</th>
@@ -543,6 +549,7 @@ export function DealsTable() {
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{renderAgentLink(deal)}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">{renderStatusControl(deal)}</td>
+                <td className="px-4 py-3 text-sm text-slate-700">{renderClosingDate(deal.closingDate)}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">
                   {deal.referral?.propertyAddress ||
                     formatReferralLocation(deal.referral) ||
@@ -653,6 +660,7 @@ export function DealsTable() {
           <tr>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Closing date</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Outcome</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral Fee</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -705,6 +713,7 @@ export function DealsTable() {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{renderStatusControl(deal)}</td>
+                <td className="px-4 py-3 text-sm text-slate-700">{renderClosingDate(deal.closingDate)}</td>
                 <td className={`px-4 py-3 text-sm font-medium ${outcomeColor}`}>{outcome}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(paidAmount)}</td>

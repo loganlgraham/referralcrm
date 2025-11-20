@@ -8,6 +8,7 @@ const decimalFormatter = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1
 });
+const dateFormatter = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' });
 
 export function formatCurrency(cents: number) {
   return currencyFormatter.format((cents || 0) / 100);
@@ -39,4 +40,17 @@ export function formatPhoneNumber(value?: string | null) {
     return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
   }
   return value;
+}
+
+export function formatDate(value?: string | Date | null) {
+  if (!value) {
+    return '—';
+  }
+
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return '—';
+  }
+
+  return dateFormatter.format(parsed);
 }
