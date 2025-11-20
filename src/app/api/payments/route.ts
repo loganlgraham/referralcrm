@@ -41,6 +41,7 @@ type PaymentWithReferral = {
   receivedAmountCents?: number | null;
   contractPriceCents?: number | null;
   terminatedReason?: string | null;
+  closingDate?: Date | null;
   agentAttribution?: string | null;
   usedAfc?: boolean | null;
   usedAssignedAgent?: boolean | null;
@@ -48,6 +49,7 @@ type PaymentWithReferral = {
   propertyAddress?: string | null;
   invoiceDate?: Date | null;
   paidDate?: Date | null;
+  closingDate?: Date | null;
   createdAt?: Date | null;
   commissionBasisPoints?: number | null;
   referralFeeBasisPoints?: number | null;
@@ -183,6 +185,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       netReferralFeePaidCents: payment.netReferralFeePaidCents ?? null,
       propertyAddress: payment.propertyAddress ?? null,
       terminatedReason: payment.terminatedReason ?? null,
+      closingDate: payment.closingDate ? payment.closingDate.toISOString() : null,
       agentAttribution: payment.agentAttribution ?? null,
       usedAfc: Boolean(payment.usedAfc),
       usedAssignedAgent: Boolean(payment.usedAssignedAgent),
@@ -255,6 +258,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     usedAssignedAgent: parsed.data.usedAssignedAgent ?? true,
     netReferralFeePaidCents: parsed.data.netReferralFeePaidCents ?? null,
     propertyAddress: parsed.data.propertyAddress ?? null,
+    closingDate: parsed.data.closingDate ?? null,
     invoiceDate: parsed.data.invoiceDate,
     paidDate: parsed.data.paidDate,
     notes: parsed.data.notes,
