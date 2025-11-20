@@ -11,7 +11,6 @@ import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import type { Contact } from '@/components/referrals/contact-assignment';
 import type { ReferralStatus } from '@/constants/referrals';
-import { ReferralFollowUpCard } from '@/components/referrals/referral-follow-up-card';
 import { ReferralDeals } from '@/components/referrals/referral-deals';
 import type { ReferralPayment } from '@/types/referral-payment';
 
@@ -1066,6 +1065,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       <ReferralHeader
         referral={headerReferral}
         viewerRole={viewerRole}
+        followUpReferral={followUpReferral}
         onFinancialsChange={handleFinancialsChange}
         buySideAgentContact={buySideAgentContact}
         sellSideAgentContact={sellSideAgentContact}
@@ -1074,7 +1074,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         onSellSideAgentContactChange={handleSellSideAgentContactChange}
         onMcContactChange={handleMcContactChange}
       />
-      <ReferralFollowUpCard referral={followUpReferral} />
       <section className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>

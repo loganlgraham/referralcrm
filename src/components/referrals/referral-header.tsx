@@ -10,6 +10,8 @@ import { StatusChanger } from '@/components/referrals/status-changer';
 import { SLAWidget } from '@/components/referrals/sla-widget';
 import { ContactAssignment, type Contact } from '@/components/referrals/contact-assignment';
 import { EmailActivityLink } from '@/components/common/email-activity-link';
+import type { ReferralLike } from '@/utils/sla-insights';
+import { ReferralFollowUpCard } from '@/components/referrals/referral-follow-up-card';
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
 type AhaBucketValue = '' | 'AHA' | 'AHA_OOS';
@@ -72,6 +74,7 @@ interface ContractDraftSnapshot {
 type ReferralHeaderProps = {
   referral: any;
   viewerRole: ViewerRole;
+  followUpReferral: ReferralLike & { borrower?: { name?: string } };
   onFinancialsChange?: (snapshot: FinancialSnapshot) => void;
   onContractDraftChange?: (draft: ContractDraftSnapshot) => void;
   onUnderContractIntentChange?: (isPreparing: boolean) => void;
@@ -89,7 +92,6 @@ type ReferralHeaderProps = {
     }) => void;
     onContractDraftChange: (draft: ContractDraftSnapshot) => void;
   }) => void;
-  onCreateDealRequest?: () => void;
   buySideAgentContact?: Contact | null;
   sellSideAgentContact?: Contact | null;
   mcContact?: Contact | null;
@@ -101,11 +103,11 @@ type ReferralHeaderProps = {
 export function ReferralHeader({
   referral,
   viewerRole,
+  followUpReferral,
   onFinancialsChange,
   onContractDraftChange,
   onUnderContractIntentChange,
   onContractHandlersReady,
-  onCreateDealRequest,
   buySideAgentContact,
   sellSideAgentContact,
   mcContact,
@@ -724,7 +726,7 @@ export function ReferralHeader({
           </div>
         </div>
         <div
-          className={`grid gap-3 ${showBucketSummary ? 'sm:grid-cols-2' : ''} ${
+          className={`grid gap-3 sm:grid-cols-2 ${
             isAgentView ? 'lg:justify-items-end' : ''
           }`}
         >
@@ -738,8 +740,25 @@ export function ReferralHeader({
               <p className="text-2xl font-semibold text-slate-900">{formattedPrimaryAmount}</p>
             </div>
           </section>
+          <section className="h-full rounded-lg border border-slate-200 bg-white/80 p-4 shadow-sm">
+            <div className="space-y-1">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-700">Status &amp; progress</h2>
+              <p className="text-xs text-slate-500">Update borrower stage and pre-approval.</p>
+            </div>
+            <div className="mt-3">
+              <StatusChanger
+                referralId={referral._id}
+                status={status}
+                statuses={REFERRAL_STATUSES}
+                preApprovalAmountCents={preApprovalAmountCents}
+                onStatusChanged={handleStatusChanged}
+                onPreApprovalSaved={handlePreApprovalSaved}
+                onUnderContractIntentChange={onUnderContractIntentChange}
+              />
+            </div>
+          </section>
           {showBucketSummary && (
-            <section className="flex h-full flex-col justify-between rounded-lg border border-slate-200 bg-slate-900/5 p-4">
+            <section className="flex h-full flex-col justify-between rounded-lg border border-slate-200 bg-slate-900/5 p-4 sm:col-span-2">
               <div className="space-y-2">
                 <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Agent bucket</h2>
                 <p className="text-xs text-slate-500">{bucketDescription}</p>
@@ -765,22 +784,7 @@ export function ReferralHeader({
       <SLAWidget referral={{ ...referral, status, audit: auditEntries }} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr),minmax(280px,1fr)]">
-        <section className="space-y-4 rounded-xl border border-brand/20 bg-white px-5 py-4 shadow-sm">
-          <div className="space-y-1">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Status &amp; progress</h2>
-            <p className="text-xs text-slate-500">Update borrower stage and contract information.</p>
-          </div>
-          <StatusChanger
-            referralId={referral._id}
-            status={status}
-            statuses={REFERRAL_STATUSES}
-            preApprovalAmountCents={preApprovalAmountCents}
-            onStatusChanged={handleStatusChanged}
-            onPreApprovalSaved={handlePreApprovalSaved}
-            onUnderContractIntentChange={onUnderContractIntentChange}
-            onCreateDealRequest={onCreateDealRequest}
-          />
-        </section>
+        <ReferralFollowUpCard referral={followUpReferral} />
         <section className="space-y-4 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
           <div className="space-y-1">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Team assignments</h2>

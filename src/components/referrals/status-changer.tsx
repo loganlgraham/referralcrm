@@ -14,7 +14,6 @@ interface Props {
   onStatusChanged?: (status: ReferralStatus, payload?: Record<string, unknown>) => void;
   onPreApprovalSaved?: (details: { preApprovalAmountCents: number; referralFeeDueCents: number }) => void;
   onUnderContractIntentChange?: (isPreparing: boolean) => void;
-  onCreateDealRequest?: () => void;
 }
 
 const centsToCurrencyInput = (value?: number | null) => {
@@ -86,7 +85,6 @@ export function StatusChanger({
   onStatusChanged,
   onPreApprovalSaved,
   onUnderContractIntentChange,
-  onCreateDealRequest,
 }: Props) {
   const router = useRouter();
   const normalizedStatus = useMemo(() => normalizeReferralStatus(status) ?? status, [status]);
@@ -153,13 +151,8 @@ export function StatusChanger({
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const nextStatus = event.target.value as ReferralStatus;
 
-    if (nextStatus === 'Under Contract') {
-      setCurrentStatus(nextStatus);
-      return;
-    }
-
     setCurrentStatus(nextStatus);
-    onUnderContractIntentChange?.(false);
+    onUnderContractIntentChange?.(nextStatus === 'Under Contract');
     void submitStatus(nextStatus, persistedStatus);
   };
 
@@ -219,45 +212,29 @@ export function StatusChanger({
         </select>
       </div>
 
-      {currentStatus === 'Under Contract' ? (
-        <div className="space-y-3 rounded border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600">
-          <p>Use the deal preparation form in the Deals section to add contract details and create the deal.</p>
-          <button
-            type="button"
-            onClick={() => {
-              onUnderContractIntentChange?.(true);
-              onCreateDealRequest?.();
-            }}
-            className="inline-flex items-center justify-center rounded border border-brand/30 bg-white px-3 py-2 text-sm font-medium text-brand shadow-sm transition hover:border-brand hover:bg-brand/10"
-          >
-            Create deal
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <p className="text-xs uppercase text-slate-400">Pre-approval</p>
-          <label className="text-sm text-slate-600">
-            Amount ($)
-            <input
-              type="text"
-              inputMode="decimal"
-              value={formatCurrencyInputDisplay(preApproval)}
-              onChange={handlePreApprovalChange}
-              className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
-              placeholder="300,000"
-              disabled={preApprovalSaving || loading}
-            />
-          </label>
-          <button
-            type="button"
-            onClick={handlePreApprovalSave}
-            disabled={preApprovalSaving || !preApprovalDirty}
-            className="inline-flex w-full items-center justify-center rounded bg-brand px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {preApprovalSaving ? 'Saving…' : 'Save pre-approval'}
-          </button>
-        </div>
-      )}
+      <div className="space-y-2">
+        <p className="text-xs uppercase text-slate-400">Pre-approval</p>
+        <label className="text-sm text-slate-600">
+          Amount ($)
+          <input
+            type="text"
+            inputMode="decimal"
+            value={formatCurrencyInputDisplay(preApproval)}
+            onChange={handlePreApprovalChange}
+            className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+            placeholder="300,000"
+            disabled={preApprovalSaving || loading}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={handlePreApprovalSave}
+          disabled={preApprovalSaving || !preApprovalDirty}
+          className="inline-flex w-full items-center justify-center rounded bg-brand px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {preApprovalSaving ? 'Saving…' : 'Save pre-approval'}
+        </button>
+      </div>
     </div>
   );
 }
