@@ -903,9 +903,9 @@ function MainDashboard({
       helper: `Closed, not paid ${formatCurrency(summary.closedNotPaidCents)}`
     },
     {
-      title: 'Pipeline value',
-      value: formatCurrency(summary.pipelineValueCents),
-      helper: `${formatNumber(summary.activePipeline)} active referrals`
+      title: 'Pending closings',
+      value: formatNumber(summary.pendingClosings),
+      helper: 'Deals under contract closing after today'
     },
     {
       title: 'Total referrals',
@@ -921,7 +921,6 @@ function MainDashboard({
 
   const pipelineMetrics = [
     { label: 'Pipeline value', value: formatCurrency(summary.pipelineValueCents) },
-    { label: 'Pending closings', value: formatNumber(summary.pendingClosings) },
     { label: 'Active pipeline', value: formatNumber(summary.activePipeline) },
     {
       label: 'AFC attach rate',
