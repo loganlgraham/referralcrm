@@ -829,29 +829,6 @@ export function ReferralHeader({
         </section>
       </div>
 
-      {!isAgentOrigin && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Financial breakdown</h2>
-          <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Agent Commission</dt>
-              <dd className="text-sm font-semibold text-slate-900">{commissionPercent}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Referral Fee %</dt>
-              <dd className="text-sm font-semibold text-slate-900">{referralFeePercent}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Referral Fee Due</dt>
-              <dd className="text-sm font-semibold text-slate-900">{formattedReferralFeeDue}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Deal Side</dt>
-              <dd className="text-sm font-semibold text-slate-900">{dealSideLabel}</dd>
-            </div>
-          </dl>
-        </div>
-      )}
     </div>
   );
 }
