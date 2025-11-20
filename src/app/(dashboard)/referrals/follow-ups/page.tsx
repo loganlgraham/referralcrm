@@ -21,6 +21,10 @@ export default async function FollowUpTasksPage() {
     statusLastUpdated: item.statusLastUpdated ?? null,
     daysInStatus: item.daysInStatus,
     assignedAgentName: item.assignedAgentName,
+    buySideAgentName: item.buySideAgentName ?? null,
+    sellSideAgentName: item.sellSideAgentName ?? null,
+    clientType: item.clientType ?? null,
+    dealSide: item.dealSide ?? null,
     lenderName: item.lenderName ?? null,
     origin: item.origin ?? null,
   }));

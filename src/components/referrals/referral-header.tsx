@@ -5,11 +5,12 @@ import { differenceInDays } from 'date-fns';
 import { toast } from 'sonner';
 
 import { ReferralStatus, REFERRAL_STATUSES, normalizeReferralStatus } from '@/constants/referrals';
-import { formatCurrency } from '@/utils/formatters';
 import { StatusChanger } from '@/components/referrals/status-changer';
 import { SLAWidget } from '@/components/referrals/sla-widget';
 import { ContactAssignment, type Contact } from '@/components/referrals/contact-assignment';
 import { EmailActivityLink } from '@/components/common/email-activity-link';
+import type { ReferralLike } from '@/utils/sla-insights';
+import { ReferralFollowUpCard } from '@/components/referrals/referral-follow-up-card';
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
 type AhaBucketValue = '' | 'AHA' | 'AHA_OOS';
@@ -72,6 +73,7 @@ interface ContractDraftSnapshot {
 type ReferralHeaderProps = {
   referral: any;
   viewerRole: ViewerRole;
+  followUpReferral: ReferralLike & { borrower?: { name?: string } };
   onFinancialsChange?: (snapshot: FinancialSnapshot) => void;
   onContractDraftChange?: (draft: ContractDraftSnapshot) => void;
   onUnderContractIntentChange?: (isPreparing: boolean) => void;
@@ -89,24 +91,27 @@ type ReferralHeaderProps = {
     }) => void;
     onContractDraftChange: (draft: ContractDraftSnapshot) => void;
   }) => void;
-  onCreateDealRequest?: () => void;
-  agentContact?: Contact | null;
+  buySideAgentContact?: Contact | null;
+  sellSideAgentContact?: Contact | null;
   mcContact?: Contact | null;
-  onAgentContactChange?: (contact: Contact | null) => void;
+  onBuySideAgentContactChange?: (contact: Contact | null) => void;
+  onSellSideAgentContactChange?: (contact: Contact | null) => void;
   onMcContactChange?: (contact: Contact | null) => void;
 };
 
 export function ReferralHeader({
   referral,
   viewerRole,
+  followUpReferral,
   onFinancialsChange,
   onContractDraftChange,
   onUnderContractIntentChange,
   onContractHandlersReady,
-  onCreateDealRequest,
-  agentContact,
+  buySideAgentContact,
+  sellSideAgentContact,
   mcContact,
-  onAgentContactChange,
+  onBuySideAgentContactChange,
+  onSellSideAgentContactChange,
   onMcContactChange,
 }: ReferralHeaderProps) {
   const isAgentOrigin = referral.origin === 'agent';
@@ -284,36 +289,6 @@ export function ReferralHeader({
       ? savedDisplayAddress
       : propertyAddress ?? referral.propertyAddress;
 
-  const primaryAmountValue = preApprovalAmountCents ?? 0;
-  const primaryAmountLabel = 'Pre-approval amount';
-  const formattedPrimaryAmount = primaryAmountValue ? formatCurrency(primaryAmountValue) : '—';
-  const derivedReferralFeeDueCents = (() => {
-    if (
-      effectiveContractPriceCents &&
-      effectiveCommissionBasisPoints &&
-      effectiveReferralFeeBasisPoints
-    ) {
-      const computed =
-        (effectiveContractPriceCents * effectiveCommissionBasisPoints * effectiveReferralFeeBasisPoints) /
-        100_000_000;
-      if (Number.isFinite(computed) && computed > 0) {
-        return Math.round(computed);
-      }
-    }
-    if (effectiveReferralFeeDueCents != null) {
-      return effectiveReferralFeeDueCents;
-    }
-    return null;
-  })();
-  const formattedReferralFeeDue =
-    derivedReferralFeeDueCents != null ? formatCurrency(derivedReferralFeeDueCents) : '—';
-  const commissionPercent = effectiveCommissionBasisPoints
-    ? `${(effectiveCommissionBasisPoints / 100).toFixed(2)}%`
-    : '—';
-  const referralFeePercent = effectiveReferralFeeBasisPoints
-    ? `${(effectiveReferralFeeBasisPoints / 100).toFixed(2)}%`
-    : '—';
-  const dealSideLabel = dealSide === 'sell' ? 'Sell-side' : 'Buy-side';
   const isAgentView = viewerRole === 'agent';
   const canAssignAgent = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'mc';
   const canAssignMc = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'agent';
@@ -325,6 +300,22 @@ export function ReferralHeader({
         phone: referral.assignedAgent.phone ?? null,
       }
     : null;
+  const fallbackBuySideContact: Contact | null = referral.buySideAgent
+    ? {
+        id: referral.buySideAgent._id ?? referral.buySideAgent.id ?? null,
+        name: referral.buySideAgent.name ?? null,
+        email: referral.buySideAgent.email ?? null,
+        phone: referral.buySideAgent.phone ?? null,
+      }
+    : null;
+  const fallbackSellSideContact: Contact | null = referral.sellSideAgent
+    ? {
+        id: referral.sellSideAgent._id ?? referral.sellSideAgent.id ?? null,
+        name: referral.sellSideAgent.name ?? null,
+        email: referral.sellSideAgent.email ?? null,
+        phone: referral.sellSideAgent.phone ?? null,
+      }
+    : null;
   const fallbackMcContact: Contact | null = referral.lender
     ? {
         id: referral.lender._id ?? referral.lender.id ?? null,
@@ -333,7 +324,49 @@ export function ReferralHeader({
         phone: referral.lender.phone ?? null,
       }
     : null;
-  const effectiveAgentContact = agentContact ?? fallbackAgentContact;
+  const allowAssignedFallback = !fallbackBuySideContact && !fallbackSellSideContact;
+  const canUseAssignedForBuySide = allowAssignedFallback && referral.clientType !== 'Seller';
+  const canUseAssignedForSellSide = allowAssignedFallback && referral.clientType !== 'Buyer';
+  const primarySide = useMemo<'buy' | 'sell'>(() => {
+    if (dealSide === 'sell') {
+      return 'sell';
+    }
+    if (dealSide === 'buy') {
+      if (buySideAgentContact || fallbackBuySideContact) {
+        return 'buy';
+      }
+      if (!buySideAgentContact && !fallbackBuySideContact && (sellSideAgentContact || fallbackSellSideContact)) {
+        return 'sell';
+      }
+      return 'buy';
+    }
+    if (referral.clientType === 'Seller') {
+      return 'sell';
+    }
+    if (referral.clientType === 'Buyer') {
+      return 'buy';
+    }
+    if (!buySideAgentContact && !fallbackBuySideContact && (sellSideAgentContact || fallbackSellSideContact)) {
+      return 'sell';
+    }
+    return 'buy';
+  }, [
+    buySideAgentContact,
+    dealSide,
+    fallbackBuySideContact,
+    fallbackSellSideContact,
+    referral.clientType,
+    sellSideAgentContact,
+  ]);
+  const effectiveBuySideContact =
+    buySideAgentContact ??
+    fallbackBuySideContact ??
+    (canUseAssignedForBuySide ? fallbackAgentContact : null);
+  const effectiveSellSideContact =
+    sellSideAgentContact ??
+    fallbackSellSideContact ??
+    (canUseAssignedForSellSide ? fallbackAgentContact : null);
+  const effectiveAgentContact = primarySide === 'sell' ? effectiveSellSideContact : effectiveBuySideContact;
   const effectiveMcContact = mcContact ?? fallbackMcContact;
   const canEditBucket = viewerRole === 'admin' || viewerRole === 'manager';
   const showBucketSummary = viewerRole !== 'agent' && viewerRole !== 'admin';
@@ -662,22 +695,29 @@ export function ReferralHeader({
           </div>
         </div>
         <div
-          className={`grid gap-3 ${showBucketSummary ? 'sm:grid-cols-2' : ''} ${
-            isAgentView ? 'lg:justify-items-end' : ''
+          className={`flex flex-col items-stretch gap-3 sm:flex-row sm:justify-end ${
+            isAgentView ? 'lg:justify-end' : ''
           }`}
         >
-          <section
-            className={`flex h-full flex-col justify-between rounded-lg border border-brand/20 bg-white/80 p-4 shadow-sm ${
-              isAgentView ? 'self-end sm:max-w-sm lg:max-w-xs lg:ml-auto' : ''
-            }`}
-          >
-            <div className="space-y-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-brand">{primaryAmountLabel}</h2>
-              <p className="text-2xl font-semibold text-slate-900">{formattedPrimaryAmount}</p>
+          <section className="h-full min-w-[280px] flex-1 rounded-lg border border-slate-200 bg-white/80 p-3 shadow-sm sm:max-w-lg">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-700">Status &amp; progress</h2>
+              <span className="text-[11px] uppercase tracking-wide text-slate-400">Pipeline</span>
+            </div>
+            <div className="mt-2">
+              <StatusChanger
+                referralId={referral._id}
+                status={status}
+                statuses={REFERRAL_STATUSES}
+                preApprovalAmountCents={preApprovalAmountCents}
+                onStatusChanged={handleStatusChanged}
+                onPreApprovalSaved={handlePreApprovalSaved}
+                onUnderContractIntentChange={onUnderContractIntentChange}
+              />
             </div>
           </section>
           {showBucketSummary && (
-            <section className="flex h-full flex-col justify-between rounded-lg border border-slate-200 bg-slate-900/5 p-4">
+            <section className="flex h-full flex-col justify-between rounded-lg border border-slate-200 bg-slate-900/5 p-4 sm:col-span-2">
               <div className="space-y-2">
                 <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Agent bucket</h2>
                 <p className="text-xs text-slate-500">{bucketDescription}</p>
@@ -703,34 +743,45 @@ export function ReferralHeader({
       <SLAWidget referral={{ ...referral, status, audit: auditEntries }} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr),minmax(280px,1fr)]">
-        <section className="space-y-4 rounded-xl border border-brand/20 bg-white px-5 py-4 shadow-sm">
-          <div className="space-y-1">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Status &amp; progress</h2>
-            <p className="text-xs text-slate-500">Update borrower stage and contract information.</p>
-          </div>
-          <StatusChanger
-            referralId={referral._id}
-            status={status}
-            statuses={REFERRAL_STATUSES}
-            preApprovalAmountCents={preApprovalAmountCents}
-            onStatusChanged={handleStatusChanged}
-            onPreApprovalSaved={handlePreApprovalSaved}
-            onUnderContractIntentChange={onUnderContractIntentChange}
-            onCreateDealRequest={onCreateDealRequest}
-          />
-        </section>
+        <ReferralFollowUpCard referral={followUpReferral} />
         <section className="space-y-4 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
           <div className="space-y-1">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Team assignments</h2>
             <p className="text-xs text-slate-500">Keep the right partners aligned on this referral.</p>
           </div>
-          <ContactAssignment
-            referralId={referral._id}
-            type="agent"
-            contact={effectiveAgentContact}
-            canAssign={canAssignAgent}
-            onContactChange={onAgentContactChange}
-          />
+          {referral.clientType === 'Both' ? (
+            <>
+              <ContactAssignment
+                referralId={referral._id}
+                type="agent"
+                side="buy"
+                contact={effectiveBuySideContact}
+                canAssign={canAssignAgent}
+                onContactChange={onBuySideAgentContactChange}
+              />
+              <ContactAssignment
+                referralId={referral._id}
+                type="agent"
+                side="sell"
+                contact={effectiveSellSideContact}
+                canAssign={canAssignAgent}
+                onContactChange={onSellSideAgentContactChange}
+              />
+            </>
+          ) : (
+            <ContactAssignment
+              referralId={referral._id}
+              type="agent"
+              side={primarySide}
+              contact={effectiveAgentContact}
+              canAssign={canAssignAgent}
+              onContactChange={
+                primarySide === 'sell'
+                  ? onSellSideAgentContactChange
+                  : onBuySideAgentContactChange
+              }
+            />
+          )}
           <ContactAssignment
             referralId={referral._id}
             type="mc"
@@ -741,29 +792,6 @@ export function ReferralHeader({
         </section>
       </div>
 
-      {!isAgentOrigin && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Financial breakdown</h2>
-          <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Agent Commission</dt>
-              <dd className="text-sm font-semibold text-slate-900">{commissionPercent}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Referral Fee %</dt>
-              <dd className="text-sm font-semibold text-slate-900">{referralFeePercent}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Referral Fee Due</dt>
-              <dd className="text-sm font-semibold text-slate-900">{formattedReferralFeeDue}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-slate-500">Deal Side</dt>
-              <dd className="text-sm font-semibold text-slate-900">{dealSideLabel}</dd>
-            </div>
-          </dl>
-        </div>
-      )}
     </div>
   );
 }

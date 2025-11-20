@@ -67,8 +67,14 @@ export interface ReferralLike {
   status?: string;
   statusLastUpdated?: string | Date | null;
   daysInStatus?: number;
+  clientType?: 'Buyer' | 'Seller' | 'Both' | null;
+  dealSide?: 'buy' | 'sell' | null;
   assignedAgent?: { name?: string | null; fullName?: string | null } | null;
   assignedAgentName?: string;
+  buySideAgent?: { name?: string | null; fullName?: string | null } | null;
+  sellSideAgent?: { name?: string | null; fullName?: string | null } | null;
+  buySideAgentName?: string;
+  sellSideAgentName?: string;
   lender?: { name?: string | null } | null;
   origin?: 'agent' | 'mc' | 'admin';
   borrower?: { name?: string };
@@ -83,7 +89,7 @@ export interface ReferralLike {
   } | null;
 }
 
-const TIME_ZONE = 'America/Denver';
+export const SLA_TIME_ZONE = 'America/Phoenix';
 const BUSINESS_START_HOUR = 8;
 const BUSINESS_END_HOUR = 17;
 
@@ -101,6 +107,59 @@ const SLA_THRESHOLDS = {
 
 const holidayCache = new Map<number, Set<string>>();
 
+const normalizeAgentName = (value?: string | null): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const resolveSideAgentName = (referral: ReferralLike, side: 'buy' | 'sell'): string | undefined => {
+  const contact = side === 'sell' ? referral.sellSideAgent : referral.buySideAgent;
+  const fallback = side === 'sell' ? referral.sellSideAgentName : referral.buySideAgentName;
+  return (
+    normalizeAgentName(contact?.name) ??
+    normalizeAgentName(contact?.fullName) ??
+    normalizeAgentName(fallback)
+  );
+};
+
+export const resolvePrimaryAgentName = (referral: ReferralLike): string | undefined => {
+  const sharedName =
+    normalizeAgentName(referral.assignedAgent?.name) ??
+    normalizeAgentName(referral.assignedAgent?.fullName) ??
+    normalizeAgentName(referral.assignedAgentName);
+
+  const buyName = resolveSideAgentName(referral, 'buy');
+  const sellName = resolveSideAgentName(referral, 'sell');
+
+  const preferredSide: 'buy' | 'sell' = (() => {
+    if (referral.dealSide === 'sell') {
+      return 'sell';
+    }
+    if (referral.dealSide === 'buy') {
+      return buyName || !sellName ? 'buy' : 'sell';
+    }
+    if (referral.clientType === 'Seller') {
+      return 'sell';
+    }
+    if (referral.clientType === 'Buyer') {
+      return 'buy';
+    }
+    if (!buyName && sellName) {
+      return 'sell';
+    }
+    return 'buy';
+  })();
+
+  return (
+    (preferredSide === 'sell' ? sellName ?? buyName : buyName ?? sellName) ??
+    sharedName ??
+    undefined
+  );
+};
+
 export const parseTimestamp = (value?: string | Date | null): Date | null => {
   if (!value) return null;
   try {
@@ -110,7 +169,7 @@ export const parseTimestamp = (value?: string | Date | null): Date | null => {
   }
 };
 
-const formatDateKey = (date: Date): string => formatInTimeZone(date, TIME_ZONE, 'yyyy-MM-dd');
+const formatDateKey = (date: Date): string => formatInTimeZone(date, SLA_TIME_ZONE, 'yyyy-MM-dd');
 
 const addObservedHoliday = (date: Date, accumulator: Set<string>) => {
   const observedDate = (() => {
@@ -165,14 +224,14 @@ const getHolidaySet = (year: number): Set<string> => {
 };
 
 const isHoliday = (date: Date): boolean => {
-  const year = Number(formatInTimeZone(date, TIME_ZONE, 'yyyy'));
+  const year = Number(formatInTimeZone(date, SLA_TIME_ZONE, 'yyyy'));
   const holidays = getHolidaySet(year);
   return holidays.has(formatDateKey(date));
 };
 
 const calculateBusinessMinutes = (start: Date, end: Date): number | null => {
-  const zonedStart = utcToZonedTime(start, TIME_ZONE);
-  const zonedEnd = utcToZonedTime(end, TIME_ZONE);
+  const zonedStart = utcToZonedTime(start, SLA_TIME_ZONE);
+  const zonedEnd = utcToZonedTime(end, SLA_TIME_ZONE);
 
   if (isBefore(zonedEnd, zonedStart)) {
     return null;
@@ -513,11 +572,7 @@ export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommenda
   const paidMinutes = durations.find((item) => item.key === 'close-to-paid')?.minutes;
 
   const status = referral.status ?? 'New Lead';
-  const assignedAgentName =
-    referral.assignedAgent?.name ??
-    referral.assignedAgent?.fullName ??
-    referral.assignedAgentName ??
-    undefined;
+  const assignedAgentName = resolvePrimaryAgentName(referral);
 
   const statusLastUpdated = parseTimestamp(referral.statusLastUpdated) ?? createdAt;
   const statusAgeDays =

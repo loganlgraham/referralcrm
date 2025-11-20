@@ -2,12 +2,12 @@
 
 import { FormEvent, useMemo, useState } from 'react';
 import { CalendarPlus, CheckCircle2, Circle, Loader2 } from 'lucide-react';
+import { formatInTimeZone } from 'date-fns-tz';
 
 import { useFollowUpTasks } from '@/components/referrals/use-follow-up-tasks';
-import type { ReferralLike } from '@/utils/sla-insights';
 import { useCalendarTaskSubmission } from '@/components/referrals/use-calendar-task-submission';
 import { useFollowUpTaskContext, type ManualTaskCategory } from '@/components/referrals/follow-up-task-provider';
-import type { RecommendationPriority } from '@/utils/sla-insights';
+import { SLA_TIME_ZONE, type RecommendationPriority, type ReferralLike } from '@/utils/sla-insights';
 import { toast } from 'sonner';
 
 interface ReferralFollowUpCardProps {
@@ -32,6 +32,14 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
   const [manualDueAt, setManualDueAt] = useState('');
   const [manualPriority, setManualPriority] = useState<RecommendationPriority>('medium');
   const [manualCategory, setManualCategory] = useState<ManualTaskCategory>('communication');
+
+  const formatDueDate = (value: string): string => {
+    try {
+      return formatInTimeZone(new Date(value), SLA_TIME_ZONE, "MMM d, yyyy h:mm a 'MST'");
+    } catch (error) {
+      return new Date(value).toLocaleString();
+    }
+  };
 
   const handleManualSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -208,7 +216,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
                   <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                     <span className="font-medium uppercase text-slate-400">{task.priority}</span>
                     {task.supportingMetric && <span>{task.supportingMetric}</span>}
-                    {task.dueAt && <span>Due {new Date(task.dueAt).toLocaleString()}</span>}
+                  {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
                   </div>
                   <div className="mt-3">
                     <button

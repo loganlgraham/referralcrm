@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ChangeEvent, ComponentProps, FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useSWRConfig } from 'swr';
@@ -9,13 +9,10 @@ import { useSWRConfig } from 'swr';
 import { ReferralHeader } from '@/components/referrals/referral-header';
 import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
-import { DealCard } from '@/components/referrals/deal-card';
-import { DealPreparationForm } from '@/components/referrals/deal-preparation-form';
-import type { AgentSelectValue, TerminatedReason } from '@/components/referrals/deal-card';
-import { DEAL_STATUS_LABELS, type DealStatus } from '@/constants/deals';
 import type { Contact } from '@/components/referrals/contact-assignment';
 import type { ReferralStatus } from '@/constants/referrals';
-import { ReferralFollowUpCard } from '@/components/referrals/referral-follow-up-card';
+import { ReferralDeals } from '@/components/referrals/referral-deals';
+import type { ReferralPayment } from '@/types/referral-payment';
 
 type ReferralSource = string;
 type ReferralClientType = 'Seller' | 'Buyer' | 'Both';
@@ -27,25 +24,6 @@ interface ReferralContact {
   name?: string | null;
   email?: string | null;
   phone?: string | null;
-}
-
-interface ReferralPayment {
-  _id: string;
-  status?: string | null;
-  expectedAmountCents?: number | null;
-  receivedAmountCents?: number | null;
-  invoiceDate?: string | null;
-  paidDate?: string | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-  terminatedReason?: string | null;
-  agentAttribution?: string | null;
-  usedAfc?: boolean;
-  usedAssignedAgent?: boolean;
-  commissionBasisPoints?: number | null;
-  referralFeeBasisPoints?: number | null;
-  side?: 'buy' | 'sell' | null;
-  contractPriceCents?: number | null;
 }
 
 interface ReferralDetailNote {
@@ -87,6 +65,8 @@ interface ReferralDetail {
   propertyState?: string | null;
   propertyPostalCode?: string | null;
   assignedAgent?: ReferralContact | null;
+  buySideAgent?: ReferralContact | null;
+  sellSideAgent?: ReferralContact | null;
   lender?: ReferralContact | null;
   payments?: ReferralPayment[];
   notes?: ReferralDetailNote[];
@@ -112,11 +92,6 @@ interface ReferralDetailClientProps {
   referralId: string;
 }
 
-type DealCardProps = ComponentProps<typeof DealCard>;
-type DealCardReferral = DealCardProps['referral'];
-type DealCardDeal = NonNullable<DealCardReferral['payments']>[number];
-type DealCardOverrides = DealCardProps['overrides'];
-type DealCardSummary = DealCardProps['summary'];
 
 interface FinancialState {
   status: ReferralStatus;
@@ -130,19 +105,6 @@ interface FinancialState {
   propertyState?: string;
   propertyPostalCode?: string;
   dealSide?: 'buy' | 'sell';
-}
-
-interface DraftState {
-  propertyAddress?: string;
-  propertyCity?: string;
-  propertyState?: string;
-  propertyPostalCode?: string;
-  contractPriceCents?: number;
-  agentCommissionBasisPoints?: number;
-  referralFeeBasisPoints?: number;
-  referralFeeDueCents?: number;
-  dealSide?: 'buy' | 'sell';
-  hasUnsavedChanges: boolean;
 }
 
 interface DetailDraft {
@@ -233,34 +195,6 @@ const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
   stageOnTransfer: normalizeStageOnTransfer(draft.stageOnTransfer),
 });
 
-const normalizeDealPayments = (
-  payments: ReferralPayment[] | undefined
-): DealCardReferral['payments'] => {
-  if (!Array.isArray(payments)) {
-    return null;
-  }
-
-  return payments.map<DealCardDeal>((payment) => ({
-    _id: payment._id,
-    status: (payment.status as DealStatus | undefined) ?? null,
-    expectedAmountCents: payment.expectedAmountCents ?? null,
-    receivedAmountCents: payment.receivedAmountCents ?? null,
-    createdAt: payment.createdAt ?? null,
-    updatedAt: payment.updatedAt ?? null,
-    paidDate: payment.paidDate ?? null,
-    terminatedReason: payment.terminatedReason
-      ? (payment.terminatedReason as TerminatedReason)
-      : null,
-    agentAttribution: payment.agentAttribution as AgentSelectValue | undefined,
-    usedAfc: payment.usedAfc ?? null,
-    usedAssignedAgent: payment.usedAssignedAgent ?? null,
-    commissionBasisPoints: payment.commissionBasisPoints ?? null,
-    referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
-    side: payment.side ?? null,
-    contractPriceCents: payment.contractPriceCents ?? null,
-  }));
-};
-
 const formatFullAddress = (
   street?: string | null,
   city?: string | null,
@@ -294,13 +228,23 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [detailsDraft, setDetailsDraft] = useState<DetailDraft>(() => createDetailDraft(initialReferral));
   const [savingDetails, setSavingDetails] = useState(false);
-  const [agentContact, setAgentContact] = useState<Contact | null>(() =>
-    initialReferral.assignedAgent
+  const [buySideAgentContact, setBuySideAgentContact] = useState<Contact | null>(() =>
+    initialReferral.buySideAgent
       ? {
-          id: initialReferral.assignedAgent._id ?? initialReferral.assignedAgent.id ?? null,
-          name: initialReferral.assignedAgent.name ?? null,
-          email: initialReferral.assignedAgent.email ?? null,
-          phone: initialReferral.assignedAgent.phone ?? null,
+          id: initialReferral.buySideAgent._id ?? initialReferral.buySideAgent.id ?? null,
+          name: initialReferral.buySideAgent.name ?? null,
+          email: initialReferral.buySideAgent.email ?? null,
+          phone: initialReferral.buySideAgent.phone ?? null,
+        }
+      : null
+  );
+  const [sellSideAgentContact, setSellSideAgentContact] = useState<Contact | null>(() =>
+    initialReferral.sellSideAgent
+      ? {
+          id: initialReferral.sellSideAgent._id ?? initialReferral.sellSideAgent.id ?? null,
+          name: initialReferral.sellSideAgent.name ?? null,
+          email: initialReferral.sellSideAgent.email ?? null,
+          phone: initialReferral.sellSideAgent.phone ?? null,
         }
       : null
   );
@@ -314,11 +258,34 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         }
       : null
   );
-  const handleAgentContactChange = (contact: Contact | null) => {
-    setAgentContact(contact);
+  const handleBuySideAgentContactChange = (contact: Contact | null) => {
+    setBuySideAgentContact(contact);
     router.refresh();
     void mutate(activityFeedKey);
   };
+
+  const handleSellSideAgentContactChange = (contact: Contact | null) => {
+    setSellSideAgentContact(contact);
+    router.refresh();
+    void mutate(activityFeedKey);
+  };
+
+  const mapReferralContact = (contact: ReferralContact | null | undefined): Contact | null => {
+    if (!contact) return null;
+    return {
+      id: contact._id ?? contact.id ?? null,
+      name: contact.name ?? null,
+      email: contact.email ?? null,
+      phone: contact.phone ?? null,
+    };
+  };
+
+  const hasSideAssignments = Boolean(
+    buySideAgentContact ||
+      sellSideAgentContact ||
+      referral.buySideAgent ||
+      referral.sellSideAgent
+  );
 
   const handleMcContactChange = (contact: Contact | null) => {
     setMcContact(contact);
@@ -344,54 +311,115 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         ? initialReferral.dealSide
         : 'buy',
   });
-  const [contractDraft, setContractDraft] = useState<DraftState>({ hasUnsavedChanges: false });
-  const [contractPrepActive, setContractPrepActive] = useState(false);
-  const dealSectionRef = useRef<HTMLDivElement | null>(null);
-  const handleCreateDealRequest = useCallback(() => {
-    setContractPrepActive(true);
-    if (typeof window !== 'undefined') {
-      window.requestAnimationFrame(() => {
-        dealSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
+  const primarySide = useMemo<'buy' | 'sell'>(() => {
+    if (financials.dealSide === 'sell') {
+      return 'sell';
     }
-  }, []);
-  const handleDealCreated = useCallback(
-    (deal: ReferralPayment) => {
-      if (!deal?._id) {
-        return;
+    if (financials.dealSide === 'buy') {
+      if (buySideAgentContact || referral.buySideAgent) {
+        return 'buy';
+      }
+      if (!buySideAgentContact && !referral.buySideAgent && (sellSideAgentContact || referral.sellSideAgent)) {
+        return 'sell';
+      }
+      return 'buy';
+    }
+    if (referral.dealSide === 'sell') {
+      return 'sell';
+    }
+    if (referral.dealSide === 'buy') {
+      return 'buy';
+    }
+    if (referral.clientType === 'Seller') {
+      return 'sell';
+    }
+    if (referral.clientType === 'Buyer') {
+      return 'buy';
+    }
+    if (!buySideAgentContact && !referral.buySideAgent && (sellSideAgentContact || referral.sellSideAgent)) {
+      return 'sell';
+    }
+    return 'buy';
+  }, [
+    buySideAgentContact,
+    financials.dealSide,
+    referral.buySideAgent,
+    referral.clientType,
+    referral.dealSide,
+    referral.sellSideAgent,
+    sellSideAgentContact,
+  ]);
+
+  const primaryAgentContact = useMemo(() => {
+    const buyContact = buySideAgentContact ?? mapReferralContact(referral.buySideAgent);
+    const sellContact = sellSideAgentContact ?? mapReferralContact(referral.sellSideAgent);
+    const preferred = primarySide === 'sell' ? sellContact : buyContact;
+    if (preferred) {
+      return preferred;
+    }
+    const alternate = primarySide === 'sell' ? buyContact : sellContact;
+    if (alternate) {
+      return alternate;
+    }
+    if (!hasSideAssignments) {
+      return mapReferralContact(referral.assignedAgent);
+    }
+    return null;
+  }, [
+    buySideAgentContact,
+    hasSideAssignments,
+    primarySide,
+    referral.assignedAgent,
+    referral.buySideAgent,
+    referral.sellSideAgent,
+    sellSideAgentContact,
+  ]);
+  const handleDealCreated = useCallback((deal: ReferralPayment) => {
+    if (!deal?._id) {
+      return;
+    }
+
+    setReferral((previous) => {
+      const existingPayments = Array.isArray(previous.payments) ? previous.payments : [];
+      if (existingPayments.some((payment) => payment._id === deal._id)) {
+        return previous;
       }
 
-      setContractPrepActive(false);
-      setContractDraft({ hasUnsavedChanges: false });
+      return {
+        ...previous,
+        payments: [deal, ...existingPayments],
+      };
+    });
+    void mutate(activityFeedKey);
+  }, [activityFeedKey, mutate]);
+  const handleDealUpdated = useCallback((deal: ReferralPayment) => {
+    if (!deal?._id) {
+      return;
+    }
 
-      setReferral((previous) => {
-        const existingPayments = Array.isArray(previous.payments) ? previous.payments : [];
-        if (existingPayments.some((payment) => payment._id === deal._id)) {
-          return previous;
-        }
+    setReferral((previous) => {
+      const existingPayments = Array.isArray(previous.payments) ? previous.payments : [];
+      const updatedPayments = existingPayments.map((payment) =>
+        payment._id === deal._id ? { ...payment, ...deal } : payment
+      );
 
-        return {
-          ...previous,
-          payments: [deal, ...existingPayments],
-        };
-      });
-    },
-    []
-  );
-  const contractHandlersRef = useRef<{
-    onContractSaved: (details: {
-      propertyAddress: string;
-      propertyCity: string;
-      propertyState: string;
-      propertyPostalCode: string;
-      contractPriceCents: number;
-      agentCommissionBasisPoints: number;
-      referralFeeBasisPoints: number;
-      referralFeeDueCents: number;
-      dealSide: 'buy' | 'sell';
-    }) => void;
-    onContractDraftChange: (draft: DraftState) => void;
-  } | null>(null);
+      return {
+        ...previous,
+        payments: updatedPayments,
+      };
+    });
+  }, []);
+
+  const handleDealDeleted = useCallback((id: string) => {
+    if (!id) return;
+    setReferral((previous) => {
+      const existingPayments = Array.isArray(previous.payments) ? previous.payments : [];
+      return {
+        ...previous,
+        payments: existingPayments.filter((payment) => payment._id !== id),
+      };
+    });
+  }, []);
   const [deleting, setDeleting] = useState(false);
 
   const normalizedDetailDraft = useMemo(() => normalizeDetailDraft(detailsDraft), [detailsDraft]);
@@ -529,17 +557,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   ]);
 
   useEffect(() => {
-    setAgentContact(
-      referral.assignedAgent
-        ? {
-            id: referral.assignedAgent._id ?? referral.assignedAgent.id ?? null,
-            name: referral.assignedAgent.name ?? null,
-            email: referral.assignedAgent.email ?? null,
-            phone: referral.assignedAgent.phone ?? null,
-          }
-        : null
-    );
-  }, [referral.assignedAgent]);
+    setBuySideAgentContact(mapReferralContact(referral.buySideAgent));
+  }, [referral.buySideAgent]);
+
+  useEffect(() => {
+    setSellSideAgentContact(mapReferralContact(referral.sellSideAgent));
+  }, [referral.sellSideAgent]);
 
   useEffect(() => {
     setMcContact(
@@ -838,15 +861,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       return next;
     });
 
+    const shouldRefreshActivityFeed = Boolean(
+      snapshot.statusLastUpdated || snapshot.daysInStatus !== undefined
+    );
     if (
-      statusChanged ||
-      preApprovalChanged ||
-      contractValueChanged ||
-      referralFeeChanged ||
-      commissionChanged ||
-      referralFeeBasisChanged ||
-      dealSideChanged ||
-      propertyFieldsTouched
+      shouldRefreshActivityFeed &&
+      (statusChanged || snapshot.statusLastUpdated || snapshot.daysInStatus !== undefined)
     ) {
       void mutate(activityFeedKey);
     }
@@ -919,26 +939,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     }
   };
 
-  const handleDraftChange = (draft: DraftState) => {
-    setContractDraft((previous) => {
-      if (
-        previous.hasUnsavedChanges === draft.hasUnsavedChanges &&
-        previous.propertyAddress === draft.propertyAddress &&
-        previous.propertyCity === draft.propertyCity &&
-        previous.propertyState === draft.propertyState &&
-        previous.propertyPostalCode === draft.propertyPostalCode &&
-        previous.contractPriceCents === draft.contractPriceCents &&
-        previous.agentCommissionBasisPoints === draft.agentCommissionBasisPoints &&
-        previous.referralFeeBasisPoints === draft.referralFeeBasisPoints &&
-        previous.referralFeeDueCents === draft.referralFeeDueCents &&
-        previous.dealSide === draft.dealSide
-      ) {
-        return previous;
-      }
-      return draft;
-    });
-  };
-
   const headerReferral = {
     ...referral,
     status: financials.status,
@@ -954,131 +954,17 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
   };
 
-  const normalizedDeals = useMemo(
-    () => normalizeDealPayments(referral.payments),
+  const referralDeals = useMemo(
+    () =>
+      Array.isArray(referral.payments)
+        ? [...referral.payments].sort((a, b) => {
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return timeB - timeA;
+          })
+        : [],
     [referral.payments]
   );
-
-  const dealReferral: DealCardReferral = {
-    _id: referral._id,
-    propertyAddress:
-      formatFullAddress(
-        financials.propertyAddress ?? referral.propertyAddress ?? undefined,
-        financials.propertyCity ?? referral.propertyCity ?? undefined,
-        financials.propertyState ?? (referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined),
-        financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined
-      ) ?? financials.propertyAddress ?? referral.propertyAddress ?? undefined,
-    lookingInZip: referral.lookingInZip ?? null,
-    lookingInZips: Array.isArray(referral.lookingInZips) ? referral.lookingInZips : null,
-    origin: referral.origin ?? null,
-    referralFeeDueCents: financials.referralFeeDueCents ?? referral.referralFeeDueCents ?? null,
-    payments: normalizedDeals,
-    ahaBucket:
-      referral.ahaBucket === null || referral.ahaBucket === undefined
-        ? null
-        : (referral.ahaBucket as AgentSelectValue),
-    dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
-  };
-
-  const baseOverrideAddress =
-    formatFullAddress(
-      financials.propertyAddress ?? referral.propertyAddress ?? undefined,
-      financials.propertyCity ?? referral.propertyCity ?? undefined,
-      financials.propertyState ?? (referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined),
-      financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined
-    ) ?? financials.propertyAddress ?? referral.propertyAddress;
-
-  const dealOverrides: DealCardOverrides = contractDraft.hasUnsavedChanges
-    ? {
-        referralFeeDueCents:
-          contractDraft.referralFeeDueCents !== undefined
-            ? contractDraft.referralFeeDueCents
-            : financials.referralFeeDueCents,
-        propertyAddress:
-          contractDraft.propertyAddress ??
-          formatFullAddress(
-            contractDraft.propertyAddress ?? financials.propertyAddress ?? referral.propertyAddress ?? undefined,
-            contractDraft.propertyCity ?? financials.propertyCity ?? referral.propertyCity ?? undefined,
-            contractDraft.propertyState ?? financials.propertyState ?? (referral.propertyState
-              ? String(referral.propertyState).toUpperCase()
-              : undefined),
-            contractDraft.propertyPostalCode ?? financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined
-          ) ?? baseOverrideAddress,
-        contractPriceCents:
-          contractDraft.contractPriceCents !== undefined
-            ? contractDraft.contractPriceCents
-            : financials.contractPriceCents,
-        commissionBasisPoints:
-          contractDraft.agentCommissionBasisPoints !== undefined
-            ? contractDraft.agentCommissionBasisPoints
-            : financials.commissionBasisPoints,
-        referralFeeBasisPoints:
-          contractDraft.referralFeeBasisPoints !== undefined
-            ? contractDraft.referralFeeBasisPoints
-            : financials.referralFeeBasisPoints,
-        dealSide: contractDraft.dealSide ?? financials.dealSide ?? 'buy',
-        hasUnsavedContractChanges: true,
-      }
-    : {
-        referralFeeDueCents: financials.referralFeeDueCents,
-        propertyAddress: baseOverrideAddress,
-        contractPriceCents: financials.contractPriceCents,
-        commissionBasisPoints: financials.commissionBasisPoints,
-        referralFeeBasisPoints: financials.referralFeeBasisPoints,
-        dealSide: financials.dealSide ?? 'buy',
-        hasUnsavedContractChanges: false,
-      };
-
-  const dealPayments = normalizedDeals ?? [];
-  const hasTerminatedDeal = dealPayments.some((payment) => payment.status === 'terminated');
-  const hasAnyDeals = dealPayments.length > 0;
-  const activeDealStatusLabel = useMemo(() => {
-    for (const payment of dealPayments) {
-      const status = (payment.status as DealStatus | undefined) ?? 'under_contract';
-      if (status !== 'terminated') {
-        return DEAL_STATUS_LABELS[status] ?? null;
-      }
-    }
-    if (dealPayments[0]?.status) {
-      const fallback = dealPayments[0].status as DealStatus;
-      return DEAL_STATUS_LABELS[fallback] ?? null;
-    }
-    return null;
-  }, [dealPayments]);
-
-  const dealSummary: DealCardSummary = {
-    borrowerName: referral.borrower?.name ?? null,
-    statusLabel: activeDealStatusLabel ?? financials.status,
-    propertyAddress: baseOverrideAddress ?? null,
-    contractPriceCents: financials.contractPriceCents ?? referral.estPurchasePriceCents ?? null,
-    referralFeeDueCents: financials.referralFeeDueCents ?? referral.referralFeeDueCents ?? null,
-    commissionBasisPoints: financials.commissionBasisPoints ?? referral.commissionBasisPoints ?? null,
-    referralFeeBasisPoints: financials.referralFeeBasisPoints ?? referral.referralFeeBasisPoints ?? null,
-    dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
-  };
-
-  useEffect(() => {
-    if (financials.status === 'Under Contract' && !hasAnyDeals) {
-      setContractPrepActive(true);
-      return;
-    }
-
-    if (hasAnyDeals && !contractDraft.hasUnsavedChanges) {
-      setContractPrepActive(false);
-      return;
-    }
-
-    if (financials.status !== 'Under Contract' && !contractDraft.hasUnsavedChanges) {
-      setContractPrepActive(false);
-    }
-  }, [contractDraft.hasUnsavedChanges, financials.status, hasAnyDeals]);
-
-  const shouldShowDealPreparation =
-    contractPrepActive ||
-    contractDraft.hasUnsavedChanges ||
-    (!hasAnyDeals && financials.status === 'Under Contract');
-
-  const showDeals = contractPrepActive || contractDraft.hasUnsavedChanges || hasTerminatedDeal || hasAnyDeals;
 
   const followUpReferral = useMemo(() => {
     const createdAt = (() => {
@@ -1131,27 +1017,44 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       status: financials.status,
       statusLastUpdated: referral.statusLastUpdated,
       daysInStatus: referral.daysInStatus,
-      assignedAgent: agentContact?.name
-        ? { name: agentContact.name }
+      clientType: referral.clientType ?? null,
+      dealSide:
+        financials.dealSide ??
+        (referral.dealSide === 'sell' || referral.dealSide === 'buy' ? referral.dealSide : null),
+      assignedAgent: primaryAgentContact?.name
+        ? { name: primaryAgentContact.name }
         : referral.assignedAgent?.name
         ? { name: referral.assignedAgent.name }
         : null,
       assignedAgentName:
-        agentContact?.name ?? referral.assignedAgent?.name ?? undefined,
+        primaryAgentContact?.name ?? referral.assignedAgent?.name ?? undefined,
+      buySideAgent: referral.buySideAgent
+        ? { name: referral.buySideAgent.name ?? null, fullName: referral.buySideAgent.name ?? null }
+        : null,
+      sellSideAgent: referral.sellSideAgent
+        ? { name: referral.sellSideAgent.name ?? null, fullName: referral.sellSideAgent.name ?? null }
+        : null,
+      buySideAgentName: referral.buySideAgent?.name ?? undefined,
+      sellSideAgentName: referral.sellSideAgent?.name ?? undefined,
       borrower: referral.borrower,
       notes: referral.notes ?? [],
       payments: referral.payments ?? [],
       audit: auditEntries,
     };
   }, [
-    agentContact?.name,
+    primaryAgentContact?.name,
     financials.status,
+    financials.dealSide,
     referral._id,
     referral.audit,
+    referral.clientType,
     referral.borrower,
     referral.createdAt,
     referral.daysInStatus,
+    referral.dealSide,
     referral.notes,
+    referral.buySideAgent,
+    referral.sellSideAgent,
     referral.payments,
     referral.statusLastUpdated,
     referral.assignedAgent?.name,
@@ -1162,19 +1065,15 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       <ReferralHeader
         referral={headerReferral}
         viewerRole={viewerRole}
+        followUpReferral={followUpReferral}
         onFinancialsChange={handleFinancialsChange}
-        onContractDraftChange={handleDraftChange}
-        onUnderContractIntentChange={setContractPrepActive}
-        onContractHandlersReady={(handlers) => {
-          contractHandlersRef.current = handlers;
-        }}
-        onCreateDealRequest={handleCreateDealRequest}
-        agentContact={agentContact}
+        buySideAgentContact={buySideAgentContact}
+        sellSideAgentContact={sellSideAgentContact}
         mcContact={mcContact}
-        onAgentContactChange={handleAgentContactChange}
+        onBuySideAgentContactChange={handleBuySideAgentContactChange}
+        onSellSideAgentContactChange={handleSellSideAgentContactChange}
         onMcContactChange={handleMcContactChange}
       />
-      <ReferralFollowUpCard referral={followUpReferral} />
       <section className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -1341,8 +1240,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         initialNotes={notes}
         viewerRole={viewerRole}
         agentContact={{
-          name: agentContact?.name ?? null,
-          email: agentContact?.email ?? null
+          name: primaryAgentContact?.name ?? null,
+          email: primaryAgentContact?.email ?? null
         }}
         mcContact={{
           name: mcContact?.name ?? null,
@@ -1350,43 +1249,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         }}
         adminContacts={referral.adminContacts ?? []}
       />
-      {showDeals && (
-        <div ref={dealSectionRef} className="space-y-4">
-          <DealCard
-            referral={dealReferral}
-            overrides={dealOverrides}
-            summary={dealSummary}
-            viewerRole={viewerRole}
-            onAddDeal={handleCreateDealRequest}
-          />
-          {shouldShowDealPreparation && (
-            <DealPreparationForm
-              referralId={referralId}
-              previousStatus={financials.status}
-              visible={shouldShowDealPreparation}
-              contractDetails={{
-                propertyAddress: financials.propertyAddress ?? referral.propertyAddress ?? undefined,
-                propertyCity: financials.propertyCity ?? referral.propertyCity ?? undefined,
-                propertyState:
-                  financials.propertyState ??
-                  (referral.propertyState ? String(referral.propertyState).toUpperCase() : undefined),
-                propertyPostalCode: financials.propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
-                contractPriceCents: financials.contractPriceCents,
-                agentCommissionBasisPoints: financials.commissionBasisPoints,
-                referralFeeBasisPoints: financials.referralFeeBasisPoints,
-                dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
-              }}
-              onContractDraftChange={(draft) => {
-                contractHandlersRef.current?.onContractDraftChange(draft);
-              }}
-              onContractSaved={(details) => {
-                contractHandlersRef.current?.onContractSaved(details);
-              }}
-              onDealCreated={handleDealCreated}
-            />
-          )}
-        </div>
-      )}
+      <ReferralDeals
+        referralId={referralId}
+        deals={referralDeals}
+        onDealCreated={handleDealCreated}
+        onDealUpdated={handleDealUpdated}
+        onDealDeleted={handleDealDeleted}
+        viewerRole={viewerRole}
+      />
       <ReferralTimeline referralId={referralId} />
       {canDelete && (
         <div className="flex justify-end">

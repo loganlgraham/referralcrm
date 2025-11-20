@@ -44,7 +44,8 @@ export const createActivitySchema = z.object({
 });
 
 export const assignAgentSchema = z.object({
-  agentId: z.string().min(1)
+  agentId: z.string().min(1),
+  side: z.enum(['buy', 'sell']).optional()
 });
 
 export const assignLenderSchema = z.object({
@@ -69,7 +70,8 @@ export const updateStatusSchema = z.object({
       referralFeePercentage: z.number().min(0),
       dealSide: z.enum(['buy', 'sell'])
     })
-    .optional()
+    .optional(),
+  createNewDeal: z.boolean().optional()
 });
 
 export const createReferralNoteSchema = z.object({
@@ -108,6 +110,9 @@ export const paymentSchema = z.object({
     .nullable()
     .optional(),
   agentAttribution: z.enum(['AHA', 'AHA_OOS', 'OUTSIDE_AGENT']).nullable().optional(),
+  agentId: z
+    .union([z.string().trim().regex(/^[0-9a-fA-F]{24}$/), z.literal(null)])
+    .optional(),
   usedAfc: z.boolean().optional(),
   usedAssignedAgent: z.boolean().optional(),
   invoiceDate: z.string().optional(),
@@ -116,5 +121,7 @@ export const paymentSchema = z.object({
   side: z.enum(['buy', 'sell']).optional(),
   commissionBasisPoints: z.number().int().min(0).optional(),
   referralFeeBasisPoints: z.number().int().min(0).optional(),
-  contractPriceCents: z.number().int().min(0).optional()
+  contractPriceCents: z.number().int().min(0).optional(),
+  netReferralFeePaidCents: z.number().int().min(0).optional(),
+  propertyAddress: z.union([z.string().trim().min(1), z.null()]).optional()
 });

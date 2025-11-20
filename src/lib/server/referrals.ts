@@ -36,8 +36,11 @@ interface PopulatedLender {
   phone?: string;
 }
 
-interface PopulatedReferral extends Omit<ReferralDocument, 'assignedAgent' | 'lender'> {
+interface PopulatedReferral
+  extends Omit<ReferralDocument, 'assignedAgent' | 'lender' | 'buySideAgent' | 'sellSideAgent'> {
   assignedAgent?: PopulatedAgent;
+  buySideAgent?: PopulatedAgent;
+  sellSideAgent?: PopulatedAgent;
   lender?: PopulatedLender;
 }
 
@@ -49,6 +52,7 @@ interface ReferralListItem {
   borrowerPhone: string;
   endorser?: string;
   clientType: 'Seller' | 'Buyer' | 'Both';
+  dealSide?: 'buy' | 'sell' | null;
   lookingInZip: string;
   lookingInZips?: string[];
   borrowerCurrentAddress?: string;
@@ -60,6 +64,8 @@ interface ReferralListItem {
   statusLastUpdated?: string | null;
   daysInStatus?: number;
   assignedAgentName?: string;
+  buySideAgentName?: string;
+  sellSideAgentName?: string;
   assignedAgentEmail?: string;
   assignedAgentPhone?: string;
   lenderName?: string;
@@ -79,6 +85,14 @@ export async function getReferrals(params: GetReferralsParams) {
   await connectMongo();
 
   const query: Record<string, unknown> = { deletedAt: null };
+  const appendAgentFilter = (conditions: Record<string, unknown>[]) => {
+    if (query.$or) {
+      query.$and = [...(Array.isArray(query.$and) ? (query.$and as unknown[]) : []), { $or: query.$or }, { $or: conditions }];
+      delete query.$or;
+    } else {
+      query.$or = conditions;
+    }
+  };
 
   if (status) query.status = status;
   const orFilters: Record<string, unknown>[] = [];
@@ -116,7 +130,11 @@ export async function getReferrals(params: GetReferralsParams) {
         pageSize: PAGE_SIZE
       };
     }
-    query.assignedAgent = agent._id;
+    appendAgentFilter([
+      { assignedAgent: agent._id },
+      { buySideAgent: agent._id },
+      { sellSideAgent: agent._id },
+    ]);
   }
   if (mc) {
     if (Types.ObjectId.isValid(mc)) {
@@ -132,13 +150,21 @@ export async function getReferrals(params: GetReferralsParams) {
   }
   if (agent) {
     if (Types.ObjectId.isValid(agent)) {
-      query.assignedAgent = new Types.ObjectId(agent);
+      appendAgentFilter([
+        { assignedAgent: new Types.ObjectId(agent) },
+        { buySideAgent: new Types.ObjectId(agent) },
+        { sellSideAgent: new Types.ObjectId(agent) },
+      ]);
     } else {
       const agentDoc = await Agent.findOne({
         $or: [{ name: new RegExp(agent, 'i') }, { email: new RegExp(agent, 'i') }]
       });
       if (agentDoc) {
-        query.assignedAgent = agentDoc._id;
+        appendAgentFilter([
+          { assignedAgent: agentDoc._id },
+          { buySideAgent: agentDoc._id },
+          { sellSideAgent: agentDoc._id },
+        ]);
       }
     }
   }
@@ -148,6 +174,28 @@ export async function getReferrals(params: GetReferralsParams) {
     if (key === '$or' && Array.isArray(value)) {
       paymentMatch.$or = value.map((clause) => {
         const scoped = Object.entries(clause).map(([innerKey, innerValue]) => [
+          `referral.${innerKey}`,
+          innerValue,
+        ]);
+        return Object.fromEntries(scoped);
+      });
+      return;
+    }
+    if (key === '$and' && Array.isArray(value)) {
+      paymentMatch.$and = value.map((clause) => {
+        if (clause && typeof clause === 'object' && '$or' in (clause as Record<string, unknown>)) {
+          const innerOr = (clause as any).$or as Record<string, unknown>[];
+          return {
+            $or: innerOr.map((innerClause) => {
+              const scoped = Object.entries(innerClause).map(([innerKey, innerValue]) => [
+                `referral.${innerKey}`,
+                innerValue,
+              ]);
+              return Object.fromEntries(scoped);
+            })
+          };
+        }
+        const scoped = Object.entries(clause as Record<string, unknown>).map(([innerKey, innerValue]) => [
           `referral.${innerKey}`,
           innerValue,
         ]);
@@ -167,6 +215,8 @@ export async function getReferrals(params: GetReferralsParams) {
   const [items, total, closedDealAggregation, activeReferrals] = await Promise.all([
     Referral.find(query)
       .populate<{ assignedAgent: PopulatedAgent }>('assignedAgent', 'name email phone')
+      .populate<{ buySideAgent: PopulatedAgent }>('buySideAgent', 'name email phone')
+      .populate<{ sellSideAgent: PopulatedAgent }>('sellSideAgent', 'name email phone')
       .populate<{ lender: PopulatedLender }>('lender', 'name email phone')
       .sort({ createdAt: -1 })
       .skip((page - 1) * PAGE_SIZE)
@@ -199,6 +249,38 @@ export async function getReferrals(params: GetReferralsParams) {
   const closeRate = total === 0 ? 0 : (closedDeals / total) * 100;
 
   const referralIds = items.map((item) => item._id);
+  const resolveAgent = (item: PopulatedReferral) => {
+    const buyAgent = item.buySideAgent ?? null;
+    const sellAgent = item.sellSideAgent ?? null;
+    const hasBuyAgent = Boolean(buyAgent);
+    const hasSellAgent = Boolean(sellAgent);
+    const preferredSide: 'buy' | 'sell' = (() => {
+      if (item.dealSide === 'sell') {
+        return 'sell';
+      }
+      if (item.dealSide === 'buy') {
+        if (hasBuyAgent || !hasSellAgent) {
+          return 'buy';
+        }
+        return 'sell';
+      }
+      if (item.clientType === 'Seller') {
+        return 'sell';
+      }
+      if (item.clientType === 'Buyer') {
+        return 'buy';
+      }
+      if (!hasBuyAgent && hasSellAgent) {
+        return 'sell';
+      }
+      return 'buy';
+    })();
+
+    if (preferredSide === 'sell') {
+      return sellAgent ?? buyAgent ?? item.assignedAgent ?? null;
+    }
+    return buyAgent ?? sellAgent ?? item.assignedAgent ?? null;
+  };
   const paymentDocs = await Payment.find({ referralId: { $in: referralIds } })
     .sort({ createdAt: -1 })
     .select('referralId status')
@@ -223,6 +305,7 @@ export async function getReferrals(params: GetReferralsParams) {
 
   return {
     items: items.map((item: PopulatedReferral) => {
+      const agent = resolveAgent(item);
       const dealRecord = dealStatusMap.get(item._id.toString());
       const dealStatus = dealRecord?.primary ?? dealRecord?.fallback ?? null;
       const dealStatusLabel = dealStatus
@@ -253,14 +336,17 @@ export async function getReferrals(params: GetReferralsParams) {
         status: normalizedStatus,
         statusLastUpdated: item.statusLastUpdated ? item.statusLastUpdated.toISOString() : null,
         daysInStatus: differenceInDays(new Date(), item.statusLastUpdated ?? item.createdAt),
-        assignedAgentName: item.assignedAgent?.name,
-        assignedAgentEmail: item.assignedAgent?.email,
-        assignedAgentPhone: item.assignedAgent?.phone,
+        assignedAgentName: agent?.name,
+        buySideAgentName: item.buySideAgent?.name,
+        sellSideAgentName: item.sellSideAgent?.name,
+        assignedAgentEmail: agent?.email,
+        assignedAgentPhone: agent?.phone,
         lenderName: item.lender?.name,
         lenderEmail: item.lender?.email,
         lenderPhone: item.lender?.phone,
         referralFeeDueCents: item.referralFeeDueCents,
         preApprovalAmountCents: item.preApprovalAmountCents,
+        dealSide: item.dealSide === 'sell' ? 'sell' : 'buy',
         dealStatus,
         dealStatusLabel,
         origin:
@@ -289,6 +375,14 @@ export async function getReferralById(id: string) {
       'assignedAgent',
       'name email phone'
     )
+    .populate<{ buySideAgent: { _id: Types.ObjectId; name: string; email?: string; phone?: string } }>(
+      'buySideAgent',
+      'name email phone'
+    )
+    .populate<{ sellSideAgent: { _id: Types.ObjectId; name: string; email?: string; phone?: string } }>(
+      'sellSideAgent',
+      'name email phone'
+    )
     .populate<{ lender: { _id: Types.ObjectId; name: string; email?: string; phone?: string } }>(
       'lender',
       'name email phone'
@@ -299,6 +393,7 @@ export async function getReferralById(id: string) {
 
   const payments = await Payment.find({ referralId: referral._id })
     .sort({ createdAt: -1 })
+    .populate('agentId', 'name')
     .lean();
   const daysInStatus = differenceInDays(new Date(), referral.statusLastUpdated ?? referral.createdAt);
 
@@ -338,6 +433,12 @@ export async function getReferralById(id: string) {
     assignedAgent: referral.assignedAgent
       ? { ...referral.assignedAgent, _id: referral.assignedAgent._id.toString() }
       : null,
+    buySideAgent: referral.buySideAgent
+      ? { ...referral.buySideAgent, _id: referral.buySideAgent._id.toString() }
+      : null,
+    sellSideAgent: referral.sellSideAgent
+      ? { ...referral.sellSideAgent, _id: referral.sellSideAgent._id.toString() }
+      : null,
     lender: referral.lender ? { ...referral.lender, _id: referral.lender._id.toString() } : null,
     payments: payments.map((payment: any) => ({
       _id: payment._id.toString(),
@@ -350,11 +451,32 @@ export async function getReferralById(id: string) {
       updatedAt: payment.updatedAt ? payment.updatedAt.toISOString() : null,
       terminatedReason: payment.terminatedReason ?? null,
       agentAttribution: payment.agentAttribution ?? null,
+      agent:
+        payment.agentId
+          ? {
+              id:
+                typeof payment.agentId === 'string'
+                  ? payment.agentId
+                  : payment.agentId instanceof Types.ObjectId
+                  ? payment.agentId.toString()
+                  : payment.agentId._id?.toString?.() ?? '',
+              name:
+                typeof payment.agentId === 'object' && payment.agentId !== null && 'name' in payment.agentId
+                  ? (payment.agentId as { name?: string | null }).name ?? null
+                  : null,
+            }
+          : null,
       usedAfc: Boolean(payment.usedAfc),
       usedAssignedAgent: Boolean(payment.usedAssignedAgent),
       commissionBasisPoints: payment.commissionBasisPoints ?? null,
       referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
       side: payment.side ?? null,
+      agentId:
+        typeof payment.agentId === 'string'
+          ? payment.agentId
+          : payment.agentId instanceof Types.ObjectId
+          ? payment.agentId.toString()
+          : payment.agentId?._id?.toString?.() ?? null,
     })),
     preApprovalAmountCents: typeof referral.preApprovalAmountCents === 'number' ? referral.preApprovalAmountCents : 0,
     estPurchasePriceCents: typeof referral.estPurchasePriceCents === 'number' ? referral.estPurchasePriceCents : 0,

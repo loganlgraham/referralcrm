@@ -28,6 +28,11 @@ type ReferralSummary = {
   dealSide?: 'buy' | 'sell' | null;
 };
 
+type AgentSummary = {
+  _id: Types.ObjectId;
+  name?: string | null;
+};
+
 type PaymentWithReferral = {
   _id: Types.ObjectId;
   referralId: ReferralSummary | null;
@@ -39,12 +44,15 @@ type PaymentWithReferral = {
   agentAttribution?: string | null;
   usedAfc?: boolean | null;
   usedAssignedAgent?: boolean | null;
+  netReferralFeePaidCents?: number | null;
+  propertyAddress?: string | null;
   invoiceDate?: Date | null;
   paidDate?: Date | null;
   createdAt?: Date | null;
   commissionBasisPoints?: number | null;
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
+  agentId?: Types.ObjectId | AgentSummary | null;
 };
 
 const toDate = (value?: Date | string | null): Date | null => {
@@ -123,45 +131,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       select:
         'borrower propertyAddress lookingInZip lookingInZips assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents ahaBucket loanFileNumber',
     })
+    .populate<{ agentId: AgentSummary | Types.ObjectId | null }>({ path: 'agentId', select: 'name' })
     .lean<PaymentWithReferral[]>();
-
-  const agentNameMap = new Map<string, string>();
-  const assignedAgentIds = new Set<string>();
-
-  payments.forEach((payment) => {
-    const referral = payment.referralId as ReferralSummary | null;
-    const assignedAgent = referral?.assignedAgent;
-    if (assignedAgent) {
-      const id =
-        typeof assignedAgent === 'string'
-          ? assignedAgent
-          : assignedAgent instanceof Types.ObjectId
-          ? assignedAgent.toString()
-          : '';
-      if (id && !assignedAgentIds.has(id)) {
-        assignedAgentIds.add(id);
-      }
-    }
-  });
-
-  if (assignedAgentIds.size > 0) {
-    const agentObjectIds: Types.ObjectId[] = [];
-    assignedAgentIds.forEach((id) => {
-      if (Types.ObjectId.isValid(id)) {
-        agentObjectIds.push(new Types.ObjectId(id));
-      }
-    });
-
-    if (agentObjectIds.length > 0) {
-      const agentDocs = await Agent.find({ _id: { $in: agentObjectIds } })
-        .select('name')
-        .lean<{ _id: Types.ObjectId; name?: string | null }[]>();
-
-      agentDocs.forEach((agent) => {
-        agentNameMap.set(agent._id.toString(), agent.name ?? '');
-      });
-    }
-  }
 
   const serialized = payments.map((payment) => {
     const referral = payment.referralId ?? null;
@@ -174,6 +145,34 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         : referral.assignedAgent?.toString?.() ?? null
       : null;
 
+    const agentField = payment.agentId ?? null;
+    const agentId = (() => {
+      if (!agentField) {
+        return '';
+      }
+      if (agentField instanceof Types.ObjectId) {
+        return agentField.toString();
+      }
+      if (typeof agentField === 'string') {
+        return agentField;
+      }
+      const populatedId = agentField._id;
+      if (populatedId instanceof Types.ObjectId) {
+        return populatedId.toString();
+      }
+      if (typeof populatedId === 'string') {
+        return populatedId;
+      }
+      return '';
+    })();
+
+    const agentName = (() => {
+      if (!agentField || agentField instanceof Types.ObjectId || typeof agentField === 'string') {
+        return null;
+      }
+      return agentField.name ?? null;
+    })();
+
     return {
       _id: payment._id.toString(),
       referralId,
@@ -181,6 +180,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       expectedAmountCents: payment.expectedAmountCents ?? 0,
       receivedAmountCents: payment.receivedAmountCents ?? 0,
       contractPriceCents: payment.contractPriceCents ?? null,
+      netReferralFeePaidCents: payment.netReferralFeePaidCents ?? null,
+      propertyAddress: payment.propertyAddress ?? null,
       terminatedReason: payment.terminatedReason ?? null,
       agentAttribution: payment.agentAttribution ?? null,
       usedAfc: Boolean(payment.usedAfc),
@@ -190,12 +191,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       commissionBasisPoints: payment.commissionBasisPoints ?? null,
       referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
       side: payment.side ?? 'buy',
-      agent: assignedAgentId
+      agent: agentId
         ? {
-            id: assignedAgentId,
-            name: agentNameMap.get(assignedAgentId) ?? null,
+            id: agentId,
+            name: agentName ?? null,
           }
         : null,
+      agentId: agentId || null,
       referral: referral
         ? {
             borrowerName: referral.borrower?.name ?? null,
@@ -251,6 +253,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     agentAttribution: parsed.data.agentAttribution ?? null,
     usedAfc: parsed.data.usedAfc ?? false,
     usedAssignedAgent: parsed.data.usedAssignedAgent ?? true,
+    netReferralFeePaidCents: parsed.data.netReferralFeePaidCents ?? null,
+    propertyAddress: parsed.data.propertyAddress ?? null,
     invoiceDate: parsed.data.invoiceDate,
     paidDate: parsed.data.paidDate,
     notes: parsed.data.notes,
@@ -258,9 +262,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     referralFeeBasisPoints: parsed.data.referralFeeBasisPoints ?? null,
     side: parsed.data.side ?? 'buy',
     contractPriceCents: parsed.data.contractPriceCents ?? null,
+    agentId: parsed.data.agentId ?? null,
   });
 
-  return NextResponse.json({ id: payment._id.toString() }, { status: 201 });
+  return NextResponse.json(
+    {
+      id: payment._id.toString(),
+      createdAt: payment.createdAt instanceof Date ? payment.createdAt.toISOString() : new Date().toISOString(),
+      expectedAmountCents: payment.expectedAmountCents ?? 0,
+      receivedAmountCents: payment.receivedAmountCents ?? 0,
+      status: payment.status,
+    },
+    { status: 201 }
+  );
 }
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
@@ -388,6 +402,11 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   }
   if ('usedAssignedAgent' in updatePayload && updatePayload.usedAssignedAgent === undefined) {
     updatePayload.usedAssignedAgent = false;
+  }
+  if (Object.prototype.hasOwnProperty.call(parsed.data, 'agentId')) {
+    updatePayload.agentId = parsed.data.agentId ?? null;
+  } else {
+    delete updatePayload.agentId;
   }
 
   const nextStatusValue = parsed.data.status ?? existingPayment.status;

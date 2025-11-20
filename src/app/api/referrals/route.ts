@@ -979,7 +979,13 @@ export async function POST(request: Request) {
   if (session.user.role === 'agent') {
     const agent = await Agent.findOne({ userId: session.user.id }).select('_id');
     if (agent) {
-      referralData.assignedAgent = agent._id;
+      if (parsed.data.clientType === 'Seller') {
+        referralData.sellSideAgent = agent._id;
+        referralData.assignedAgent = referralData.sellSideAgent;
+      } else if (parsed.data.clientType === 'Buyer') {
+        referralData.buySideAgent = agent._id;
+        referralData.assignedAgent = referralData.buySideAgent;
+      }
     }
   }
 

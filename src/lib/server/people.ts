@@ -166,6 +166,7 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
     const paymentDocs = await Payment.find({ referralId: { $in: referralIds } })
       .sort({ createdAt: -1 })
       .limit(100)
+      .populate('agentId', 'name')
       .lean<{
         _id: Types.ObjectId;
         referralId: Types.ObjectId | string;
@@ -175,6 +176,7 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
         usedAfc?: boolean | null;
         usedAssignedAgent?: boolean | null;
         updatedAt?: Date | string | null;
+        agentId?: Types.ObjectId | { _id: Types.ObjectId; name?: string | null } | null;
       }[]>();
 
     deals = paymentDocs.map((payment) => {
@@ -197,6 +199,32 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
         return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
       })();
 
+      const agentField = payment.agentId ?? null;
+      const resolvedAgent = (() => {
+        if (!agentField) {
+          return null;
+        }
+        if (agentField instanceof Types.ObjectId) {
+          return {
+            id: agentField.toString(),
+            name: null,
+          };
+        }
+        const idValue =
+          agentField._id instanceof Types.ObjectId
+            ? agentField._id.toString()
+            : typeof agentField._id === 'string'
+            ? agentField._id
+            : '';
+        if (!idValue) {
+          return null;
+        }
+        return {
+          id: idValue,
+          name: agentField.name ?? null,
+        };
+      })();
+
       return {
         id: payment._id.toString(),
         referralId: referralIdString,
@@ -209,7 +237,7 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
         usedAfc: payment.usedAfc ?? null,
         usedAssignedAgent: payment.usedAssignedAgent ?? null,
         updatedAt: updatedAtIso,
-        agent: {
+        agent: resolvedAgent ?? {
           id: agent._id.toString(),
           name: agent.name ?? null,
         },
@@ -321,6 +349,7 @@ export async function getLenderProfile(id: string): Promise<LenderProfile | null
     const paymentDocs = await Payment.find({ referralId: { $in: referralIds } })
       .sort({ createdAt: -1 })
       .limit(100)
+      .populate('agentId', 'name')
       .lean<{
         _id: Types.ObjectId;
         referralId: Types.ObjectId | string;
@@ -330,6 +359,7 @@ export async function getLenderProfile(id: string): Promise<LenderProfile | null
         usedAfc?: boolean | null;
         usedAssignedAgent?: boolean | null;
         updatedAt?: Date | string | null;
+        agentId?: Types.ObjectId | { _id: Types.ObjectId; name?: string | null } | null;
       }[]>();
 
     deals = paymentDocs.map((payment) => {
@@ -352,8 +382,6 @@ export async function getLenderProfile(id: string): Promise<LenderProfile | null
         return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
       })();
 
-      const assignedAgentId = meta?.assignedAgentId ?? null;
-
       return {
         id: payment._id.toString(),
         referralId: referralIdString,
@@ -366,12 +394,36 @@ export async function getLenderProfile(id: string): Promise<LenderProfile | null
         usedAfc: payment.usedAfc ?? null,
         usedAssignedAgent: payment.usedAssignedAgent ?? null,
         updatedAt: updatedAtIso,
-        agent: assignedAgentId
-          ? {
-              id: assignedAgentId,
-              name: agentNameMap.get(assignedAgentId) ?? null,
+        agent: (() => {
+          const agentField = payment.agentId ?? null;
+          if (agentField instanceof Types.ObjectId) {
+            return {
+              id: agentField.toString(),
+              name: agentNameMap.get(agentField.toString()) ?? null,
+            };
+          }
+          if (agentField && typeof agentField === 'object') {
+            const idValue =
+              agentField._id instanceof Types.ObjectId
+                ? agentField._id.toString()
+                : typeof agentField._id === 'string'
+                ? agentField._id
+                : null;
+            if (idValue) {
+              return {
+                id: idValue,
+                name: agentField.name ?? agentNameMap.get(idValue) ?? null,
+              };
             }
-          : null,
+          }
+          const assignedAgentId = meta?.assignedAgentId ?? null;
+          return assignedAgentId
+            ? {
+                id: assignedAgentId,
+                name: agentNameMap.get(assignedAgentId) ?? null,
+              }
+            : null;
+        })(),
       } satisfies PersonDealSnapshot;
     });
   }

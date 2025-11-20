@@ -2,10 +2,17 @@
 
 import { useMemo } from 'react';
 import { CalendarPlus, CheckCircle2, Circle, Loader2 } from 'lucide-react';
+import { formatInTimeZone } from 'date-fns-tz';
 
 import { useFollowUpTaskContext } from '@/components/referrals/follow-up-task-provider';
 import { useFollowUpTasks } from '@/components/referrals/use-follow-up-tasks';
-import { computeSlaInsights, sortRecommendations, type ReferralLike } from '@/utils/sla-insights';
+import {
+  computeSlaInsights,
+  sortRecommendations,
+  type ReferralLike,
+  resolvePrimaryAgentName,
+  SLA_TIME_ZONE,
+} from '@/utils/sla-insights';
 import { useCalendarTaskSubmission } from '@/components/referrals/use-calendar-task-submission';
 
 interface BoardReferral {
@@ -16,6 +23,10 @@ interface BoardReferral {
   statusLastUpdated?: string | null;
   daysInStatus?: number;
   assignedAgentName?: string;
+  buySideAgentName?: string | null;
+  sellSideAgentName?: string | null;
+  clientType?: 'Buyer' | 'Seller' | 'Both' | null;
+  dealSide?: 'buy' | 'sell' | null;
   lenderName?: string | null;
   origin?: 'agent' | 'mc' | 'admin' | null;
 }
@@ -30,8 +41,12 @@ const toReferralLike = (referral: BoardReferral): ReferralLike & { borrower: { n
   status: referral.status,
   statusLastUpdated: referral.statusLastUpdated ?? null,
   daysInStatus: referral.daysInStatus,
+  clientType: referral.clientType ?? undefined,
+  dealSide: referral.dealSide ?? undefined,
   assignedAgent: referral.assignedAgentName ? { name: referral.assignedAgentName } : null,
   assignedAgentName: referral.assignedAgentName,
+  buySideAgentName: referral.buySideAgentName ?? undefined,
+  sellSideAgentName: referral.sellSideAgentName ?? undefined,
   lender: referral.lenderName ? { name: referral.lenderName } : null,
   origin: referral.origin ?? undefined,
   borrower: { name: referral.borrowerName },
@@ -39,6 +54,14 @@ const toReferralLike = (referral: BoardReferral): ReferralLike & { borrower: { n
   payments: [],
   audit: [],
 });
+
+const formatDueDate = (value: string): string => {
+  try {
+    return formatInTimeZone(new Date(value), SLA_TIME_ZONE, "MMM d, yyyy h:mm a 'MST'");
+  } catch (error) {
+    return new Date(value).toLocaleString();
+  }
+};
 
 export function FollowUpTasksBoard({ referrals }: FollowUpTasksBoardProps) {
   const { completions } = useFollowUpTaskContext();
@@ -93,6 +116,7 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
   const { submitTasks, addingTaskId, bulkAdding } = useCalendarTaskSubmission();
   const incompleteTasks = useMemo(() => tasks.filter((task) => !task.completed), [tasks]);
   const outstanding = incompleteTasks.length;
+  const assignmentName = resolvePrimaryAgentName(referralLike);
 
   return (
     <section className="space-y-3 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
@@ -101,9 +125,7 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
           <p className="text-xs font-semibold uppercase tracking-wide text-brand">{referral.status}</p>
           <h2 className="text-lg font-semibold text-slate-900">{referral.borrowerName}</h2>
           <p className="text-xs text-slate-500">
-            {referral.assignedAgentName
-              ? `Assigned to ${referral.assignedAgentName}`
-              : 'Agent assignment pending'}
+            {assignmentName ? `Assigned to ${assignmentName}` : 'Agent assignment pending'}
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -152,7 +174,7 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
                 <p className="text-sm text-slate-600">{task.message}</p>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                   {task.supportingMetric && <span>{task.supportingMetric}</span>}
-                  {task.dueAt && <span>Due {new Date(task.dueAt).toLocaleString()}</span>}
+                  {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
                 </div>
                 <div className="pt-2">
                   <button

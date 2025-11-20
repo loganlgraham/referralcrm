@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { ReferralStatus } from '@/models/referral';
+import { useAgentOptions } from '@/hooks/use-agent-options';
 
 interface ContractDetails {
   propertyAddress?: string;
@@ -15,6 +16,7 @@ interface ContractDetails {
   agentCommissionBasisPoints?: number;
   referralFeeBasisPoints?: number;
   dealSide?: 'buy' | 'sell';
+  agentId?: string | null;
 }
 
 interface ContractFormState {
@@ -26,6 +28,7 @@ interface ContractFormState {
   agentCommissionPercentage: string;
   referralFeePercentage: string;
   dealSide: 'buy' | 'sell';
+  agentId: string;
 }
 
 interface CreatedDealPayload {
@@ -44,6 +47,8 @@ interface CreatedDealPayload {
   createdAt?: string | null;
   updatedAt?: string | null;
   paidDate?: string | null;
+  agent?: { id: string; name: string | null } | null;
+  agentId?: string | null;
 }
 
 interface DealPreparationFormProps {
@@ -51,6 +56,7 @@ interface DealPreparationFormProps {
   previousStatus: ReferralStatus;
   visible: boolean;
   contractDetails?: ContractDetails;
+  defaultAgentId?: string | null;
   onContractSaved?: (details: {
     propertyAddress: string;
     propertyCity: string;
@@ -78,7 +84,10 @@ interface DealPreparationFormProps {
   onDealCreated?: (deal: CreatedDealPayload) => void;
 }
 
-const buildInitialFormState = (details?: ContractDetails): ContractFormState => ({
+const buildInitialFormState = (
+  details?: ContractDetails,
+  defaultAgentId?: string | null
+): ContractFormState => ({
   propertyAddress: details?.propertyAddress ?? '',
   propertyCity: details?.propertyCity ?? '',
   propertyState: details?.propertyState ? details.propertyState.toUpperCase() : '',
@@ -91,6 +100,7 @@ const buildInitialFormState = (details?: ContractDetails): ContractFormState => 
     ? (details.referralFeeBasisPoints / 100).toString()
     : '25',
   dealSide: details?.dealSide ?? 'buy',
+  agentId: details?.agentId ?? defaultAgentId ?? '',
 });
 
 const formatFullAddress = (
@@ -153,15 +163,22 @@ export function DealPreparationForm({
   previousStatus,
   visible,
   contractDetails,
+  defaultAgentId,
   onContractSaved,
   onStatusChanged,
   onContractDraftChange,
   onDealCreated,
 }: DealPreparationFormProps) {
   const router = useRouter();
-  const [form, setForm] = useState<ContractFormState>(() => buildInitialFormState(contractDetails));
+  const [form, setForm] = useState<ContractFormState>(() =>
+    buildInitialFormState(contractDetails, defaultAgentId)
+  );
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const { options: agentOptions, isLoading: loadingAgentOptions } = useAgentOptions(visible);
+  const agentNameMap = useMemo(() => {
+    return new Map(agentOptions.map((option) => [option.id, option.name]));
+  }, [agentOptions]);
 
   useEffect(() => {
     if (!visible && onContractDraftChange) {
@@ -174,7 +191,7 @@ export function DealPreparationForm({
       return;
     }
 
-    const nextState = buildInitialFormState(contractDetails);
+    const nextState = buildInitialFormState(contractDetails, defaultAgentId);
     setForm((previous) => {
       const hasChanged =
         previous.propertyAddress !== nextState.propertyAddress ||
@@ -183,7 +200,8 @@ export function DealPreparationForm({
         previous.propertyPostalCode !== nextState.propertyPostalCode ||
         previous.contractPrice !== nextState.contractPrice ||
         previous.agentCommissionPercentage !== nextState.agentCommissionPercentage ||
-        previous.referralFeePercentage !== nextState.referralFeePercentage;
+        previous.referralFeePercentage !== nextState.referralFeePercentage ||
+        previous.agentId !== nextState.agentId;
 
       if (!hasChanged) {
         return previous;
@@ -191,7 +209,7 @@ export function DealPreparationForm({
 
       return nextState;
     });
-  }, [contractDetails, dirty, visible]);
+  }, [contractDetails, defaultAgentId, dirty, visible]);
 
   const broadcastDraft = useCallback(
     (state: ContractFormState, hasUnsavedChanges: boolean) => {
@@ -343,6 +361,7 @@ export function DealPreparationForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'Under Contract',
+          createNewDeal: Boolean(onDealCreated),
           contractDetails: {
             propertyAddress: propertyStreet,
             propertyCity,
@@ -391,7 +410,8 @@ export function DealPreparationForm({
           agentCommissionBasisPoints: details.agentCommissionBasisPoints,
           referralFeeBasisPoints: details.referralFeeBasisPoints,
           dealSide: details.dealSide,
-        });
+          agentId: form.agentId,
+        }, defaultAgentId);
         setForm(nextState);
         setDirty(false);
         broadcastDraft(nextState, false);
@@ -468,7 +488,43 @@ export function DealPreparationForm({
               : createdDeal.paidDate instanceof Date
                 ? createdDeal.paidDate.toISOString()
                 : null,
+          agent:
+            createdDeal.agent && typeof createdDeal.agent === 'object'
+              ? {
+                  id: String((createdDeal.agent as { id?: string }).id ?? ''),
+                  name: (createdDeal.agent as { name?: string | null }).name ?? null,
+                }
+              : null,
+          agentId:
+            typeof (createdDeal as { agentId?: unknown }).agentId === 'string'
+              ? (createdDeal as { agentId?: string }).agentId
+              : null,
         };
+
+        if (form.agentId && payload._id) {
+          try {
+            const response = await fetch('/api/payments', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: payload._id, agentId: form.agentId }),
+            });
+            if (!response.ok) {
+              throw new Error('Unable to save agent selection for this deal.');
+            }
+            payload.agent = {
+              id: form.agentId,
+              name: agentNameMap.get(form.agentId) ?? null,
+            };
+            payload.agentId = form.agentId;
+          } catch (error) {
+            console.error(error);
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : 'Unable to save the selected agent for this deal'
+            );
+          }
+        }
 
         onDealCreated?.(payload);
       }
@@ -591,6 +647,25 @@ export function DealPreparationForm({
             <option value="buy">Buy-side</option>
             <option value="sell">Sell-side</option>
           </select>
+        </label>
+        <label className="block">
+          <span className="text-slate-500">Closing Agent</span>
+          <select
+            value={form.agentId}
+            onChange={handleFieldChange('agentId')}
+            className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+            disabled={saving || loadingAgentOptions}
+          >
+            <option value="">Select agent</option>
+            {agentOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.name}
+              </option>
+            ))}
+          </select>
+          {loadingAgentOptions && (
+            <span className="mt-1 block text-xs text-slate-400">Loading agents…</span>
+          )}
         </label>
         <label className="block">
           <span className="text-slate-500">Referral Fee Amount</span>

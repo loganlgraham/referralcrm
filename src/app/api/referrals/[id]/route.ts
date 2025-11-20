@@ -30,6 +30,8 @@ export async function GET(request: NextRequest, context: RouteContext): Promise<
   await connectMongo();
   const referral = await Referral.findById<ReferralDocument>(context.params.id)
     .populate('assignedAgent', 'userId')
+    .populate('buySideAgent', 'userId')
+    .populate('sellSideAgent', 'userId')
     .populate('lender', 'userId')
     .lean();
   if (!referral) {
@@ -40,6 +42,8 @@ export async function GET(request: NextRequest, context: RouteContext): Promise<
   }
   if (!canViewReferral(session, {
     assignedAgent: referral.assignedAgent,
+    buySideAgent: referral.buySideAgent,
+    sellSideAgent: referral.sellSideAgent,
     lender: referral.lender,
     org: referral.org
   })) {
@@ -63,6 +67,8 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
   await connectMongo();
   const existing = await Referral.findById(context.params.id)
     .populate('assignedAgent', 'userId')
+    .populate('buySideAgent', 'userId')
+    .populate('sellSideAgent', 'userId')
     .populate('lender', 'userId');
   if (!existing) {
     return new NextResponse('Not found', { status: 404 });
@@ -70,7 +76,15 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
   if (existing.deletedAt) {
     return new NextResponse('Not found', { status: 404 });
   }
-  if (!canManageReferral(session, { assignedAgent: existing.assignedAgent, lender: existing.lender, org: existing.org })) {
+  if (
+    !canManageReferral(session, {
+      assignedAgent: existing.assignedAgent,
+      buySideAgent: existing.buySideAgent,
+      sellSideAgent: existing.sellSideAgent,
+      lender: existing.lender,
+      org: existing.org,
+    })
+  ) {
     return new NextResponse('Forbidden', { status: 403 });
   }
   const updatePayload = parsed.data as Record<string, unknown>;

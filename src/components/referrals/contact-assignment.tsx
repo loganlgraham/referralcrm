@@ -36,6 +36,7 @@ interface Props {
   type: AssignmentType;
   contact: Contact | null | undefined;
   canAssign: boolean;
+  side?: 'buy' | 'sell';
   onContactChange?: (contact: Contact | null) => void;
 }
 
@@ -64,6 +65,7 @@ export function ContactAssignment({
   type,
   contact,
   canAssign,
+  side,
   onContactChange
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -74,7 +76,12 @@ export function ContactAssignment({
   const { data: options } = useSWR<AssignmentOption[]>(open && canAssign ? directoryForType[type] : null, fetcher);
   const { mutate } = useSWRConfig();
 
-  const title = labelForType[type];
+  const title = useMemo(() => {
+    if (type !== 'agent') return labelForType[type];
+    if (side === 'sell') return 'Sell-side Agent';
+    if (side === 'buy') return 'Buy-side Agent';
+    return labelForType[type];
+  }, [side, type]);
 
   useEffect(() => {
     setCurrentContact(contact);
@@ -105,7 +112,11 @@ export function ContactAssignment({
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [payloadKey]: selected })
+        body: JSON.stringify(
+          side && type === 'agent'
+            ? { [payloadKey]: selected, side }
+            : { [payloadKey]: selected }
+        )
       });
       if (!response.ok) {
         throw new Error('Unable to update assignment');

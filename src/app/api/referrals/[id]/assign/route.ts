@@ -28,6 +28,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   await connectMongo();
   const referral = await Referral.findById(params.id)
     .populate('assignedAgent', 'userId name')
+    .populate('buySideAgent', 'userId name')
+    .populate('sellSideAgent', 'userId name')
     .populate('lender', 'userId');
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
@@ -35,17 +37,34 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   if (referral.deletedAt) {
     return new NextResponse('Not found', { status: 404 });
   }
-  if (!canManageReferral(session, { assignedAgent: referral.assignedAgent, lender: referral.lender, org: referral.org })) {
+  if (
+    !canManageReferral(session, {
+      assignedAgent: referral.assignedAgent,
+      buySideAgent: referral.buySideAgent,
+      sellSideAgent: referral.sellSideAgent,
+      lender: referral.lender,
+      org: referral.org,
+    })
+  ) {
     return new NextResponse('Forbidden', { status: 403 });
   }
-  const previousAgentValue = (referral.assignedAgent as any)?._id ?? referral.assignedAgent ?? null;
+  const assignmentSide = parsed.data.side ?? (referral.clientType === 'Seller' ? 'sell' : 'buy');
+  const previousAgentValue = (() => {
+    if (assignmentSide === 'sell') return (referral.sellSideAgent as any)?._id ?? referral.sellSideAgent ?? null;
+    return (referral.buySideAgent as any)?._id ?? referral.buySideAgent ?? null;
+  })();
   const previousAgent = previousAgentValue ? previousAgentValue.toString() : null;
-  referral.assignedAgent = parsed.data.agentId as any;
+  if (assignmentSide === 'sell') {
+    referral.sellSideAgent = parsed.data.agentId as any;
+  } else {
+    referral.buySideAgent = parsed.data.agentId as any;
+  }
+  referral.assignedAgent = referral.buySideAgent ?? referral.sellSideAgent ?? null;
   referral.statusLastUpdated = new Date();
   referral.audit = referral.audit || [];
   const auditEntry: Record<string, unknown> = {
     actorRole: session.user.role,
-    field: 'assignedAgent',
+    field: `${assignmentSide}SideAgent`,
     previousValue: previousAgent,
     newValue: parsed.data.agentId,
     timestamp: new Date()
@@ -80,10 +99,10 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const nextLabel = nextAgentDoc?.name?.trim() || 'Unassigned';
   const activityContent =
     previousAgent && previousAgent !== parsed.data.agentId
-      ? `Reassigned agent from ${previousLabel} to ${nextLabel}`
+      ? `Reassigned ${assignmentSide} agent from ${previousLabel} to ${nextLabel}`
       : previousAgent
-      ? `Confirmed agent assignment for ${nextLabel}`
-      : `Assigned agent ${nextLabel}`;
+      ? `Confirmed ${assignmentSide} agent assignment for ${nextLabel}`
+      : `Assigned ${assignmentSide} agent ${nextLabel}`;
 
   await logReferralActivity({
     referralId: referral._id,

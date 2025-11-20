@@ -18,6 +18,8 @@ export function hasRole(session: Session | null, allowed: Role[] = []): boolean 
 
 type ReferralAccess = {
   assignedAgent?: unknown;
+  buySideAgent?: unknown;
+  sellSideAgent?: unknown;
   lender?: unknown;
   org: string;
 };
@@ -85,6 +87,10 @@ export function canManageReferral(session: Session | null, referral: ReferralAcc
 
   const assignedAgentUserId = extractUserId(referral.assignedAgent);
   const assignedAgentId = extractId(referral.assignedAgent);
+  const buySideAgentId = extractId(referral.buySideAgent);
+  const buySideAgentUserId = extractUserId(referral.buySideAgent);
+  const sellSideAgentId = extractId(referral.sellSideAgent);
+  const sellSideAgentUserId = extractUserId(referral.sellSideAgent);
   const lenderUserId = extractUserId(referral.lender);
   const lenderId = extractId(referral.lender);
 
@@ -92,7 +98,12 @@ export function canManageReferral(session: Session | null, referral: ReferralAcc
     return Boolean(session.user.id && session.user.id === (lenderUserId ?? lenderId));
   }
   if (role === 'agent') {
-    return Boolean(session.user.id && session.user.id === (assignedAgentUserId ?? assignedAgentId));
+    return Boolean(
+      session.user.id &&
+        [assignedAgentUserId, assignedAgentId, buySideAgentUserId, buySideAgentId, sellSideAgentUserId, sellSideAgentId]
+          .filter(Boolean)
+          .includes(session.user.id)
+    );
   }
   return false;
 }
@@ -108,6 +119,10 @@ export function canViewReferral(session: Session | null, referral: ReferralAcces
 
   const assignedAgentUserId = extractUserId(referral.assignedAgent);
   const assignedAgentId = extractId(referral.assignedAgent);
+  const buySideAgentId = extractId(referral.buySideAgent);
+  const buySideAgentUserId = extractUserId(referral.buySideAgent);
+  const sellSideAgentId = extractId(referral.sellSideAgent);
+  const sellSideAgentUserId = extractUserId(referral.sellSideAgent);
   const lenderUserId = extractUserId(referral.lender);
   const lenderId = extractId(referral.lender);
 
@@ -115,7 +130,12 @@ export function canViewReferral(session: Session | null, referral: ReferralAcces
     return Boolean(session.user.id && session.user.id === (lenderUserId ?? lenderId));
   }
   if (role === 'agent') {
-    return Boolean(session.user.id && session.user.id === (assignedAgentUserId ?? assignedAgentId));
+    return Boolean(
+      session.user.id &&
+        [assignedAgentUserId, assignedAgentId, buySideAgentUserId, buySideAgentId, sellSideAgentUserId, sellSideAgentId]
+          .filter(Boolean)
+          .includes(session.user.id)
+    );
   }
   return false;
 }
