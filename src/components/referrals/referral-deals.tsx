@@ -83,7 +83,11 @@ function DealCard({
   canManage: boolean;
   statusUpdating?: boolean;
   deleting?: boolean;
-  onStatusChange: (deal: ReferralPayment, status: DealStatus) => void;
+  onStatusChange: (
+    deal: ReferralPayment,
+    status: DealStatus,
+    terminationReason?: TerminatedReason | null
+  ) => void;
   onDelete: (deal: ReferralPayment) => void;
   onUpdate: (deal: ReferralPayment, payload: DealUpdatePayload) => Promise<boolean>;
 }) {
