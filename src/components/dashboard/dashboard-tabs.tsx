@@ -95,18 +95,30 @@ interface DashboardResponse {
       monthKey: string;
       label: string;
       totalReferrals: number;
+      ahaReferrals: number;
+      ahaOosReferrals: number;
       preApprovals: number;
+      ahaPreApprovals: number;
+      ahaOosPreApprovals: number;
       conversionRate: number;
+      conversionRateAha: number;
+      conversionRateAhaOos: number;
       updatedAt?: string;
     }[];
     preApprovalConversion: {
-      trend: TrendPoint[];
+      trend: { all: TrendPoint[]; aha: TrendPoint[]; ahaOos: TrendPoint[] };
       entries: {
         monthKey: string;
         label: string;
         totalReferrals: number;
+        ahaReferrals: number;
+        ahaOosReferrals: number;
         preApprovals: number;
+        ahaPreApprovals: number;
+        ahaOosPreApprovals: number;
         conversionRate: number;
+        conversionRateAha: number;
+        conversionRateAhaOos: number;
         updatedAt?: string;
       }[];
     };
@@ -453,6 +465,225 @@ function LineChartCard({
   );
 }
 
+function MultiLineChartCard({
+  title,
+  series,
+  formatValue,
+  helper,
+  actions
+}: {
+  title: string;
+  series: { label: string; color: string; data: TrendPoint[] }[];
+  formatValue: (value: number) => string;
+  helper?: string;
+  actions?: ReactNode;
+}) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const safeSeries = series.map((entry) => ({ ...entry, data: entry.data ?? [] }));
+  const referenceSeries =
+    safeSeries.find((entry) => entry.data.length === Math.max(...safeSeries.map((s) => s.data.length)))?.data ?? [];
+  const hasData = referenceSeries.length > 0;
+  const allValues = safeSeries.flatMap((entry) => entry.data.map((point) => point.value));
+  const maxValue = hasData ? Math.max(...allValues, 0) : 0;
+  const minValue = hasData ? Math.min(...allValues, 0) : 0;
+  const normalizedMax = maxValue === minValue ? maxValue || 1 : maxValue;
+  const normalizedMin = maxValue === minValue ? 0 : minValue;
+
+  const stepX = referenceSeries.length > 1 ? (CHART_WIDTH - CHART_PADDING_X * 2) / (referenceSeries.length - 1) : 0;
+  const rangeY = normalizedMax - normalizedMin || 1;
+
+  const seriesPoints = safeSeries.map((entry) => ({
+    ...entry,
+    points: referenceSeries.map((refPoint, index) => {
+      const value = entry.data[index]?.value ?? 0;
+      const label = entry.data[index]?.label ?? refPoint.label;
+      const x = CHART_PADDING_X + stepX * index;
+      const ratio = (value - normalizedMin) / rangeY;
+      const y = CHART_PADDING_Y + (CHART_HEIGHT - CHART_PADDING_Y * 2) * (1 - ratio);
+      return { x, y, label, value };
+    })
+  }));
+
+  const activeIndex = hoverIndex != null ? hoverIndex : referenceSeries.length > 0 ? referenceSeries.length - 1 : null;
+  const tooltipPoint =
+    activeIndex != null && seriesPoints[0]?.points[activeIndex]
+      ? seriesPoints[0].points[activeIndex]
+      : null;
+  const labelText = activeIndex != null && referenceSeries[activeIndex] ? referenceSeries[activeIndex].label : '';
+
+  const tooltipValues =
+    activeIndex != null
+      ? seriesPoints.map((entry) => ({
+          label: entry.label,
+          color: entry.color,
+          value: entry.points[activeIndex]?.value ?? 0
+        }))
+      : [];
+
+  let tooltipMetrics: {
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+  } | null = null;
+
+  if (tooltipPoint && labelText) {
+    const longestValue = Math.max(...tooltipValues.map((item) => formatValue(item.value).length), 0);
+    const textLength = Math.max(labelText.length, longestValue + 6);
+    const width = Math.min(Math.max(textLength * 7 + 24, 140), CHART_WIDTH - CHART_PADDING_X);
+    const height = 52 + tooltipValues.length * 16;
+    const x = Math.min(
+      Math.max(tooltipPoint.x - width / 2, CHART_PADDING_X),
+      CHART_WIDTH - CHART_PADDING_X - width
+    );
+    const y = Math.max(tooltipPoint.y - height - 8, 8);
+    tooltipMetrics = { width, height, x, y };
+  }
+
+  const handleMouseMove = (event: ReactMouseEvent<SVGSVGElement>) => {
+    if (!hasData) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const relativeX = ((event.clientX - rect.left) / rect.width) * CHART_WIDTH;
+    let closestIndex = 0;
+    let minDistance = Number.POSITIVE_INFINITY;
+    seriesPoints[0]?.points.forEach((point, index) => {
+      const distance = Math.abs(point.x - relativeX);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestIndex = index;
+      }
+    });
+    setHoverIndex(closestIndex);
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+          {helper ? <p className="text-xs text-slate-500">{helper}</p> : null}
+        </div>
+        {actions}
+      </div>
+      {hasData ? (
+        <div className="mt-4">
+          <svg
+            viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+            className="h-48 w-full"
+            onMouseMove={handleMouseMove}
+            onMouseLeave={() => setHoverIndex(null)}
+          >
+            <defs>
+              <linearGradient id="gridGradient" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="#e2e8f0" stopOpacity="0.4" />
+                <stop offset="100%" stopColor="#e2e8f0" stopOpacity="0.1" />
+              </linearGradient>
+            </defs>
+            <rect
+              x={CHART_PADDING_X}
+              y={CHART_PADDING_Y}
+              width={CHART_WIDTH - CHART_PADDING_X * 2}
+              height={CHART_HEIGHT - CHART_PADDING_Y * 2}
+              fill="url(#gridGradient)"
+              className="stroke-0"
+            />
+            {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+              const y = CHART_PADDING_Y + (CHART_HEIGHT - CHART_PADDING_Y * 2) * ratio;
+              const value = normalizedMax - (normalizedMax - normalizedMin) * ratio;
+              return (
+                <g key={ratio}>
+                  <line
+                    x1={CHART_PADDING_X}
+                    y1={y}
+                    x2={CHART_WIDTH - CHART_PADDING_X}
+                    y2={y}
+                    stroke="#e2e8f0"
+                    strokeWidth={1}
+                    strokeDasharray="4 4"
+                  />
+                  <text
+                    x={CHART_WIDTH - CHART_PADDING_X + 6}
+                    y={y + 4}
+                    className="fill-slate-400 text-[10px]"
+                  >
+                    {formatValue(value)}
+                  </text>
+                </g>
+              );
+            })}
+            {seriesPoints.map((entry) => {
+              const path = entry.points
+                .map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+                .join(' ');
+              return (
+                <g key={entry.label}>
+                  <path d={path} fill="none" stroke={entry.color} strokeWidth={2.5} />
+                  {entry.points.map((point, index) => (
+                    <circle
+                      key={`${entry.label}-${point.x}-${point.y}`}
+                      cx={point.x}
+                      cy={point.y}
+                      r={activeIndex === index ? 4 : 3}
+                      fill={entry.color}
+                      opacity={activeIndex == null || activeIndex === index ? 1 : 0.25}
+                    />
+                  ))}
+                </g>
+              );
+            })}
+            {tooltipPoint && tooltipMetrics ? (
+              <g>
+                <line
+                  x1={tooltipPoint.x}
+                  y1={CHART_PADDING_Y}
+                  x2={tooltipPoint.x}
+                  y2={CHART_HEIGHT - CHART_PADDING_Y}
+                  stroke="#cbd5e1"
+                  strokeWidth={1}
+                  strokeDasharray="4 4"
+                />
+                <rect
+                  x={tooltipMetrics.x}
+                  y={tooltipMetrics.y}
+                  width={tooltipMetrics.width}
+                  height={tooltipMetrics.height}
+                  rx={6}
+                  className="fill-white"
+                  stroke="#cbd5e1"
+                />
+                <text x={tooltipMetrics.x + 10} y={tooltipMetrics.y + 18} className="text-[11px] font-semibold fill-slate-900">
+                  {labelText}
+                </text>
+                {tooltipValues.map((item, index) => (
+                  <text
+                    key={item.label}
+                    x={tooltipMetrics.x + 10}
+                    y={tooltipMetrics.y + 34 + index * 14}
+                    className="text-[11px] fill-slate-600"
+                  >
+                    <tspan fill={item.color}>● </tspan>
+                    {item.label}: {formatValue(item.value)}
+                  </text>
+                ))}
+              </g>
+            ) : null}
+          </svg>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            {seriesPoints.map((entry) => (
+              <div key={entry.label} className="flex items-center gap-2 text-xs text-slate-600">
+                <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                {entry.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 text-sm text-slate-500">No data available.</div>
+      )}
+    </div>
+  );
+}
+
 function PieChartCard({
   title,
   data,
@@ -680,7 +911,8 @@ function PreApprovalConversionSection({
   onSaved: () => void;
 }) {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
-  const [inputValue, setInputValue] = useState<string>('');
+  const [inputAhaValue, setInputAhaValue] = useState<string>('');
+  const [inputAhaOosValue, setInputAhaOosValue] = useState<string>('');
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [deletingMonth, setDeletingMonth] = useState<string | null>(null);
@@ -688,9 +920,11 @@ function PreApprovalConversionSection({
   useEffect(() => {
     const match = monthlyReferrals.find((entry) => entry.monthKey === selectedMonth);
     if (match) {
-      setInputValue(match.preApprovals > 0 ? String(match.preApprovals) : '');
+      setInputAhaValue(match.ahaPreApprovals > 0 ? String(match.ahaPreApprovals) : '');
+      setInputAhaOosValue(match.ahaOosPreApprovals > 0 ? String(match.ahaOosPreApprovals) : '');
     } else {
-      setInputValue('');
+      setInputAhaValue('');
+      setInputAhaOosValue('');
     }
   }, [monthlyReferrals, selectedMonth]);
 
@@ -704,21 +938,43 @@ function PreApprovalConversionSection({
   const selectedEntry = monthlyReferrals.find((entry) => entry.monthKey === selectedMonth);
   const referralsForMonth = selectedEntry?.totalReferrals ?? 0;
   const existingPreApprovals = selectedEntry?.preApprovals ?? 0;
+  const ahaPreApprovals = selectedEntry?.ahaPreApprovals ?? 0;
+  const ahaOosPreApprovals = selectedEntry?.ahaOosPreApprovals ?? 0;
+  const ahaReferrals = selectedEntry?.ahaReferrals ?? 0;
+  const ahaOosReferrals = selectedEntry?.ahaOosReferrals ?? 0;
   const currentConversion = selectedEntry && existingPreApprovals > 0
     ? (referralsForMonth / existingPreApprovals) * 100
     : 0;
+  const ahaConversion = ahaPreApprovals > 0 ? (ahaReferrals / ahaPreApprovals) * 100 : 0;
+  const ahaOosConversion = ahaOosPreApprovals > 0 ? (ahaOosReferrals / ahaOosPreApprovals) * 100 : 0;
 
   const sortedEntries = useMemo(() => {
     return [...conversion.entries].sort((a, b) => (a.monthKey < b.monthKey ? 1 : -1));
   }, [conversion.entries]);
 
+  const conversionSeries = useMemo(
+    () => [
+      { label: 'All', color: '#0ea5e9', data: conversion.trend.all ?? [] },
+      { label: 'AHA', color: '#0ea64a', data: conversion.trend.aha ?? [] },
+      { label: 'AHA OOS', color: '#6366f1', data: conversion.trend.ahaOos ?? [] }
+    ],
+    [conversion.trend]
+  );
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canEdit || !selectedMonth) return;
 
-    const numericValue = Number(inputValue);
-    if (Number.isNaN(numericValue) || numericValue < 0) {
-      setErrorMessage('Enter a non-negative number.');
+    const ahaValue = Number(inputAhaValue);
+    const ahaOosValue = Number(inputAhaOosValue);
+    if (Number.isNaN(ahaValue) || ahaValue < 0) {
+      setErrorMessage('Enter a non-negative number for AHA pre-approvals.');
+      setStatus('error');
+      return;
+    }
+
+    if (Number.isNaN(ahaOosValue) || ahaOosValue < 0) {
+      setErrorMessage('Enter a non-negative number for AHA OOS pre-approvals.');
       setStatus('error');
       return;
     }
@@ -729,7 +985,7 @@ function PreApprovalConversionSection({
     const response = await fetch('/api/dashboard/pre-approvals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ month: selectedMonth, preApprovals: numericValue })
+      body: JSON.stringify({ month: selectedMonth, ahaPreApprovals: ahaValue, ahaOosPreApprovals: ahaOosValue })
     });
 
     if (!response.ok) {
@@ -762,7 +1018,8 @@ function PreApprovalConversionSection({
 
       setStatus('idle');
       setSelectedMonth('');
-      setInputValue('');
+      setInputAhaValue('');
+      setInputAhaOosValue('');
       onSaved();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to delete pre-approval entry.');
@@ -778,7 +1035,7 @@ function PreApprovalConversionSection({
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Pre-approval conversion</p>
           <p className="text-xs text-slate-500">
-            Track how referral volume compares with the number of pre-approvals you issue each month.
+            Track how referral volume compares with AHA and AHA OOS pre-approvals issued each month.
           </p>
         </div>
         {canEdit ? (
@@ -793,12 +1050,22 @@ function PreApprovalConversionSection({
               />
             </label>
             <label className="flex flex-col text-xs font-medium text-slate-600">
-              Pre-approvals
+              Pre-approvals (AHA)
               <input
                 type="number"
                 min={0}
-                value={inputValue}
-                onChange={(event) => setInputValue(event.target.value)}
+                value={inputAhaValue}
+                onChange={(event) => setInputAhaValue(event.target.value)}
+                className="mt-1 w-32 rounded border border-slate-200 px-2 py-1 text-sm"
+              />
+            </label>
+            <label className="flex flex-col text-xs font-medium text-slate-600">
+              Pre-approvals (AHA OOS)
+              <input
+                type="number"
+                min={0}
+                value={inputAhaOosValue}
+                onChange={(event) => setInputAhaOosValue(event.target.value)}
                 className="mt-1 w-32 rounded border border-slate-200 px-2 py-1 text-sm"
               />
             </label>
@@ -816,8 +1083,18 @@ function PreApprovalConversionSection({
         <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-600">
           <p>
             {selectedEntry.label}: {formatNumber(referralsForMonth)} referrals ·{' '}
-            {existingPreApprovals > 0 ? `${formatNumber(existingPreApprovals)} pre-approvals` : 'No pre-approvals recorded'} ·{' '}
-            {existingPreApprovals > 0 ? `${currentConversion.toFixed(1)}% conversion` : 'Conversion unavailable'}
+            {existingPreApprovals > 0
+              ? `${formatNumber(existingPreApprovals)} total pre-approvals`
+              : 'No pre-approvals recorded'}{' '}
+            · {existingPreApprovals > 0 ? `${currentConversion.toFixed(1)}% overall conversion` : 'Conversion unavailable'}
+          </p>
+          <p className="mt-1">
+            AHA: {formatNumber(ahaReferrals)} referrals · {formatNumber(ahaPreApprovals)} pre-approvals ·{' '}
+            {ahaPreApprovals > 0 ? `${ahaConversion.toFixed(1)}% conversion` : 'conversion unavailable'}
+          </p>
+          <p className="mt-1">
+            AHA OOS: {formatNumber(ahaOosReferrals)} referrals · {formatNumber(ahaOosPreApprovals)} pre-approvals ·{' '}
+            {ahaOosPreApprovals > 0 ? `${ahaOosConversion.toFixed(1)}% conversion` : 'conversion unavailable'}
           </p>
         </div>
       ) : null}
@@ -826,11 +1103,11 @@ function PreApprovalConversionSection({
         <p className="text-sm text-emerald-600">Pre-approvals saved.</p>
       ) : null}
       <div className="grid gap-4 lg:grid-cols-2">
-        <LineChartCard
+        <MultiLineChartCard
           title="Conversion trend"
-          data={conversion.trend}
+          series={conversionSeries}
           formatValue={(value) => `${value.toFixed(1)}%`}
-          helper="Referrals ÷ pre-approvals across recorded months"
+          helper="Referrals ÷ pre-approvals across recorded months by network"
         />
         <div className="overflow-hidden rounded-lg border border-slate-200">
           <table className="min-w-full text-sm">
@@ -838,8 +1115,11 @@ function PreApprovalConversionSection({
               <tr className="text-left">
                 <th className="px-3 py-2 font-medium">Month</th>
                 <th className="px-3 py-2 font-medium text-right">Referrals</th>
-                <th className="px-3 py-2 font-medium text-right">Pre-approvals</th>
-                <th className="px-3 py-2 font-medium text-right">Conversion</th>
+                <th className="px-3 py-2 font-medium text-right">Pre-approvals (AHA)</th>
+                <th className="px-3 py-2 font-medium text-right">Pre-approvals (AHA OOS)</th>
+                <th className="px-3 py-2 font-medium text-right">Conversion (All)</th>
+                <th className="px-3 py-2 font-medium text-right">Conversion (AHA)</th>
+                <th className="px-3 py-2 font-medium text-right">Conversion (AHA OOS)</th>
                 <th className="px-3 py-2 font-medium">Updated</th>
                 {canEdit ? <th className="px-3 py-2 font-medium text-right">Actions</th> : null}
               </tr>
@@ -850,8 +1130,11 @@ function PreApprovalConversionSection({
                   <tr key={entry.monthKey} className="border-t border-slate-100 text-slate-700">
                     <td className="px-3 py-2 font-medium text-slate-900">{entry.label}</td>
                     <td className="px-3 py-2 text-right">{formatNumber(entry.totalReferrals)}</td>
-                    <td className="px-3 py-2 text-right">{formatNumber(entry.preApprovals)}</td>
+                    <td className="px-3 py-2 text-right">{formatNumber(entry.ahaPreApprovals)}</td>
+                    <td className="px-3 py-2 text-right">{formatNumber(entry.ahaOosPreApprovals)}</td>
                     <td className="px-3 py-2 text-right">{entry.conversionRate.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-right">{entry.conversionRateAha.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-right">{entry.conversionRateAhaOos.toFixed(1)}%</td>
                     <td className="px-3 py-2 text-slate-500">
                       {entry.updatedAt ? new Date(entry.updatedAt).toLocaleDateString() : '—'}
                     </td>
@@ -872,7 +1155,7 @@ function PreApprovalConversionSection({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={canEdit ? 6 : 5} className="px-3 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={canEdit ? 8 : 7} className="px-3 py-6 text-center text-sm text-slate-500">
                     No pre-approval history captured yet.
                   </td>
                 </tr>
