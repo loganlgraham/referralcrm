@@ -7,6 +7,7 @@ import { createActivitySchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { canViewReferral } from '@/lib/rbac';
 import { Referral } from '@/models/referral';
+import { resolveActivityActor } from '@/lib/server/activities';
 
 interface Params {
   params: { id: string };
@@ -15,7 +16,7 @@ interface Params {
 type LeanActivity = {
   _id: Types.ObjectId;
   referralId: Types.ObjectId;
-  actor: 'Agent' | 'MC' | 'System';
+  actor: 'Agent' | 'MC' | 'Admin' | 'System';
   actorId?: Types.ObjectId | null;
   channel: 'call' | 'sms' | 'email' | 'note' | 'status' | 'update';
   content: string;
@@ -120,7 +121,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
   const activity = await Activity.create({
     referralId: params.id,
-    actor: session.user.role === 'agent' ? 'Agent' : 'MC',
+    actor: resolveActivityActor(session.user.role),
     actorId: session.user.id,
     channel: parsed.data.channel,
     content: parsed.data.content

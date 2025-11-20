@@ -3,7 +3,7 @@ import { Schema, model, models } from 'mongoose';
 const activitySchema = new Schema(
   {
     referralId: { type: Schema.Types.ObjectId, ref: 'Referral', required: true, index: true },
-    actor: { type: String, enum: ['Agent', 'MC', 'System'], required: true },
+    actor: { type: String, enum: ['Agent', 'MC', 'Admin', 'System'], required: true },
     actorId: { type: Schema.Types.ObjectId, ref: 'User' },
     channel: {
       type: String,

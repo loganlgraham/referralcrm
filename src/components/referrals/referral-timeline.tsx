@@ -3,6 +3,7 @@
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { format } from 'date-fns';
+import { useMemo, useState } from 'react';
 
 interface Activity {
   _id: string;
@@ -13,16 +14,22 @@ interface Activity {
 }
 
 export function ReferralTimeline({ referralId }: { referralId: string }) {
-  const {
-    data,
-    error,
-    isLoading
-  } = useSWR<Activity[]>(`/api/referrals/${referralId}/activities`, fetcher, {
-    refreshInterval: 60_000
-  });
+  const { data, error, isLoading } = useSWR<Activity[]>(
+    `/api/referrals/${referralId}/activities`,
+    fetcher,
+    {
+      refreshInterval: 60_000,
+    }
+  );
 
   const activities = Array.isArray(data) ? data : [];
   const hasActivity = activities.length > 0;
+  const [showAll, setShowAll] = useState(false);
+  const visibleActivities = useMemo(
+    () => (showAll ? activities : activities.slice(0, 5)),
+    [activities, showAll]
+  );
+  const canShowToggle = activities.length > 5;
 
   return (
     <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -39,7 +46,7 @@ export function ReferralTimeline({ referralId }: { referralId: string }) {
       )}
       {hasActivity && (
         <div className="space-y-3">
-          {activities.map((activity) => (
+          {visibleActivities.map((activity) => (
             <div key={activity._id} className="rounded-lg border border-slate-200 bg-slate-50/60 p-4">
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span className="uppercase">{activity.channel}</span>
@@ -49,6 +56,15 @@ export function ReferralTimeline({ referralId }: { referralId: string }) {
               <p className="text-xs text-slate-500">by {activity.actor}</p>
             </div>
           ))}
+          {canShowToggle && (
+            <button
+              type="button"
+              className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+              onClick={() => setShowAll((previous) => !previous)}
+            >
+              {showAll ? 'Show less' : 'Show all activity'}
+            </button>
+          )}
         </div>
       )}
     </div>
