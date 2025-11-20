@@ -12,7 +12,6 @@ import {
 } from 'react';
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
-import { Trash2 } from 'lucide-react';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatNumber } from '@/utils/formatters';
 import {
@@ -915,7 +914,6 @@ function PreApprovalConversionSection({
   const [inputAhaOosValue, setInputAhaOosValue] = useState<string>('');
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [deletingMonth, setDeletingMonth] = useState<string | null>(null);
 
   useEffect(() => {
     const match = monthlyReferrals.find((entry) => entry.monthKey === selectedMonth);
@@ -997,36 +995,6 @@ function PreApprovalConversionSection({
 
     setStatus('saved');
     onSaved();
-  };
-
-  const handleDelete = async (monthKey: string) => {
-    if (!canEdit) return;
-    setDeletingMonth(monthKey);
-    setErrorMessage(null);
-
-    try {
-      const response = await fetch('/api/dashboard/pre-approvals', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month: monthKey })
-      });
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error ?? 'Unable to delete pre-approval entry.');
-      }
-
-      setStatus('idle');
-      setSelectedMonth('');
-      setInputAhaValue('');
-      setInputAhaOosValue('');
-      onSaved();
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to delete pre-approval entry.');
-      setStatus('error');
-    } finally {
-      setDeletingMonth(null);
-    }
   };
 
   return (
@@ -1120,7 +1088,6 @@ function PreApprovalConversionSection({
                 <th className="px-3 py-2 font-medium text-right">Conversion (All)</th>
                 <th className="px-3 py-2 font-medium text-right">Conversion (AHA)</th>
                 <th className="px-3 py-2 font-medium text-right">Conversion (AHA OOS)</th>
-                {canEdit ? <th className="px-3 py-2 font-medium text-right">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -1134,24 +1101,11 @@ function PreApprovalConversionSection({
                     <td className="px-3 py-2 text-right">{entry.conversionRate.toFixed(1)}%</td>
                     <td className="px-3 py-2 text-right">{entry.conversionRateAha.toFixed(1)}%</td>
                     <td className="px-3 py-2 text-right">{entry.conversionRateAhaOos.toFixed(1)}%</td>
-                    {canEdit ? (
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(entry.monthKey)}
-                          className="inline-flex items-center justify-center rounded p-1 text-slate-400 transition hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={deletingMonth === entry.monthKey}
-                          aria-label={`Delete ${entry.label} pre-approval entry`}
-                        >
-                          <Trash2 className="h-4 w-4" aria-hidden="true" />
-                        </button>
-                      </td>
-                    ) : null}
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={canEdit ? 8 : 7} className="px-3 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={7} className="px-3 py-6 text-center text-sm text-slate-500">
                     No pre-approval history captured yet.
                   </td>
                 </tr>
