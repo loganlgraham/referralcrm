@@ -415,6 +415,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           totalReferrals: 0,
           dealsClosed: 0,
           dealsUnderContract: 0,
+          pendingClosings: 0,
           closeRate: 0,
           afcDealsLost: 0,
           afcAttachRate: 0,
@@ -609,6 +610,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
       (payment.status === 'closed' || payment.status === 'paid')
   );
+  const endOfToday = endOfDay(new Date());
   const dealsUnderContract = filteredPayments.filter((payment) =>
     [
       'under_contract',
@@ -616,6 +618,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       'past_appraisal',
       'clear_to_close',
     ].includes(payment.status)
+  );
+  const pendingClosings = dealsUnderContract.filter(
+    (payment) => payment.closingDate && payment.closingDate > endOfToday
   );
   const closeRate = totalReferrals === 0 ? 0 : (dealsClosed.length / totalReferrals) * 100;
 
@@ -1293,6 +1298,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         totalReferrals,
         dealsClosed: dealsClosed.length,
         dealsUnderContract: dealsUnderContract.length,
+        pendingClosings: pendingClosings.length,
         closeRate,
         afcDealsLost,
         afcAttachRate,

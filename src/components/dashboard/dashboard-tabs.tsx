@@ -50,6 +50,7 @@ interface DashboardSummary {
   totalReferrals: number;
   dealsClosed: number;
   dealsUnderContract: number;
+  pendingClosings: number;
   closeRate: number;
   afcDealsLost: number;
   afcAttachRate: number;
@@ -919,7 +920,8 @@ function MainDashboard({
   ];
 
   const pipelineMetrics = [
-    { label: 'Deals under contract', value: formatNumber(summary.dealsUnderContract) },
+    { label: 'Pipeline value', value: formatCurrency(summary.pipelineValueCents) },
+    { label: 'Pending closings', value: formatNumber(summary.pendingClosings) },
     { label: 'Active pipeline', value: formatNumber(summary.activePipeline) },
     {
       label: 'AFC attach rate',
