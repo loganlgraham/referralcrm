@@ -1109,7 +1109,7 @@ function PreApprovalConversionSection({
           formatValue={(value) => `${value.toFixed(1)}%`}
           helper="Referrals ÷ pre-approvals across recorded months by network"
         />
-        <div className="overflow-hidden rounded-lg border border-slate-200">
+        <div className="overflow-x-auto rounded-lg border border-slate-200">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-xs text-slate-500">
               <tr className="text-left">
@@ -1120,7 +1120,6 @@ function PreApprovalConversionSection({
                 <th className="px-3 py-2 font-medium text-right">Conversion (All)</th>
                 <th className="px-3 py-2 font-medium text-right">Conversion (AHA)</th>
                 <th className="px-3 py-2 font-medium text-right">Conversion (AHA OOS)</th>
-                <th className="px-3 py-2 font-medium">Updated</th>
                 {canEdit ? <th className="px-3 py-2 font-medium text-right">Actions</th> : null}
               </tr>
             </thead>
@@ -1135,9 +1134,6 @@ function PreApprovalConversionSection({
                     <td className="px-3 py-2 text-right">{entry.conversionRate.toFixed(1)}%</td>
                     <td className="px-3 py-2 text-right">{entry.conversionRateAha.toFixed(1)}%</td>
                     <td className="px-3 py-2 text-right">{entry.conversionRateAhaOos.toFixed(1)}%</td>
-                    <td className="px-3 py-2 text-slate-500">
-                      {entry.updatedAt ? new Date(entry.updatedAt).toLocaleDateString() : '—'}
-                    </td>
                     {canEdit ? (
                       <td className="px-3 py-2 text-right">
                         <button
