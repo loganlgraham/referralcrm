@@ -50,6 +50,7 @@ export function ReferralDeals({
   const [status, setStatus] = useState<DealStatus>('under_contract');
   const [markPaid, setMarkPaid] = useState(false);
   const [expectedAmount, setExpectedAmount] = useState('');
+  const [expectedManuallyEdited, setExpectedManuallyEdited] = useState(false);
   const [netReferralFeePaid, setNetReferralFeePaid] = useState('');
   const [contractPrice, setContractPrice] = useState('');
   const [commissionPercentage, setCommissionPercentage] = useState('');
@@ -92,6 +93,23 @@ export function ReferralDeals({
       controller.abort();
     };
   }, [canCreate]);
+
+  useEffect(() => {
+    if (expectedManuallyEdited) return;
+    const contract = Number.parseFloat(contractPrice);
+    const commission = Number.parseFloat(commissionPercentage);
+    const referral = Number.parseFloat(referralFeePercentage);
+    if (Number.isFinite(contract) && Number.isFinite(commission) && Number.isFinite(referral)) {
+      const computed = ((contract * commission) / 100) * (referral / 100);
+      if (Number.isFinite(computed)) {
+        setExpectedAmount(computed.toFixed(2));
+        return;
+      }
+    }
+    if (expectedAmount) {
+      setExpectedAmount('');
+    }
+  }, [commissionPercentage, contractPrice, referralFeePercentage, expectedAmount, expectedManuallyEdited]);
 
   const sortedDeals = useMemo(
     () => [...deals].sort((a, b) => {
@@ -177,6 +195,7 @@ export function ReferralDeals({
         invoiceDate: null,
       });
       setExpectedAmount('');
+      setExpectedManuallyEdited(false);
       setNetReferralFeePaid('');
       setContractPrice('');
       setCommissionPercentage('');
@@ -277,49 +296,6 @@ export function ReferralDeals({
           className="grid gap-4 rounded-md border border-slate-200 p-4 sm:grid-cols-2 lg:grid-cols-4"
         >
           <label className="space-y-1 text-sm font-medium text-slate-700">
-            <span>Status</span>
-            <select
-              value={status}
-              onChange={(event) => setStatus(event.target.value as DealStatus)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-              disabled={submitting}
-            >
-              {DEAL_STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
-            <span>Expected amount</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={expectedAmount}
-              onChange={(event) => setExpectedAmount(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-              placeholder="0.00"
-              disabled={submitting}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
-            <span>Net referral fee paid (optional)</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={netReferralFeePaid}
-              onChange={(event) => setNetReferralFeePaid(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-              placeholder="0.00"
-              disabled={submitting}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
             <span>Contract price</span>
             <input
               type="number"
@@ -360,6 +336,53 @@ export function ReferralDeals({
               placeholder="0.00"
               disabled={submitting}
             />
+          </label>
+          <label className="space-y-1 text-sm font-medium text-slate-700">
+            <span>Expected amount</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              value={expectedAmount}
+              onChange={(event) => {
+                const value = event.target.value;
+                setExpectedManuallyEdited(Boolean(value));
+                setExpectedAmount(value);
+              }}
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              placeholder="0.00"
+              disabled={submitting}
+            />
+          </label>
+          <label className="space-y-1 text-sm font-medium text-slate-700">
+            <span>Net referral fee paid (optional)</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              value={netReferralFeePaid}
+              onChange={(event) => setNetReferralFeePaid(event.target.value)}
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              placeholder="0.00"
+              disabled={submitting}
+            />
+          </label>
+          <label className="space-y-1 text-sm font-medium text-slate-700">
+            <span>Status</span>
+            <select
+              value={status}
+              onChange={(event) => setStatus(event.target.value as DealStatus)}
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              disabled={submitting}
+            >
+              {DEAL_STATUS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="space-y-1 text-sm font-medium text-slate-700 sm:col-span-2 lg:col-span-4">
             <span>Property address</span>
