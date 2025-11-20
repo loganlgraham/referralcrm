@@ -699,7 +699,7 @@ export function ReferralHeader({
             isAgentView ? 'lg:justify-end' : ''
           }`}
         >
-          <section className="h-full min-w-[280px] flex-1 rounded-lg border border-slate-200 bg-white/80 p-3 shadow-sm sm:max-w-lg">
+          <section className="h-full min-w-[280px] w-full max-w-xl rounded-lg border border-slate-200 bg-white/80 p-3 shadow-sm sm:max-w-md lg:max-w-[440px]">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-700">Status &amp; progress</h2>
               <span className="text-[11px] uppercase tracking-wide text-slate-400">Pipeline</span>
