@@ -49,7 +49,6 @@ type PaymentWithReferral = {
   propertyAddress?: string | null;
   invoiceDate?: Date | null;
   paidDate?: Date | null;
-  closingDate?: Date | null;
   createdAt?: Date | null;
   commissionBasisPoints?: number | null;
   referralFeeBasisPoints?: number | null;
