@@ -103,6 +103,8 @@ const SLA_THRESHOLDS = {
   daysToClose: 45,
   daysWithoutTouchPoint: 3,
   daysToPaymentAfterClose: 10,
+  adminHoursToCommunication: 24,
+  activeLeadCheckInDays: 7,
 };
 
 const holidayCache = new Map<number, Set<string>>();
@@ -555,6 +557,35 @@ const computeAgentReferralRecommendations = (referral: ReferralLike): SlaRecomme
     );
   }
 
+  if (status === 'Paired' || status === 'In Communication') {
+    const dueBy = addHours(statusLastUpdated, SLA_THRESHOLDS.hoursToFirstConversation);
+    recommendations.push(
+      buildRecommendation({
+        id: 'mc-sync-preapproval',
+        title: 'Align with agent on pre-approval path',
+        message:
+          'Confirm credit docs, income, and funds to close are collected so the MC can validate full pre-approval.',
+        priority: 'high',
+        category: 'communication',
+        dueAt: minDueDate(dueBy),
+        supportingMetric: 'Target: borrower in communication within 24 hours of pairing',
+      })
+    );
+  }
+
+  if (status === 'In Communication' || status === 'Active Lead') {
+    recommendations.push(
+      buildRecommendation({
+        id: 'mc-prepare-loan-options',
+        title: 'Draft loan options for the borrower',
+        message: 'Prepare 2–3 loan scenarios and send them to the agent so showings align with budget.',
+        priority: 'medium',
+        category: 'finance',
+        supportingMetric: 'Keep MC, agent, and borrower aligned on budget',
+      })
+    );
+  }
+
   return recommendations;
 };
 
@@ -582,6 +613,9 @@ export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommenda
 
   const latestNoteAt = getLatestNoteTimestamp(referral.notes);
   const hoursSinceLastNote = latestNoteAt ? differenceInHours(now, latestNoteAt) : null;
+
+  const isBuyer = referral.clientType === 'Buyer' || referral.dealSide === 'buy' || referral.clientType === 'Both';
+  const isSeller = referral.clientType === 'Seller' || referral.dealSide === 'sell' || referral.clientType === 'Both';
 
   const recommendations: SlaRecommendation[] = [];
 
@@ -617,14 +651,34 @@ export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommenda
     );
   }
 
+  if (
+    status === 'New Lead' &&
+    differenceInHours(now, createdAt) >= SLA_THRESHOLDS.adminHoursToCommunication &&
+    communicationMinutes == null
+  ) {
+    const dueBy = addHours(createdAt, SLA_THRESHOLDS.adminHoursToCommunication);
+    recommendations.push(
+      buildRecommendation({
+        id: 'admin-drive-first-communication',
+        title: 'Reach “In Communication” within 24 hours',
+        message:
+          'Check in with the assigned agent and MC to ensure the borrower has been contacted and acknowledged.',
+        priority: 'urgent',
+        category: 'communication',
+        dueAt: minDueDate(dueBy),
+        supportingMetric: 'Admin SLA: borrower contact within 24 hours of creation',
+      })
+    );
+  }
+
   if (status === 'Paired') {
     if (hoursSinceStatusUpdate > SLA_THRESHOLDS.hoursToFirstConversation) {
       const dueBy = addHours(statusLastUpdated, SLA_THRESHOLDS.hoursToFirstConversation);
       recommendations.push(
         buildRecommendation({
           id: 'nudge-first-conversation',
-          title: 'Prompt first borrower conversation',
-          message: 'Follow up with the agent to ensure they have scheduled an introduction call.',
+          title: 'Agent to borrower within 24 hours',
+          message: 'Hold the agent accountable for making contact within a day of pairing and logging the touchpoint.',
           priority: 'high',
           category: 'communication',
           dueAt: minDueDate(dueBy),
@@ -639,22 +693,28 @@ export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommenda
           title: 'Capture communication progress',
           message: 'Record a timeline update once the agent makes contact so SLA tracking stays accurate.',
           priority: 'medium',
-          category: 'ops',
-          supportingMetric: 'Awaiting communication milestone',
-        })
-      );
-    }
+        category: 'ops',
+        supportingMetric: 'Awaiting communication milestone',
+      })
+    );
+  }
   }
 
   if (status === 'In Communication' || ACTIVE_LEAD_STATUSES.has(status)) {
-    if (statusAgeDays >= SLA_THRESHOLDS.daysWithoutTouchPoint) {
-      const dueBy = addDays(statusLastUpdated, SLA_THRESHOLDS.daysWithoutTouchPoint);
+    const touchpointThreshold = ACTIVE_LEAD_STATUSES.has(status)
+      ? SLA_THRESHOLDS.activeLeadCheckInDays
+      : SLA_THRESHOLDS.daysWithoutTouchPoint;
+
+    if (statusAgeDays >= touchpointThreshold) {
+      const dueBy = addDays(statusLastUpdated, touchpointThreshold);
       recommendations.push(
         buildRecommendation({
           id: 'schedule-proactive-check-in',
           title: 'Schedule a proactive check-in',
-          message: 'It has been a few days without movement. Suggest next steps or resources to keep momentum.',
-          priority: 'medium',
+          message: ACTIVE_LEAD_STATUSES.has(status)
+            ? 'Light-touch check-in to keep the relationship warm while the agent works the active lead.'
+            : 'It has been a few days without movement. Suggest next steps or resources to keep momentum.',
+          priority: ACTIVE_LEAD_STATUSES.has(status) ? 'low' : 'medium',
           category: 'communication',
           dueAt: minDueDate(dueBy),
           supportingMetric: `${statusAgeDays} days in current stage`,
@@ -665,14 +725,114 @@ export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommenda
       recommendations.push(
         buildRecommendation({
           id: 'refresh-activity-log',
-          title: 'Update the activity log',
-          message: 'Log a quick note or call outcome so the team has the latest borrower context.',
-          priority: 'low',
+          title: 'Log a borrower update',
+          message: 'Share borrower progress so the admin, agent, and MC stay aligned.',
+          priority: ACTIVE_LEAD_STATUSES.has(status) ? 'low' : 'medium',
           category: 'ops',
           supportingMetric: `Last note ${hoursSinceLastNote}h ago`,
         })
       );
     }
+  }
+
+  if ((status === 'Paired' || status === 'In Communication') && isBuyer) {
+    const dueBy = addHours(statusLastUpdated, 24);
+    recommendations.push(
+      buildRecommendation({
+        id: 'confirm-preapproval-readiness',
+        title: 'Verify full buyer pre-approval',
+        message:
+          'Confirm income, assets, and credit docs are collected so the MC can issue a rock-solid pre-approval.',
+        priority: 'high',
+        category: 'finance',
+        dueAt: minDueDate(dueBy),
+        supportingMetric: 'Pre-approval needed before showings',
+      })
+    );
+    recommendations.push(
+      buildRecommendation({
+        id: 'agent-mc-sync',
+        title: 'Align agent and MC on budget',
+        message: 'Ensure the agent and MC have discussed pre-approval terms before scheduling showings.',
+        priority: 'medium',
+        category: 'communication',
+        supportingMetric: 'Keep budget and home search in sync',
+      })
+    );
+  }
+
+  if ((status === 'In Communication' || ACTIVE_LEAD_STATUSES.has(status)) && isBuyer) {
+    recommendations.push(
+      buildRecommendation({
+        id: 'schedule-first-showings',
+        title: 'Schedule first home tours',
+        message: 'Book initial showings to move the borrower into Active Lead status.',
+        priority: 'medium',
+        category: 'pipeline',
+        supportingMetric: 'Goal: active lead with scheduled tours',
+      })
+    );
+
+    recommendations.push(
+      buildRecommendation({
+        id: 'buyers-agency-agreement',
+        title: 'Secure buyer agency agreement',
+        message: 'Confirm the buyer representation agreement is signed before touring widely.',
+        priority: 'medium',
+        category: 'ops',
+        supportingMetric: 'Protect representation before heavy touring',
+      })
+    );
+  }
+
+  if ((status === 'Paired' || status === 'In Communication') && isSeller) {
+    const dueBy = addHours(statusLastUpdated, 24);
+    recommendations.push(
+      buildRecommendation({
+        id: 'schedule-listing-consult',
+        title: 'Hold a listing consultation',
+        message: 'Book the listing consult to cover pricing, prep, and timelines with the seller.',
+        priority: 'high',
+        category: 'communication',
+        dueAt: minDueDate(dueBy),
+        supportingMetric: 'Consult within 24 hours of pairing',
+      })
+    );
+  }
+
+  if ((status === 'In Communication' || ACTIVE_LEAD_STATUSES.has(status)) && isSeller) {
+    recommendations.push(
+      buildRecommendation({
+        id: 'listing-paperwork',
+        title: 'Collect listing paperwork',
+        message: 'Confirm agency disclosures and listing agreements are signed.',
+        priority: 'medium',
+        category: 'ops',
+        supportingMetric: 'Signed listing docs on file',
+      })
+    );
+
+    recommendations.push(
+      buildRecommendation({
+        id: 'prep-photos',
+        title: 'Schedule photos and pre-list prep',
+        message: 'Book photography and prep tasks so the property can go live cleanly.',
+        priority: 'medium',
+        category: 'pipeline',
+        supportingMetric: 'Marketing assets ready for launch',
+      })
+    );
+
+    recommendations.push(
+      buildRecommendation({
+        id: 'target-list-date',
+        title: 'Set target list date',
+        message: 'Align on the go-live date to reach Active Lead status with marketing in place.',
+        priority: 'low',
+        category: 'ops',
+        supportingMetric: 'Active lead = live listing',
+      })
+    );
   }
 
   if (ACTIVE_LEAD_STATUSES.has(status) || status === 'In Communication') {
@@ -693,6 +853,39 @@ export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommenda
   }
 
   if (status === 'Under Contract') {
+    recommendations.push(
+      buildRecommendation({
+        id: 'schedule-inspection',
+        title: 'Schedule inspections',
+        message: 'Confirm inspection timelines and share key dates with admin, agent, and MC.',
+        priority: 'high',
+        category: 'pipeline',
+        supportingMetric: 'Under contract milestone: inspections',
+      })
+    );
+
+    recommendations.push(
+      buildRecommendation({
+        id: 'order-appraisal',
+        title: 'Order appraisal and confirm financing steps',
+        message: 'Ensure the appraisal is ordered and MC has updated docs to keep loan on track.',
+        priority: 'high',
+        category: 'finance',
+        supportingMetric: 'Finance milestones on track',
+      })
+    );
+
+    recommendations.push(
+      buildRecommendation({
+        id: 'share-closing-timeline',
+        title: 'Share closing timeline',
+        message: 'Send a summary of contingencies, appraisal, loan commitment, and closing dates.',
+        priority: 'medium',
+        category: 'communication',
+        supportingMetric: 'Keep parties aligned post-contract',
+      })
+    );
+
     if (!closedMinutes && statusAgeDays >= SLA_THRESHOLDS.daysToClose) {
       const dueBy = addDays(statusLastUpdated, SLA_THRESHOLDS.daysToClose);
       recommendations.push(
