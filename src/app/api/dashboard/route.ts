@@ -50,12 +50,14 @@ interface AggregatedPayment {
     | 'terminated';
   expectedAmountCents: number;
   receivedAmountCents: number;
+  contractPriceCents?: number | null;
   closingDate?: Date | null;
   terminatedReason?: 'inspection' | 'appraisal' | 'financing' | 'changed_mind' | null;
   paidDate?: Date | null;
   invoiceDate?: Date | null;
   updatedAt: Date;
   usedAfc?: boolean;
+  usedAssignedAgent?: boolean;
   agentAttribution?: 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT' | null;
   referral: {
     _id: Types.ObjectId;
@@ -84,6 +86,7 @@ interface AggregatedPayment {
       daysToClose?: number | null;
       timeToFirstAgentContactHours?: number | null;
       timeToAssignmentHours?: number | null;
+      lastClosedAt?: Date | string | null;
     } | null;
   };
 }
@@ -427,6 +430,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           realizedRevenueCents: 0,
           closedNotPaidCents: 0,
           averageDaysClosedToPaid: 0,
+          averageClosedDealAmountCents: 0,
           averageRevenuePerDealCents: 0,
           totalVolumeClosedCents: 0,
           averagePaAmountCents: 0,
@@ -467,6 +471,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         commissionSampleSize: 0,
         referralLeaderboard: [],
         closeRateLeaderboard: [],
+        averageClosedDealAmount: [],
         revenuePaid: [],
         revenueExpected: [],
         netRevenue: []
@@ -629,18 +634,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     (payment) => payment.agentAttribution !== 'OUTSIDE_AGENT'
   );
 
+  const closedOrPaidStatuses = new Set(['closed', 'paid']);
+
   const afcRelevant = filteredPayments.filter(
     (payment) =>
       payment.referral?.org === 'AFC' &&
-      [
-        'under_contract',
-        'past_inspection',
-        'past_appraisal',
-        'clear_to_close',
-        'closed',
-        'payment_sent',
-        'paid',
-      ].includes(payment.status)
+      closedOrPaidStatuses.has(payment.status)
   );
   const afcDealsLost = afcRelevant.filter((payment) => !payment.usedAfc).length;
   const afcAttachRate = afcRelevant.length
@@ -650,33 +649,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const ahaRelevant = filteredPayments.filter(
     (payment) =>
       payment.referral?.ahaBucket === 'AHA' &&
-      [
-        'under_contract',
-        'past_inspection',
-        'past_appraisal',
-        'clear_to_close',
-        'closed',
-        'payment_sent',
-        'paid',
-      ].includes(payment.status)
+      closedOrPaidStatuses.has(payment.status)
   );
-  const ahaAttached = ahaRelevant.filter((payment) => payment.agentAttribution === 'AHA');
+  const ahaAttached = ahaRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
   const ahaAttachRate = ahaRelevant.length ? (ahaAttached.length / ahaRelevant.length) * 100 : 0;
 
   const ahaOosRelevant = filteredPayments.filter(
     (payment) =>
       payment.referral?.ahaBucket === 'AHA_OOS' &&
-      [
-        'under_contract',
-        'past_inspection',
-        'past_appraisal',
-        'clear_to_close',
-        'closed',
-        'payment_sent',
-        'paid',
-      ].includes(payment.status)
+      closedOrPaidStatuses.has(payment.status)
   );
-  const ahaOosAttached = ahaOosRelevant.filter((payment) => payment.agentAttribution === 'AHA_OOS');
+  const ahaOosAttached = ahaOosRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
   const ahaOosAttachRate = ahaOosRelevant.length ? (ahaOosAttached.length / ahaOosRelevant.length) * 100 : 0;
 
   const expectedRevenueCents = revenueEligiblePayments.reduce(
@@ -705,9 +688,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const averageDaysClosedToPaid = computeAverage(
     paidPaymentsWithDates
       .map((payment) => {
-        const end = payment.paidDate ? new Date(payment.paidDate) : undefined;
-        const start = payment.invoiceDate ? new Date(payment.invoiceDate) : new Date(payment.updatedAt);
+        const end = payment.paidDate ? new Date(payment.paidDate) : null;
         if (!end) return null;
+
+        const closingDate = payment.closingDate
+          ? new Date(payment.closingDate)
+          : payment.referral?.sla?.lastClosedAt
+          ? new Date(payment.referral.sla.lastClosedAt)
+          : null;
+
+        const start = closingDate
+          ? closingDate
+          : payment.invoiceDate
+          ? new Date(payment.invoiceDate)
+          : new Date(payment.updatedAt);
+
         return differenceInCalendarDays(end, start);
       })
       .filter((value): value is number => value != null)
@@ -716,6 +711,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const revenueContributingClosedDeals = revenueEligiblePayments.filter(
     (payment) => payment.status === 'closed' || payment.status === 'paid'
   );
+  const closedDealPrices = revenueContributingClosedDeals
+    .map((payment) =>
+      payment.contractPriceCents ??
+      payment.referral?.closedPriceCents ??
+      payment.referral?.estPurchasePriceCents ??
+      null
+    )
+    .filter((value): value is number => value != null && value > 0);
   const averageRevenuePerDealCents = revenueContributingClosedDeals.length
     ? realizedRevenueCents / revenueContributingClosedDeals.length
     : 0;
@@ -723,6 +726,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const closedPrice = payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
     return sum + closedPrice;
   }, 0);
+  const averageClosedDealAmountCents = computeAverage(closedDealPrices);
 
   const revenueBySourceMap = new Map<string, number>();
   const revenueByEndorserMap = new Map<string, number>();
@@ -1115,6 +1119,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       commissionCents: number[];
       commissionPercentages: number[];
       netCommissionCents: number;
+      closedVolumeCents: number;
     }
   >();
   const agentLostDealsMap = new Map<string, number>();
@@ -1128,7 +1133,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       totalReferrals: agentReferralCount.get(key) ?? 0,
       commissionCents: [],
       commissionPercentages: [],
-      netCommissionCents: 0
+      netCommissionCents: 0,
+      closedVolumeCents: 0
     };
     const isOutsideAgentDeal = payment.agentAttribution === 'OUTSIDE_AGENT';
     if (!isOutsideAgentDeal) {
@@ -1143,6 +1149,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           payment.referral?.estPurchasePriceCents ??
           payment.referral?.referralFeeDueCents ??
           0;
+        if (closedPriceCents > 0) {
+          current.closedVolumeCents += closedPriceCents;
+        }
         const commissionBasisPoints = payment.referral?.commissionBasisPoints ?? 0;
         const commissionCents = (closedPriceCents * commissionBasisPoints) / 10000;
         const commissionPercent = commissionBasisPoints / 100;
@@ -1196,6 +1205,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       revenueCents: value.expected
     }))
     .sort((a, b) => b.revenueCents - a.revenueCents)
+    .slice(0, 10);
+
+  const agentAverageClosedDeal = Array.from(agentRevenueMap.entries())
+    .map(([key, value]) => ({
+      id: key,
+      name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
+      revenueCents: value.closed > 0 ? value.closedVolumeCents / value.closed : 0,
+    }))
+    .sort((a, b) => (b.revenueCents ?? 0) - (a.revenueCents ?? 0))
     .slice(0, 10);
 
   const agentCommissionValues = Array.from(agentRevenueMap.values())
@@ -1369,6 +1387,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         realizedRevenueCents,
         closedNotPaidCents,
         averageDaysClosedToPaid,
+        averageClosedDealAmountCents,
         averageRevenuePerDealCents,
         totalVolumeClosedCents,
         averagePaAmountCents,
@@ -1419,6 +1438,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       closeRateLeaderboard: agentCloseRateLeaderboard,
       revenuePaid: agentRevenuePaid,
       revenueExpected: agentRevenueExpected,
+      averageClosedDealAmount: agentAverageClosedDeal,
       netRevenue: agentNetRevenue,
       lostDeals: agentLostDeals
     },

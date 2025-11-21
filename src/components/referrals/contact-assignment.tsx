@@ -72,6 +72,10 @@ export function ContactAssignment({
   const [currentContact, setCurrentContact] = useState<Contact | null | undefined>(contact);
   const [selected, setSelected] = useState(contact?.id ?? '');
   const [submitting, setSubmitting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestionReason, setSuggestionReason] = useState<string | null>(null);
+  const [suggestedAgentIds, setSuggestedAgentIds] = useState<string[]>([]);
 
   const { data: options } = useSWR<AssignmentOption[]>(open && canAssign ? directoryForType[type] : null, fetcher);
   const { mutate } = useSWRConfig();
@@ -86,6 +90,9 @@ export function ContactAssignment({
   useEffect(() => {
     setCurrentContact(contact);
     setSelected(contact?.id ?? '');
+    setSearchTerm('');
+    setSuggestionReason(null);
+    setSuggestedAgentIds([]);
   }, [contact]);
 
   const formattedContact = useMemo(() => {
@@ -98,6 +105,47 @@ export function ContactAssignment({
       phone: currentContact.phone ?? undefined
     };
   }, [currentContact]);
+
+  const filteredOptions = useMemo(() => {
+    if (!options) return [];
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return options;
+    return options.filter((option) => {
+      const name = option.name?.toLowerCase() ?? '';
+      const email = option.email?.toLowerCase() ?? '';
+      return name.includes(query) || email.includes(query);
+    });
+  }, [options, searchTerm]);
+
+  const handleSuggest = async () => {
+    if (type !== 'agent') return;
+    setSuggesting(true);
+    setSuggestionReason(null);
+    try {
+      const params = new URLSearchParams();
+      suggestedAgentIds.forEach((id) => params.append('exclude', id));
+      const response = await fetch(
+        `/api/referrals/${referralId}/suggest-agent${params.toString() ? `?${params.toString()}` : ''}`
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        const message = typeof payload?.error === 'string' ? payload.error : 'Unable to suggest an agent right now.';
+        throw new Error(message);
+      }
+
+      const suggestion = (await response.json()) as { agentId: string; reason?: string; name?: string };
+      setSelected(suggestion.agentId);
+      setSuggestionReason(suggestion.reason ?? null);
+      setSuggestedAgentIds((previous) => [...previous, suggestion.agentId]);
+      setSearchTerm('');
+      toast.success(`Suggested ${suggestion.name ?? 'agent'} selected`);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Unable to suggest an agent right now.');
+    } finally {
+      setSuggesting(false);
+    }
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -197,20 +245,48 @@ export function ContactAssignment({
           <form onSubmit={handleSubmit} className="mt-3 space-y-3">
             <label className="block text-xs font-semibold uppercase text-slate-500">
               Select {title}
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                className="mt-1 w-full rounded border border-slate-200 px-2 py-1 text-sm"
+                placeholder={`Type to filter ${title.toLowerCase()}s…`}
+                disabled={!options || submitting}
+              />
               <select
                 value={selected}
                 onChange={(event) => setSelected(event.target.value)}
-                className="mt-1 w-full rounded border border-slate-200 px-2 py-1 text-sm"
+                className="mt-2 w-full rounded border border-slate-200 px-2 py-1 text-sm"
                 disabled={!options || submitting}
               >
                 <option value="">Choose…</option>
-                {options?.map((option) => (
+                {filteredOptions.map((option) => (
                   <option key={option._id} value={option._id}>
                     {option.name}
                   </option>
                 ))}
               </select>
             </label>
+            {type === 'agent' && (
+              <div className="flex flex-col gap-2 rounded border border-dashed border-slate-200 p-3 text-xs text-slate-600">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="font-semibold text-slate-700">Need a recommendation?</p>
+                  <button
+                    type="button"
+                    onClick={handleSuggest}
+                    disabled={suggesting}
+                    className="inline-flex items-center justify-center rounded bg-slate-800 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {suggesting ? 'Thinking…' : 'Suggest agent'}
+                  </button>
+                </div>
+                {suggestionReason && (
+                  <p className="rounded bg-slate-50 p-2 text-[11px] text-slate-600">
+                    <span className="font-semibold text-slate-700">Why:</span> {suggestionReason}
+                  </p>
+                )}
+              </div>
+            )}
             <button
               type="submit"
               disabled={submitting || !selected}

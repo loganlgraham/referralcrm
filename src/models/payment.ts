@@ -42,7 +42,7 @@ const paymentSchema = new Schema(
       default: null,
     },
     agentId: { type: Schema.Types.ObjectId, ref: 'Agent', default: null },
-    usedAfc: { type: Boolean, default: false },
+    usedAfc: { type: Boolean, default: true },
     usedAssignedAgent: { type: Boolean, default: true },
     invoiceDate: Date,
     paidDate: Date,

@@ -11,6 +11,22 @@ import {
 
 import { useFollowUpTaskContext } from './follow-up-task-provider';
 
+export const getLatestCompletionForReferral = (
+  referralId: string,
+  completions: Record<string, { completed: boolean; completedAt?: string | null }>
+): string | null => {
+  const prefix = `${referralId}::`;
+  const timestamps = Object.entries(completions)
+    .filter(([taskId, state]) => taskId.startsWith(prefix) && state.completed && typeof state.completedAt === 'string')
+    .map(([, state]) => state.completedAt as string);
+
+  if (timestamps.length === 0) {
+    return null;
+  }
+
+  return timestamps.reduce((latest, current) => (latest > current ? latest : current));
+};
+
 export interface FollowUpTask extends SlaRecommendation {
   taskId: string;
   referralId: string;
@@ -25,7 +41,8 @@ export function useFollowUpTasks(referral: ReferralLike & { borrower?: { name?: 
   const { completions, toggleTask, manualTasks, removeManualTask } = useFollowUpTaskContext();
 
   return useMemo(() => {
-    const insights = computeSlaInsights(referral);
+    const lastCompletedAt = getLatestCompletionForReferral(referral._id, completions);
+    const insights = computeSlaInsights(referral, { lastCompletedAt });
     const ordered = sortRecommendations(insights.recommendations);
     const manual = manualTasks[referral._id] ?? [];
 

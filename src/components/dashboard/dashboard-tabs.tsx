@@ -60,6 +60,7 @@ interface DashboardSummary {
   realizedRevenueCents: number;
   closedNotPaidCents: number;
   averageDaysClosedToPaid: number;
+  averageClosedDealAmountCents: number;
   averageRevenuePerDealCents: number;
   totalVolumeClosedCents: number;
   averagePaAmountCents: number;
@@ -154,6 +155,7 @@ interface DashboardResponse {
     commissionSampleSize: number;
     referralLeaderboard: LeaderboardEntry[];
     closeRateLeaderboard: LeaderboardEntry[];
+    averageClosedDealAmount: LeaderboardEntry[];
     revenuePaid: LeaderboardEntry[];
     revenueExpected: LeaderboardEntry[];
     netRevenue: LeaderboardEntry[];
@@ -1171,7 +1173,8 @@ function MainDashboard({
     { label: 'Total volume closed', value: formatCurrency(summary.totalVolumeClosedCents) },
     { label: 'Avg. referral fee paid', value: formatCurrency(summary.averageReferralFeePaidCents) },
     { label: 'Avg. revenue per deal', value: formatCurrency(summary.averageRevenuePerDealCents) },
-    { label: 'Avg. days closed → paid', value: `${summary.averageDaysClosedToPaid.toFixed(1)} days` }
+    { label: 'Avg. days closed → paid', value: `${summary.averageDaysClosedToPaid.toFixed(1)} days` },
+    { label: 'Avg. closed deal amount', value: formatCurrency(summary.averageClosedDealAmountCents) }
   ];
 
   return (
@@ -1267,6 +1270,11 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
         <LeaderboardTable title="Close rate by agent" entries={data.closeRateLeaderboard} valueLabel="Close rate" />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
+        <LeaderboardTable
+          title="Avg. closed deal amount by agent"
+          entries={data.averageClosedDealAmount}
+          valueLabel="Avg. closed deal"
+        />
         <LeaderboardTable title="Revenue paid by agent" entries={data.revenuePaid} valueLabel="Revenue" />
         <LeaderboardTable title="Revenue expected by agent" entries={data.revenueExpected} valueLabel="Expected" />
       </div>

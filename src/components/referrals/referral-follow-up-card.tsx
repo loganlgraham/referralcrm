@@ -35,7 +35,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
 
   const formatDueDate = (value: string): string => {
     try {
-      return formatInTimeZone(new Date(value), SLA_TIME_ZONE, "MMM d, yyyy h:mm a 'MST'");
+      return formatInTimeZone(new Date(value), SLA_TIME_ZONE, "MMM d, yyyy h:mm a 'MT'");
     } catch (error) {
       return new Date(value).toLocaleString();
     }

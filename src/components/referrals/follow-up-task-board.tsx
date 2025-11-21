@@ -5,7 +5,7 @@ import { CalendarPlus, CheckCircle2, Circle, Loader2 } from 'lucide-react';
 import { formatInTimeZone } from 'date-fns-tz';
 
 import { useFollowUpTaskContext } from '@/components/referrals/follow-up-task-provider';
-import { useFollowUpTasks } from '@/components/referrals/use-follow-up-tasks';
+import { useFollowUpTasks, getLatestCompletionForReferral } from '@/components/referrals/use-follow-up-tasks';
 import {
   computeSlaInsights,
   sortRecommendations,
@@ -57,7 +57,7 @@ const toReferralLike = (referral: BoardReferral): ReferralLike & { borrower: { n
 
 const formatDueDate = (value: string): string => {
   try {
-    return formatInTimeZone(new Date(value), SLA_TIME_ZONE, "MMM d, yyyy h:mm a 'MST'");
+    return formatInTimeZone(new Date(value), SLA_TIME_ZONE, "MMM d, yyyy h:mm a 'MT'");
   } catch (error) {
     return new Date(value).toLocaleString();
   }
@@ -70,7 +70,8 @@ export function FollowUpTasksBoard({ referrals }: FollowUpTasksBoardProps) {
     return referrals.reduce(
       (acc, referral) => {
         const referralLike = toReferralLike(referral);
-        const insights = computeSlaInsights(referralLike);
+        const lastCompletedAt = getLatestCompletionForReferral(referral._id, completions);
+        const insights = computeSlaInsights(referralLike, { lastCompletedAt });
         const ordered = sortRecommendations(insights.recommendations);
         const outstanding = ordered.filter((item) => {
           const taskId = `${referral._id}::${item.id}`;
@@ -148,7 +149,12 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
       {tasks.length > 0 ? (
         <ul className="space-y-3">
           {tasks.map((task) => (
-            <li key={task.taskId} className="flex items-start gap-3 rounded-lg border border-slate-200 p-3">
+            <li
+              key={task.taskId}
+              className={`flex items-start gap-3 rounded-lg border border-slate-200 p-3 ${
+                task.completed ? 'bg-slate-50 opacity-70' : 'bg-white'
+              }`}
+            >
               <button
                 type="button"
                 onClick={task.toggle}
@@ -162,7 +168,9 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
               </button>
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-medium text-slate-900">{task.title}</p>
+                  <p className={`font-medium ${task.completed ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
+                    {task.title}
+                  </p>
                   <span className="text-xs uppercase tracking-wide text-slate-400">{task.category}</span>
                   {task.isManual && (
                     <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
@@ -171,8 +179,8 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
                   )}
                   <span className="text-xs font-semibold uppercase text-slate-400">{task.priority}</span>
                 </div>
-                <p className="text-sm text-slate-600">{task.message}</p>
-                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                <p className={`text-sm ${task.completed ? 'text-slate-500' : 'text-slate-600'}`}>{task.message}</p>
+                <div className={`flex flex-wrap items-center gap-3 text-xs ${task.completed ? 'text-slate-400' : 'text-slate-500'}`}>
                   {task.supportingMetric && <span>{task.supportingMetric}</span>}
                   {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
                 </div>
