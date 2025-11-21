@@ -1,3 +1,4 @@
+import { differenceInMinutes } from 'date-fns';
 import { NextRequest, NextResponse } from 'next/server';
 import { Types } from 'mongoose';
 import { connectMongo } from '@/lib/mongoose';
@@ -61,6 +62,13 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
   referral.assignedAgent = referral.buySideAgent ?? referral.sellSideAgent ?? null;
   referral.statusLastUpdated = new Date();
+  const sla = (referral.sla ??= {} as any);
+  const createdAt = referral.createdAt instanceof Date ? referral.createdAt : new Date(referral.createdAt ?? Date.now());
+  if (!Number.isNaN(createdAt.getTime()) && sla.timeToAssignmentHours == null) {
+    const minutesSinceCreation = Math.max(differenceInMinutes(new Date(), createdAt), 0);
+    sla.timeToAssignmentHours = Math.round((minutesSinceCreation / 60) * 10) / 10;
+    referral.markModified('sla');
+  }
   referral.audit = referral.audit || [];
   const auditEntry: Record<string, unknown> = {
     actorRole: session.user.role,

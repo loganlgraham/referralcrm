@@ -1,3 +1,4 @@
+import { differenceInDays } from 'date-fns';
 import { NextRequest, NextResponse } from 'next/server';
 import { connectMongo } from '@/lib/mongoose';
 import { Types } from 'mongoose';
@@ -476,6 +477,10 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
       if (nextStatus === 'under_contract') {
         sla.lastUnderContractAt = now;
+        const createdAt = toDate(referral.createdAt) ?? now;
+        if (sla.daysToContract == null) {
+          sla.daysToContract = Math.max(differenceInDays(now, createdAt), 0);
+        }
         slaChanged = true;
       }
 
@@ -488,6 +493,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         const closedMinutes = minutesBetweenDates(underContractAt, now);
         if (closedMinutes != null) {
           sla.contractToCloseMinutes = closedMinutes;
+          sla.daysToClose = Math.max(differenceInDays(now, underContractAt), 0);
           sla.lastClosedAt = now;
           slaChanged = true;
         }

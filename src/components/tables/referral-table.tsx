@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import clsx from 'clsx';
 
 import { REFERRAL_STATUSES, ReferralStatus } from '@/constants/referrals';
-import { formatCurrency, formatNumber } from '@/utils/formatters';
+import { formatCurrency, formatNumber, formatPhoneNumber } from '@/utils/formatters';
 
 export interface ReferralRow {
   _id: string;
@@ -372,7 +372,9 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
           <div className="flex flex-col text-sm">
             <span className="font-medium text-slate-700">{row.original.assignedAgentName || 'Unassigned'}</span>
             {row.original.assignedAgentPhone && (
-              <span className="text-xs text-slate-500">{row.original.assignedAgentPhone}</span>
+              <span className="text-xs text-slate-500">
+                {formatPhoneNumber(row.original.assignedAgentPhone)}
+              </span>
             )}
           </div>
         )
@@ -411,7 +413,9 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
         return (
           <div className="flex flex-col text-sm">
             <span className="font-medium text-slate-700">{assignedAgentName || 'Unassigned'}</span>
-            {assignedAgentPhone && <span className="text-xs text-slate-500">{assignedAgentPhone}</span>}
+            {assignedAgentPhone && (
+              <span className="text-xs text-slate-500">{formatPhoneNumber(assignedAgentPhone)}</span>
+            )}
           </div>
         );
       }
@@ -427,7 +431,9 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
         return (
           <div className="flex flex-col text-sm">
             <span className="font-medium text-slate-700">{lenderName || 'Unassigned'}</span>
-            {lenderPhone && <span className="text-xs text-slate-500">{lenderPhone}</span>}
+            {lenderPhone && (
+              <span className="text-xs text-slate-500">{formatPhoneNumber(lenderPhone)}</span>
+            )}
           </div>
         );
       }

@@ -19,6 +19,15 @@ interface ReferralDealsProps {
 
 type AgentOption = { id: string; name: string };
 
+type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
+
+const TERMINATED_REASON_OPTIONS: { value: TerminatedReason; label: string }[] = [
+  { value: 'inspection', label: 'Inspection' },
+  { value: 'appraisal', label: 'Appraisal' },
+  { value: 'financing', label: 'Financing' },
+  { value: 'changed_mind', label: 'Changed Mind' },
+];
+
 type DealUpdatePayload = {
   status: DealStatus;
   expectedAmountCents: number;
@@ -33,6 +42,7 @@ type DealUpdatePayload = {
   usedAfc: boolean;
   usedAssignedAgent: boolean;
   receivedAmountCents?: number;
+  terminatedReason?: TerminatedReason | null;
 };
 
 const toCents = (value: string): number => {
@@ -73,7 +83,11 @@ function DealCard({
   canManage: boolean;
   statusUpdating?: boolean;
   deleting?: boolean;
-  onStatusChange: (deal: ReferralPayment, status: DealStatus) => void;
+  onStatusChange: (
+    deal: ReferralPayment,
+    status: DealStatus,
+    terminationReason?: TerminatedReason | null
+  ) => void;
   onDelete: (deal: ReferralPayment) => void;
   onUpdate: (deal: ReferralPayment, payload: DealUpdatePayload) => Promise<boolean>;
 }) {
@@ -99,6 +113,9 @@ function DealCard({
   const [usedAfc, setUsedAfc] = useState(Boolean(deal.usedAfc));
   const [usedAssignedAgent, setUsedAssignedAgent] = useState(Boolean(deal.usedAssignedAgent));
   const [markPaid, setMarkPaid] = useState(deal.status === 'paid');
+  const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | null>(
+    (deal.terminatedReason as TerminatedReason | undefined) ?? null
+  );
 
   const populateFromDeal = useCallback(() => {
     setStatus((deal.status as DealStatus | undefined) ?? 'under_contract');
@@ -115,6 +132,7 @@ function DealCard({
     setUsedAfc(Boolean(deal.usedAfc));
     setUsedAssignedAgent(Boolean(deal.usedAssignedAgent));
     setMarkPaid(deal.status === 'paid');
+    setTerminatedReason((deal.terminatedReason as TerminatedReason | undefined) ?? null);
   }, [deal]);
 
   useEffect(() => {
@@ -162,6 +180,11 @@ function DealCard({
 
     setSaving(true);
     const statusToSend = markPaid ? 'paid' : status;
+    if (statusToSend === 'terminated' && !terminatedReason) {
+      toast.error('Select a termination reason');
+      setSaving(false);
+      return;
+    }
     const success = await onUpdate(deal, {
       status: statusToSend,
       expectedAmountCents: finalExpectedAmountCents,
@@ -176,6 +199,7 @@ function DealCard({
       usedAfc,
       usedAssignedAgent,
       receivedAmountCents: netReferralFeePaidCents,
+      terminatedReason: statusToSend === 'terminated' ? terminatedReason : null,
     });
 
     if (success) {
@@ -190,6 +214,10 @@ function DealCard({
   const netPaid = formatCurrency((deal.netReferralFeePaidCents ?? deal.receivedAmountCents ?? 0) ?? 0);
   const contractPriceValue = deal.contractPriceCents ? formatCurrency(deal.contractPriceCents) : '—';
   const dealSide = deal.side === 'sell' ? 'Sell-side' : 'Buy-side';
+  const terminatedReasonLabel = terminatedReason
+    ? TERMINATED_REASON_OPTIONS.find((option) => option.value === terminatedReason)?.label ??
+      terminatedReason
+    : null;
 
   return (
     <div
@@ -204,12 +232,23 @@ function DealCard({
             <p className="text-xs text-slate-500">
               Closing date: {deal.closingDate ? formatDate(deal.closingDate) : '—'}
             </p>
+            {deal.status === 'terminated' && (
+              <p className="text-xs font-medium text-rose-600">
+                Termination reason: {terminatedReasonLabel ?? 'Not specified'}
+              </p>
+            )}
           </div>
           <label className="block text-xs font-semibold text-slate-600">
             <span className="mr-2">Update stage</span>
             <select
               value={(deal.status as DealStatus | undefined) ?? 'under_contract'}
-              onChange={(event) => onStatusChange(deal, event.target.value as DealStatus)}
+              onChange={(event) =>
+                onStatusChange(
+                  deal,
+                  event.target.value as DealStatus,
+                  event.target.value === 'terminated' ? terminatedReason : null
+                )
+              }
               disabled={!canManage || statusUpdating}
               className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs shadow-sm focus:border-brand focus:outline-none"
             >
@@ -220,6 +259,28 @@ function DealCard({
               ))}
             </select>
           </label>
+          {canManage && (
+            <label className="block text-xs font-semibold text-slate-600">
+              <span className="mr-2">Termination reason</span>
+              <select
+                value={terminatedReason ?? ''}
+                onChange={(event) =>
+                  setTerminatedReason(
+                    event.target.value ? (event.target.value as TerminatedReason) : null
+                  )
+                }
+                disabled={!canManage || statusUpdating}
+                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs shadow-sm focus:border-brand focus:outline-none"
+              >
+                <option value="">Select reason</option>
+                {TERMINATED_REASON_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
         <div className="space-y-1">
           <p className="text-xs uppercase text-slate-500">Expected</p>
@@ -365,26 +426,48 @@ function DealCard({
               disabled={saving}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
-            <span>Status</span>
-            <select
-              value={status}
-              onChange={(event) => setStatus(event.target.value as DealStatus)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-              disabled={saving}
-            >
-              {DEAL_STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-            </select>
-          </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
-            <span>Closing date</span>
-            <input
-              type="date"
-              value={closingDate}
+            <label className="space-y-1 text-sm font-medium text-slate-700">
+              <span>Status</span>
+              <select
+                value={status}
+                onChange={(event) => setStatus(event.target.value as DealStatus)}
+                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                disabled={saving}
+              >
+                {DEAL_STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+              </select>
+            </label>
+            {status === 'terminated' && (
+              <label className="space-y-1 text-sm font-medium text-slate-700">
+                <span>Termination reason</span>
+                <select
+                  value={terminatedReason ?? ''}
+                  onChange={(event) =>
+                    setTerminatedReason(
+                      event.target.value ? (event.target.value as TerminatedReason) : null
+                    )
+                  }
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  disabled={saving}
+                >
+                  <option value="">Select reason</option>
+                  {TERMINATED_REASON_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="space-y-1 text-sm font-medium text-slate-700">
+              <span>Closing date</span>
+              <input
+                type="date"
+                value={closingDate}
               onChange={(event) => setClosingDate(event.target.value)}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
               disabled={saving}
@@ -517,6 +600,7 @@ export function ReferralDeals({
   const [usedAfc, setUsedAfc] = useState(false);
   const [usedAssignedAgent, setUsedAssignedAgent] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | null>(null);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
   const [deleting, setDeleting] = useState<Record<string, boolean>>({});
@@ -594,34 +678,40 @@ export function ReferralDeals({
       : 0;
     const finalExpectedAmountCents = expectedAmountCents || computedExpected;
 
-    if (!finalExpectedAmountCents) {
-      toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
-      return;
-    }
+      if (!finalExpectedAmountCents) {
+        toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
+        return;
+      }
 
-    setSubmitting(true);
-    try {
-      const statusToSend = markPaid ? 'paid' : status;
-      const response = await fetch('/api/payments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          referralId,
-          status: statusToSend,
-          expectedAmountCents: finalExpectedAmountCents,
-          receivedAmountCents: netReferralFeePaidCents,
-      netReferralFeePaidCents,
-      contractPriceCents,
-      commissionBasisPoints,
-      referralFeeBasisPoints,
-      propertyAddress: propertyAddress.trim() || null,
-      closingDate: closingDate ? new Date(closingDate).toISOString() : null,
-      agentId: agentId || null,
-      usedAfc,
-      usedAssignedAgent,
-          side,
-        }),
-      });
+      if (status === 'terminated' && !terminatedReason) {
+        toast.error('Select a termination reason');
+        return;
+      }
+
+      setSubmitting(true);
+      try {
+        const statusToSend = markPaid ? 'paid' : status;
+        const response = await fetch('/api/payments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            referralId,
+            status: statusToSend,
+            expectedAmountCents: finalExpectedAmountCents,
+            receivedAmountCents: netReferralFeePaidCents,
+            netReferralFeePaidCents,
+            contractPriceCents,
+            commissionBasisPoints,
+            referralFeeBasisPoints,
+            propertyAddress: propertyAddress.trim() || null,
+            closingDate: closingDate ? new Date(closingDate).toISOString() : null,
+            agentId: agentId || null,
+            usedAfc,
+            usedAssignedAgent,
+            side,
+            terminatedReason: statusToSend === 'terminated' ? terminatedReason : null,
+          }),
+        });
 
       if (!response.ok) {
         toast.error('Unable to save deal');
@@ -629,27 +719,28 @@ export function ReferralDeals({
       }
 
       const payload = (await response.json()) as { id: string; createdAt?: string };
-      onDealCreated({
-        _id: payload.id,
-        status: statusToSend,
-        expectedAmountCents: finalExpectedAmountCents,
-        receivedAmountCents: netReferralFeePaidCents,
-        netReferralFeePaidCents,
-        contractPriceCents,
-        commissionBasisPoints,
-        referralFeeBasisPoints,
-        propertyAddress: propertyAddress.trim() || null,
-        closingDate: closingDate ? new Date(closingDate).toISOString() : null,
-        agent: agentId ? { id: agentId, name: agents.find((option) => option.id === agentId)?.name ?? null } : null,
-        agentId: agentId || null,
-        usedAfc,
-        usedAssignedAgent,
-        side,
-        createdAt: payload.createdAt ?? new Date().toISOString(),
-        updatedAt: payload.createdAt ?? new Date().toISOString(),
-        paidDate: null,
-        invoiceDate: null,
-      });
+        onDealCreated({
+          _id: payload.id,
+          status: statusToSend,
+          expectedAmountCents: finalExpectedAmountCents,
+          receivedAmountCents: netReferralFeePaidCents,
+          netReferralFeePaidCents,
+          contractPriceCents,
+          commissionBasisPoints,
+          referralFeeBasisPoints,
+          propertyAddress: propertyAddress.trim() || null,
+          closingDate: closingDate ? new Date(closingDate).toISOString() : null,
+          agent: agentId ? { id: agentId, name: agents.find((option) => option.id === agentId)?.name ?? null } : null,
+          agentId: agentId || null,
+          usedAfc,
+          usedAssignedAgent,
+          side,
+          terminatedReason: statusToSend === 'terminated' ? terminatedReason : null,
+          createdAt: payload.createdAt ?? new Date().toISOString(),
+          updatedAt: payload.createdAt ?? new Date().toISOString(),
+          paidDate: null,
+          invoiceDate: null,
+        });
       setExpectedAmount('');
       setExpectedManuallyEdited(false);
       setNetReferralFeePaid('');
@@ -660,12 +751,13 @@ export function ReferralDeals({
       setClosingDate('');
       setAgentId('');
       setSide('buy');
-      setUsedAfc(false);
-      setUsedAssignedAgent(true);
-      setMarkPaid(false);
-      setStatus('under_contract');
-      setShowForm(false);
-      toast.success('Deal added');
+        setUsedAfc(false);
+        setUsedAssignedAgent(true);
+        setMarkPaid(false);
+        setStatus('under_contract');
+        setTerminatedReason(null);
+        setShowForm(false);
+        toast.success('Deal added');
     } catch (error) {
       console.error(error);
       toast.error('Something went wrong while saving the deal');
@@ -674,14 +766,26 @@ export function ReferralDeals({
     }
   };
 
-  const handleStatusChange = async (deal: ReferralPayment, nextStatus: DealStatus) => {
+  const handleStatusChange = async (
+    deal: ReferralPayment,
+    nextStatus: DealStatus,
+    terminationReason?: TerminatedReason | null
+  ) => {
     if (statusUpdating[deal._id]) return;
+    if (nextStatus === 'terminated' && !terminationReason) {
+      toast.error('Select a termination reason before marking the deal terminated');
+      return;
+    }
     setStatusUpdating((previous) => ({ ...previous, [deal._id]: true }));
     try {
       const response = await fetch('/api/payments', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: deal._id, status: nextStatus }),
+        body: JSON.stringify({
+          id: deal._id,
+          status: nextStatus,
+          terminatedReason: nextStatus === 'terminated' ? terminationReason : null,
+        }),
       });
 
       if (!response.ok) {
@@ -689,7 +793,12 @@ export function ReferralDeals({
         return;
       }
 
-      onDealUpdated?.({ ...deal, status: nextStatus, updatedAt: new Date().toISOString() });
+      onDealUpdated?.({
+        ...deal,
+        status: nextStatus,
+        terminatedReason: nextStatus === 'terminated' ? terminationReason ?? null : null,
+        updatedAt: new Date().toISOString(),
+      });
       toast.success('Deal stage updated');
     } catch (error) {
       console.error(error);
@@ -768,6 +877,7 @@ export function ReferralDeals({
         side: payload.side ?? deal.side,
         usedAfc: payload.usedAfc,
         usedAssignedAgent: payload.usedAssignedAgent,
+        terminatedReason: payload.terminatedReason ?? null,
         updatedAt: new Date().toISOString(),
       });
       toast.success('Deal updated');
@@ -877,26 +987,48 @@ export function ReferralDeals({
               disabled={submitting}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
-            <span>Status</span>
-            <select
-              value={status}
-              onChange={(event) => setStatus(event.target.value as DealStatus)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-              disabled={submitting}
-            >
-              {DEAL_STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-            </select>
-          </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
-            <span>Closing date</span>
-            <input
-              type="date"
-              value={closingDate}
+            <label className="space-y-1 text-sm font-medium text-slate-700">
+              <span>Status</span>
+              <select
+                value={status}
+                onChange={(event) => setStatus(event.target.value as DealStatus)}
+                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                disabled={submitting}
+              >
+                {DEAL_STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+              </select>
+            </label>
+            {status === 'terminated' && (
+              <label className="space-y-1 text-sm font-medium text-slate-700">
+                <span>Termination reason</span>
+                <select
+                  value={terminatedReason ?? ''}
+                  onChange={(event) =>
+                    setTerminatedReason(
+                      event.target.value ? (event.target.value as TerminatedReason) : null
+                    )
+                  }
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  disabled={submitting}
+                >
+                  <option value="">Select reason</option>
+                  {TERMINATED_REASON_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="space-y-1 text-sm font-medium text-slate-700">
+              <span>Closing date</span>
+              <input
+                type="date"
+                value={closingDate}
               onChange={(event) => setClosingDate(event.target.value)}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
               disabled={submitting}

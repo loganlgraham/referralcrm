@@ -50,6 +50,7 @@ interface AggregatedPayment {
     | 'terminated';
   expectedAmountCents: number;
   receivedAmountCents: number;
+  closingDate?: Date | null;
   terminatedReason?: 'inspection' | 'appraisal' | 'financing' | 'changed_mind' | null;
   paidDate?: Date | null;
   invoiceDate?: Date | null;
@@ -415,6 +416,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           totalReferrals: 0,
           dealsClosed: 0,
           dealsUnderContract: 0,
+          pendingClosings: 0,
           closeRate: 0,
           afcDealsLost: 0,
           afcAttachRate: 0,
@@ -609,6 +611,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
       (payment.status === 'closed' || payment.status === 'paid')
   );
+  const endOfToday = endOfDay(new Date());
   const dealsUnderContract = filteredPayments.filter((payment) =>
     [
       'under_contract',
@@ -616,6 +619,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       'past_appraisal',
       'clear_to_close',
     ].includes(payment.status)
+  );
+  const pendingClosings = dealsUnderContract.filter(
+    (payment) => payment.closingDate && payment.closingDate > endOfToday
   );
   const closeRate = totalReferrals === 0 ? 0 : (dealsClosed.length / totalReferrals) * 100;
 
@@ -792,6 +798,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             $sum: {
               $cond: [{ $eq: ['$source', 'MC'] }, 1, 0]
             }
+          },
+          ahaReferrals: {
+            $sum: {
+              $cond: [{ $eq: ['$ahaBucket', 'AHA'] }, 1, 0]
+            }
+          },
+          ahaOosReferrals: {
+            $sum: {
+              $cond: [{ $eq: ['$ahaBucket', 'AHA_OOS'] }, 1, 0]
+            }
           }
         }
       }
@@ -873,13 +889,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
   }
 
-  const referralMonthlyMap = new Map<string, { total: number; transfers: number }>();
+  const referralMonthlyMap = new Map<
+    string,
+    { total: number; transfers: number; ahaReferrals: number; ahaOosReferrals: number }
+  >();
   monthlyReferralsAgg.forEach((entry: any) => {
     if (!entry?._id) return;
     const key = `${entry._id.year}-${String(entry._id.month).padStart(2, '0')}`;
     referralMonthlyMap.set(key, {
       total: entry.totalReferrals ?? 0,
-      transfers: entry.mcTransfers ?? 0
+      transfers: entry.mcTransfers ?? 0,
+      ahaReferrals: entry.ahaReferrals ?? 0,
+      ahaOosReferrals: entry.ahaOosReferrals ?? 0
     });
   });
 
@@ -899,22 +920,44 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .sort({ month: 1 })
     .lean();
 
-  const preApprovalMap = new Map<string, { preApprovals: number; updatedAt: Date }>();
+  const preApprovalMap = new Map<
+    string,
+    { preApprovals: number; ahaPreApprovals: number; ahaOosPreApprovals: number; updatedAt: Date }
+  >();
   preApprovalMetrics.forEach((metric) => {
     const key = `${metric.month.getFullYear()}-${String(metric.month.getMonth() + 1).padStart(2, '0')}`;
-    preApprovalMap.set(key, { preApprovals: metric.preApprovals, updatedAt: metric.updatedAt });
+    preApprovalMap.set(key, {
+      preApprovals: metric.preApprovals,
+      ahaPreApprovals: metric.ahaPreApprovals ?? 0,
+      ahaOosPreApprovals: metric.ahaOosPreApprovals ?? 0,
+      updatedAt: metric.updatedAt
+    });
   });
 
   const monthlyReferrals = monthBuckets.map((bucket) => {
-    const referralStats = referralMonthlyMap.get(bucket.key) ?? { total: 0, transfers: 0 };
+    const referralStats =
+      referralMonthlyMap.get(bucket.key) ?? { total: 0, transfers: 0, ahaReferrals: 0, ahaOosReferrals: 0 };
     const dealStats = dealMonthlyMap.get(bucket.key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
-    const preApprovalStats = preApprovalMap.get(bucket.key) ?? { preApprovals: 0, updatedAt: undefined };
+    const preApprovalStats =
+      preApprovalMap.get(bucket.key) ?? { preApprovals: 0, ahaPreApprovals: 0, ahaOosPreApprovals: 0, updatedAt: undefined };
     const monthlyCloseRate = referralStats.total === 0
       ? 0
       : (dealStats.dealsClosed / Math.max(referralStats.total, 1)) * 100;
+    const totalPreApprovals = preApprovalStats.preApprovals > 0
+      ? preApprovalStats.preApprovals
+      : preApprovalStats.ahaPreApprovals + preApprovalStats.ahaOosPreApprovals;
+
     const conversionRate =
-      preApprovalStats.preApprovals > 0
-        ? Number(((referralStats.total / preApprovalStats.preApprovals) * 100).toFixed(1))
+      totalPreApprovals > 0 ? Number(((referralStats.total / totalPreApprovals) * 100).toFixed(1)) : 0;
+
+    const ahaConversionRate =
+      preApprovalStats.ahaPreApprovals > 0
+        ? Number(((referralStats.ahaReferrals / preApprovalStats.ahaPreApprovals) * 100).toFixed(1))
+        : 0;
+
+    const ahaOosConversionRate =
+      preApprovalStats.ahaOosPreApprovals > 0
+        ? Number(((referralStats.ahaOosReferrals / preApprovalStats.ahaOosPreApprovals) * 100).toFixed(1))
         : 0;
 
     return {
@@ -922,11 +965,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       label: bucket.label,
       totalReferrals: referralStats.total,
       mcTransfers: referralStats.transfers,
+      ahaReferrals: referralStats.ahaReferrals,
+      ahaOosReferrals: referralStats.ahaOosReferrals,
       dealsClosed: dealStats.dealsClosed,
       revenueReceivedCents: dealStats.revenueReceivedCents,
       closeRate: Number(monthlyCloseRate.toFixed(1)),
       preApprovals: preApprovalStats.preApprovals,
+      ahaPreApprovals: preApprovalStats.ahaPreApprovals,
+      ahaOosPreApprovals: preApprovalStats.ahaOosPreApprovals,
       conversionRate,
+      conversionRateAha: ahaConversionRate,
+      conversionRateAhaOos: ahaOosConversionRate,
       preApprovalsUpdatedAt: preApprovalStats.updatedAt
     };
   });
@@ -1257,21 +1306,37 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   };
 
   const preApprovalConversionTrend = monthlyReferrals
-    .filter((entry) => entry.preApprovals > 0)
-    .map((entry) => ({
-      key: entry.monthKey,
-      label: entry.label,
-      value: entry.conversionRate
-    }));
+    .filter(
+      (entry) =>
+        entry.preApprovals > 0 || entry.ahaPreApprovals > 0 || entry.ahaOosPreApprovals > 0
+    )
+    .reduce(
+      (acc, entry) => {
+        acc.all.push({ key: entry.monthKey, label: entry.label, value: entry.conversionRate });
+        acc.aha.push({ key: entry.monthKey, label: entry.label, value: entry.conversionRateAha });
+        acc.ahaOos.push({ key: entry.monthKey, label: entry.label, value: entry.conversionRateAhaOos });
+        return acc;
+      },
+      { all: [] as TrendPoint[], aha: [] as TrendPoint[], ahaOos: [] as TrendPoint[] }
+    );
 
   const preApprovalEntries = monthlyReferrals
-    .filter((entry) => entry.preApprovals > 0)
+    .filter(
+      (entry) =>
+        entry.preApprovals > 0 || entry.ahaPreApprovals > 0 || entry.ahaOosPreApprovals > 0
+    )
     .map((entry) => ({
       monthKey: entry.monthKey,
       label: entry.label,
       totalReferrals: entry.totalReferrals,
+      ahaReferrals: entry.ahaReferrals,
+      ahaOosReferrals: entry.ahaOosReferrals,
       preApprovals: entry.preApprovals,
+      ahaPreApprovals: entry.ahaPreApprovals,
+      ahaOosPreApprovals: entry.ahaOosPreApprovals,
       conversionRate: entry.conversionRate,
+      conversionRateAha: entry.conversionRateAha,
+      conversionRateAhaOos: entry.conversionRateAhaOos,
       updatedAt: entry.preApprovalsUpdatedAt
     }));
 
@@ -1293,6 +1358,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         totalReferrals,
         dealsClosed: dealsClosed.length,
         dealsUnderContract: dealsUnderContract.length,
+        pendingClosings: pendingClosings.length,
         closeRate,
         afcDealsLost,
         afcAttachRate,
@@ -1323,8 +1389,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         monthKey: entry.monthKey,
         label: entry.label,
         totalReferrals: entry.totalReferrals,
+        ahaReferrals: entry.ahaReferrals,
+        ahaOosReferrals: entry.ahaOosReferrals,
         preApprovals: entry.preApprovals,
+        ahaPreApprovals: entry.ahaPreApprovals,
+        ahaOosPreApprovals: entry.ahaOosPreApprovals,
         conversionRate: entry.conversionRate,
+        conversionRateAha: entry.conversionRateAha,
+        conversionRateAhaOos: entry.conversionRateAhaOos,
         updatedAt: entry.preApprovalsUpdatedAt
       })),
       preApprovalConversion: {

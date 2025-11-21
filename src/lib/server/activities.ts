@@ -2,7 +2,7 @@ import { Types } from 'mongoose';
 
 import { Activity } from '@/models/activity';
 
-type ActivityActor = 'Agent' | 'MC' | 'System';
+type ActivityActor = 'Agent' | 'MC' | 'Admin' | 'System';
 export type ActivityChannel = 'call' | 'sms' | 'email' | 'note' | 'status' | 'update';
 
 const isObjectIdString = (value: unknown): value is string => {
@@ -16,7 +16,10 @@ export const resolveActivityActor = (role: string | null | undefined): ActivityA
   if (role === 'agent') {
     return 'Agent';
   }
-  if (role === 'mc' || role === 'manager' || role === 'admin') {
+  if (role === 'admin') {
+    return 'Admin';
+  }
+  if (role === 'mc' || role === 'manager') {
     return 'MC';
   }
   return 'System';

@@ -106,6 +106,12 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     sla.lastClosedAt = null;
     sla.lastPaidAt = null;
     sla.lastUnderContractAt = now;
+    if (sla.daysToContract == null) {
+      const createdAt = referral.createdAt instanceof Date ? referral.createdAt : new Date(referral.createdAt ?? now);
+      if (!Number.isNaN(createdAt.getTime())) {
+        sla.daysToContract = Math.max(differenceInDays(now, createdAt), 0);
+      }
+    }
     slaModified = true;
   } else if (PRE_CONTRACT_STATUSES.has(nextStatus)) {
     if (nextStatus === 'Paired') {

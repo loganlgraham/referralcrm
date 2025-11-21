@@ -23,6 +23,8 @@ export async function GET(): Promise<NextResponse> {
       id: metric._id.toString(),
       month: metric.month,
       preApprovals: metric.preApprovals,
+      ahaPreApprovals: metric.ahaPreApprovals ?? 0,
+      ahaOosPreApprovals: metric.ahaOosPreApprovals ?? 0,
       updatedAt: metric.updatedAt
     }))
   );
@@ -38,13 +40,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const body = await request.json();
   const rawMonth = typeof body.month === 'string' ? body.month : '';
-  const preApprovals = Number(body.preApprovals);
+  const ahaPreApprovals = Number(body.ahaPreApprovals);
+  const ahaOosPreApprovals = Number(body.ahaOosPreApprovals);
+  const totalPreApprovals = Number(
+    Number.isFinite(body.preApprovals) ? body.preApprovals : ahaPreApprovals + ahaOosPreApprovals
+  );
 
   if (!rawMonth) {
     return NextResponse.json({ error: 'Month is required' }, { status: 400 });
   }
 
-  if (!Number.isFinite(preApprovals) || preApprovals < 0) {
+  if (!Number.isFinite(ahaPreApprovals) || ahaPreApprovals < 0) {
+    return NextResponse.json({ error: 'AHA pre-approvals must be a non-negative number' }, { status: 400 });
+  }
+
+  if (!Number.isFinite(ahaOosPreApprovals) || ahaOosPreApprovals < 0) {
+    return NextResponse.json({ error: 'AHA OOS pre-approvals must be a non-negative number' }, { status: 400 });
+  }
+
+  if (!Number.isFinite(totalPreApprovals) || totalPreApprovals < 0) {
     return NextResponse.json({ error: 'Pre-approvals must be a non-negative number' }, { status: 400 });
   }
 
@@ -59,7 +73,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     { month: monthStart },
     {
       month: monthStart,
-      preApprovals,
+      preApprovals: totalPreApprovals,
+      ahaPreApprovals,
+      ahaOosPreApprovals,
       createdBy: session.user.id,
       updatedBy: session.user.id
     },
@@ -74,6 +90,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     id: metric._id.toString(),
     month: metric.month,
     preApprovals: metric.preApprovals,
+    ahaPreApprovals: metric.ahaPreApprovals ?? 0,
+    ahaOosPreApprovals: metric.ahaOosPreApprovals ?? 0,
     updatedAt: metric.updatedAt
   });
 }
