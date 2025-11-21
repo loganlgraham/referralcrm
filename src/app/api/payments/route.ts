@@ -254,7 +254,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     receivedAmountCents: parsed.data.receivedAmountCents,
     terminatedReason: parsed.data.terminatedReason ?? null,
     agentAttribution: parsed.data.agentAttribution ?? null,
-    usedAfc: parsed.data.usedAfc ?? false,
+    usedAfc: parsed.data.usedAfc ?? true,
     usedAssignedAgent: parsed.data.usedAssignedAgent ?? true,
     netReferralFeePaidCents: parsed.data.netReferralFeePaidCents ?? null,
     propertyAddress: parsed.data.propertyAddress ?? null,

@@ -11,6 +11,7 @@ import { calculateReferralFeeDue } from '@/utils/referral';
 import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
+import { inferStateFromPostalCode } from '@/utils/location';
 
 interface Params {
   params: { id: string };
@@ -175,8 +176,13 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     if (details) {
       const propertyAddress = details.propertyAddress.trim();
       const propertyCity = details.propertyCity.trim();
-      const propertyState = details.propertyState.trim().toUpperCase();
       const propertyPostalCode = details.propertyPostalCode.trim();
+      let propertyState = details.propertyState.trim().toUpperCase();
+
+      const inferredState = await inferStateFromPostalCode(propertyPostalCode);
+      if (inferredState) {
+        propertyState = inferredState;
+      }
 
       referral.propertyAddress = propertyAddress;
       referral.propertyCity = propertyCity;
@@ -220,6 +226,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
           side: referral.dealSide,
           contractPriceCents: referral.estPurchasePriceCents ?? null,
           usedAssignedAgent: true,
+          usedAfc: true,
           agentId:
             referral.assignedAgent && typeof (referral.assignedAgent as any) === 'object'
               ? ((referral.assignedAgent as any)._id ?? null)
@@ -236,11 +243,12 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         referralFeeBasisPoints: referral.referralFeeBasisPoints ?? null,
         side: referral.dealSide,
         contractPriceCents: referral.estPurchasePriceCents ?? null,
-          usedAssignedAgent: true,
-          agentId:
-            referral.assignedAgent && typeof (referral.assignedAgent as any) === 'object'
-              ? ((referral.assignedAgent as any)._id ?? null)
-              : referral.assignedAgent ?? null,
+        usedAssignedAgent: true,
+        usedAfc: true,
+        agentId:
+          referral.assignedAgent && typeof (referral.assignedAgent as any) === 'object'
+            ? ((referral.assignedAgent as any)._id ?? null)
+            : referral.assignedAgent ?? null,
       });
       createdDeal = newDeal.toObject();
     }

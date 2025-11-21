@@ -57,6 +57,7 @@ interface AggregatedPayment {
   invoiceDate?: Date | null;
   updatedAt: Date;
   usedAfc?: boolean;
+  usedAssignedAgent?: boolean;
   agentAttribution?: 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT' | null;
   referral: {
     _id: Types.ObjectId;
@@ -85,6 +86,7 @@ interface AggregatedPayment {
       daysToClose?: number | null;
       timeToFirstAgentContactHours?: number | null;
       timeToAssignmentHours?: number | null;
+      lastClosedAt?: Date | string | null;
     } | null;
   };
 }
@@ -632,18 +634,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     (payment) => payment.agentAttribution !== 'OUTSIDE_AGENT'
   );
 
+  const closedOrPaidStatuses = new Set(['closed', 'paid']);
+
   const afcRelevant = filteredPayments.filter(
     (payment) =>
       payment.referral?.org === 'AFC' &&
-      [
-        'under_contract',
-        'past_inspection',
-        'past_appraisal',
-        'clear_to_close',
-        'closed',
-        'payment_sent',
-        'paid',
-      ].includes(payment.status)
+      closedOrPaidStatuses.has(payment.status)
   );
   const afcDealsLost = afcRelevant.filter((payment) => !payment.usedAfc).length;
   const afcAttachRate = afcRelevant.length
@@ -653,33 +649,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const ahaRelevant = filteredPayments.filter(
     (payment) =>
       payment.referral?.ahaBucket === 'AHA' &&
-      [
-        'under_contract',
-        'past_inspection',
-        'past_appraisal',
-        'clear_to_close',
-        'closed',
-        'payment_sent',
-        'paid',
-      ].includes(payment.status)
+      closedOrPaidStatuses.has(payment.status)
   );
-  const ahaAttached = ahaRelevant.filter((payment) => payment.agentAttribution === 'AHA');
+  const ahaAttached = ahaRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
   const ahaAttachRate = ahaRelevant.length ? (ahaAttached.length / ahaRelevant.length) * 100 : 0;
 
   const ahaOosRelevant = filteredPayments.filter(
     (payment) =>
       payment.referral?.ahaBucket === 'AHA_OOS' &&
-      [
-        'under_contract',
-        'past_inspection',
-        'past_appraisal',
-        'clear_to_close',
-        'closed',
-        'payment_sent',
-        'paid',
-      ].includes(payment.status)
+      closedOrPaidStatuses.has(payment.status)
   );
-  const ahaOosAttached = ahaOosRelevant.filter((payment) => payment.agentAttribution === 'AHA_OOS');
+  const ahaOosAttached = ahaOosRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
   const ahaOosAttachRate = ahaOosRelevant.length ? (ahaOosAttached.length / ahaOosRelevant.length) * 100 : 0;
 
   const expectedRevenueCents = revenueEligiblePayments.reduce(
@@ -708,9 +688,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const averageDaysClosedToPaid = computeAverage(
     paidPaymentsWithDates
       .map((payment) => {
-        const end = payment.paidDate ? new Date(payment.paidDate) : undefined;
-        const start = payment.invoiceDate ? new Date(payment.invoiceDate) : new Date(payment.updatedAt);
+        const end = payment.paidDate ? new Date(payment.paidDate) : null;
         if (!end) return null;
+
+        const closingDate = payment.closingDate
+          ? new Date(payment.closingDate)
+          : payment.referral?.sla?.lastClosedAt
+          ? new Date(payment.referral.sla.lastClosedAt)
+          : null;
+
+        const start = closingDate
+          ? closingDate
+          : payment.invoiceDate
+          ? new Date(payment.invoiceDate)
+          : new Date(payment.updatedAt);
+
         return differenceInCalendarDays(end, start);
       })
       .filter((value): value is number => value != null)

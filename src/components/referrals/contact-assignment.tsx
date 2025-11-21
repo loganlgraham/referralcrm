@@ -280,9 +280,6 @@ export function ContactAssignment({
                     {suggesting ? 'Thinking…' : 'Suggest agent'}
                   </button>
                 </div>
-                <p className="text-[11px] leading-relaxed text-slate-500">
-                  We’ll use your OpenAI API key and this referral’s &ldquo;Looking in ZIP&rdquo; details to suggest the best coverage match.
-                </p>
                 {suggestionReason && (
                   <p className="rounded bg-slate-50 p-2 text-[11px] text-slate-600">
                     <span className="font-semibold text-slate-700">Why:</span> {suggestionReason}
