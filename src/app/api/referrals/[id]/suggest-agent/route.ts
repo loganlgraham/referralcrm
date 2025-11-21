@@ -28,6 +28,12 @@ type CandidateAgent = {
   ahaDesignation?: string | null;
 };
 
+const normalizeAgentId = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (value instanceof Types.ObjectId) return value.toString();
+  return String(value);
+};
+
 export async function GET(_: Request, { params }: Params) {
   const session = await getCurrentSession();
   if (!session) {
@@ -92,7 +98,7 @@ export async function GET(_: Request, { params }: Params) {
   }
 
   const agentSummaries = candidateAgents.map((agent) => ({
-    id: typeof agent._id === 'string' ? agent._id : agent._id.toString(),
+    id: normalizeAgentId(agent._id),
     name: agent.name,
     zipCoverage: Array.isArray(agent.zipCoverage) ? agent.zipCoverage : [],
     coverageLocations: Array.isArray(agent.coverageLocations) ? agent.coverageLocations : [],
