@@ -45,6 +45,7 @@ interface DealRow {
   status: DealStatus;
   expectedAmountCents: number;
   receivedAmountCents: number;
+  propertyAddress?: string | null;
   terminatedReason?: TerminatedReason | null;
   closingDate?: string | null;
   invoiceDate?: string | null;
@@ -122,17 +123,9 @@ export function DealsTable() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
 
-  const formatReferralLocation = (referral: DealRow['referral'] | null | undefined) => {
-    if (!referral) {
-      return null;
-    }
-    const zips = Array.isArray(referral.lookingInZips)
-      ? referral.lookingInZips.filter((zip) => typeof zip === 'string' && zip.trim().length > 0)
-      : [];
-    if (zips.length > 0) {
-      return `Looking in ${zips.join(', ')}`;
-    }
-    return referral.lookingInZip?.trim() ? `Looking in ${referral.lookingInZip}` : null;
+  const getDealAddress = (deal: DealRow) => {
+    const address = (deal.propertyAddress ?? deal.referral?.propertyAddress ?? '').trim();
+    return address || null;
   };
   if (!data) {
     return <div className="rounded-lg bg-white p-4 shadow-sm">Loading deals…</div>;
@@ -551,9 +544,7 @@ export function DealsTable() {
                 <td className="px-4 py-3 text-sm text-slate-700">{renderStatusControl(deal)}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">{renderClosingDate(deal.closingDate)}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">
-                  {deal.referral?.propertyAddress ||
-                    formatReferralLocation(deal.referral) ||
-                    '—'}
+                  {getDealAddress(deal) || '—'}
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(referralFee)}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">
@@ -706,9 +697,7 @@ export function DealsTable() {
                   <div className="flex flex-col">
                     {renderReferralLink(deal)}
                     <span className="text-xs text-slate-500">
-                      {deal.referral?.propertyAddress ||
-                        formatReferralLocation(deal.referral) ||
-                        `Loan # ${deal.referral?.loanFileNumber || '—'}`}
+                      {getDealAddress(deal) || `Loan # ${deal.referral?.loanFileNumber || '—'}`}
                     </span>
                   </div>
                 </td>
