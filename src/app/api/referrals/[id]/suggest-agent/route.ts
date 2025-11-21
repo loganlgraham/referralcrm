@@ -33,7 +33,27 @@ type CandidateAgent = {
 const normalizeAgentId = (value: unknown): string => {
   if (typeof value === 'string') return value;
   if (value instanceof Types.ObjectId) return value.toString();
+  if (value && typeof value === 'object' && '_id' in value) {
+    const inner = (value as { _id?: unknown })._id;
+    if (typeof inner === 'string') return inner;
+    if (inner instanceof Types.ObjectId) return inner.toString();
+  }
   return String(value);
+};
+
+const toObjectId = (value: unknown): Types.ObjectId | null => {
+  if (value instanceof Types.ObjectId) return value;
+  if (typeof value === 'string' && Types.ObjectId.isValid(value)) {
+    return new Types.ObjectId(value);
+  }
+  if (value && typeof value === 'object' && '_id' in value) {
+    const inner = (value as { _id?: unknown })._id;
+    if (inner instanceof Types.ObjectId) return inner;
+    if (typeof inner === 'string' && Types.ObjectId.isValid(inner)) {
+      return new Types.ObjectId(inner);
+    }
+  }
+  return null;
 };
 
 export async function GET(_: Request, { params }: Params) {
@@ -78,8 +98,8 @@ export async function GET(_: Request, { params }: Params) {
     referral.buySideAgent,
     referral.sellSideAgent,
   ]
-    .filter((value): value is Types.ObjectId => Boolean(value))
-    .map((id) => id.toString());
+    .map((value) => toObjectId(value))
+    .filter((value): value is Types.ObjectId => Boolean(value));
 
   const targetZips = Array.from(
     new Set(
