@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { Types } from 'mongoose';
+
 import { connectMongo } from '@/lib/mongoose';
 import { getCurrentSession } from '@/lib/auth';
 import { Referral } from '@/models/referral';
@@ -15,6 +17,16 @@ const suggestionResponseSchema = z.object({
   agentId: z.string().trim(),
   reason: z.string().trim().optional(),
 });
+
+type CandidateAgent = {
+  _id: Types.ObjectId | string;
+  name: string;
+  zipCoverage?: string[] | null;
+  coverageLocations?: string[] | null;
+  specialties?: string[] | null;
+  languages?: string[] | null;
+  ahaDesignation?: string | null;
+};
 
 export async function GET(_: Request, { params }: Params) {
   const session = await getCurrentSession();
@@ -67,7 +79,7 @@ export async function GET(_: Request, { params }: Params) {
     return NextResponse.json({ error: 'No valid ZIP codes found for this referral.' }, { status: 400 });
   }
 
-  const candidateAgents = await Agent.find({
+  const candidateAgents = await Agent.find<CandidateAgent>({
     active: true,
     zipCoverage: { $in: targetZips },
   })
@@ -80,7 +92,7 @@ export async function GET(_: Request, { params }: Params) {
   }
 
   const agentSummaries = candidateAgents.map((agent) => ({
-    id: agent._id.toString(),
+    id: typeof agent._id === 'string' ? agent._id : agent._id.toString(),
     name: agent.name,
     zipCoverage: Array.isArray(agent.zipCoverage) ? agent.zipCoverage : [],
     coverageLocations: Array.isArray(agent.coverageLocations) ? agent.coverageLocations : [],
