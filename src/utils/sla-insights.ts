@@ -95,6 +95,15 @@ const BUSINESS_END_HOUR = 17;
 
 const ACTIVE_LEAD_STATUSES = new Set(['Active Lead', 'Showing Homes']);
 const PRE_CONTRACT_STATUSES = new Set(['New Lead', 'Paired', 'In Communication', 'Active Lead', 'Showing Homes']);
+const DEAL_STAGE_PRIORITIES: { key: string; label: string }[] = [
+  { key: 'paid', label: 'Paid' },
+  { key: 'payment_sent', label: 'Payment Sent' },
+  { key: 'closed', label: 'Closed' },
+  { key: 'clear_to_close', label: 'Clear to Close' },
+  { key: 'past_appraisal', label: 'Past Appraisal' },
+  { key: 'past_inspection', label: 'Past Inspection' },
+  { key: 'under_contract', label: 'Under Contract' },
+];
 
 const SLA_THRESHOLDS = {
   minutesToAssignment: 120,
@@ -169,6 +178,50 @@ export const parseTimestamp = (value?: string | Date | null): Date | null => {
   } catch (error) {
     return null;
   }
+};
+
+const normalizeStatusValue = (value?: string | null): string | null => {
+  if (!value || typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const resolveDealDrivenStatus = (
+  referral: ReferralLike
+): { status: string | null; updatedAt: Date | null } => {
+  const deals = Array.isArray(referral.payments) ? referral.payments : [];
+
+  for (const stage of DEAL_STAGE_PRIORITIES) {
+    const reachedAt = findFirstDealTimestamp(deals, stage.key);
+    if (reachedAt) {
+      return { status: stage.label, updatedAt: reachedAt };
+    }
+  }
+
+  return { status: null, updatedAt: null };
+};
+
+const resolveEffectiveStatus = (
+  referral: ReferralLike
+): { status: string; updatedAt: Date | null } => {
+  const createdAt = parseTimestamp(referral.createdAt) ?? new Date();
+  const normalizedStatus = normalizeStatusValue(referral.status);
+  const dealStage = resolveDealDrivenStatus(referral);
+
+  if (dealStage.status) {
+    return {
+      status: dealStage.status,
+      updatedAt: dealStage.updatedAt ?? parseTimestamp(referral.statusLastUpdated) ?? createdAt,
+    };
+  }
+
+  return {
+    status: normalizedStatus ?? 'New Lead',
+    updatedAt: parseTimestamp(referral.statusLastUpdated) ?? createdAt,
+  };
 };
 
 const formatDateKey = (date: Date): string => formatInTimeZone(date, SLA_TIME_ZONE, 'yyyy-MM-dd');
@@ -381,6 +434,7 @@ export const computeSlaDurations = (referral: ReferralLike): SlaDuration[] => {
   const storedClosedToPaid = referral.sla?.closedToPaidMinutes ?? null;
   const previousContractToClose = referral.sla?.previousContractToCloseMinutes ?? null;
   const previousClosedToPaid = referral.sla?.previousClosedToPaidMinutes ?? null;
+  const { status: effectiveStatus } = resolveEffectiveStatus(referral);
   const activeDealStatuses = new Set([
     'under_contract',
     'past_inspection',
@@ -399,8 +453,8 @@ export const computeSlaDurations = (referral: ReferralLike): SlaDuration[] => {
     'Past Inspection',
     'Past Appraisal',
   ]);
-  const isCurrentlyContracting = referral.status && activeReferralStatuses.has(referral.status);
-  const isPreContractStatus = referral.status ? PRE_CONTRACT_STATUSES.has(referral.status) : false;
+  const isCurrentlyContracting = effectiveStatus && activeReferralStatuses.has(effectiveStatus);
+  const isPreContractStatus = effectiveStatus ? PRE_CONTRACT_STATUSES.has(effectiveStatus) : false;
 
   const dealUnderContractAt = hasDealProgress || isCurrentlyContracting
     ? findFirstDealTimestamp(deals, [
@@ -488,14 +542,30 @@ const minDueDate = (candidate: Date | null | undefined): string | null => {
   return candidate.toISOString();
 };
 
-const computeAgentReferralRecommendations = (referral: ReferralLike): SlaRecommendation[] => {
+const buildSlaClock = (
+  referral: ReferralLike,
+  lastCompletedAt: Date | null
+): { statusLastUpdated: Date; createdAt: Date; status: string; lastCompletedAt: Date | null } => {
   const createdAt = parseTimestamp(referral.createdAt) ?? new Date();
+  const { status, updatedAt } = resolveEffectiveStatus(referral);
+  const rawUpdatedAt = updatedAt ?? parseTimestamp(referral.statusLastUpdated) ?? createdAt;
+  const statusLastUpdated = lastCompletedAt ? max([rawUpdatedAt, lastCompletedAt]) : rawUpdatedAt;
+
+  return { statusLastUpdated, createdAt, status, lastCompletedAt };
+};
+
+const computeAgentReferralRecommendations = (
+  referral: ReferralLike,
+  clock: ReturnType<typeof buildSlaClock>
+): SlaRecommendation[] => {
+  const { createdAt, statusLastUpdated, status } = clock;
   const now = new Date();
-  const status = referral.status ?? 'New Lead';
-  const statusLastUpdated = parseTimestamp(referral.statusLastUpdated) ?? createdAt;
   const hoursSinceStatusUpdate = differenceInHours(now, statusLastUpdated);
   const latestNoteAt = getLatestNoteTimestamp(referral.notes);
-  const hoursSinceLastNote = latestNoteAt ? differenceInHours(now, latestNoteAt) : null;
+  const lastEngagementAt = clock.lastCompletedAt
+    ? max([clock.lastCompletedAt, latestNoteAt ?? statusLastUpdated])
+    : latestNoteAt;
+  const hoursSinceLastNote = lastEngagementAt ? differenceInHours(now, lastEngagementAt) : null;
 
   const recommendations: SlaRecommendation[] = [];
 
@@ -589,11 +659,16 @@ const computeAgentReferralRecommendations = (referral: ReferralLike): SlaRecomme
   return recommendations;
 };
 
-export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommendation[] => {
+export const computeSlaRecommendations = (
+  referral: ReferralLike,
+  options?: { lastCompletedAt?: Date | null }
+): SlaRecommendation[] => {
+  const clock = buildSlaClock(referral, options?.lastCompletedAt ?? null);
   if (referral.origin === 'agent') {
-    return computeAgentReferralRecommendations(referral);
+    return computeAgentReferralRecommendations(referral, clock);
   }
-  const createdAt = parseTimestamp(referral.createdAt) ?? new Date();
+
+  const { createdAt, statusLastUpdated, status } = clock;
   const now = new Date();
   const durations = computeSlaDurations(referral);
   const assignmentsMinutes = durations.find((item) => item.key === 'new-lead-to-paired')?.minutes;
@@ -602,17 +677,17 @@ export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommenda
   const closedMinutes = durations.find((item) => item.key === 'contract-to-close')?.minutes;
   const paidMinutes = durations.find((item) => item.key === 'close-to-paid')?.minutes;
 
-  const status = referral.status ?? 'New Lead';
   const assignedAgentName = resolvePrimaryAgentName(referral);
 
-  const statusLastUpdated = parseTimestamp(referral.statusLastUpdated) ?? createdAt;
-  const statusAgeDays =
-    referral.daysInStatus ?? differenceInDays(now, statusLastUpdated);
+  const statusAgeDays = differenceInDays(now, statusLastUpdated);
   const hoursSinceStatusUpdate = differenceInHours(now, statusLastUpdated);
   const minutesSinceStatusUpdate = differenceInMinutes(now, statusLastUpdated);
 
   const latestNoteAt = getLatestNoteTimestamp(referral.notes);
-  const hoursSinceLastNote = latestNoteAt ? differenceInHours(now, latestNoteAt) : null;
+  const lastEngagementAt = clock.lastCompletedAt
+    ? max([clock.lastCompletedAt, latestNoteAt ?? statusLastUpdated])
+    : latestNoteAt;
+  const hoursSinceLastNote = lastEngagementAt ? differenceInHours(now, lastEngagementAt) : null;
 
   const isBuyer = referral.clientType === 'Buyer' || referral.dealSide === 'buy' || referral.clientType === 'Both';
   const isSeller = referral.clientType === 'Seller' || referral.dealSide === 'sell' || referral.clientType === 'Both';
@@ -970,9 +1045,13 @@ export const computeRiskSummary = (referral: ReferralLike, recommendations: SlaR
   };
 };
 
-export const computeSlaInsights = (referral: ReferralLike): SlaInsights => {
+export const computeSlaInsights = (
+  referral: ReferralLike,
+  options?: { lastCompletedAt?: string | Date | null }
+): SlaInsights => {
+  const lastCompletedAt = parseTimestamp(options?.lastCompletedAt ?? null);
   const durations = computeSlaDurations(referral);
-  const recommendations = computeSlaRecommendations(referral);
+  const recommendations = computeSlaRecommendations(referral, { lastCompletedAt });
   const riskSummary = computeRiskSummary(referral, recommendations);
 
   return {
