@@ -89,7 +89,7 @@ export interface ReferralLike {
   } | null;
 }
 
-export const SLA_TIME_ZONE = 'America/Phoenix';
+export const SLA_TIME_ZONE = 'America/Denver';
 const BUSINESS_START_HOUR = 8;
 const BUSINESS_END_HOUR = 17;
 
@@ -578,6 +578,7 @@ export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommenda
   const statusAgeDays =
     referral.daysInStatus ?? differenceInDays(now, statusLastUpdated);
   const hoursSinceStatusUpdate = differenceInHours(now, statusLastUpdated);
+  const minutesSinceStatusUpdate = differenceInMinutes(now, statusLastUpdated);
 
   const latestNoteAt = getLatestNoteTimestamp(referral.notes);
   const hoursSinceLastNote = latestNoteAt ? differenceInHours(now, latestNoteAt) : null;
@@ -597,7 +598,11 @@ export const computeSlaRecommendations = (referral: ReferralLike): SlaRecommenda
         supportingMetric: 'Assignment SLA: 2 hours',
       })
     );
-  } else if (status === 'New Lead' && (!assignmentsMinutes || assignmentsMinutes > SLA_THRESHOLDS.minutesToAssignment)) {
+  } else if (
+    status === 'New Lead' &&
+    minutesSinceStatusUpdate >= SLA_THRESHOLDS.minutesToAssignment &&
+    (!assignmentsMinutes || assignmentsMinutes > SLA_THRESHOLDS.minutesToAssignment)
+  ) {
     const dueBy = addHours(statusLastUpdated, SLA_THRESHOLDS.minutesToAssignment / 60);
     recommendations.push(
       buildRecommendation({
