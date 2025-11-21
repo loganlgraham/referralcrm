@@ -26,6 +26,8 @@ type CandidateAgent = {
   specialties?: string[] | null;
   languages?: string[] | null;
   ahaDesignation?: string | null;
+  closingRatePercentage?: number | null;
+  npsScore?: number | null;
 };
 
 const normalizeAgentId = (value: unknown): string => {
@@ -51,7 +53,9 @@ export async function GET(_: Request, { params }: Params) {
     .populate('buySideAgent', 'userId')
     .populate('sellSideAgent', 'userId')
     .populate('lender', 'userId')
-    .select('assignedAgent buySideAgent sellSideAgent lender org lookingInZip lookingInZips deletedAt');
+    .select(
+      'assignedAgent buySideAgent sellSideAgent lender org lookingInZip lookingInZips deletedAt preApprovalAmountCents'
+    );
 
   if (!referral || referral.deletedAt) {
     return new NextResponse('Not found', { status: 404 });
@@ -69,9 +73,13 @@ export async function GET(_: Request, { params }: Params) {
     return new NextResponse('Forbidden', { status: 403 });
   }
 
-  if (referral.assignedAgent) {
-    return NextResponse.json({ error: 'This referral already has an assigned agent.' }, { status: 400 });
-  }
+  const excludedAgentIds = [
+    referral.assignedAgent,
+    referral.buySideAgent,
+    referral.sellSideAgent,
+  ]
+    .filter((value): value is Types.ObjectId => Boolean(value))
+    .map((id) => id.toString());
 
   const targetZips = Array.from(
     new Set(
@@ -88,14 +96,92 @@ export async function GET(_: Request, { params }: Params) {
   const candidateAgents = await Agent.find<CandidateAgent>({
     active: true,
     zipCoverage: { $in: targetZips },
+    ...(excludedAgentIds.length ? { _id: { $nin: excludedAgentIds } } : {}),
   })
-    .select('_id name coverageLocations zipCoverage specialties languages ahaDesignation')
+    .select('_id name coverageLocations zipCoverage specialties languages ahaDesignation closingRatePercentage npsScore')
     .limit(50)
     .lean();
 
   if (candidateAgents.length === 0) {
     return NextResponse.json({ error: 'No active agents cover these ZIP codes yet.' }, { status: 404 });
   }
+
+  const candidateIds = candidateAgents
+    .map((agent) => normalizeAgentId(agent._id))
+    .filter((value) => Types.ObjectId.isValid(value))
+    .map((value) => new Types.ObjectId(value));
+
+  const referralStats = await Referral.aggregate<{
+    _id: Types.ObjectId;
+    total: number;
+    closed: number;
+  }>([
+    { $match: { assignedAgent: { $in: candidateIds } } },
+    {
+      $group: {
+        _id: '$assignedAgent',
+        total: { $sum: 1 },
+        closed: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'closed'] }, 1, 0],
+          },
+        },
+      },
+    },
+  ]);
+
+  const closingStats = await Agent.aggregate<{
+    _id: Types.ObjectId;
+    averageClosedPriceCents: number;
+  }>([
+    {
+      $lookup: {
+        from: 'payments',
+        localField: '_id',
+        foreignField: 'agentId',
+        as: 'payments',
+      },
+    },
+    { $unwind: { path: '$payments', preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: 'referrals',
+        localField: 'payments.referralId',
+        foreignField: '_id',
+        as: 'referral',
+      },
+    },
+    { $unwind: { path: '$referral', preserveNullAndEmptyArrays: true } },
+    {
+      $match: {
+        _id: { $in: candidateIds },
+        $or: [
+          { 'payments.status': { $in: ['closed', 'paid'] }, 'payments.agentAttribution': { $ne: 'OUTSIDE_AGENT' } },
+          { 'referral.assignedAgent': { $in: candidateIds } },
+        ],
+      },
+    },
+    {
+      $group: {
+        _id: '$_id',
+        averageClosedPriceCents: {
+          $avg: {
+            $ifNull: ['$referral.closedPriceCents', '$referral.estPurchasePriceCents'],
+          },
+        },
+      },
+    },
+  ]);
+
+  const referralStatsMap = new Map<string, { total: number; closed: number }>();
+  referralStats.forEach((entry) => {
+    referralStatsMap.set(entry._id.toString(), { total: entry.total, closed: entry.closed });
+  });
+
+  const closingStatsMap = new Map<string, number>();
+  closingStats.forEach((entry) => {
+    closingStatsMap.set(entry._id.toString(), entry.averageClosedPriceCents ?? 0);
+  });
 
   const agentSummaries = candidateAgents.map((agent) => ({
     id: normalizeAgentId(agent._id),
@@ -105,6 +191,13 @@ export async function GET(_: Request, { params }: Params) {
     specialties: Array.isArray(agent.specialties) ? agent.specialties : [],
     languages: Array.isArray(agent.languages) ? agent.languages : [],
     ahaDesignation: agent.ahaDesignation ?? null,
+    closeRate:
+      referralStatsMap.get(normalizeAgentId(agent._id))?.total
+        ? (referralStatsMap.get(normalizeAgentId(agent._id))!.closed /
+            referralStatsMap.get(normalizeAgentId(agent._id))!.total) * 100
+        : agent.closingRatePercentage ?? 0,
+    npsScore: agent.npsScore ?? 0,
+    averageClosedPriceCents: closingStatsMap.get(normalizeAgentId(agent._id)) ?? 0,
   }));
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -135,12 +228,13 @@ export async function GET(_: Request, { params }: Params) {
         {
           role: 'system',
           content:
-            'You are an assistant that recommends the best real estate agent based on coverage areas. Choose the single best agent from the provided list who covers the referral ZIP codes. Prefer agents whose coverage matches more ZIP codes and whose specialties or AHA designation seem relevant.',
+            'You are an assistant that recommends the best real estate agent based on coverage areas and past performance. Choose the single best agent from the provided list who covers the referral ZIP codes. Prefer agents whose coverage matches more ZIP codes, who have higher close rates and NPS scores, and whose average closed price best aligns with the borrower\'s pre-approval amount. Avoid suggesting any already-assigned agents and surface the strongest alternate match.',
         },
         {
           role: 'user',
           content: JSON.stringify({
             lookingInZips: targetZips,
+            preApprovalAmountCents: referral.preApprovalAmountCents ?? null,
             agents: agentSummaries,
           }),
         },

@@ -427,6 +427,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           realizedRevenueCents: 0,
           closedNotPaidCents: 0,
           averageDaysClosedToPaid: 0,
+          averageClosedDealAmountCents: 0,
           averageRevenuePerDealCents: 0,
           totalVolumeClosedCents: 0,
           averagePaAmountCents: 0,
@@ -467,6 +468,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         commissionSampleSize: 0,
         referralLeaderboard: [],
         closeRateLeaderboard: [],
+        averageClosedDealAmount: [],
         revenuePaid: [],
         revenueExpected: [],
         netRevenue: []
@@ -716,6 +718,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const revenueContributingClosedDeals = revenueEligiblePayments.filter(
     (payment) => payment.status === 'closed' || payment.status === 'paid'
   );
+  const closedDealPrices = revenueContributingClosedDeals
+    .map((payment) =>
+      payment.contractPriceCents ??
+      payment.referral?.closedPriceCents ??
+      payment.referral?.estPurchasePriceCents ??
+      null
+    )
+    .filter((value): value is number => value != null && value > 0);
   const averageRevenuePerDealCents = revenueContributingClosedDeals.length
     ? realizedRevenueCents / revenueContributingClosedDeals.length
     : 0;
@@ -723,6 +733,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const closedPrice = payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
     return sum + closedPrice;
   }, 0);
+  const averageClosedDealAmountCents = computeAverage(closedDealPrices);
 
   const revenueBySourceMap = new Map<string, number>();
   const revenueByEndorserMap = new Map<string, number>();
@@ -1115,6 +1126,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       commissionCents: number[];
       commissionPercentages: number[];
       netCommissionCents: number;
+      closedVolumeCents: number;
     }
   >();
   const agentLostDealsMap = new Map<string, number>();
@@ -1128,7 +1140,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       totalReferrals: agentReferralCount.get(key) ?? 0,
       commissionCents: [],
       commissionPercentages: [],
-      netCommissionCents: 0
+      netCommissionCents: 0,
+      closedVolumeCents: 0
     };
     const isOutsideAgentDeal = payment.agentAttribution === 'OUTSIDE_AGENT';
     if (!isOutsideAgentDeal) {
@@ -1143,6 +1156,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           payment.referral?.estPurchasePriceCents ??
           payment.referral?.referralFeeDueCents ??
           0;
+        if (closedPriceCents > 0) {
+          current.closedVolumeCents += closedPriceCents;
+        }
         const commissionBasisPoints = payment.referral?.commissionBasisPoints ?? 0;
         const commissionCents = (closedPriceCents * commissionBasisPoints) / 10000;
         const commissionPercent = commissionBasisPoints / 100;
@@ -1196,6 +1212,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       revenueCents: value.expected
     }))
     .sort((a, b) => b.revenueCents - a.revenueCents)
+    .slice(0, 10);
+
+  const agentAverageClosedDeal = Array.from(agentRevenueMap.entries())
+    .map(([key, value]) => ({
+      id: key,
+      name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
+      revenueCents: value.closed > 0 ? value.closedVolumeCents / value.closed : 0,
+    }))
+    .sort((a, b) => (b.revenueCents ?? 0) - (a.revenueCents ?? 0))
     .slice(0, 10);
 
   const agentCommissionValues = Array.from(agentRevenueMap.values())
@@ -1369,6 +1394,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         realizedRevenueCents,
         closedNotPaidCents,
         averageDaysClosedToPaid,
+        averageClosedDealAmountCents,
         averageRevenuePerDealCents,
         totalVolumeClosedCents,
         averagePaAmountCents,
@@ -1419,6 +1445,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       closeRateLeaderboard: agentCloseRateLeaderboard,
       revenuePaid: agentRevenuePaid,
       revenueExpected: agentRevenueExpected,
+      averageClosedDealAmount: agentAverageClosedDeal,
       netRevenue: agentNetRevenue,
       lostDeals: agentLostDeals
     },
