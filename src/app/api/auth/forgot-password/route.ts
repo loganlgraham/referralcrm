@@ -75,3 +75,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unable to process password reset at this time.' }, { status: 500 });
   }
 }
+
+export function GET() {
+  return NextResponse.json({ error: 'Method not allowed. Use POST instead.' }, {
+    status: 405,
+    headers: { Allow: 'POST' },
+  });
+}
