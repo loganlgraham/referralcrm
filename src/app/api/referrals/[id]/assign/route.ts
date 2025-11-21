@@ -9,6 +9,7 @@ import { canManageReferral } from '@/lib/rbac';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
 import { Agent } from '@/models/agent';
+import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 
 interface Params {
   params: { id: string };
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   referral.audit.push(auditEntry as any);
   await referral.save();
 
-  type AgentNameLean = { _id: Types.ObjectId; name?: string | null };
+  type AgentNameLean = { _id: Types.ObjectId; name?: string | null; email?: string | null };
 
   const previousAgentPromise = previousAgent
     ? Agent.findById(previousAgent)
@@ -119,6 +120,73 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     channel: 'update',
     content: activityContent,
   });
+
+  const baseUrl = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');
+  const agentDetails = await Agent.findById(parsed.data.agentId)
+    .select('name email')
+    .lean<{ name?: string | null; email?: string | null }>();
+
+  if (agentDetails?.email && isTransactionalEmailConfigured()) {
+    const borrowerName = [
+      referral.borrower?.firstName,
+      referral.borrower?.lastName,
+    ]
+      .map((part) => (typeof part === 'string' ? part.trim() : ''))
+      .filter(Boolean)
+      .join(' ');
+    const borrowerEmail = referral.borrower?.email ?? '';
+    const borrowerPhone = referral.borrower?.phone ?? '';
+    const referralLink = baseUrl ? `${baseUrl}/referrals/${referral._id.toString()}` : '';
+    const contactMadeLink = baseUrl
+      ? `${baseUrl}/api/referrals/${referral._id.toString()}/contact-action?action=contact-made`
+      : '';
+    const contactAttemptedLink = baseUrl
+      ? `${baseUrl}/api/referrals/${referral._id.toString()}/contact-action?action=contact-attempted`
+      : '';
+
+    const htmlLines = [
+      `<p>Hi ${agentDetails.name ?? 'there'},</p>`,
+      '<p>You have been assigned a new referral. Please reach out to the borrower as soon as possible, and within 24 hours.</p>',
+      '<p>Borrower details:</p>',
+      '<ul>',
+      `<li><strong>Name:</strong> ${borrowerName || referral.borrower?.name || 'Unknown'}</li>`,
+      borrowerEmail ? `<li><strong>Email:</strong> ${borrowerEmail}</li>` : null,
+      borrowerPhone ? `<li><strong>Phone:</strong> ${borrowerPhone}</li>` : null,
+      '</ul>',
+      referralLink ? `<p>Review the referral: <a href="${referralLink}">${referralLink}</a></p>` : null,
+      '<p>Update the referral status directly from these quick links:</p>',
+      contactMadeLink
+        ? `<p><a href="${contactMadeLink}">Contact made</a> – confirm you connected with the borrower.</p>`
+        : null,
+      contactAttemptedLink
+        ? `<p><a href="${contactAttemptedLink}">Attempted but couldn’t reach</a> – log your outreach attempt.</p>`
+        : null,
+    ].filter(Boolean);
+
+    const textLines = [
+      `Hi ${agentDetails.name ?? 'there'},`,
+      '',
+      'You have been assigned a new referral. Please reach out to the borrower as soon as possible, and within 24 hours.',
+      'Borrower details:',
+      `Name: ${borrowerName || referral.borrower?.name || 'Unknown'}`,
+      borrowerEmail ? `Email: ${borrowerEmail}` : null,
+      borrowerPhone ? `Phone: ${borrowerPhone}` : null,
+      referralLink ? `Review the referral: ${referralLink}` : null,
+      contactMadeLink ? `Contact made: ${contactMadeLink}` : null,
+      contactAttemptedLink ? `Attempted but couldn’t reach: ${contactAttemptedLink}` : null,
+    ].filter(Boolean);
+
+    try {
+      await sendTransactionalEmail({
+        to: [agentDetails.email],
+        subject: 'New referral assignment',
+        html: htmlLines.join(''),
+        text: textLines.join('\n'),
+      });
+    } catch (error) {
+      console.error('Failed to send agent referral assignment email', error);
+    }
+  }
 
   return NextResponse.json({ id: referral._id.toString() });
 }

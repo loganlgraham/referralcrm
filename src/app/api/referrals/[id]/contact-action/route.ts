@@ -1,0 +1,146 @@
+import { differenceInMinutes } from 'date-fns';
+import { NextRequest, NextResponse } from 'next/server';
+
+import { connectMongo } from '@/lib/mongoose';
+import { Referral } from '@/models/referral';
+import { getCurrentSession } from '@/lib/auth';
+import { canManageReferral } from '@/lib/rbac';
+import { resolveAuditActorId } from '@/lib/server/audit';
+import { logReferralActivity } from '@/lib/server/activities';
+
+interface Params {
+  params: { id: string };
+}
+
+const CONTACT_ACTIONS = new Set(['contact-made', 'contact-attempted']);
+
+export async function GET(request: NextRequest, { params }: Params): Promise<NextResponse> {
+  const session = await getCurrentSession();
+  if (!session) {
+    return new NextResponse('Unauthorized', { status: 401 });
+  }
+
+  const action = request.nextUrl.searchParams.get('action');
+  if (!action || !CONTACT_ACTIONS.has(action)) {
+    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+  }
+
+  await connectMongo();
+  const referral = await Referral.findById(params.id)
+    .populate('assignedAgent', 'userId')
+    .populate('buySideAgent', 'userId')
+    .populate('sellSideAgent', 'userId')
+    .populate('lender', 'userId');
+
+  if (!referral) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
+  if (referral.deletedAt) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
+  if (
+    !canManageReferral(session, {
+      assignedAgent: referral.assignedAgent,
+      buySideAgent: referral.buySideAgent,
+      sellSideAgent: referral.sellSideAgent,
+      lender: referral.lender,
+      org: referral.org,
+    })
+  ) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
+
+  const now = new Date();
+  const previousStatusRaw = referral.status;
+  const previousStatus = previousStatusRaw === 'Showing Homes' ? 'Active Lead' : previousStatusRaw;
+  const previousStatusUpdatedAt = referral.statusLastUpdated instanceof Date
+    ? referral.statusLastUpdated
+    : referral.statusLastUpdated
+    ? new Date(referral.statusLastUpdated)
+    : null;
+  const nextStatus = 'In Communication';
+  const shouldUpdateStatus = previousStatus !== nextStatus;
+
+  if (shouldUpdateStatus) {
+    referral.status = nextStatus as any;
+    referral.statusLastUpdated = now;
+    referral.audit = referral.audit || [];
+    const auditEntry: Record<string, unknown> = {
+      actorRole: session.user.role,
+      field: 'status',
+      previousValue: previousStatus,
+      newValue: nextStatus,
+      timestamp: now,
+    };
+
+    const actorId = resolveAuditActorId(session.user.id);
+    if (actorId) {
+      auditEntry.actorId = actorId;
+    }
+
+    referral.audit.push(auditEntry as any);
+
+    const sla = (referral.sla ??= {} as any);
+    let pairedAt: Date | null = null;
+
+    if (sla.lastPairedAt) {
+      const candidate = sla.lastPairedAt instanceof Date ? sla.lastPairedAt : new Date(sla.lastPairedAt);
+      if (!Number.isNaN(candidate.getTime())) {
+        pairedAt = candidate;
+      }
+    }
+
+    if (!pairedAt && previousStatus === 'Paired' && previousStatusUpdatedAt) {
+      pairedAt = previousStatusUpdatedAt;
+    }
+
+    if (!pairedAt) {
+      const auditEntries = Array.isArray(referral.audit) ? referral.audit : [];
+      for (let index = auditEntries.length - 1; index >= 0; index -= 1) {
+        const entry = auditEntries[index];
+        if (entry?.field === 'status' && entry.newValue === 'Paired' && entry.timestamp) {
+          const timestamp = entry.timestamp instanceof Date ? entry.timestamp : new Date(entry.timestamp);
+          if (!Number.isNaN(timestamp.getTime())) {
+            pairedAt = timestamp;
+            break;
+          }
+        }
+      }
+    }
+
+    if (pairedAt) {
+      const minutes = Math.max(differenceInMinutes(now, pairedAt), 0);
+      sla.timeToFirstAgentContactHours = Math.round((minutes / 60) * 10) / 10;
+      sla.lastPairedAt = pairedAt;
+      referral.markModified('sla');
+    }
+  }
+
+  referral.statusLastUpdated = now;
+  await referral.save();
+
+  const activityContent =
+    action === 'contact-made'
+      ? 'Agent reported contact made with borrower via quick link.'
+      : 'Agent reported attempted outreach but could not reach the borrower via quick link.';
+
+  const auditActorId = resolveAuditActorId(session.user.id);
+  await logReferralActivity({
+    referralId: referral._id,
+    actorRole: session.user.role,
+    actorId: auditActorId ?? session.user.id,
+    channel: 'update',
+    content: activityContent,
+  });
+
+  const baseUrl = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');
+  const redirectUrl = baseUrl ? `${baseUrl}/referrals/${referral._id.toString()}?action=${action}` : null;
+
+  if (redirectUrl) {
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  return NextResponse.json({ id: referral._id.toString(), action });
+}
