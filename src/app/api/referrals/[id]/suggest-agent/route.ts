@@ -13,11 +13,6 @@ interface Params {
   params: { id: string };
 }
 
-const suggestionResponseSchema = z.object({
-  agentId: z.string().trim(),
-  reason: z.string().trim().optional(),
-});
-
 type CandidateAgent = {
   _id: Types.ObjectId | string;
   name: string;
@@ -56,7 +51,7 @@ const toObjectId = (value: unknown): Types.ObjectId | null => {
   return null;
 };
 
-export async function GET(_: Request, { params }: Params) {
+export async function GET(request: Request, { params }: Params) {
   const session = await getCurrentSession();
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });
@@ -93,10 +88,17 @@ export async function GET(_: Request, { params }: Params) {
     return new NextResponse('Forbidden', { status: 403 });
   }
 
+  const url = new URL(request.url);
+  const previouslySuggested = url.searchParams
+    .getAll('exclude')
+    .map((value) => value.trim())
+    .filter(Boolean);
+
   const excludedAgentIds = [
     referral.assignedAgent,
     referral.buySideAgent,
     referral.sellSideAgent,
+    ...previouslySuggested,
   ]
     .map((value) => toObjectId(value))
     .filter((value): value is Types.ObjectId => Boolean(value));
@@ -123,7 +125,11 @@ export async function GET(_: Request, { params }: Params) {
     .lean();
 
   if (candidateAgents.length === 0) {
-    return NextResponse.json({ error: 'No active agents cover these ZIP codes yet.' }, { status: 404 });
+    const message = previouslySuggested.length
+      ? 'All matching agents have already been suggested.'
+      : 'No active agents cover these ZIP codes yet.';
+
+    return NextResponse.json({ error: message }, { status: 404 });
   }
 
   const candidateIds = candidateAgents
@@ -236,10 +242,21 @@ export async function GET(_: Request, { params }: Params) {
           schema: {
             type: 'object',
             properties: {
-              agentId: { type: 'string' },
-              reason: { type: 'string' },
+              rankedAgents: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    agentId: { type: 'string' },
+                    reason: { type: 'string' },
+                  },
+                  required: ['agentId'],
+                  additionalProperties: false,
+                },
+                minItems: 1,
+              },
             },
-            required: ['agentId'],
+            required: ['rankedAgents'],
             additionalProperties: false,
           },
         },
@@ -248,7 +265,7 @@ export async function GET(_: Request, { params }: Params) {
         {
           role: 'system',
           content:
-            'You are an assistant that recommends the best real estate agent based on coverage areas and past performance. Choose the single best agent from the provided list who covers the referral ZIP codes. Prefer agents whose coverage matches more ZIP codes, who have higher close rates and NPS scores, and whose average closed price best aligns with the borrower\'s pre-approval amount. Avoid suggesting any already-assigned agents and surface the strongest alternate match.',
+            'You are an assistant that recommends real estate agents based on coverage and performance. Return all provided agents sorted best to worst, preferring coverage matches across the referral ZIP codes, higher close rates, higher NPS scores, and average closed prices closest to the borrower\'s pre-approval amount. Do not repeat or omit agents—rank them all in descending order of fit.',
         },
         {
           role: 'user',
@@ -271,8 +288,7 @@ export async function GET(_: Request, { params }: Params) {
   const completion = await response.json();
   const content = completion.choices?.[0]?.message?.content;
 
-  let agentId: string | null = null;
-  let reason: string | null = null;
+  let rankedAgents: Array<{ agentId: string; reason?: string }> = [];
 
   if (content) {
     let parsedContent: unknown = null;
@@ -281,18 +297,45 @@ export async function GET(_: Request, { params }: Params) {
     } catch (error) {
       console.error('Agent suggestion parse error', error);
     }
-    const parsed = suggestionResponseSchema.safeParse(parsedContent);
+    const parsed = z
+      .object({
+        rankedAgents: z
+          .array(
+            z.object({
+              agentId: z.string(),
+              reason: z.string().optional(),
+            })
+          )
+          .min(1),
+      })
+      .safeParse(parsedContent);
+
     if (parsed.success) {
-      agentId = parsed.data.agentId;
-      reason = parsed.data.reason ?? null;
+      rankedAgents = parsed.data.rankedAgents;
     }
   }
 
-  const suggestedAgent = agentSummaries.find((agent) => agent.id === agentId) ?? agentSummaries[0];
+  const excludedIds = new Set(previouslySuggested.map((value) => normalizeAgentId(value)));
+
+  let suggestedAgent = agentSummaries.find((agent) => !excludedIds.has(agent.id));
+  let suggestionReason: string | null = null;
+
+  for (const entry of rankedAgents) {
+    const match = agentSummaries.find((agent) => agent.id === entry.agentId);
+    if (match && !excludedIds.has(match.id)) {
+      suggestedAgent = match;
+      suggestionReason = entry.reason ?? null;
+      break;
+    }
+  }
+
+  if (!suggestedAgent) {
+    return NextResponse.json({ error: 'All matching agents have already been suggested.' }, { status: 404 });
+  }
 
   return NextResponse.json({
     agentId: suggestedAgent.id,
     name: suggestedAgent.name,
-    reason: reason ?? 'Matched by coverage area and ZIP code proximity.',
+    reason: suggestionReason ?? 'Matched by coverage area and ZIP code proximity.',
   });
 }

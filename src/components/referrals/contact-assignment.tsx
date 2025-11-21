@@ -75,6 +75,7 @@ export function ContactAssignment({
   const [searchTerm, setSearchTerm] = useState('');
   const [suggesting, setSuggesting] = useState(false);
   const [suggestionReason, setSuggestionReason] = useState<string | null>(null);
+  const [suggestedAgentIds, setSuggestedAgentIds] = useState<string[]>([]);
 
   const { data: options } = useSWR<AssignmentOption[]>(open && canAssign ? directoryForType[type] : null, fetcher);
   const { mutate } = useSWRConfig();
@@ -91,6 +92,7 @@ export function ContactAssignment({
     setSelected(contact?.id ?? '');
     setSearchTerm('');
     setSuggestionReason(null);
+    setSuggestedAgentIds([]);
   }, [contact]);
 
   const formattedContact = useMemo(() => {
@@ -120,7 +122,11 @@ export function ContactAssignment({
     setSuggesting(true);
     setSuggestionReason(null);
     try {
-      const response = await fetch(`/api/referrals/${referralId}/suggest-agent`);
+      const params = new URLSearchParams();
+      suggestedAgentIds.forEach((id) => params.append('exclude', id));
+      const response = await fetch(
+        `/api/referrals/${referralId}/suggest-agent${params.toString() ? `?${params.toString()}` : ''}`
+      );
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         const message = typeof payload?.error === 'string' ? payload.error : 'Unable to suggest an agent right now.';
@@ -130,6 +136,7 @@ export function ContactAssignment({
       const suggestion = (await response.json()) as { agentId: string; reason?: string; name?: string };
       setSelected(suggestion.agentId);
       setSuggestionReason(suggestion.reason ?? null);
+      setSuggestedAgentIds((previous) => [...previous, suggestion.agentId]);
       setSearchTerm('');
       toast.success(`Suggested ${suggestion.name ?? 'agent'} selected`);
     } catch (error) {
