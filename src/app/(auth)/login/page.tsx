@@ -213,6 +213,12 @@ function LoginForm() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
+                <div className="flex justify-between text-xs text-slate-500">
+                  <span />
+                  <Link href="/auth/reset-password" className="font-medium text-brand hover:text-brand-dark">
+                    Forgot password?
+                  </Link>
+                </div>
               </div>
 
               <button
