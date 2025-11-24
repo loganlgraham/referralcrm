@@ -59,6 +59,10 @@ interface AggregatedPayment {
   usedAfc?: boolean;
   usedAssignedAgent?: boolean;
   agentAttribution?: 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT' | null;
+  assignedAgent?: {
+    _id: Types.ObjectId;
+    ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
+  } | null;
   referral: {
     _id: Types.ObjectId;
     createdAt: Date;
@@ -251,6 +255,13 @@ function resolveMetricDate(payment: AggregatedPayment): Date {
     return payment.invoiceDate;
   }
   return payment.updatedAt;
+}
+
+function deriveAhaBucket(payment: AggregatedPayment): 'AHA' | 'AHA_OOS' | null {
+  if (payment.usedAssignedAgent && payment.assignedAgent?.ahaDesignation) {
+    return payment.assignedAgent.ahaDesignation;
+  }
+  return payment.referral?.ahaBucket ?? null;
 }
 
 function createDashboardContext(request: NextRequest): DashboardRequestContext {
@@ -533,6 +544,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       },
       { $unwind: '$referral' },
       {
+        $lookup: {
+          from: 'agents',
+          localField: 'referral.assignedAgent',
+          foreignField: '_id',
+          as: 'assignedAgent'
+        }
+      },
+      {
+        $addFields: {
+          assignedAgent: { $first: '$assignedAgent' }
+        }
+      },
+      {
         $match: {
           ...paymentMatch,
           status: {
@@ -559,6 +583,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         }
       },
       { $unwind: '$referral' },
+      {
+        $lookup: {
+          from: 'agents',
+          localField: 'referral.assignedAgent',
+          foreignField: '_id',
+          as: 'assignedAgent'
+        }
+      },
+      {
+        $addFields: {
+          assignedAgent: { $first: '$assignedAgent' }
+        }
+      },
       {
         $match: {
           ...paymentMatch,
@@ -646,19 +683,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ? (afcRelevant.filter((payment) => Boolean(payment.usedAfc)).length / afcRelevant.length) * 100
     : 0;
 
-  const ahaRelevant = filteredPayments.filter(
-    (payment) =>
-      payment.referral?.ahaBucket === 'AHA' &&
-      closedOrPaidStatuses.has(payment.status)
-  );
+  const ahaRelevant = filteredPayments.filter((payment) => {
+    const bucket = deriveAhaBucket(payment);
+    return bucket === 'AHA' && closedOrPaidStatuses.has(payment.status);
+  });
   const ahaAttached = ahaRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
   const ahaAttachRate = ahaRelevant.length ? (ahaAttached.length / ahaRelevant.length) * 100 : 0;
 
-  const ahaOosRelevant = filteredPayments.filter(
-    (payment) =>
-      payment.referral?.ahaBucket === 'AHA_OOS' &&
-      closedOrPaidStatuses.has(payment.status)
-  );
+  const ahaOosRelevant = filteredPayments.filter((payment) => {
+    const bucket = deriveAhaBucket(payment);
+    return bucket === 'AHA_OOS' && closedOrPaidStatuses.has(payment.status);
+  });
   const ahaOosAttached = ahaOosRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
   const ahaOosAttachRate = ahaOosRelevant.length ? (ahaOosAttached.length / ahaOosRelevant.length) * 100 : 0;
 
