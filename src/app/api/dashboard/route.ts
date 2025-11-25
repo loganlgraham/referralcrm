@@ -551,89 +551,99 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     createdAtMatch.$lte = timeframeEnd;
   }
 
+  const referralPromise = Referral.find<AggregatedPayment['referral']>({
+    ...referralMatch,
+    ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
+  })
+    .select(
+      'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser sla origin'
+    )
+    .lean<AggregatedPayment['referral']>()
+    .exec();
+
+  const paymentPipeline: PipelineStage[] = [
+    {
+      $lookup: {
+        from: 'referrals',
+        localField: 'referralId',
+        foreignField: '_id',
+        as: 'referral'
+      }
+    },
+    { $unwind: '$referral' },
+    {
+      $lookup: {
+        from: 'agents',
+        localField: 'referral.assignedAgent',
+        foreignField: '_id',
+        as: 'assignedAgent'
+      }
+    },
+    {
+      $addFields: {
+        assignedAgent: { $first: '$assignedAgent' }
+      }
+    },
+    {
+      $match: {
+        ...paymentMatch,
+        status: {
+          $in: [
+            'under_contract',
+            'past_inspection',
+            'past_appraisal',
+            'clear_to_close',
+            'closed',
+            'payment_sent',
+            'paid',
+          ]
+        }
+      }
+    }
+  ];
+
+  const terminatedPipeline: PipelineStage[] = [
+    {
+      $lookup: {
+        from: 'referrals',
+        localField: 'referralId',
+        foreignField: '_id',
+        as: 'referral'
+      }
+    },
+    { $unwind: '$referral' },
+    {
+      $lookup: {
+        from: 'agents',
+        localField: 'referral.assignedAgent',
+        foreignField: '_id',
+        as: 'assignedAgent'
+      }
+    },
+    {
+      $addFields: {
+        assignedAgent: { $first: '$assignedAgent' }
+      }
+    },
+    {
+      $match: {
+        ...paymentMatch,
+        status: 'terminated'
+      }
+    }
+  ];
+
+  const paymentPromise = Payment.aggregate<AggregatedPayment>(paymentPipeline).exec();
+  const terminatedPromise = Payment.aggregate<AggregatedPayment>(terminatedPipeline).exec();
+
   const [referrals, payments, terminatedPayments]: [
     AggregatedPayment['referral'][],
     AggregatedPayment[],
     AggregatedPayment[],
   ] = await Promise.all([
-    Referral.find<AggregatedPayment['referral']>({
-      ...referralMatch,
-      ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
-    })
-      .select(
-        'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser sla origin'
-      )
-      .lean<AggregatedPayment['referral']>(),
-    Payment.aggregate<AggregatedPayment>([
-      {
-        $lookup: {
-          from: 'referrals',
-          localField: 'referralId',
-          foreignField: '_id',
-          as: 'referral'
-        }
-      },
-      { $unwind: '$referral' },
-      {
-        $lookup: {
-          from: 'agents',
-          localField: 'referral.assignedAgent',
-          foreignField: '_id',
-          as: 'assignedAgent'
-        }
-      },
-      {
-        $addFields: {
-          assignedAgent: { $first: '$assignedAgent' }
-        }
-      },
-      {
-        $match: {
-          ...paymentMatch,
-          status: {
-            $in: [
-              'under_contract',
-              'past_inspection',
-              'past_appraisal',
-              'clear_to_close',
-              'closed',
-              'payment_sent',
-              'paid',
-            ]
-          }
-        }
-      }
-    ]),
-    Payment.aggregate<AggregatedPayment>([
-      {
-        $lookup: {
-          from: 'referrals',
-          localField: 'referralId',
-          foreignField: '_id',
-          as: 'referral'
-        }
-      },
-      { $unwind: '$referral' },
-      {
-        $lookup: {
-          from: 'agents',
-          localField: 'referral.assignedAgent',
-          foreignField: '_id',
-          as: 'assignedAgent'
-        }
-      },
-      {
-        $addFields: {
-          assignedAgent: { $first: '$assignedAgent' }
-        }
-      },
-      {
-        $match: {
-          ...paymentMatch,
-          status: 'terminated'
-        }
-      }
-    ])
+    referralPromise,
+    paymentPromise,
+    terminatedPromise,
   ]);
 
   const paymentsWithMetric = payments.map((payment) => ({
