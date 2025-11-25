@@ -551,7 +551,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     createdAtMatch.$lte = timeframeEnd;
   }
 
-  const referralPromise = Referral.find<AggregatedPayment['referral']>({
+  const referralPromise: Promise<AggregatedPayment['referral'][]> = Referral.find<AggregatedPayment['referral']>({
     ...referralMatch,
     ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
   })
@@ -636,11 +636,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const paymentPromise = Payment.aggregate<AggregatedPayment>(paymentPipeline).exec();
   const terminatedPromise = Payment.aggregate<AggregatedPayment>(terminatedPipeline).exec();
 
-  const [referrals, payments, terminatedPayments] = await Promise.all<[
-    AggregatedPayment['referral'][],
-    AggregatedPayment[],
-    AggregatedPayment[],
-  ]>([
+  const [referrals, payments, terminatedPayments] = await Promise.all([
     referralPromise,
     paymentPromise,
     terminatedPromise,
