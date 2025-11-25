@@ -574,14 +574,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     createdAtMatch.$lte = timeframeEnd;
   }
 
-  const referralsPromise: Promise<DashboardReferral[]> = Referral.find<DashboardReferral>({
+  const referralsPromise: Promise<DashboardReferral[]> = Referral.find({
     ...referralMatch,
     ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
   })
     .select(
       'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser sla'
     )
-    .lean<DashboardReferral>()
+    .lean<DashboardReferral[]>()
     .exec();
 
   const paymentsPromise: Promise<AggregatedPayment[]> = Payment.aggregate<AggregatedPayment>([
