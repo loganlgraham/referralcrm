@@ -47,6 +47,10 @@ describe('Dashboard API attach rates', () => {
     mockLenderFind.mockReturnValue(buildSelectableQuery([]));
   });
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('derives attach buckets from assigned agent designation when used', async () => {
     const now = new Date();
     const ahaAgentId = new Types.ObjectId();
@@ -122,5 +126,111 @@ describe('Dashboard API attach rates', () => {
 
     expect(payload.main.summary.ahaAttachRate).toBe(100);
     expect(payload.main.summary.ahaOosAttachRate).toBe(0);
+  });
+
+  it('sums total volume closed from contract prices', async () => {
+    const now = new Date();
+
+    const referralA = {
+      _id: new Types.ObjectId(),
+      createdAt: now,
+      origin: 'admin' as const,
+      sla: {}
+    };
+    const referralB = {
+      _id: new Types.ObjectId(),
+      createdAt: now,
+      origin: 'admin' as const,
+      sla: {}
+    };
+
+    mockReferralFind.mockReturnValue(buildReferralQuery([referralA, referralB]));
+
+    mockPaymentAggregate
+      .mockResolvedValueOnce([
+        {
+          _id: new Types.ObjectId(),
+          status: 'closed',
+          updatedAt: now,
+          contractPriceCents: 25000000,
+          agentAttribution: 'AHA',
+          usedAssignedAgent: true,
+          referral: referralA
+        },
+        {
+          _id: new Types.ObjectId(),
+          status: 'paid',
+          updatedAt: now,
+          paidDate: now,
+          contractPriceCents: 15000000,
+          agentAttribution: 'AHA',
+          usedAssignedAgent: true,
+          referral: referralB
+        }
+      ])
+      .mockResolvedValueOnce([]);
+
+    const response = await GET(buildRequest());
+    const payload = await response.json();
+
+    expect(payload.main.summary.totalVolumeClosedCents).toBe(40000000);
+  });
+
+  it('averages closed to paid days from admin SLA durations', async () => {
+    const now = new Date('2024-06-15T12:00:00Z');
+    jest.useFakeTimers();
+    jest.setSystemTime(now);
+
+    const adminReferralWithSla = {
+      _id: new Types.ObjectId(),
+      createdAt: now,
+      origin: 'admin' as const,
+      sla: { closedToPaidMinutes: 2880 }
+    };
+
+    const adminReferralInProgress = {
+      _id: new Types.ObjectId(),
+      createdAt: now,
+      origin: 'admin' as const,
+      sla: { lastClosedAt: new Date('2024-06-10T12:00:00Z') }
+    };
+
+    const mcReferral = {
+      _id: new Types.ObjectId(),
+      createdAt: now,
+      origin: 'mc' as const,
+      sla: { closedToPaidMinutes: 1440 }
+    };
+
+    mockReferralFind.mockReturnValue(
+      buildReferralQuery([adminReferralWithSla, adminReferralInProgress, mcReferral])
+    );
+
+    mockPaymentAggregate
+      .mockResolvedValueOnce([
+        {
+          _id: new Types.ObjectId(),
+          status: 'paid',
+          updatedAt: now,
+          paidDate: now,
+          agentAttribution: 'AHA',
+          usedAssignedAgent: true,
+          referral: adminReferralWithSla
+        },
+        {
+          _id: new Types.ObjectId(),
+          status: 'closed',
+          updatedAt: now,
+          agentAttribution: 'AHA',
+          usedAssignedAgent: true,
+          referral: adminReferralInProgress
+        }
+      ])
+      .mockResolvedValueOnce([]);
+
+    const response = await GET(buildRequest());
+    const payload = await response.json();
+
+    expect(payload.main.summary.averageDaysClosedToPaid).toBeCloseTo(3.5, 5);
   });
 });
