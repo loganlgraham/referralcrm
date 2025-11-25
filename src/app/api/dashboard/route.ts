@@ -1205,12 +1205,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           referralFeePercent = (referralFeeCents / closedPriceCents) * 100;
         }
         const commissionBasisPoints = payment.referral?.commissionBasisPoints ?? 0;
-        const commissionCents = (closedPriceCents * commissionBasisPoints) / 10000;
         const commissionPercent = commissionBasisPoints / 100;
-        if (commissionCents > 0 && commissionPercent > 0) {
-          current.commissionCents.push(commissionCents);
+        const commissionCents = (closedPriceCents * commissionBasisPoints) / 10000;
+        if (commissionPercent > 0) {
           current.commissionPercentages.push(commissionPercent);
-          current.netCommissionCents += commissionCents - referralFeeCents;
+          if (commissionCents > 0) {
+            current.commissionCents.push(commissionCents);
+            current.netCommissionCents += commissionCents - referralFeeCents;
+          }
         }
         if (referralFeePercent && referralFeePercent > 0) {
           current.referralFeePercentages.push(referralFeePercent);
