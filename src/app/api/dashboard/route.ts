@@ -638,6 +638,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const closedOrPaidStatuses = new Set(['closed', 'paid']);
 
+  const agentDesignationMap = new Map<string, 'AHA' | 'AHA_OOS' | null>();
+  agents.forEach((agent) => {
+    agentDesignationMap.set(agent._id.toString(), agent.ahaDesignation ?? null);
+  });
+
+  const getAgentDesignation = (
+    payment: AggregatedPayment
+  ): 'AHA' | 'AHA_OOS' | null => {
+    const agentId = payment.agentId ?? payment.referral?.assignedAgent;
+    if (!agentId) return null;
+    return agentDesignationMap.get(agentId.toString()) ?? null;
+  };
+
   const afcRelevant = filteredPayments.filter(
     (payment) =>
       payment.referral?.org === 'AFC' &&
@@ -648,25 +661,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ? (afcRelevant.filter((payment) => Boolean(payment.usedAfc)).length / afcRelevant.length) * 100
     : 0;
 
-  const ahaRelevant = filteredPayments.filter(
-    (payment) =>
-      payment.referral?.ahaBucket === 'AHA' &&
-      closedOrPaidStatuses.has(payment.status)
-  );
-  const ahaAttached = ahaRelevant.filter(
-    (payment) => Boolean(payment.usedAssignedAgent) && payment.agentAttribution === 'AHA'
-  );
+  const ahaRelevant = filteredPayments.filter((payment) => {
+    if (!closedOrPaidStatuses.has(payment.status)) return false;
+    const designation = getAgentDesignation(payment);
+    return designation === 'AHA';
+  });
+  const ahaAttached = ahaRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
   const ahaDealsLost = ahaRelevant.length - ahaAttached.length;
   const ahaAttachRate = ahaRelevant.length ? (ahaAttached.length / ahaRelevant.length) * 100 : 0;
 
-  const ahaOosRelevant = filteredPayments.filter(
-    (payment) =>
-      payment.referral?.ahaBucket === 'AHA_OOS' &&
-      closedOrPaidStatuses.has(payment.status)
-  );
-  const ahaOosAttached = ahaOosRelevant.filter(
-    (payment) => Boolean(payment.usedAssignedAgent) && payment.agentAttribution === 'AHA_OOS'
-  );
+  const ahaOosRelevant = filteredPayments.filter((payment) => {
+    if (!closedOrPaidStatuses.has(payment.status)) return false;
+    const designation = getAgentDesignation(payment);
+    return designation === 'AHA_OOS';
+  });
+  const ahaOosAttached = ahaOosRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
   const ahaOosDealsLost = ahaOosRelevant.length - ahaOosAttached.length;
   const ahaOosAttachRate = ahaOosRelevant.length ? (ahaOosAttached.length / ahaOosRelevant.length) * 100 : 0;
 
@@ -1003,6 +1012,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   filteredPayments.forEach((payment) => {
     if (payment.referral?.lender) lenderIds.add(payment.referral.lender.toString());
     if (payment.referral?.assignedAgent) agentIds.add(payment.referral.assignedAgent.toString());
+    if (payment.agentId) agentIds.add(payment.agentId.toString());
   });
 
   const [lenders, agents] = await Promise.all([
@@ -1010,7 +1020,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       ? LenderMC.find({ _id: { $in: Array.from(lenderIds, (id) => new Types.ObjectId(id)) } }).select('name')
       : Promise.resolve([]),
     agentIds.size
-      ? Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } }).select('name')
+      ? Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } }).select(
+          'name ahaDesignation'
+        )
       : Promise.resolve([])
   ]);
 
