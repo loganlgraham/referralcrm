@@ -558,7 +558,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .select(
       'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser sla origin'
     )
-    .lean()
+    .lean<AggregatedPayment['referral']>()
     .exec();
 
   const paymentPipeline: PipelineStage[] = [
