@@ -65,6 +65,7 @@ interface AggregatedPayment {
     createdAt: Date;
     source: 'Lender' | 'MC';
     endorser?: string;
+    origin?: 'agent' | 'mc' | 'admin' | '';
     org?: 'AFC' | 'AHA';
     lookingInZip?: string;
     propertyAddress?: string;
@@ -99,6 +100,7 @@ interface DashboardReferral {
   createdAt: Date;
   source: 'Lender' | 'MC';
   endorser?: string;
+  origin?: 'agent' | 'mc' | 'admin' | '';
   org?: 'AFC' | 'AHA';
   lookingInZip?: string;
   propertyAddress?: string;
@@ -575,7 +577,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
   })
     .select(
-      'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser sla'
+      'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin sla'
     )
     .lean<DashboardReferral[]>()
     .exec();
@@ -1145,6 +1147,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       totalReferrals: number;
       commissionCents: number[];
       commissionPercentages: number[];
+      referralFeePercentages: number[];
       netCommissionCents: number;
       closedVolumeCents: number;
     }
@@ -1160,6 +1163,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       totalReferrals: agentReferralCount.get(key) ?? 0,
       commissionCents: [],
       commissionPercentages: [],
+      referralFeePercentages: [],
       netCommissionCents: 0,
       closedVolumeCents: 0
     };
@@ -1179,14 +1183,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         if (closedPriceCents > 0) {
           current.closedVolumeCents += closedPriceCents;
         }
+        const referralFeeCents = payment.referral?.referralFeeDueCents ?? 0;
+        let referralFeePercent: number | null =
+          typeof payment.referral?.referralFeeBasisPoints === 'number'
+            ? (payment.referral.referralFeeBasisPoints ?? 0) / 100
+            : null;
+        if ((!referralFeePercent || referralFeePercent <= 0) && closedPriceCents > 0 && referralFeeCents > 0) {
+          referralFeePercent = (referralFeeCents / closedPriceCents) * 100;
+        }
         const commissionBasisPoints = payment.referral?.commissionBasisPoints ?? 0;
         const commissionCents = (closedPriceCents * commissionBasisPoints) / 10000;
         const commissionPercent = commissionBasisPoints / 100;
         if (commissionCents > 0 && commissionPercent > 0) {
           current.commissionCents.push(commissionCents);
           current.commissionPercentages.push(commissionPercent);
-          const referralFeeCents = payment.referral?.referralFeeDueCents ?? 0;
           current.netCommissionCents += commissionCents - referralFeeCents;
+        }
+        if (referralFeePercent && referralFeePercent > 0) {
+          current.referralFeePercentages.push(referralFeePercent);
         }
       } else {
         agentLostDealsMap.set(key, (agentLostDealsMap.get(key) ?? 0) + 1);
@@ -1252,6 +1266,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const averageAgentCommissionPercent = computeAverage(agentCommissionPercentages);
   const agentCommissionSampleSize = agentCommissionPercentages.length;
 
+  const agentReferralFeePercentages = Array.from(agentRevenueMap.values())
+    .flatMap((value) => value.referralFeePercentages);
+  const averageReferralFeePercent = computeAverage(agentReferralFeePercentages);
+  const referralFeeSampleSize = agentReferralFeePercentages.length;
+
   const agentNetRevenue = Array.from(agentRevenueMap.entries())
     .map(([key, value]) => ({
       id: key,
@@ -1262,6 +1281,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .slice(0, 10);
 
   const agentLostDeals = Array.from(agentLostDealsMap.entries())
+    .map(([key, value]) => ({
+      id: key,
+      name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
+      referrals: value
+    }))
+    .sort((a, b) => b.referrals - a.referrals)
+    .slice(0, 10);
+
+  const agentCreatedMcAssignmentCount = new Map<string, number>();
+  filteredReferrals.forEach((referral) => {
+    if (referral.origin === 'agent' && referral.lender && referral.assignedAgent) {
+      const key = referral.assignedAgent.toString();
+      agentCreatedMcAssignmentCount.set(key, (agentCreatedMcAssignmentCount.get(key) ?? 0) + 1);
+    }
+  });
+
+  const agentCreatedMcLeaderboard = Array.from(agentCreatedMcAssignmentCount.entries())
     .map(([key, value]) => ({
       id: key,
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
@@ -1470,6 +1506,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     agent: {
       averageCommissionCents: averageAgentCommissionCents,
       averageCommissionPercent: averageAgentCommissionPercent,
+      averageReferralFeePercent,
+      referralFeeSampleSize,
       commissionSampleSize: agentCommissionSampleSize,
       referralLeaderboard: agentReferralLeaderboard,
       closeRateLeaderboard: agentCloseRateLeaderboard,
@@ -1477,7 +1515,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       revenueExpected: agentRevenueExpected,
       averageClosedDealAmount: agentAverageClosedDeal,
       netRevenue: agentNetRevenue,
-      lostDeals: agentLostDeals
+      lostDeals: agentLostDeals,
+      agentCreatedMcAssignments: agentCreatedMcLeaderboard
     },
     admin: {
       slaAverages: {
