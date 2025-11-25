@@ -224,6 +224,14 @@ const resolveEffectiveStatus = (
   };
 };
 
+const resolveCommunicationStart = (
+  getFirstStatusTimestamp: ReturnType<typeof buildStatusLookup>,
+  createdAt: Date,
+  pairedAt: Date | null
+): Date | null => {
+  return getFirstStatusTimestamp('In Communication') ?? pairedAt ?? createdAt ?? null;
+};
+
 const formatDateKey = (date: Date): string => formatInTimeZone(date, SLA_TIME_ZONE, 'yyyy-MM-dd');
 
 const addObservedHoliday = (date: Date, accumulator: Set<string>) => {
@@ -426,7 +434,6 @@ export const computeSlaDurations = (referral: ReferralLike): SlaDuration[] => {
   const getFirstStatusTimestamp = buildStatusLookup(referral, auditEntries);
   const pairedAt = getFirstStatusTimestamp('Paired');
   const inCommunicationAt = getFirstStatusTimestamp('In Communication');
-  const activeLeadAt = getFirstStatusTimestamp('Active Lead') ?? getFirstStatusTimestamp('Showing Homes');
   const underContractAt = getFirstStatusTimestamp('Under Contract');
 
   const deals: DealLike[] = Array.isArray(referral.payments) ? referral.payments : [];
@@ -470,9 +477,9 @@ export const computeSlaDurations = (referral: ReferralLike): SlaDuration[] => {
   const dealClosedAt = findFirstDealTimestamp(deals, ['closed', 'payment_sent', 'paid']) ?? getFirstStatusTimestamp('Closed');
   const dealPaidAt = findFirstDealTimestamp(deals, 'paid');
 
+  const communicationStart = resolveCommunicationStart(getFirstStatusTimestamp, createdAt, pairedAt);
   const newLeadToPaired = minutesBetween(createdAt, pairedAt);
-  const pairedToCommunication = minutesBetween(pairedAt, inCommunicationAt);
-  const communicationStart = activeLeadAt ?? inCommunicationAt ?? pairedAt ?? createdAt;
+  const pairedToCommunication = minutesBetween(pairedAt, inCommunicationAt ?? communicationStart);
   const communicationToContract = minutesBetween(communicationStart, underContractAt);
   const contractToClose = minutesBetween(dealUnderContractAt, dealClosedAt);
   const closeToPaid = minutesBetween(dealClosedAt, dealPaidAt);
@@ -547,8 +554,17 @@ const buildSlaClock = (
   lastCompletedAt: Date | null
 ): { statusLastUpdated: Date; createdAt: Date; status: string; lastCompletedAt: Date | null } => {
   const createdAt = parseTimestamp(referral.createdAt) ?? new Date();
+  const auditEntries = Array.isArray(referral.audit) ? referral.audit : [];
+  const getFirstStatusTimestamp = buildStatusLookup(referral, auditEntries);
+  const pairedAt = getFirstStatusTimestamp('Paired');
+  const communicationStart = resolveCommunicationStart(getFirstStatusTimestamp, createdAt, pairedAt);
   const { status, updatedAt } = resolveEffectiveStatus(referral);
-  const rawUpdatedAt = updatedAt ?? parseTimestamp(referral.statusLastUpdated) ?? createdAt;
+  const rawUpdatedAt = (() => {
+    if (status === 'In Communication' || ACTIVE_LEAD_STATUSES.has(status)) {
+      return communicationStart ?? updatedAt ?? parseTimestamp(referral.statusLastUpdated) ?? createdAt;
+    }
+    return updatedAt ?? parseTimestamp(referral.statusLastUpdated) ?? createdAt;
+  })();
   const statusLastUpdated = lastCompletedAt ? max([rawUpdatedAt, lastCompletedAt]) : rawUpdatedAt;
 
   return { statusLastUpdated, createdAt, status, lastCompletedAt };
