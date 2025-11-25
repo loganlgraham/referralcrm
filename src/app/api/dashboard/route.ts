@@ -39,6 +39,7 @@ interface DashboardRequestContext {
 
 interface AggregatedPayment {
   _id: Types.ObjectId;
+  agentId?: Types.ObjectId | null;
   status:
     | 'under_contract'
     | 'past_inspection'
