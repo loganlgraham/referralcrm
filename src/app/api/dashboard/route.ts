@@ -39,6 +39,7 @@ interface DashboardRequestContext {
 
 interface AggregatedPayment {
   _id: Types.ObjectId;
+  agentId?: Types.ObjectId | null;
   status:
     | 'under_contract'
     | 'past_inspection'
@@ -64,6 +65,7 @@ interface AggregatedPayment {
     createdAt: Date;
     source: 'Lender' | 'MC';
     endorser?: string;
+    origin?: 'agent' | 'mc' | 'admin' | '';
     org?: 'AFC' | 'AHA';
     lookingInZip?: string;
     propertyAddress?: string;
@@ -87,8 +89,44 @@ interface AggregatedPayment {
       timeToFirstAgentContactHours?: number | null;
       timeToAssignmentHours?: number | null;
       lastClosedAt?: Date | string | null;
+      lastUnderContractAt?: Date | string | null;
+      lastPairedAt?: Date | string | null;
     } | null;
   };
+}
+
+interface DashboardReferral {
+  _id: Types.ObjectId;
+  createdAt: Date;
+  source: 'Lender' | 'MC';
+  endorser?: string;
+  origin?: 'agent' | 'mc' | 'admin' | '';
+  org?: 'AFC' | 'AHA';
+  lookingInZip?: string;
+  propertyAddress?: string;
+  propertyCity?: string;
+  propertyState?: string;
+  propertyPostalCode?: string;
+  borrowerCurrentAddress?: string;
+  closedPriceCents?: number;
+  estPurchasePriceCents?: number;
+  referralFeeDueCents?: number;
+  referralFeeBasisPoints?: number;
+  commissionBasisPoints?: number;
+  ahaBucket?: 'AHA' | 'AHA_OOS' | null;
+  assignedAgent?: Types.ObjectId | null;
+  lender?: Types.ObjectId | null;
+  status?: string;
+  preApprovalAmountCents?: number;
+  sla?: {
+    daysToContract?: number | null;
+    daysToClose?: number | null;
+    timeToFirstAgentContactHours?: number | null;
+    timeToAssignmentHours?: number | null;
+    lastClosedAt?: Date | string | null;
+    lastUnderContractAt?: Date | string | null;
+    lastPairedAt?: Date | string | null;
+  } | null;
 }
 
 const ACTIVE_PIPELINE_STATUSES = new Set<string>([
@@ -266,10 +304,6 @@ function createDashboardContext(request: NextRequest): DashboardRequestContext {
       ? (networkParam as NetworkFilter)
       : 'ALL';
 
-  if (normalizedNetwork === 'AHA' || normalizedNetwork === 'AHA_OOS') {
-    referralMatch.ahaBucket = normalizedNetwork === 'AHA' ? 'AHA' : 'AHA_OOS';
-  }
-
   return {
     referralMatch,
     paymentMatch: {},
@@ -363,6 +397,29 @@ function computeAverage(values: number[]): number {
   return total / values.length;
 }
 
+function isWithinTimeframe(date: Date | null | undefined, timeframe: TimeframeInfo): boolean {
+  if (!date) return false;
+  const value = new Date(date);
+  if (Number.isNaN(value.getTime())) return false;
+  if (timeframe.start && value < timeframe.start) return false;
+  if (timeframe.end && value > timeframe.end) return false;
+  return true;
+}
+
+function getSlaMetricDate(
+  referral: AggregatedPayment['referral'] | DashboardReferral,
+  fallback: Date | null = null
+): Date | null {
+  const sla = referral.sla;
+  if (!sla) return fallback;
+  return (
+    (sla.lastClosedAt ? new Date(sla.lastClosedAt) : null) ??
+    (sla.lastUnderContractAt ? new Date(sla.lastUnderContractAt) : null) ??
+    (sla.lastPairedAt ? new Date(sla.lastPairedAt) : null) ??
+    fallback
+  );
+}
+
 function formatTerminatedAddress(referral: AggregatedPayment['referral']): string {
   const parts = [referral.propertyAddress, referral.propertyCity, referral.propertyState].filter(
     (part): part is string => Boolean(part && part.toString().trim())
@@ -423,7 +480,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           closeRate: 0,
           afcDealsLost: 0,
           afcAttachRate: 0,
+          ahaDealsLost: 0,
           ahaAttachRate: 0,
+          ahaOosDealsLost: 0,
           ahaOosAttachRate: 0,
           activePipeline: 0,
           expectedRevenueCents: 0,
@@ -513,59 +572,66 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     createdAtMatch.$lte = timeframeEnd;
   }
 
+  const referralsPromise: Promise<DashboardReferral[]> = Referral.find({
+    ...referralMatch,
+    ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
+  })
+    .select(
+      'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin sla'
+    )
+    .lean<DashboardReferral[]>()
+    .exec();
+
+  const paymentsPromise: Promise<AggregatedPayment[]> = Payment.aggregate<AggregatedPayment>([
+    {
+      $lookup: {
+        from: 'referrals',
+        localField: 'referralId',
+        foreignField: '_id',
+        as: 'referral'
+      }
+    },
+    { $unwind: '$referral' },
+    {
+      $match: {
+        ...paymentMatch,
+        status: {
+          $in: [
+            'under_contract',
+            'past_inspection',
+            'past_appraisal',
+            'clear_to_close',
+            'closed',
+            'payment_sent',
+            'paid',
+          ]
+        }
+      }
+    }
+  ]).exec();
+
+  const terminatedPaymentsPromise: Promise<AggregatedPayment[]> = Payment.aggregate<AggregatedPayment>([
+    {
+      $lookup: {
+        from: 'referrals',
+        localField: 'referralId',
+        foreignField: '_id',
+        as: 'referral'
+      }
+    },
+    { $unwind: '$referral' },
+    {
+      $match: {
+        ...paymentMatch,
+        status: 'terminated'
+      }
+    }
+  ]).exec();
+
   const [referrals, payments, terminatedPayments] = await Promise.all([
-    Referral.find({
-      ...referralMatch,
-      ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
-    })
-      .select(
-        'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser sla'
-      )
-      .lean(),
-    Payment.aggregate<AggregatedPayment>([
-      {
-        $lookup: {
-          from: 'referrals',
-          localField: 'referralId',
-          foreignField: '_id',
-          as: 'referral'
-        }
-      },
-      { $unwind: '$referral' },
-      {
-        $match: {
-          ...paymentMatch,
-          status: {
-            $in: [
-              'under_contract',
-              'past_inspection',
-              'past_appraisal',
-              'clear_to_close',
-              'closed',
-              'payment_sent',
-              'paid',
-            ]
-          }
-        }
-      }
-    ]),
-    Payment.aggregate<AggregatedPayment>([
-      {
-        $lookup: {
-          from: 'referrals',
-          localField: 'referralId',
-          foreignField: '_id',
-          as: 'referral'
-        }
-      },
-      { $unwind: '$referral' },
-      {
-        $match: {
-          ...paymentMatch,
-          status: 'terminated'
-        }
-      }
-    ])
+    referralsPromise,
+    paymentsPromise,
+    terminatedPaymentsPromise,
   ]);
 
   const paymentsWithMetric = payments.map((payment) => ({
@@ -598,9 +664,83 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return true;
   });
 
-  const totalReferrals = referrals.length;
-  const referralZipMap = new Map<string, number>();
+  const lenderIds = new Set<string>();
+  const agentIds = new Set<string>();
+
   referrals.forEach((referral) => {
+    if (referral.lender) lenderIds.add(referral.lender.toString());
+    if (referral.assignedAgent) agentIds.add(referral.assignedAgent.toString());
+  });
+
+  filteredPayments.forEach((payment) => {
+    if (payment.referral?.lender) lenderIds.add(payment.referral.lender.toString());
+    if (payment.referral?.assignedAgent) agentIds.add(payment.referral.assignedAgent.toString());
+    if (payment.agentId) agentIds.add(payment.agentId.toString());
+  });
+
+  terminatedWithinTimeframe.forEach((payment) => {
+    if (payment.referral?.assignedAgent) agentIds.add(payment.referral.assignedAgent.toString());
+    if (payment.agentId) agentIds.add(payment.agentId.toString());
+  });
+
+  const [lenders, agents] = await Promise.all([
+    lenderIds.size
+      ? LenderMC.find({ _id: { $in: Array.from(lenderIds, (id) => new Types.ObjectId(id)) } }).select('name')
+      : Promise.resolve([]),
+    agentIds.size
+      ? Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } }).select('name ahaDesignation')
+      : Promise.resolve([])
+  ]);
+
+  const lenderNameMap = new Map<string, string>();
+  lenders.forEach((lender) => {
+    lenderNameMap.set(lender._id.toString(), lender.name || 'Unnamed MC');
+  });
+
+  const agentNameMap = new Map<string, string>();
+  agents.forEach((agent) => {
+    agentNameMap.set(agent._id.toString(), agent.name || 'Unnamed Agent');
+  });
+
+  const agentDesignationMap = new Map<string, 'AHA' | 'AHA_OOS' | null>();
+  agents.forEach((agent) => {
+    agentDesignationMap.set(agent._id.toString(), agent.ahaDesignation ?? null);
+  });
+
+  const getAgentDesignation = (payment: AggregatedPayment): 'AHA' | 'AHA_OOS' | null => {
+    const agentId = payment.agentId ?? payment.referral?.assignedAgent;
+    if (!agentId) return null;
+    return agentDesignationMap.get(agentId.toString()) ?? null;
+  };
+
+  const getReferralDesignation = (referral: DashboardReferral): 'AHA' | 'AHA_OOS' | null => {
+    if (!referral.assignedAgent) return null;
+    return agentDesignationMap.get(referral.assignedAgent.toString()) ?? null;
+  };
+
+  const matchesNetwork = (designation: 'AHA' | 'AHA_OOS' | null) => {
+    if (context.networkFilter === 'ALL') return true;
+    return designation === context.networkFilter;
+  };
+
+  const filteredReferrals =
+    context.networkFilter === 'ALL'
+      ? referrals
+      : referrals.filter((referral) => matchesNetwork(getReferralDesignation(referral)));
+
+  const filteredPaymentsByNetwork =
+    context.networkFilter === 'ALL'
+      ? filteredPayments
+      : filteredPayments.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
+
+  const terminatedWithinNetwork =
+    context.networkFilter === 'ALL'
+      ? terminatedWithinTimeframe
+      : terminatedWithinTimeframe.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
+
+  const totalReferrals = filteredReferrals.length;
+  const referralZipMap = new Map<string, number>();
+  filteredReferrals.forEach((referral) => {
     const candidates = [referral.lookingInZip, referral.propertyPostalCode];
     const zipCandidate = candidates.find((value) => {
       if (value == null) return false;
@@ -611,13 +751,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const zip = zipCandidate.toString().trim();
     referralZipMap.set(zip, (referralZipMap.get(zip) ?? 0) + 1);
   });
-  const dealsClosed = filteredPayments.filter(
+  const dealsClosed = filteredPaymentsByNetwork.filter(
     (payment) =>
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
       (payment.status === 'closed' || payment.status === 'paid')
   );
   const endOfToday = endOfDay(new Date());
-  const dealsUnderContract = filteredPayments.filter((payment) =>
+  const dealsUnderContract = filteredPaymentsByNetwork.filter((payment) =>
     [
       'under_contract',
       'past_inspection',
@@ -630,37 +770,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   );
   const closeRate = totalReferrals === 0 ? 0 : (dealsClosed.length / totalReferrals) * 100;
 
-  const revenueEligiblePayments = filteredPayments.filter(
+  const revenueEligiblePayments = filteredPaymentsByNetwork.filter(
     (payment) => payment.agentAttribution !== 'OUTSIDE_AGENT'
   );
 
   const closedOrPaidStatuses = new Set(['closed', 'paid']);
-
-  const afcRelevant = filteredPayments.filter(
-    (payment) =>
-      payment.referral?.org === 'AFC' &&
-      closedOrPaidStatuses.has(payment.status)
-  );
-  const afcDealsLost = afcRelevant.filter((payment) => !payment.usedAfc).length;
-  const afcAttachRate = afcRelevant.length
-    ? (afcRelevant.filter((payment) => Boolean(payment.usedAfc)).length / afcRelevant.length) * 100
-    : 0;
-
-  const ahaRelevant = filteredPayments.filter(
-    (payment) =>
-      payment.referral?.ahaBucket === 'AHA' &&
-      closedOrPaidStatuses.has(payment.status)
-  );
-  const ahaAttached = ahaRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
-  const ahaAttachRate = ahaRelevant.length ? (ahaAttached.length / ahaRelevant.length) * 100 : 0;
-
-  const ahaOosRelevant = filteredPayments.filter(
-    (payment) =>
-      payment.referral?.ahaBucket === 'AHA_OOS' &&
-      closedOrPaidStatuses.has(payment.status)
-  );
-  const ahaOosAttached = ahaOosRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
-  const ahaOosAttachRate = ahaOosRelevant.length ? (ahaOosAttached.length / ahaOosRelevant.length) * 100 : 0;
 
   const expectedRevenueCents = revenueEligiblePayments.reduce(
     (sum, payment) => sum + (payment.expectedAmountCents ?? 0),
@@ -723,8 +837,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ? realizedRevenueCents / revenueContributingClosedDeals.length
     : 0;
   const totalVolumeClosedCents = dealsClosed.reduce((sum, payment) => {
-    const closedPrice = payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
-    return sum + closedPrice;
+    const contractPrice = payment.contractPriceCents ?? 0;
+    return contractPrice > 0 ? sum + contractPrice : sum;
   }, 0);
   const averageClosedDealAmountCents = computeAverage(closedDealPrices);
 
@@ -747,7 +861,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   const averagePaAmountCents = computeAverage(
-    referrals
+    filteredReferrals
       .map((referral) => referral.preApprovalAmountCents ?? 0)
       .filter((amount) => amount > 0)
   );
@@ -758,11 +872,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .filter((amount) => amount > 0)
   );
 
-  const pipelineValueCents = referrals
+  const pipelineValueCents = filteredReferrals
     .filter((referral) => ACTIVE_PIPELINE_STATUSES.has((referral.status as string | undefined) ?? ''))
     .reduce((sum, referral) => sum + (referral.preApprovalAmountCents ?? 0), 0);
 
-  const activePipeline = referrals.filter((referral) =>
+  const activePipeline = filteredReferrals.filter((referral) =>
     ACTIVE_PIPELINE_STATUSES.has((referral.status as string | undefined) ?? '')
   ).length;
 
@@ -783,102 +897,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .sort((a, b) => b.value - a.value);
 
   const referralsMonthlyStart = startOfMonth(subMonths(new Date(), 11));
-  const [monthlyReferralsAgg, monthlyDealsAgg] = await Promise.all([
-    Referral.aggregate([
-      {
-        $match: {
-          ...referralMatch,
-          createdAt: { $gte: referralsMonthlyStart }
-        }
-      },
-      {
-        $group: {
-          _id: {
-            year: { $year: '$createdAt' },
-            month: { $month: '$createdAt' }
-          },
-          totalReferrals: { $sum: 1 },
-          mcTransfers: {
-            $sum: {
-              $cond: [{ $eq: ['$source', 'MC'] }, 1, 0]
-            }
-          },
-          ahaReferrals: {
-            $sum: {
-              $cond: [{ $eq: ['$ahaBucket', 'AHA'] }, 1, 0]
-            }
-          },
-          ahaOosReferrals: {
-            $sum: {
-              $cond: [{ $eq: ['$ahaBucket', 'AHA_OOS'] }, 1, 0]
-            }
-          }
-        }
-      }
-    ]),
-    Payment.aggregate([
-      {
-        $lookup: {
-          from: 'referrals',
-          localField: 'referralId',
-          foreignField: '_id',
-          as: 'referral'
-        }
-      },
-      { $unwind: '$referral' },
-      {
-        $match: {
-          ...paymentMatch,
-          status: { $in: ['closed', 'payment_sent', 'paid'] },
-          agentAttribution: { $ne: 'OUTSIDE_AGENT' }
-        }
-      },
-      {
-        $addFields: {
-          metricDate: {
-            $ifNull: [
-              {
-                $cond: [
-                  {
-                    $and: [
-                      { $eq: ['$status', 'paid'] },
-                      { $ne: ['$paidDate', null] }
-                    ]
-                  },
-                  '$paidDate',
-                  '$updatedAt'
-                ]
-              },
-              '$updatedAt'
-            ]
-          }
-        }
-      },
-      {
-        $match: {
-          metricDate: { $gte: referralsMonthlyStart }
-        }
-      },
-      {
-        $group: {
-          _id: {
-            year: { $year: '$metricDate' },
-            month: { $month: '$metricDate' }
-          },
-          dealsClosed: { $sum: 1 },
-          revenueReceivedCents: {
-            $sum: {
-              $cond: [
-                { $gt: ['$receivedAmountCents', 0] },
-                '$receivedAmountCents',
-                0
-              ]
-            }
-          }
-        }
-      }
-    ])
-  ]);
 
   const monthBuckets: { key: string; label: string; year: number; month: number }[] = [];
   const startMonth = referralsMonthlyStart;
@@ -897,25 +915,37 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     string,
     { total: number; transfers: number; ahaReferrals: number; ahaOosReferrals: number }
   >();
-  monthlyReferralsAgg.forEach((entry: any) => {
-    if (!entry?._id) return;
-    const key = `${entry._id.year}-${String(entry._id.month).padStart(2, '0')}`;
-    referralMonthlyMap.set(key, {
-      total: entry.totalReferrals ?? 0,
-      transfers: entry.mcTransfers ?? 0,
-      ahaReferrals: entry.ahaReferrals ?? 0,
-      ahaOosReferrals: entry.ahaOosReferrals ?? 0
-    });
+  filteredReferrals.forEach((referral) => {
+    if (!referral.createdAt || referral.createdAt < referralsMonthlyStart) return;
+    const createdAt = new Date(referral.createdAt);
+    const key = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
+    const current =
+      referralMonthlyMap.get(key) ?? { total: 0, transfers: 0, ahaReferrals: 0, ahaOosReferrals: 0 };
+    current.total += 1;
+    if (referral.source === 'MC') {
+      current.transfers += 1;
+    }
+    const designation = getReferralDesignation(referral);
+    if (designation === 'AHA') {
+      current.ahaReferrals += 1;
+    } else if (designation === 'AHA_OOS') {
+      current.ahaOosReferrals += 1;
+    }
+    referralMonthlyMap.set(key, current);
   });
 
   const dealMonthlyMap = new Map<string, { dealsClosed: number; revenueReceivedCents: number }>();
-  monthlyDealsAgg.forEach((entry: any) => {
-    if (!entry?._id) return;
-    const key = `${entry._id.year}-${String(entry._id.month).padStart(2, '0')}`;
-    dealMonthlyMap.set(key, {
-      dealsClosed: entry.dealsClosed ?? 0,
-      revenueReceivedCents: entry.revenueReceivedCents ?? 0
-    });
+  filteredPaymentsByNetwork.forEach((payment) => {
+    const metricDate = payment.metricDate ?? resolveMetricDate(payment);
+    if (!metricDate || metricDate < referralsMonthlyStart) return;
+    if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
+    if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return;
+
+    const key = `${metricDate.getFullYear()}-${String(metricDate.getMonth() + 1).padStart(2, '0')}`;
+    const current = dealMonthlyMap.get(key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
+    current.dealsClosed += 1;
+    current.revenueReceivedCents += payment.receivedAmountCents ?? 0;
+    dealMonthlyMap.set(key, current);
   });
 
   const preApprovalMetrics = await PreApprovalMetric.find({
@@ -984,37 +1014,35 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     };
   });
 
-  const lenderIds = new Set<string>();
-  const agentIds = new Set<string>();
+  const afcRelevant = filteredPaymentsByNetwork.filter(
+    (payment) =>
+      payment.referral?.org === 'AFC' &&
+      closedOrPaidStatuses.has(payment.status)
+  );
+  const afcDealsLost = afcRelevant.filter((payment) => !payment.usedAfc).length;
+  const afcAttachRate = afcRelevant.length
+    ? (afcRelevant.filter((payment) => Boolean(payment.usedAfc)).length / afcRelevant.length) * 100
+    : 0;
 
-  referrals.forEach((referral) => {
-    if (referral.lender) lenderIds.add(referral.lender.toString());
-    if (referral.assignedAgent) agentIds.add(referral.assignedAgent.toString());
+  const ahaRelevant = filteredPaymentsByNetwork.filter((payment) => {
+    if (!closedOrPaidStatuses.has(payment.status)) return false;
+    const designation = getAgentDesignation(payment);
+    return designation === 'AHA';
   });
+  const ahaAttached = ahaRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
+  const ahaDealsLost = ahaRelevant.length - ahaAttached.length;
+  const ahaAttachRate = ahaRelevant.length ? (ahaAttached.length / ahaRelevant.length) * 100 : 0;
 
-  filteredPayments.forEach((payment) => {
-    if (payment.referral?.lender) lenderIds.add(payment.referral.lender.toString());
-    if (payment.referral?.assignedAgent) agentIds.add(payment.referral.assignedAgent.toString());
+  const ahaOosRelevant = filteredPaymentsByNetwork.filter((payment) => {
+    if (!closedOrPaidStatuses.has(payment.status)) return false;
+    const designation = getAgentDesignation(payment);
+    return designation === 'AHA_OOS';
   });
-
-  const [lenders, agents] = await Promise.all([
-    lenderIds.size
-      ? LenderMC.find({ _id: { $in: Array.from(lenderIds, (id) => new Types.ObjectId(id)) } }).select('name')
-      : Promise.resolve([]),
-    agentIds.size
-      ? Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } }).select('name')
-      : Promise.resolve([])
-  ]);
-
-  const lenderNameMap = new Map<string, string>();
-  lenders.forEach((lender) => {
-    lenderNameMap.set(lender._id.toString(), lender.name || 'Unnamed MC');
-  });
-
-  const agentNameMap = new Map<string, string>();
-  agents.forEach((agent) => {
-    agentNameMap.set(agent._id.toString(), agent.name || 'Unnamed Agent');
-  });
+  const ahaOosAttached = ahaOosRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
+  const ahaOosDealsLost = ahaOosRelevant.length - ahaOosAttached.length;
+  const ahaOosAttachRate = ahaOosRelevant.length
+    ? (ahaOosAttached.length / ahaOosRelevant.length) * 100
+    : 0;
 
   const buildMcRequestLeaderboard = (sourceMap: Map<string, number>) =>
     Array.from(sourceMap.entries())
@@ -1032,17 +1060,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const referralByMcMap = new Map<string, number>();
   const referralByMcAhaMap = new Map<string, number>();
   const referralByMcAhaOosMap = new Map<string, number>();
-  const allReferralDates = referrals.map((referral) => referral.createdAt);
+  const allReferralDates = filteredReferrals.map((referral) => referral.createdAt);
   const ahaReferralDates: Date[] = [];
   const ahaOosReferralDates: Date[] = [];
-  referrals.forEach((referral) => {
+  filteredReferrals.forEach((referral) => {
     const key = referral.lender ? referral.lender.toString() : 'unassigned';
     referralByMcMap.set(key, (referralByMcMap.get(key) ?? 0) + 1);
 
-    if (referral.ahaBucket === 'AHA') {
+    const designation = getReferralDesignation(referral);
+    if (designation === 'AHA') {
       referralByMcAhaMap.set(key, (referralByMcAhaMap.get(key) ?? 0) + 1);
       ahaReferralDates.push(referral.createdAt);
-    } else if (referral.ahaBucket === 'AHA_OOS') {
+    } else if (designation === 'AHA_OOS') {
       referralByMcAhaOosMap.set(key, (referralByMcAhaOosMap.get(key) ?? 0) + 1);
       ahaOosReferralDates.push(referral.createdAt);
     }
@@ -1054,7 +1083,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ahaOos: groupTrendByTimeframe(ahaOosReferralDates, timeframe)
   };
 
-  filteredPayments.forEach((payment) => {
+  filteredPaymentsByNetwork.forEach((payment) => {
     const key = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     const current = mcRevenueMap.get(key) ?? { revenue: 0, expected: 0, closed: 0, totalReferrals: referralByMcMap.get(key) ?? 0 };
     const isOutsideAgentDeal = payment.agentAttribution === 'OUTSIDE_AGENT';
@@ -1104,7 +1133,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   };
 
   const agentReferralCount = new Map<string, number>();
-  referrals.forEach((referral) => {
+  filteredReferrals.forEach((referral) => {
     const key = referral.assignedAgent ? referral.assignedAgent.toString() : 'unassigned';
     agentReferralCount.set(key, (agentReferralCount.get(key) ?? 0) + 1);
   });
@@ -1118,13 +1147,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       totalReferrals: number;
       commissionCents: number[];
       commissionPercentages: number[];
+      referralFeePercentages: number[];
       netCommissionCents: number;
       closedVolumeCents: number;
     }
   >();
   const agentLostDealsMap = new Map<string, number>();
 
-  filteredPayments.forEach((payment) => {
+  filteredPaymentsByNetwork.forEach((payment) => {
     const key = payment.referral?.assignedAgent ? payment.referral.assignedAgent.toString() : 'unassigned';
     const current = agentRevenueMap.get(key) ?? {
       revenue: 0,
@@ -1133,13 +1163,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       totalReferrals: agentReferralCount.get(key) ?? 0,
       commissionCents: [],
       commissionPercentages: [],
+      referralFeePercentages: [],
       netCommissionCents: 0,
       closedVolumeCents: 0
     };
     const isOutsideAgentDeal = payment.agentAttribution === 'OUTSIDE_AGENT';
     if (!isOutsideAgentDeal) {
       current.revenue += payment.receivedAmountCents ?? 0;
-      current.expected += payment.expectedAmountCents ?? 0;
+      const outstandingRevenue = Math.max(
+        (payment.expectedAmountCents ?? 0) - (payment.receivedAmountCents ?? 0),
+        0
+      );
+      const isUnderContractPipeline = [
+        'under_contract',
+        'past_inspection',
+        'past_appraisal',
+        'clear_to_close'
+      ].includes(payment.status);
+      const isPaidButNotFullyReceived = payment.status === 'paid' && outstandingRevenue > 0;
+      if (isUnderContractPipeline || isPaidButNotFullyReceived) {
+        current.expected += outstandingRevenue;
+      }
     }
     if (payment.status === 'closed' || payment.status === 'paid') {
       if (!isOutsideAgentDeal) {
@@ -1152,14 +1196,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         if (closedPriceCents > 0) {
           current.closedVolumeCents += closedPriceCents;
         }
+        const referralFeeCents = payment.referral?.referralFeeDueCents ?? 0;
+        let referralFeePercent: number | null =
+          typeof payment.referral?.referralFeeBasisPoints === 'number'
+            ? (payment.referral.referralFeeBasisPoints ?? 0) / 100
+            : null;
+        if ((!referralFeePercent || referralFeePercent <= 0) && closedPriceCents > 0 && referralFeeCents > 0) {
+          referralFeePercent = (referralFeeCents / closedPriceCents) * 100;
+        }
         const commissionBasisPoints = payment.referral?.commissionBasisPoints ?? 0;
-        const commissionCents = (closedPriceCents * commissionBasisPoints) / 10000;
         const commissionPercent = commissionBasisPoints / 100;
-        if (commissionCents > 0 && commissionPercent > 0) {
-          current.commissionCents.push(commissionCents);
+        const commissionCents = (closedPriceCents * commissionBasisPoints) / 10000;
+        if (commissionPercent > 0) {
           current.commissionPercentages.push(commissionPercent);
-          const referralFeeCents = payment.referral?.referralFeeDueCents ?? 0;
-          current.netCommissionCents += commissionCents - referralFeeCents;
+          if (commissionCents > 0) {
+            current.commissionCents.push(commissionCents);
+            current.netCommissionCents += commissionCents - referralFeeCents;
+          }
+        }
+        if (referralFeePercent && referralFeePercent > 0) {
+          current.referralFeePercentages.push(referralFeePercent);
         }
       } else {
         agentLostDealsMap.set(key, (agentLostDealsMap.get(key) ?? 0) + 1);
@@ -1225,6 +1281,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const averageAgentCommissionPercent = computeAverage(agentCommissionPercentages);
   const agentCommissionSampleSize = agentCommissionPercentages.length;
 
+  const agentReferralFeePercentages = Array.from(agentRevenueMap.values())
+    .flatMap((value) => value.referralFeePercentages);
+  const averageReferralFeePercent = computeAverage(agentReferralFeePercentages);
+  const referralFeeSampleSize = agentReferralFeePercentages.length;
+
   const agentNetRevenue = Array.from(agentRevenueMap.entries())
     .map(([key, value]) => ({
       id: key,
@@ -1243,10 +1304,35 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .sort((a, b) => b.referrals - a.referrals)
     .slice(0, 10);
 
-  const assignedReferrals = referrals.filter((referral) => Boolean(referral.assignedAgent)).length;
-  const unassignedReferrals = Math.max(totalReferrals - assignedReferrals, 0);
+  const agentCreatedMcAssignmentCount = new Map<string, number>();
+  filteredReferrals.forEach((referral) => {
+    if (referral.origin === 'agent' && referral.lender && referral.assignedAgent) {
+      const key = referral.assignedAgent.toString();
+      agentCreatedMcAssignmentCount.set(key, (agentCreatedMcAssignmentCount.get(key) ?? 0) + 1);
+    }
+  });
 
-  const slaFields = referrals
+  const agentCreatedMcLeaderboard = Array.from(agentCreatedMcAssignmentCount.entries())
+    .map(([key, value]) => ({
+      id: key,
+      name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
+      referrals: value
+    }))
+    .sort((a, b) => b.referrals - a.referrals)
+    .slice(0, 10);
+
+  const adminEligibleReferrals = referrals.filter((referral) => {
+    const metricDate = getSlaMetricDate(referral, referral.createdAt ?? null);
+    return metricDate ? isWithinTimeframe(metricDate, timeframe) : false;
+  });
+
+  const assignedReferrals = adminEligibleReferrals.filter((referral) => Boolean(referral.assignedAgent)).length;
+  const unassignedReferrals = Math.max(adminEligibleReferrals.length - assignedReferrals, 0);
+  const assignmentRate = adminEligibleReferrals.length
+    ? (assignedReferrals / adminEligibleReferrals.length) * 100
+    : 0;
+
+  const slaFields = adminEligibleReferrals
     .map((referral) => referral.sla)
     .filter((sla): sla is NonNullable<typeof sla> => Boolean(sla));
 
@@ -1285,7 +1371,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const adminAverageLeadToContract = daysToContractAvg;
   const adminAverageContractToClose = daysToCloseAvg;
 
-  const terminatedDealsByReason = terminatedWithinTimeframe.reduce((map, payment) => {
+  const terminatedDealsByReason = terminatedWithinNetwork.reduce((map, payment) => {
     const reason = payment.terminatedReason;
     if (!reason) return map;
     map.set(reason, (map.get(reason) ?? 0) + 1);
@@ -1305,7 +1391,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }))
     .sort((a, b) => b.value - a.value);
 
-  const terminatedDeals = terminatedWithinTimeframe.map((payment) => ({
+  const terminatedDeals = terminatedWithinNetwork.map((payment) => ({
     id: payment._id.toString(),
     reasonKey: payment.terminatedReason ?? 'unknown',
     reasonLabel: TERMINATED_REASON_LABELS[payment.terminatedReason ?? 'unknown'] ?? 'Unknown',
@@ -1380,7 +1466,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         closeRate,
         afcDealsLost,
         afcAttachRate,
+        ahaDealsLost,
         ahaAttachRate,
+        ahaOosDealsLost,
         ahaOosAttachRate,
         activePipeline,
         expectedRevenueCents,
@@ -1433,6 +1521,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     agent: {
       averageCommissionCents: averageAgentCommissionCents,
       averageCommissionPercent: averageAgentCommissionPercent,
+      averageReferralFeePercent,
+      referralFeeSampleSize,
       commissionSampleSize: agentCommissionSampleSize,
       referralLeaderboard: agentReferralLeaderboard,
       closeRateLeaderboard: agentCloseRateLeaderboard,
@@ -1440,7 +1530,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       revenueExpected: agentRevenueExpected,
       averageClosedDealAmount: agentAverageClosedDeal,
       netRevenue: agentNetRevenue,
-      lostDeals: agentLostDeals
+      lostDeals: agentLostDeals,
+      agentCreatedMcAssignments: agentCreatedMcLeaderboard
     },
     admin: {
       slaAverages: {
@@ -1451,9 +1542,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       },
       averageDaysNewLeadToContract: adminAverageLeadToContract,
       averageDaysContractToClose: adminAverageContractToClose,
-      totalReferrals,
+      totalReferrals: adminEligibleReferrals.length,
       assignedReferrals,
       unassignedReferrals,
+      assignmentRate,
       firstContactWithin24HoursRate,
       firstContactWithin24HoursCount,
       firstContactSampleSize: firstContactRecords.length

@@ -57,6 +57,7 @@ interface DealRow {
     id: string;
     name: string | null;
   } | null;
+  agentDesignation?: 'AHA' | 'AHA_OOS' | null;
   referral?: {
     borrowerName?: string | null;
     propertyAddress?: string | null;
@@ -122,6 +123,9 @@ export function DealsTable() {
   const { data, mutate } = useSWR<DealRow[]>('/api/payments', fetcher);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
+  const [classificationFilter, setClassificationFilter] = useState<'all' | 'AHA' | 'AHA_OOS'>(
+    'all'
+  );
 
   const getDealAddress = (deal: DealRow) => {
     const address = (deal.propertyAddress ?? deal.referral?.propertyAddress ?? '').trim();
@@ -154,7 +158,15 @@ export function DealsTable() {
     return Math.round((baseAmountCents * commissionBps) / 10000);
   };
 
-  const aggregates = data.reduce(
+  const filteredDeals = data.filter((deal) => {
+    if (classificationFilter === 'all') {
+      return true;
+    }
+
+    return deal.agentDesignation === classificationFilter;
+  });
+
+  const aggregates = filteredDeals.reduce(
     (acc, row) => {
       const isTerminated = row.status === 'terminated';
 
@@ -515,7 +527,7 @@ export function DealsTable() {
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {data.map((deal) => {
+          {filteredDeals.map((deal) => {
             const isTerminated = deal.status === 'terminated';
             const referralFee = isTerminated
               ? 0
@@ -662,7 +674,7 @@ export function DealsTable() {
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {data.map((deal) => {
+          {filteredDeals.map((deal) => {
             const commission = calculateCommission(deal);
             const isTerminated = deal.status === 'terminated';
             const paidAmount = isTerminated
@@ -718,6 +730,30 @@ export function DealsTable() {
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm font-medium text-slate-700">Filter:</span>
+        {[
+          { label: 'All Deals', value: 'all' as const },
+          { label: 'AHA', value: 'AHA' as const },
+          { label: 'AHA OOS', value: 'AHA_OOS' as const },
+        ].map((option) => {
+          const isActive = classificationFilter === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setClassificationFilter(option.value)}
+              className={`rounded-full border px-3 py-1 text-sm font-medium transition ${
+                isActive
+                  ? 'border-brand bg-brand text-white'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-brand hover:text-brand'
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
       {summarySection}
       {isAdminView ? renderAdminTable() : renderDefaultTable()}
     </div>

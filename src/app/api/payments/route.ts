@@ -32,6 +32,7 @@ type ReferralSummary = {
 type AgentSummary = {
   _id: Types.ObjectId;
   name?: string | null;
+  ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
 };
 
 type PaymentWithReferral = {
@@ -55,6 +56,7 @@ type PaymentWithReferral = {
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
   agentId?: Types.ObjectId | AgentSummary | null;
+  agentDesignation?: 'AHA' | 'AHA_OOS' | null;
 };
 
 const toDate = (value?: Date | string | null): Date | null => {
@@ -136,6 +138,43 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .populate<{ agentId: AgentSummary | Types.ObjectId | null }>({ path: 'agentId', select: 'name' })
     .lean<PaymentWithReferral[]>();
 
+  const agentIds = new Set<string>();
+
+  payments.forEach((payment) => {
+    const rawAgentId = payment.agentId;
+    if (rawAgentId instanceof Types.ObjectId) {
+      agentIds.add(rawAgentId.toString());
+    } else if (typeof rawAgentId === 'string') {
+      agentIds.add(rawAgentId);
+    } else if (rawAgentId?._id instanceof Types.ObjectId) {
+      agentIds.add(rawAgentId._id.toString());
+    } else if (typeof rawAgentId?._id === 'string') {
+      agentIds.add(rawAgentId._id);
+    }
+
+    const assigned = payment.referralId?.assignedAgent;
+    if (assigned instanceof Types.ObjectId) {
+      agentIds.add(assigned.toString());
+    } else if (typeof assigned === 'string') {
+      agentIds.add(assigned);
+    }
+  });
+
+  const agents = agentIds.size
+    ? await Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } })
+        .select('name ahaDesignation')
+        .lean<AgentSummary[]>()
+    : [];
+
+  const agentNameMap = new Map<string, string | null>();
+  const agentDesignationMap = new Map<string, 'AHA' | 'AHA_OOS' | null>();
+
+  agents.forEach((agent) => {
+    const id = agent._id.toString();
+    agentNameMap.set(id, agent.name ?? null);
+    agentDesignationMap.set(id, agent.ahaDesignation ?? null);
+  });
+
   const serialized = payments.map((payment) => {
     const referral = payment.referralId ?? null;
     const fallbackReferralId = (payment as any).referralId;
@@ -169,10 +208,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     })();
 
     const agentName = (() => {
+      const id = agentId || assignedAgentId || '';
+      if (id && agentNameMap.has(id)) {
+        return agentNameMap.get(id) ?? null;
+      }
       if (!agentField || agentField instanceof Types.ObjectId || typeof agentField === 'string') {
         return null;
       }
       return agentField.name ?? null;
+    })();
+
+    const agentDesignation = (() => {
+      const id = agentId || assignedAgentId || '';
+      if (!id) return null;
+      return agentDesignationMap.get(id) ?? null;
     })();
 
     return {
@@ -201,6 +250,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           }
         : null,
       agentId: agentId || null,
+      agentDesignation,
       referral: referral
         ? {
             borrowerName: referral.borrower?.name ?? null,

@@ -152,6 +152,8 @@ interface DashboardResponse {
   agent: {
     averageCommissionCents: number;
     averageCommissionPercent: number;
+    averageReferralFeePercent: number;
+    referralFeeSampleSize: number;
     commissionSampleSize: number;
     referralLeaderboard: LeaderboardEntry[];
     closeRateLeaderboard: LeaderboardEntry[];
@@ -160,6 +162,7 @@ interface DashboardResponse {
     revenueExpected: LeaderboardEntry[];
     netRevenue: LeaderboardEntry[];
     lostDeals: LeaderboardEntry[];
+    agentCreatedMcAssignments: LeaderboardEntry[];
   };
   admin: {
     slaAverages: {
@@ -1262,9 +1265,19 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
       ? `Across ${formatNumber(data.commissionSampleSize)} closed/paid deals`
       : 'No closed or paid deals this period';
 
+  const averageReferralFeeDisplay =
+    data.averageReferralFeePercent > 0 ? `${data.averageReferralFeePercent.toFixed(2)}%` : '—';
+  const referralFeeHelper =
+    data.referralFeeSampleSize > 0
+      ? `Across ${formatNumber(data.referralFeeSampleSize)} closed/paid deals`
+      : 'No closed or paid deals this period';
+
   return (
     <div className="space-y-6">
-      <SummaryCard title="Average agent commission" value={averageCommissionDisplay} helper={commissionHelper} />
+      <div className="grid gap-4 md:grid-cols-2">
+        <SummaryCard title="Average agent commission" value={averageCommissionDisplay} helper={commissionHelper} />
+        <SummaryCard title="Average referral fee" value={averageReferralFeeDisplay} helper={referralFeeHelper} />
+      </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <LeaderboardTable title="Referrals by agent" entries={data.referralLeaderboard} valueLabel="Referrals" />
         <LeaderboardTable title="Close rate by agent" entries={data.closeRateLeaderboard} valueLabel="Close rate" />
@@ -1278,9 +1291,14 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
         <LeaderboardTable title="Revenue paid by agent" entries={data.revenuePaid} valueLabel="Revenue" />
         <LeaderboardTable title="Revenue expected by agent" entries={data.revenueExpected} valueLabel="Expected" />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
         <LeaderboardTable title="Agent net earnings" entries={data.netRevenue} valueLabel="Net revenue" />
         <LeaderboardTable title="Deals lost to outside agents" entries={data.lostDeals} valueLabel="Lost deals" />
+        <LeaderboardTable
+          title="Agent-created referrals assigned to MCs"
+          entries={data.agentCreatedMcAssignments}
+          valueLabel="Referrals"
+        />
       </div>
     </div>
   );
