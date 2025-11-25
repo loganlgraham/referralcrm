@@ -35,6 +35,37 @@ interface LeaderboardsResponse {
   agentCloseRate: Record<Timeframe, AgentRateEntry[]>;
 }
 
+const TOP_LEADERS = 5;
+
+function LeaderboardList<T>({
+  entries,
+  renderEntry
+}: {
+  entries: T[];
+  renderEntry: (entry: T) => ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const visibleEntries = expanded ? entries : entries.slice(0, TOP_LEADERS);
+  const hasMore = entries.length > TOP_LEADERS;
+
+  if (!entries.length) return null;
+
+  return (
+    <div className="space-y-3">
+      <ul className="space-y-3">{visibleEntries.map((entry) => renderEntry(entry))}</ul>
+      {hasMore ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((prev) => !prev)}
+          className="text-xs font-semibold text-brand hover:text-brand/80"
+        >
+          {expanded ? 'Show less' : `Show more (${entries.length - TOP_LEADERS} more)`}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 const TIMEFRAME_OPTIONS: { label: string; value: Timeframe }[] = [
   { label: 'Today', value: 'day' },
   { label: 'This Week', value: 'week' },
@@ -174,18 +205,17 @@ export function Leaderboards() {
           subtitle={`${mcEntries.length} leaders`}
           emptyText="No mortgage consultant transfers in this timeframe yet."
         >
-          {mcEntries.length ? (
-            <ul className="space-y-3">
-              {mcEntries.map((entry) => (
-                <li key={entry.id} className="flex items-center justify-between text-sm">
-                  <div>
-                    <p className="font-medium text-slate-900">{entry.name}</p>
-                    <p className="text-xs text-slate-500">{formatNumber(entry.transfers)} transfers</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : null}
+          <LeaderboardList
+            entries={mcEntries}
+            renderEntry={(entry) => (
+              <li key={entry.id} className="flex items-center justify-between text-sm">
+                <div>
+                  <p className="font-medium text-slate-900">{entry.name}</p>
+                  <p className="text-xs text-slate-500">{formatNumber(entry.transfers)} transfers</p>
+                </div>
+              </li>
+            )}
+          />
         </LeaderboardCard>
 
         <LeaderboardCard
@@ -193,23 +223,20 @@ export function Leaderboards() {
           subtitle={`${closingEntries.length} leaders`}
           emptyText="No agent closings recorded in this timeframe."
         >
-          {closingEntries.length ? (
-            <ul className="space-y-3">
-              {closingEntries.map((entry) => (
-                <li key={entry.id} className="flex items-center justify-between text-sm">
-                  <div>
-                    <p className="font-medium text-slate-900">{entry.name}</p>
-                    <p className="text-xs text-slate-500">
-                      {formatNumber(entry.closings)} closings · {formatCurrency(entry.expectedRevenueCents)} expected
-                    </p>
-                  </div>
-                  <span className="text-xs font-semibold text-brand">
-                    {formatCurrency(entry.paidRevenueCents)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
+          <LeaderboardList
+            entries={closingEntries}
+            renderEntry={(entry) => (
+              <li key={entry.id} className="flex items-center justify-between text-sm">
+                <div>
+                  <p className="font-medium text-slate-900">{entry.name}</p>
+                  <p className="text-xs text-slate-500">
+                    {formatNumber(entry.closings)} closings · {formatCurrency(entry.expectedRevenueCents)} expected
+                  </p>
+                </div>
+                <span className="text-xs font-semibold text-brand">{formatCurrency(entry.paidRevenueCents)}</span>
+              </li>
+            )}
+          />
         </LeaderboardCard>
 
         <LeaderboardCard
@@ -217,21 +244,20 @@ export function Leaderboards() {
           subtitle={`${rateEntries.length} leaders`}
           emptyText="No referral activity in this timeframe to calculate close rates."
         >
-          {rateEntries.length ? (
-            <ul className="space-y-3">
-              {rateEntries.map((entry) => (
-                <li key={entry.id} className="flex items-center justify-between text-sm">
-                  <div>
-                    <p className="font-medium text-slate-900">{entry.name}</p>
-                    <p className="text-xs text-slate-500">
-                      {formatNumber(entry.closings)} closings · {formatNumber(entry.totalReferrals)} referrals
-                    </p>
-                  </div>
-                  <span className="text-xs font-semibold text-emerald-600">{entry.closeRate.toFixed(1)}%</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
+          <LeaderboardList
+            entries={rateEntries}
+            renderEntry={(entry) => (
+              <li key={entry.id} className="flex items-center justify-between text-sm">
+                <div>
+                  <p className="font-medium text-slate-900">{entry.name}</p>
+                  <p className="text-xs text-slate-500">
+                    {formatNumber(entry.closings)} closings · {formatNumber(entry.totalReferrals)} referrals
+                  </p>
+                </div>
+                <span className="text-xs font-semibold text-emerald-600">{entry.closeRate.toFixed(1)}%</span>
+              </li>
+            )}
+          />
         </LeaderboardCard>
       </div>
     </div>
