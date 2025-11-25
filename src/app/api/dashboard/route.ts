@@ -651,7 +651,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       payment.referral?.ahaBucket === 'AHA' &&
       closedOrPaidStatuses.has(payment.status)
   );
-  const ahaAttached = ahaRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
+  const ahaAttached = ahaRelevant.filter(
+    (payment) => Boolean(payment.usedAssignedAgent) && payment.agentAttribution === 'AHA'
+  );
   const ahaAttachRate = ahaRelevant.length ? (ahaAttached.length / ahaRelevant.length) * 100 : 0;
 
   const ahaOosRelevant = filteredPayments.filter(
@@ -659,7 +661,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       payment.referral?.ahaBucket === 'AHA_OOS' &&
       closedOrPaidStatuses.has(payment.status)
   );
-  const ahaOosAttached = ahaOosRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
+  const ahaOosAttached = ahaOosRelevant.filter(
+    (payment) => Boolean(payment.usedAssignedAgent) && payment.agentAttribution === 'AHA_OOS'
+  );
   const ahaOosAttachRate = ahaOosRelevant.length ? (ahaOosAttached.length / ahaOosRelevant.length) * 100 : 0;
 
   const expectedRevenueCents = revenueEligiblePayments.reduce(
@@ -723,8 +727,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ? realizedRevenueCents / revenueContributingClosedDeals.length
     : 0;
   const totalVolumeClosedCents = dealsClosed.reduce((sum, payment) => {
-    const closedPrice = payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
-    return sum + closedPrice;
+    const contractPrice = payment.contractPriceCents ?? 0;
+    return contractPrice > 0 ? sum + contractPrice : sum;
   }, 0);
   const averageClosedDealAmountCents = computeAverage(closedDealPrices);
 
