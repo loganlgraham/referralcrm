@@ -551,7 +551,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     createdAtMatch.$lte = timeframeEnd;
   }
 
-  const referralPromise: Promise<AggregatedPayment['referral'][]> = Referral.find<AggregatedPayment['referral']>({
+  const referralPromise: Promise<AggregatedPayment['referral'][]> = Referral.find({
     ...referralMatch,
     ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
   })
@@ -559,7 +559,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser sla origin'
     )
     .lean<AggregatedPayment['referral']>()
-    .exec();
+    .exec() as Promise<AggregatedPayment['referral'][]>;
 
   const paymentPipeline: PipelineStage[] = [
     {
