@@ -574,7 +574,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     createdAtMatch.$lte = timeframeEnd;
   }
 
-  const referralsPromise = Referral.find<DashboardReferral>({
+  const referralsPromise: Promise<DashboardReferral[]> = Referral.find<DashboardReferral>({
     ...referralMatch,
     ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
   })
@@ -584,7 +584,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .lean<DashboardReferral>()
     .exec();
 
-  const paymentsPromise = Payment.aggregate<AggregatedPayment>([
+  const paymentsPromise: Promise<AggregatedPayment[]> = Payment.aggregate<AggregatedPayment>([
     {
       $lookup: {
         from: 'referrals',
@@ -610,9 +610,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         }
       }
     }
-  ]);
+  ]).exec();
 
-  const terminatedPaymentsPromise = Payment.aggregate<AggregatedPayment>([
+  const terminatedPaymentsPromise: Promise<AggregatedPayment[]> = Payment.aggregate<AggregatedPayment>([
     {
       $lookup: {
         from: 'referrals',
@@ -628,13 +628,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         status: 'terminated'
       }
     }
-  ]);
+  ]).exec();
 
-  const [referrals, payments, terminatedPayments] = await Promise.all<[
-    DashboardReferral[],
-    AggregatedPayment[],
-    AggregatedPayment[],
-  ]>([referralsPromise, paymentsPromise, terminatedPaymentsPromise]);
+  const [referrals, payments, terminatedPayments] = await Promise.all([
+    referralsPromise,
+    paymentsPromise,
+    terminatedPaymentsPromise,
+  ]);
 
   const paymentsWithMetric = payments.map((payment) => ({
     ...payment,
