@@ -57,6 +57,7 @@ interface DealRow {
     id: string;
     name: string | null;
   } | null;
+  agentDesignation?: 'AHA' | 'AHA_OOS' | null;
   referral?: {
     borrowerName?: string | null;
     propertyAddress?: string | null;
@@ -162,8 +163,7 @@ export function DealsTable() {
       return true;
     }
 
-    const attribution = deal.agentAttribution ?? deal.referral?.ahaBucket ?? null;
-    return attribution === classificationFilter;
+    return deal.agentDesignation === classificationFilter;
   });
 
   const aggregates = filteredDeals.reduce(
