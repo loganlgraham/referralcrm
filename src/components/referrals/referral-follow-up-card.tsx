@@ -24,7 +24,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
   const tasks = useFollowUpTasks(referral);
   const hasTasks = tasks.length > 0;
   const incompleteTasks = useMemo(() => tasks.filter((task) => !task.completed), [tasks]);
-  const { sendReminders, sendingTaskId, bulkSending, reminderEnabled, reminderFrequency } = useTaskReminderEmails(referral._id);
+  const { sendReminders, sendingTaskId, bulkSending, reminderFrequency } = useTaskReminderEmails(referral._id);
   const { addManualTask } = useFollowUpTaskContext();
 
   const [showManualForm, setShowManualForm] = useState(false);
@@ -179,7 +179,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
               <button
                 type="button"
                 onClick={() => sendReminders(incompleteTasks, 'bulk')}
-                disabled={!reminderEnabled || bulkSending || sendingTaskId !== null}
+                disabled={bulkSending || sendingTaskId !== null}
                 className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {bulkSending ? (
@@ -227,9 +227,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
                     <button
                       type="button"
                       onClick={() => sendReminders([task], 'single')}
-                      disabled={
-                        !reminderEnabled || bulkSending || (sendingTaskId !== null && sendingTaskId !== task.taskId)
-                      }
+                      disabled={bulkSending || (sendingTaskId !== null && sendingTaskId !== task.taskId)}
                       className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {sendingTaskId === task.taskId ? (

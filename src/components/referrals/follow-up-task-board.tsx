@@ -116,7 +116,7 @@ export function FollowUpTasksBoard({ referrals }: FollowUpTasksBoardProps) {
 function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
   const referralLike = toReferralLike(referral);
   const tasks = useFollowUpTasks(referralLike);
-  const { sendReminders, sendingTaskId, bulkSending, reminderEnabled, reminderFrequency } = useTaskReminderEmails(referral._id);
+  const { sendReminders, sendingTaskId, bulkSending, reminderFrequency } = useTaskReminderEmails(referral._id);
   const incompleteTasks = useMemo(() => tasks.filter((task) => !task.completed), [tasks]);
   const outstanding = incompleteTasks.length;
   const assignmentName = resolvePrimaryAgentName(referralLike);
@@ -139,7 +139,7 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
             <button
               type="button"
               onClick={() => sendReminders(incompleteTasks, 'bulk')}
-              disabled={!reminderEnabled || bulkSending || sendingTaskId !== null}
+              disabled={bulkSending || sendingTaskId !== null}
               className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {bulkSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailCheck className="h-4 w-4" />}
@@ -196,9 +196,7 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
                   <button
                     type="button"
                     onClick={() => sendReminders([task], 'single')}
-                    disabled={
-                      !reminderEnabled || bulkSending || (sendingTaskId !== null && sendingTaskId !== task.taskId)
-                    }
+                    disabled={bulkSending || (sendingTaskId !== null && sendingTaskId !== task.taskId)}
                     className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {sendingTaskId === task.taskId ? (

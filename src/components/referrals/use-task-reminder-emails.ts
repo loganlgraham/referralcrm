@@ -9,6 +9,7 @@ import { useFollowUpTaskContext, type ReminderFrequency } from '@/components/ref
 
 export interface ReminderTaskInput {
   taskId: string;
+  referralId: string;
   title: string;
   message: string;
   dueAt?: string | null;
@@ -61,6 +62,7 @@ export function useTaskReminderEmails(referralId?: string): ReminderSubmissionRe
             frequency: reminderSettings.frequency,
             tasks: tasks.map((task) => ({
               taskId: task.taskId,
+              referralId: task.referralId,
               title: task.title,
               message: task.message,
               dueAt: task.dueAt ?? null,
