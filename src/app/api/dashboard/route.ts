@@ -551,7 +551,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     createdAtMatch.$lte = timeframeEnd;
   }
 
-  const referralPromise = Referral.find<AggregatedPayment['referral']>({
+  const referralPromise: Promise<AggregatedPayment['referral'][]> = Referral.find<AggregatedPayment['referral']>({
     ...referralMatch,
     ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
   })
