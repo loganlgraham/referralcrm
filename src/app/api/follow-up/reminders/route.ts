@@ -88,13 +88,13 @@ export async function POST(request: NextRequest) {
     return acc;
   }, {});
 
-  const allowedGroups = Object.entries(groupedTasks).flatMap(([referralId, referralTasks]) => {
+  const allowedGroups = Object.entries(groupedTasks).reduce<ReminderTask[]>((acc, [referralId, referralTasks]) => {
     const referral = referralMap.get(referralId);
     if (!referral) {
-      return [] as ReminderTask[];
+      return acc;
     }
 
-    const side = referral.dealSide === 'sell' ? 'sell' : 'buy';
+    const side: 'buy' | 'sell' = referral.dealSide === 'sell' ? 'sell' : 'buy';
 
     if (session.user.role === 'agent') {
       const isBuySideAgent = referral.buySideAgent && 'userId' in referral.buySideAgent
@@ -105,16 +105,19 @@ export async function POST(request: NextRequest) {
         : false;
 
       if ((side === 'buy' && !isBuySideAgent) || (side === 'sell' && !isSellSideAgent)) {
-        return [] as ReminderTask[];
+        return acc;
       }
     }
 
-    return referralTasks.map((task) => ({
+    const decoratedTasks = referralTasks.map<ReminderTask>((task) => ({
       ...task,
       referralName: task.referralName ?? referral.borrower?.name ?? null,
       dealSide: side,
     }));
-  });
+
+    acc.push(...decoratedTasks);
+    return acc;
+  }, []);
 
   if (allowedGroups.length === 0) {
     return NextResponse.json({ error: 'No eligible tasks to send for your assignment.' }, { status: 403 });
