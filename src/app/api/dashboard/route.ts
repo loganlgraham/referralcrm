@@ -551,7 +551,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     createdAtMatch.$lte = timeframeEnd;
   }
 
-  const [referrals, payments, terminatedPayments] = await Promise.all([
+  const [referrals, payments, terminatedPayments]: [
+    AggregatedPayment['referral'][],
+    AggregatedPayment[],
+    AggregatedPayment[],
+  ] = await Promise.all([
     Referral.find<AggregatedPayment['referral']>({
       ...referralMatch,
       ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
