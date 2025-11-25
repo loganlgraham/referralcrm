@@ -552,14 +552,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const [referrals, payments, terminatedPayments] = await Promise.all([
-    Referral.find({
+    Referral.find<AggregatedPayment['referral']>({
       ...referralMatch,
       ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
     })
       .select(
         'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser sla origin'
       )
-      .lean(),
+      .lean<AggregatedPayment['referral']>(),
     Payment.aggregate<AggregatedPayment>([
       {
         $lookup: {
@@ -748,12 +748,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const paidPayments = revenueEligiblePayments.filter((payment) => payment.status === 'paid');
   const now = new Date();
   const adminOriginReferrals = referrals.filter((referral) => {
-    const origin = (referral as AggregatedPayment['referral']).origin;
+    const origin = referral.origin;
     return origin === 'admin' || origin == null;
   });
 
   const closedToPaidMinutes = adminOriginReferrals
-    .map((referral) => deriveClosedToPaidMinutes(referral as AggregatedPayment['referral'], now))
+    .map((referral) => deriveClosedToPaidMinutes(referral, now))
     .filter((value): value is number => value != null);
 
   const averageDaysClosedToPaid = closedToPaidMinutes.length
