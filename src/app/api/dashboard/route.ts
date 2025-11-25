@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Types } from 'mongoose';
+import { PipelineStage, Types } from 'mongoose';
 import {
   differenceInCalendarDays,
   endOfDay,
   format,
+  differenceInMinutes,
   startOfDay,
   startOfHour,
   startOfMonth,
@@ -59,6 +60,10 @@ interface AggregatedPayment {
   usedAfc?: boolean;
   usedAssignedAgent?: boolean;
   agentAttribution?: 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT' | null;
+  assignedAgent?: {
+    _id: Types.ObjectId;
+    ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
+  } | null;
   referral: {
     _id: Types.ObjectId;
     createdAt: Date;
@@ -79,6 +84,7 @@ interface AggregatedPayment {
     ahaBucket?: 'AHA' | 'AHA_OOS' | null;
     assignedAgent?: Types.ObjectId | null;
     lender?: Types.ObjectId | null;
+    origin?: 'agent' | 'mc' | 'admin';
     status?: string;
     preApprovalAmountCents?: number;
     sla?: {
@@ -87,6 +93,9 @@ interface AggregatedPayment {
       timeToFirstAgentContactHours?: number | null;
       timeToAssignmentHours?: number | null;
       lastClosedAt?: Date | string | null;
+      lastPaidAt?: Date | string | null;
+      previousClosedToPaidMinutes?: number | null;
+      closedToPaidMinutes?: number | null;
     } | null;
   };
 }
@@ -251,6 +260,35 @@ function resolveMetricDate(payment: AggregatedPayment): Date {
     return payment.invoiceDate;
   }
   return payment.updatedAt;
+}
+
+function deriveAhaBucket(payment: AggregatedPayment): 'AHA' | 'AHA_OOS' | null {
+  if (payment.usedAssignedAgent && payment.assignedAgent?.ahaDesignation) {
+    return payment.assignedAgent.ahaDesignation;
+  }
+  return payment.referral?.ahaBucket ?? null;
+}
+
+function deriveClosedToPaidMinutes(referral: AggregatedPayment['referral'], now: Date): number | null {
+  if (!referral) return null;
+  const sla = referral.sla ?? {};
+
+  if (sla.closedToPaidMinutes != null) {
+    return sla.closedToPaidMinutes;
+  }
+
+  if (sla.previousClosedToPaidMinutes != null) {
+    return sla.previousClosedToPaidMinutes;
+  }
+
+  const lastClosedAt = sla.lastClosedAt ? new Date(sla.lastClosedAt) : null;
+  if (!lastClosedAt) return null;
+
+  const paidAt = sla.lastPaidAt ? new Date(sla.lastPaidAt) : null;
+  const end = paidAt ?? now;
+
+  const minutes = differenceInMinutes(end, lastClosedAt);
+  return minutes < 0 ? 0 : minutes;
 }
 
 function createDashboardContext(request: NextRequest): DashboardRequestContext {
@@ -513,59 +551,95 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     createdAtMatch.$lte = timeframeEnd;
   }
 
+  const referralPromise: Promise<AggregatedPayment['referral'][]> = Referral.find({
+    ...referralMatch,
+    ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
+  })
+    .select(
+      'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser sla origin'
+    )
+    .lean<AggregatedPayment['referral']>()
+    .exec() as Promise<AggregatedPayment['referral'][]>;
+
+  const paymentPipeline: PipelineStage[] = [
+    {
+      $lookup: {
+        from: 'referrals',
+        localField: 'referralId',
+        foreignField: '_id',
+        as: 'referral'
+      }
+    },
+    { $unwind: '$referral' },
+    {
+      $lookup: {
+        from: 'agents',
+        localField: 'referral.assignedAgent',
+        foreignField: '_id',
+        as: 'assignedAgent'
+      }
+    },
+    {
+      $addFields: {
+        assignedAgent: { $first: '$assignedAgent' }
+      }
+    },
+    {
+      $match: {
+        ...paymentMatch,
+        status: {
+          $in: [
+            'under_contract',
+            'past_inspection',
+            'past_appraisal',
+            'clear_to_close',
+            'closed',
+            'payment_sent',
+            'paid',
+          ]
+        }
+      }
+    }
+  ];
+
+  const terminatedPipeline: PipelineStage[] = [
+    {
+      $lookup: {
+        from: 'referrals',
+        localField: 'referralId',
+        foreignField: '_id',
+        as: 'referral'
+      }
+    },
+    { $unwind: '$referral' },
+    {
+      $lookup: {
+        from: 'agents',
+        localField: 'referral.assignedAgent',
+        foreignField: '_id',
+        as: 'assignedAgent'
+      }
+    },
+    {
+      $addFields: {
+        assignedAgent: { $first: '$assignedAgent' }
+      }
+    },
+    {
+      $match: {
+        ...paymentMatch,
+        status: 'terminated'
+      }
+    }
+  ];
+
+  const paymentPromise = Payment.aggregate<AggregatedPayment>(paymentPipeline).exec();
+  const terminatedPromise = Payment.aggregate<AggregatedPayment>(terminatedPipeline).exec();
+
   const [referrals, payments, terminatedPayments] = await Promise.all([
-    Referral.find({
-      ...referralMatch,
-      ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
-    })
-      .select(
-        'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser sla'
-      )
-      .lean(),
-    Payment.aggregate<AggregatedPayment>([
-      {
-        $lookup: {
-          from: 'referrals',
-          localField: 'referralId',
-          foreignField: '_id',
-          as: 'referral'
-        }
-      },
-      { $unwind: '$referral' },
-      {
-        $match: {
-          ...paymentMatch,
-          status: {
-            $in: [
-              'under_contract',
-              'past_inspection',
-              'past_appraisal',
-              'clear_to_close',
-              'closed',
-              'payment_sent',
-              'paid',
-            ]
-          }
-        }
-      }
-    ]),
-    Payment.aggregate<AggregatedPayment>([
-      {
-        $lookup: {
-          from: 'referrals',
-          localField: 'referralId',
-          foreignField: '_id',
-          as: 'referral'
-        }
-      },
-      { $unwind: '$referral' },
-      {
-        $match: {
-          ...paymentMatch,
-          status: 'terminated'
-        }
-      }
-    ])
+    referralPromise,
+    paymentPromise,
+    terminatedPromise,
   ]);
 
   const paymentsWithMetric = payments.map((payment) => ({
@@ -646,19 +720,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ? (afcRelevant.filter((payment) => Boolean(payment.usedAfc)).length / afcRelevant.length) * 100
     : 0;
 
-  const ahaRelevant = filteredPayments.filter(
-    (payment) =>
-      payment.referral?.ahaBucket === 'AHA' &&
-      closedOrPaidStatuses.has(payment.status)
-  );
+  const ahaRelevant = filteredPayments.filter((payment) => {
+    const bucket = deriveAhaBucket(payment);
+    return bucket === 'AHA' && closedOrPaidStatuses.has(payment.status);
+  });
   const ahaAttached = ahaRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
   const ahaAttachRate = ahaRelevant.length ? (ahaAttached.length / ahaRelevant.length) * 100 : 0;
 
-  const ahaOosRelevant = filteredPayments.filter(
-    (payment) =>
-      payment.referral?.ahaBucket === 'AHA_OOS' &&
-      closedOrPaidStatuses.has(payment.status)
-  );
+  const ahaOosRelevant = filteredPayments.filter((payment) => {
+    const bucket = deriveAhaBucket(payment);
+    return bucket === 'AHA_OOS' && closedOrPaidStatuses.has(payment.status);
+  });
   const ahaOosAttached = ahaOosRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
   const ahaOosAttachRate = ahaOosRelevant.length ? (ahaOosAttached.length / ahaOosRelevant.length) * 100 : 0;
 
@@ -684,46 +756,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }, 0);
 
   const paidPayments = revenueEligiblePayments.filter((payment) => payment.status === 'paid');
-  const paidPaymentsWithDates = paidPayments.filter((payment) => payment.paidDate);
-  const averageDaysClosedToPaid = computeAverage(
-    paidPaymentsWithDates
-      .map((payment) => {
-        const end = payment.paidDate ? new Date(payment.paidDate) : null;
-        if (!end) return null;
+  const now = new Date();
+  const adminOriginReferrals = referrals.filter((referral) => {
+    const origin = referral.origin;
+    return origin === 'admin' || origin == null;
+  });
 
-        const closingDate = payment.closingDate
-          ? new Date(payment.closingDate)
-          : payment.referral?.sla?.lastClosedAt
-          ? new Date(payment.referral.sla.lastClosedAt)
-          : null;
+  const closedToPaidMinutes = adminOriginReferrals
+    .map((referral) => deriveClosedToPaidMinutes(referral, now))
+    .filter((value): value is number => value != null);
 
-        const start = closingDate
-          ? closingDate
-          : payment.invoiceDate
-          ? new Date(payment.invoiceDate)
-          : new Date(payment.updatedAt);
-
-        return differenceInCalendarDays(end, start);
-      })
-      .filter((value): value is number => value != null)
-  );
+  const averageDaysClosedToPaid = closedToPaidMinutes.length
+    ? computeAverage(closedToPaidMinutes) / (60 * 24)
+    : 0;
 
   const revenueContributingClosedDeals = revenueEligiblePayments.filter(
     (payment) => payment.status === 'closed' || payment.status === 'paid'
   );
   const closedDealPrices = revenueContributingClosedDeals
-    .map((payment) =>
-      payment.contractPriceCents ??
-      payment.referral?.closedPriceCents ??
-      payment.referral?.estPurchasePriceCents ??
-      null
-    )
+    .map((payment) => payment.contractPriceCents ?? payment.referral?.closedPriceCents ?? null)
     .filter((value): value is number => value != null && value > 0);
   const averageRevenuePerDealCents = revenueContributingClosedDeals.length
     ? realizedRevenueCents / revenueContributingClosedDeals.length
     : 0;
   const totalVolumeClosedCents = dealsClosed.reduce((sum, payment) => {
-    const closedPrice = payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
+    const closedPrice = payment.contractPriceCents ?? payment.referral?.closedPriceCents ?? 0;
     return sum + closedPrice;
   }, 0);
   const averageClosedDealAmountCents = computeAverage(closedDealPrices);
