@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChangeEvent, FormEvent, useState } from 'react';
+import { ChangeEvent, FormEvent, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
@@ -15,6 +15,8 @@ interface LenderRow {
   nmlsId: string;
   licensedStates?: string[];
 }
+
+type SortKey = 'name' | 'email' | 'phone' | 'nmls' | 'states';
 
 export function LendersTable() {
   const { data: session } = useSession();
@@ -30,7 +32,70 @@ export function LendersTable() {
     licensedStates: '',
   });
 
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
+    null
+  );
+
+  const sortedLenders = useMemo(() => {
+    if (!data) {
+      return [];
+    }
+
+    if (!sortConfig) {
+      return data;
+    }
+
+    const getValue = (lender: LenderRow, key: SortKey): string => {
+      switch (key) {
+        case 'name':
+          return lender.name.toLowerCase();
+        case 'email':
+          return lender.email.toLowerCase();
+        case 'phone':
+          return lender.phone.toLowerCase();
+        case 'nmls':
+          return lender.nmlsId.toLowerCase();
+        case 'states':
+          return (lender.licensedStates ?? []).join(', ').toLowerCase();
+        default:
+          return '';
+      }
+    };
+
+    return [...data].sort((a, b) => {
+      const aValue = getValue(a, sortConfig.key);
+      const bValue = getValue(b, sortConfig.key);
+      const direction = sortConfig.direction === 'asc' ? 1 : -1;
+      return aValue.localeCompare(bValue) * direction;
+    });
+  }, [data, sortConfig]);
+
   if (!data) return <div className="rounded-lg bg-white p-4 shadow-sm">Loading mortgage consultants…</div>;
+
+  const toggleSort = (key: SortKey) => {
+    setSortConfig((previous) => {
+      if (previous?.key === key) {
+        return { key, direction: previous.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+
+  const SortableHeader = ({ label, sortKey }: { label: string; sortKey: SortKey }) => {
+    const direction = sortConfig?.key === sortKey ? sortConfig.direction : null;
+    const icon = direction === 'asc' ? '▲' : direction === 'desc' ? '▼' : '↕';
+
+    return (
+      <button
+        type="button"
+        onClick={() => toggleSort(sortKey)}
+        className="flex items-center gap-1 text-left"
+      >
+        <span>{label}</span>
+        <span className="text-[10px] text-slate-400">{icon}</span>
+      </button>
+    );
+  };
 
   const handleChange = (field: keyof typeof form) => (event: ChangeEvent<HTMLInputElement>) => {
     setForm((previous) => ({ ...previous, [field]: event.target.value }));
@@ -163,13 +228,19 @@ export function LendersTable() {
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Lender</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">NMLS</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Licensed states</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="Lender" sortKey="name" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="NMLS" sortKey="nmls" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="Licensed states" sortKey="states" />
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {data.map((lender) => (
+            {sortedLenders.map((lender) => (
               <tr key={lender._id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 text-sm text-slate-700">
                   <div className="font-medium text-slate-900">

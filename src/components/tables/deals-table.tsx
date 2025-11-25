@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -42,6 +42,7 @@ const TERMINATED_REASON_OPTIONS: { value: TerminatedReason; label: string }[] = 
 interface DealRow {
   _id: string;
   referralId: string;
+  side?: 'buy' | 'sell' | null;
   status: DealStatus;
   expectedAmountCents: number;
   receivedAmountCents: number;
@@ -70,6 +71,7 @@ interface DealRow {
     referralFeeDueCents?: number | null;
     loanFileNumber?: string | null;
     ahaBucket?: AgentAttribution;
+    dealSide?: 'buy' | 'sell' | null;
   } | null;
 }
 
@@ -126,6 +128,9 @@ export function DealsTable() {
   const [classificationFilter, setClassificationFilter] = useState<'all' | 'AHA' | 'AHA_OOS'>(
     'all'
   );
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
+    null
+  );
 
   const getDealAddress = (deal: DealRow) => {
     const address = (deal.propertyAddress ?? deal.referral?.propertyAddress ?? '').trim();
@@ -165,6 +170,181 @@ export function DealsTable() {
 
     return deal.agentDesignation === classificationFilter;
   });
+
+  type SortKey =
+    | 'referral'
+    | 'agent'
+    | 'dealSide'
+    | 'status'
+    | 'closingDate'
+    | 'address'
+    | 'referralFee'
+    | 'receivedAmount'
+    | 'usedAfc'
+    | 'usedAgent'
+    | 'paid'
+    | 'outcome'
+    | 'commission'
+    | 'netCommission';
+
+  const toggleSort = (key: SortKey) => {
+    setSortConfig((previous) => {
+      if (previous?.key === key) {
+        return { key, direction: previous.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+
+  const getSortValue = (deal: DealRow, key: SortKey): string | number => {
+    const isTerminated = deal.status === 'terminated';
+    const referralFee = isTerminated
+      ? 0
+      : deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
+    const paidAmount = isTerminated
+      ? 0
+      : deal.status === 'paid'
+        ? deal.receivedAmountCents || deal.expectedAmountCents || 0
+        : deal.receivedAmountCents || 0;
+    const commission = calculateCommission(deal);
+    const netCommission = isTerminated ? 0 : commission - paidAmount;
+    const outcome = (() => {
+      if (isTerminated) {
+        return 'Lost';
+      }
+      const basis = isMcView ? deal.usedAfc : deal.usedAssignedAgent;
+      if (basis === null || basis === undefined) {
+        return 'Pending';
+      }
+      return basis ? 'Won' : 'Lost';
+    })();
+
+    switch (key) {
+      case 'referral':
+        return (deal.referral?.borrowerName || '').toLowerCase();
+      case 'agent':
+        return (deal.agent?.name || '').toLowerCase();
+      case 'dealSide':
+        return deal.side === 'sell' || deal.referral?.dealSide === 'sell' ? 'sell' : 'buy';
+      case 'status':
+        return STATUS_LABELS[deal.status] ?? deal.status;
+      case 'closingDate':
+        return deal.closingDate ? new Date(deal.closingDate).getTime() : 0;
+      case 'address':
+        return (getDealAddress(deal) || '').toLowerCase();
+      case 'referralFee':
+        return referralFee;
+      case 'receivedAmount':
+        return paidAmount;
+      case 'usedAfc':
+        return Number(Boolean(deal.usedAfc));
+      case 'usedAgent':
+        return Number(Boolean(deal.usedAssignedAgent));
+      case 'paid':
+        return Number(deal.status === 'paid');
+      case 'outcome':
+        return outcome.toLowerCase();
+      case 'commission':
+        return commission;
+      case 'netCommission':
+        return netCommission;
+      default:
+        return 0;
+    }
+  };
+
+  const sortedDeals = useMemo(() => {
+    const rows = [...filteredDeals];
+    if (!sortConfig) {
+      return rows;
+    }
+
+    const getSortValue = (deal: DealRow, key: SortKey): string | number => {
+      const isTerminated = deal.status === 'terminated';
+      const referralFee = isTerminated
+        ? 0
+        : deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
+      const paidAmount = isTerminated
+        ? 0
+        : deal.status === 'paid'
+          ? deal.receivedAmountCents || deal.expectedAmountCents || 0
+          : deal.receivedAmountCents || 0;
+      const commission = calculateCommission(deal);
+      const netCommission = isTerminated ? 0 : commission - paidAmount;
+      const outcome = (() => {
+        if (isTerminated) {
+          return 'Lost';
+        }
+        const basis = isMcView ? deal.usedAfc : deal.usedAssignedAgent;
+        if (basis === null || basis === undefined) {
+          return 'Pending';
+        }
+        return basis ? 'Won' : 'Lost';
+      })();
+
+      switch (key) {
+        case 'referral':
+          return (deal.referral?.borrowerName || '').toLowerCase();
+        case 'agent':
+          return (deal.agent?.name || '').toLowerCase();
+        case 'dealSide':
+          return deal.side === 'sell' || deal.referral?.dealSide === 'sell' ? 'sell' : 'buy';
+        case 'status':
+          return STATUS_LABELS[deal.status] ?? deal.status;
+        case 'closingDate':
+          return deal.closingDate ? new Date(deal.closingDate).getTime() : 0;
+        case 'address':
+          return (getDealAddress(deal) || '').toLowerCase();
+        case 'referralFee':
+          return referralFee;
+        case 'receivedAmount':
+          return paidAmount;
+        case 'usedAfc':
+          return Number(Boolean(deal.usedAfc));
+        case 'usedAgent':
+          return Number(Boolean(deal.usedAssignedAgent));
+        case 'paid':
+          return Number(deal.status === 'paid');
+        case 'outcome':
+          return outcome.toLowerCase();
+        case 'commission':
+          return commission;
+        case 'netCommission':
+          return netCommission;
+        default:
+          return 0;
+      }
+    };
+
+    return rows.sort((a, b) => {
+      const aValue = getSortValue(a, sortConfig.key);
+      const bValue = getSortValue(b, sortConfig.key);
+
+      const direction = sortConfig.direction === 'asc' ? 1 : -1;
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return (aValue - bValue) * direction;
+      }
+
+      return String(aValue).localeCompare(String(bValue)) * direction;
+    });
+  }, [filteredDeals, sortConfig, isMcView]);
+
+  const SortableHeader = ({ label, sortKey }: { label: string; sortKey: SortKey }) => {
+    const direction = sortConfig?.key === sortKey ? sortConfig.direction : null;
+    const icon = direction === 'asc' ? '▲' : direction === 'desc' ? '▼' : '↕';
+
+    return (
+      <button
+        type="button"
+        onClick={() => toggleSort(sortKey)}
+        className="flex items-center gap-1 text-left"
+      >
+        <span>{label}</span>
+        <span className="text-[10px] text-slate-400">{icon}</span>
+      </button>
+    );
+  };
 
   const aggregates = filteredDeals.reduce(
     (acc, row) => {
@@ -509,25 +689,52 @@ export function DealsTable() {
     });
   };
 
+  const renderDealSide = (deal: DealRow) => {
+    return deal.side === 'sell' || deal.referral?.dealSide === 'sell' ? 'Seller' : 'Buyer';
+  };
+
   const renderAdminTable = () => (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <table className="min-w-full divide-y divide-slate-200">
         <thead className="bg-slate-50">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Closing date</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Address</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral Fee</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Amount Received</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Used AFC</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Used Agent</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Paid</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Referral" sortKey="referral" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Agent" sortKey="agent" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Deal Side" sortKey="dealSide" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Status" sortKey="status" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Closing date" sortKey="closingDate" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Address" sortKey="address" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Referral Fee" sortKey="referralFee" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Amount Received" sortKey="receivedAmount" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Used AFC" sortKey="usedAfc" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Used Agent" sortKey="usedAgent" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Paid" sortKey="paid" />
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {filteredDeals.map((deal) => {
+          {sortedDeals.map((deal) => {
             const isTerminated = deal.status === 'terminated';
             const referralFee = isTerminated
               ? 0
@@ -553,6 +760,7 @@ export function DealsTable() {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{renderAgentLink(deal)}</td>
+                <td className="px-4 py-3 text-sm text-slate-700">{renderDealSide(deal)}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">{renderStatusControl(deal)}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">{renderClosingDate(deal.closingDate)}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">
@@ -661,20 +869,34 @@ export function DealsTable() {
       <table className="min-w-full divide-y divide-slate-200">
         <thead className="bg-slate-50">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Closing date</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Outcome</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral Fee</th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              {isAgentView ? 'Referral Fee Paid' : 'Paid'}
+              <SortableHeader label="Referral" sortKey="referral" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Commission</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Net Commission</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Status" sortKey="status" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Closing date" sortKey="closingDate" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Outcome" sortKey="outcome" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Referral Fee" sortKey="referralFee" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label={isAgentView ? 'Referral Fee Paid' : 'Paid'} sortKey="receivedAmount" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Commission" sortKey="commission" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <SortableHeader label="Net Commission" sortKey="netCommission" />
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {filteredDeals.map((deal) => {
+          {sortedDeals.map((deal) => {
             const commission = calculateCommission(deal);
             const isTerminated = deal.status === 'terminated';
             const paidAmount = isTerminated
