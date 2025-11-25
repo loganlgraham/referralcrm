@@ -363,6 +363,29 @@ function computeAverage(values: number[]): number {
   return total / values.length;
 }
 
+function isWithinTimeframe(date: Date | null | undefined, timeframe: TimeframeInfo): boolean {
+  if (!date) return false;
+  const value = new Date(date);
+  if (Number.isNaN(value.getTime())) return false;
+  if (timeframe.start && value < timeframe.start) return false;
+  if (timeframe.end && value > timeframe.end) return false;
+  return true;
+}
+
+function getSlaMetricDate(
+  referral: AggregatedPayment['referral'],
+  fallback: Date | null = null
+): Date | null {
+  const sla = referral.sla;
+  if (!sla) return fallback;
+  return (
+    (sla.lastClosedAt ? new Date(sla.lastClosedAt) : null) ??
+    (sla.lastUnderContractAt ? new Date(sla.lastUnderContractAt) : null) ??
+    (sla.lastPairedAt ? new Date(sla.lastPairedAt) : null) ??
+    fallback
+  );
+}
+
 function formatTerminatedAddress(referral: AggregatedPayment['referral']): string {
   const parts = [referral.propertyAddress, referral.propertyCity, referral.propertyState].filter(
     (part): part is string => Boolean(part && part.toString().trim())
@@ -1263,10 +1286,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .sort((a, b) => b.referrals - a.referrals)
     .slice(0, 10);
 
-  const assignedReferrals = referrals.filter((referral) => Boolean(referral.assignedAgent)).length;
-  const unassignedReferrals = Math.max(totalReferrals - assignedReferrals, 0);
+  const adminEligibleReferrals = referrals.filter((referral) => {
+    const metricDate = getSlaMetricDate(referral, referral.createdAt ?? null);
+    return metricDate ? isWithinTimeframe(metricDate, timeframe) : false;
+  });
 
-  const slaFields = referrals
+  const assignedReferrals = adminEligibleReferrals.filter((referral) => Boolean(referral.assignedAgent)).length;
+  const unassignedReferrals = Math.max(adminEligibleReferrals.length - assignedReferrals, 0);
+  const assignmentRate = adminEligibleReferrals.length
+    ? (assignedReferrals / adminEligibleReferrals.length) * 100
+    : 0;
+
+  const slaFields = adminEligibleReferrals
     .map((referral) => referral.sla)
     .filter((sla): sla is NonNullable<typeof sla> => Boolean(sla));
 
@@ -1473,9 +1504,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       },
       averageDaysNewLeadToContract: adminAverageLeadToContract,
       averageDaysContractToClose: adminAverageContractToClose,
-      totalReferrals,
+      totalReferrals: adminEligibleReferrals.length,
       assignedReferrals,
       unassignedReferrals,
+      assignmentRate,
       firstContactWithin24HoursRate,
       firstContactWithin24HoursCount,
       firstContactSampleSize: firstContactRecords.length
