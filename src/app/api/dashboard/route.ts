@@ -551,15 +551,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     createdAtMatch.$lte = timeframeEnd;
   }
 
-  const referralPromise: Promise<AggregatedPayment['referral'][]> = Referral.find({
+  const referralPromise = Referral.find<AggregatedPayment['referral']>({
     ...referralMatch,
     ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
   })
     .select(
       'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser sla origin'
     )
-    .lean<AggregatedPayment['referral']>()
-    .exec() as Promise<AggregatedPayment['referral'][]>;
+    .lean()
+    .exec();
 
   const paymentPipeline: PipelineStage[] = [
     {
