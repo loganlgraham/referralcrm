@@ -1,11 +1,12 @@
 'use client';
 
 import { FormEvent, useMemo, useState } from 'react';
-import { CalendarPlus, CheckCircle2, Circle, Loader2 } from 'lucide-react';
+import { CheckCircle2, Circle, Loader2, MailCheck } from 'lucide-react';
 import { formatInTimeZone } from 'date-fns-tz';
 
 import { useFollowUpTasks } from '@/components/referrals/use-follow-up-tasks';
-import { useCalendarTaskSubmission } from '@/components/referrals/use-calendar-task-submission';
+import { useTaskReminderEmails } from '@/components/referrals/use-task-reminder-emails';
+import { ReminderSettingsToggle } from '@/components/referrals/reminder-settings-toggle';
 import { useFollowUpTaskContext, type ManualTaskCategory } from '@/components/referrals/follow-up-task-provider';
 import { SLA_TIME_ZONE, type RecommendationPriority, type ReferralLike } from '@/utils/sla-insights';
 import { toast } from 'sonner';
@@ -23,7 +24,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
   const tasks = useFollowUpTasks(referral);
   const hasTasks = tasks.length > 0;
   const incompleteTasks = useMemo(() => tasks.filter((task) => !task.completed), [tasks]);
-  const { submitTasks, addingTaskId, bulkAdding } = useCalendarTaskSubmission();
+  const { sendReminders, sendingTaskId, bulkSending, reminderFrequency } = useTaskReminderEmails(referral._id);
   const { addManualTask } = useFollowUpTaskContext();
 
   const [showManualForm, setShowManualForm] = useState(false);
@@ -96,6 +97,10 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
           {showManualForm ? 'Cancel manual task' : 'Add manual task'}
         </button>
       </div>
+      <ReminderSettingsToggle
+        referralId={referral._id}
+        helperText="Inherited from your global setting unless you override it here for this referral."
+      />
       {showManualForm && (
         <form onSubmit={handleManualSubmit} className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
           <div className="grid gap-3 sm:grid-cols-2">
@@ -173,18 +178,18 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={() => submitTasks(incompleteTasks, 'bulk')}
-                disabled={bulkAdding || addingTaskId !== null}
+                onClick={() => sendReminders(incompleteTasks, 'bulk')}
+                disabled={bulkSending || sendingTaskId !== null}
                 className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {bulkAdding ? (
+                {bulkSending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <CalendarPlus className="h-4 w-4" />
+                  <MailCheck className="h-4 w-4" />
                 )}
                 {incompleteTasks.length > 1
-                  ? 'Add outstanding tasks to Google Calendar'
-                  : 'Add task to Google Calendar'}
+                  ? `Email ${reminderFrequency} reminder for outstanding tasks`
+                  : `Email ${reminderFrequency} reminder`}
               </button>
             </div>
           ) : null}
@@ -221,16 +226,16 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
                   <div className="mt-3">
                     <button
                       type="button"
-                      onClick={() => submitTasks([task], 'single')}
-                      disabled={bulkAdding || (addingTaskId !== null && addingTaskId !== task.taskId)}
+                      onClick={() => sendReminders([task], 'single')}
+                      disabled={bulkSending || (sendingTaskId !== null && sendingTaskId !== task.taskId)}
                       className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {addingTaskId === task.taskId ? (
+                      {sendingTaskId === task.taskId ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        <CalendarPlus className="h-4 w-4" />
+                        <MailCheck className="h-4 w-4" />
                       )}
-                      {addingTaskId === task.taskId ? 'Adding…' : 'Add to Google Calendar'}
+                      {sendingTaskId === task.taskId ? 'Sending…' : `Email ${reminderFrequency} reminder`}
                     </button>
                     {task.isManual && task.remove && (
                       <button

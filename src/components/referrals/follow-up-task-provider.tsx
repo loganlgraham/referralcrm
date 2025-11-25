@@ -21,6 +21,18 @@ type CompletionMap = Record<string, TaskCompletionState>;
 
 export type ManualTaskCategory = 'assignment' | 'communication' | 'pipeline' | 'finance' | 'ops';
 
+export type ReminderFrequency = 'daily' | 'weekly';
+
+interface ReminderSettings {
+  enabled: boolean;
+  frequency: ReminderFrequency;
+}
+
+interface ReminderState {
+  global: ReminderSettings;
+  overrides: Record<string, ReminderSettings>;
+}
+
 interface ManualTask {
   id: string;
   title: string;
@@ -42,13 +54,16 @@ interface ManualTaskInput {
 interface StoredTaskState {
   completions: CompletionMap;
   manualTasks: Record<string, ManualTask[]>;
+  reminders: ReminderState;
 }
 
 type Action =
   | { type: 'toggle'; taskId: string; completed: boolean }
   | { type: 'hydrate'; payload: StoredTaskState }
   | { type: 'add-manual'; referralId: string; task: ManualTask }
-  | { type: 'remove-manual'; referralId: string; taskId: string };
+  | { type: 'remove-manual'; referralId: string; taskId: string }
+  | { type: 'set-global-reminders'; settings: ReminderSettings }
+  | { type: 'set-referral-reminders'; referralId: string; settings: ReminderSettings | null };
 
 interface FollowUpTaskContextValue {
   completions: CompletionMap;
@@ -56,13 +71,27 @@ interface FollowUpTaskContextValue {
   toggleTask: (taskId: string, completed: boolean) => void;
   addManualTask: (referralId: string, task: ManualTaskInput) => void;
   removeManualTask: (referralId: string, taskId: string) => void;
+  reminderSettings: ReminderSettings;
+  globalReminderSettings: ReminderSettings;
+  reminderOverrides: Record<string, ReminderSettings>;
+  getReminderSettings: (referralId?: string) => ReminderSettings;
+  updateReminderSettings: (settings: ReminderSettings, referralId?: string) => void;
+  clearReminderOverride: (referralId: string) => void;
+  hasReminderOverride: (referralId: string) => boolean;
 }
 
 const STORAGE_KEY = 'referralcrm.followUpTasks';
 
 const FollowUpTaskContext = createContext<FollowUpTaskContextValue | null>(null);
 
-const defaultState: StoredTaskState = { completions: {}, manualTasks: {} };
+const defaultReminderSettings: ReminderSettings = { enabled: false, frequency: 'daily' };
+
+const defaultReminderState: ReminderState = {
+  global: defaultReminderSettings,
+  overrides: {},
+};
+
+const defaultState: StoredTaskState = { completions: {}, manualTasks: {}, reminders: defaultReminderState };
 
 const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
   switch (action.type) {
@@ -100,6 +129,18 @@ const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
         completions: nextCompletions,
       };
     }
+    case 'set-global-reminders': {
+      return { ...state, reminders: { ...state.reminders, global: action.settings } };
+    }
+    case 'set-referral-reminders': {
+      const overrides = { ...state.reminders.overrides };
+      if (action.settings === null) {
+        delete overrides[action.referralId];
+      } else {
+        overrides[action.referralId] = action.settings;
+      }
+      return { ...state, reminders: { ...state.reminders, overrides } };
+    }
     default:
       return state;
   }
@@ -111,7 +152,7 @@ const safeParse = (value: string | null): StoredTaskState => {
     const parsed = JSON.parse(value) as unknown;
     if (parsed && typeof parsed === 'object') {
       const record = parsed as Record<string, unknown>;
-      if ('completions' in record || 'manualTasks' in record) {
+      if ('completions' in record || 'manualTasks' in record || 'reminders' in record) {
         const completions =
           record.completions && typeof record.completions === 'object' ? (record.completions as CompletionMap) : {};
         const manualTasksEntries =
@@ -164,14 +205,50 @@ const safeParse = (value: string | null): StoredTaskState => {
             manualTasks[key] = sanitized;
           }
         });
-        return { completions, manualTasks };
+        const reminders = (() => {
+          const parseSettings = (candidate: unknown): ReminderSettings | null => {
+            if (!candidate || typeof candidate !== 'object') return null;
+            const reminderRecord = candidate as Record<string, unknown>;
+            const enabled = Boolean(reminderRecord.enabled);
+            const frequency = reminderRecord.frequency === 'weekly' ? 'weekly' : 'daily';
+            return { enabled, frequency } satisfies ReminderSettings;
+          };
+
+          if (record.reminders && typeof record.reminders === 'object') {
+            const reminderRecord = record.reminders as Record<string, unknown>;
+            const globalSettings = parseSettings(reminderRecord.global) ?? parseSettings(reminderRecord);
+            const overrides: Record<string, ReminderSettings> = {};
+
+            if (reminderRecord.overrides && typeof reminderRecord.overrides === 'object') {
+              Object.entries(reminderRecord.overrides as Record<string, unknown>).forEach(([referralId, value]) => {
+                const parsed = parseSettings(value);
+                if (parsed) {
+                  overrides[referralId] = parsed;
+                }
+              });
+            }
+
+            return {
+              global: globalSettings ?? defaultReminderSettings,
+              overrides,
+            } satisfies ReminderState;
+          }
+
+          const legacySettings = parseSettings(record.reminders);
+          if (legacySettings) {
+            return { global: legacySettings, overrides: {} } satisfies ReminderState;
+          }
+
+          return defaultReminderState;
+        })();
+        return { completions, manualTasks, reminders };
       }
       const entries = Object.values(record);
       const resemblesCompletionMap = entries.every((value) => {
         return value != null && typeof value === 'object' && 'completed' in (value as Record<string, unknown>);
       });
       if (resemblesCompletionMap) {
-        return { completions: record as CompletionMap, manualTasks: {} };
+        return { completions: record as CompletionMap, manualTasks: {}, reminders: defaultReminderState };
       }
     }
   } catch (error) {
@@ -239,6 +316,33 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'remove-manual', referralId, taskId });
   }, []);
 
+  const updateReminderSettings = useCallback((settings: ReminderSettings, referralId?: string) => {
+    if (referralId) {
+      dispatch({ type: 'set-referral-reminders', referralId, settings });
+      return;
+    }
+    dispatch({ type: 'set-global-reminders', settings });
+  }, []);
+
+  const clearReminderOverride = useCallback((referralId: string) => {
+    dispatch({ type: 'set-referral-reminders', referralId, settings: null });
+  }, []);
+
+  const getReminderSettings = useCallback(
+    (referralId?: string): ReminderSettings => {
+      if (referralId && state.reminders.overrides[referralId]) {
+        return state.reminders.overrides[referralId];
+      }
+      return state.reminders.global;
+    },
+    [state.reminders]
+  );
+
+  const hasReminderOverride = useCallback(
+    (referralId: string) => Boolean(state.reminders.overrides[referralId]),
+    [state.reminders.overrides]
+  );
+
   const value = useMemo<FollowUpTaskContextValue>(
     () => ({
       completions: state.completions,
@@ -246,8 +350,24 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       toggleTask,
       addManualTask,
       removeManualTask,
+      reminderSettings: state.reminders.global,
+      globalReminderSettings: state.reminders.global,
+      reminderOverrides: state.reminders.overrides,
+      getReminderSettings,
+      updateReminderSettings,
+      clearReminderOverride,
+      hasReminderOverride,
     }),
-    [state, toggleTask, addManualTask, removeManualTask]
+    [
+      state,
+      toggleTask,
+      addManualTask,
+      removeManualTask,
+      updateReminderSettings,
+      getReminderSettings,
+      clearReminderOverride,
+      hasReminderOverride,
+    ]
   );
 
   return <FollowUpTaskContext.Provider value={value}>{children}</FollowUpTaskContext.Provider>;
