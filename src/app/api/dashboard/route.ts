@@ -94,6 +94,39 @@ interface AggregatedPayment {
   };
 }
 
+interface DashboardReferral {
+  _id: Types.ObjectId;
+  createdAt: Date;
+  source: 'Lender' | 'MC';
+  endorser?: string;
+  org?: 'AFC' | 'AHA';
+  lookingInZip?: string;
+  propertyAddress?: string;
+  propertyCity?: string;
+  propertyState?: string;
+  propertyPostalCode?: string;
+  borrowerCurrentAddress?: string;
+  closedPriceCents?: number;
+  estPurchasePriceCents?: number;
+  referralFeeDueCents?: number;
+  referralFeeBasisPoints?: number;
+  commissionBasisPoints?: number;
+  ahaBucket?: 'AHA' | 'AHA_OOS' | null;
+  assignedAgent?: Types.ObjectId | null;
+  lender?: Types.ObjectId | null;
+  status?: string;
+  preApprovalAmountCents?: number;
+  sla?: {
+    daysToContract?: number | null;
+    daysToClose?: number | null;
+    timeToFirstAgentContactHours?: number | null;
+    timeToAssignmentHours?: number | null;
+    lastClosedAt?: Date | string | null;
+    lastUnderContractAt?: Date | string | null;
+    lastPairedAt?: Date | string | null;
+  } | null;
+}
+
 const ACTIVE_PIPELINE_STATUSES = new Set<string>([
   'Paired',
   'In Communication',
@@ -376,7 +409,7 @@ function isWithinTimeframe(date: Date | null | undefined, timeframe: TimeframeIn
 }
 
 function getSlaMetricDate(
-  referral: AggregatedPayment['referral'],
+  referral: AggregatedPayment['referral'] | DashboardReferral,
   fallback: Date | null = null
 ): Date | null {
   const sla = referral.sla;
@@ -542,14 +575,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const [referrals, payments, terminatedPayments] = await Promise.all([
-    Referral.find({
+    Referral.find<DashboardReferral>({
       ...referralMatch,
       ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
     })
       .select(
         'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser sla'
       )
-      .lean(),
+      .lean<DashboardReferral>(),
     Payment.aggregate<AggregatedPayment>([
       {
         $lookup: {
