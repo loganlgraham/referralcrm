@@ -1170,7 +1170,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const isOutsideAgentDeal = payment.agentAttribution === 'OUTSIDE_AGENT';
     if (!isOutsideAgentDeal) {
       current.revenue += payment.receivedAmountCents ?? 0;
-      current.expected += payment.expectedAmountCents ?? 0;
+      const outstandingRevenue = Math.max(
+        (payment.expectedAmountCents ?? 0) - (payment.receivedAmountCents ?? 0),
+        0
+      );
+      const isUnderContractPipeline = [
+        'under_contract',
+        'past_inspection',
+        'past_appraisal',
+        'clear_to_close'
+      ].includes(payment.status);
+      const isPaidButNotFullyReceived = payment.status === 'paid' && outstandingRevenue > 0;
+      if (isUnderContractPipeline || isPaidButNotFullyReceived) {
+        current.expected += outstandingRevenue;
+      }
     }
     if (payment.status === 'closed' || payment.status === 'paid') {
       if (!isOutsideAgentDeal) {
