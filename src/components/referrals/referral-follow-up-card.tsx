@@ -6,6 +6,7 @@ import { formatInTimeZone } from 'date-fns-tz';
 
 import { useFollowUpTasks } from '@/components/referrals/use-follow-up-tasks';
 import { useTaskReminderEmails } from '@/components/referrals/use-task-reminder-emails';
+import { ReminderSettingsToggle } from '@/components/referrals/reminder-settings-toggle';
 import { useFollowUpTaskContext, type ManualTaskCategory } from '@/components/referrals/follow-up-task-provider';
 import { SLA_TIME_ZONE, type RecommendationPriority, type ReferralLike } from '@/utils/sla-insights';
 import { toast } from 'sonner';
@@ -23,7 +24,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
   const tasks = useFollowUpTasks(referral);
   const hasTasks = tasks.length > 0;
   const incompleteTasks = useMemo(() => tasks.filter((task) => !task.completed), [tasks]);
-  const { sendReminders, sendingTaskId, bulkSending, reminderEnabled, reminderFrequency } = useTaskReminderEmails();
+  const { sendReminders, sendingTaskId, bulkSending, reminderEnabled, reminderFrequency } = useTaskReminderEmails(referral._id);
   const { addManualTask } = useFollowUpTaskContext();
 
   const [showManualForm, setShowManualForm] = useState(false);
@@ -96,6 +97,10 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
           {showManualForm ? 'Cancel manual task' : 'Add manual task'}
         </button>
       </div>
+      <ReminderSettingsToggle
+        referralId={referral._id}
+        helperText="Inherited from your global setting unless you override it here for this referral."
+      />
       {showManualForm && (
         <form onSubmit={handleManualSubmit} className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
           <div className="grid gap-3 sm:grid-cols-2">

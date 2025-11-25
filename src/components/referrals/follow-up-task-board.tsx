@@ -116,7 +116,7 @@ export function FollowUpTasksBoard({ referrals }: FollowUpTasksBoardProps) {
 function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
   const referralLike = toReferralLike(referral);
   const tasks = useFollowUpTasks(referralLike);
-  const { sendReminders, sendingTaskId, bulkSending, reminderEnabled, reminderFrequency } = useTaskReminderEmails();
+  const { sendReminders, sendingTaskId, bulkSending, reminderEnabled, reminderFrequency } = useTaskReminderEmails(referral._id);
   const incompleteTasks = useMemo(() => tasks.filter((task) => !task.completed), [tasks]);
   const outstanding = incompleteTasks.length;
   const assignmentName = resolvePrimaryAgentName(referralLike);
@@ -150,6 +150,10 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
           ) : null}
         </div>
       </div>
+      <ReminderSettingsToggle
+        referralId={referral._id}
+        helperText="Defaults to your global reminder setting unless you override this referral."
+      />
       {tasks.length > 0 ? (
         <ul className="space-y-3">
           {tasks.map((task) => (

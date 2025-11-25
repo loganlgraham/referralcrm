@@ -28,6 +28,11 @@ interface ReminderSettings {
   frequency: ReminderFrequency;
 }
 
+interface ReminderState {
+  global: ReminderSettings;
+  overrides: Record<string, ReminderSettings>;
+}
+
 interface ManualTask {
   id: string;
   title: string;
@@ -49,7 +54,7 @@ interface ManualTaskInput {
 interface StoredTaskState {
   completions: CompletionMap;
   manualTasks: Record<string, ManualTask[]>;
-  reminders: ReminderSettings;
+  reminders: ReminderState;
 }
 
 type Action =
@@ -57,7 +62,8 @@ type Action =
   | { type: 'hydrate'; payload: StoredTaskState }
   | { type: 'add-manual'; referralId: string; task: ManualTask }
   | { type: 'remove-manual'; referralId: string; taskId: string }
-  | { type: 'set-reminders'; settings: ReminderSettings };
+  | { type: 'set-global-reminders'; settings: ReminderSettings }
+  | { type: 'set-referral-reminders'; referralId: string; settings: ReminderSettings | null };
 
 interface FollowUpTaskContextValue {
   completions: CompletionMap;
@@ -66,7 +72,12 @@ interface FollowUpTaskContextValue {
   addManualTask: (referralId: string, task: ManualTaskInput) => void;
   removeManualTask: (referralId: string, taskId: string) => void;
   reminderSettings: ReminderSettings;
-  updateReminderSettings: (settings: ReminderSettings) => void;
+  globalReminderSettings: ReminderSettings;
+  reminderOverrides: Record<string, ReminderSettings>;
+  getReminderSettings: (referralId?: string) => ReminderSettings;
+  updateReminderSettings: (settings: ReminderSettings, referralId?: string) => void;
+  clearReminderOverride: (referralId: string) => void;
+  hasReminderOverride: (referralId: string) => boolean;
 }
 
 const STORAGE_KEY = 'referralcrm.followUpTasks';
@@ -75,7 +86,12 @@ const FollowUpTaskContext = createContext<FollowUpTaskContextValue | null>(null)
 
 const defaultReminderSettings: ReminderSettings = { enabled: false, frequency: 'daily' };
 
-const defaultState: StoredTaskState = { completions: {}, manualTasks: {}, reminders: defaultReminderSettings };
+const defaultReminderState: ReminderState = {
+  global: defaultReminderSettings,
+  overrides: {},
+};
+
+const defaultState: StoredTaskState = { completions: {}, manualTasks: {}, reminders: defaultReminderState };
 
 const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
   switch (action.type) {
@@ -113,8 +129,17 @@ const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
         completions: nextCompletions,
       };
     }
-    case 'set-reminders': {
-      return { ...state, reminders: action.settings };
+    case 'set-global-reminders': {
+      return { ...state, reminders: { ...state.reminders, global: action.settings } };
+    }
+    case 'set-referral-reminders': {
+      const overrides = { ...state.reminders.overrides };
+      if (action.settings === null) {
+        delete overrides[action.referralId];
+      } else {
+        overrides[action.referralId] = action.settings;
+      }
+      return { ...state, reminders: { ...state.reminders, overrides } };
     }
     default:
       return state;
@@ -181,13 +206,40 @@ const safeParse = (value: string | null): StoredTaskState => {
           }
         });
         const reminders = (() => {
-          if (record.reminders && typeof record.reminders === 'object') {
-            const reminderRecord = record.reminders as Record<string, unknown>;
+          const parseSettings = (candidate: unknown): ReminderSettings | null => {
+            if (!candidate || typeof candidate !== 'object') return null;
+            const reminderRecord = candidate as Record<string, unknown>;
             const enabled = Boolean(reminderRecord.enabled);
             const frequency = reminderRecord.frequency === 'weekly' ? 'weekly' : 'daily';
             return { enabled, frequency } satisfies ReminderSettings;
+          };
+
+          if (record.reminders && typeof record.reminders === 'object') {
+            const reminderRecord = record.reminders as Record<string, unknown>;
+            const globalSettings = parseSettings(reminderRecord.global) ?? parseSettings(reminderRecord);
+            const overrides: Record<string, ReminderSettings> = {};
+
+            if (reminderRecord.overrides && typeof reminderRecord.overrides === 'object') {
+              Object.entries(reminderRecord.overrides as Record<string, unknown>).forEach(([referralId, value]) => {
+                const parsed = parseSettings(value);
+                if (parsed) {
+                  overrides[referralId] = parsed;
+                }
+              });
+            }
+
+            return {
+              global: globalSettings ?? defaultReminderSettings,
+              overrides,
+            } satisfies ReminderState;
           }
-          return defaultReminderSettings;
+
+          const legacySettings = parseSettings(record.reminders);
+          if (legacySettings) {
+            return { global: legacySettings, overrides: {} } satisfies ReminderState;
+          }
+
+          return defaultReminderState;
         })();
         return { completions, manualTasks, reminders };
       }
@@ -196,7 +248,7 @@ const safeParse = (value: string | null): StoredTaskState => {
         return value != null && typeof value === 'object' && 'completed' in (value as Record<string, unknown>);
       });
       if (resemblesCompletionMap) {
-        return { completions: record as CompletionMap, manualTasks: {}, reminders: defaultReminderSettings };
+        return { completions: record as CompletionMap, manualTasks: {}, reminders: defaultReminderState };
       }
     }
   } catch (error) {
@@ -264,9 +316,32 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'remove-manual', referralId, taskId });
   }, []);
 
-  const updateReminderSettings = useCallback((settings: ReminderSettings) => {
-    dispatch({ type: 'set-reminders', settings });
+  const updateReminderSettings = useCallback((settings: ReminderSettings, referralId?: string) => {
+    if (referralId) {
+      dispatch({ type: 'set-referral-reminders', referralId, settings });
+      return;
+    }
+    dispatch({ type: 'set-global-reminders', settings });
   }, []);
+
+  const clearReminderOverride = useCallback((referralId: string) => {
+    dispatch({ type: 'set-referral-reminders', referralId, settings: null });
+  }, []);
+
+  const getReminderSettings = useCallback(
+    (referralId?: string): ReminderSettings => {
+      if (referralId && state.reminders.overrides[referralId]) {
+        return state.reminders.overrides[referralId];
+      }
+      return state.reminders.global;
+    },
+    [state.reminders]
+  );
+
+  const hasReminderOverride = useCallback(
+    (referralId: string) => Boolean(state.reminders.overrides[referralId]),
+    [state.reminders.overrides]
+  );
 
   const value = useMemo<FollowUpTaskContextValue>(
     () => ({
@@ -275,10 +350,24 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       toggleTask,
       addManualTask,
       removeManualTask,
-      reminderSettings: state.reminders,
+      reminderSettings: state.reminders.global,
+      globalReminderSettings: state.reminders.global,
+      reminderOverrides: state.reminders.overrides,
+      getReminderSettings,
       updateReminderSettings,
+      clearReminderOverride,
+      hasReminderOverride,
     }),
-    [state, toggleTask, addManualTask, removeManualTask, updateReminderSettings]
+    [
+      state,
+      toggleTask,
+      addManualTask,
+      removeManualTask,
+      updateReminderSettings,
+      getReminderSettings,
+      clearReminderOverride,
+      hasReminderOverride,
+    ]
   );
 
   return <FollowUpTaskContext.Provider value={value}>{children}</FollowUpTaskContext.Provider>;

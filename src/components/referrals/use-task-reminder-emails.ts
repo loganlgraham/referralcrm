@@ -29,10 +29,11 @@ interface ReminderSubmissionResult {
   reminderFrequency: ReminderCadence;
 }
 
-export function useTaskReminderEmails(): ReminderSubmissionResult {
-  const { reminderSettings } = useFollowUpTaskContext();
+export function useTaskReminderEmails(referralId?: string): ReminderSubmissionResult {
+  const { getReminderSettings } = useFollowUpTaskContext();
   const [sendingTaskId, setSendingTaskId] = useState<string | null>(null);
   const [bulkSending, setBulkSending] = useState(false);
+  const reminderSettings = getReminderSettings(referralId);
 
   const sendReminders = useCallback(
     async (tasks: ReminderTaskInput[], mode: SubmissionMode) => {
