@@ -574,64 +574,67 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     createdAtMatch.$lte = timeframeEnd;
   }
 
-  const [referrals, payments, terminatedPayments]: [
+  const referralsPromise = Referral.find<DashboardReferral>({
+    ...referralMatch,
+    ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
+  })
+    .select(
+      'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser sla'
+    )
+    .lean<DashboardReferral>()
+    .exec();
+
+  const paymentsPromise = Payment.aggregate<AggregatedPayment>([
+    {
+      $lookup: {
+        from: 'referrals',
+        localField: 'referralId',
+        foreignField: '_id',
+        as: 'referral'
+      }
+    },
+    { $unwind: '$referral' },
+    {
+      $match: {
+        ...paymentMatch,
+        status: {
+          $in: [
+            'under_contract',
+            'past_inspection',
+            'past_appraisal',
+            'clear_to_close',
+            'closed',
+            'payment_sent',
+            'paid',
+          ]
+        }
+      }
+    }
+  ]);
+
+  const terminatedPaymentsPromise = Payment.aggregate<AggregatedPayment>([
+    {
+      $lookup: {
+        from: 'referrals',
+        localField: 'referralId',
+        foreignField: '_id',
+        as: 'referral'
+      }
+    },
+    { $unwind: '$referral' },
+    {
+      $match: {
+        ...paymentMatch,
+        status: 'terminated'
+      }
+    }
+  ]);
+
+  const [referrals, payments, terminatedPayments] = await Promise.all<[
     DashboardReferral[],
     AggregatedPayment[],
     AggregatedPayment[],
-  ] = await Promise.all([
-    Referral.find<DashboardReferral>({
-      ...referralMatch,
-      ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
-    })
-      .select(
-        'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser sla'
-      )
-      .lean<DashboardReferral>(),
-    Payment.aggregate<AggregatedPayment>([
-      {
-        $lookup: {
-          from: 'referrals',
-          localField: 'referralId',
-          foreignField: '_id',
-          as: 'referral'
-        }
-      },
-      { $unwind: '$referral' },
-      {
-        $match: {
-          ...paymentMatch,
-          status: {
-            $in: [
-              'under_contract',
-              'past_inspection',
-              'past_appraisal',
-              'clear_to_close',
-              'closed',
-              'payment_sent',
-              'paid',
-            ]
-          }
-        }
-      }
-    ]),
-    Payment.aggregate<AggregatedPayment>([
-      {
-        $lookup: {
-          from: 'referrals',
-          localField: 'referralId',
-          foreignField: '_id',
-          as: 'referral'
-        }
-      },
-      { $unwind: '$referral' },
-      {
-        $match: {
-          ...paymentMatch,
-          status: 'terminated'
-        }
-      }
-    ])
-  ]);
+  ]>([referralsPromise, paymentsPromise, terminatedPaymentsPromise]);
 
   const paymentsWithMetric = payments.map((payment) => ({
     ...payment,
