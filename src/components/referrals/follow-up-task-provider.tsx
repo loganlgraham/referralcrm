@@ -21,6 +21,13 @@ type CompletionMap = Record<string, TaskCompletionState>;
 
 export type ManualTaskCategory = 'assignment' | 'communication' | 'pipeline' | 'finance' | 'ops';
 
+export type ReminderFrequency = 'daily' | 'weekly';
+
+interface ReminderSettings {
+  enabled: boolean;
+  frequency: ReminderFrequency;
+}
+
 interface ManualTask {
   id: string;
   title: string;
@@ -42,13 +49,15 @@ interface ManualTaskInput {
 interface StoredTaskState {
   completions: CompletionMap;
   manualTasks: Record<string, ManualTask[]>;
+  reminders: ReminderSettings;
 }
 
 type Action =
   | { type: 'toggle'; taskId: string; completed: boolean }
   | { type: 'hydrate'; payload: StoredTaskState }
   | { type: 'add-manual'; referralId: string; task: ManualTask }
-  | { type: 'remove-manual'; referralId: string; taskId: string };
+  | { type: 'remove-manual'; referralId: string; taskId: string }
+  | { type: 'set-reminders'; settings: ReminderSettings };
 
 interface FollowUpTaskContextValue {
   completions: CompletionMap;
@@ -56,13 +65,17 @@ interface FollowUpTaskContextValue {
   toggleTask: (taskId: string, completed: boolean) => void;
   addManualTask: (referralId: string, task: ManualTaskInput) => void;
   removeManualTask: (referralId: string, taskId: string) => void;
+  reminderSettings: ReminderSettings;
+  updateReminderSettings: (settings: ReminderSettings) => void;
 }
 
 const STORAGE_KEY = 'referralcrm.followUpTasks';
 
 const FollowUpTaskContext = createContext<FollowUpTaskContextValue | null>(null);
 
-const defaultState: StoredTaskState = { completions: {}, manualTasks: {} };
+const defaultReminderSettings: ReminderSettings = { enabled: false, frequency: 'daily' };
+
+const defaultState: StoredTaskState = { completions: {}, manualTasks: {}, reminders: defaultReminderSettings };
 
 const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
   switch (action.type) {
@@ -100,6 +113,9 @@ const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
         completions: nextCompletions,
       };
     }
+    case 'set-reminders': {
+      return { ...state, reminders: action.settings };
+    }
     default:
       return state;
   }
@@ -111,7 +127,7 @@ const safeParse = (value: string | null): StoredTaskState => {
     const parsed = JSON.parse(value) as unknown;
     if (parsed && typeof parsed === 'object') {
       const record = parsed as Record<string, unknown>;
-      if ('completions' in record || 'manualTasks' in record) {
+      if ('completions' in record || 'manualTasks' in record || 'reminders' in record) {
         const completions =
           record.completions && typeof record.completions === 'object' ? (record.completions as CompletionMap) : {};
         const manualTasksEntries =
@@ -164,14 +180,23 @@ const safeParse = (value: string | null): StoredTaskState => {
             manualTasks[key] = sanitized;
           }
         });
-        return { completions, manualTasks };
+        const reminders = (() => {
+          if (record.reminders && typeof record.reminders === 'object') {
+            const reminderRecord = record.reminders as Record<string, unknown>;
+            const enabled = Boolean(reminderRecord.enabled);
+            const frequency = reminderRecord.frequency === 'weekly' ? 'weekly' : 'daily';
+            return { enabled, frequency } satisfies ReminderSettings;
+          }
+          return defaultReminderSettings;
+        })();
+        return { completions, manualTasks, reminders };
       }
       const entries = Object.values(record);
       const resemblesCompletionMap = entries.every((value) => {
         return value != null && typeof value === 'object' && 'completed' in (value as Record<string, unknown>);
       });
       if (resemblesCompletionMap) {
-        return { completions: record as CompletionMap, manualTasks: {} };
+        return { completions: record as CompletionMap, manualTasks: {}, reminders: defaultReminderSettings };
       }
     }
   } catch (error) {
@@ -239,6 +264,10 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'remove-manual', referralId, taskId });
   }, []);
 
+  const updateReminderSettings = useCallback((settings: ReminderSettings) => {
+    dispatch({ type: 'set-reminders', settings });
+  }, []);
+
   const value = useMemo<FollowUpTaskContextValue>(
     () => ({
       completions: state.completions,
@@ -246,8 +275,10 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       toggleTask,
       addManualTask,
       removeManualTask,
+      reminderSettings: state.reminders,
+      updateReminderSettings,
     }),
-    [state, toggleTask, addManualTask, removeManualTask]
+    [state, toggleTask, addManualTask, removeManualTask, updateReminderSettings]
   );
 
   return <FollowUpTaskContext.Provider value={value}>{children}</FollowUpTaskContext.Provider>;
