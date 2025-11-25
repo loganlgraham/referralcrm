@@ -636,11 +636,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const paymentPromise = Payment.aggregate<AggregatedPayment>(paymentPipeline).exec();
   const terminatedPromise = Payment.aggregate<AggregatedPayment>(terminatedPipeline).exec();
 
-  const [referrals, payments, terminatedPayments]: [
+  const [referrals, payments, terminatedPayments] = await Promise.all<[
     AggregatedPayment['referral'][],
     AggregatedPayment[],
     AggregatedPayment[],
-  ] = await Promise.all([
+  ]>([
     referralPromise,
     paymentPromise,
     terminatedPromise,
