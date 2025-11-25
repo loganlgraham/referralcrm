@@ -423,7 +423,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           closeRate: 0,
           afcDealsLost: 0,
           afcAttachRate: 0,
+          ahaDealsLost: 0,
           ahaAttachRate: 0,
+          ahaOosDealsLost: 0,
           ahaOosAttachRate: 0,
           activePipeline: 0,
           expectedRevenueCents: 0,
@@ -654,6 +656,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const ahaAttached = ahaRelevant.filter(
     (payment) => Boolean(payment.usedAssignedAgent) && payment.agentAttribution === 'AHA'
   );
+  const ahaDealsLost = ahaRelevant.length - ahaAttached.length;
   const ahaAttachRate = ahaRelevant.length ? (ahaAttached.length / ahaRelevant.length) * 100 : 0;
 
   const ahaOosRelevant = filteredPayments.filter(
@@ -664,6 +667,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const ahaOosAttached = ahaOosRelevant.filter(
     (payment) => Boolean(payment.usedAssignedAgent) && payment.agentAttribution === 'AHA_OOS'
   );
+  const ahaOosDealsLost = ahaOosRelevant.length - ahaOosAttached.length;
   const ahaOosAttachRate = ahaOosRelevant.length ? (ahaOosAttached.length / ahaOosRelevant.length) * 100 : 0;
 
   const expectedRevenueCents = revenueEligiblePayments.reduce(
@@ -1384,7 +1388,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         closeRate,
         afcDealsLost,
         afcAttachRate,
+        ahaDealsLost,
         ahaAttachRate,
+        ahaOosDealsLost,
         ahaOosAttachRate,
         activePipeline,
         expectedRevenueCents,
