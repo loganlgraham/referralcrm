@@ -120,6 +120,8 @@ export function ReferralNotes({
     [notes]
   );
 
+  const previewNotes = useMemo(() => sortedNotes.slice(0, 2), [sortedNotes]);
+
   useEffect(() => {
     if (hiddenFromAgent && emailAgent) {
       setEmailAgent(false);
@@ -237,6 +239,50 @@ export function ReferralNotes({
     }
   };
 
+  const renderNoteCard = (note: ReferralNote) => {
+    const showVisibilityBadge = viewerRole === 'admin' && (note.hiddenFromAgent || note.hiddenFromMc);
+    const showEmailBadge = Array.isArray(note.emailedTargets) && note.emailedTargets.length > 0;
+    const showBadges = showVisibilityBadge || showEmailBadge;
+
+    return (
+      <div key={note.id} className="rounded border border-slate-200 bg-white px-3 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs font-semibold text-slate-600">
+          <span className="truncate">
+            {note.authorName} · {note.authorRole}
+          </span>
+          <span className="text-slate-400">{formatTimestamp(note.createdAt)}</span>
+        </div>
+        <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{note.content}</p>
+        {showBadges && (
+          <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide">
+            {showVisibilityBadge && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">
+                {[note.hiddenFromAgent ? 'Hidden from agent' : null, note.hiddenFromMc ? 'Hidden from MC' : null]
+                  .filter(Boolean)
+                  .join(' • ')}
+              </span>
+            )}
+            {showEmailBadge && (
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700">
+                {`Emailed: ${note.emailedTargets
+                  ?.map((target) => {
+                    if (target === 'agent') {
+                      return 'Agent';
+                    }
+                    if (target === 'mc') {
+                      return 'MC';
+                    }
+                    return 'Admin';
+                  })
+                  .join(' & ')}`}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div>
@@ -330,70 +376,39 @@ export function ReferralNotes({
           <p className="text-sm text-slate-500">No notes yet.</p>
         ) : (
           <div className="space-y-2">
+            <div className="space-y-2">
+              {previewNotes.map(renderNoteCard)}
+            </div>
+            {sortedNotes.length > 2 && (
+              <button
+                type="button"
+                onClick={handleDropdownToggle}
+                className="flex w-full items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+              >
+                <span>
+                  Show all notes ({sortedNotes.length})
+                </span>
+                <span className={`transition-transform ${showNotesDropdown ? 'rotate-180' : ''}`} aria-hidden>
+                  ▾
+                </span>
+              </button>
+            )}
             <button
               type="button"
               onClick={handleDropdownToggle}
               className="flex w-full items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
             >
-              <span>
-                Show details ({sortedNotes.length})
-              </span>
+              <span>{showNotesDropdown ? 'Hide note drawer' : 'Show all notes'}</span>
               <span className={`transition-transform ${showNotesDropdown ? 'rotate-180' : ''}`} aria-hidden>
                 ▾
               </span>
             </button>
             {showNotesDropdown && (
               <div className="max-h-80 space-y-2 overflow-y-auto rounded border border-slate-200 bg-slate-50 p-2">
-                {sortedNotes.map((note) => {
-                  const showVisibilityBadge =
-                    viewerRole === 'admin' && (note.hiddenFromAgent || note.hiddenFromMc);
-                  const showEmailBadge =
-                    Array.isArray(note.emailedTargets) && note.emailedTargets.length > 0;
-                  const showBadges = showVisibilityBadge || showEmailBadge;
-
-                  return (
-                    <div key={note.id} className="rounded border border-slate-200 bg-white px-3 py-3">
-                      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs font-semibold text-slate-600">
-                        <span className="truncate">
-                          {note.authorName} · {note.authorRole}
-                        </span>
-                        <span className="text-slate-400">{formatTimestamp(note.createdAt)}</span>
-                      </div>
-                      <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{note.content}</p>
-                      {showBadges && (
-                        <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide">
-                          {showVisibilityBadge && (
-                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">
-                              {[
-                                note.hiddenFromAgent ? 'Hidden from agent' : null,
-                                note.hiddenFromMc ? 'Hidden from MC' : null
-                              ]
-                                .filter(Boolean)
-                                .join(' • ')}
-                            </span>
-                          )}
-                          {showEmailBadge && (
-                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700">
-                              {`Emailed: ${note.emailedTargets
-                                ?.map((target) => {
-                                  if (target === 'agent') {
-                                    return 'Agent';
-                                  }
-                                  if (target === 'mc') {
-                                    return 'MC';
-                                  }
-                                  return 'Admin';
-                                })
-                                .join(' & ')}`}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                {sortedNotes.map(renderNoteCard)}
               </div>
             )}
+
           </div>
         )}
       </div>
