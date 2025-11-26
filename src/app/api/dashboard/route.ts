@@ -798,26 +798,33 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }, 0);
 
   const paidPayments = revenueEligiblePayments.filter((payment) => payment.status === 'paid');
-  const paidPaymentsWithDates = paidPayments.filter((payment) => payment.paidDate);
   const averageDaysClosedToPaid = computeAverage(
-    paidPaymentsWithDates
+    paidPayments
       .map((payment) => {
         const end = payment.paidDate ? new Date(payment.paidDate) : null;
-        if (!end) return null;
-
         const closingDate = payment.closingDate
           ? new Date(payment.closingDate)
           : payment.referral?.sla?.lastClosedAt
           ? new Date(payment.referral.sla.lastClosedAt)
           : null;
 
-        const start = closingDate
-          ? closingDate
-          : payment.invoiceDate
-          ? new Date(payment.invoiceDate)
-          : new Date(payment.updatedAt);
+        if (end && closingDate) {
+          return differenceInCalendarDays(end, closingDate);
+        }
 
-        return differenceInCalendarDays(end, start);
+        const storedMinutes =
+          payment.referral?.sla?.closedToPaidMinutes ?? payment.referral?.sla?.previousClosedToPaidMinutes ?? null;
+        if (storedMinutes != null && storedMinutes >= 0) {
+          return storedMinutes / (60 * 24);
+        }
+
+        if (end) {
+          const fallbackStart =
+            closingDate ?? (payment.invoiceDate ? new Date(payment.invoiceDate) : new Date(payment.updatedAt));
+          return differenceInCalendarDays(end, fallbackStart);
+        }
+
+        return null;
       })
       .filter((value): value is number => value != null)
   );
@@ -922,7 +929,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const current =
       referralMonthlyMap.get(key) ?? { total: 0, transfers: 0, ahaReferrals: 0, ahaOosReferrals: 0 };
     current.total += 1;
-    if (referral.source === 'MC') {
+    if (referral.origin === 'admin' && referral.lender) {
       current.transfers += 1;
     }
     const designation = getReferralDesignation(referral);

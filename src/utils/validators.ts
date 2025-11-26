@@ -124,5 +124,16 @@ export const paymentSchema = z.object({
   referralFeeBasisPoints: z.number().int().min(0).nullable().optional(),
   contractPriceCents: z.number().int().min(0).nullable().optional(),
   netReferralFeePaidCents: z.number().int().min(0).optional(),
-  propertyAddress: z.union([z.string().trim().min(1), z.null()]).optional()
+  propertyAddress: z.union([z.string().trim().min(1), z.null()]).optional(),
+  propertyCity: z.union([z.string().trim().min(1), z.null()]).optional(),
+  propertyState: z
+    .union([
+      z
+        .string()
+        .trim()
+        .regex(/^[A-Za-z]{2}$/)
+        .transform((value) => value.toUpperCase()),
+      z.null()
+    ])
+    .optional()
 });

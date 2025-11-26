@@ -36,6 +36,8 @@ type DealUpdatePayload = {
   commissionBasisPoints: number | null;
   referralFeeBasisPoints: number | null;
   propertyAddress: string | null;
+  propertyCity: string | null;
+  propertyState: string | null;
   agentId: string | null;
   closingDate: string | null;
   side: 'buy' | 'sell';
@@ -107,6 +109,8 @@ function DealCard({
     basisPointsToDisplay(deal.referralFeeBasisPoints)
   );
   const [propertyAddress, setPropertyAddress] = useState(deal.propertyAddress ?? '');
+  const [propertyCity, setPropertyCity] = useState(deal.propertyCity ?? '');
+  const [propertyState, setPropertyState] = useState(deal.propertyState ?? '');
   const [closingDate, setClosingDate] = useState(deal.closingDate ? deal.closingDate.slice(0, 10) : '');
   const [agentId, setAgentId] = useState(deal.agentId ?? deal.agent?.id ?? '');
   const [side, setSide] = useState<'buy' | 'sell'>(deal.side ?? 'buy');
@@ -126,6 +130,8 @@ function DealCard({
     setCommissionPercentage(basisPointsToDisplay(deal.commissionBasisPoints));
     setReferralFeePercentage(basisPointsToDisplay(deal.referralFeeBasisPoints));
     setPropertyAddress(deal.propertyAddress ?? '');
+    setPropertyCity(deal.propertyCity ?? '');
+    setPropertyState(deal.propertyState ?? '');
     setClosingDate(deal.closingDate ? deal.closingDate.slice(0, 10) : '');
     setAgentId(deal.agentId ?? deal.agent?.id ?? '');
     setSide(deal.side ?? 'buy');
@@ -199,6 +205,8 @@ function DealCard({
       commissionBasisPoints,
       referralFeeBasisPoints,
       propertyAddress: propertyAddress.trim() || null,
+      propertyCity: propertyCity.trim() || null,
+      propertyState: propertyState.trim().toUpperCase() || null,
       closingDate: closingDateToSend,
       agentId: agentId || null,
       side,
@@ -491,6 +499,29 @@ function DealCard({
             />
           </label>
           <label className="space-y-1 text-sm font-medium text-slate-700">
+            <span>Property city</span>
+            <input
+              type="text"
+              value={propertyCity}
+              onChange={(event) => setPropertyCity(event.target.value)}
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              placeholder="City"
+              disabled={saving}
+            />
+          </label>
+          <label className="space-y-1 text-sm font-medium text-slate-700">
+            <span>Property state</span>
+            <input
+              type="text"
+              value={propertyState}
+              maxLength={2}
+              onChange={(event) => setPropertyState(event.target.value.toUpperCase())}
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm uppercase focus:border-brand focus:outline-none"
+              placeholder="ST"
+              disabled={saving}
+            />
+          </label>
+          <label className="space-y-1 text-sm font-medium text-slate-700">
             <span>Agent</span>
             <select
               value={agentId}
@@ -600,6 +631,8 @@ export function ReferralDeals({
   const [commissionPercentage, setCommissionPercentage] = useState('');
   const [referralFeePercentage, setReferralFeePercentage] = useState('');
   const [propertyAddress, setPropertyAddress] = useState('');
+  const [propertyCity, setPropertyCity] = useState('');
+  const [propertyState, setPropertyState] = useState('');
   const [closingDate, setClosingDate] = useState('');
   const [agentId, setAgentId] = useState('');
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
@@ -716,6 +749,8 @@ export function ReferralDeals({
             commissionBasisPoints,
             referralFeeBasisPoints,
             propertyAddress: propertyAddress.trim() || null,
+            propertyCity: propertyCity.trim() || null,
+            propertyState: propertyState.trim().toUpperCase() || null,
             closingDate: closingDateToSend,
             agentId: agentId || null,
             usedAfc,
@@ -741,6 +776,8 @@ export function ReferralDeals({
           commissionBasisPoints,
           referralFeeBasisPoints,
           propertyAddress: propertyAddress.trim() || null,
+          propertyCity: propertyCity.trim() || null,
+          propertyState: propertyState.trim().toUpperCase() || null,
           closingDate: closingDateToSend,
           agent: agentId ? { id: agentId, name: agents.find((option) => option.id === agentId)?.name ?? null } : null,
           agentId: agentId || null,
@@ -760,6 +797,8 @@ export function ReferralDeals({
       setCommissionPercentage('');
       setReferralFeePercentage('');
       setPropertyAddress('');
+      setPropertyCity('');
+      setPropertyState('');
       setClosingDate('');
       setAgentId('');
       setSide('buy');
@@ -884,6 +923,8 @@ export function ReferralDeals({
         commissionBasisPoints: payload.commissionBasisPoints ?? null,
         referralFeeBasisPoints: payload.referralFeeBasisPoints ?? null,
         propertyAddress: payload.propertyAddress ?? null,
+        propertyCity: payload.propertyCity ?? null,
+        propertyState: payload.propertyState ?? null,
         closingDate: payload.closingDate ?? null,
         agentId: payload.agentId ?? null,
         agent: payload.agentId
@@ -1057,6 +1098,29 @@ export function ReferralDeals({
               onChange={(event) => setPropertyAddress(event.target.value)}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
               placeholder="123 Main St, City, ST"
+              disabled={submitting}
+            />
+          </label>
+          <label className="space-y-1 text-sm font-medium text-slate-700">
+            <span>Property city</span>
+            <input
+              type="text"
+              value={propertyCity}
+              onChange={(event) => setPropertyCity(event.target.value)}
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              placeholder="City"
+              disabled={submitting}
+            />
+          </label>
+          <label className="space-y-1 text-sm font-medium text-slate-700">
+            <span>Property state</span>
+            <input
+              type="text"
+              value={propertyState}
+              maxLength={2}
+              onChange={(event) => setPropertyState(event.target.value.toUpperCase())}
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm uppercase focus:border-brand focus:outline-none"
+              placeholder="ST"
               disabled={submitting}
             />
           </label>

@@ -124,7 +124,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           },
           mcTransferCount: {
             $sum: {
-              $cond: [{ $eq: ['$source', 'MC'] }, 1, 0]
+              $cond: [
+                { $and: [{ $eq: ['$origin', 'admin'] }, { $ne: ['$lender', null] }] },
+                1,
+                0
+              ]
             }
           },
           newReferrals30Days: {
@@ -625,7 +629,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             $match: {
               ...referralMatch,
               createdAt: { $gte: start },
-              source: 'MC'
+              origin: 'admin',
+              lender: { $ne: null }
             }
           },
           {

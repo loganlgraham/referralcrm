@@ -17,6 +17,8 @@ export interface ReferralPayment {
   contractPriceCents?: number | null;
   netReferralFeePaidCents?: number | null;
   propertyAddress?: string | null;
+  propertyCity?: string | null;
+  propertyState?: string | null;
   closingDate?: string | null;
   agent?: { id: string; name: string | null } | null;
   agentId?: string | null;
