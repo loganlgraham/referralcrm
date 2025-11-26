@@ -196,63 +196,6 @@ export function DealsTable() {
     });
   };
 
-  const getSortValue = (deal: DealRow, key: SortKey): string | number => {
-    const isTerminated = deal.status === 'terminated';
-    const referralFee = isTerminated
-      ? 0
-      : deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
-    const paidAmount = isTerminated
-      ? 0
-      : deal.status === 'paid'
-        ? deal.receivedAmountCents || deal.expectedAmountCents || 0
-        : deal.receivedAmountCents || 0;
-    const commission = calculateCommission(deal);
-    const netCommission = isTerminated ? 0 : commission - paidAmount;
-    const outcome = (() => {
-      if (isTerminated) {
-        return 'Lost';
-      }
-      const basis = isMcView ? deal.usedAfc : deal.usedAssignedAgent;
-      if (basis === null || basis === undefined) {
-        return 'Pending';
-      }
-      return basis ? 'Won' : 'Lost';
-    })();
-
-    switch (key) {
-      case 'referral':
-        return (deal.referral?.borrowerName || '').toLowerCase();
-      case 'agent':
-        return (deal.agent?.name || '').toLowerCase();
-      case 'dealSide':
-        return deal.side === 'sell' || deal.referral?.dealSide === 'sell' ? 'sell' : 'buy';
-      case 'status':
-        return STATUS_LABELS[deal.status] ?? deal.status;
-      case 'closingDate':
-        return deal.closingDate ? new Date(deal.closingDate).getTime() : 0;
-      case 'address':
-        return (getDealAddress(deal) || '').toLowerCase();
-      case 'referralFee':
-        return referralFee;
-      case 'receivedAmount':
-        return paidAmount;
-      case 'usedAfc':
-        return Number(Boolean(deal.usedAfc));
-      case 'usedAgent':
-        return Number(Boolean(deal.usedAssignedAgent));
-      case 'paid':
-        return Number(deal.status === 'paid');
-      case 'outcome':
-        return outcome.toLowerCase();
-      case 'commission':
-        return commission;
-      case 'netCommission':
-        return netCommission;
-      default:
-        return 0;
-    }
-  };
-
   const sortedDeals = useMemo(() => {
     const rows = [...filteredDeals];
     if (!sortConfig) {
@@ -290,7 +233,7 @@ export function DealsTable() {
         case 'dealSide':
           return deal.side === 'sell' || deal.referral?.dealSide === 'sell' ? 'sell' : 'buy';
         case 'status':
-          return STATUS_LABELS[deal.status] ?? deal.status;
+          return (STATUS_LABELS[deal.status] ?? deal.status).toLowerCase();
         case 'closingDate':
           return deal.closingDate ? new Date(deal.closingDate).getTime() : 0;
         case 'address':
@@ -326,7 +269,9 @@ export function DealsTable() {
         return (aValue - bValue) * direction;
       }
 
-      return String(aValue).localeCompare(String(bValue)) * direction;
+      return (
+        String(aValue).localeCompare(String(bValue), undefined, { sensitivity: 'base' }) * direction
+      );
     });
   }, [filteredDeals, sortConfig, isMcView]);
 
