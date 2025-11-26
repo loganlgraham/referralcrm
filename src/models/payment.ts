@@ -27,6 +27,8 @@ const paymentSchema = new Schema(
       default: null,
     },
     closingDate: { type: Date, default: null },
+    propertyCity: { type: String, default: null },
+    propertyState: { type: String, default: null },
     commissionBasisPoints: { type: Number, default: null },
     referralFeeBasisPoints: { type: Number, default: null },
     side: {

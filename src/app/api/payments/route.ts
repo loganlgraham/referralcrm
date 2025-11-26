@@ -317,7 +317,29 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     side: parsed.data.side ?? 'buy',
     contractPriceCents: parsed.data.contractPriceCents ?? null,
     agentId: parsed.data.agentId ?? null,
+    propertyCity: parsed.data.propertyCity ?? null,
+    propertyState: parsed.data.propertyState ?? null,
   });
+
+  const referralForCreate = await Referral.findById(parsed.data.referralId);
+  if (referralForCreate) {
+    let referralUpdated = false;
+    if (parsed.data.propertyAddress !== undefined) {
+      referralForCreate.propertyAddress = parsed.data.propertyAddress ?? '';
+      referralUpdated = true;
+    }
+    if (parsed.data.propertyCity !== undefined) {
+      referralForCreate.propertyCity = parsed.data.propertyCity ?? '';
+      referralUpdated = true;
+    }
+    if (parsed.data.propertyState !== undefined) {
+      referralForCreate.propertyState = parsed.data.propertyState ?? '';
+      referralUpdated = true;
+    }
+    if (referralUpdated) {
+      await referralForCreate.save();
+    }
+  }
 
   return NextResponse.json(
     {
@@ -365,6 +387,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   }
 
   const previousStatus = existingPayment.status;
+  const isClosingNow = parsed.data.status === 'closed' && previousStatus !== 'closed';
 
   let nextContractPriceCents =
     parsed.data.contractPriceCents !== undefined
@@ -461,6 +484,16 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     updatePayload.agentId = parsed.data.agentId ?? null;
   } else {
     delete updatePayload.agentId;
+  }
+  if (Object.prototype.hasOwnProperty.call(parsed.data, 'propertyCity')) {
+    updatePayload.propertyCity = parsed.data.propertyCity ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(parsed.data, 'propertyState')) {
+    updatePayload.propertyState = parsed.data.propertyState ?? null;
+  }
+
+  if (isClosingNow) {
+    updatePayload.closingDate = new Date();
   }
 
   const nextStatusValue = parsed.data.status ?? existingPayment.status;
@@ -575,6 +608,15 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     }
     if (nextSide) {
       referral.dealSide = nextSide;
+    }
+    if (parsed.data.propertyAddress !== undefined) {
+      referral.propertyAddress = parsed.data.propertyAddress ?? '';
+    }
+    if (parsed.data.propertyCity !== undefined) {
+      referral.propertyCity = parsed.data.propertyCity ?? '';
+    }
+    if (parsed.data.propertyState !== undefined) {
+      referral.propertyState = parsed.data.propertyState ?? '';
     }
     referral.referralFeeDueCents = nextExpectedAmountCents;
     if (slaChanged) {

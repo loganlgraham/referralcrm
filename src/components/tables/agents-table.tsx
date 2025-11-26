@@ -1,7 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { ChangeEvent, CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
+import {
+  ChangeEvent,
+  CSSProperties,
+  FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
@@ -86,6 +93,9 @@ export function AgentsTable() {
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
   const [coverageProgress, setCoverageProgress] = useState(0);
   const [ahaFilter, setAhaFilter] = useState<'all' | 'AHA' | 'AHA_OOS'>('all');
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
+    null
+  );
 
   useEffect(() => {
     if (!isGeneratingCoverage) {
@@ -146,6 +156,80 @@ export function AgentsTable() {
 
     return data.filter((agent) => agent.ahaDesignation === ahaFilter);
   }, [data, ahaFilter]);
+
+  type SortKey =
+    | 'name'
+    | 'closings'
+    | 'closingRate'
+    | 'nps'
+    | 'avgResponse'
+    | 'referralFees'
+    | 'netIncome';
+
+  const toggleSort = (key: SortKey) => {
+    setSortConfig((previous) => {
+      if (previous?.key === key) {
+        return { key, direction: previous.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+
+  const sortedAgents = useMemo(() => {
+    const rows = [...agents];
+    if (!sortConfig) {
+      return rows;
+    }
+
+    const getValue = (agent: AgentRow, key: SortKey): string | number => {
+      switch (key) {
+        case 'name':
+          return agent.name.toLowerCase();
+        case 'closings':
+          return agent.metrics.closingsLast12Months;
+        case 'closingRate':
+          return agent.metrics.closingRate;
+        case 'nps':
+          return agent.metrics.npsScore ?? -Infinity;
+        case 'avgResponse':
+          return agent.metrics.avgResponseHours ?? Infinity;
+        case 'referralFees':
+          return agent.metrics.totalReferralFeesPaidCents;
+        case 'netIncome':
+          return agent.metrics.totalNetIncomeCents;
+        default:
+          return 0;
+      }
+    };
+
+    return rows.sort((a, b) => {
+      const aValue = getValue(a, sortConfig.key);
+      const bValue = getValue(b, sortConfig.key);
+      const direction = sortConfig.direction === 'asc' ? 1 : -1;
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return (aValue - bValue) * direction;
+      }
+
+      return String(aValue).localeCompare(String(bValue)) * direction;
+    });
+  }, [agents, sortConfig]);
+
+  const SortableHeader = ({ label, sortKey }: { label: string; sortKey: SortKey }) => {
+    const direction = sortConfig?.key === sortKey ? sortConfig.direction : null;
+    const icon = direction === 'asc' ? '▲' : direction === 'desc' ? '▼' : '↕';
+
+    return (
+      <button
+        type="button"
+        onClick={() => toggleSort(sortKey)}
+        className="flex items-center gap-1 text-left"
+      >
+        <span>{label}</span>
+        <span className="text-[10px] text-slate-400">{icon}</span>
+      </button>
+    );
+  };
 
   if (!data) {
     return <div className="rounded-lg bg-white p-4 shadow-sm">Loading agents…</div>;
@@ -596,13 +680,27 @@ export function AgentsTable() {
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Closings (12mo)</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Closing %</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">NPS</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Avg response</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral fees paid</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Net income</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="Agent" sortKey="name" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="Closings (12mo)" sortKey="closings" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="Closing %" sortKey="closingRate" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="NPS" sortKey="nps" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="Avg response" sortKey="avgResponse" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="Referral fees paid" sortKey="referralFees" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="Net income" sortKey="netIncome" />
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -613,7 +711,7 @@ export function AgentsTable() {
                 </td>
               </tr>
             ) : (
-              agents.map((agent) => (
+              sortedAgents.map((agent) => (
                 <tr key={agent._id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 text-sm text-slate-700">
                     <div className="font-medium text-slate-900">

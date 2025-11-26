@@ -1,7 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import { ReactNode, useMemo, useState } from 'react';
+import {
+  ColumnDef,
+  SortingState,
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from '@tanstack/react-table';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -152,6 +159,14 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function normalizeStatusForSort({
+  status,
+  dealStatusLabel,
+}: Pick<ReferralRow, 'status' | 'dealStatusLabel'>) {
+  const label = dealStatusLabel ?? STATUS_LABELS[status] ?? status;
+  return label.toLocaleLowerCase();
+}
+
 function NoteComposer({ referralId }: { referralId: string }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState('');
@@ -279,9 +294,29 @@ function DeleteReferralButton({ referralId, borrowerName }: { referralId: string
   );
 }
 
+function SortButton({ column, label }: { column: any; label: string }) {
+  const direction = column.getIsSorted();
+  const icon = direction === 'asc' ? '▲' : direction === 'desc' ? '▼' : '↕';
+
+  return (
+    <button
+      type="button"
+      onClick={column.getToggleSortingHandler()}
+      className="flex items-center gap-1 text-left"
+    >
+      <span>{label}</span>
+      <span className="text-[10px] text-slate-400">{icon}</span>
+    </button>
+  );
+}
+
+const sortableHeader = (label: string): ((props: { column: any }) => ReactNode) => ({ column }) => (
+  <SortButton column={column} label={label} />
+);
+
 function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
   const borrowerColumn: ColumnDef<ReferralRow> = {
-    header: 'Borrower',
+    header: sortableHeader('Borrower'),
     accessorKey: 'borrowerName',
     cell: ({ row }) => {
       const { _id, borrowerName, borrowerPhone } = row.original;
@@ -301,9 +336,11 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
   };
 
   const createdColumn: ColumnDef<ReferralRow> = {
-    header: 'Created',
+    header: sortableHeader('Created'),
     accessorKey: 'createdAt',
-    cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString()
+    cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString(),
+    sortingFn: (a, b) =>
+      new Date(a.original.createdAt).getTime() - new Date(b.original.createdAt).getTime(),
   };
 
   const renderLocation = (row: ReferralRow) => {
@@ -317,7 +354,7 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
   };
 
   const locationColumn: ColumnDef<ReferralRow> = {
-    header: 'Looking In (Zip)',
+    header: sortableHeader('Looking In (Zip)'),
     accessorKey: 'lookingInZip',
     cell: ({ row }) => renderLocation(row.original)
   };
@@ -326,12 +363,12 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
     return [
       borrowerColumn,
       {
-        header: 'Loan File #',
+        header: sortableHeader('Loan File #'),
         accessorKey: 'loanFileNumber'
       },
       locationColumn,
       {
-        header: 'Pre-approval',
+        header: sortableHeader('Pre-approval'),
         accessorKey: 'preApprovalAmountCents',
         cell: ({ row }) =>
           row.original.preApprovalAmountCents
@@ -339,7 +376,7 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
             : '—'
       },
       {
-        header: 'Status',
+        header: sortableHeader('Status'),
         accessorKey: 'status',
         cell: ({ row }) => (
           <StatusSelect
@@ -347,12 +384,19 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
             value={row.original.status}
             dealStatusLabel={row.original.dealStatusLabel ?? null}
           />
-        )
+        ),
+        sortingFn: (a, b) =>
+          normalizeStatusForSort(a.original).localeCompare(
+            normalizeStatusForSort(b.original),
+            undefined,
+            { sensitivity: 'base' }
+          ),
       },
       {
         header: 'Notes',
         id: 'notes',
-        cell: ({ row }) => <NoteComposer referralId={row.original._id} />
+        cell: ({ row }) => <NoteComposer referralId={row.original._id} />,
+        enableSorting: false,
       },
       createdColumn
     ];
@@ -362,7 +406,7 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
     return [
       borrowerColumn,
       {
-        header: 'Loan File #',
+        header: sortableHeader('Loan File #'),
         accessorKey: 'loanFileNumber'
       },
       {
@@ -380,11 +424,17 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
         )
       },
       {
-        header: 'Status',
+        header: sortableHeader('Status'),
         accessorKey: 'status',
         cell: ({ row }) => (
           <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />
-        )
+        ),
+        sortingFn: (a, b) =>
+          normalizeStatusForSort(a.original).localeCompare(
+            normalizeStatusForSort(b.original),
+            undefined,
+            { sensitivity: 'base' }
+          ),
       },
       createdColumn
     ];
@@ -393,17 +443,23 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
   return [
     borrowerColumn,
       {
-        header: 'Loan File #',
+        header: sortableHeader('Loan File #'),
         accessorKey: 'loanFileNumber'
       },
       locationColumn,
     {
-      header: 'Status',
+      header: sortableHeader('Status'),
       accessorKey: 'status',
-      cell: ({ row }) => <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />
+      cell: ({ row }) => <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />,
+      sortingFn: (a, b) =>
+        normalizeStatusForSort(a.original).localeCompare(
+          normalizeStatusForSort(b.original),
+          undefined,
+          { sensitivity: 'base' }
+        ),
     },
     {
-      header: 'Agent',
+      header: sortableHeader('Agent'),
       accessorKey: 'assignedAgentName',
       cell: ({ row }) => {
         const { assignedAgentName, assignedAgentPhone } = row.original;
@@ -421,7 +477,7 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
       }
     },
     {
-      header: 'Lender/MC',
+      header: sortableHeader('Lender/MC'),
       accessorKey: 'lenderName',
       cell: ({ row }) => {
         const { lenderName, lenderPhone } = row.original;
@@ -447,14 +503,24 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
           referralId={row.original._id}
           borrowerName={row.original.borrowerName}
         />
-      )
+      ),
+      enableSorting: false,
     }
   ];
 }
 
 export function ReferralTable({ data, mode }: ReferralTableProps) {
   const columns = useMemo<ColumnDef<ReferralRow>[]>(() => buildColumns(mode), [mode]);
-  const table = useReactTable({ data, columns, getCoreRowModel: getCoreRowModel() });
+  const [sorting, setSorting] = useState<SortingState>([]);
+
+  const table = useReactTable({
+    data,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">

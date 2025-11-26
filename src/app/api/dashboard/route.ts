@@ -88,6 +88,10 @@ interface AggregatedPayment {
       daysToClose?: number | null;
       timeToFirstAgentContactHours?: number | null;
       timeToAssignmentHours?: number | null;
+      contractToCloseMinutes?: number | null;
+      closedToPaidMinutes?: number | null;
+      previousContractToCloseMinutes?: number | null;
+      previousClosedToPaidMinutes?: number | null;
       lastClosedAt?: Date | string | null;
       lastUnderContractAt?: Date | string | null;
       lastPairedAt?: Date | string | null;
@@ -798,26 +802,33 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }, 0);
 
   const paidPayments = revenueEligiblePayments.filter((payment) => payment.status === 'paid');
-  const paidPaymentsWithDates = paidPayments.filter((payment) => payment.paidDate);
   const averageDaysClosedToPaid = computeAverage(
-    paidPaymentsWithDates
+    paidPayments
       .map((payment) => {
         const end = payment.paidDate ? new Date(payment.paidDate) : null;
-        if (!end) return null;
-
         const closingDate = payment.closingDate
           ? new Date(payment.closingDate)
           : payment.referral?.sla?.lastClosedAt
           ? new Date(payment.referral.sla.lastClosedAt)
           : null;
 
-        const start = closingDate
-          ? closingDate
-          : payment.invoiceDate
-          ? new Date(payment.invoiceDate)
-          : new Date(payment.updatedAt);
+        if (end && closingDate) {
+          return differenceInCalendarDays(end, closingDate);
+        }
 
-        return differenceInCalendarDays(end, start);
+        const storedMinutes =
+          payment.referral?.sla?.closedToPaidMinutes ?? payment.referral?.sla?.previousClosedToPaidMinutes ?? null;
+        if (storedMinutes != null && storedMinutes >= 0) {
+          return storedMinutes / (60 * 24);
+        }
+
+        if (end) {
+          const fallbackStart =
+            closingDate ?? (payment.invoiceDate ? new Date(payment.invoiceDate) : new Date(payment.updatedAt));
+          return differenceInCalendarDays(end, fallbackStart);
+        }
+
+        return null;
       })
       .filter((value): value is number => value != null)
   );
@@ -922,7 +933,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const current =
       referralMonthlyMap.get(key) ?? { total: 0, transfers: 0, ahaReferrals: 0, ahaOosReferrals: 0 };
     current.total += 1;
-    if (referral.source === 'MC') {
+    if (referral.origin === 'admin' && referral.lender) {
       current.transfers += 1;
     }
     const designation = getReferralDesignation(referral);
@@ -1155,6 +1166,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const agentLostDealsMap = new Map<string, number>();
 
   filteredPaymentsByNetwork.forEach((payment) => {
+    if (payment.status === 'terminated') {
+      return;
+    }
     const key = payment.referral?.assignedAgent ? payment.referral.assignedAgent.toString() : 'unassigned';
     const current = agentRevenueMap.get(key) ?? {
       revenue: 0,
@@ -1168,6 +1182,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       closedVolumeCents: 0
     };
     const isOutsideAgentDeal = payment.agentAttribution === 'OUTSIDE_AGENT';
+    const contractPriceCents =
+      payment.contractPriceCents ?? payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
     if (!isOutsideAgentDeal) {
       current.revenue += payment.receivedAmountCents ?? 0;
       const outstandingRevenue = Math.max(
@@ -1188,34 +1204,32 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (payment.status === 'closed' || payment.status === 'paid') {
       if (!isOutsideAgentDeal) {
         current.closed += 1;
-        const closedPriceCents =
-          payment.referral?.closedPriceCents ??
-          payment.referral?.estPurchasePriceCents ??
-          payment.referral?.referralFeeDueCents ??
-          0;
-        if (closedPriceCents > 0) {
-          current.closedVolumeCents += closedPriceCents;
+        if (contractPriceCents > 0) {
+          current.closedVolumeCents += contractPriceCents;
         }
         const referralFeeCents = payment.referral?.referralFeeDueCents ?? 0;
         let referralFeePercent: number | null =
           typeof payment.referral?.referralFeeBasisPoints === 'number'
             ? (payment.referral.referralFeeBasisPoints ?? 0) / 100
             : null;
-        if ((!referralFeePercent || referralFeePercent <= 0) && closedPriceCents > 0 && referralFeeCents > 0) {
-          referralFeePercent = (referralFeeCents / closedPriceCents) * 100;
+        if ((!referralFeePercent || referralFeePercent <= 0) && contractPriceCents > 0 && referralFeeCents > 0) {
+          referralFeePercent = (referralFeeCents / contractPriceCents) * 100;
         }
         const commissionBasisPoints = payment.referral?.commissionBasisPoints ?? 0;
         const commissionPercent = commissionBasisPoints / 100;
-        const commissionCents = (closedPriceCents * commissionBasisPoints) / 10000;
+        const commissionCents = (contractPriceCents * commissionBasisPoints) / 10000;
         if (commissionPercent > 0) {
           current.commissionPercentages.push(commissionPercent);
           if (commissionCents > 0) {
             current.commissionCents.push(commissionCents);
-            current.netCommissionCents += commissionCents - referralFeeCents;
           }
         }
         if (referralFeePercent && referralFeePercent > 0) {
           current.referralFeePercentages.push(referralFeePercent);
+        }
+        if (payment.status === 'paid' && commissionBasisPoints > 0) {
+          const paidReferralFeeCents = payment.receivedAmountCents ?? referralFeeCents;
+          current.netCommissionCents += commissionCents - paidReferralFeeCents;
         }
       } else {
         agentLostDealsMap.set(key, (agentLostDealsMap.get(key) ?? 0) + 1);
