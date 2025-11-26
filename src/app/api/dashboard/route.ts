@@ -88,6 +88,10 @@ interface AggregatedPayment {
       daysToClose?: number | null;
       timeToFirstAgentContactHours?: number | null;
       timeToAssignmentHours?: number | null;
+      contractToCloseMinutes?: number | null;
+      closedToPaidMinutes?: number | null;
+      previousContractToCloseMinutes?: number | null;
+      previousClosedToPaidMinutes?: number | null;
       lastClosedAt?: Date | string | null;
       lastUnderContractAt?: Date | string | null;
       lastPairedAt?: Date | string | null;
