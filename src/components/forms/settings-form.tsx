@@ -265,8 +265,8 @@ export function SettingsForm() {
               <option>This week</option>
               <option>This month</option>
               <option>Last 90 days</option>
-              <option>All time</option>
               <option>Year to date</option>
+              <option>All</option>
               <option>Custom export window</option>
             </select>
           </label>
