@@ -132,13 +132,13 @@ export function DealsTable() {
     null
   );
 
+  const deals = data ?? [];
+  const isLoading = !data;
+
   const getDealAddress = (deal: DealRow) => {
     const address = (deal.propertyAddress ?? deal.referral?.propertyAddress ?? '').trim();
     return address || null;
   };
-  if (!data) {
-    return <div className="rounded-lg bg-white p-4 shadow-sm">Loading deals…</div>;
-  }
 
   const role = session?.user?.role;
   const isAgentView = role === 'agent';
@@ -163,7 +163,7 @@ export function DealsTable() {
     return Math.round((baseAmountCents * commissionBps) / 10000);
   };
 
-  const filteredDeals = data.filter((deal) => {
+  const filteredDeals = deals.filter((deal) => {
     if (classificationFilter === 'all') {
       return true;
     }
@@ -396,7 +396,7 @@ export function DealsTable() {
         referralFeeDueCents: nextReferralFee,
       };
     }
-    const optimistic = data.map((row) => (row._id === deal._id ? optimisticRow : row));
+    const optimistic = deals.map((row) => (row._id === deal._id ? optimisticRow : row));
 
     setUpdatingId(deal._id);
     await mutate(optimistic, false);
@@ -902,6 +902,10 @@ export function DealsTable() {
       </table>
     </div>
   );
+
+  if (isLoading) {
+    return <div className="rounded-lg bg-white p-4 shadow-sm">Loading deals…</div>;
+  }
 
   return (
     <div className="space-y-4">
