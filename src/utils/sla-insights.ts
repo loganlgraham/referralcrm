@@ -464,15 +464,7 @@ export const computeSlaDurations = (referral: ReferralLike): SlaDuration[] => {
   const isPreContractStatus = effectiveStatus ? PRE_CONTRACT_STATUSES.has(effectiveStatus) : false;
 
   const dealUnderContractAt = hasDealProgress || isCurrentlyContracting
-    ? findFirstDealTimestamp(deals, [
-        'under_contract',
-        'past_inspection',
-        'past_appraisal',
-        'clear_to_close',
-        'closed',
-        'payment_sent',
-        'paid',
-      ]) ?? underContractAt ?? pairedAt ?? createdAt
+    ? findFirstDealTimestamp(deals, 'under_contract') ?? underContractAt ?? pairedAt ?? createdAt
     : null;
   const dealClosedAt = findFirstDealTimestamp(deals, ['closed', 'payment_sent', 'paid']) ?? getFirstStatusTimestamp('Closed');
   const dealPaidAt = findFirstDealTimestamp(deals, 'paid');
