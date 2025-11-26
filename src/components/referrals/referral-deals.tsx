@@ -185,6 +185,12 @@ function DealCard({
       setSaving(false);
       return;
     }
+    const closingDateToSend =
+      statusToSend === 'closed'
+        ? new Date().toISOString()
+        : closingDate
+          ? new Date(closingDate).toISOString()
+          : null;
     const success = await onUpdate(deal, {
       status: statusToSend,
       expectedAmountCents: finalExpectedAmountCents,
@@ -193,7 +199,7 @@ function DealCard({
       commissionBasisPoints,
       referralFeeBasisPoints,
       propertyAddress: propertyAddress.trim() || null,
-      closingDate: closingDate ? new Date(closingDate).toISOString() : null,
+      closingDate: closingDateToSend,
       agentId: agentId || null,
       side,
       usedAfc,
@@ -691,6 +697,12 @@ export function ReferralDeals({
       setSubmitting(true);
       try {
         const statusToSend = markPaid ? 'paid' : status;
+        const closingDateToSend =
+          statusToSend === 'closed'
+            ? new Date().toISOString()
+            : closingDate
+              ? new Date(closingDate).toISOString()
+              : null;
         const response = await fetch('/api/payments', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -704,7 +716,7 @@ export function ReferralDeals({
             commissionBasisPoints,
             referralFeeBasisPoints,
             propertyAddress: propertyAddress.trim() || null,
-            closingDate: closingDate ? new Date(closingDate).toISOString() : null,
+            closingDate: closingDateToSend,
             agentId: agentId || null,
             usedAfc,
             usedAssignedAgent,
@@ -729,7 +741,7 @@ export function ReferralDeals({
           commissionBasisPoints,
           referralFeeBasisPoints,
           propertyAddress: propertyAddress.trim() || null,
-          closingDate: closingDate ? new Date(closingDate).toISOString() : null,
+          closingDate: closingDateToSend,
           agent: agentId ? { id: agentId, name: agents.find((option) => option.id === agentId)?.name ?? null } : null,
           agentId: agentId || null,
           usedAfc,
@@ -778,6 +790,7 @@ export function ReferralDeals({
     }
     setStatusUpdating((previous) => ({ ...previous, [deal._id]: true }));
     try {
+      const closingDate = nextStatus === 'closed' ? new Date().toISOString() : undefined;
       const response = await fetch('/api/payments', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -785,6 +798,7 @@ export function ReferralDeals({
           id: deal._id,
           status: nextStatus,
           terminatedReason: nextStatus === 'terminated' ? terminationReason : null,
+          closingDate,
         }),
       });
 
@@ -797,6 +811,7 @@ export function ReferralDeals({
         ...deal,
         status: nextStatus,
         terminatedReason: nextStatus === 'terminated' ? terminationReason ?? null : null,
+        closingDate: closingDate ?? deal.closingDate ?? null,
         updatedAt: new Date().toISOString(),
       });
       toast.success('Deal stage updated');

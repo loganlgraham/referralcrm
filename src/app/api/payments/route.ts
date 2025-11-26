@@ -365,6 +365,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   }
 
   const previousStatus = existingPayment.status;
+  const isClosingNow = parsed.data.status === 'closed' && previousStatus !== 'closed';
 
   let nextContractPriceCents =
     parsed.data.contractPriceCents !== undefined
@@ -461,6 +462,10 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     updatePayload.agentId = parsed.data.agentId ?? null;
   } else {
     delete updatePayload.agentId;
+  }
+
+  if (isClosingNow) {
+    updatePayload.closingDate = new Date();
   }
 
   const nextStatusValue = parsed.data.status ?? existingPayment.status;
