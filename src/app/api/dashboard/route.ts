@@ -165,6 +165,19 @@ const TIMEFRAME_LABELS: Record<TimeframeKey, string> = {
   custom: 'Custom range'
 };
 
+const UNDER_CONTRACT_STATUSES = new Set<AggregatedPayment['status']>([
+  'under_contract',
+  'past_inspection',
+  'past_appraisal',
+  'clear_to_close'
+]);
+
+const EXPECTED_REVENUE_STATUSES = new Set<AggregatedPayment['status']>([
+  ...UNDER_CONTRACT_STATUSES,
+  'closed',
+  'payment_sent'
+]);
+
 function parseDateOnly(value: string | null): Date | null {
   if (!value) return null;
   const parsed = new Date(value);
@@ -263,6 +276,23 @@ function parseTimeframe(
         end: endOfDay(now)
       };
   }
+}
+
+function calculateOutstandingExpected(payment: AggregatedPayment): number {
+  const outstanding = Math.max(
+    (payment.expectedAmountCents ?? 0) - (payment.receivedAmountCents ?? 0),
+    0
+  );
+
+  if (EXPECTED_REVENUE_STATUSES.has(payment.status)) {
+    return outstanding;
+  }
+
+  if (payment.status === 'paid' && outstanding > 0) {
+    return outstanding;
+  }
+
+  return 0;
 }
 
 function extractState(referral: AggregatedPayment['referral']): string {
@@ -781,7 +811,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const closedOrPaidStatuses = new Set(['closed', 'paid']);
 
   const expectedRevenueCents = revenueEligiblePayments.reduce(
-    (sum, payment) => sum + (payment.expectedAmountCents ?? 0),
+    (sum, payment) => sum + calculateOutstandingExpected(payment),
     0
   );
   const realizedRevenueCents = revenueEligiblePayments.reduce(
@@ -1100,7 +1130,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const isOutsideAgentDeal = payment.agentAttribution === 'OUTSIDE_AGENT';
     if (!isOutsideAgentDeal) {
       current.revenue += payment.receivedAmountCents ?? 0;
-      current.expected += payment.expectedAmountCents ?? 0;
+      current.expected += calculateOutstandingExpected(payment);
     }
     if (!isOutsideAgentDeal && (payment.status === 'closed' || payment.status === 'paid')) {
       current.closed += 1;
@@ -1186,20 +1216,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       payment.contractPriceCents ?? payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
     if (!isOutsideAgentDeal) {
       current.revenue += payment.receivedAmountCents ?? 0;
-      const outstandingRevenue = Math.max(
-        (payment.expectedAmountCents ?? 0) - (payment.receivedAmountCents ?? 0),
-        0
-      );
-      const isUnderContractPipeline = [
-        'under_contract',
-        'past_inspection',
-        'past_appraisal',
-        'clear_to_close'
-      ].includes(payment.status);
-      const isPaidButNotFullyReceived = payment.status === 'paid' && outstandingRevenue > 0;
-      if (isUnderContractPipeline || isPaidButNotFullyReceived) {
-        current.expected += outstandingRevenue;
-      }
+      current.expected += calculateOutstandingExpected(payment);
     }
     if (payment.status === 'closed' || payment.status === 'paid') {
       if (!isOutsideAgentDeal) {
