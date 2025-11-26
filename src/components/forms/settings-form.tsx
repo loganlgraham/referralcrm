@@ -73,6 +73,8 @@ export function SettingsForm() {
   );
   const [reportName, setReportName] = useState('Performance dashboard export');
   const [reportTimeframe, setReportTimeframe] = useState('This month');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   const [reportRecipient, setReportRecipient] = useState('ops@referralcrm.com');
   const [reportLoading, setReportLoading] = useState(false);
   const [exporting, setExporting] = useState<ExportReport | null>(null);
@@ -110,11 +112,22 @@ export function SettingsForm() {
       return;
     }
 
+    if (reportTimeframe === 'Custom export window' && (!customStartDate || !customEndDate)) {
+      toast.error('Select a start and end date for the custom timeframe.');
+      return;
+    }
+
     setReportLoading(true);
     await new Promise((resolve) => setTimeout(resolve, 700));
-    toast.success(`Dashboard report "${reportName}" (${reportTimeframe}) created for ${selectedMetrics.length} metric${
-      selectedMetrics.length === 1 ? '' : 's'
-    }. We'll send it to ${reportRecipient}.`);
+    const timeframeLabel =
+      reportTimeframe === 'Custom export window'
+        ? `${customStartDate || 'Start'} to ${customEndDate || 'End'}`
+        : reportTimeframe;
+    toast.success(
+      `Dashboard report "${reportName}" (${timeframeLabel}) created for ${selectedMetrics.length} metric${
+        selectedMetrics.length === 1 ? '' : 's'
+      }. We'll send it to ${reportRecipient}.`
+    );
     setReportLoading(false);
   };
 
@@ -239,16 +252,46 @@ export function SettingsForm() {
             Timeframe
             <select
               value={reportTimeframe}
-              onChange={(event) => setReportTimeframe(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setReportTimeframe(value);
+                if (value !== 'Custom export window') {
+                  setCustomStartDate('');
+                  setCustomEndDate('');
+                }
+              }}
               className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
             >
               <option>This week</option>
               <option>This month</option>
               <option>Last 90 days</option>
+              <option>All time</option>
               <option>Year to date</option>
               <option>Custom export window</option>
             </select>
           </label>
+          {reportTimeframe === 'Custom export window' && (
+            <div className="grid grid-cols-1 gap-4 md:col-span-2 md:grid-cols-2">
+              <label className="text-sm font-medium text-slate-600">
+                Start date
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(event) => setCustomStartDate(event.target.value)}
+                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+                />
+              </label>
+              <label className="text-sm font-medium text-slate-600">
+                End date
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(event) => setCustomEndDate(event.target.value)}
+                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+                />
+              </label>
+            </div>
+          )}
           <label className="text-sm font-medium text-slate-600">
             Deliver to
             <input
