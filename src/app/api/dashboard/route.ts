@@ -1162,6 +1162,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const agentLostDealsMap = new Map<string, number>();
 
   filteredPaymentsByNetwork.forEach((payment) => {
+    if (payment.status === 'terminated') {
+      return;
+    }
     const key = payment.referral?.assignedAgent ? payment.referral.assignedAgent.toString() : 'unassigned';
     const current = agentRevenueMap.get(key) ?? {
       revenue: 0,
@@ -1175,6 +1178,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       closedVolumeCents: 0
     };
     const isOutsideAgentDeal = payment.agentAttribution === 'OUTSIDE_AGENT';
+    const contractPriceCents =
+      payment.contractPriceCents ?? payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
     if (!isOutsideAgentDeal) {
       current.revenue += payment.receivedAmountCents ?? 0;
       const outstandingRevenue = Math.max(
@@ -1195,34 +1200,32 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (payment.status === 'closed' || payment.status === 'paid') {
       if (!isOutsideAgentDeal) {
         current.closed += 1;
-        const closedPriceCents =
-          payment.referral?.closedPriceCents ??
-          payment.referral?.estPurchasePriceCents ??
-          payment.referral?.referralFeeDueCents ??
-          0;
-        if (closedPriceCents > 0) {
-          current.closedVolumeCents += closedPriceCents;
+        if (contractPriceCents > 0) {
+          current.closedVolumeCents += contractPriceCents;
         }
         const referralFeeCents = payment.referral?.referralFeeDueCents ?? 0;
         let referralFeePercent: number | null =
           typeof payment.referral?.referralFeeBasisPoints === 'number'
             ? (payment.referral.referralFeeBasisPoints ?? 0) / 100
             : null;
-        if ((!referralFeePercent || referralFeePercent <= 0) && closedPriceCents > 0 && referralFeeCents > 0) {
-          referralFeePercent = (referralFeeCents / closedPriceCents) * 100;
+        if ((!referralFeePercent || referralFeePercent <= 0) && contractPriceCents > 0 && referralFeeCents > 0) {
+          referralFeePercent = (referralFeeCents / contractPriceCents) * 100;
         }
         const commissionBasisPoints = payment.referral?.commissionBasisPoints ?? 0;
         const commissionPercent = commissionBasisPoints / 100;
-        const commissionCents = (closedPriceCents * commissionBasisPoints) / 10000;
+        const commissionCents = (contractPriceCents * commissionBasisPoints) / 10000;
         if (commissionPercent > 0) {
           current.commissionPercentages.push(commissionPercent);
           if (commissionCents > 0) {
             current.commissionCents.push(commissionCents);
-            current.netCommissionCents += commissionCents - referralFeeCents;
           }
         }
         if (referralFeePercent && referralFeePercent > 0) {
           current.referralFeePercentages.push(referralFeePercent);
+        }
+        if (payment.status === 'paid' && commissionBasisPoints > 0) {
+          const paidReferralFeeCents = payment.receivedAmountCents ?? referralFeeCents;
+          current.netCommissionCents += commissionCents - paidReferralFeeCents;
         }
       } else {
         agentLostDealsMap.set(key, (agentLostDealsMap.get(key) ?? 0) + 1);
