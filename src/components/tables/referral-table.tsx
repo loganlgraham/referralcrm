@@ -159,6 +159,14 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function normalizeStatusForSort({
+  status,
+  dealStatusLabel,
+}: Pick<ReferralRow, 'status' | 'dealStatusLabel'>) {
+  const label = dealStatusLabel ?? STATUS_LABELS[status] ?? status;
+  return label.toLocaleLowerCase();
+}
+
 function NoteComposer({ referralId }: { referralId: string }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState('');
@@ -377,7 +385,12 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
             dealStatusLabel={row.original.dealStatusLabel ?? null}
           />
         ),
-        enableSorting: false,
+        sortingFn: (a, b) =>
+          normalizeStatusForSort(a.original).localeCompare(
+            normalizeStatusForSort(b.original),
+            undefined,
+            { sensitivity: 'base' }
+          ),
       },
       {
         header: 'Notes',
@@ -415,7 +428,13 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
         accessorKey: 'status',
         cell: ({ row }) => (
           <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />
-        )
+        ),
+        sortingFn: (a, b) =>
+          normalizeStatusForSort(a.original).localeCompare(
+            normalizeStatusForSort(b.original),
+            undefined,
+            { sensitivity: 'base' }
+          ),
       },
       createdColumn
     ];
@@ -431,7 +450,13 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
     {
       header: sortableHeader('Status'),
       accessorKey: 'status',
-      cell: ({ row }) => <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />
+      cell: ({ row }) => <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />,
+      sortingFn: (a, b) =>
+        normalizeStatusForSort(a.original).localeCompare(
+          normalizeStatusForSort(b.original),
+          undefined,
+          { sensitivity: 'base' }
+        ),
     },
     {
       header: sortableHeader('Agent'),
