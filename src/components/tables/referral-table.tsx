@@ -523,7 +523,7 @@ export function ReferralTable({ data, mode }: ReferralTableProps) {
   });
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
       <table className="min-w-full divide-y divide-slate-200">
         <thead className="bg-slate-50">
           {table.getHeaderGroups().map((headerGroup) => (

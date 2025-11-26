@@ -47,13 +47,13 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const ahaBucketValue = isAgentMode ? '' : searchParams.get('ahaBucket') ?? '';
 
   return (
-    <div className="grid gap-4 rounded-lg bg-white p-4 shadow-sm md:grid-cols-6">
+    <div className="grid grid-cols-1 gap-4 rounded-lg bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
       <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
         Status
         <select
           defaultValue={searchParams.get('status') ?? ''}
           onChange={(event) => handleChange('status', event.target.value)}
-          className="mt-1 rounded border border-slate-200 px-2 py-1 text-sm"
+          className="mt-1 w-full rounded border border-slate-200 px-2 py-1 text-sm"
           disabled={isPending}
         >
           <option value="">All</option>
@@ -70,7 +70,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
           <select
             value={ahaBucketValue}
             onChange={(event) => handleChange('ahaBucket', event.target.value)}
-            className="mt-1 rounded border border-slate-200 px-2 py-1 text-sm"
+            className="mt-1 w-full rounded border border-slate-200 px-2 py-1 text-sm"
             disabled={isPending}
           >
             <option value="">All</option>
@@ -84,7 +84,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
         <select
           value={lenderValue}
           onChange={(event) => handleChange('mc', event.target.value)}
-          className="mt-1 rounded border border-slate-200 px-2 py-1 text-sm"
+          className="mt-1 w-full rounded border border-slate-200 px-2 py-1 text-sm"
           disabled={isPending}
         >
           <option value="">All</option>
@@ -102,7 +102,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
           <select
             value={agentValue}
             onChange={(event) => handleChange('agent', event.target.value)}
-            className="mt-1 rounded border border-slate-200 px-2 py-1 text-sm"
+            className="mt-1 w-full rounded border border-slate-200 px-2 py-1 text-sm"
             disabled={isPending}
           >
             <option value="">All</option>
@@ -123,7 +123,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
             maxLength={2}
             defaultValue={searchParams.get('state') ?? ''}
             onBlur={(event) => handleChange('state', event.target.value.toUpperCase())}
-            className="mt-1 rounded border border-slate-200 px-2 py-1 text-sm"
+            className="mt-1 w-full rounded border border-slate-200 px-2 py-1 text-sm"
             placeholder="CO"
             disabled={isPending}
           />
@@ -135,7 +135,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
           type="text"
           defaultValue={searchParams.get('zip') ?? ''}
           onBlur={(event) => handleChange('zip', event.target.value)}
-          className="mt-1 rounded border border-slate-200 px-2 py-1 text-sm"
+          className="mt-1 w-full rounded border border-slate-200 px-2 py-1 text-sm"
           placeholder="80202"
           disabled={isPending}
         />

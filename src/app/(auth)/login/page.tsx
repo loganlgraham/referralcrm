@@ -124,7 +124,7 @@ function LoginForm() {
         </div>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_55%)]" aria-hidden="true" />
       </div>
-      <div className="flex w-full flex-1 items-center justify-center px-6 py-12 sm:px-10 lg:px-12">
+      <div className="flex w-full flex-1 flex-col items-start justify-start px-6 pb-8 pt-4 sm:px-10 sm:pb-12 sm:pt-6 lg:flex-row lg:items-center lg:justify-center lg:px-12 lg:pt-0">
         <div className="relative w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl ring-1 ring-black/5">
           <div className="space-y-2 text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-brand">AFC · AHA</p>
@@ -240,7 +240,10 @@ function LoginForm() {
 
           <p className="text-center text-xs text-slate-400">
             Need help?{' '}
-            <a href="mailto:support@referralcrm.example.com" className="font-medium text-brand hover:text-brand-dark">
+            <a
+              href="mailto:logan.graham@americanfinancing.net?subject=Referrio%20Assistance%20Needed&body=Hello%2C%0A%0AI%20need%20help%20with%20Referrio.%20Please%20assist.%0A%0AThank%20you."
+              className="font-medium text-brand hover:text-brand-dark"
+            >
               Contact support
             </a>
           </p>

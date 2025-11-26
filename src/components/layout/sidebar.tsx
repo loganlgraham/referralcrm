@@ -9,7 +9,7 @@ import { signOut } from 'next-auth/react';
 
 type Role = 'admin' | 'mc' | 'agent' | string;
 
-const navItems: Array<{ href: string; label: string; roles?: Role[] }> = [
+export const navItems: Array<{ href: string; label: string; roles?: Role[] }> = [
   { href: '/dashboard', label: 'Dashboard', roles: ['admin'] },
   { href: '/referrals', label: 'Referrals', roles: ['admin', 'mc', 'agent'] },
   { href: '/referrals/follow-ups', label: 'Follow-up Tasks', roles: ['admin', 'mc', 'agent'] },
@@ -21,7 +21,7 @@ const navItems: Array<{ href: string; label: string; roles?: Role[] }> = [
   { href: '/settings', label: 'Settings', roles: ['admin'] }
 ];
 
-export function Sidebar({ session }: { session: Session }) {
+export function Sidebar({ session, className }: { session: Session; className?: string }) {
   const pathname = usePathname();
   const role = session.user.role;
 
@@ -32,7 +32,7 @@ export function Sidebar({ session }: { session: Session }) {
   };
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-lg">
+    <aside className={clsx('fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-lg', className)}>
       <div className="flex h-16 items-center justify-between border-b px-6">
         <div>
           <p className="text-sm font-semibold text-brand">AFC · AHA</p>
