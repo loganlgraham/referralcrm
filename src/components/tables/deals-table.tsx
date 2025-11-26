@@ -196,6 +196,14 @@ export function DealsTable() {
     });
   };
 
+  const normalizeStatusLabel = (status?: DealStatus | null) => {
+    if (!status) {
+      return '';
+    }
+
+    return (STATUS_LABELS[status] ?? status).toString();
+  };
+
   const sortedDeals = useMemo(() => {
     const rows = [...filteredDeals];
     if (!sortConfig) {
@@ -233,7 +241,7 @@ export function DealsTable() {
         case 'dealSide':
           return deal.side === 'sell' || deal.referral?.dealSide === 'sell' ? 'sell' : 'buy';
         case 'status':
-          return (STATUS_LABELS[deal.status] ?? deal.status).toLowerCase();
+          return normalizeStatusLabel(deal.status).toLowerCase();
         case 'closingDate':
           return deal.closingDate ? new Date(deal.closingDate).getTime() : 0;
         case 'address':
@@ -589,7 +597,7 @@ export function DealsTable() {
 
   const renderStatusControl = (deal: DealRow) => {
     const isTerminated = deal.status === 'terminated';
-    const statusLabel = STATUS_LABELS[deal.status] ?? deal.status;
+    const statusLabel = normalizeStatusLabel(deal.status) || '—';
     const terminatedLabel = deal.terminatedReason
       ? TERMINATED_REASON_OPTIONS.find((option) => option.value === deal.terminatedReason)?.label ??
         deal.terminatedReason
