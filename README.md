@@ -51,6 +51,8 @@ Required keys:
 - `NEXTAUTH_URL` – e.g. `https://your-vercel-domain.vercel.app`
 - `NEXTAUTH_SECRET` – 32+ char secret (`openssl rand -base64 32`)
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_MAPS_API_KEY` – server-side Google Maps Geocoding (used when admins create/patch agents)
+- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` – client-side Google Maps JS API key for coverage validation/preview
 - `EMAIL_SERVER` – SMTP connection string (e.g. `smtp://user:pass@smtp.host:587`)
 - `EMAIL_FROM` – default From address
 - `RESEND_API_KEY` / `RESEND_INBOUND_SECRET` – Resend transactional email and inbound webhook signing
@@ -87,6 +89,12 @@ pnpm seed
 - Unit tests: `pnpm test:unit`
 - API tests: `pnpm test:api`
 - E2E tests: `pnpm test:e2e`
+
+### Coverage validation
+
+- Admin and agent profile forms include a **Validate with Google Maps** button to geocode coverage labels and preview them on an embedded map.
+- Validated coverage saves Google-provided coordinates, viewports/bounds, and postal codes alongside the agent record.
+- Client-side validation uses the Maps JavaScript API and counts against your Google Cloud project’s usage limits/quota.
 
 ### Project structure
 

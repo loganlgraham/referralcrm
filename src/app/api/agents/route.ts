@@ -11,6 +11,16 @@ import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
 import { mergeAndNormalizeZipCodes, syncAgentZipCoverage } from '@/lib/server/zip-coverage';
 import { geocodeCoverageLabel, GeocodingError } from '@/lib/server/google-geocoding';
 
+const geoPointSchema = z.object({
+  lat: z.number(),
+  lng: z.number(),
+});
+
+const geoBoundsSchema = z.object({
+  northeast: geoPointSchema,
+  southwest: geoPointSchema,
+});
+
 const coverageLocationSchema = z.object({
   label: z.string().trim().min(1),
   zipCodes: z
@@ -18,6 +28,10 @@ const coverageLocationSchema = z.object({
     .optional()
     .default([])
     .transform((zipCodes) => Array.from(new Set(zipCodes))),
+  center: geoPointSchema.optional(),
+  viewport: geoBoundsSchema.optional(),
+  bounds: geoBoundsSchema.optional(),
+  placeId: z.string().trim().optional(),
 });
 
 const createAgentSchema = z.object({
@@ -134,42 +148,47 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   await connectMongo();
 
-  let geocodedLocations: {
-    label: string;
-    zipCodes: string[];
-    center: { lat: number; lng: number };
-    viewport?: {
-      northeast: { lat: number; lng: number };
-      southwest: { lat: number; lng: number };
+  const resolveCoverageLocation = async (location: z.infer<typeof coverageLocationSchema>) => {
+    const baseZipCodes = mergeAndNormalizeZipCodes(location.zipCodes ?? []);
+
+    if (location.center) {
+      if (baseZipCodes.length === 0) {
+        throw new GeocodingError('Coverage locations must include at least one ZIP code', 'ZERO_RESULTS');
+      }
+
+      return {
+        label: location.label,
+        zipCodes: baseZipCodes,
+        center: location.center,
+        viewport: location.viewport,
+        bounds: location.bounds,
+        placeId: location.placeId,
+      };
+    }
+
+    const result = await geocodeCoverageLabel(location.label);
+    const postalCodes = mergeAndNormalizeZipCodes([...baseZipCodes, ...result.postalCodes]);
+
+    if (postalCodes.length === 0) {
+      throw new GeocodingError('No postal codes found for location', 'ZERO_RESULTS');
+    }
+
+    return {
+      label: result.formattedAddress || location.label,
+      zipCodes: postalCodes,
+      center: result.center,
+      viewport: result.viewport,
+      bounds: result.bounds,
+      placeId: result.placeId ?? location.placeId,
     };
-    bounds?: {
-      northeast: { lat: number; lng: number };
-      southwest: { lat: number; lng: number };
-    };
-    placeId?: string;
-  }[];
+  };
+
+  let geocodedLocations: Awaited<ReturnType<typeof resolveCoverageLocation>>[];
   try {
     geocodedLocations = await Promise.all(
       parsed.data.coverageLocations.map(async (location) => {
         try {
-          const result = await geocodeCoverageLabel(location.label);
-          const postalCodes = mergeAndNormalizeZipCodes([
-            ...location.zipCodes,
-            ...result.postalCodes,
-          ]);
-
-          if (postalCodes.length === 0) {
-            throw new GeocodingError('No postal codes found for location', 'ZERO_RESULTS');
-          }
-
-          return {
-            label: result.formattedAddress || location.label,
-            zipCodes: postalCodes,
-            center: result.center,
-            viewport: result.viewport,
-            bounds: result.bounds,
-            placeId: result.placeId,
-          };
+          return await resolveCoverageLocation(location);
         } catch (error) {
           if (error instanceof GeocodingError) {
             throw error;

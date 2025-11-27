@@ -31,7 +31,14 @@ type AgentProfile = {
   brokerage?: string;
   statesLicensed?: string[];
   coverageAreas?: string[];
-  coverageLocations?: { label: string; zipCodes: string[] }[];
+  coverageLocations?: {
+    label: string;
+    zipCodes: string[];
+    center?: { lat: number; lng: number };
+    viewport?: { northeast: { lat: number; lng: number }; southwest: { lat: number; lng: number } } | null;
+    bounds?: { northeast: { lat: number; lng: number }; southwest: { lat: number; lng: number } } | null;
+    placeId?: string | null;
+  }[];
   specialties?: string[];
   languages?: string[];
   ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
@@ -97,7 +104,14 @@ type AgentLean = {
   brokerage?: string | null;
   statesLicensed?: string[] | null;
   zipCoverage?: string[] | null;
-  coverageLocations?: { label: string; zipCodes: string[] }[] | null;
+  coverageLocations?: {
+    label: string;
+    zipCodes: string[];
+    center?: { lat: number; lng: number };
+    viewport?: { northeast: { lat: number; lng: number }; southwest: { lat: number; lng: number } } | null;
+    bounds?: { northeast: { lat: number; lng: number }; southwest: { lat: number; lng: number } } | null;
+    placeId?: string | null;
+  }[] | null;
   npsScore?: number | null;
   notes?: NoteRecord[] | null;
   specialties?: string[] | null;

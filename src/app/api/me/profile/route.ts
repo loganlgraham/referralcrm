@@ -8,7 +8,18 @@ import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { User } from '@/models/user';
 import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
+import { geocodeCoverageLabel, GeocodingError } from '@/lib/server/google-geocoding';
 import { mergeAndNormalizeZipCodes, syncAgentZipCoverage } from '@/lib/server/zip-coverage';
+
+const geoPointSchema = z.object({
+  lat: z.number(),
+  lng: z.number(),
+});
+
+const geoBoundsSchema = z.object({
+  northeast: geoPointSchema,
+  southwest: geoPointSchema,
+});
 
 const coverageLocationSchema = z.object({
   label: z.string().trim().min(1),
@@ -16,6 +27,10 @@ const coverageLocationSchema = z.object({
     .array(z.string().trim().regex(/^\d{5}$/))
     .min(1)
     .transform((zipCodes) => Array.from(new Set(zipCodes))),
+  center: geoPointSchema.optional(),
+  viewport: geoBoundsSchema.optional(),
+  bounds: geoBoundsSchema.optional(),
+  placeId: z.string().trim().optional(),
 });
 
 const agentProfileSchema = z.object({
@@ -122,11 +137,55 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
     }
 
+    const resolveCoverageLocation = async (location: z.infer<typeof coverageLocationSchema>) => {
+      const baseZipCodes = mergeAndNormalizeZipCodes(location.zipCodes ?? []);
+
+      if (location.center) {
+        return {
+          label: location.label,
+          zipCodes: baseZipCodes,
+          center: location.center,
+          viewport: location.viewport,
+          bounds: location.bounds,
+          placeId: location.placeId,
+        };
+      }
+
+      const result = await geocodeCoverageLabel(location.label);
+      const postalCodes = mergeAndNormalizeZipCodes([...baseZipCodes, ...result.postalCodes]);
+
+      if (postalCodes.length === 0) {
+        throw new GeocodingError('No postal codes found for location', 'ZERO_RESULTS');
+      }
+
+      return {
+        label: result.formattedAddress || location.label,
+        zipCodes: postalCodes,
+        center: result.center,
+        viewport: result.viewport,
+        bounds: result.bounds,
+        placeId: result.placeId ?? location.placeId,
+      };
+    };
+
+    let resolvedCoverageLocations: Awaited<ReturnType<typeof resolveCoverageLocation>>[];
+    try {
+      resolvedCoverageLocations = await Promise.all(
+        parsed.data.coverageLocations.map((location) => resolveCoverageLocation(location))
+      );
+    } catch (error) {
+      if (error instanceof GeocodingError) {
+        const statusCode = error.status === 'OVER_QUERY_LIMIT' ? 503 : 422;
+        return NextResponse.json({ error: error.message }, { status: statusCode });
+      }
+      return NextResponse.json({ error: 'Failed to geocode coverage locations' }, { status: 500 });
+    }
+
     agent.name = parsed.data.name;
     agent.email = parsed.data.email;
     agent.phone = parsed.data.phone ?? '';
     agent.statesLicensed = parsed.data.statesLicensed;
-    const coverageLocations = parsed.data.coverageLocations;
+    const coverageLocations = resolvedCoverageLocations;
     const coverageAreas = parsed.data.coverageAreas;
     const combinedZipCoverage = mergeAndNormalizeZipCodes([
       ...coverageAreas,
