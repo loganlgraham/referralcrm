@@ -9,7 +9,7 @@ export interface CoverageLocation {
   label: string;
   zipCodes: string[];
   center?: GeoPoint;
-  viewport?: GeoBounds;
-  bounds?: GeoBounds;
-  placeId?: string;
+  viewport?: GeoBounds | null;
+  bounds?: GeoBounds | null;
+  placeId?: string | null;
 }
