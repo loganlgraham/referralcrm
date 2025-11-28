@@ -121,7 +121,7 @@ const referralSchema = new Schema(
     initialNotes: { type: String, default: '' },
     loanFileNumber: {
       type: String,
-      required(this: { isNew: boolean }) {
+      required(this: { isNew: boolean; origin?: string }) {
         return this.isNew && this.origin !== 'agent';
       }
     },
