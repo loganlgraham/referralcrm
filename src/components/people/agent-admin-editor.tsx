@@ -9,11 +9,9 @@ import {
   AGENT_LANGUAGE_OPTIONS,
   AGENT_SPECIALTY_OPTIONS,
 } from '@/constants/agent-options';
-
-interface CoverageLocation {
-  label: string;
-  zipCodes: string[];
-}
+import { AgentCoverageMap, geocodeMissingCoverageLocations } from '@/components/maps/AgentCoverageMap';
+import { CoverageLocation } from '@/types/coverage';
+import { deriveZipCodes, mergeCoverageLocations, normalizeZipCode } from '@/utils/coverage';
 
 export interface AgentAdminEditorProps {
   agent: {
@@ -64,71 +62,6 @@ type FormState = {
   ahaDesignation: '' | 'AHA' | 'AHA_OOS';
 };
 
-const normalizeZipCode = (value: string) => {
-  const digits = value.replace(/\D/g, '');
-  if (digits.length < 5) {
-    return null;
-  }
-  return digits.slice(0, 5);
-};
-
-const deriveZipCodes = (locations: CoverageLocation[]): string[] =>
-  Array.from(
-    new Set(
-      locations.flatMap((location) =>
-        (Array.isArray(location.zipCodes) ? location.zipCodes : [])
-          .map((zip) => normalizeZipCode(zip))
-          .filter((zip: string | null): zip is string => Boolean(zip))
-      )
-    )
-  );
-
-const mergeCoverageLocations = (
-  existing: CoverageLocation[],
-  incoming: CoverageLocation[]
-): CoverageLocation[] => {
-  const merged = new Map<string, CoverageLocation>();
-
-  existing.forEach((location) => {
-    merged.set(location.label.toLowerCase(), {
-      label: location.label,
-      zipCodes: Array.from(new Set(location.zipCodes)),
-    });
-  });
-
-  incoming.forEach((location) => {
-    const label = location.label?.trim();
-    if (!label) {
-      return;
-    }
-
-    const normalizedZipCodes = Array.from(
-      new Set(
-        (Array.isArray(location.zipCodes) ? location.zipCodes : [])
-          .map((zip) => normalizeZipCode(zip))
-          .filter((zip: string | null): zip is string => Boolean(zip))
-      )
-    );
-
-    if (normalizedZipCodes.length === 0) {
-      return;
-    }
-
-    const key = label.toLowerCase();
-    const existingLocation = merged.get(key);
-    if (existingLocation) {
-      merged.set(key, {
-        label: existingLocation.label,
-        zipCodes: Array.from(new Set([...existingLocation.zipCodes, ...normalizedZipCodes])),
-      });
-    } else {
-      merged.set(key, { label, zipCodes: normalizedZipCodes });
-    }
-  });
-
-  return Array.from(merged.values());
-};
-
 const buildInitialFormState = (agent: AgentAdminEditorProps['agent']): FormState => {
   const coverageLocations = Array.isArray(agent.coverageLocations)
     ? mergeCoverageLocations([], agent.coverageLocations)
@@ -165,6 +98,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
   const [saving, setSaving] = useState(false);
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
   const [coverageProgress, setCoverageProgress] = useState(0);
+  const [validatingCoverage, setValidatingCoverage] = useState(false);
 
   useEffect(() => {
     setForm(buildInitialFormState(agent));
@@ -217,7 +151,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
     };
   }, [coverageProgress, isGeneratingCoverage]);
 
-  const formDisabled = saving;
+  const formDisabled = saving || validatingCoverage;
 
   type TextField = Exclude<keyof FormState, 'coverageLocations' | 'specialties' | 'languages' | 'coverageDescription' | 'ahaDesignation'>;
 
@@ -325,6 +259,35 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
     } finally {
       setCoverageProgress(100);
       setIsGeneratingCoverage(false);
+    }
+  };
+
+  const validateCoverageWithMaps = async () => {
+    if (form.coverageLocations.length === 0) {
+      toast.info('Add coverage locations before validating.');
+      return;
+    }
+
+    setValidatingCoverage(true);
+    try {
+      const validated = await geocodeMissingCoverageLocations(form.coverageLocations);
+      if (validated.length === 0) {
+        toast.info('No coverage locations could be validated.');
+        return;
+      }
+
+      setForm((previous) => ({
+        ...previous,
+        coverageLocations: mergeCoverageLocations(previous.coverageLocations, validated),
+      }));
+      toast.success('Coverage validated with Google Maps.');
+    } catch (error) {
+      console.error(error);
+      toast.error(
+        error instanceof Error ? error.message : 'Unable to validate coverage locations with Google Maps.'
+      );
+    } finally {
+      setValidatingCoverage(false);
     }
   };
 
@@ -478,55 +441,74 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
             disabled={formDisabled}
           />
         </label>
-        <div className="md:col-span-2 space-y-2">
-          <label htmlFor="edit-agent-coverage-description" className="text-xs font-semibold text-slate-600">
-            Areas covered
-          </label>
-          <div className="flex flex-col gap-2 md:flex-row md:items-stretch md:gap-3">
-            <textarea
-              id="edit-agent-coverage-description"
-              value={form.coverageDescription}
-              onChange={handleCoverageDescriptionChange}
-              className="w-full flex-1 rounded border border-slate-200 px-3 py-2 text-sm md:min-h-[5.5rem]"
-              placeholder="Describe the neighborhoods, cities, and counties this agent serves"
-              rows={3}
-              disabled={formDisabled || isGeneratingCoverage}
-            />
-            <button
-              type="button"
-              onClick={generateCoverageLocations}
-              className="flex shrink-0 items-center justify-center rounded bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 md:h-full md:min-h-[5.5rem] md:self-stretch"
-              style={coverageButtonStyles}
-              disabled={formDisabled || isGeneratingCoverage}
-            >
-              {isGeneratingCoverage ? 'Generating…' : 'Save Service Areas'}
-            </button>
-          </div>
-        </div>
-        <div className="md:col-span-2 space-y-2">
-          <p className="text-xs font-semibold text-slate-600">Cities, towns & counties</p>
-          <div className="flex flex-wrap gap-2">
-            {form.coverageLocations.length === 0 ? (
-              <p className="text-xs text-slate-500">No coverage locations added yet.</p>
-            ) : (
-              form.coverageLocations.map((location) => (
-                <span
-                  key={location.label}
-                  className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-700"
+        <div className="md:col-span-2 grid gap-4 lg:grid-cols-2">
+          <div className="space-y-3">
+            <label htmlFor="edit-agent-coverage-description" className="text-xs font-semibold text-slate-600">
+              Areas covered
+            </label>
+            <div className="flex flex-col gap-2 md:flex-row md:items-stretch md:gap-3">
+              <textarea
+                id="edit-agent-coverage-description"
+                value={form.coverageDescription}
+                onChange={handleCoverageDescriptionChange}
+                className="w-full flex-1 rounded border border-slate-200 px-3 py-2 text-sm md:min-h-[5.5rem]"
+                placeholder="Describe the neighborhoods, cities, and counties this agent serves"
+                rows={3}
+                disabled={formDisabled || isGeneratingCoverage}
+              />
+              <button
+                type="button"
+                onClick={generateCoverageLocations}
+                className="flex shrink-0 items-center justify-center rounded bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 md:h-full md:min-h-[5.5rem] md:self-stretch"
+                style={coverageButtonStyles}
+                disabled={formDisabled || isGeneratingCoverage}
+              >
+                {isGeneratingCoverage ? 'Generating…' : 'Save Service Areas'}
+              </button>
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-slate-600">Cities, towns & counties</p>
+              <div className="flex flex-wrap gap-2">
+                {form.coverageLocations.length === 0 ? (
+                  <p className="text-xs text-slate-500">No coverage locations added yet.</p>
+                ) : (
+                  form.coverageLocations.map((location) => (
+                    <span
+                      key={location.label}
+                      className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-700"
+                    >
+                      {location.label}
+                      <button
+                        type="button"
+                        onClick={() => removeCoverageLocation(location.label)}
+                        className="text-slate-400 transition hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                        aria-label={`Remove ${location.label}`}
+                        disabled={formDisabled}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={validateCoverageWithMaps}
+                  className="inline-flex items-center justify-center rounded border border-slate-200 px-3 py-1.5 text-[11px] font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={formDisabled || validatingCoverage || isGeneratingCoverage}
                 >
-                  {location.label}
-                  <button
-                    type="button"
-                    onClick={() => removeCoverageLocation(location.label)}
-                    className="text-slate-400 transition hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
-                    aria-label={`Remove ${location.label}`}
-                    disabled={formDisabled}
-                  >
-                    ×
-                  </button>
-                </span>
-              ))
-            )}
+                  {validatingCoverage ? 'Validating…' : 'Validate with Google Maps'}
+                </button>
+                <p className="text-[11px] text-slate-500">
+                  We will pull coordinates and postal codes directly from Google when they are missing.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+            <p className="px-2 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Coverage preview</p>
+            <AgentCoverageMap locations={form.coverageLocations} className="mt-1" height={340} />
           </div>
         </div>
         <div className="md:col-span-2 grid gap-3">
