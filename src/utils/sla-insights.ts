@@ -582,8 +582,8 @@ const computeAgentReferralRecommendations = (
     recommendations.push(
       buildRecommendation({
         id: 'assign-mc-agent-origin',
-        title: 'Assign a mortgage consultant',
-        message: 'Choose the MC who will take this referral so they can contact the borrower without delay.',
+        title: 'Loop in your AFC mortgage consultant',
+        message: 'Pick the AFC MC who should receive this referral so they can reach out quickly.',
         priority: 'urgent',
         category: 'assignment',
         dueAt: minDueDate(dueBy),
@@ -597,8 +597,9 @@ const computeAgentReferralRecommendations = (
     recommendations.push(
       buildRecommendation({
         id: 'confirm-borrower-intro',
-        title: 'Confirm borrower outreach',
-        message: 'Make sure the MC has introduced themselves to the borrower and acknowledged the referral.',
+        title: 'Confirm borrower introduction to MC',
+        message:
+          'Send a warm handoff connecting the borrower to the MC and confirm the MC has acknowledged the referral.',
         priority: 'high',
         category: 'communication',
         dueAt: minDueDate(dueBy),
@@ -611,8 +612,8 @@ const computeAgentReferralRecommendations = (
     recommendations.push(
       buildRecommendation({
         id: 'share-agent-update',
-        title: 'Share an update with the referring agent',
-        message: 'Log a quick note so the referring agent knows how the borrower conversation is progressing.',
+        title: 'Share borrower context with the MC',
+        message: 'Post a quick note so the MC knows how the borrower conversation is progressing.',
         priority: 'medium',
         category: 'communication',
         supportingMetric: `Last update ${hoursSinceLastNote}h ago`,
@@ -640,9 +641,9 @@ const computeAgentReferralRecommendations = (
     recommendations.push(
       buildRecommendation({
         id: 'mc-sync-preapproval',
-        title: 'Align with agent on pre-approval path',
+        title: 'Equip the MC for pre-approval',
         message:
-          'Confirm credit docs, income, and funds to close are collected so the MC can validate full pre-approval.',
+          'Gather income, assets, and credit docs from the borrower so the MC can validate full pre-approval.',
         priority: 'high',
         category: 'communication',
         dueAt: minDueDate(dueBy),
@@ -655,8 +656,8 @@ const computeAgentReferralRecommendations = (
     recommendations.push(
       buildRecommendation({
         id: 'mc-prepare-loan-options',
-        title: 'Draft loan options for the borrower',
-        message: 'Prepare 2–3 loan scenarios and send them to the agent so showings align with budget.',
+        title: 'Share budget guidance with the MC',
+        message: 'Send price range and constraints so the MC can tailor 2–3 loan scenarios for the borrower.',
         priority: 'medium',
         category: 'finance',
         supportingMetric: 'Keep MC, agent, and borrower aligned on budget',

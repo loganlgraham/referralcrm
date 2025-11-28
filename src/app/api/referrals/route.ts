@@ -894,6 +894,8 @@ export async function POST(request: Request) {
   const origin: 'agent' | 'mc' | 'admin' =
     session.user.role === 'agent' ? 'agent' : session.user.role === 'mc' ? 'mc' : 'admin';
 
+  const loanFileNumber = parsed.data.loanFileNumber?.trim() ?? '';
+
   const normalizedZips = Array.isArray(parsed.data.lookingInZips)
     ? Array.from(
         new Set(
@@ -926,6 +928,9 @@ export async function POST(request: Request) {
     if (!providedEndorser) {
       return NextResponse.json({ error: 'Endorser is required.' }, { status: 400 });
     }
+    if (!loanFileNumber) {
+      return NextResponse.json({ error: 'Loan file number is required.' }, { status: 400 });
+    }
   }
 
   const source = origin === 'agent' ? '' : providedSource;
@@ -946,7 +951,6 @@ export async function POST(request: Request) {
     lookingInZips,
     borrowerCurrentAddress: parsed.data.borrowerCurrentAddress,
     stageOnTransfer: parsed.data.stageOnTransfer,
-    loanFileNumber: parsed.data.loanFileNumber,
     loanType: parsed.data.loanType,
     estPurchasePriceCents: preApprovalAmountCents,
     preApprovalAmountCents,
@@ -973,6 +977,10 @@ export async function POST(request: Request) {
     ],
     origin,
   };
+
+  if (loanFileNumber) {
+    referralData.loanFileNumber = loanFileNumber;
+  }
 
   if (session.user.role === 'mc') {
     const lender = await LenderMC.findOne({ userId: session.user.id }).select('_id');

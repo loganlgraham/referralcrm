@@ -125,9 +125,6 @@ export function DealsTable() {
   const { data, mutate } = useSWR<DealRow[]>('/api/payments', fetcher);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
-  const [classificationFilter, setClassificationFilter] = useState<'all' | 'AHA' | 'AHA_OOS'>(
-    'all'
-  );
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
     null
   );
@@ -163,13 +160,7 @@ export function DealsTable() {
     return Math.round((baseAmountCents * commissionBps) / 10000);
   };
 
-  const filteredDeals = deals.filter((deal) => {
-    if (classificationFilter === 'all') {
-      return true;
-    }
-
-    return deal.agentDesignation === classificationFilter;
-  });
+  const filteredDeals = deals;
 
   type SortKey =
     | 'referral'
@@ -909,30 +900,6 @@ export function DealsTable() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm font-medium text-slate-700">Filter:</span>
-        {[
-          { label: 'All Deals', value: 'all' as const },
-          { label: 'AHA', value: 'AHA' as const },
-          { label: 'AHA OOS', value: 'AHA_OOS' as const },
-        ].map((option) => {
-          const isActive = classificationFilter === option.value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setClassificationFilter(option.value)}
-              className={`rounded-full border px-3 py-1 text-sm font-medium transition ${
-                isActive
-                  ? 'border-brand bg-brand text-white'
-                  : 'border-slate-200 bg-white text-slate-700 hover:border-brand hover:text-brand'
-              }`}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
       {summarySection}
       {isAdminView ? renderAdminTable() : renderDefaultTable()}
     </div>

@@ -122,7 +122,7 @@ const referralSchema = new Schema(
     loanFileNumber: {
       type: String,
       required(this: { isNew: boolean }) {
-        return this.isNew;
+        return this.isNew && this.origin !== 'agent';
       }
     },
     assignedAgent: { type: Schema.Types.ObjectId, ref: 'Agent', index: true },

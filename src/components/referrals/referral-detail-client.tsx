@@ -639,7 +639,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       return;
     }
 
-    if (!normalizedDraft.loanFileNumber) {
+    if (!normalizedDraft.loanFileNumber && !isAgentOrigin) {
       toast.error('Loan file number is required.');
       return;
     }

@@ -33,7 +33,7 @@ const referralSchema = z.object({
     .regex(zipListPattern, 'Enter one or more 5-digit ZIP codes separated by commas'),
   borrowerCurrentAddress: z.string().min(1, 'Add the borrower\'s current address'),
   stageOnTransfer: z.enum(STAGE_OPTIONS),
-  loanFileNumber: z.string().min(1, 'Loan file number is required'),
+  loanFileNumber: z.string().optional(),
   initialNotes: z.string().optional(),
   loanType: z.string().optional(),
   preApprovalAmount: z
@@ -151,6 +151,8 @@ export function ReferralForm() {
       return;
     }
 
+    const loanFileNumber = result.data.loanFileNumber?.trim() ?? '';
+
     if (!isAgent) {
       if (!result.data.source?.trim()) {
         toast.error('Add a referral source');
@@ -158,6 +160,10 @@ export function ReferralForm() {
       }
       if (!result.data.endorser?.trim()) {
         toast.error('Add an endorser');
+        return;
+      }
+      if (!loanFileNumber) {
+        toast.error('Add a loan file number');
         return;
       }
     }
@@ -172,12 +178,15 @@ export function ReferralForm() {
       lookingInZips: zipList,
       borrowerCurrentAddress: result.data.borrowerCurrentAddress,
       stageOnTransfer: result.data.stageOnTransfer,
-      loanFileNumber: result.data.loanFileNumber,
     };
 
     if (!isAgent) {
       body.source = result.data.source?.trim() ?? '';
       body.endorser = result.data.endorser?.trim() ?? '';
+    }
+
+    if (loanFileNumber) {
+      body.loanFileNumber = loanFileNumber;
     }
 
     if (result.data.loanType?.trim()) {
@@ -341,7 +350,7 @@ export function ReferralForm() {
               </label>
               <label className={labelClasses}>
                 Loan file number
-                <input name="loanFileNumber" required className={inputClasses} />
+                <input name="loanFileNumber" required={!isAgent} className={inputClasses} />
               </label>
               <label className={labelClasses}>
                 Loan type
