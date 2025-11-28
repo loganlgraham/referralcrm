@@ -8,8 +8,11 @@ import { getCurrentSession } from '@/lib/auth';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { computeAgentMetrics, EMPTY_AGENT_METRICS } from '@/lib/server/agent-metrics';
 import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
-import { mergeAndNormalizeZipCodes, syncAgentZipCoverage } from '@/lib/server/zip-coverage';
-import { geocodeCoverageLabel, GeocodingError } from '@/lib/server/google-geocoding';
+import {
+  mergeAndNormalizeZipCodes,
+  normalizeCoverageLocations,
+  syncAgentZipCoverage,
+} from '@/lib/server/zip-coverage';
 
 const coverageLocationSchema = z.object({
   label: z.string().trim().min(1),
@@ -62,16 +65,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     coverageLocations?: {
       label: string;
       zipCodes: string[];
-      center?: { lat: number; lng: number };
-      viewport?: {
-        northeast: { lat: number; lng: number };
-        southwest: { lat: number; lng: number };
-      } | null;
-      bounds?: {
-        northeast: { lat: number; lng: number };
-        southwest: { lat: number; lng: number };
-      } | null;
-      placeId?: string | null;
     }[] | null;
     npsScore?: number | null;
     specialties?: string[] | null;
@@ -134,61 +127,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   await connectMongo();
 
-  let geocodedLocations: {
-    label: string;
-    zipCodes: string[];
-    center: { lat: number; lng: number };
-    viewport?: {
-      northeast: { lat: number; lng: number };
-      southwest: { lat: number; lng: number };
-    };
-    bounds?: {
-      northeast: { lat: number; lng: number };
-      southwest: { lat: number; lng: number };
-    };
-    placeId?: string;
-  }[];
-  try {
-    geocodedLocations = await Promise.all(
-      parsed.data.coverageLocations.map(async (location) => {
-        try {
-          const result = await geocodeCoverageLabel(location.label);
-          const postalCodes = mergeAndNormalizeZipCodes([
-            ...location.zipCodes,
-            ...result.postalCodes,
-          ]);
-
-          if (postalCodes.length === 0) {
-            throw new GeocodingError('No postal codes found for location', 'ZERO_RESULTS');
-          }
-
-          return {
-            label: result.formattedAddress || location.label,
-            zipCodes: postalCodes,
-            center: result.center,
-            viewport: result.viewport,
-            bounds: result.bounds,
-            placeId: result.placeId,
-          };
-        } catch (error) {
-          if (error instanceof GeocodingError) {
-            throw error;
-          }
-          throw new GeocodingError('Failed to resolve coverage location');
-        }
-      })
-    );
-  } catch (error) {
-    if (error instanceof GeocodingError) {
-      const statusCode = error.status === 'OVER_QUERY_LIMIT' ? 503 : 422;
-      return NextResponse.json({ error: error.message }, { status: statusCode });
-    }
-    return NextResponse.json({ error: 'Failed to geocode coverage locations' }, { status: 500 });
-  }
+  const normalizedCoverageLocations = normalizeCoverageLocations(
+    parsed.data.coverageLocations
+  );
 
   const combinedZipCoverage = mergeAndNormalizeZipCodes([
     ...parsed.data.coverageAreas,
-    ...geocodedLocations.flatMap((location) => location.zipCodes),
+    ...normalizedCoverageLocations.flatMap((location) => location.zipCodes),
   ]);
 
   const agent = await Agent.create({
@@ -199,7 +144,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     brokerage: parsed.data.brokerage ?? '',
     statesLicensed: parsed.data.statesLicensed,
     zipCoverage: combinedZipCoverage,
-    coverageLocations: geocodedLocations,
+    coverageLocations: normalizedCoverageLocations,
     specialties: parsed.data.specialties,
     languages: parsed.data.languages,
     ahaDesignation: parsed.data.ahaDesignation,
@@ -208,11 +153,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   await syncAgentZipCoverage({
     agentId: agent._id,
-    coverageLocations: geocodedLocations,
+    coverageLocations: normalizedCoverageLocations,
     explicitZipCodes: combinedZipCoverage,
   });
 
-  const coverageSuggestionLabels = geocodedLocations.map((location) => location.label);
+  const coverageSuggestionLabels = normalizedCoverageLocations.map(
+    (location) => location.label
+  );
   if (coverageSuggestionLabels.length > 0) {
     await rememberCoverageSuggestions(coverageSuggestionLabels);
   } else if (combinedZipCoverage.length > 0) {
