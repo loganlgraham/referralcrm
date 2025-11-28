@@ -12,7 +12,7 @@ const requestSchema = z.object({
 });
 
 function buildResetUrl(request: Request, token: string, email: string): string {
-  const url = new URL('/auth/reset-password', request.url);
+  const url = new URL('/reset-password', request.url);
   url.searchParams.set('token', token);
   url.searchParams.set('email', email);
   return url.toString();
