@@ -32,7 +32,7 @@ function ResetPasswordForm() {
     }
 
     try {
-      const response = await fetch('/api/auth/forgot-password', {
+      const response = await fetch('/api/password/forgot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: trimmedEmail }),
@@ -89,7 +89,7 @@ function ResetPasswordForm() {
     }
 
     try {
-      const response = await fetch('/api/auth/reset-password', {
+      const response = await fetch('/api/password/reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: trimmedEmail, token, password: trimmedPassword }),
