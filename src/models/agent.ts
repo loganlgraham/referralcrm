@@ -16,31 +16,6 @@ const coverageLocationSchema = new Schema(
   {
     label: { type: String, required: true },
     zipCodes: [{ type: String, required: true }],
-    center: {
-      lat: { type: Number, required: true },
-      lng: { type: Number, required: true },
-    },
-    viewport: {
-      northeast: {
-        lat: { type: Number },
-        lng: { type: Number },
-      },
-      southwest: {
-        lat: { type: Number },
-        lng: { type: Number },
-      },
-    },
-    bounds: {
-      northeast: {
-        lat: { type: Number },
-        lng: { type: Number },
-      },
-      southwest: {
-        lat: { type: Number },
-        lng: { type: Number },
-      },
-    },
-    placeId: { type: String },
   },
   { _id: false }
 );

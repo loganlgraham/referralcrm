@@ -1,7 +1,6 @@
 import { MongoDBAdapter } from '@next-auth/mongodb-adapter';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import EmailProvider from 'next-auth/providers/email';
-import GoogleProvider from 'next-auth/providers/google';
 import bcrypt from 'bcryptjs';
 import type { NextAuthOptions } from 'next-auth';
 import { Resend } from 'resend';
@@ -101,25 +100,6 @@ if (process.env.RESEND_API_KEY && process.env.EMAIL_FROM) {
     EmailProvider({
       server: process.env.EMAIL_SERVER,
       from: process.env.EMAIL_FROM,
-    })
-  );
-}
-
-// Google only if configured
-if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-  providers.push(
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      allowDangerousEmailAccountLinking: true,
-      authorization: {
-        params: {
-          scope: 'openid email profile',
-          access_type: 'offline',
-          prompt: 'consent',
-          include_granted_scopes: 'true',
-        },
-      },
     })
   );
 }
