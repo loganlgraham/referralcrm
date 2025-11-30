@@ -1,3 +1,4 @@
+import { promises as fs } from 'fs';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -13,6 +14,29 @@ type RateSourceResult = {
 };
 
 const today = new Date().toISOString().slice(0, 10);
+
+const apiNinjasCachePath = '/tmp/api-ninjas-mortgage-rates.json';
+
+const apiNinjasNumber = z.preprocess((value) => {
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isNaN(parsed) ? value : parsed;
+  }
+  return value;
+}, z.number().optional());
+
+const apiNinjasSchema = z.object({
+  date: z.string().optional(),
+  last_updated: z.string().optional(),
+  thirty_year_fixed: apiNinjasNumber,
+  fifteen_year_fixed: apiNinjasNumber,
+  thirty_year_fha: apiNinjasNumber,
+  thirty_year_va: apiNinjasNumber,
+  thirty_year_jumbo: apiNinjasNumber,
+  five_one_arm: apiNinjasNumber,
+});
+
+type ApiNinjasPayload = z.infer<typeof apiNinjasSchema>;
 
 const briefSchema = z.object({
   headline: z.string().min(1),
@@ -63,6 +87,86 @@ const pmmsSources = [
   { url: 'https://www.freddiemac.com/pmms/docs/pmms30_history.csv', loanType: '30-year fixed' },
   { url: 'https://www.freddiemac.com/pmms/docs/pmms15_history.csv', loanType: '15-year fixed' },
 ];
+
+async function readApiNinjasCache() {
+  try {
+    const raw = await fs.readFile(apiNinjasCachePath, 'utf8');
+    const parsed = JSON.parse(raw) as { date: string; rates: AverageRate[]; dataDate?: string };
+    if (parsed.date === today && parsed.rates?.length) {
+      return { rates: parsed.rates, dataDate: parsed.dataDate } as RateSourceResult;
+    }
+  } catch (error) {
+    console.error('ApiNinjas cache read failed', error);
+  }
+  return null;
+}
+
+async function writeApiNinjasCache(payload: RateSourceResult) {
+  try {
+    await fs.writeFile(
+      apiNinjasCachePath,
+      JSON.stringify({ date: today, rates: payload.rates, dataDate: payload.dataDate || today }),
+      'utf8'
+    );
+  } catch (error) {
+    console.error('ApiNinjas cache write failed', error);
+  }
+}
+
+function parseApiNinjasRates(data: ApiNinjasPayload): RateSourceResult {
+  const map: { key: keyof ApiNinjasPayload; loanType: string }[] = [
+    { key: 'thirty_year_fixed', loanType: '30-year fixed' },
+    { key: 'fifteen_year_fixed', loanType: '15-year fixed' },
+    { key: 'thirty_year_fha', loanType: 'FHA 30-year' },
+    { key: 'thirty_year_va', loanType: 'VA 30-year' },
+    { key: 'thirty_year_jumbo', loanType: 'Jumbo 30-year' },
+    { key: 'five_one_arm', loanType: '5/6 ARM' },
+  ];
+
+  const rates: AverageRate[] = [];
+
+  for (const entry of map) {
+    const value = data[entry.key];
+    if (typeof value !== 'number' || Number.isNaN(value)) continue;
+    rates.push({ loanType: entry.loanType, averageRate: `${value.toFixed(2)}%`, change: '—' });
+  }
+
+  if (!rates.length) {
+    throw new Error('ApiNinjas response missing rate values');
+  }
+
+  const rawDate = data.last_updated || data.date;
+  const formattedDate = rawDate ? formatDataDate(rawDate) || rawDate : today;
+
+  return { rates, dataDate: formattedDate };
+}
+
+async function fetchApiNinjasRates(): Promise<RateSourceResult> {
+  const cached = await readApiNinjasCache();
+  if (cached) return cached;
+
+  const apiKey = process.env.API_NINJAS_API_KEY || 'TSM1KIhd4UFMkpQat+SHnA==wVYsHgZ6Hz7YxKFB';
+  const response = await fetch('https://api.api-ninjas.com/v1/mortgagerate', {
+    headers: {
+      'X-Api-Key': apiKey,
+    },
+    next: { revalidate: 86400 },
+  });
+
+  if (!response.ok) {
+    throw new Error('ApiNinjas mortgage rate request failed');
+  }
+
+  const payload = await response.json();
+  const parsed = apiNinjasSchema.safeParse(payload);
+  if (!parsed.success) {
+    throw new Error('ApiNinjas mortgage rate payload invalid');
+  }
+
+  const result = parseApiNinjasRates(parsed.data);
+  await writeApiNinjasCache(result);
+  return result;
+}
 
 function formatDataDate(date: string) {
   const parsed = new Date(date);
@@ -209,20 +313,30 @@ async function fetchBankrateRates(): Promise<RateSourceResult> {
 
 export async function GET() {
   try {
-    const [pmmsResult, bankrateResult] = await Promise.allSettled([
+    const [apiNinjasResult, pmmsResult, bankrateResult] = await Promise.allSettled([
+      fetchApiNinjasRates(),
       fetchFreddieMacRates(),
       fetchBankrateRates(),
     ]);
 
+    const apiNinjasRates = apiNinjasResult.status === 'fulfilled' ? apiNinjasResult.value : null;
     const pmmsRates = pmmsResult.status === 'fulfilled' ? pmmsResult.value : null;
     const bankrateRates = bankrateResult.status === 'fulfilled' ? bankrateResult.value : null;
 
-    const rateSources: AverageRate[] = [
-      ...(pmmsRates?.rates ?? []),
-      ...(bankrateRates?.rates ?? []),
-    ];
+    const combinedRates: AverageRate[] = [];
+    const appendRates = (rates?: AverageRate[]) => {
+      for (const rate of rates ?? []) {
+        if (combinedRates.find((existing) => existing.loanType === rate.loanType)) continue;
+        combinedRates.push(rate);
+      }
+    };
+
+    appendRates(apiNinjasRates?.rates);
+    appendRates(pmmsRates?.rates);
+    appendRates(bankrateRates?.rates);
 
     const rateDataDate =
+      apiNinjasRates?.dataDate ||
       bankrateRates?.dataDate ||
       pmmsRates?.dataDate ||
       new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -230,7 +344,7 @@ export async function GET() {
     if (!process.env.OPENAI_API_KEY) {
       const mergedFallback = {
         ...fallbackBrief,
-        averageRates: rateSources.length ? rateSources : fallbackBrief.averageRates,
+        averageRates: combinedRates.length ? combinedRates : fallbackBrief.averageRates,
         dataDate: rateDataDate,
       };
 
@@ -322,14 +436,14 @@ export async function GET() {
       }),
     });
 
-    if (!response.ok) {
-      const payload = await response.json().catch(() => ({}));
-      console.error('Mortgage market insights OpenAI error', payload);
-      const mergedFallback = {
-        ...fallbackBrief,
-        averageRates: rateSources.length ? rateSources : fallbackBrief.averageRates,
-        dataDate: rateDataDate,
-      };
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        console.error('Mortgage market insights OpenAI error', payload);
+        const mergedFallback = {
+          ...fallbackBrief,
+          averageRates: combinedRates.length ? combinedRates : fallbackBrief.averageRates,
+          dataDate: rateDataDate,
+        };
 
       return NextResponse.json(mergedFallback, {
         status: 200,
@@ -341,12 +455,12 @@ export async function GET() {
 
     const completion = await response.json();
     const content = completion.choices?.[0]?.message?.content;
-    if (!content) {
-      const mergedFallback = {
-        ...fallbackBrief,
-        averageRates: rateSources.length ? rateSources : fallbackBrief.averageRates,
-        dataDate: rateDataDate,
-      };
+      if (!content) {
+        const mergedFallback = {
+          ...fallbackBrief,
+          averageRates: combinedRates.length ? combinedRates : fallbackBrief.averageRates,
+          dataDate: rateDataDate,
+        };
 
       return NextResponse.json(mergedFallback, {
         status: 200,
@@ -363,7 +477,7 @@ export async function GET() {
       console.error('Mortgage market insights parse error', error);
       const mergedFallback = {
         ...fallbackBrief,
-        averageRates: rateSources.length ? rateSources : fallbackBrief.averageRates,
+        averageRates: combinedRates.length ? combinedRates : fallbackBrief.averageRates,
         dataDate: rateDataDate,
       };
 
@@ -380,7 +494,7 @@ export async function GET() {
 
     const mergedBrief = {
       ...brief,
-      averageRates: rateSources.length ? rateSources : brief.averageRates,
+      averageRates: combinedRates.length ? combinedRates : brief.averageRates,
       dataDate: rateDataDate,
     };
 
