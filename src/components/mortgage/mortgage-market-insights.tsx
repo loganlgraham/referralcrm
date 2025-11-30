@@ -65,8 +65,11 @@ export function MortgageMarketInsights() {
         coachingAngles: payload.coachingAngles ?? defaultBrief.coachingAngles,
         borrowerAdvice: payload.borrowerAdvice ?? defaultBrief.borrowerAdvice,
         caution: payload.caution ?? defaultBrief.caution,
-        averageRates: payload.averageRates ?? defaultBrief.averageRates,
-        dataDate: payload.dataDate ?? defaultBrief.dataDate,
+        averageRates:
+          payload.averageRates && payload.averageRates.length > 0
+            ? payload.averageRates
+            : defaultBrief.averageRates,
+        dataDate: payload.dataDate && payload.dataDate.trim().length > 0 ? payload.dataDate : defaultBrief.dataDate,
       });
     } catch (err) {
       setError('Unable to load mortgage market insights.');
