@@ -141,9 +141,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   const filter: Record<string, unknown> = {};
   await connectMongo();
-  const lenders = await LenderMC.find(filter).lean();
+  const lenders = await LenderMC.find(filter).lean<{
+    _id: Types.ObjectId | string;
+    name?: string;
+    email?: string;
+    phone?: string;
+    nmlsId?: string;
+    licensedStates?: string[];
+    team?: string;
+    region?: string;
+    notes?: unknown[];
+    userId?: Types.ObjectId | string | null;
+    createdAt?: Date;
+    updatedAt?: Date;
+  }[]>();
 
-  const lenderIds = lenders.map((lender) => lender._id).filter((value): value is Types.ObjectId => Types.ObjectId.isValid(value));
+  const lenderIds = lenders
+    .map((lender) => {
+      const value = lender._id;
+      if (!Types.ObjectId.isValid(value)) return null;
+      return typeof value === 'string' ? new Types.ObjectId(value) : value;
+    })
+    .filter((value): value is Types.ObjectId => value !== null);
   const metrics = await computeLenderMetrics(lenderIds);
 
   const response = lenders.map((lender) => {
