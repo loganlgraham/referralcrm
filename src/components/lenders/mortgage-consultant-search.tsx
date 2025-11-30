@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import { ArrowRightIcon, Loader2Icon, MailIcon, PhoneIcon, SearchIcon, SparklesIcon } from 'lucide-react';
 
@@ -142,7 +143,9 @@ const sortConsultants = (consultants: MortgageConsultant[]) =>
     return (bMetrics.activePipeline ?? 0) - (aMetrics.activePipeline ?? 0);
   });
 
-export function FindMcExperience() {
+export function MortgageConsultantSearch() {
+  const { data: session } = useSession();
+  const isAgent = session?.user?.role === 'agent';
   const { data: consultants, isLoading } = useSWR<MortgageConsultant[]>('/api/lenders', fetcher);
   const [description, setDescription] = useState('');
   const [states, setStates] = useState<string[]>([]);
@@ -159,6 +162,10 @@ export function FindMcExperience() {
     }
     return `${matches.length} consultant${matches.length === 1 ? '' : 's'} licensed here`;
   }, [matches.length, states.length]);
+
+  if (!isAgent) {
+    return null;
+  }
 
   const handleSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -198,10 +205,10 @@ export function FindMcExperience() {
             <SparklesIcon className="h-5 w-5" />
           </div>
           <div className="space-y-2">
-            <h1 className="text-2xl font-semibold text-slate-900">Find Mortgage Consultant</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">Mortgage Consultants</h1>
             <p className="text-sm text-slate-600">
               Describe where your borrower needs a licensed mortgage consultant. We’ll surface teammates licensed in that state
-              with recent performance so you can choose the right partner without creating a referral.
+              with recent performance so you can pick a partner and launch the referral flow.
             </p>
           </div>
         </div>
@@ -251,7 +258,7 @@ export function FindMcExperience() {
           </div>
           <div className="text-right text-sm text-slate-600">
             <p className="font-semibold text-slate-900">{matchedCountLabel}</p>
-            <p className="text-xs text-slate-500">Profiles are read-only and do not create referrals.</p>
+            <p className="text-xs text-slate-500">Profiles are read-only—start a referral when you pick your partner.</p>
           </div>
         </div>
 
@@ -296,6 +303,13 @@ export function FindMcExperience() {
                         className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
                       >
                         View profile
+                        <ArrowRightIcon className="h-4 w-4" />
+                      </Link>
+                      <Link
+                        href={`/referrals/new`}
+                        className="inline-flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand/90"
+                      >
+                        Start referral
                         <ArrowRightIcon className="h-4 w-4" />
                       </Link>
                     </div>
