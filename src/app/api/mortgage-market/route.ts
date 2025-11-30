@@ -1,6 +1,17 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+type AverageRate = {
+  loanType: string;
+  averageRate: string;
+  change: string;
+};
+
+type RateSourceResult = {
+  rates: AverageRate[];
+  dataDate?: string;
+};
+
 const today = new Date().toISOString().slice(0, 10);
 
 const briefSchema = z.object({
@@ -48,17 +59,123 @@ const fallbackBrief = {
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  if (!process.env.OPENAI_API_KEY) {
-    return NextResponse.json(fallbackBrief, {
-      status: 200,
-      headers: {
-        'Cache-Control': 'public, s-maxage=43200, stale-while-revalidate=3600',
-      },
-    });
+async function fetchFreddieMacRates(): Promise<RateSourceResult> {
+  const response = await fetch('https://www.freddiemac.com/pmms', {
+    next: { revalidate: 3600 },
+  });
+
+  if (!response.ok) {
+    throw new Error('Freddie Mac PMMS unavailable');
   }
 
+  const html = await response.text();
+
+  const extractRate = (label: string) => {
+    const pattern = new RegExp(`${label}[^0-9]*([0-9]+\\.[0-9]+)%`, 'i');
+    const match = html.match(pattern);
+    return match?.[1] ? `${match[1]}%` : undefined;
+  };
+
+  const thirtyYear = extractRate('30-year Fixed Rate Mortgage');
+  const fifteenYear = extractRate('15-year Fixed Rate Mortgage');
+
+  const dataDateMatch = html.match(/Week of ([A-Za-z]+ \d{1,2}, \d{4})/i);
+  const dataDate = dataDateMatch?.[1];
+
+  const rates: AverageRate[] = [];
+  if (thirtyYear) {
+    rates.push({ loanType: '30-year fixed', averageRate: thirtyYear, change: '—' });
+  }
+  if (fifteenYear) {
+    rates.push({ loanType: '15-year fixed', averageRate: fifteenYear, change: '—' });
+  }
+
+  if (!rates.length) {
+    throw new Error('Unable to parse PMMS rates');
+  }
+
+  return { rates, dataDate };
+}
+
+async function fetchBankrateRates(): Promise<RateSourceResult> {
+  const response = await fetch('https://www.bankrate.com/mortgages/mortgage-rates/', {
+    next: { revalidate: 3600 },
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; ReferralCRM/1.0; +https://referralcrm.com)',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Bankrate page unavailable');
+  }
+
+  const html = await response.text();
+
+  const extractRate = (label: string) => {
+    const pattern = new RegExp(`${label}[^0-9]*([0-9]+\\.[0-9]+)%`, 'i');
+    const match = html.match(pattern);
+    return match?.[1] ? `${match[1]}%` : undefined;
+  };
+
+  const rates: AverageRate[] = [];
+
+  const addRate = (loanType: string, label: string) => {
+    const rate = extractRate(label);
+    if (rate) {
+      rates.push({ loanType, averageRate: rate, change: '—' });
+    }
+  };
+
+  addRate('FHA 30-year', 'FHA mortgage rate');
+  addRate('VA 30-year', 'VA mortgage rate');
+  addRate('Jumbo 30-year', 'Jumbo mortgage rate');
+  addRate('5/6 ARM', 'ARM');
+
+  const dataDateMatch = html.match(/Rates last updated[^A-Za-z]*(\w+ \d{1,2}, \d{4})/i);
+  const dataDate = dataDateMatch?.[1];
+
+  if (!rates.length) {
+    throw new Error('Unable to parse Bankrate rates');
+  }
+
+  return { rates, dataDate };
+}
+
+export async function GET() {
   try {
+    const [pmmsResult, bankrateResult] = await Promise.allSettled([
+      fetchFreddieMacRates(),
+      fetchBankrateRates(),
+    ]);
+
+    const pmmsRates = pmmsResult.status === 'fulfilled' ? pmmsResult.value : null;
+    const bankrateRates = bankrateResult.status === 'fulfilled' ? bankrateResult.value : null;
+
+    const rateSources: AverageRate[] = [
+      ...(pmmsRates?.rates ?? []),
+      ...(bankrateRates?.rates ?? []),
+    ];
+
+    const rateDataDate =
+      bankrateRates?.dataDate ||
+      pmmsRates?.dataDate ||
+      new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    if (!process.env.OPENAI_API_KEY) {
+      const mergedFallback = {
+        ...fallbackBrief,
+        averageRates: rateSources.length ? rateSources : fallbackBrief.averageRates,
+        dataDate: rateDataDate,
+      };
+
+      return NextResponse.json(mergedFallback, {
+        status: 200,
+        headers: {
+          'Cache-Control': 'public, s-maxage=43200, stale-while-revalidate=3600',
+        },
+      });
+    }
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -142,7 +259,13 @@ export async function GET() {
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
       console.error('Mortgage market insights OpenAI error', payload);
-      return NextResponse.json(fallbackBrief, {
+      const mergedFallback = {
+        ...fallbackBrief,
+        averageRates: rateSources.length ? rateSources : fallbackBrief.averageRates,
+        dataDate: rateDataDate,
+      };
+
+      return NextResponse.json(mergedFallback, {
         status: 200,
         headers: {
           'Cache-Control': 'public, s-maxage=43200, stale-while-revalidate=3600',
@@ -153,7 +276,13 @@ export async function GET() {
     const completion = await response.json();
     const content = completion.choices?.[0]?.message?.content;
     if (!content) {
-      return NextResponse.json(fallbackBrief, {
+      const mergedFallback = {
+        ...fallbackBrief,
+        averageRates: rateSources.length ? rateSources : fallbackBrief.averageRates,
+        dataDate: rateDataDate,
+      };
+
+      return NextResponse.json(mergedFallback, {
         status: 200,
         headers: {
           'Cache-Control': 'public, s-maxage=43200, stale-while-revalidate=3600',
@@ -166,7 +295,13 @@ export async function GET() {
       parsedContent = JSON.parse(content);
     } catch (error) {
       console.error('Mortgage market insights parse error', error);
-      return NextResponse.json(fallbackBrief, {
+      const mergedFallback = {
+        ...fallbackBrief,
+        averageRates: rateSources.length ? rateSources : fallbackBrief.averageRates,
+        dataDate: rateDataDate,
+      };
+
+      return NextResponse.json(mergedFallback, {
         status: 200,
         headers: {
           'Cache-Control': 'public, s-maxage=43200, stale-while-revalidate=3600',
@@ -177,7 +312,13 @@ export async function GET() {
     const parsed = briefSchema.safeParse(parsedContent);
     const brief = parsed.success ? parsed.data : fallbackBrief;
 
-    return NextResponse.json(brief, {
+    const mergedBrief = {
+      ...brief,
+      averageRates: rateSources.length ? rateSources : brief.averageRates,
+      dataDate: rateDataDate,
+    };
+
+    return NextResponse.json(mergedBrief, {
       status: 200,
       headers: {
         'Cache-Control': 'public, s-maxage=43200, stale-while-revalidate=3600',
