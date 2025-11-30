@@ -9,24 +9,46 @@ import { signOut } from 'next-auth/react';
 
 type Role = 'admin' | 'mc' | 'agent' | string;
 
-export const navItems: Array<{ href: string; label: string; roles?: Role[] }> = [
-  { href: '/dashboard', label: 'Dashboard', roles: ['admin'] },
-  { href: '/referrals', label: 'Referrals', roles: ['admin', 'mc', 'agent'] },
-  { href: '/referrals/follow-ups', label: 'Follow-up Tasks', roles: ['admin', 'mc', 'agent'] },
-  { href: '/agents', label: 'Agents', roles: ['admin', 'mc'] },
-  { href: '/find-agent', label: 'Find Agent', roles: ['agent'] },
-  { href: '/mortgage-calculator', label: 'Mortgage Calculator', roles: ['agent'] },
-  { href: '/mortgage-market', label: 'Mortgage Market', roles: ['agent'] },
-  { href: '/lenders', label: 'Mortgage Consultants', roles: ['admin', 'agent'] },
-  { href: '/deals', label: 'Deals', roles: ['admin', 'agent'] },
-  { href: '/imports', label: 'Imports', roles: ['admin'] },
-  { href: '/profile', label: 'My Profile', roles: ['agent', 'mc'] },
-  { href: '/settings', label: 'Settings', roles: ['admin'] }
+type NavItem =
+  | { type: 'link'; href: string; label: string; roles?: Role[] }
+  | { type: 'divider'; roles?: Role[] };
+
+export const navItems: NavItem[] = [
+  { type: 'link', href: '/dashboard', label: 'Dashboard', roles: ['admin'] },
+  { type: 'link', href: '/referrals', label: 'Referrals', roles: ['admin', 'mc', 'agent'] },
+  { type: 'link', href: '/deals', label: 'Deals', roles: ['admin', 'agent'] },
+  { type: 'link', href: '/referrals/follow-ups', label: 'Follow-up Tasks', roles: ['admin', 'mc', 'agent'] },
+  { type: 'divider' },
+  { type: 'link', href: '/agents', label: 'Agents', roles: ['admin', 'mc'] },
+  { type: 'link', href: '/find-agent', label: 'Find Referral Agent', roles: ['agent'] },
+  { type: 'link', href: '/lenders', label: 'Mortgage Consultants', roles: ['admin', 'agent'] },
+  { type: 'divider' },
+  { type: 'link', href: '/mortgage-market', label: 'Mortgage Market', roles: ['agent'] },
+  { type: 'link', href: '/mortgage-calculator', label: 'Mortgage Calculator', roles: ['agent'] },
+  { type: 'divider' },
+  { type: 'link', href: '/profile', label: 'My Profile', roles: ['agent', 'mc'] },
+  { type: 'link', href: '/imports', label: 'Imports', roles: ['admin'] },
+  { type: 'link', href: '/settings', label: 'Settings', roles: ['admin'] },
 ];
 
 export function Sidebar({ session, className }: { session: Session; className?: string }) {
   const pathname = usePathname();
   const role = session.user.role;
+
+  const visibleNavItems = navItems.filter((item) => !item.roles || item.roles.includes(role));
+  const compactNavItems = visibleNavItems.reduce<NavItem[]>((acc, item) => {
+    if (item.type === 'divider') {
+      const last = acc[acc.length - 1];
+      if (!last || last.type === 'divider') {
+        return acc;
+      }
+    }
+    acc.push(item);
+    return acc;
+  }, []);
+  if (compactNavItems[compactNavItems.length - 1]?.type === 'divider') {
+    compactNavItems.pop();
+  }
 
   const handleSignOut = async () => {
     const result = await signOut({ callbackUrl: '/login', redirect: false });
@@ -43,27 +65,29 @@ export function Sidebar({ session, className }: { session: Session; className?: 
         </div>
       </div>
       <nav className="flex flex-col space-y-1 p-4">
-        {navItems
-          .filter((item) => !item.roles || item.roles.includes(role))
-          .map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            const isReferralsParent =
-              item.href === '/referrals' && pathname.startsWith('/referrals/follow-ups');
-            const active = isActive && !isReferralsParent;
+        {compactNavItems.map((item, index) => {
+          if (item.type === 'divider') {
+            return <div key={`divider-${index}`} className="my-1 border-t border-slate-200" />;
+          }
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={clsx(
-                  'rounded-md px-4 py-2 text-sm font-medium transition hover:bg-slate-100',
-                  active && 'bg-brand text-white hover:bg-brand'
-                )}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
+          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const isReferralsParent =
+            item.href === '/referrals' && pathname.startsWith('/referrals/follow-ups');
+          const active = isActive && !isReferralsParent;
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={clsx(
+                'rounded-md px-4 py-2 text-sm font-medium transition hover:bg-slate-100',
+                active && 'bg-brand text-white hover:bg-brand'
+              )}
+            >
+              {item.label}
+            </Link>
+          );
+        })}
       </nav>
       <div className="mt-auto p-4">
         <button

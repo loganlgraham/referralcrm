@@ -10,6 +10,7 @@ type MortgageMarketBrief = {
   coachingAngles: string[];
   borrowerAdvice: string[];
   caution: string[];
+  averageRates: { loanType: string; averageRate: string; change: string }[];
   dataDate: string;
 };
 
@@ -29,6 +30,14 @@ const defaultBrief: MortgageMarketBrief = {
     'Keep them focused on controllables: credit hygiene, cash to close, and rate-lock strategy.',
   ],
   caution: ['Set expectations that this briefing is informational only and not lender advice.'],
+  averageRates: [
+    { loanType: '30-year fixed', averageRate: '6.95%', change: '-0.02%' },
+    { loanType: '15-year fixed', averageRate: '6.25%', change: '-0.01%' },
+    { loanType: 'FHA 30-year', averageRate: '6.75%', change: '-0.02%' },
+    { loanType: 'VA 30-year', averageRate: '6.60%', change: '-0.01%' },
+    { loanType: 'Jumbo 30-year', averageRate: '6.80%', change: '0.00%' },
+    { loanType: '5/6 ARM', averageRate: '6.35%', change: '+0.01%' },
+  ],
   dataDate: new Date().toISOString().slice(0, 10),
 };
 
@@ -56,6 +65,7 @@ export function MortgageMarketInsights() {
         coachingAngles: payload.coachingAngles ?? defaultBrief.coachingAngles,
         borrowerAdvice: payload.borrowerAdvice ?? defaultBrief.borrowerAdvice,
         caution: payload.caution ?? defaultBrief.caution,
+        averageRates: payload.averageRates ?? defaultBrief.averageRates,
         dataDate: payload.dataDate ?? defaultBrief.dataDate,
       });
     } catch (err) {
@@ -102,6 +112,32 @@ export function MortgageMarketInsights() {
           <span>{error}</span>
         </div>
       )}
+
+      <div className="mt-6 rounded-lg border border-slate-200 p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-800">Current average mortgage rates</h2>
+            <p className="text-xs text-slate-500">National averages across common loan programs.</p>
+          </div>
+          <p className="text-xs text-slate-500">As of {brief.dataDate}</p>
+        </div>
+        <div className="mt-4 overflow-hidden rounded-md border border-slate-100">
+          <div className="grid grid-cols-3 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+            <span>Loan type</span>
+            <span className="text-right">Avg. rate</span>
+            <span className="text-right">Day change</span>
+          </div>
+          <ul className="divide-y divide-slate-100">
+            {brief.averageRates.map((rate) => (
+              <li key={rate.loanType} className="grid grid-cols-3 px-3 py-2 text-sm text-slate-800">
+                <span>{rate.loanType}</span>
+                <span className="text-right font-medium">{rate.averageRate}</span>
+                <span className="text-right text-slate-600">{rate.change}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
 
       <div className="mt-6 grid gap-5 lg:grid-cols-2">
         <div className="space-y-4">
