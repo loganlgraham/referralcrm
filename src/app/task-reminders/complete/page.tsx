@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 import {
@@ -10,7 +10,7 @@ import {
   parseFollowUpTaskState,
 } from '@/components/referrals/follow-up-task-provider';
 
-export default function CompleteFollowUpTasksPage() {
+function CompleteFollowUpTasksContent() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<'pending' | 'updated' | 'noop'>('pending');
 
@@ -87,5 +87,13 @@ export default function CompleteFollowUpTasksPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function CompleteFollowUpTasksPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-slate-700">Loading task completion…</div>}>
+      <CompleteFollowUpTasksContent />
+    </Suspense>
   );
 }
