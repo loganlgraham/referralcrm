@@ -26,6 +26,20 @@ export function MobileNav({ session }: MobileNavProps) {
   };
 
   const filteredNavItems = navItems.filter((item) => !item.roles || item.roles.includes(role));
+  const compactNavItems = filteredNavItems.reduce<typeof navItems>((acc, item) => {
+    if (item.type === 'divider') {
+      const last = acc[acc.length - 1];
+      if (!last || last.type === 'divider') {
+        return acc;
+      }
+    }
+    acc.push(item);
+    return acc;
+  }, []);
+
+  if (compactNavItems[compactNavItems.length - 1]?.type === 'divider') {
+    compactNavItems.pop();
+  }
 
   return (
     <header className="sticky top-0 z-30 bg-white shadow-sm md:hidden">
@@ -46,7 +60,11 @@ export function MobileNav({ session }: MobileNavProps) {
       {open && (
         <div className="border-t border-slate-200 bg-white">
           <nav className="flex flex-col">
-            {filteredNavItems.map((item) => {
+            {compactNavItems.map((item, index) => {
+              if (item.type === 'divider') {
+                return <div key={`mobile-divider-${index}`} className="my-1 border-t border-slate-200" />;
+              }
+
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
               const isReferralsParent = item.href === '/referrals' && pathname.startsWith('/referrals/follow-ups');
               const active = isActive && !isReferralsParent;
