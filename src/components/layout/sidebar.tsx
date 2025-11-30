@@ -15,6 +15,7 @@ export const navItems: Array<{ href: string; label: string; roles?: Role[] }> = 
   { href: '/referrals/follow-ups', label: 'Follow-up Tasks', roles: ['admin', 'mc', 'agent'] },
   { href: '/agents', label: 'Agents', roles: ['admin', 'mc'] },
   { href: '/find-agent', label: 'Find Agent', roles: ['agent'] },
+  { href: '/find-mc', label: 'Find Mortgage Consultant', roles: ['agent'] },
   { href: '/lenders', label: 'Mortgage Consultants', roles: ['admin', 'agent'] },
   { href: '/deals', label: 'Deals', roles: ['admin', 'agent'] },
   { href: '/imports', label: 'Imports', roles: ['admin'] },

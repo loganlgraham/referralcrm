@@ -14,6 +14,15 @@ interface LenderRow {
   phone: string;
   nmlsId: string;
   licensedStates?: string[];
+  metrics?: {
+    closingsLast12Months: number;
+    closingRate: number;
+    totalReferrals: number;
+    activePipeline: number;
+    dealsClosedAllTime: number;
+    revenueRealizedCents: number;
+    npsScore: number | null;
+  };
 }
 
 type SortKey = 'name' | 'email' | 'phone' | 'nmls' | 'states';
