@@ -290,7 +290,8 @@ export function ReferralHeader({
       : propertyAddress ?? referral.propertyAddress;
 
   const isAgentView = viewerRole === 'agent';
-  const canAssignAgent = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'mc';
+  const canAssignAgent =
+    viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'mc' || viewerRole === 'agent';
   const canAssignMc = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'agent';
   const fallbackAgentContact: Contact | null = referral.assignedAgent
     ? {
@@ -740,7 +741,7 @@ export function ReferralHeader({
           )}
         </div>
       </div>
-      <SLAWidget referral={{ ...referral, status, audit: auditEntries }} />
+      {referral.origin !== 'agent' && <SLAWidget referral={{ ...referral, status, audit: auditEntries }} />}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr),minmax(280px,1fr)]">
         <ReferralFollowUpCard referral={followUpReferral} />
