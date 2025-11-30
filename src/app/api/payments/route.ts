@@ -42,6 +42,8 @@ type PaymentWithReferral = {
   expectedAmountCents?: number | null;
   receivedAmountCents?: number | null;
   contractPriceCents?: number | null;
+  propertyCity?: string | null;
+  propertyState?: string | null;
   terminatedReason?: string | null;
   closingDate?: Date | null;
   agentAttribution?: string | null;
