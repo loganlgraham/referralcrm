@@ -59,35 +59,50 @@ const fallbackBrief = {
 
 export const dynamic = 'force-dynamic';
 
+const pmmsSources = [
+  { url: 'https://www.freddiemac.com/pmms/docs/pmms30_history.csv', loanType: '30-year fixed' },
+  { url: 'https://www.freddiemac.com/pmms/docs/pmms15_history.csv', loanType: '15-year fixed' },
+];
+
+function formatDataDate(date: string) {
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+async function fetchPmmsCsvRate(url: string) {
+  const response = await fetch(url, { next: { revalidate: 3600 } });
+  if (!response.ok) throw new Error('PMMS CSV unavailable');
+
+  const csv = await response.text();
+  const rows = csv
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const lastRow = rows[rows.length - 1];
+  const [date, averageRate] = lastRow.split(',').map((entry) => entry.trim());
+
+  if (!date || !averageRate) throw new Error('PMMS CSV missing fields');
+
+  const formattedRate = `${Number.parseFloat(averageRate).toFixed(2)}%`;
+  const dataDate = formatDataDate(date) ?? date;
+
+  return { rate: formattedRate, dataDate };
+}
+
 async function fetchFreddieMacRates(): Promise<RateSourceResult> {
-  const response = await fetch('https://www.freddiemac.com/pmms', {
-    next: { revalidate: 3600 },
-  });
-
-  if (!response.ok) {
-    throw new Error('Freddie Mac PMMS unavailable');
-  }
-
-  const html = await response.text();
-
-  const extractRate = (label: string) => {
-    const pattern = new RegExp(`${label}[^0-9]*([0-9]+\\.[0-9]+)%`, 'i');
-    const match = html.match(pattern);
-    return match?.[1] ? `${match[1]}%` : undefined;
-  };
-
-  const thirtyYear = extractRate('30-year Fixed Rate Mortgage');
-  const fifteenYear = extractRate('15-year Fixed Rate Mortgage');
-
-  const dataDateMatch = html.match(/Week of ([A-Za-z]+ \d{1,2}, \d{4})/i);
-  const dataDate = dataDateMatch?.[1];
-
   const rates: AverageRate[] = [];
-  if (thirtyYear) {
-    rates.push({ loanType: '30-year fixed', averageRate: thirtyYear, change: '—' });
-  }
-  if (fifteenYear) {
-    rates.push({ loanType: '15-year fixed', averageRate: fifteenYear, change: '—' });
+  let dataDate: string | undefined;
+
+  for (const source of pmmsSources) {
+    try {
+      const { rate, dataDate: date } = await fetchPmmsCsvRate(source.url);
+      rates.push({ loanType: source.loanType, averageRate: rate, change: '—' });
+      dataDate = dataDate ?? date;
+    } catch (error) {
+      console.error('PMMS source failed', source.url, error);
+    }
   }
 
   if (!rates.length) {
@@ -102,6 +117,7 @@ async function fetchBankrateRates(): Promise<RateSourceResult> {
     next: { revalidate: 3600 },
     headers: {
       'User-Agent': 'Mozilla/5.0 (compatible; ReferralCRM/1.0; +https://referralcrm.com)',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     },
   });
 
@@ -111,15 +127,65 @@ async function fetchBankrateRates(): Promise<RateSourceResult> {
 
   const html = await response.text();
 
+  const rates: AverageRate[] = [];
+
+  const captureFromJson = () => {
+    const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">(.+?)<\/script>/s);
+    if (!nextDataMatch?.[1]) return;
+    try {
+      const data = JSON.parse(nextDataMatch[1]);
+      const collected: AverageRate[] = [];
+
+      const visit = (value: unknown) => {
+        if (!value || typeof value !== 'object') return;
+        if (Array.isArray(value)) {
+          value.forEach(visit);
+          return;
+        }
+
+        const entry = value as Record<string, unknown>;
+        const label = (entry.productName || entry.loanType || entry.name) as string | undefined;
+        const rateValue = (entry.interestRate || entry.rate || entry.avgRate || entry.averageRate) as
+          | string
+          | number
+          | undefined;
+
+        const addEntry = (loanTypeLabel: string, rateCandidate: string | number | undefined) => {
+          if (!rateCandidate) return;
+          const numeric = Number.parseFloat(String(rateCandidate));
+          if (Number.isNaN(numeric)) return;
+          collected.push({ loanType: loanTypeLabel, averageRate: `${numeric.toFixed(2)}%`, change: '—' });
+        };
+
+        if (label && /FHA/i.test(label)) addEntry('FHA 30-year', rateValue);
+        if (label && /VA/i.test(label)) addEntry('VA 30-year', rateValue);
+        if (label && /Jumbo/i.test(label)) addEntry('Jumbo 30-year', rateValue);
+        if (label && /(ARM|Adjustable)/i.test(label)) addEntry('5/6 ARM', rateValue);
+
+        Object.values(entry).forEach(visit);
+      };
+
+      visit(data);
+      return collected;
+    } catch (error) {
+      console.error('Bankrate NEXT_DATA parse failed', error);
+      return undefined;
+    }
+  };
+
+  const jsonRates = captureFromJson();
+  if (jsonRates?.length) {
+    rates.push(...jsonRates);
+  }
+
   const extractRate = (label: string) => {
     const pattern = new RegExp(`${label}[^0-9]*([0-9]+\\.[0-9]+)%`, 'i');
     const match = html.match(pattern);
     return match?.[1] ? `${match[1]}%` : undefined;
   };
 
-  const rates: AverageRate[] = [];
-
   const addRate = (loanType: string, label: string) => {
+    if (rates.find((rate) => rate.loanType === loanType)) return;
     const rate = extractRate(label);
     if (rate) {
       rates.push({ loanType, averageRate: rate, change: '—' });
