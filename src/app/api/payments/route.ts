@@ -120,11 +120,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .select('_id')
       .lean<{ _id: Types.ObjectId }[]>();
 
-    if (!referralDocs.length) {
+    const referralFilter = referralDocs.length
+      ? { $in: referralDocs.map((doc) => doc._id) }
+      : undefined;
+
+    const agentFilter = candidateIds.length ? { $in: candidateIds } : undefined;
+
+    if (referralFilter || agentFilter) {
+      filter.$or = [
+        ...(referralFilter ? [{ referralId: referralFilter }] : []),
+        ...(agentFilter ? [{ agentId: agentFilter }] : []),
+      ];
+    } else {
       return NextResponse.json([]);
     }
-
-    filter.referralId = { $in: referralDocs.map((doc) => doc._id) };
   }
 
   const payments = await Payment.find(filter)
@@ -231,6 +240,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       expectedAmountCents: payment.expectedAmountCents ?? 0,
       receivedAmountCents: payment.receivedAmountCents ?? 0,
       contractPriceCents: payment.contractPriceCents ?? null,
+      propertyCity: payment.propertyCity ?? null,
+      propertyState: payment.propertyState ?? null,
       netReferralFeePaidCents: payment.netReferralFeePaidCents ?? null,
       propertyAddress: payment.propertyAddress ?? null,
       terminatedReason: payment.terminatedReason ?? null,
