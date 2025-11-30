@@ -6,6 +6,16 @@
   --font-sans: 'Inter', sans-serif;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 body {
   @apply bg-slate-50 text-slate-900;
+  min-height: 100%;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }
