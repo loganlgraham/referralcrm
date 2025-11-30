@@ -117,7 +117,7 @@ type LenderLean = {
 
 export async function getAgentProfile(id: string): Promise<AgentProfile | null> {
   const session = await getCurrentSession();
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'mc')) {
+  if (!session || (session.user.role !== 'admin' && session.user.role !== 'mc' && session.user.role !== 'agent')) {
     return null;
   }
 

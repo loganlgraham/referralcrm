@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 
 export default async function AgentDetailPage({ params }: AgentDetailPageProps) {
   const session = await getCurrentSession();
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'mc')) {
+  if (!session || (session.user.role !== 'admin' && session.user.role !== 'mc' && session.user.role !== 'agent')) {
     notFound();
   }
 

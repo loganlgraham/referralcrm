@@ -19,7 +19,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   }
 
   return (
-    <div className="min-h-screen w-full bg-slate-100">
+    <div className="min-h-[100dvh] w-full bg-slate-100 overflow-x-hidden">
       <Sidebar session={session} className="hidden md:block" />
       <MobileNav session={session} />
       <main className="px-4 py-6 md:ml-64 md:px-8 md:py-8">

@@ -4,6 +4,10 @@ import { LenderMC } from '@/models/lender';
 import { getCurrentSession } from '@/lib/auth';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { z } from 'zod';
+import { Payment } from '@/models/payment';
+import { Referral } from '@/models/referral';
+import { Types } from 'mongoose';
+import { subYears } from 'date-fns';
 
 const createLenderSchema = z.object({
   name: z.string().trim().min(1),
@@ -13,6 +17,123 @@ const createLenderSchema = z.object({
   licensedStates: z.array(z.string().trim().min(2)).optional().default([]),
 });
 
+const CLOSED_PAYMENT_STATUSES = new Set(['closed', 'payment_sent', 'paid']);
+
+const EMPTY_LENDER_METRICS = {
+  closingsLast12Months: 0,
+  closingRate: 0,
+  totalReferrals: 0,
+  activePipeline: 0,
+  dealsClosedAllTime: 0,
+  revenueRealizedCents: 0,
+  npsScore: null as number | null,
+};
+
+async function computeLenderMetrics(lenderIds: Types.ObjectId[]) {
+  if (lenderIds.length === 0) {
+    return new Map<string, typeof EMPTY_LENDER_METRICS>();
+  }
+
+  const referrals = await Referral.find({ lender: { $in: lenderIds }, deletedAt: null })
+    .select('_id lender status createdAt')
+    .lean<{ _id: Types.ObjectId; lender?: Types.ObjectId; status?: string | null; createdAt?: Date | null }[]>();
+
+  const referralIds = referrals.map((referral) => referral._id).filter((value): value is Types.ObjectId => Types.ObjectId.isValid(value));
+
+  const payments = referralIds.length
+    ? await Payment.find({ referralId: { $in: referralIds } })
+        .populate('referralId', 'lender status')
+        .lean<
+          Array<
+            {
+              status?: string | null;
+              receivedAmountCents?: number | null;
+              paidDate?: Date | null;
+              invoiceDate?: Date | null;
+              updatedAt?: Date | null;
+              createdAt?: Date | null;
+              referralId?: { lender?: Types.ObjectId; status?: string | null } | Types.ObjectId | null;
+            }
+          >
+        >()
+    : [];
+
+  const referralMap = new Map<string, { status?: string | null; createdAt?: Date | null }[]>();
+  referrals.forEach((referral) => {
+    const lenderId = referral.lender?.toString();
+    if (!lenderId) return;
+    const bucket = referralMap.get(lenderId) ?? [];
+    bucket.push({ status: referral.status, createdAt: referral.createdAt ?? null });
+    referralMap.set(lenderId, bucket);
+  });
+
+  const paymentMap = new Map<string, typeof payments>();
+  payments.forEach((payment) => {
+    const lenderId = (() => {
+      const referralField = payment.referralId;
+      if (referralField && typeof referralField === 'object' && 'lender' in referralField) {
+        const nested = referralField.lender;
+        return nested instanceof Types.ObjectId ? nested.toString() : typeof nested === 'string' ? nested : null;
+      }
+      return null;
+    })();
+
+    if (!lenderId) return;
+    const bucket = paymentMap.get(lenderId) ?? [];
+    bucket.push(payment);
+    paymentMap.set(lenderId, bucket);
+  });
+
+  const lastYear = subYears(new Date(), 1);
+  const metricsByLender = new Map<string, typeof EMPTY_LENDER_METRICS>();
+
+  lenderIds.forEach((idValue) => {
+    const id = idValue.toString();
+    const lenderReferrals = referralMap.get(id) ?? [];
+    const lenderPayments = paymentMap.get(id) ?? [];
+
+    if (!lenderReferrals.length && !lenderPayments.length) {
+      metricsByLender.set(id, { ...EMPTY_LENDER_METRICS });
+      return;
+    }
+
+    const totalReferrals = lenderReferrals.length;
+    const activePipeline = lenderReferrals.filter((referral) => {
+      const status = (referral.status ?? '').trim();
+      return !['Closed', 'Lost', 'Terminated'].includes(status);
+    }).length;
+
+    const closedPayments = lenderPayments.filter((payment) => CLOSED_PAYMENT_STATUSES.has((payment.status ?? '').trim()));
+    const dealsClosedAllTime = closedPayments.length;
+    const closingRate = totalReferrals === 0 ? 0 : (dealsClosedAllTime / totalReferrals) * 100;
+
+    let closingsLast12Months = 0;
+    let revenueRealizedCents = 0;
+
+    closedPayments.forEach((payment) => {
+      const paidDate = payment.paidDate || payment.invoiceDate || payment.updatedAt || payment.createdAt || new Date();
+      if (paidDate >= lastYear) {
+        closingsLast12Months += 1;
+      }
+      if (payment.status === 'paid') {
+        revenueRealizedCents += payment.receivedAmountCents ?? 0;
+      }
+    });
+
+    metricsByLender.set(id, {
+      closingsLast12Months,
+      closingRate,
+      totalReferrals,
+      activePipeline,
+      dealsClosedAllTime,
+      revenueRealizedCents,
+      npsScore: null,
+    });
+  });
+
+  return metricsByLender;
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session) {
@@ -20,8 +141,40 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   const filter: Record<string, unknown> = {};
   await connectMongo();
-  const lenders = await LenderMC.find(filter).lean();
-  return NextResponse.json(lenders);
+  const lenders = await LenderMC.find(filter).lean<{
+    _id: Types.ObjectId | string;
+    name?: string;
+    email?: string;
+    phone?: string;
+    nmlsId?: string;
+    licensedStates?: string[];
+    team?: string;
+    region?: string;
+    notes?: unknown[];
+    userId?: Types.ObjectId | string | null;
+    createdAt?: Date;
+    updatedAt?: Date;
+  }[]>();
+
+  const lenderIds = lenders
+    .map((lender) => {
+      const value = lender._id;
+      if (!Types.ObjectId.isValid(value)) return null;
+      return typeof value === 'string' ? new Types.ObjectId(value) : value;
+    })
+    .filter((value): value is Types.ObjectId => value !== null);
+  const metrics = await computeLenderMetrics(lenderIds);
+
+  const response = lenders.map((lender) => {
+    const id = lender._id?.toString?.() ?? '';
+    return {
+      ...lender,
+      _id: id,
+      metrics: metrics.get(id) ?? EMPTY_LENDER_METRICS,
+    };
+  });
+
+  return NextResponse.json(response);
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
