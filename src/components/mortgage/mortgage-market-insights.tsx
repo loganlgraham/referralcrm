@@ -58,18 +58,27 @@ export function MortgageMarketInsights() {
       }
 
       const payload = (await response.json()) as Partial<MortgageMarketBrief>;
+
+      const fallbackString = (value: string | undefined, defaultValue: string) =>
+        value && value.trim().length > 0 ? value : defaultValue;
+
+      const fallbackList = (value: string[] | undefined, defaultValue: string[]) =>
+        value && value.length > 0 ? value : defaultValue;
+
       setBrief({
         ...defaultBrief,
         ...payload,
-        rateSignals: payload.rateSignals ?? defaultBrief.rateSignals,
-        coachingAngles: payload.coachingAngles ?? defaultBrief.coachingAngles,
-        borrowerAdvice: payload.borrowerAdvice ?? defaultBrief.borrowerAdvice,
-        caution: payload.caution ?? defaultBrief.caution,
+        headline: fallbackString(payload.headline, defaultBrief.headline),
+        summary: fallbackString(payload.summary, defaultBrief.summary),
+        rateSignals: fallbackList(payload.rateSignals, defaultBrief.rateSignals),
+        coachingAngles: fallbackList(payload.coachingAngles, defaultBrief.coachingAngles),
+        borrowerAdvice: fallbackList(payload.borrowerAdvice, defaultBrief.borrowerAdvice),
+        caution: fallbackList(payload.caution, defaultBrief.caution),
         averageRates:
           payload.averageRates && payload.averageRates.length > 0
             ? payload.averageRates
             : defaultBrief.averageRates,
-        dataDate: payload.dataDate && payload.dataDate.trim().length > 0 ? payload.dataDate : defaultBrief.dataDate,
+        dataDate: fallbackString(payload.dataDate, defaultBrief.dataDate),
       });
     } catch (err) {
       setError('Unable to load mortgage market insights.');
