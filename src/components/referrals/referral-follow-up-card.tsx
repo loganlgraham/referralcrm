@@ -1,11 +1,10 @@
 'use client';
 
 import { FormEvent, useMemo, useState } from 'react';
-import { CheckCircle2, Circle, Loader2, MailCheck } from 'lucide-react';
+import { CheckCircle2, Circle } from 'lucide-react';
 import { formatInTimeZone } from 'date-fns-tz';
 
 import { useFollowUpTasks } from '@/components/referrals/use-follow-up-tasks';
-import { useTaskReminderEmails } from '@/components/referrals/use-task-reminder-emails';
 import { ReminderSettingsToggle } from '@/components/referrals/reminder-settings-toggle';
 import { useFollowUpTaskContext, type ManualTaskCategory } from '@/components/referrals/follow-up-task-provider';
 import { SLA_TIME_ZONE, type RecommendationPriority, type ReferralLike } from '@/utils/sla-insights';
@@ -24,7 +23,6 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
   const tasks = useFollowUpTasks(referral);
   const hasTasks = tasks.length > 0;
   const incompleteTasks = useMemo(() => tasks.filter((task) => !task.completed), [tasks]);
-  const { sendReminders, sendingTaskId, bulkSending, reminderFrequency } = useTaskReminderEmails(referral._id);
   const { addManualTask } = useFollowUpTaskContext();
 
   const [showManualForm, setShowManualForm] = useState(false);
@@ -174,25 +172,6 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
       )}
       {hasTasks ? (
         <>
-          {incompleteTasks.length > 0 ? (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => sendReminders(incompleteTasks, 'bulk')}
-                disabled={bulkSending || sendingTaskId !== null}
-                className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {bulkSending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <MailCheck className="h-4 w-4" />
-                )}
-                {incompleteTasks.length > 1
-                  ? `Email ${reminderFrequency} reminder for outstanding tasks`
-                  : `Email ${reminderFrequency} reminder`}
-              </button>
-            </div>
-          ) : null}
           <ul className="space-y-3">
             {tasks.map((task) => (
               <li key={task.taskId} className="flex items-start gap-3 rounded-lg border border-slate-200 p-3">
@@ -221,32 +200,19 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
                   <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                     <span className="font-medium uppercase text-slate-400">{task.priority}</span>
                     {task.supportingMetric && <span>{task.supportingMetric}</span>}
-                  {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
+                    {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
                   </div>
-                  <div className="mt-3">
-                    <button
-                      type="button"
-                      onClick={() => sendReminders([task], 'single')}
-                      disabled={bulkSending || (sendingTaskId !== null && sendingTaskId !== task.taskId)}
-                      className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {sendingTaskId === task.taskId ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <MailCheck className="h-4 w-4" />
-                      )}
-                      {sendingTaskId === task.taskId ? 'Sending…' : `Email ${reminderFrequency} reminder`}
-                    </button>
-                    {task.isManual && task.remove && (
+                  {task.isManual && task.remove && (
+                    <div className="mt-3">
                       <button
                         type="button"
                         onClick={task.remove}
-                        className="ml-2 inline-flex items-center rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+                        className="inline-flex items-center rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
                       >
                         Remove task
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </li>
             ))}

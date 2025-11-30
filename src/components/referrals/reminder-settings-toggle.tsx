@@ -24,12 +24,15 @@ export function ReminderSettingsToggle({ referralId, title, helperText }: Remind
   const isOverride = referralId ? hasReminderOverride(referralId) : false;
 
   const description = useMemo(() => {
+    const cadenceText =
+      reminderSettings.frequency === 'weekly' ? 'Mondays at 8:00 AM MT' : 'daily at 8:00 AM MT';
+
     if (!reminderSettings.enabled) {
       return referralId
         ? 'Uses the global reminder preference unless you override it here.'
-        : 'Enable reminder emails to receive summaries of outstanding tasks.';
+        : 'Enable reminder emails to schedule 8:00 AM summaries of outstanding tasks.';
     }
-    return `Reminder emails will be delivered on a ${reminderSettings.frequency} cadence via Resend.`;
+    return `Reminder emails are scheduled for ${cadenceText} via Resend.`;
   }, [referralId, reminderSettings]);
 
   const handleFrequencyChange = (value: ReminderFrequency) => {

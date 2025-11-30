@@ -33,7 +33,7 @@ interface ReminderState {
   overrides: Record<string, ReminderSettings>;
 }
 
-interface ManualTask {
+export interface ManualTask {
   id: string;
   title: string;
   message: string;
@@ -43,7 +43,7 @@ interface ManualTask {
   createdAt: string;
 }
 
-interface ManualTaskInput {
+export interface ManualTaskInput {
   title: string;
   message: string;
   dueAt?: string | null;
@@ -51,7 +51,7 @@ interface ManualTaskInput {
   category: ManualTaskCategory;
 }
 
-interface StoredTaskState {
+export interface StoredTaskState {
   completions: CompletionMap;
   manualTasks: Record<string, ManualTask[]>;
   reminders: ReminderState;
@@ -80,23 +80,27 @@ interface FollowUpTaskContextValue {
   hasReminderOverride: (referralId: string) => boolean;
 }
 
-const STORAGE_KEY = 'referralcrm.followUpTasks';
+export const FOLLOW_UP_TASK_STORAGE_KEY = 'referralcrm.followUpTasks';
 
 const FollowUpTaskContext = createContext<FollowUpTaskContextValue | null>(null);
 
-const defaultReminderSettings: ReminderSettings = { enabled: false, frequency: 'daily' };
+export const defaultReminderSettings: ReminderSettings = { enabled: false, frequency: 'daily' };
 
-const defaultReminderState: ReminderState = {
+export const defaultReminderState: ReminderState = {
   global: defaultReminderSettings,
   overrides: {},
 };
 
-const defaultState: StoredTaskState = { completions: {}, manualTasks: {}, reminders: defaultReminderState };
+export const createDefaultTaskState = (): StoredTaskState => ({
+  completions: {},
+  manualTasks: {},
+  reminders: { global: { ...defaultReminderSettings }, overrides: {} },
+});
 
 const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
   switch (action.type) {
     case 'hydrate':
-      return { ...defaultState, ...action.payload };
+      return { ...createDefaultTaskState(), ...action.payload };
     case 'toggle': {
       const nextCompletions: CompletionMap = { ...state.completions };
       nextCompletions[action.taskId] = {
@@ -146,8 +150,8 @@ const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
   }
 };
 
-const safeParse = (value: string | null): StoredTaskState => {
-  if (!value) return defaultState;
+export const parseFollowUpTaskState = (value: string | null): StoredTaskState => {
+  if (!value) return createDefaultTaskState();
   try {
     const parsed = JSON.parse(value) as unknown;
     if (parsed && typeof parsed === 'object') {
@@ -229,8 +233,8 @@ const safeParse = (value: string | null): StoredTaskState => {
             }
 
             return {
-              global: globalSettings ?? defaultReminderSettings,
-              overrides,
+              global: globalSettings ?? { ...defaultReminderSettings },
+              overrides: { ...overrides },
             } satisfies ReminderState;
           }
 
@@ -239,9 +243,9 @@ const safeParse = (value: string | null): StoredTaskState => {
             return { global: legacySettings, overrides: {} } satisfies ReminderState;
           }
 
-          return defaultReminderState;
+          return { ...defaultReminderState, overrides: {} } satisfies ReminderState;
         })();
-        return { completions, manualTasks, reminders };
+        return { completions: { ...completions }, manualTasks: { ...manualTasks }, reminders };
       }
       const entries = Object.values(record);
       const resemblesCompletionMap = entries.every((value) => {
@@ -254,15 +258,15 @@ const safeParse = (value: string | null): StoredTaskState => {
   } catch (error) {
     console.warn('Unable to parse follow-up task storage payload', error);
   }
-  return defaultState;
+  return createDefaultTaskState();
 };
 
 export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, defaultState, () => {
+  const [state, dispatch] = useReducer(reducer, createDefaultTaskState(), () => {
     if (typeof window === 'undefined') {
-      return defaultState;
+      return createDefaultTaskState();
     }
-    return safeParse(window.localStorage.getItem(STORAGE_KEY));
+    return parseFollowUpTaskState(window.localStorage.getItem(FOLLOW_UP_TASK_STORAGE_KEY));
   });
 
   useEffect(() => {
@@ -270,8 +274,8 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       return;
     }
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === STORAGE_KEY) {
-        dispatch({ type: 'hydrate', payload: safeParse(event.newValue) });
+      if (event.key === FOLLOW_UP_TASK_STORAGE_KEY) {
+        dispatch({ type: 'hydrate', payload: parseFollowUpTaskState(event.newValue) });
       }
     };
     window.addEventListener('storage', handleStorage);
@@ -282,7 +286,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     if (typeof window === 'undefined') {
       return;
     }
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    window.localStorage.setItem(FOLLOW_UP_TASK_STORAGE_KEY, JSON.stringify(state));
   }, [state]);
 
   const toggleTask = useCallback((taskId: string, completed: boolean) => {
