@@ -92,11 +92,6 @@ const fallbackBrief = {
 
 export const dynamic = 'force-dynamic';
 
-const pmmsSources = [
-  { url: 'https://www.freddiemac.com/pmms/docs/pmms30_history.csv', loanType: '30-year fixed' },
-  { url: 'https://www.freddiemac.com/pmms/docs/pmms15_history.csv', loanType: '15-year fixed' },
-];
-
 async function readApiNinjasCache(allowStale = false) {
   try {
     const raw = await fs.readFile(apiNinjasCachePath, 'utf8');
@@ -189,48 +184,6 @@ function formatDataDate(date: string) {
   const parsed = new Date(date);
   if (Number.isNaN(parsed.getTime())) return undefined;
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-async function fetchPmmsCsvRate(url: string) {
-  const response = await fetch(url, { next: { revalidate: 3600 } });
-  if (!response.ok) throw new Error('PMMS CSV unavailable');
-
-  const csv = await response.text();
-  const rows = csv
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const lastRow = rows[rows.length - 1];
-  const [date, averageRate] = lastRow.split(',').map((entry) => entry.trim());
-
-  if (!date || !averageRate) throw new Error('PMMS CSV missing fields');
-
-  const formattedRate = `${Number.parseFloat(averageRate).toFixed(2)}%`;
-  const dataDate = formatDataDate(date) ?? date;
-
-  return { rate: formattedRate, dataDate };
-}
-
-async function fetchFreddieMacRates(): Promise<RateSourceResult> {
-  const rates: AverageRate[] = [];
-  let dataDate: string | undefined;
-
-  for (const source of pmmsSources) {
-    try {
-      const { rate, dataDate: date } = await fetchPmmsCsvRate(source.url);
-      rates.push({ loanType: source.loanType, averageRate: rate, change: '—' });
-      dataDate = dataDate ?? date;
-    } catch (error) {
-      console.error('PMMS source failed', source.url, error);
-    }
-  }
-
-  if (!rates.length) {
-    throw new Error('Unable to parse PMMS rates');
-  }
-
-  return { rates, dataDate };
 }
 
 async function fetchBankrateRates(): Promise<RateSourceResult> {
@@ -331,12 +284,8 @@ async function fetchBankrateRates(): Promise<RateSourceResult> {
 export async function GET() {
   try {
     const apiNinjasRates = await fetchApiNinjasRates();
-    const [pmmsResult, bankrateResult] = await Promise.allSettled([
-      fetchFreddieMacRates(),
-      fetchBankrateRates(),
-    ]);
-    const pmmsRates = pmmsResult.status === 'fulfilled' ? pmmsResult.value : null;
-    const bankrateRates = bankrateResult.status === 'fulfilled' ? bankrateResult.value : null;
+    const bankrateResult = await Promise.allSettled([fetchBankrateRates()]);
+    const bankrateRates = bankrateResult[0].status === 'fulfilled' ? bankrateResult[0].value : null;
 
     const combinedRates: AverageRate[] = [];
     const appendRates = (rates?: AverageRate[]) => {
@@ -347,13 +296,11 @@ export async function GET() {
     };
 
     appendRates(apiNinjasRates?.rates);
-    appendRates(pmmsRates?.rates);
     appendRates(bankrateRates?.rates);
 
     const rateDataDate =
       apiNinjasRates?.dataDate ||
       bankrateRates?.dataDate ||
-      pmmsRates?.dataDate ||
       new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
     if (!process.env.OPENAI_API_KEY) {
@@ -366,7 +313,7 @@ export async function GET() {
       return NextResponse.json(mergedFallback, {
         status: 200,
         headers: {
-          'Cache-Control': 'public, s-maxage=43200, stale-while-revalidate=3600',
+          'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=3600',
         },
       });
     }
@@ -463,7 +410,7 @@ export async function GET() {
       return NextResponse.json(mergedFallback, {
         status: 200,
         headers: {
-          'Cache-Control': 'public, s-maxage=43200, stale-while-revalidate=3600',
+          'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=3600',
         },
       });
     }
@@ -480,7 +427,7 @@ export async function GET() {
       return NextResponse.json(mergedFallback, {
         status: 200,
         headers: {
-          'Cache-Control': 'public, s-maxage=43200, stale-while-revalidate=3600',
+          'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=3600',
         },
       });
     }
@@ -499,7 +446,7 @@ export async function GET() {
       return NextResponse.json(mergedFallback, {
         status: 200,
         headers: {
-          'Cache-Control': 'public, s-maxage=43200, stale-while-revalidate=3600',
+          'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=3600',
         },
       });
     }
@@ -516,7 +463,7 @@ export async function GET() {
     return NextResponse.json(mergedBrief, {
       status: 200,
       headers: {
-        'Cache-Control': 'public, s-maxage=43200, stale-while-revalidate=3600',
+        'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=3600',
       },
     });
   } catch (error) {
@@ -524,7 +471,7 @@ export async function GET() {
     return NextResponse.json(fallbackBrief, {
       status: 200,
       headers: {
-        'Cache-Control': 'public, s-maxage=43200, stale-while-revalidate=3600',
+        'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=3600',
       },
     });
   }
