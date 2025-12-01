@@ -5,14 +5,8 @@ import { CheckCircle2, Circle, Loader2, MailCheck } from 'lucide-react';
 import { formatInTimeZone } from 'date-fns-tz';
 
 import { useFollowUpTaskContext } from '@/components/referrals/follow-up-task-provider';
-import { useFollowUpTasks, getLatestCompletionForReferral } from '@/components/referrals/use-follow-up-tasks';
-import {
-  computeSlaInsights,
-  sortRecommendations,
-  type ReferralLike,
-  resolvePrimaryAgentName,
-  SLA_TIME_ZONE,
-} from '@/utils/sla-insights';
+import { buildFollowUpTasksForReferral, type FollowUpTask } from '@/components/referrals/use-follow-up-tasks';
+import { type ReferralLike, resolvePrimaryAgentName, SLA_TIME_ZONE } from '@/utils/sla-insights';
 import { useTaskReminderEmails } from '@/components/referrals/use-task-reminder-emails';
 import { ReminderSettingsToggle } from './reminder-settings-toggle';
 
@@ -65,27 +59,42 @@ const formatDueDate = (value: string): string => {
 };
 
 export function FollowUpTasksBoard({ referrals }: FollowUpTasksBoardProps) {
-  const { completions } = useFollowUpTaskContext();
+  const { completions, manualTasks, toggleTask, removeManualTask } = useFollowUpTaskContext();
+  const { sendReminders, bulkSending, sendingTaskId, reminderFrequency, reminderEnabled } = useTaskReminderEmails();
+
+  const tasksByReferral = useMemo(() => {
+    return referrals.reduce<Record<string, FollowUpTask[]>>((acc, referral) => {
+      const referralLike = toReferralLike(referral);
+      const tasks = buildFollowUpTasksForReferral(referralLike, {
+        completions,
+        manualTasks,
+        toggleTask,
+        removeManualTask,
+      });
+      acc[referral._id] = tasks;
+      return acc;
+    }, {});
+  }, [completions, manualTasks, referrals, removeManualTask, toggleTask]);
+
+  const outstandingTasks = useMemo(
+    () => Object.values(tasksByReferral).flat().filter((task) => !task.completed),
+    [tasksByReferral]
+  );
 
   const summary = useMemo(() => {
-    return referrals.reduce(
-      (acc, referral) => {
-        const referralLike = toReferralLike(referral);
-        const lastCompletedAt = getLatestCompletionForReferral(referral._id, completions);
-        const insights = computeSlaInsights(referralLike, { lastCompletedAt });
-        const ordered = sortRecommendations(insights.recommendations);
-        const outstanding = ordered.filter((item) => {
-          const taskId = `${referral._id}::${item.id}`;
-          return !(completions[taskId]?.completed ?? false);
-        });
+    return Object.values(tasksByReferral).reduce(
+      (acc, tasks) => {
+        const outstanding = tasks.filter((task) => !task.completed).length;
         return {
-          total: acc.total + ordered.length,
-          outstanding: acc.outstanding + outstanding.length,
+          total: acc.total + tasks.length,
+          outstanding: acc.outstanding + outstanding,
         };
       },
       { total: 0, outstanding: 0 }
     );
-  }, [completions, referrals]);
+  }, [tasksByReferral]);
+
+  const hasOutstandingTasks = outstandingTasks.length > 0;
 
   return (
     <div className="space-y-6">
@@ -104,19 +113,40 @@ export function FollowUpTasksBoard({ referrals }: FollowUpTasksBoardProps) {
         </div>
       </header>
       <ReminderSettingsToggle />
+      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1 text-sm text-slate-700">
+          <p className="font-semibold text-slate-900">Send an on-demand reminder</p>
+          <p className="text-xs text-slate-500">
+            Email every open task right now. Scheduled reminder summaries go out at 8:00 AM {reminderFrequency === 'weekly'
+              ? 'each Monday'
+              : 'daily'} when emails are enabled.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => sendReminders(outstandingTasks, 'bulk')}
+          disabled={!hasOutstandingTasks || bulkSending || sendingTaskId !== null || !reminderEnabled}
+          className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {bulkSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailCheck className="h-4 w-4" />}
+          {reminderEnabled
+            ? hasOutstandingTasks
+              ? 'Email all outstanding tasks now'
+              : 'No tasks to email'
+            : 'Enable emails to send reminders'}
+        </button>
+      </div>
       <div className="space-y-5">
         {referrals.map((referral) => (
-          <FollowUpTaskGroup key={referral._id} referral={referral} />
+          <FollowUpTaskGroup key={referral._id} referral={referral} tasks={tasksByReferral[referral._id] ?? []} />
         ))}
       </div>
     </div>
   );
 }
 
-function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
+function FollowUpTaskGroup({ referral, tasks }: { referral: BoardReferral; tasks: FollowUpTask[] }) {
   const referralLike = toReferralLike(referral);
-  const tasks = useFollowUpTasks(referralLike);
-  const { sendReminders, sendingTaskId, bulkSending, reminderFrequency } = useTaskReminderEmails(referral._id);
   const incompleteTasks = useMemo(() => tasks.filter((task) => !task.completed), [tasks]);
   const outstanding = incompleteTasks.length;
   const assignmentName = resolvePrimaryAgentName(referralLike);
@@ -135,19 +165,6 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
           <div className="rounded-full bg-slate-900/5 px-3 py-1 text-xs font-semibold text-slate-600">
             {outstanding} open task{outstanding === 1 ? '' : 's'}
           </div>
-          {outstanding > 0 ? (
-            <button
-              type="button"
-              onClick={() => sendReminders(incompleteTasks, 'bulk')}
-              disabled={bulkSending || sendingTaskId !== null}
-              className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {bulkSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MailCheck className="h-4 w-4" />}
-              {outstanding > 1
-                ? `Email ${reminderFrequency} reminder for outstanding tasks`
-                : `Email ${reminderFrequency} reminder`}
-            </button>
-          ) : null}
         </div>
       </div>
       <ReminderSettingsToggle
@@ -192,30 +209,17 @@ function FollowUpTaskGroup({ referral }: { referral: BoardReferral }) {
                   {task.supportingMetric && <span>{task.supportingMetric}</span>}
                   {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
                 </div>
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => sendReminders([task], 'single')}
-                    disabled={bulkSending || (sendingTaskId !== null && sendingTaskId !== task.taskId)}
-                    className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {sendingTaskId === task.taskId ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <MailCheck className="h-4 w-4" />
-                    )}
-                    {sendingTaskId === task.taskId ? 'Sending…' : `Email ${reminderFrequency} reminder`}
-                  </button>
-                  {task.isManual && task.remove && (
+                {task.isManual && task.remove && (
+                  <div className="pt-2">
                     <button
                       type="button"
                       onClick={task.remove}
-                      className="ml-2 inline-flex items-center rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+                      className="inline-flex items-center rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
                     >
                       Remove task
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </li>
           ))}

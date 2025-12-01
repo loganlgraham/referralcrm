@@ -75,7 +75,9 @@ export function useTaskReminderEmails(referralId?: string): ReminderSubmissionRe
 
         const payload = (await response.json().catch(() => null)) as { error?: string } | null;
         if (response.ok) {
-          toast.success(`Reminder email queued for ${reminderSettings.frequency === 'daily' ? 'daily' : 'weekly'} delivery.`);
+          toast.success(
+            `Reminder email queued with your ${reminderSettings.frequency === 'daily' ? 'daily' : 'weekly'} cadence settings.`
+          );
           return;
         }
 

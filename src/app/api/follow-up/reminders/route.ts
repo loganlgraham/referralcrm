@@ -60,6 +60,16 @@ export async function POST(request: NextRequest) {
 
   const { frequency, tasks } = parsed.data;
   const cadenceLabel = frequency === 'daily' ? 'Daily' : 'Weekly';
+  const scheduleText = frequency === 'weekly' ? 'Mondays at 8:00 AM MT' : '8:00 AM MT each day';
+  const origin = new URL(request.url).origin;
+  const returnToPath = '/referrals/follow-ups';
+
+  const buildCompletionUrl = (taskIds: string[]) => {
+    const url = new URL('/task-reminders/complete', origin);
+    taskIds.forEach((taskId) => url.searchParams.append('taskId', taskId));
+    url.searchParams.set('returnTo', returnToPath);
+    return url.toString();
+  };
 
   await connectMongo();
 
@@ -88,7 +98,7 @@ export async function POST(request: NextRequest) {
     return acc;
   }, {});
 
-  const allowedGroups = Object.entries(groupedTasks).reduce<ReminderTask[]>((acc, [referralId, referralTasks]) => {
+  const allowedTasks = Object.entries(groupedTasks).reduce<ReminderTask[]>((acc, [referralId, referralTasks]) => {
     const referral = referralMap.get(referralId);
     if (!referral) {
       return acc;
@@ -119,16 +129,18 @@ export async function POST(request: NextRequest) {
     return acc;
   }, []);
 
-  if (allowedGroups.length === 0) {
+  if (allowedTasks.length === 0) {
     return NextResponse.json({ error: 'No eligible tasks to send for your assignment.' }, { status: 403 });
   }
 
-  const sections = allowedGroups.reduce<Record<string, ReminderTask[]>>((acc, task) => {
+  const sections = allowedTasks.reduce<Record<string, ReminderTask[]>>((acc, task) => {
     const list = acc[task.referralId] ?? [];
     list.push(task);
     acc[task.referralId] = list;
     return acc;
   }, {});
+
+  const completeAllUrl = buildCompletionUrl(allowedTasks.map((task) => task.taskId));
 
   const taskListHtml = Object.values(sections)
     .map((section) => {
@@ -141,11 +153,14 @@ export async function POST(request: NextRequest) {
             ? `<div style="font-weight:600;text-transform:uppercase;font-size:12px;color:#0f172a;">${task.priority}</div>`
             : '';
           const message = task.message ? `<div style="color:#334155;font-size:14px;margin-top:4px;">${task.message}</div>` : '';
+          const completeHref = buildCompletionUrl([task.taskId]);
+          const completionLink = `<a href="${completeHref}" style="display:inline-flex;align-items:center;margin-top:10px;font-weight:600;color:#0f172a;text-decoration:underline;">Mark complete from email</a>`;
           return `<li style="margin-bottom:12px;padding:10px;border:1px solid #e2e8f0;border-radius:12px;">` +
             `<div style="font-weight:700;color:#0f172a;font-size:15px;">${task.title}</div>` +
             `${message}` +
             `${priority}` +
             `${dueHtml}` +
+            `${completionLink}` +
             `</li>`;
         })
         .join('');
@@ -165,7 +180,8 @@ export async function POST(request: NextRequest) {
           const details = [task.priority ? `Urgency: ${task.priority}` : null, due ? `Due: ${due}` : null]
             .filter(Boolean)
             .join(' | ');
-          return `- ${task.title}${details ? ` (${details})` : ''}${task.message ? `\n  ${task.message}` : ''}`;
+          const completionLink = buildCompletionUrl([task.taskId]);
+          return `- ${task.title}${details ? ` (${details})` : ''}${task.message ? `\n  ${task.message}` : ''}\n  Complete: ${completionLink}`;
         })
         .join('\n');
       return `${referralName}:\n${taskLines}`;
@@ -177,10 +193,12 @@ export async function POST(request: NextRequest) {
     subject: `${cadenceLabel} follow-up task reminders`,
     html: `<div style="font-family:Inter,system-ui,-apple-system,sans-serif;max-width:640px;color:#0f172a;line-height:1.5;">
       <h2 style="font-size:20px;margin-bottom:8px;">${cadenceLabel} follow-up task reminders</h2>
-      <p style="margin:0 0 12px 0;">Here are your outstanding tasks. You'll keep receiving ${frequency} reminders while this setting is enabled.</p>
+      <p style="margin:0 0 12px 0;">Here are your outstanding tasks. You'll keep receiving ${frequency} reminders at ${scheduleText} while this setting is enabled.</p>
       <div style="padding-left:4px;margin:0;">${taskListHtml}</div>
+      <p style="margin:12px 0 0 0;font-weight:700;">Ready to clear the deck?</p>
+      <a href="${completeAllUrl}" style="display:inline-block;margin-top:8px;padding:10px 16px;border-radius:10px;background:#0f172a;color:#fff;font-weight:700;text-decoration:none;">Mark all tasks complete</a>
     </div>`,
-    text: `${cadenceLabel} follow-up task reminders\n\nHere are your outstanding tasks:\n${taskListText}`,
+    text: `${cadenceLabel} follow-up task reminders\n\nHere are your outstanding tasks:\n${taskListText}\n\nComplete every task: ${completeAllUrl}`,
   });
 
   if (!delivered) {

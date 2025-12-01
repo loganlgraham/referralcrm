@@ -445,6 +445,7 @@ export async function getReferralById(id: string) {
       status: payment.status,
       expectedAmountCents: payment.expectedAmountCents ?? 0,
       receivedAmountCents: payment.receivedAmountCents ?? 0,
+      netReferralFeePaidCents: payment.netReferralFeePaidCents ?? null,
       invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
       paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
       closingDate: payment.closingDate ? payment.closingDate.toISOString() : null,
@@ -452,6 +453,9 @@ export async function getReferralById(id: string) {
       updatedAt: payment.updatedAt ? payment.updatedAt.toISOString() : null,
       terminatedReason: payment.terminatedReason ?? null,
       agentAttribution: payment.agentAttribution ?? null,
+      propertyAddress: payment.propertyAddress ?? null,
+      propertyCity: payment.propertyCity ?? null,
+      propertyState: payment.propertyState ?? null,
       agent:
         payment.agentId
           ? {
@@ -471,6 +475,7 @@ export async function getReferralById(id: string) {
       usedAssignedAgent: Boolean(payment.usedAssignedAgent),
       commissionBasisPoints: payment.commissionBasisPoints ?? null,
       referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
+      contractPriceCents: payment.contractPriceCents ?? null,
       side: payment.side ?? null,
       agentId:
         typeof payment.agentId === 'string'
