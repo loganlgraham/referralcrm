@@ -1256,6 +1256,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         onDealUpdated={handleDealUpdated}
         onDealDeleted={handleDealDeleted}
         viewerRole={viewerRole}
+        referralOrigin={referral.origin}
       />
       <ReferralTimeline referralId={referralId} />
       {canDelete && (

@@ -15,6 +15,7 @@ interface ReferralDealsProps {
   onDealUpdated?: (deal: ReferralPayment) => void;
   onDealDeleted?: (id: string) => void;
   viewerRole?: string;
+  referralOrigin?: string;
 }
 
 type AgentOption = { id: string; name: string };
@@ -76,7 +77,7 @@ function DealCard({
   canManage,
   statusUpdating,
   deleting,
-  isAgentViewer,
+  isAgentOrigin,
   onStatusChange,
   onDelete,
   onUpdate,
@@ -86,7 +87,7 @@ function DealCard({
   canManage: boolean;
   statusUpdating?: boolean;
   deleting?: boolean;
-  isAgentViewer?: boolean;
+  isAgentOrigin?: boolean;
   onStatusChange: (
     deal: ReferralPayment,
     status: DealStatus,
@@ -122,7 +123,7 @@ function DealCard({
   const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | null>(
     (deal.terminatedReason as TerminatedReason | undefined) ?? null
   );
-  const viewerIsAgent = Boolean(isAgentViewer);
+  const agentCreatedReferral = Boolean(isAgentOrigin);
 
   const populateFromDeal = useCallback(() => {
     setStatus((deal.status as DealStatus | undefined) ?? 'under_contract');
@@ -149,7 +150,7 @@ function DealCard({
   }, [populateFromDeal]);
 
   useEffect(() => {
-    if (expectedManuallyEdited || viewerIsAgent) return;
+    if (expectedManuallyEdited || agentCreatedReferral) return;
     const contract = Number.parseFloat(contractPrice);
     const commission = Number.parseFloat(commissionPercentage);
     const referral = Number.parseFloat(referralFeePercentage);
@@ -159,34 +160,38 @@ function DealCard({
         setExpectedAmount(computed.toFixed(2));
       }
     }
-  }, [commissionPercentage, contractPrice, referralFeePercentage, expectedManuallyEdited, viewerIsAgent]);
+    }, [commissionPercentage, contractPrice, referralFeePercentage, expectedManuallyEdited, agentCreatedReferral]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canManage || saving) return;
 
-    const expectedAmountCents = viewerIsAgent ? 0 : toCents(expectedAmount);
-    const netReferralFeePaidCents = viewerIsAgent ? 0 : toCents(netReferralFeePaid);
+    const expectedAmountCents = agentCreatedReferral ? 0 : toCents(expectedAmount);
+    const netReferralFeePaidCents = agentCreatedReferral ? 0 : toCents(netReferralFeePaid);
     const contractPriceCents = contractPrice ? toCents(contractPrice) : null;
-    const commissionBasisPoints = viewerIsAgent
+    const commissionBasisPoints = agentCreatedReferral
       ? null
       : commissionPercentage
           ? Math.round(Number.parseFloat(commissionPercentage) * 100)
           : null;
-    const referralFeeBasisPoints = viewerIsAgent
+    const referralFeeBasisPoints = agentCreatedReferral
       ? null
       : referralFeePercentage
           ? Math.round(Number.parseFloat(referralFeePercentage) * 100)
           : null;
 
     const shouldComputeExpected =
-      !viewerIsAgent && !expectedAmountCents && contractPriceCents && commissionBasisPoints && referralFeeBasisPoints;
+      !agentCreatedReferral &&
+      !expectedAmountCents &&
+      contractPriceCents &&
+      commissionBasisPoints &&
+      referralFeeBasisPoints;
     const computedExpected = shouldComputeExpected
       ? Math.round((contractPriceCents * commissionBasisPoints * referralFeeBasisPoints) / 100_000_000)
       : 0;
-    const finalExpectedAmountCents = viewerIsAgent ? 0 : expectedAmountCents || computedExpected;
+    const finalExpectedAmountCents = agentCreatedReferral ? 0 : expectedAmountCents || computedExpected;
 
-    if (!viewerIsAgent && !finalExpectedAmountCents) {
+    if (!agentCreatedReferral && !finalExpectedAmountCents) {
       toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
       return;
     }
@@ -628,6 +633,7 @@ export function ReferralDeals({
   onDealUpdated,
   onDealDeleted,
   viewerRole,
+  referralOrigin,
 }: ReferralDealsProps) {
   const [status, setStatus] = useState<DealStatus>('under_contract');
   const [markPaid, setMarkPaid] = useState(false);
@@ -651,7 +657,7 @@ export function ReferralDeals({
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
   const [deleting, setDeleting] = useState<Record<string, boolean>>({});
   const [showForm, setShowForm] = useState(false);
-  const isAgentViewer = viewerRole === 'agent';
+  const isAgentOrigin = referralOrigin === 'agent';
 
   const canManage = viewerRole !== 'viewer';
 
@@ -683,7 +689,7 @@ export function ReferralDeals({
   }, [canManage]);
 
   useEffect(() => {
-    if (expectedManuallyEdited || isAgentViewer) return;
+    if (expectedManuallyEdited || isAgentOrigin) return;
     const contract = Number.parseFloat(contractPrice);
     const commission = Number.parseFloat(commissionPercentage);
     const referral = Number.parseFloat(referralFeePercentage);
@@ -708,28 +714,28 @@ export function ReferralDeals({
     event.preventDefault();
     if (!canManage || submitting) return;
 
-    const expectedAmountCents = isAgentViewer ? 0 : toCents(expectedAmount);
-    const netReferralFeePaidCents = isAgentViewer ? 0 : toCents(netReferralFeePaid);
+    const expectedAmountCents = isAgentOrigin ? 0 : toCents(expectedAmount);
+    const netReferralFeePaidCents = isAgentOrigin ? 0 : toCents(netReferralFeePaid);
     const contractPriceCents = contractPrice ? toCents(contractPrice) : null;
-    const commissionBasisPoints = isAgentViewer
+    const commissionBasisPoints = isAgentOrigin
       ? null
       : commissionPercentage
           ? Math.round(Number.parseFloat(commissionPercentage) * 100)
           : null;
-    const referralFeeBasisPoints = isAgentViewer
+    const referralFeeBasisPoints = isAgentOrigin
       ? null
       : referralFeePercentage
           ? Math.round(Number.parseFloat(referralFeePercentage) * 100)
           : null;
 
     const shouldComputeExpected =
-      !isAgentViewer && !expectedAmountCents && contractPriceCents && commissionBasisPoints && referralFeeBasisPoints;
+      !isAgentOrigin && !expectedAmountCents && contractPriceCents && commissionBasisPoints && referralFeeBasisPoints;
     const computedExpected = shouldComputeExpected
       ? Math.round((contractPriceCents * commissionBasisPoints * referralFeeBasisPoints) / 100_000_000)
       : 0;
-    const finalExpectedAmountCents = isAgentViewer ? 0 : expectedAmountCents || computedExpected;
+    const finalExpectedAmountCents = isAgentOrigin ? 0 : expectedAmountCents || computedExpected;
 
-    if (!isAgentViewer && !finalExpectedAmountCents) {
+    if (!isAgentOrigin && !finalExpectedAmountCents) {
       toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
       return;
     }
@@ -765,8 +771,8 @@ export function ReferralDeals({
           propertyState: propertyState.trim().toUpperCase() || null,
           closingDate: closingDateToSend,
           agentId: agentId || null,
-          usedAfc: isAgentViewer ? false : usedAfc,
-          usedAssignedAgent: isAgentViewer ? true : usedAssignedAgent,
+          usedAfc: isAgentOrigin ? false : usedAfc,
+          usedAssignedAgent: isAgentOrigin ? true : usedAssignedAgent,
           side,
           terminatedReason: statusToSend === 'terminated' ? terminatedReason : null,
         }),
@@ -793,8 +799,8 @@ export function ReferralDeals({
           closingDate: closingDateToSend,
           agent: agentId ? { id: agentId, name: agents.find((option) => option.id === agentId)?.name ?? null } : null,
           agentId: agentId || null,
-          usedAfc: isAgentViewer ? false : usedAfc,
-          usedAssignedAgent: isAgentViewer ? true : usedAssignedAgent,
+          usedAfc: isAgentOrigin ? false : usedAfc,
+          usedAssignedAgent: isAgentOrigin ? true : usedAssignedAgent,
           side,
           terminatedReason: statusToSend === 'terminated' ? terminatedReason : null,
           createdAt: payload.createdAt ?? new Date().toISOString(),
@@ -978,7 +984,7 @@ export function ReferralDeals({
               disabled={submitting}
             />
           </label>
-          {!isAgentViewer && (
+          {!isAgentOrigin && (
             <>
               <label className="space-y-1 text-sm font-medium text-slate-700">
                 <span>Commission %</span>
@@ -1211,7 +1217,7 @@ export function ReferralDeals({
               deal={deal}
               agents={agents}
               canManage={canManage}
-              isAgentViewer={isAgentViewer}
+              isAgentOrigin={isAgentOrigin}
               statusUpdating={statusUpdating[deal._id]}
               deleting={deleting[deal._id]}
               onStatusChange={handleStatusChange}
