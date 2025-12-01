@@ -85,6 +85,7 @@ function DealCard({
   canManage: boolean;
   statusUpdating?: boolean;
   deleting?: boolean;
+  isAgentViewer?: boolean;
   onStatusChange: (
     deal: ReferralPayment,
     status: DealStatus,
@@ -120,6 +121,7 @@ function DealCard({
   const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | null>(
     (deal.terminatedReason as TerminatedReason | undefined) ?? null
   );
+  const viewerIsAgent = Boolean(isAgentViewer);
 
   const populateFromDeal = useCallback(() => {
     setStatus((deal.status as DealStatus | undefined) ?? 'under_contract');
@@ -146,7 +148,7 @@ function DealCard({
   }, [populateFromDeal]);
 
   useEffect(() => {
-    if (expectedManuallyEdited || isAgentViewer) return;
+    if (expectedManuallyEdited || viewerIsAgent) return;
     const contract = Number.parseFloat(contractPrice);
     const commission = Number.parseFloat(commissionPercentage);
     const referral = Number.parseFloat(referralFeePercentage);
@@ -156,30 +158,34 @@ function DealCard({
         setExpectedAmount(computed.toFixed(2));
       }
     }
-  }, [commissionPercentage, contractPrice, referralFeePercentage, expectedManuallyEdited]);
+  }, [commissionPercentage, contractPrice, referralFeePercentage, expectedManuallyEdited, viewerIsAgent]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canManage || saving) return;
 
-    const expectedAmountCents = toCents(expectedAmount);
-    const netReferralFeePaidCents = toCents(netReferralFeePaid);
+    const expectedAmountCents = viewerIsAgent ? 0 : toCents(expectedAmount);
+    const netReferralFeePaidCents = viewerIsAgent ? 0 : toCents(netReferralFeePaid);
     const contractPriceCents = contractPrice ? toCents(contractPrice) : null;
-    const commissionBasisPoints = commissionPercentage
-      ? Math.round(Number.parseFloat(commissionPercentage) * 100)
-      : null;
-    const referralFeeBasisPoints = referralFeePercentage
-      ? Math.round(Number.parseFloat(referralFeePercentage) * 100)
-      : null;
+    const commissionBasisPoints = viewerIsAgent
+      ? null
+      : commissionPercentage
+          ? Math.round(Number.parseFloat(commissionPercentage) * 100)
+          : null;
+    const referralFeeBasisPoints = viewerIsAgent
+      ? null
+      : referralFeePercentage
+          ? Math.round(Number.parseFloat(referralFeePercentage) * 100)
+          : null;
 
     const shouldComputeExpected =
-      !expectedAmountCents && contractPriceCents && commissionBasisPoints && referralFeeBasisPoints;
+      !viewerIsAgent && !expectedAmountCents && contractPriceCents && commissionBasisPoints && referralFeeBasisPoints;
     const computedExpected = shouldComputeExpected
       ? Math.round((contractPriceCents * commissionBasisPoints * referralFeeBasisPoints) / 100_000_000)
       : 0;
-    const finalExpectedAmountCents = expectedAmountCents || computedExpected;
+    const finalExpectedAmountCents = viewerIsAgent ? 0 : expectedAmountCents || computedExpected;
 
-    if (!finalExpectedAmountCents) {
+    if (!viewerIsAgent && !finalExpectedAmountCents) {
       toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
       return;
     }
@@ -1204,6 +1210,7 @@ export function ReferralDeals({
               deal={deal}
               agents={agents}
               canManage={canManage}
+              isAgentViewer={isAgentViewer}
               statusUpdating={statusUpdating[deal._id]}
               deleting={deleting[deal._id]}
               onStatusChange={handleStatusChange}
