@@ -15,7 +15,7 @@ interface ReferralDealsProps {
   onDealUpdated?: (deal: ReferralPayment) => void;
   onDealDeleted?: (id: string) => void;
   viewerRole?: string;
-  referralOrigin?: string;
+  referralOrigin?: 'agent' | 'admin' | 'mc' | null;
 }
 
 type AgentOption = { id: string; name: string };
