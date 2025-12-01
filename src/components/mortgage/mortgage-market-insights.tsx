@@ -50,7 +50,11 @@ export function MortgageMarketInsights() {
         return;
       }
 
-      const payload = (await response.json()) as Partial<MortgageMarketBrief>;
+      const payload = (await response.json()) as Partial<MortgageMarketBrief> & { error?: string };
+
+      if (payload.error) {
+        setError(payload.error);
+      }
 
       const fallbackString = (value: string | undefined, defaultValue: string) =>
         value && value.trim().length > 0 ? value : defaultValue;

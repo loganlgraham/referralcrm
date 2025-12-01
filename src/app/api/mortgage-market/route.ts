@@ -153,6 +153,7 @@ async function fetchApiNinjasRates(): Promise<RateSourceResult> {
 
   try {
     const response = await fetch('https://api.api-ninjas.com/v1/mortgagerate', {
+      method: 'GET',
       headers: {
         'X-Api-Key': apiKey,
       },
@@ -161,7 +162,7 @@ async function fetchApiNinjasRates(): Promise<RateSourceResult> {
 
     if (!response.ok) {
       if (fallbackStale) return fallbackStale;
-      throw new Error('ApiNinjas mortgage rate request failed');
+      throw new Error(`ApiNinjas mortgage rate request failed with status ${response.status}`);
     }
 
     const payload = await response.json();
@@ -177,7 +178,7 @@ async function fetchApiNinjasRates(): Promise<RateSourceResult> {
   } catch (error) {
     console.error('ApiNinjas fetch failed', error);
     if (fallbackStale) return fallbackStale;
-    throw error;
+    return { rates: [], dataDate: today };
   }
 }
 
@@ -296,14 +297,14 @@ export async function GET() {
       }),
     });
 
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        console.error('Mortgage market insights OpenAI error', payload);
-        const mergedFallback = {
-          ...fallbackBrief,
-          averageRates: combinedRates.length ? combinedRates : fallbackBrief.averageRates,
-          dataDate: rateDataDate,
-        };
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      console.error('Mortgage market insights OpenAI error', payload);
+      const mergedFallback = {
+        ...fallbackBrief,
+        averageRates: combinedRates.length ? combinedRates : fallbackBrief.averageRates,
+        dataDate: rateDataDate,
+      };
 
       return NextResponse.json(mergedFallback, {
         status: 200,
@@ -315,12 +316,12 @@ export async function GET() {
 
     const completion = await response.json();
     const content = completion.choices?.[0]?.message?.content;
-      if (!content) {
-        const mergedFallback = {
-          ...fallbackBrief,
-          averageRates: combinedRates.length ? combinedRates : fallbackBrief.averageRates,
-          dataDate: rateDataDate,
-        };
+    if (!content) {
+      const mergedFallback = {
+        ...fallbackBrief,
+        averageRates: combinedRates.length ? combinedRates : fallbackBrief.averageRates,
+        dataDate: rateDataDate,
+      };
 
       return NextResponse.json(mergedFallback, {
         status: 200,
@@ -383,6 +384,19 @@ export async function GET() {
       );
     }
 
-    return NextResponse.json({ error: 'Unable to load live mortgage rates. Please try again shortly.' }, { status: 502 });
+    return NextResponse.json(
+      {
+        ...fallbackBrief,
+        dataDate: fallbackBrief.dataDate,
+        averageRates: fallbackBrief.averageRates,
+        error: 'Live mortgage rates are temporarily unavailable.',
+      },
+      {
+        status: 200,
+        headers: {
+          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=3600',
+        },
+      }
+    );
   }
 }
