@@ -16,6 +16,7 @@ type RateSourceResult = {
 const today = new Date().toISOString().slice(0, 10);
 
 const apiNinjasCachePath = '/tmp/api-ninjas-mortgage-rates.json';
+const fallbackApiKey = 'TSM1KIhd4UFMkpQat+SHnA==wVYsHgZ6Hz7YxKFB';
 
 const apiNinjasNumber = z.preprocess((value) => {
   if (typeof value === 'string') {
@@ -149,7 +150,7 @@ async function fetchApiNinjasRates(): Promise<RateSourceResult> {
   const cached = await readApiNinjasCache();
   if (cached) return cached;
 
-  const apiKey = process.env.API_NINJAS_API_KEY;
+  const apiKey = process.env.API_NINJAS_API_KEY || fallbackApiKey;
   const fallbackStale = await readApiNinjasCache(true);
 
   if (!apiKey) {
