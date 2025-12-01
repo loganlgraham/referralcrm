@@ -59,17 +59,26 @@ const briefSchema = z.object({
 
 const fallbackBrief = {
   headline: 'Mortgage market check-in',
-  summary: 'Tap “Refresh insights” to generate a daily coaching brief for agents.',
+  summary:
+    'Give agents a quick, confidence-building script: a rate pulse, why it moved, what to tell active clients, and the one action to take today.',
   rateSignals: [
-    'Include today’s context on rate moves and the likely driver (inflation, jobs, bonds, or Fed signals).',
+    'Lead with the “why” behind today’s move (inflation prints, bond rally, or Fed commentary) and how it shapes lock/float calls.',
+    'Flag notable spread moves (jumbo vs. conforming, ARM vs. fixed) so agents can steer shoppers toward the best-fit product.',
   ],
   coachingAngles: [
-    'Offer a concise rate outlook, lock/float guidance, and next steps with the lender partner.',
+    'Share a 2-sentence talk track for buyers: price sensitivity, payment check, and when to lock.',
+    'Prompt sellers to consider rate buydowns or concessions to widen the buyer pool.',
+    'Ask every prospect if they want a lender warm intro today; make it frictionless.',
   ],
   borrowerAdvice: [
-    'Clarify budget, documents, and decision timeline before sending to the lender.',
+    'Verify max monthly payment comfort, down payment, and timeline before looping in the lender.',
+    'Remind borrowers to gather income docs and assets so the lender can quote confidently.',
+    'Give a simple “if rates move +/– 0.25%, your payment changes about $15 per $100k” rule of thumb.',
   ],
-  caution: ['This feed is informational only. Encourage borrowers to confirm pricing and eligibility with licensed lenders.'],
+  caution: [
+    'This feed is informational only. Encourage borrowers to confirm pricing and eligibility with licensed lenders.',
+    'Avoid quoting rate guarantees; anchor on payment ranges and pre-approval speed.',
+  ],
   averageRates: [
     { loanType: '30-year fixed', averageRate: '6.95%', change: '-0.02%' },
     { loanType: '15-year fixed', averageRate: '6.25%', change: '-0.01%' },
@@ -149,20 +158,25 @@ async function fetchApiNinjasRates(): Promise<RateSourceResult> {
   if (!apiKey) {
     throw new Error('ApiNinjas API key missing');
   }
+
   const response = await fetch('https://api.api-ninjas.com/v1/mortgagerate', {
     headers: {
       'X-Api-Key': apiKey,
     },
-    next: { revalidate: 86400 },
+    cache: 'no-store',
   });
 
   if (!response.ok) {
+    const cachedStale = await readApiNinjasCache(true);
+    if (cachedStale) return cachedStale;
     throw new Error('ApiNinjas mortgage rate request failed');
   }
 
   const payload = await response.json();
   const parsed = apiNinjasSchema.safeParse(payload);
   if (!parsed.success) {
+    const cachedStale = await readApiNinjasCache(true);
+    if (cachedStale) return cachedStale;
     throw new Error('ApiNinjas mortgage rate payload invalid');
   }
 
@@ -316,16 +330,11 @@ async function fetchBankrateRates(): Promise<RateSourceResult> {
 
 export async function GET() {
   try {
-    const [apiNinjasResult, pmmsResult, bankrateResult] = await Promise.allSettled([
-      fetchApiNinjasRates(),
+    const apiNinjasRates = await fetchApiNinjasRates();
+    const [pmmsResult, bankrateResult] = await Promise.allSettled([
       fetchFreddieMacRates(),
       fetchBankrateRates(),
     ]);
-
-    const apiNinjasRates =
-      apiNinjasResult.status === 'fulfilled'
-        ? apiNinjasResult.value
-        : await readApiNinjasCache(true);
     const pmmsRates = pmmsResult.status === 'fulfilled' ? pmmsResult.value : null;
     const bankrateRates = bankrateResult.status === 'fulfilled' ? bankrateResult.value : null;
 
@@ -431,12 +440,12 @@ export async function GET() {
         messages: [
           {
             role: 'system',
-            content: `You are a US mortgage market strategist. Write concise, confident talking points for real estate agents to use with their referrals. Use today's date (${today}). Avoid giving legal or pricing guarantees.`,
+            content: `You are a US mortgage market strategist. Write concise, confident talking points for real estate agents to use with their referrals. Use today's date (${today}). Avoid giving legal or pricing guarantees. Favor actionable coaching steps that an agent can say or do in the next 12 hours.`,
           },
           {
             role: 'user',
             content:
-              'Summarize the mortgage market in a short brief: a headline, 2-3 bullet rate or liquidity signals, 2-3 coaching angles for agents, 3 borrower-facing talking points, and any cautions to share. Keep it under 120 words.',
+              'Create a succinct mortgage market brief for agents. Include: a punchy headline, 2-3 bullet rate/liquidity signals tied to lock/float guidance, 2-3 coaching angles (scripts or actions for buyers/sellers/prospects), 3 borrower-facing talking points, and any cautions. Keep it under 120 words.',
           },
         ],
       }),
