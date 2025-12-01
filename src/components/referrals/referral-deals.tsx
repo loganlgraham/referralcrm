@@ -76,6 +76,7 @@ function DealCard({
   canManage,
   statusUpdating,
   deleting,
+  isAgentViewer,
   onStatusChange,
   onDelete,
   onUpdate,
