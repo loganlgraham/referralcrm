@@ -150,34 +150,41 @@ async function fetchApiNinjasRates(): Promise<RateSourceResult> {
   if (cached) return cached;
 
   const apiKey = process.env.API_NINJAS_API_KEY;
+  const fallbackStale = await readApiNinjasCache(true);
+
   if (!apiKey) {
+    if (fallbackStale) return fallbackStale;
     throw new Error('ApiNinjas API key missing');
   }
 
-  const response = await fetch('https://api.api-ninjas.com/v1/mortgagerate', {
-    headers: {
-      'X-Api-Key': apiKey,
-    },
-    cache: 'no-store',
-  });
+  try {
+    const response = await fetch('https://api.api-ninjas.com/v1/mortgagerate', {
+      headers: {
+        'X-Api-Key': apiKey,
+      },
+      cache: 'no-store',
+    });
 
-  if (!response.ok) {
-    const cachedStale = await readApiNinjasCache(true);
-    if (cachedStale) return cachedStale;
-    throw new Error('ApiNinjas mortgage rate request failed');
+    if (!response.ok) {
+      if (fallbackStale) return fallbackStale;
+      throw new Error('ApiNinjas mortgage rate request failed');
+    }
+
+    const payload = await response.json();
+    const parsed = apiNinjasSchema.safeParse(payload);
+    if (!parsed.success) {
+      if (fallbackStale) return fallbackStale;
+      throw new Error('ApiNinjas mortgage rate payload invalid');
+    }
+
+    const result = parseApiNinjasRates(parsed.data);
+    await writeApiNinjasCache(result);
+    return result;
+  } catch (error) {
+    console.error('ApiNinjas fetch failed', error);
+    if (fallbackStale) return fallbackStale;
+    throw error;
   }
-
-  const payload = await response.json();
-  const parsed = apiNinjasSchema.safeParse(payload);
-  if (!parsed.success) {
-    const cachedStale = await readApiNinjasCache(true);
-    if (cachedStale) return cachedStale;
-    throw new Error('ApiNinjas mortgage rate payload invalid');
-  }
-
-  const result = parseApiNinjasRates(parsed.data);
-  await writeApiNinjasCache(result);
-  return result;
 }
 
 function formatDataDate(date: string) {
@@ -186,121 +193,18 @@ function formatDataDate(date: string) {
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-async function fetchBankrateRates(): Promise<RateSourceResult> {
-  const response = await fetch('https://www.bankrate.com/mortgages/mortgage-rates/', {
-    next: { revalidate: 3600 },
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; ReferralCRM/1.0; +https://referralcrm.com)',
-      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error('Bankrate page unavailable');
-  }
-
-  const html = await response.text();
-
-  const rates: AverageRate[] = [];
-
-  const captureFromJson = () => {
-    const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">(.+?)<\/script>/s);
-    if (!nextDataMatch?.[1]) return;
-    try {
-      const data = JSON.parse(nextDataMatch[1]);
-      const collected: AverageRate[] = [];
-
-      const visit = (value: unknown) => {
-        if (!value || typeof value !== 'object') return;
-        if (Array.isArray(value)) {
-          value.forEach(visit);
-          return;
-        }
-
-        const entry = value as Record<string, unknown>;
-        const label = (entry.productName || entry.loanType || entry.name) as string | undefined;
-        const rateValue = (entry.interestRate || entry.rate || entry.avgRate || entry.averageRate) as
-          | string
-          | number
-          | undefined;
-
-        const addEntry = (loanTypeLabel: string, rateCandidate: string | number | undefined) => {
-          if (!rateCandidate) return;
-          const numeric = Number.parseFloat(String(rateCandidate));
-          if (Number.isNaN(numeric)) return;
-          collected.push({ loanType: loanTypeLabel, averageRate: `${numeric.toFixed(2)}%`, change: '—' });
-        };
-
-        if (label && /FHA/i.test(label)) addEntry('FHA 30-year', rateValue);
-        if (label && /VA/i.test(label)) addEntry('VA 30-year', rateValue);
-        if (label && /Jumbo/i.test(label)) addEntry('Jumbo 30-year', rateValue);
-        if (label && /(ARM|Adjustable)/i.test(label)) addEntry('5/6 ARM', rateValue);
-
-        Object.values(entry).forEach(visit);
-      };
-
-      visit(data);
-      return collected;
-    } catch (error) {
-      console.error('Bankrate NEXT_DATA parse failed', error);
-      return undefined;
-    }
-  };
-
-  const jsonRates = captureFromJson();
-  if (jsonRates?.length) {
-    rates.push(...jsonRates);
-  }
-
-  const extractRate = (label: string) => {
-    const pattern = new RegExp(`${label}[^0-9]*([0-9]+\\.[0-9]+)%`, 'i');
-    const match = html.match(pattern);
-    return match?.[1] ? `${match[1]}%` : undefined;
-  };
-
-  const addRate = (loanType: string, label: string) => {
-    if (rates.find((rate) => rate.loanType === loanType)) return;
-    const rate = extractRate(label);
-    if (rate) {
-      rates.push({ loanType, averageRate: rate, change: '—' });
-    }
-  };
-
-  addRate('FHA 30-year', 'FHA mortgage rate');
-  addRate('VA 30-year', 'VA mortgage rate');
-  addRate('Jumbo 30-year', 'Jumbo mortgage rate');
-  addRate('5/6 ARM', 'ARM');
-
-  const dataDateMatch = html.match(/Rates last updated[^A-Za-z]*(\w+ \d{1,2}, \d{4})/i);
-  const dataDate = dataDateMatch?.[1];
-
-  if (!rates.length) {
-    throw new Error('Unable to parse Bankrate rates');
-  }
-
-  return { rates, dataDate };
-}
-
 export async function GET() {
   try {
     const apiNinjasRates = await fetchApiNinjasRates();
-    const bankrateResult = await Promise.allSettled([fetchBankrateRates()]);
-    const bankrateRates = bankrateResult[0].status === 'fulfilled' ? bankrateResult[0].value : null;
 
     const combinedRates: AverageRate[] = [];
-    const appendRates = (rates?: AverageRate[]) => {
-      for (const rate of rates ?? []) {
-        if (combinedRates.find((existing) => existing.loanType === rate.loanType)) continue;
-        combinedRates.push(rate);
-      }
-    };
-
-    appendRates(apiNinjasRates?.rates);
-    appendRates(bankrateRates?.rates);
+    for (const rate of apiNinjasRates?.rates ?? []) {
+      if (combinedRates.find((existing) => existing.loanType === rate.loanType)) continue;
+      combinedRates.push(rate);
+    }
 
     const rateDataDate =
       apiNinjasRates?.dataDate ||
-      bankrateRates?.dataDate ||
       new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
     if (!process.env.OPENAI_API_KEY) {
@@ -468,7 +372,14 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Mortgage market insights unexpected error', error);
-    return NextResponse.json(fallbackBrief, {
+    const stale = await readApiNinjasCache(true);
+    const mergedFallback = {
+      ...fallbackBrief,
+      averageRates: stale?.rates?.length ? stale.rates : fallbackBrief.averageRates,
+      dataDate: stale?.dataDate || fallbackBrief.dataDate,
+    };
+
+    return NextResponse.json(mergedFallback, {
       status: 200,
       headers: {
         'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=3600',
