@@ -146,7 +146,7 @@ function DealCard({
   }, [populateFromDeal]);
 
   useEffect(() => {
-    if (expectedManuallyEdited) return;
+    if (expectedManuallyEdited || isAgentViewer) return;
     const contract = Number.parseFloat(contractPrice);
     const commission = Number.parseFloat(commissionPercentage);
     const referral = Number.parseFloat(referralFeePercentage);
@@ -644,6 +644,7 @@ export function ReferralDeals({
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
   const [deleting, setDeleting] = useState<Record<string, boolean>>({});
   const [showForm, setShowForm] = useState(false);
+  const isAgentViewer = viewerRole === 'agent';
 
   const canManage = viewerRole !== 'viewer';
 
@@ -675,7 +676,7 @@ export function ReferralDeals({
   }, [canManage]);
 
   useEffect(() => {
-    if (expectedManuallyEdited) return;
+    if (expectedManuallyEdited || isAgentViewer) return;
     const contract = Number.parseFloat(contractPrice);
     const commission = Number.parseFloat(commissionPercentage);
     const referral = Number.parseFloat(referralFeePercentage);
@@ -698,29 +699,33 @@ export function ReferralDeals({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canManage) return;
+    if (!canManage || submitting) return;
 
-    const expectedAmountCents = toCents(expectedAmount);
-    const netReferralFeePaidCents = toCents(netReferralFeePaid);
+    const expectedAmountCents = isAgentViewer ? 0 : toCents(expectedAmount);
+    const netReferralFeePaidCents = isAgentViewer ? 0 : toCents(netReferralFeePaid);
     const contractPriceCents = contractPrice ? toCents(contractPrice) : null;
-    const commissionBasisPoints = commissionPercentage
-      ? Math.round(Number.parseFloat(commissionPercentage) * 100)
-      : null;
-    const referralFeeBasisPoints = referralFeePercentage
-      ? Math.round(Number.parseFloat(referralFeePercentage) * 100)
-      : null;
+    const commissionBasisPoints = isAgentViewer
+      ? null
+      : commissionPercentage
+          ? Math.round(Number.parseFloat(commissionPercentage) * 100)
+          : null;
+    const referralFeeBasisPoints = isAgentViewer
+      ? null
+      : referralFeePercentage
+          ? Math.round(Number.parseFloat(referralFeePercentage) * 100)
+          : null;
 
     const shouldComputeExpected =
-      !expectedAmountCents && contractPriceCents && commissionBasisPoints && referralFeeBasisPoints;
+      !isAgentViewer && !expectedAmountCents && contractPriceCents && commissionBasisPoints && referralFeeBasisPoints;
     const computedExpected = shouldComputeExpected
       ? Math.round((contractPriceCents * commissionBasisPoints * referralFeeBasisPoints) / 100_000_000)
       : 0;
-    const finalExpectedAmountCents = expectedAmountCents || computedExpected;
+    const finalExpectedAmountCents = isAgentViewer ? 0 : expectedAmountCents || computedExpected;
 
-      if (!finalExpectedAmountCents) {
-        toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
-        return;
-      }
+    if (!isAgentViewer && !finalExpectedAmountCents) {
+      toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
+      return;
+    }
 
       if (status === 'terminated' && !terminatedReason) {
         toast.error('Select a termination reason');
@@ -744,21 +749,21 @@ export function ReferralDeals({
             status: statusToSend,
             expectedAmountCents: finalExpectedAmountCents,
             receivedAmountCents: netReferralFeePaidCents,
-            netReferralFeePaidCents,
-            contractPriceCents,
-            commissionBasisPoints,
-            referralFeeBasisPoints,
-            propertyAddress: propertyAddress.trim() || null,
-            propertyCity: propertyCity.trim() || null,
-            propertyState: propertyState.trim().toUpperCase() || null,
-            closingDate: closingDateToSend,
-            agentId: agentId || null,
-            usedAfc,
-            usedAssignedAgent,
-            side,
-            terminatedReason: statusToSend === 'terminated' ? terminatedReason : null,
-          }),
-        });
+          netReferralFeePaidCents,
+          contractPriceCents,
+          commissionBasisPoints,
+          referralFeeBasisPoints,
+          propertyAddress: propertyAddress.trim() || null,
+          propertyCity: propertyCity.trim() || null,
+          propertyState: propertyState.trim().toUpperCase() || null,
+          closingDate: closingDateToSend,
+          agentId: agentId || null,
+          usedAfc: isAgentViewer ? false : usedAfc,
+          usedAssignedAgent: isAgentViewer ? true : usedAssignedAgent,
+          side,
+          terminatedReason: statusToSend === 'terminated' ? terminatedReason : null,
+        }),
+      });
 
       if (!response.ok) {
         toast.error('Unable to save deal');
@@ -781,8 +786,8 @@ export function ReferralDeals({
           closingDate: closingDateToSend,
           agent: agentId ? { id: agentId, name: agents.find((option) => option.id === agentId)?.name ?? null } : null,
           agentId: agentId || null,
-          usedAfc,
-          usedAssignedAgent,
+          usedAfc: isAgentViewer ? false : usedAfc,
+          usedAssignedAgent: isAgentViewer ? true : usedAssignedAgent,
           side,
           terminatedReason: statusToSend === 'terminated' ? terminatedReason : null,
           createdAt: payload.createdAt ?? new Date().toISOString(),
@@ -790,25 +795,8 @@ export function ReferralDeals({
           paidDate: null,
           invoiceDate: null,
         });
-      setExpectedAmount('');
-      setExpectedManuallyEdited(false);
-      setNetReferralFeePaid('');
-      setContractPrice('');
-      setCommissionPercentage('');
-      setReferralFeePercentage('');
-      setPropertyAddress('');
-      setPropertyCity('');
-      setPropertyState('');
-      setClosingDate('');
-      setAgentId('');
-      setSide('buy');
-        setUsedAfc(false);
-        setUsedAssignedAgent(true);
-        setMarkPaid(false);
-        setStatus('under_contract');
-        setTerminatedReason(null);
-        setShowForm(false);
-        toast.success('Deal added');
+      setShowForm(false);
+      toast.success('Deal added');
     } catch (error) {
       console.error(error);
       toast.error('Something went wrong while saving the deal');
@@ -983,66 +971,70 @@ export function ReferralDeals({
               disabled={submitting}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
-            <span>Commission %</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={commissionPercentage}
-              onChange={(event) => setCommissionPercentage(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-              placeholder="0.00"
-              disabled={submitting}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
-            <span>Referral fee %</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={referralFeePercentage}
-              onChange={(event) => setReferralFeePercentage(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-              placeholder="0.00"
-              disabled={submitting}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
-            <span>Expected amount</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={expectedAmount}
-              onChange={(event) => {
-                const value = event.target.value;
-                setExpectedManuallyEdited(Boolean(value));
-                setExpectedAmount(value);
-              }}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-              placeholder="0.00"
-              disabled={submitting}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
-            <span>Net referral fee paid (optional)</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={netReferralFeePaid}
-              onChange={(event) => setNetReferralFeePaid(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-              placeholder="0.00"
-              disabled={submitting}
-            />
-          </label>
+          {!isAgentViewer && (
+            <>
+              <label className="space-y-1 text-sm font-medium text-slate-700">
+                <span>Commission %</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={commissionPercentage}
+                  onChange={(event) => setCommissionPercentage(event.target.value)}
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  placeholder="0.00"
+                  disabled={submitting}
+                />
+              </label>
+              <label className="space-y-1 text-sm font-medium text-slate-700">
+                <span>Referral fee %</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={referralFeePercentage}
+                  onChange={(event) => setReferralFeePercentage(event.target.value)}
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  placeholder="0.00"
+                  disabled={submitting}
+                />
+              </label>
+              <label className="space-y-1 text-sm font-medium text-slate-700">
+                <span>Expected amount</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={expectedAmount}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setExpectedManuallyEdited(Boolean(value));
+                    setExpectedAmount(value);
+                  }}
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  placeholder="0.00"
+                  disabled={submitting}
+                />
+              </label>
+              <label className="space-y-1 text-sm font-medium text-slate-700">
+                <span>Net referral fee paid (optional)</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={netReferralFeePaid}
+                  onChange={(event) => setNetReferralFeePaid(event.target.value)}
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  placeholder="0.00"
+                  disabled={submitting}
+                />
+              </label>
+            </>
+          )}
             <label className="space-y-1 text-sm font-medium text-slate-700">
               <span>Status</span>
               <select

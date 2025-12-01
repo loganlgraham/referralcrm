@@ -88,11 +88,11 @@ const pmmsSources = [
   { url: 'https://www.freddiemac.com/pmms/docs/pmms15_history.csv', loanType: '15-year fixed' },
 ];
 
-async function readApiNinjasCache() {
+async function readApiNinjasCache(allowStale = false) {
   try {
     const raw = await fs.readFile(apiNinjasCachePath, 'utf8');
     const parsed = JSON.parse(raw) as { date: string; rates: AverageRate[]; dataDate?: string };
-    if (parsed.date === today && parsed.rates?.length) {
+    if ((allowStale || parsed.date === today) && parsed.rates?.length) {
       return { rates: parsed.rates, dataDate: parsed.dataDate } as RateSourceResult;
     }
   } catch (error) {
@@ -145,7 +145,10 @@ async function fetchApiNinjasRates(): Promise<RateSourceResult> {
   const cached = await readApiNinjasCache();
   if (cached) return cached;
 
-  const apiKey = process.env.API_NINJAS_API_KEY || 'TSM1KIhd4UFMkpQat+SHnA==wVYsHgZ6Hz7YxKFB';
+  const apiKey = process.env.API_NINJAS_API_KEY;
+  if (!apiKey) {
+    throw new Error('ApiNinjas API key missing');
+  }
   const response = await fetch('https://api.api-ninjas.com/v1/mortgagerate', {
     headers: {
       'X-Api-Key': apiKey,
@@ -319,7 +322,10 @@ export async function GET() {
       fetchBankrateRates(),
     ]);
 
-    const apiNinjasRates = apiNinjasResult.status === 'fulfilled' ? apiNinjasResult.value : null;
+    const apiNinjasRates =
+      apiNinjasResult.status === 'fulfilled'
+        ? apiNinjasResult.value
+        : await readApiNinjasCache(true);
     const pmmsRates = pmmsResult.status === 'fulfilled' ? pmmsResult.value : null;
     const bankrateRates = bankrateResult.status === 'fulfilled' ? bankrateResult.value : null;
 

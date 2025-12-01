@@ -310,31 +310,47 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   await connectMongo();
+  const referralForCreate = await Referral.findById(parsed.data.referralId);
+  if (!referralForCreate) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
+  const isAgentOrigin = referralForCreate.origin === 'agent';
+  const fallbackSide = referralForCreate.dealSide === 'sell' ? 'sell' : 'buy';
+  let defaultAgentId: Types.ObjectId | string | null = null;
+
+  if (session.user.role === 'agent' && referralForCreate.assignedAgent) {
+    defaultAgentId = referralForCreate.assignedAgent as Types.ObjectId;
+  } else if (session.user.role === 'agent') {
+    const agentRecord = await Agent.findOne({ userId: session.user.id })
+      .select('_id')
+      .lean<{ _id: Types.ObjectId } | null>();
+    defaultAgentId = agentRecord?._id ?? null;
+  }
+
   const payment = await Payment.create({
     referralId: parsed.data.referralId,
     status: parsed.data.status,
-    expectedAmountCents: parsed.data.expectedAmountCents,
-    receivedAmountCents: parsed.data.receivedAmountCents,
+    expectedAmountCents: isAgentOrigin ? 0 : parsed.data.expectedAmountCents,
+    receivedAmountCents: isAgentOrigin ? 0 : parsed.data.receivedAmountCents,
     terminatedReason: parsed.data.terminatedReason ?? null,
     agentAttribution: parsed.data.agentAttribution ?? null,
     usedAfc: parsed.data.usedAfc ?? true,
     usedAssignedAgent: parsed.data.usedAssignedAgent ?? true,
-    netReferralFeePaidCents: parsed.data.netReferralFeePaidCents ?? null,
+    netReferralFeePaidCents: isAgentOrigin ? 0 : parsed.data.netReferralFeePaidCents ?? null,
     propertyAddress: parsed.data.propertyAddress ?? null,
     closingDate: parsed.data.closingDate ?? null,
     invoiceDate: parsed.data.invoiceDate,
     paidDate: parsed.data.paidDate,
     notes: parsed.data.notes,
     commissionBasisPoints: parsed.data.commissionBasisPoints ?? null,
-    referralFeeBasisPoints: parsed.data.referralFeeBasisPoints ?? null,
-    side: parsed.data.side ?? 'buy',
+    referralFeeBasisPoints: isAgentOrigin ? null : parsed.data.referralFeeBasisPoints ?? null,
+    side: parsed.data.side ?? fallbackSide,
     contractPriceCents: parsed.data.contractPriceCents ?? null,
-    agentId: parsed.data.agentId ?? null,
+    agentId: parsed.data.agentId ?? defaultAgentId,
     propertyCity: parsed.data.propertyCity ?? null,
     propertyState: parsed.data.propertyState ?? null,
   });
-
-  const referralForCreate = await Referral.findById(parsed.data.referralId);
   if (referralForCreate) {
     let referralUpdated = false;
     if (parsed.data.propertyAddress !== undefined) {
@@ -399,6 +415,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     return new NextResponse('Not found', { status: 404 });
   }
 
+  const referral = await Referral.findById(existingPayment.referralId);
+  const isAgentOrigin = referral?.origin === 'agent';
+
   const previousStatus = existingPayment.status;
   const isClosingNow = parsed.data.status === 'closed' && previousStatus !== 'closed';
 
@@ -417,8 +436,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const nextSide =
     parsed.data.side !== undefined ? parsed.data.side ?? existingPayment.side : existingPayment.side;
 
-  let nextExpectedAmountCents = existingPayment.expectedAmountCents ?? 0;
-  let nextReceivedAmountCents = existingPayment.receivedAmountCents ?? 0;
+  let nextExpectedAmountCents = isAgentOrigin ? 0 : existingPayment.expectedAmountCents ?? 0;
+  let nextReceivedAmountCents = isAgentOrigin ? 0 : existingPayment.receivedAmountCents ?? 0;
   const hasUsedAssignedAgentUpdate = Object.prototype.hasOwnProperty.call(
     parsed.data,
     'usedAssignedAgent'
@@ -436,7 +455,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       parsed.data.commissionBasisPoints !== undefined ||
       parsed.data.referralFeeBasisPoints !== undefined);
 
-  if (shouldRecalculateReferralFee) {
+  if (shouldRecalculateReferralFee && !isAgentOrigin) {
     if (
       nextContractPriceCents != null &&
       nextCommissionBasisPoints != null &&
@@ -457,12 +476,12 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     nextReceivedAmountCents = parsed.data.receivedAmountCents ?? nextReceivedAmountCents;
   }
 
-  if (hasUsedAssignedAgentUpdate && !nextUsedAssignedAgent) {
+  if (hasUsedAssignedAgentUpdate && !nextUsedAssignedAgent && !isAgentOrigin) {
     nextExpectedAmountCents = 0;
     nextReceivedAmountCents = 0;
   }
 
-  if (hasAgentAttributionUpdate) {
+  if (hasAgentAttributionUpdate && !isAgentOrigin) {
     if (nextAgentAttribution === 'OUTSIDE_AGENT') {
       nextUsedAssignedAgent = false;
       nextExpectedAmountCents = 0;
@@ -476,10 +495,10 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   delete updatePayload.referralId;
   updatePayload.contractPriceCents = nextContractPriceCents ?? null;
   updatePayload.commissionBasisPoints = nextCommissionBasisPoints ?? null;
-  updatePayload.referralFeeBasisPoints = nextReferralFeeBasisPoints ?? null;
+  updatePayload.referralFeeBasisPoints = isAgentOrigin ? null : nextReferralFeeBasisPoints ?? null;
   updatePayload.side = nextSide ?? 'buy';
-  updatePayload.expectedAmountCents = nextExpectedAmountCents;
-  updatePayload.receivedAmountCents = nextReceivedAmountCents;
+  updatePayload.expectedAmountCents = isAgentOrigin ? 0 : nextExpectedAmountCents;
+  updatePayload.receivedAmountCents = isAgentOrigin ? 0 : nextReceivedAmountCents;
   if (hasUsedAssignedAgentUpdate) {
     updatePayload.usedAssignedAgent = nextUsedAssignedAgent;
   }
@@ -505,7 +524,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     updatePayload.propertyState = parsed.data.propertyState ?? null;
   }
 
-  if (isClosingNow) {
+  if (isClosingNow && !isAgentOrigin) {
     updatePayload.closingDate = new Date();
   }
 
@@ -515,20 +534,30 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     updatePayload.terminatedReason = null;
   }
 
+  if (isAgentOrigin) {
+    updatePayload.netReferralFeePaidCents = 0;
+    updatePayload.usedAssignedAgent = true;
+    updatePayload.usedAfc = existingPayment.usedAfc ?? true;
+  }
+
   const payment = await Payment.findByIdAndUpdate(body.id, updatePayload, { new: true });
   if (!payment) {
     return new NextResponse('Not found', { status: 404 });
   }
 
-  const referral = await Referral.findById(existingPayment.referralId);
   if (referral) {
+    if (isAgentOrigin) {
+      referral.referralFeeDueCents = 0;
+    }
+
     const now = new Date();
     const previousReferralStatus = referral.status ?? null;
     const sla = (referral.sla ??= {} as any);
     let slaChanged = false;
     let referralStatusChanged = false;
 
-    const shouldMarkLost = (hasUsedAssignedAgentUpdate || hasAgentAttributionUpdate) && !nextUsedAssignedAgent;
+    const shouldMarkLost =
+      !isAgentOrigin && (hasUsedAssignedAgentUpdate || hasAgentAttributionUpdate) && !nextUsedAssignedAgent;
 
     if (shouldMarkLost) {
       referral.estPurchasePriceCents = 0;
@@ -568,7 +597,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    if (parsed.data.status && parsed.data.status !== previousStatus) {
+    if (parsed.data.status && parsed.data.status !== previousStatus && !isAgentOrigin) {
       const nextStatus = parsed.data.status as string;
 
       if (nextStatus === 'under_contract') {
@@ -631,7 +660,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     if (parsed.data.propertyState !== undefined) {
       referral.propertyState = parsed.data.propertyState ?? '';
     }
-    referral.referralFeeDueCents = nextExpectedAmountCents;
+    referral.referralFeeDueCents = isAgentOrigin ? 0 : nextExpectedAmountCents;
     if (slaChanged) {
       referral.markModified('sla');
     }
