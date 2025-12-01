@@ -80,14 +80,7 @@ const fallbackBrief = {
     'This feed is informational only. Encourage borrowers to confirm pricing and eligibility with licensed lenders.',
     'Avoid quoting rate guarantees; anchor on payment ranges and pre-approval speed.',
   ],
-  averageRates: [
-    { loanType: '30-year fixed', averageRate: '6.95%', change: '-0.02%' },
-    { loanType: '15-year fixed', averageRate: '6.25%', change: '-0.01%' },
-    { loanType: 'FHA 30-year', averageRate: '6.75%', change: '-0.02%' },
-    { loanType: 'VA 30-year', averageRate: '6.60%', change: '-0.01%' },
-    { loanType: 'Jumbo 30-year', averageRate: '6.80%', change: '0.00%' },
-    { loanType: '5/6 ARM', averageRate: '6.35%', change: '+0.01%' },
-  ],
+  averageRates: [],
   dataDate: today,
 };
 
@@ -374,17 +367,22 @@ export async function GET() {
   } catch (error) {
     console.error('Mortgage market insights unexpected error', error);
     const stale = await readApiNinjasCache(true);
-    const mergedFallback = {
-      ...fallbackBrief,
-      averageRates: stale?.rates?.length ? stale.rates : fallbackBrief.averageRates,
-      dataDate: stale?.dataDate || fallbackBrief.dataDate,
-    };
+    if (stale?.rates?.length) {
+      return NextResponse.json(
+        {
+          ...fallbackBrief,
+          averageRates: stale.rates,
+          dataDate: stale.dataDate || fallbackBrief.dataDate,
+        },
+        {
+          status: 200,
+          headers: {
+            'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=3600',
+          },
+        }
+      );
+    }
 
-    return NextResponse.json(mergedFallback, {
-      status: 200,
-      headers: {
-        'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=3600',
-      },
-    });
+    return NextResponse.json({ error: 'Unable to load live mortgage rates. Please try again shortly.' }, { status: 502 });
   }
 }

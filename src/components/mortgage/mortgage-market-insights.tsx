@@ -30,15 +30,8 @@ const defaultBrief: MortgageMarketBrief = {
     'Keep them focused on controllables: credit hygiene, cash to close, and rate-lock strategy.',
   ],
   caution: ['Set expectations that this briefing is informational only and not lender advice.'],
-  averageRates: [
-    { loanType: '30-year fixed', averageRate: '6.95%', change: '-0.02%' },
-    { loanType: '15-year fixed', averageRate: '6.25%', change: '-0.01%' },
-    { loanType: 'FHA 30-year', averageRate: '6.75%', change: '-0.02%' },
-    { loanType: 'VA 30-year', averageRate: '6.60%', change: '-0.01%' },
-    { loanType: 'Jumbo 30-year', averageRate: '6.80%', change: '0.00%' },
-    { loanType: '5/6 ARM', averageRate: '6.35%', change: '+0.01%' },
-  ],
-  dataDate: new Date().toISOString().slice(0, 10),
+  averageRates: [],
+  dataDate: '—',
 };
 
 export function MortgageMarketInsights() {
@@ -139,15 +132,19 @@ export function MortgageMarketInsights() {
             <span className="text-right">Avg. rate</span>
             <span className="text-right">Day change</span>
           </div>
-          <ul className="divide-y divide-slate-100">
-            {brief.averageRates.map((rate) => (
-              <li key={rate.loanType} className="grid grid-cols-3 px-3 py-2 text-sm text-slate-800">
-                <span>{rate.loanType}</span>
-                <span className="text-right font-medium">{rate.averageRate}</span>
-                <span className="text-right text-slate-600">{rate.change}</span>
-              </li>
-            ))}
-          </ul>
+          {brief.averageRates.length === 0 ? (
+            <div className="px-3 py-3 text-sm text-slate-600">Live rate data will load momentarily.</div>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {brief.averageRates.map((rate) => (
+                <li key={rate.loanType} className="grid grid-cols-3 px-3 py-2 text-sm text-slate-800">
+                  <span>{rate.loanType}</span>
+                  <span className="text-right font-medium">{rate.averageRate}</span>
+                  <span className="text-right text-slate-600">{rate.change}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
 
