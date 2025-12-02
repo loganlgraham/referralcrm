@@ -16,9 +16,15 @@ type MortgageMarketBrief = {
   lastUpdated: string;
 };
 
+const defaultDateLabel = new Date().toLocaleDateString('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+
 const defaultBrief: MortgageMarketBrief = {
-  headline: 'Mortgage market check-in',
-  summary: 'Daily agent briefing: price the market confidently, coach buyers, and set expectations on timing.',
+  headline: 'Mortgage market snapshot',
+  summary: 'Use the live widget for today’s quotes, speak in payments, and set expectations around lender-specific pricing.',
   headlineStories: [
     {
       headline: 'Waiting for live headlines…',
@@ -26,8 +32,8 @@ const defaultBrief: MortgageMarketBrief = {
     },
   ],
   rateSignals: [
-    'Rates are steady today. Use the live widget as your script and remind clients lender quotes vary.',
-    'Government-backed options (FHA/VA) typically price below conventional 30-year rates—good for payment-sensitive buyers.',
+    'Use the live widget as your rate anchor—quotes vary by lender and change quickly.',
+    'Government-backed options (FHA/VA) often price below conventional 30-year rates—good for payment-sensitive buyers.',
   ],
   coachingAngles: [
     'Align on a comfortable payment today, then suggest locking if quotes land near that target.',
@@ -39,8 +45,8 @@ const defaultBrief: MortgageMarketBrief = {
   ],
   caution: ['Use these talking points for education only. Always defer exact quotes to the lender you’re working with.'],
   averageRates: [],
-  dataDate: '—',
-  lastUpdated: '—',
+  dataDate: defaultDateLabel,
+  lastUpdated: defaultDateLabel,
 };
 
 export function MortgageMarketInsights() {
@@ -123,9 +129,9 @@ export function MortgageMarketInsights() {
             <LineChartIcon className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-900">Mortgage market coaching feed</h1>
+            <h1 className="text-lg font-semibold text-slate-900">Mortgage Market</h1>
             <p className="text-sm text-slate-600">
-              Daily, AI-assisted talking points that tie market conditions to borrower conversations.
+              Live snapshot plus agent talking points—use the widget for quotes and defer specifics to your lender partner.
             </p>
             <p className="mt-1 text-xs text-slate-500">Updated {lastUpdatedLabel}</p>
           </div>
@@ -215,7 +221,9 @@ export function MortgageMarketInsights() {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-slate-600">Live widget data is loading. Refresh to pull today’s rates for scripts.</p>
+                  <p className="text-sm text-slate-600">
+                    Use the widget for live numbers. Quotes and payments come from the lender you’re working with.
+                  </p>
                 )}
 
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
