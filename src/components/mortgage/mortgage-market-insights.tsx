@@ -47,6 +47,11 @@ export function MortgageMarketInsights() {
   const [brief, setBrief] = useState<MortgageMarketBrief>(defaultBrief);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const todayLabel = new Date().toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 
   const fetchInsights = async () => {
     setLoading(true);
@@ -95,6 +100,14 @@ export function MortgageMarketInsights() {
     }
   };
 
+  const asOfLabel = brief.dataDate && brief.dataDate !== '—' ? brief.dataDate : todayLabel;
+  const lastUpdatedLabel = brief.lastUpdated && brief.lastUpdated !== '—' ? brief.lastUpdated : todayLabel;
+  const parsedAsOf = new Date(asOfLabel);
+  const daysOld = Number.isNaN(parsedAsOf.getTime())
+    ? 0
+    : Math.max(0, Math.floor((Date.now() - parsedAsOf.getTime()) / (1000 * 60 * 60 * 24)));
+  const isStale = daysOld > 3;
+
   useEffect(() => {
     fetchInsights();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -112,7 +125,7 @@ export function MortgageMarketInsights() {
             <p className="text-sm text-slate-600">
               Daily, AI-assisted talking points that tie market conditions to borrower conversations.
             </p>
-            <p className="mt-1 text-xs text-slate-500">Updated {brief.lastUpdated}</p>
+            <p className="mt-1 text-xs text-slate-500">Updated {lastUpdatedLabel}</p>
           </div>
         </div>
         <button
@@ -134,39 +147,95 @@ export function MortgageMarketInsights() {
       )}
 
       <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-800">Live national rate snapshot</h2>
-            <p className="text-xs text-slate-500">Widget powered by Mortgage News Daily—share with clients as a real-time reference.</p>
-          </div>
-          <div className="text-right text-xs text-slate-500">
-            <p>Rates as of {brief.dataDate}</p>
-            <p>Local lender quotes may vary.</p>
-          </div>
-        </div>
-        <div className="mt-4 flex justify-center">
-          <div
-            className="mnd-rates-widget w-full max-w-2xl overflow-hidden rounded-md shadow-sm"
-            style={{ backgroundColor: '#f8fafc', border: '1px solid #cbd5e1' }}
-          >
-            <div className="w-header" style={{ textAlign: 'center', padding: '4px 0', backgroundColor: '#0f172a', color: '#ffffff' }}>
-              <a href="https://www.mortgagenewsdaily.com/mortgage-rates" target="_blank" rel="noreferrer" style={{ color: '#ffffff', textDecoration: 'none' }}>
-                Mortgage Interest Rates
-              </a>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex-1 space-y-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-800">Live national rate snapshot</h2>
+                <p className="text-xs text-slate-500">Widget powered by Mortgage News Daily—share with clients as a real-time reference.</p>
+              </div>
+              <div className="text-left text-xs text-slate-500 sm:text-right">
+                <p>Rates as of {asOfLabel}</p>
+                <p className="flex flex-wrap items-center gap-2">
+                  <span>Local lender quotes may vary.</span>
+                  {isStale ? <span className="rounded-sm bg-amber-100 px-2 py-0.5 text-amber-700">Latest available; source may lag</span> : null}
+                </p>
+              </div>
             </div>
-            <iframe
-              src="//widgets.mortgagenewsdaily.com/widget/f/rates?t=large&sn=true&c=0f172a&u=&cbu=&w=498&h=290"
-              width="100%"
-              height="290"
-              frameBorder="0"
-              scrolling="no"
-              style={{ border: 'solid 1px #0f172a', borderWidth: '0 1px', boxSizing: 'border-box', width: '100%', height: '290px', display: 'block' }}
-            />
-            <div className="w-footer" style={{ textAlign: 'center', padding: '4px 0', backgroundColor: '#0f172a', color: '#ffffff' }}>
-              View More{' '}
-              <a href="https://www.mortgagenewsdaily.com/mortgage-rates" target="_blank" rel="noreferrer" style={{ color: '#ffffff', textDecoration: 'none' }}>
-                Mortgage Rates
-              </a>
+
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
+              <div className="flex-1 rounded-md border border-slate-200 bg-white shadow-sm" style={{ maxWidth: '100%' }}>
+                <div className="w-header" style={{ textAlign: 'center', padding: '6px 0', backgroundColor: '#0f172a', color: '#ffffff' }}>
+                  <a href="https://www.mortgagenewsdaily.com/mortgage-rates" target="_blank" rel="noreferrer" style={{ color: '#ffffff', textDecoration: 'none' }}>
+                    Mortgage Interest Rates
+                  </a>
+                </div>
+                <iframe
+                  src="//widgets.mortgagenewsdaily.com/widget/f/rates?t=large&sn=true&c=0f172a&u=&cbu=&w=760&h=290"
+                  width="100%"
+                  height="290"
+                  frameBorder="0"
+                  scrolling="no"
+                  style={{
+                    border: 'solid 1px #0f172a',
+                    borderWidth: '0 1px',
+                    boxSizing: 'border-box',
+                    width: '100%',
+                    height: '290px',
+                    display: 'block',
+                  }}
+                />
+                <div className="w-footer" style={{ textAlign: 'center', padding: '6px 0', backgroundColor: '#0f172a', color: '#ffffff' }}>
+                  View More{' '}
+                  <a href="https://www.mortgagenewsdaily.com/mortgage-rates" target="_blank" rel="noreferrer" style={{ color: '#ffffff', textDecoration: 'none' }}>
+                    Mortgage Rates
+                  </a>
+                </div>
+              </div>
+
+              <div className="lg:w-72">
+                {brief.averageRates && brief.averageRates.length > 0 ? (
+                  <div className="rounded-md border border-slate-200 bg-white p-3 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pull these talking points from the widget</p>
+                    <div className="mt-3 space-y-2">
+                      {brief.averageRates.slice(0, 6).map((rate) => (
+                        <div key={rate.loanType} className="flex items-center justify-between rounded bg-slate-50 px-3 py-2 text-sm">
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-slate-900">{rate.loanType}</span>
+                            <span className="text-xs text-slate-500">Widget feed • {asOfLabel}</span>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-base font-semibold text-slate-900">{rate.averageRate}</p>
+                            <p className="text-xs text-slate-500">Change: {rate.change}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-dashed border-slate-200 bg-white p-3 text-sm text-slate-600 shadow-sm">
+                    Live widget data is loading. Refresh to pull today’s rates for scripts.
+                  </div>
+                )}
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 shadow-sm">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <AlertCircleIcon className="h-4 w-4" />
+                    Use with care
+                  </div>
+                  <ul className="mt-2 space-y-1">
+                    {brief.caution.map((item) => (
+                      <li key={item} className="flex gap-2">
+                        <span>•</span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-xs text-amber-700">
+                    These insights are informational—quote specifics must come from a licensed lender.
+                  </p>
+                </div>
+              </div>
+            </div>
             </div>
           </div>
         </div>
@@ -236,23 +305,6 @@ export function MortgageMarketInsights() {
                 </li>
               ))}
             </ul>
-          </div>
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-amber-800">
-              <AlertCircleIcon className="h-4 w-4" />
-              Use with care
-            </div>
-            <ul className="mt-3 space-y-2 text-sm text-amber-800">
-              {brief.caution.map((item) => (
-                <li key={item} className="flex gap-2">
-                  <span>•</span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-3 text-xs text-amber-700">
-              These insights are informational only—agents should not promise rates or terms. Always defer to licensed lenders for eligibility and pricing.
-            </p>
           </div>
         </div>
       </div>
