@@ -184,6 +184,7 @@ function parseApiNinjasRates(data: ApiNinjasPayload): RateSourceResult {
       return { rates, dataDate: formattedDate };
     }
 
+    const products = (data as ApiNinjasArrayPayload).filter((row): row is ApiNinjasArrayPayload[number] => 'product' in row);
     const rates: AverageRate[] = [];
     const map = [
       { match: /30\s*year\s*fixed/i, loanType: '30-year fixed' },
@@ -194,7 +195,7 @@ function parseApiNinjasRates(data: ApiNinjasPayload): RateSourceResult {
       { match: /arm/i, loanType: '5/6 ARM' },
     ];
 
-    for (const row of data) {
+    for (const row of products) {
       if (typeof row.rate !== 'number' || Number.isNaN(row.rate)) continue;
       const match = map.find((entry) => entry.match.test(row.product));
       const loanType = match?.loanType ?? row.product;
