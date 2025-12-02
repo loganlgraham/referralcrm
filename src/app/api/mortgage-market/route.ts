@@ -206,7 +206,7 @@ function parseApiNinjasRates(data: ApiNinjasPayload): RateSourceResult {
       throw new Error('ApiNinjas response missing rate values');
     }
 
-    const rowDate = data.find((row) => row.date)?.date;
+    const rowDate = products.find((row) => row.date)?.date;
     const formattedDate = rowDate ? formatDataDate(rowDate) || rowDate : today;
 
     return { rates, dataDate: formattedDate };
