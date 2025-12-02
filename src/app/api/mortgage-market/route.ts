@@ -104,25 +104,24 @@ const fallbackRates: AverageRate[] = [
 const fallbackBrief = {
   headline: 'Mortgage market check-in',
   summary:
-    "Quick agent script for today: 'Rates are hovering near national averages this morning. The move is tied to calmer bond marke"
-    + "ts after last week’s data. For active buyers, this keeps payments close to their recent quotes.'",
+    "Agent script for today: 'Rates are holding near the week’s averages after calmer bond trading. Buyers should expect quotes close to last week’s numbers with small lender-to-lender differences.'",
   rateSignals: [
-    'Tell clients: “Markets are steady after recent inflation data; lenders are keeping pricing tight with only minor day-to-day wiggles.”',
-    'Note: jumbo and conforming spreads remain close, and 5/6 ARMs are still pricing below 30-year fixed for payment-conscious buyers.',
+    'Explain: “Pricing is stable after last week’s data, so payments should look similar to your recent lender estimates.”',
+    'Share: jumbo and conforming pricing are closely aligned, and 5/6 ARMs remain below 30-year fixed for payment-sensitive buyers.',
   ],
   coachingAngles: [
-    'Open with: “You’re still in the same payment ballpark as last week. Want me to have my lender refresh your exact numbers today?”',
-    'For sellers: suggest a modest buydown or closing credit to keep monthly payments attractive without cutting price.',
-    'Action line: “I can introduce you to my lender partner in the next hour—want me to set that up?”',
+    'Encourage active buyers to lock if they’re happy with today’s payment range to avoid next week’s potential bumps.',
+    'Invite prospects to a quick Q&A (text or Zoom) about current pricing and steps to stay lock-ready.',
+    'Re-engage past clients about move-up or relocation plans and offer to refresh their pre-approval—not a refinance pitch.',
   ],
   borrowerAdvice: [
-    'Have them confirm their comfortable monthly payment and down payment, then share both with the lender for a precise quote.',
-    'Ask them to gather pay stubs, W-2s, and asset snapshots so the lender can lock quickly if pricing dips.',
-    'Rule of thumb to share: every 0.25% rate change moves payment roughly $15 per $100k financed.',
+    'Confirm their comfortable monthly payment and down payment target, then share both with the lender for a refreshed quote.',
+    'Have them gather pay stubs, W-2s, and asset snapshots so the lender can move fast if pricing improves.',
+    'Share the rule of thumb: every 0.25% rate move shifts payment roughly $15 per $100k financed.',
   ],
   caution: [
-    'Use these talking points as guidance only; exact eligibility and pricing must come from licensed lenders.',
-    'Avoid promising specific rates—focus on payment ranges and speed to pre-approval.',
+    'These talking points are for real estate agents; exact eligibility and pricing must come from licensed lenders.',
+    'Avoid promising specific rates—stick to payment ranges and timelines to pre-approval and closing.',
   ],
   averageRates: fallbackRates,
   dataDate: today,
@@ -401,12 +400,12 @@ export async function GET() {
         messages: [
           {
             role: 'system',
-            content: `You are a US mortgage market strategist. Write concise, confident talking points for real estate agents to use with their referrals. Use today's date (${today}). Avoid giving legal or pricing guarantees. Favor actionable coaching steps that an agent can say or do in the next 12 hours.`,
+            content: `You are a US mortgage market strategist. Audience: residential real estate agents (not mortgage brokers or loan officers). Write concise, confident talking points they can deliver to buyers and sellers. Use today's date (${today}). Avoid refinance-only angles unless tied to a move. Avoid legal or pricing guarantees. Favor actionable coaching steps an agent can say or do in the next 12 hours.`,
           },
           {
             role: 'user',
             content:
-              'Create a succinct mortgage market brief for agents. Include: a punchy headline, 2-3 bullet rate/liquidity signals tied to lock/float guidance, 2-3 coaching angles (scripts or actions for buyers/sellers/prospects), 3 borrower-facing talking points, and any cautions. Keep it under 120 words.',
+              'Create a succinct mortgage market brief for agents. Include: a punchy headline, 2-3 bullet rate/liquidity signals tied to lock/float guidance, 2-3 coaching angles (scripts or actions for buyers/sellers/prospects), 3 borrower-facing talking points, and any cautions. Keep it under 120 words. Keep the focus on purchase conversations, not refinance pitches.',
           },
         ],
       }),
