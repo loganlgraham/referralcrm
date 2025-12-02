@@ -49,9 +49,29 @@ const apiNinjasArraySchema = z
   )
   .min(1);
 
+const apiNinjasWeeklySchema = z
+  .array(
+    z.object({
+      week: z.string().optional(),
+      data: z
+        .object({
+          frm_30: apiNinjasNumber,
+          frm_15: apiNinjasNumber.optional(),
+          fha_30: apiNinjasNumber.optional(),
+          va_30: apiNinjasNumber.optional(),
+          jumbo_30: apiNinjasNumber.optional(),
+          arm_5_1: apiNinjasNumber.optional(),
+          week: z.string().optional(),
+        })
+        .passthrough(),
+    })
+  )
+  .min(1);
+
 type ApiNinjasObjectPayload = z.infer<typeof apiNinjasObjectSchema>;
 type ApiNinjasArrayPayload = z.infer<typeof apiNinjasArraySchema>;
-type ApiNinjasPayload = ApiNinjasObjectPayload | ApiNinjasArrayPayload;
+type ApiNinjasWeeklyPayload = z.infer<typeof apiNinjasWeeklySchema>;
+type ApiNinjasPayload = ApiNinjasObjectPayload | ApiNinjasArrayPayload | ApiNinjasWeeklyPayload;
 
 const briefSchema = z.object({
   headline: z.string().min(1),
@@ -136,6 +156,34 @@ async function writeApiNinjasCache(payload: RateSourceResult) {
 
 function parseApiNinjasRates(data: ApiNinjasPayload): RateSourceResult {
   if (Array.isArray(data)) {
+    const weeklyRow = (data as ApiNinjasWeeklyPayload)[0];
+    if (weeklyRow?.data) {
+      const rates: AverageRate[] = [];
+      const fieldMap: { key: keyof typeof weeklyRow.data; loanType: string }[] = [
+        { key: 'frm_30', loanType: '30-year fixed' },
+        { key: 'frm_15', loanType: '15-year fixed' },
+        { key: 'fha_30', loanType: 'FHA 30-year' },
+        { key: 'va_30', loanType: 'VA 30-year' },
+        { key: 'jumbo_30', loanType: 'Jumbo 30-year' },
+        { key: 'arm_5_1', loanType: '5/6 ARM' },
+      ];
+
+      for (const field of fieldMap) {
+        const value = weeklyRow.data[field.key];
+        if (typeof value !== 'number' || Number.isNaN(value)) continue;
+        rates.push({ loanType: field.loanType, averageRate: `${value.toFixed(2)}%`, change: '—' });
+      }
+
+      if (!rates.length) {
+        throw new Error('ApiNinjas response missing rate values');
+      }
+
+      const rawDate = weeklyRow.data.week || weeklyRow.week;
+      const formattedDate = rawDate ? formatDataDate(rawDate) || rawDate : today;
+
+      return { rates, dataDate: formattedDate };
+    }
+
     const rates: AverageRate[] = [];
     const map = [
       { match: /30\s*year\s*fixed/i, loanType: '30-year fixed' },
@@ -220,6 +268,13 @@ async function fetchApiNinjasRates(): Promise<RateSourceResult> {
     const parsedObject = apiNinjasObjectSchema.safeParse(payload);
     if (parsedObject.success) {
       const result = parseApiNinjasRates(parsedObject.data);
+      await writeApiNinjasCache(result);
+      return result;
+    }
+
+    const parsedWeekly = apiNinjasWeeklySchema.safeParse(payload);
+    if (parsedWeekly.success) {
+      const result = parseApiNinjasRates(parsedWeekly.data);
       await writeApiNinjasCache(result);
       return result;
     }
