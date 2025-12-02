@@ -26,7 +26,7 @@ const apiNinjasNumber = z.preprocess((value) => {
   return value;
 }, z.number().optional());
 
-const apiNinjasSchema = z.object({
+const apiNinjasObjectSchema = z.object({
   date: z.string().optional(),
   last_updated: z.string().optional(),
   thirty_year_fixed: apiNinjasNumber,
@@ -37,7 +37,21 @@ const apiNinjasSchema = z.object({
   five_one_arm: apiNinjasNumber,
 });
 
-type ApiNinjasPayload = z.infer<typeof apiNinjasSchema>;
+const apiNinjasArraySchema = z
+  .array(
+    z.object({
+      product: z.string(),
+      rate: apiNinjasNumber,
+      type: z.string().optional(),
+      term: z.string().optional(),
+      date: z.string().optional(),
+    })
+  )
+  .min(1);
+
+type ApiNinjasObjectPayload = z.infer<typeof apiNinjasObjectSchema>;
+type ApiNinjasArrayPayload = z.infer<typeof apiNinjasArraySchema>;
+type ApiNinjasPayload = ApiNinjasObjectPayload | ApiNinjasArrayPayload;
 
 const briefSchema = z.object({
   headline: z.string().min(1),
@@ -57,6 +71,15 @@ const briefSchema = z.object({
     .default([]),
   dataDate: z.string().default(today),
 });
+
+const fallbackRates: AverageRate[] = [
+  { loanType: '30-year fixed', averageRate: '—', change: '—' },
+  { loanType: '15-year fixed', averageRate: '—', change: '—' },
+  { loanType: 'FHA 30-year', averageRate: '—', change: '—' },
+  { loanType: 'VA 30-year', averageRate: '—', change: '—' },
+  { loanType: 'Jumbo 30-year', averageRate: '—', change: '—' },
+  { loanType: '5/6 ARM', averageRate: '—', change: '—' },
+];
 
 const fallbackBrief = {
   headline: 'Mortgage market check-in',
@@ -80,7 +103,7 @@ const fallbackBrief = {
     'This feed is informational only. Encourage borrowers to confirm pricing and eligibility with licensed lenders.',
     'Avoid quoting rate guarantees; anchor on payment ranges and pre-approval speed.',
   ],
-  averageRates: [],
+  averageRates: fallbackRates,
   dataDate: today,
 };
 
@@ -112,7 +135,35 @@ async function writeApiNinjasCache(payload: RateSourceResult) {
 }
 
 function parseApiNinjasRates(data: ApiNinjasPayload): RateSourceResult {
-  const map: { key: keyof ApiNinjasPayload; loanType: string }[] = [
+  if (Array.isArray(data)) {
+    const rates: AverageRate[] = [];
+    const map = [
+      { match: /30\s*year\s*fixed/i, loanType: '30-year fixed' },
+      { match: /15\s*year\s*fixed/i, loanType: '15-year fixed' },
+      { match: /fha/i, loanType: 'FHA 30-year' },
+      { match: /va/i, loanType: 'VA 30-year' },
+      { match: /jumbo/i, loanType: 'Jumbo 30-year' },
+      { match: /arm/i, loanType: '5/6 ARM' },
+    ];
+
+    for (const row of data) {
+      if (typeof row.rate !== 'number' || Number.isNaN(row.rate)) continue;
+      const match = map.find((entry) => entry.match.test(row.product));
+      const loanType = match?.loanType ?? row.product;
+      rates.push({ loanType, averageRate: `${row.rate.toFixed(2)}%`, change: '—' });
+    }
+
+    if (!rates.length) {
+      throw new Error('ApiNinjas response missing rate values');
+    }
+
+    const rowDate = data.find((row) => row.date)?.date;
+    const formattedDate = rowDate ? formatDataDate(rowDate) || rowDate : today;
+
+    return { rates, dataDate: formattedDate };
+  }
+
+  const map: { key: keyof ApiNinjasObjectPayload; loanType: string }[] = [
     { key: 'thirty_year_fixed', loanType: '30-year fixed' },
     { key: 'fifteen_year_fixed', loanType: '15-year fixed' },
     { key: 'thirty_year_fha', loanType: 'FHA 30-year' },
@@ -166,19 +217,21 @@ async function fetchApiNinjasRates(): Promise<RateSourceResult> {
     }
 
     const payload = await response.json();
-    const parsed = apiNinjasSchema.safeParse(payload);
-    if (!parsed.success) {
+    const parsedObject = apiNinjasObjectSchema.safeParse(payload);
+    const parsedArray = parsedObject.success ? null : apiNinjasArraySchema.safeParse(payload);
+
+    if (!parsedObject.success && !parsedArray?.success) {
       if (fallbackStale) return fallbackStale;
       throw new Error('ApiNinjas mortgage rate payload invalid');
     }
 
-    const result = parseApiNinjasRates(parsed.data);
+    const result = parseApiNinjasRates(parsedObject.success ? parsedObject.data : parsedArray!.data);
     await writeApiNinjasCache(result);
     return result;
   } catch (error) {
     console.error('ApiNinjas fetch failed', error);
     if (fallbackStale) return fallbackStale;
-    return { rates: [], dataDate: today };
+    return { rates: fallbackRates, dataDate: today };
   }
 }
 
