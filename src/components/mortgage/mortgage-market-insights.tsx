@@ -22,22 +22,22 @@ const defaultBrief: MortgageMarketBrief = {
   headlineStories: [
     {
       headline: 'Waiting for live headlines…',
-      takeaway: 'Tap refresh to pull a current market recap. Share local context if you have it from your lender partner.',
+      takeaway: 'Tap refresh for a current market recap. Share local lender color you’re hearing on pricing or overlays.',
     },
   ],
   rateSignals: [
-    'Today’s rates are steady. Use the rate table below as your script and remind clients lenders may price differently.',
-    'Government-backed options (FHA/VA) are typically below conventional 30-year rates—good for payment-sensitive buyers.',
+    'Rates are steady today. Use the live widget as your script and remind clients lender quotes vary.',
+    'Government-backed options (FHA/VA) typically price below conventional 30-year rates—good for payment-sensitive buyers.',
   ],
   coachingAngles: [
-    'Align on their “comfortable payment” today, then encourage a lock if quotes come in near that target.',
-    'Invite active buyers to a 10-minute check-in about timing, payments, and what a lock would look like.',
+    'Align on a comfortable payment today, then suggest locking if quotes land near that target.',
+    'Invite active buyers to a 10-minute check-in about timing, payments, and what locking with their lender would look like.',
   ],
   borrowerAdvice: [
-    'Bring a fresh pay stub and asset snapshot to your lender—faster docs can mean better pricing and quicker locks.',
-    'Expect slight lender-to-lender differences. Have a second quote ready if payment is tight.',
+    'Bring a fresh pay stub and asset snapshot to the lender partner—faster docs can mean better pricing and quicker locks.',
+    'Expect lender-to-lender differences. Have a second quote ready if payment is tight.',
   ],
-  caution: ['Use these talking points for education only. Always defer exact quotes to the lender.'],
+  caution: ['Use these talking points for education only. Always defer exact quotes to the lender you’re working with.'],
   averageRates: [],
   dataDate: '—',
   lastUpdated: '—',
@@ -47,6 +47,7 @@ export function MortgageMarketInsights() {
   const [brief, setBrief] = useState<MortgageMarketBrief>(defaultBrief);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const todayLabel = new Date().toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -56,6 +57,7 @@ export function MortgageMarketInsights() {
   const fetchInsights = async () => {
     setLoading(true);
     setError(null);
+
     try {
       const response = await fetch('/api/mortgage-market', { cache: 'no-store' });
       if (!response.ok) {
@@ -163,15 +165,15 @@ export function MortgageMarketInsights() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
-              <div className="flex-1 rounded-md border border-slate-200 bg-white shadow-sm" style={{ maxWidth: '100%' }}>
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.8fr)] lg:items-start lg:gap-6">
+              <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
                 <div className="w-header" style={{ textAlign: 'center', padding: '6px 0', backgroundColor: '#0f172a', color: '#ffffff' }}>
                   <a href="https://www.mortgagenewsdaily.com/mortgage-rates" target="_blank" rel="noreferrer" style={{ color: '#ffffff', textDecoration: 'none' }}>
                     Mortgage Interest Rates
                   </a>
                 </div>
                 <iframe
-                  src="//widgets.mortgagenewsdaily.com/widget/f/rates?t=large&sn=true&c=0f172a&u=&cbu=&w=760&h=290"
+                  src="//widgets.mortgagenewsdaily.com/widget/f/rates?t=large&sn=true&c=0f172a&u=&cbu=&w=720&h=290"
                   width="100%"
                   height="290"
                   frameBorder="0"
@@ -193,11 +195,11 @@ export function MortgageMarketInsights() {
                 </div>
               </div>
 
-              <div className="lg:w-72">
+              <div className="space-y-3 rounded-md border border-slate-200 bg-white p-4 shadow-sm">
                 {brief.averageRates && brief.averageRates.length > 0 ? (
-                  <div className="rounded-md border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="space-y-2">
                     <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pull these talking points from the widget</p>
-                    <div className="mt-3 space-y-2">
+                    <div className="space-y-2">
                       {brief.averageRates.slice(0, 6).map((rate) => (
                         <div key={rate.loanType} className="flex items-center justify-between rounded bg-slate-50 px-3 py-2 text-sm">
                           <div className="flex flex-col">
@@ -213,11 +215,10 @@ export function MortgageMarketInsights() {
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-md border border-dashed border-slate-200 bg-white p-3 text-sm text-slate-600 shadow-sm">
-                    Live widget data is loading. Refresh to pull today’s rates for scripts.
-                  </div>
+                  <p className="text-sm text-slate-600">Live widget data is loading. Refresh to pull today’s rates for scripts.</p>
                 )}
-                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 shadow-sm">
+
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                   <div className="flex items-center gap-2 font-semibold">
                     <AlertCircleIcon className="h-4 w-4" />
                     Use with care
@@ -242,67 +243,72 @@ export function MortgageMarketInsights() {
         <div className="mt-6 grid gap-5 lg:grid-cols-2">
           <div className="space-y-4">
             <div className="rounded-lg border border-slate-200 p-4">
-            <h2 className="text-sm font-semibold text-slate-800">Headline</h2>
-            <p className="mt-1 text-base font-semibold text-slate-900">{brief.headline}</p>
-            <p className="mt-2 text-sm text-slate-700">{brief.summary}</p>
-          </div>
-          {brief.headlineStories && brief.headlineStories.length > 0 && (
+              <h2 className="text-sm font-semibold text-slate-800">Headline</h2>
+              <p className="mt-1 text-base font-semibold text-slate-900">{brief.headline}</p>
+              <p className="mt-2 text-sm text-slate-700">{brief.summary}</p>
+            </div>
+
+            {brief.headlineStories && brief.headlineStories.length > 0 && (
+              <div className="rounded-lg border border-slate-200 p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                  <SparklesIcon className="h-4 w-4 text-brand" />
+                  Market headlines to share
+                </div>
+                <ul className="mt-3 space-y-3 text-sm text-slate-700">
+                  {brief.headlineStories.map((item) => (
+                    <li key={item.headline} className="space-y-1 rounded-md bg-slate-50 p-3">
+                      <p className="font-semibold text-slate-900">{item.headline}</p>
+                      <p className="text-slate-700">{item.takeaway}</p>
+                      {item.source ? <p className="text-xs text-slate-500">Source: {item.source}</p> : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="rounded-lg border border-slate-200 p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                <SparklesIcon className="h-4 w-4 text-brand" />
-                Market headlines to share
+                <LineChartIcon className="h-4 w-4 text-brand" />
+                Rate and market signals
               </div>
-              <ul className="mt-3 space-y-3 text-sm text-slate-700">
-                {brief.headlineStories.map((item) => (
-                  <li key={item.headline} className="space-y-1 rounded-md bg-slate-50 p-3">
-                    <p className="font-semibold text-slate-900">{item.headline}</p>
-                    <p className="text-slate-700">{item.takeaway}</p>
-                    {item.source ? <p className="text-xs text-slate-500">Source: {item.source}</p> : null}
+              <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                {brief.rateSignals.map((item) => (
+                  <li key={item} className="flex gap-2">
+                    <span className="text-brand">•</span>
+                    <span>{item}</span>
                   </li>
                 ))}
               </ul>
             </div>
-          )}
-          <div className="rounded-lg border border-slate-200 p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <LineChartIcon className="h-4 w-4 text-brand" />
-              Rate and market signals
+
+            <div className="rounded-lg border border-slate-200 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                <SparklesIcon className="h-4 w-4 text-brand" />
+                Coaching angles for agents
+              </div>
+              <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                {brief.coachingAngles.map((item) => (
+                  <li key={item} className="flex gap-2">
+                    <span className="text-brand">•</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <ul className="mt-3 space-y-2 text-sm text-slate-700">
-              {brief.rateSignals.map((item) => (
-                <li key={item} className="flex gap-2">
-                  <span className="text-brand">•</span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
           </div>
-          <div className="rounded-lg border border-slate-200 p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <SparklesIcon className="h-4 w-4 text-brand" />
-              Coaching angles for agents
+
+          <div className="space-y-4">
+            <div className="rounded-lg border border-slate-200 p-4">
+              <h2 className="text-sm font-semibold text-slate-800">Borrower-ready talking points</h2>
+              <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                {brief.borrowerAdvice.map((item) => (
+                  <li key={item} className="flex gap-2">
+                    <span className="text-brand">•</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <ul className="mt-3 space-y-2 text-sm text-slate-700">
-              {brief.coachingAngles.map((item) => (
-                <li key={item} className="flex gap-2">
-                  <span className="text-brand">•</span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-        <div className="space-y-4">
-          <div className="rounded-lg border border-slate-200 p-4">
-            <h2 className="text-sm font-semibold text-slate-800">Borrower-ready talking points</h2>
-            <ul className="mt-3 space-y-2 text-sm text-slate-700">
-              {brief.borrowerAdvice.map((item) => (
-                <li key={item} className="flex gap-2">
-                  <span className="text-brand">•</span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
           </div>
         </div>
       </div>
