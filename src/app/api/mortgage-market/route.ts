@@ -104,24 +104,25 @@ const fallbackRates: AverageRate[] = [
 const fallbackBrief = {
   headline: 'Mortgage market check-in',
   summary:
-    'Give agents a quick, confidence-building script: a rate pulse, why it moved, what to tell active clients, and the one action to take today.',
+    "Quick agent script for today: 'Rates are hovering near national averages this morning. The move is tied to calmer bond marke"
+    + "ts after last week’s data. For active buyers, this keeps payments close to their recent quotes.'",
   rateSignals: [
-    'Lead with the “why” behind today’s move (inflation prints, bond rally, or Fed commentary) and how it shapes lock/float calls.',
-    'Flag notable spread moves (jumbo vs. conforming, ARM vs. fixed) so agents can steer shoppers toward the best-fit product.',
+    'Tell clients: “Markets are steady after recent inflation data; lenders are keeping pricing tight with only minor day-to-day wiggles.”',
+    'Note: jumbo and conforming spreads remain close, and 5/6 ARMs are still pricing below 30-year fixed for payment-conscious buyers.',
   ],
   coachingAngles: [
-    'Share a 2-sentence talk track for buyers: price sensitivity, payment check, and when to lock.',
-    'Prompt sellers to consider rate buydowns or concessions to widen the buyer pool.',
-    'Ask every prospect if they want a lender warm intro today; make it frictionless.',
+    'Open with: “You’re still in the same payment ballpark as last week. Want me to have my lender refresh your exact numbers today?”',
+    'For sellers: suggest a modest buydown or closing credit to keep monthly payments attractive without cutting price.',
+    'Action line: “I can introduce you to my lender partner in the next hour—want me to set that up?”',
   ],
   borrowerAdvice: [
-    'Verify max monthly payment comfort, down payment, and timeline before looping in the lender.',
-    'Remind borrowers to gather income docs and assets so the lender can quote confidently.',
-    'Give a simple “if rates move +/– 0.25%, your payment changes about $15 per $100k” rule of thumb.',
+    'Have them confirm their comfortable monthly payment and down payment, then share both with the lender for a precise quote.',
+    'Ask them to gather pay stubs, W-2s, and asset snapshots so the lender can lock quickly if pricing dips.',
+    'Rule of thumb to share: every 0.25% rate change moves payment roughly $15 per $100k financed.',
   ],
   caution: [
-    'This feed is informational only. Encourage borrowers to confirm pricing and eligibility with licensed lenders.',
-    'Avoid quoting rate guarantees; anchor on payment ranges and pre-approval speed.',
+    'Use these talking points as guidance only; exact eligibility and pricing must come from licensed lenders.',
+    'Avoid promising specific rates—focus on payment ranges and speed to pre-approval.',
   ],
   averageRates: fallbackRates,
   dataDate: today,
