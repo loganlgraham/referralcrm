@@ -133,33 +133,42 @@ export function MortgageMarketInsights() {
         </div>
       )}
 
-      <div className="mt-6 rounded-lg border border-slate-200 p-4">
+      <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-slate-800">Current average mortgage rates</h2>
-            <p className="text-xs text-slate-500">National averages across common loan programs.</p>
+            <h2 className="text-sm font-semibold text-slate-800">Live national rate snapshot</h2>
+            <p className="text-xs text-slate-500">Widget powered by Mortgage News Daily—share with clients as a real-time reference.</p>
           </div>
-          <p className="text-xs text-slate-500">Rates as of {brief.dataDate}</p>
+          <div className="text-right text-xs text-slate-500">
+            <p>Rates as of {brief.dataDate}</p>
+            <p>Local lender quotes may vary.</p>
+          </div>
         </div>
-        <div className="mt-4 overflow-hidden rounded-md border border-slate-100">
-          <div className="grid grid-cols-3 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
-            <span>Loan type</span>
-            <span className="text-right">Avg. rate</span>
-            <span className="text-right">Day change</span>
+        <div className="mt-4 flex justify-center">
+          <div
+            className="mnd-rates-widget w-full max-w-2xl overflow-hidden rounded-md shadow-sm"
+            style={{ backgroundColor: '#f8fafc', border: '1px solid #cbd5e1' }}
+          >
+            <div className="w-header" style={{ textAlign: 'center', padding: '4px 0', backgroundColor: '#0f172a', color: '#ffffff' }}>
+              <a href="https://www.mortgagenewsdaily.com/mortgage-rates" target="_blank" rel="noreferrer" style={{ color: '#ffffff', textDecoration: 'none' }}>
+                Mortgage Interest Rates
+              </a>
+            </div>
+            <iframe
+              src="//widgets.mortgagenewsdaily.com/widget/f/rates?t=large&sn=true&c=0f172a&u=&cbu=&w=498&h=290"
+              width="100%"
+              height="290"
+              frameBorder="0"
+              scrolling="no"
+              style={{ border: 'solid 1px #0f172a', borderWidth: '0 1px', boxSizing: 'border-box', width: '100%', height: '290px', display: 'block' }}
+            />
+            <div className="w-footer" style={{ textAlign: 'center', padding: '4px 0', backgroundColor: '#0f172a', color: '#ffffff' }}>
+              View More{' '}
+              <a href="https://www.mortgagenewsdaily.com/mortgage-rates" target="_blank" rel="noreferrer" style={{ color: '#ffffff', textDecoration: 'none' }}>
+                Mortgage Rates
+              </a>
+            </div>
           </div>
-          {brief.averageRates.length === 0 ? (
-            <div className="px-3 py-3 text-sm text-slate-600">Live rate data will load momentarily.</div>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {brief.averageRates.map((rate) => (
-                <li key={rate.loanType} className="grid grid-cols-3 px-3 py-2 text-sm text-slate-800">
-                  <span>{rate.loanType}</span>
-                  <span className="text-right font-medium">{rate.averageRate}</span>
-                  <span className="text-right text-slate-600">{rate.change}</span>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       </div>
 
