@@ -6,32 +6,41 @@ import { AlertCircleIcon, LineChartIcon, RefreshCwIcon, SparklesIcon } from 'luc
 type MortgageMarketBrief = {
   headline: string;
   summary: string;
+  headlineStories?: { headline: string; takeaway: string; source?: string }[];
   rateSignals: string[];
   coachingAngles: string[];
   borrowerAdvice: string[];
   caution: string[];
   averageRates: { loanType: string; averageRate: string; change: string }[];
   dataDate: string;
+  lastUpdated: string;
 };
 
 const defaultBrief: MortgageMarketBrief = {
   headline: 'Mortgage market check-in',
-  summary: 'Tap “Refresh insights” to generate a daily coaching brief for agents.',
+  summary: 'Daily agent briefing: price the market confidently, coach buyers, and set expectations on timing.',
+  headlineStories: [
+    {
+      headline: 'Waiting for live headlines…',
+      takeaway: 'Tap refresh to pull a current market recap. Share local context if you have it from your lender partner.',
+    },
+  ],
   rateSignals: [
-    'Include today’s context on rate moves and the economic driver (jobs, inflation, bonds).',
-    'Call out how lenders are responding with pricing or concessions.',
+    'Today’s rates are steady. Use the rate table below as your script and remind clients lenders may price differently.',
+    'Government-backed options (FHA/VA) are typically below conventional 30-year rates—good for payment-sensitive buyers.',
   ],
   coachingAngles: [
-    'Give your referral a quick headline and confidence in the process.',
-    'Offer a rate outlook, talk through lock vs. float, and align on next steps.',
+    'Align on their “comfortable payment” today, then encourage a lock if quotes come in near that target.',
+    'Invite active buyers to a 10-minute check-in about timing, payments, and what a lock would look like.',
   ],
   borrowerAdvice: [
-    'Clarify budget, documents, and decision timeline before sending to the lender.',
-    'Keep them focused on controllables: credit hygiene, cash to close, and rate-lock strategy.',
+    'Bring a fresh pay stub and asset snapshot to your lender—faster docs can mean better pricing and quicker locks.',
+    'Expect slight lender-to-lender differences. Have a second quote ready if payment is tight.',
   ],
-  caution: ['Set expectations that this briefing is informational only and not lender advice.'],
+  caution: ['Use these talking points for education only. Always defer exact quotes to the lender.'],
   averageRates: [],
   dataDate: '—',
+  lastUpdated: '—',
 };
 
 export function MortgageMarketInsights() {
@@ -65,6 +74,7 @@ export function MortgageMarketInsights() {
       setBrief({
         ...defaultBrief,
         ...payload,
+        headlineStories: payload.headlineStories ?? defaultBrief.headlineStories,
         headline: fallbackString(payload.headline, defaultBrief.headline),
         summary: fallbackString(payload.summary, defaultBrief.summary),
         rateSignals: fallbackList(payload.rateSignals, defaultBrief.rateSignals),
@@ -76,6 +86,7 @@ export function MortgageMarketInsights() {
             ? payload.averageRates
             : defaultBrief.averageRates,
         dataDate: fallbackString(payload.dataDate, defaultBrief.dataDate),
+        lastUpdated: fallbackString(payload.lastUpdated, defaultBrief.lastUpdated),
       });
     } catch (err) {
       setError('Unable to load mortgage market insights.');
@@ -101,7 +112,7 @@ export function MortgageMarketInsights() {
             <p className="text-sm text-slate-600">
               Daily, AI-assisted talking points that tie market conditions to borrower conversations.
             </p>
-            <p className="mt-1 text-xs text-slate-500">Updated {brief.dataDate}</p>
+            <p className="mt-1 text-xs text-slate-500">Updated {brief.lastUpdated}</p>
           </div>
         </div>
         <button
@@ -128,7 +139,7 @@ export function MortgageMarketInsights() {
             <h2 className="text-sm font-semibold text-slate-800">Current average mortgage rates</h2>
             <p className="text-xs text-slate-500">National averages across common loan programs.</p>
           </div>
-          <p className="text-xs text-slate-500">As of {brief.dataDate}</p>
+          <p className="text-xs text-slate-500">Rates as of {brief.dataDate}</p>
         </div>
         <div className="mt-4 overflow-hidden rounded-md border border-slate-100">
           <div className="grid grid-cols-3 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
@@ -159,6 +170,23 @@ export function MortgageMarketInsights() {
             <p className="mt-1 text-base font-semibold text-slate-900">{brief.headline}</p>
             <p className="mt-2 text-sm text-slate-700">{brief.summary}</p>
           </div>
+          {brief.headlineStories && brief.headlineStories.length > 0 && (
+            <div className="rounded-lg border border-slate-200 p-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                <SparklesIcon className="h-4 w-4 text-brand" />
+                Market headlines to share
+              </div>
+              <ul className="mt-3 space-y-3 text-sm text-slate-700">
+                {brief.headlineStories.map((item) => (
+                  <li key={item.headline} className="space-y-1 rounded-md bg-slate-50 p-3">
+                    <p className="font-semibold text-slate-900">{item.headline}</p>
+                    <p className="text-slate-700">{item.takeaway}</p>
+                    {item.source ? <p className="text-xs text-slate-500">Source: {item.source}</p> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="rounded-lg border border-slate-200 p-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
               <LineChartIcon className="h-4 w-4 text-brand" />

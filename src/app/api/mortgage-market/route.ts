@@ -14,6 +14,7 @@ type RateSourceResult = {
 };
 
 const today = new Date().toISOString().slice(0, 10);
+const formattedToday = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
 const apiNinjasCachePath = '/tmp/api-ninjas-mortgage-rates.json';
 const fallbackApiKey = 'TSM1KIhd4UFMkpQat+SHnA==wVYsHgZ6Hz7YxKFB';
@@ -76,6 +77,15 @@ type ApiNinjasPayload = ApiNinjasObjectPayload | ApiNinjasArrayPayload | ApiNinj
 const briefSchema = z.object({
   headline: z.string().min(1),
   summary: z.string().min(1),
+  headlineStories: z
+    .array(
+      z.object({
+        headline: z.string().min(1),
+        takeaway: z.string().min(1),
+        source: z.string().optional(),
+      })
+    )
+    .optional(),
   rateSignals: z.array(z.string().min(1)).min(1),
   coachingAngles: z.array(z.string().min(1)).min(1),
   borrowerAdvice: z.array(z.string().min(1)).min(1),
@@ -90,6 +100,7 @@ const briefSchema = z.object({
     )
     .default([]),
   dataDate: z.string().default(today),
+  lastUpdated: z.string().default(formattedToday),
 });
 
 const fallbackRates: AverageRate[] = [
@@ -104,27 +115,32 @@ const fallbackRates: AverageRate[] = [
 const fallbackBrief = {
   headline: 'Mortgage market check-in',
   summary:
-    "Agent script for today: 'Rates are holding near the week’s averages after calmer bond trading. Buyers should expect quotes close to last week’s numbers with small lender-to-lender differences.'",
+    'Agent script for today: “Rates are trending steady. Use the table below as your quote anchor and set expectations that lenders may price a touch differently.”',
+  headlineStories: [
+    {
+      headline: 'Awaiting live market headlines',
+      takeaway: 'Tap refresh to pull fresh news. If headlines are unavailable, share what you’re hearing locally about buyer demand and lender pricing.',
+    },
+  ],
   rateSignals: [
-    'Explain: “Pricing is stable after last week’s data, so payments should look similar to your recent lender estimates.”',
-    'Share: jumbo and conforming pricing are closely aligned, and 5/6 ARMs remain below 30-year fixed for payment-sensitive buyers.',
+    '30-year fixed and 15-year fixed rates are hovering near recent averages—stable footing for buyers comparing payments.',
+    'Government-backed (FHA/VA) options typically price below conventional 30-year rates, helping payment-sensitive buyers qualify.',
+    'Jumbo pricing is close to conforming quotes in many cases; ask lenders for both when buyers are near county limits.',
   ],
   coachingAngles: [
-    'Encourage active buyers to lock if they’re happy with today’s payment range to avoid next week’s potential bumps.',
-    'Invite prospects to a quick Q&A (text or Zoom) about current pricing and steps to stay lock-ready.',
-    'Re-engage past clients about move-up or relocation plans and offer to refresh their pre-approval—not a refinance pitch.',
+    'Agree on a “comfortable payment” today and green-light a lock if quotes land near that target.',
+    'Offer a 10-minute buyer huddle to align on payment, closing timeline, and what triggers a lock decision.',
+    'Invite weekend shoppers to get documents in order now so the lender can issue an updated approval quickly.',
   ],
   borrowerAdvice: [
-    'Confirm their comfortable monthly payment and down payment target, then share both with the lender for a refreshed quote.',
-    'Have them gather pay stubs, W-2s, and asset snapshots so the lender can move fast if pricing improves.',
-    'Share the rule of thumb: every 0.25% rate move shifts payment roughly $15 per $100k financed.',
+    'Share a recent pay stub and asset snapshot with your lender—fast docs keep you ready to lock when pricing looks good.',
+    'Expect small differences between lenders; getting a backup quote can sharpen pricing and confidence.',
+    'Talk in payments, not just rates: every 0.25% move shifts payment roughly $15 per $100k financed.',
   ],
-  caution: [
-    'These talking points are for real estate agents; exact eligibility and pricing must come from licensed lenders.',
-    'Avoid promising specific rates—stick to payment ranges and timelines to pre-approval and closing.',
-  ],
+  caution: ['Educational only—agents should not promise specific rates or terms. Always defer to the lender for pricing.'],
   averageRates: fallbackRates,
-  dataDate: today,
+  dataDate: formattedToday,
+  lastUpdated: formattedToday,
 };
 
 export const dynamic = 'force-dynamic';
@@ -302,6 +318,64 @@ function formatDataDate(date: string) {
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function deriveRateSignals(rates: AverageRate[], dataDate: string): string[] {
+  if (!rates.length) return fallbackBrief.rateSignals;
+
+  const asOf = dataDate ? `as of ${dataDate}` : 'today';
+  const parseRate = (value: string) => {
+    const parsed = Number.parseFloat(value.replace('%', ''));
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const thirty = rates.find((r) => /30-year fixed/i.test(r.loanType));
+  const fifteen = rates.find((r) => /15-year fixed/i.test(r.loanType));
+  const gov = rates.filter((r) => /(FHA|VA)/i.test(r.loanType));
+  const jumbo = rates.find((r) => /Jumbo/i.test(r.loanType));
+
+  const messages: string[] = [];
+
+  if (thirty) {
+    messages.push(`30-year fixed is around ${thirty.averageRate} ${asOf}. Use it as your payment anchor in buyer calls.`);
+  }
+
+  if (fifteen) {
+    const fifteenVal = parseRate(fifteen.averageRate);
+    const thirtyVal = thirty ? parseRate(thirty.averageRate) : null;
+    if (fifteenVal && thirtyVal) {
+      const spread = (thirtyVal - fifteenVal).toFixed(2);
+      messages.push(`15-year fixed is lower by ~${spread}% versus 30-year. Position it for buyers with aggressive payoff goals.`);
+    } else {
+      messages.push(`15-year fixed is posting near ${fifteen.averageRate}; use for buyers prioritizing faster payoff.`);
+    }
+  }
+
+  if (gov.length) {
+    const govMin = gov
+      .map((r) => parseRate(r.averageRate))
+      .filter((v): v is number => v !== null)
+      .sort((a, b) => a - b)[0];
+    const thirtyVal = thirty ? parseRate(thirty.averageRate) : null;
+    if (govMin) {
+      const spread = thirtyVal ? (thirtyVal - govMin).toFixed(2) : '0.25';
+      messages.push(`FHA/VA quotes are often below conventional by ~${spread}%. Mention this for payment-sensitive buyers.`);
+    }
+  }
+
+  if (jumbo && thirty) {
+    const jumboVal = parseRate(jumbo.averageRate);
+    const thirtyVal = parseRate(thirty.averageRate);
+    if (jumboVal && thirtyVal) {
+      const spread = (jumboVal - thirtyVal).toFixed(2);
+      messages.push(
+        `Jumbo vs conforming: spread is about ${spread}% ${asOf}. If buyers are near county limits, ask lenders for both.`
+      );
+    }
+  }
+
+  if (!messages.length) return fallbackBrief.rateSignals;
+  return messages.slice(0, 4);
+}
+
 export async function GET() {
   try {
     const apiNinjasRates = await fetchApiNinjasRates();
@@ -316,11 +390,15 @@ export async function GET() {
       apiNinjasRates?.dataDate ||
       new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
+    const rateSignals = deriveRateSignals(combinedRates.length ? combinedRates : fallbackRates, rateDataDate);
+
     if (!process.env.OPENAI_API_KEY) {
       const mergedFallback = {
         ...fallbackBrief,
+        rateSignals,
         averageRates: combinedRates.length ? combinedRates : fallbackBrief.averageRates,
         dataDate: rateDataDate,
+        lastUpdated: formattedToday,
       };
 
       return NextResponse.json(mergedFallback, {
@@ -350,6 +428,20 @@ export async function GET() {
               properties: {
                 headline: { type: 'string' },
                 summary: { type: 'string' },
+                headlineStories: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      headline: { type: 'string' },
+                      takeaway: { type: 'string' },
+                      source: { type: 'string' },
+                    },
+                    required: ['headline', 'takeaway'],
+                  },
+                  minItems: 0,
+                },
                 rateSignals: {
                   type: 'array',
                   items: { type: 'string' },
@@ -385,6 +477,7 @@ export async function GET() {
                   minItems: 1,
                 },
                 dataDate: { type: 'string' },
+                lastUpdated: { type: 'string' },
               },
               required: [
                 'headline',
@@ -405,7 +498,7 @@ export async function GET() {
           {
             role: 'user',
             content:
-              'Create a succinct mortgage market brief for agents. Include: a punchy headline, 2-3 bullet rate/liquidity signals tied to lock/float guidance, 2-3 coaching angles (scripts or actions for buyers/sellers/prospects), 3 borrower-facing talking points, and any cautions. Keep it under 120 words. Keep the focus on purchase conversations, not refinance pitches.',
+              'Create a succinct mortgage market brief for agents. Include: a punchy headline, 2-3 bullet rate/liquidity signals tied to lock/float guidance, 2-3 coaching angles (scripts or actions for buyers/sellers/prospects), 3 borrower-facing talking points, up to 2 current mortgage/real-estate headlines with short takeaways (only if you are confident; otherwise leave empty), and any cautions. Keep it under 140 words. Keep the focus on purchase conversations, not refinance pitches. Do not invent headlines—omit them if unsure.',
           },
         ],
       }),
@@ -416,8 +509,10 @@ export async function GET() {
       console.error('Mortgage market insights OpenAI error', payload);
       const mergedFallback = {
         ...fallbackBrief,
+        rateSignals,
         averageRates: combinedRates.length ? combinedRates : fallbackBrief.averageRates,
         dataDate: rateDataDate,
+        lastUpdated: formattedToday,
       };
 
       return NextResponse.json(mergedFallback, {
@@ -433,8 +528,10 @@ export async function GET() {
     if (!content) {
       const mergedFallback = {
         ...fallbackBrief,
+        rateSignals,
         averageRates: combinedRates.length ? combinedRates : fallbackBrief.averageRates,
         dataDate: rateDataDate,
+        lastUpdated: formattedToday,
       };
 
       return NextResponse.json(mergedFallback, {
@@ -452,8 +549,10 @@ export async function GET() {
       console.error('Mortgage market insights parse error', error);
       const mergedFallback = {
         ...fallbackBrief,
+        rateSignals,
         averageRates: combinedRates.length ? combinedRates : fallbackBrief.averageRates,
         dataDate: rateDataDate,
+        lastUpdated: formattedToday,
       };
 
       return NextResponse.json(mergedFallback, {
@@ -471,6 +570,9 @@ export async function GET() {
       ...brief,
       averageRates: combinedRates.length ? combinedRates : brief.averageRates,
       dataDate: rateDataDate,
+      rateSignals: rateSignals.length ? rateSignals : brief.rateSignals,
+      headlineStories: brief.headlineStories ?? fallbackBrief.headlineStories,
+      lastUpdated: formattedToday,
     };
 
     return NextResponse.json(mergedBrief, {
@@ -488,6 +590,7 @@ export async function GET() {
           ...fallbackBrief,
           averageRates: stale.rates,
           dataDate: stale.dataDate || fallbackBrief.dataDate,
+          lastUpdated: formattedToday,
         },
         {
           status: 200,
@@ -502,6 +605,7 @@ export async function GET() {
       {
         ...fallbackBrief,
         dataDate: fallbackBrief.dataDate,
+        lastUpdated: formattedToday,
         averageRates: fallbackBrief.averageRates,
         error: 'Live mortgage rates are temporarily unavailable.',
       },
