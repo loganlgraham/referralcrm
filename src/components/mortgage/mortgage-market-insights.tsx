@@ -231,19 +231,17 @@ export function MortgageMarketInsights() {
                     ))}
                   </ul>
                   <p className="mt-3 text-xs text-amber-700">
-                    These insights are informational—quote specifics must come from a licensed lender.
+                    These insights are informational—quote specifics must come from the lender you’re working with.
                   </p>
                 </div>
               </div>
             </div>
-            </div>
           </div>
         </div>
-      </div>
 
-      <div className="mt-6 grid gap-5 lg:grid-cols-2">
-        <div className="space-y-4">
-          <div className="rounded-lg border border-slate-200 p-4">
+        <div className="mt-6 grid gap-5 lg:grid-cols-2">
+          <div className="space-y-4">
+            <div className="rounded-lg border border-slate-200 p-4">
             <h2 className="text-sm font-semibold text-slate-800">Headline</h2>
             <p className="mt-1 text-base font-semibold text-slate-900">{brief.headline}</p>
             <p className="mt-2 text-sm text-slate-700">{brief.summary}</p>
