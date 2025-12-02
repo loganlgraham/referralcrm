@@ -218,16 +218,21 @@ async function fetchApiNinjasRates(): Promise<RateSourceResult> {
 
     const payload = await response.json();
     const parsedObject = apiNinjasObjectSchema.safeParse(payload);
-    const parsedArray = parsedObject.success ? null : apiNinjasArraySchema.safeParse(payload);
-
-    if (!parsedObject.success && !parsedArray?.success) {
-      if (fallbackStale) return fallbackStale;
-      throw new Error('ApiNinjas mortgage rate payload invalid');
+    if (parsedObject.success) {
+      const result = parseApiNinjasRates(parsedObject.data);
+      await writeApiNinjasCache(result);
+      return result;
     }
 
-    const result = parseApiNinjasRates(parsedObject.success ? parsedObject.data : parsedArray!.data);
-    await writeApiNinjasCache(result);
-    return result;
+    const parsedArray = apiNinjasArraySchema.safeParse(payload);
+    if (parsedArray.success) {
+      const result = parseApiNinjasRates(parsedArray.data);
+      await writeApiNinjasCache(result);
+      return result;
+    }
+
+    if (fallbackStale) return fallbackStale;
+    throw new Error('ApiNinjas mortgage rate payload invalid');
   } catch (error) {
     console.error('ApiNinjas fetch failed', error);
     if (fallbackStale) return fallbackStale;
