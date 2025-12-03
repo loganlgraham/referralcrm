@@ -4,7 +4,7 @@ import { Referral, ReferralDocument } from '@/models/referral';
 import { Payment } from '@/models/payment';
 import { updateReferralSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
-import { canManageReferral, canViewReferral } from '@/lib/rbac';
+import { canManageReferral } from '@/lib/rbac';
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 
@@ -188,7 +188,11 @@ export async function DELETE(request: NextRequest, context: RouteContext): Promi
   if (referral.deletedAt) {
     return new NextResponse('Not found', { status: 404 });
   }
-  if (!canViewReferral(session, { assignedAgent: referral.assignedAgent, lender: referral.lender, org: referral.org })) {
+  const canDelete =
+    session.user.role === 'agent' ||
+    canManageReferral(session, { assignedAgent: referral.assignedAgent, lender: referral.lender, org: referral.org });
+
+  if (!canDelete) {
     return new NextResponse('Forbidden', { status: 403 });
   }
   await Payment.deleteMany({ referralId: referral._id });
