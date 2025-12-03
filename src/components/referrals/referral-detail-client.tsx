@@ -514,7 +514,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     return referral.lookingInZip ?? '';
   }, [referral.lookingInZips, referral.lookingInZip]);
 
-  const canDelete = viewerRole === 'admin' || viewerRole === 'manager';
+  const canDelete =
+    (viewerRole === 'admin' && referral.origin === 'admin') ||
+    (viewerRole === 'agent' && referral.origin === 'agent');
   const canEditDetails = viewerRole !== 'viewer';
 
   useEffect(() => {
