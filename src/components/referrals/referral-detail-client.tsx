@@ -49,6 +49,7 @@ interface ReferralDetail {
   lookingInZips?: string[] | null;
   borrowerCurrentAddress?: string | null;
   stageOnTransfer?: string | null;
+  loanType?: string | null;
   borrower: {
     name: string;
     email: string;
