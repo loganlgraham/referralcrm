@@ -4,7 +4,7 @@ import { Referral, ReferralDocument } from '@/models/referral';
 import { Payment } from '@/models/payment';
 import { updateReferralSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
-import { canManageReferral } from '@/lib/rbac';
+import { canManageReferral, canViewReferral } from '@/lib/rbac';
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 
