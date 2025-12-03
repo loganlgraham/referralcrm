@@ -188,9 +188,9 @@ export async function DELETE(request: NextRequest, context: RouteContext): Promi
   if (referral.deletedAt) {
     return new NextResponse('Not found', { status: 404 });
   }
-  const canDelete =
-    session.user.role === 'agent' ||
-    canManageReferral(session, { assignedAgent: referral.assignedAgent, lender: referral.lender, org: referral.org });
+  const agentDeletingAgentReferral = session.user.role === 'agent' && referral.origin === 'agent';
+  const adminDeletingAdminReferral = session.user.role === 'admin' && referral.origin === 'admin';
+  const canDelete = agentDeletingAgentReferral || adminDeletingAdminReferral;
 
   if (!canDelete) {
     return new NextResponse('Forbidden', { status: 403 });
