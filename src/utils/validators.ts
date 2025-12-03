@@ -36,6 +36,8 @@ export const updateReferralSchema = z.object({
   borrowerCurrentAddress: z.string().min(1).optional(),
   stageOnTransfer: z.string().min(1).optional(),
   loanFileNumber: z.string().min(1).optional(),
+  loanType: z.string().optional(),
+  preApprovalAmount: z.number().min(0).optional(),
 });
 
 export const createActivitySchema = z.object({

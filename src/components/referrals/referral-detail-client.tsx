@@ -13,6 +13,7 @@ import type { Contact } from '@/components/referrals/contact-assignment';
 import type { ReferralStatus } from '@/constants/referrals';
 import { ReferralDeals } from '@/components/referrals/referral-deals';
 import type { ReferralPayment } from '@/types/referral-payment';
+import { formatCurrency } from '@/utils/formatters';
 
 type ReferralSource = string;
 type ReferralClientType = 'Seller' | 'Buyer' | 'Both';
@@ -115,6 +116,8 @@ interface DetailDraft {
   lookingInZip: string;
   borrowerCurrentAddress: string;
   stageOnTransfer: TransferStage;
+  loanType: string;
+  preApprovalAmount: string;
 }
 
 const DETAIL_FIELD_KEYS: (keyof DetailDraft)[] = [
@@ -125,6 +128,8 @@ const DETAIL_FIELD_KEYS: (keyof DetailDraft)[] = [
   'lookingInZip',
   'borrowerCurrentAddress',
   'stageOnTransfer',
+  'loanType',
+  'preApprovalAmount',
 ];
 
 const ensureString = (value: unknown) => (typeof value === 'string' ? value : '');
@@ -167,6 +172,57 @@ const parseZipList = (value: string): string[] =>
 
 const formatZipList = (values: string[]): string => values.join(', ');
 
+const centsToCurrencyInput = (value?: number | null) => {
+  if (!value) {
+    return '';
+  }
+  const amount = value / 100;
+  return Number.isInteger(amount) ? amount.toString() : amount.toFixed(2);
+};
+
+const sanitizeCurrencyInput = (value: string) => {
+  if (!value) {
+    return '';
+  }
+  const stripped = value.replace(/[^0-9.]/g, '');
+  if (!stripped) {
+    return '';
+  }
+
+  const [integerPart = '', ...decimalParts] = stripped.split('.');
+  const decimalPart = decimalParts.join('').slice(0, 2);
+  const normalizedInteger = integerPart.replace(/^0+(?=\d)/, '');
+  const hasDecimal = decimalParts.length > 0;
+  const safeInteger = normalizedInteger || (integerPart.length > 0 ? '0' : '');
+
+  if (!hasDecimal) {
+    return safeInteger;
+  }
+
+  const integerPortion = safeInteger || '0';
+  return decimalPart.length > 0 ? `${integerPortion}.${decimalPart}` : `${integerPortion}.`;
+};
+
+const formatCurrencyInputDisplay = (value: string) => {
+  if (!value) {
+    return '';
+  }
+
+  const [integerPart = '', decimalPart] = value.split('.');
+  const hasDecimal = decimalPart !== undefined;
+  const sanitizedInteger = integerPart.replace(/[^0-9]/g, '');
+  const integerValue = sanitizedInteger ? Number(sanitizedInteger) : 0;
+  const formattedInteger = sanitizedInteger
+    ? new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(integerValue)
+    : '';
+
+  if (!hasDecimal) {
+    return formattedInteger;
+  }
+
+  return decimalPart !== undefined ? `${formattedInteger}.${decimalPart}` : formattedInteger;
+};
+
 const createDetailDraft = (referral: ReferralDetail): DetailDraft => ({
   loanFileNumber: ensureString(referral?.loanFileNumber),
   source: normalizeSource(referral?.source),
@@ -183,6 +239,8 @@ const createDetailDraft = (referral: ReferralDetail): DetailDraft => ({
   })(),
   borrowerCurrentAddress: ensureString(referral?.borrowerCurrentAddress),
   stageOnTransfer: normalizeStageOnTransfer(referral?.stageOnTransfer),
+  loanType: ensureString(referral?.loanType),
+  preApprovalAmount: sanitizeCurrencyInput(centsToCurrencyInput(referral?.preApprovalAmountCents)),
 });
 
 const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
@@ -193,6 +251,8 @@ const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
   lookingInZip: formatZipList(parseZipList(draft.lookingInZip)),
   borrowerCurrentAddress: draft.borrowerCurrentAddress.trim(),
   stageOnTransfer: normalizeStageOnTransfer(draft.stageOnTransfer),
+  loanType: draft.loanType.trim(),
+  preApprovalAmount: sanitizeCurrencyInput(draft.preApprovalAmount),
 });
 
 const formatFullAddress = (
@@ -434,6 +494,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       referral.lookingInZips,
       referral.borrowerCurrentAddress,
       referral.stageOnTransfer,
+      referral.loanType,
+      referral.preApprovalAmountCents,
     ]
   );
   const detailsChanged = useMemo(
@@ -584,6 +646,11 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       setDetailsDraft((previous) => ({ ...previous, [field]: value as DetailDraft[K] }));
     };
 
+  const handlePreApprovalChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const sanitized = sanitizeCurrencyInput(event.target.value);
+    setDetailsDraft((previous) => ({ ...previous, preApprovalAmount: sanitized }));
+  };
+
   const startEditingDetails = () => {
     setDetailsDraft(createDetailDraft(referral));
     setIsEditingDetails(true);
@@ -632,6 +699,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
     const normalizedDraft = normalizeDetailDraft(detailsDraft);
     const normalizedCurrent = normalizedCurrentDetails;
+    const hasExistingPreApproval = Boolean(normalizedCurrent.preApprovalAmount);
+    let preApprovalAmountValue: number | undefined;
 
     if (!DETAIL_FIELD_KEYS.some((field) => normalizedDraft[field] !== normalizedCurrent[field])) {
       toast.info('No changes to save');
@@ -661,10 +730,24 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       return;
     }
 
+    if (normalizedDraft.preApprovalAmount) {
+      preApprovalAmountValue = Number.parseFloat(normalizedDraft.preApprovalAmount);
+      if (Number.isNaN(preApprovalAmountValue) || preApprovalAmountValue < 0) {
+        toast.error('Enter a valid pre-approval amount.');
+        return;
+      }
+    } else if (hasExistingPreApproval) {
+      preApprovalAmountValue = 0;
+    }
+
     const payload: Record<string, unknown> = {};
     DETAIL_FIELD_KEYS.forEach((field) => {
       if (normalizedDraft[field] !== normalizedCurrent[field]) {
-        payload[field] = normalizedDraft[field];
+        if (field === 'preApprovalAmount') {
+          payload.preApprovalAmount = preApprovalAmountValue;
+        } else {
+          payload[field] = normalizedDraft[field];
+        }
       }
     });
 
@@ -745,6 +828,15 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         lookingInZips: parsedZips,
         borrowerCurrentAddress: normalizedDraft.borrowerCurrentAddress,
         stageOnTransfer: normalizedDraft.stageOnTransfer,
+        loanType: normalizedDraft.loanType,
+        preApprovalAmountCents:
+          preApprovalAmountValue === undefined
+            ? previous.preApprovalAmountCents
+            : Math.round(preApprovalAmountValue * 100),
+        estPurchasePriceCents:
+          preApprovalAmountValue === undefined
+            ? previous.estPurchasePriceCents
+            : Math.round(preApprovalAmountValue * 100),
       }));
       setDetailsDraft(normalizedDraft);
       setIsEditingDetails(false);
@@ -1104,6 +1196,33 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                 />
               </label>
+              <label className="space-y-1 text-sm font-medium text-slate-600">
+                <span>Loan Type</span>
+                <input
+                  name="loanType"
+                  value={detailsDraft.loanType}
+                  onChange={handleDetailInputChange('loanType')}
+                  disabled={savingDetails}
+                  className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                />
+              </label>
+              <label className="space-y-1 text-sm font-medium text-slate-600">
+                <span>Pre-approval Amount</span>
+                <div className="relative">
+                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-slate-400">
+                    $
+                  </span>
+                  <input
+                    name="preApprovalAmount"
+                    value={formatCurrencyInputDisplay(detailsDraft.preApprovalAmount)}
+                    onChange={handlePreApprovalChange}
+                    disabled={savingDetails}
+                    className="mt-1 w-full rounded border border-slate-300 px-3 py-2 pl-7 text-sm shadow-sm focus:border-brand focus:outline-none"
+                    inputMode="decimal"
+                    placeholder="300,000"
+                  />
+                </div>
+              </label>
               {!isAgentOrigin && (
                 <>
                   <label className="space-y-1 text-sm font-medium text-slate-600">
@@ -1201,6 +1320,16 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             <div className="space-y-1">
               <dt className="text-xs uppercase text-slate-500">Loan File #</dt>
               <dd className="text-sm font-semibold text-slate-900">{referral.loanFileNumber || '—'}</dd>
+            </div>
+            <div className="space-y-1">
+              <dt className="text-xs uppercase text-slate-500">Loan Type</dt>
+              <dd className="text-sm text-slate-700">{referral.loanType?.trim() ? referral.loanType : '—'}</dd>
+            </div>
+            <div className="space-y-1">
+              <dt className="text-xs uppercase text-slate-500">Pre-approval Amount</dt>
+              <dd className="text-sm text-slate-700">
+                {referral.preApprovalAmountCents ? formatCurrency(referral.preApprovalAmountCents) : '—'}
+              </dd>
             </div>
             {!isAgentOrigin && (
               <>

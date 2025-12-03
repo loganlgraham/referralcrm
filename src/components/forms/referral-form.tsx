@@ -348,32 +348,36 @@ export function ReferralForm() {
                   ))}
                 </select>
               </label>
-              <label className={labelClasses}>
-                Loan file number
-                <input name="loanFileNumber" required={!isAgent} className={inputClasses} />
-              </label>
-              <label className={labelClasses}>
-                Loan type
-                <input name="loanType" placeholder="Conventional, FHA, VA…" className={inputClasses} />
-              </label>
-              <label className={labelClasses}>
-                Pre-approval amount
-                <div className="relative mt-2">
-                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-slate-400">
-                    $
-                  </span>
-                  <input
-                    name="preApprovalAmount"
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9,]*"
-                    className={`${inputClasses} pl-7`}
-                    placeholder="300,000"
-                    onFocus={handleCurrencyFocus}
-                    onBlur={handleCurrencyBlur}
-                  />
-                </div>
-              </label>
+              {!isAgent && (
+                <>
+                  <label className={labelClasses}>
+                    Loan file number
+                    <input name="loanFileNumber" required className={inputClasses} />
+                  </label>
+                  <label className={labelClasses}>
+                    Loan type
+                    <input name="loanType" placeholder="Conventional, FHA, VA…" className={inputClasses} />
+                  </label>
+                  <label className={labelClasses}>
+                    Pre-approval amount
+                    <div className="relative mt-2">
+                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-slate-400">
+                        $
+                      </span>
+                      <input
+                        name="preApprovalAmount"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9,]*"
+                        className={`${inputClasses} pl-7`}
+                        placeholder="300,000"
+                        onFocus={handleCurrencyFocus}
+                        onBlur={handleCurrencyBlur}
+                      />
+                    </div>
+                  </label>
+                </>
+              )}
               <label className={labelClasses}>
                 Looking in (ZIP)
                 <input
