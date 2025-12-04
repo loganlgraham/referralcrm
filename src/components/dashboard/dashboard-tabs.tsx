@@ -1160,7 +1160,7 @@ function MainDashboard({
     {
       title: 'Realized revenue',
       value: formatCurrency(summary.realizedRevenueCents),
-      helper: `Closed, not paid ${formatCurrency(summary.closedNotPaidCents)}`
+      extraStats: [{ label: 'Closed, not paid', value: formatCurrency(summary.closedNotPaidCents) }]
     },
     {
       title: 'Pending closings',
@@ -1173,12 +1173,17 @@ function MainDashboard({
     {
       title: 'Total referrals',
       value: formatNumber(summary.totalReferrals),
-      helper: `${formatNumber(summary.dealsClosed)} closed`
+      extraStats: [{ label: 'Closed', value: formatNumber(summary.dealsClosed) }]
     },
     {
       title: 'Close rate',
       value: `${summary.closeRate.toFixed(1)}%`,
-      helper: `Avg. days closed → paid ${summary.averageDaysClosedToPaid.toFixed(1)} days`
+      extraStats: [
+        {
+          label: 'Avg. days closed → paid',
+          value: `${summary.averageDaysClosedToPaid.toFixed(1)} days`
+        }
+      ]
     }
   ];
 
