@@ -23,6 +23,7 @@ const taskSchema = z.object({
 const payloadSchema = z.object({
   frequency: z.enum(['daily', 'weekly']),
   tasks: z.array(taskSchema).min(1),
+  recipient: z.string().trim().email().optional(),
 });
 
 const formatDueDate = (value?: string | null): string | null => {
@@ -37,8 +38,13 @@ const formatDueDate = (value?: string | null): string | null => {
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
+  const automationSecret = process.env.TASK_REMINDER_SECRET;
+  const isAutomationRequest = Boolean(
+    automationSecret && request.headers.get('x-task-reminder-secret') === automationSecret
+  );
+
   const session = await getCurrentSession();
-  if (!session?.user?.id) {
+  if (!isAutomationRequest && !session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -53,12 +59,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Task reminder email is not configured.' }, { status: 503 });
   }
 
-  const recipient = session.user.email;
+  const { frequency, tasks, recipient: overrideRecipient } = parsed.data;
+  const recipient = isAutomationRequest ? overrideRecipient : session?.user?.email ?? null;
   if (!recipient) {
-    return NextResponse.json({ error: 'Your account is missing an email address.' }, { status: 400 });
+    const message = isAutomationRequest
+      ? 'Recipient email address is required for automated reminders.'
+      : 'Your account is missing an email address.';
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  const { frequency, tasks } = parsed.data;
+  if (isAutomationRequest && !automationSecret) {
+    return NextResponse.json({ error: 'Automated reminders are not configured.' }, { status: 503 });
+  }
   const cadenceLabel = frequency === 'daily' ? 'Daily' : 'Weekly';
   const scheduleText = frequency === 'weekly' ? 'Mondays at 8:00 AM MT' : '8:00 AM MT each day';
   const origin = new URL(request.url).origin;
@@ -74,9 +86,9 @@ export async function POST(request: NextRequest) {
   await connectMongo();
 
   const agentRecord =
-    session.user.role === 'agent' ? await Agent.findOne({ userId: session.user.id }).select('_id') : null;
+    session?.user?.role === 'agent' ? await Agent.findOne({ userId: session.user.id }).select('_id') : null;
 
-  if (session.user.role === 'agent' && !agentRecord?._id) {
+  if (!isAutomationRequest && session?.user?.role === 'agent' && !agentRecord?._id) {
     return NextResponse.json({ error: 'Agent account not found.' }, { status: 403 });
   }
 
@@ -106,7 +118,7 @@ export async function POST(request: NextRequest) {
 
     const side: 'buy' | 'sell' = referral.dealSide === 'sell' ? 'sell' : 'buy';
 
-    if (session.user.role === 'agent') {
+    if (!isAutomationRequest && session?.user?.role === 'agent') {
       const isBuySideAgent = referral.buySideAgent && 'userId' in referral.buySideAgent
         ? String(referral.buySideAgent.userId) === session.user.id
         : false;
