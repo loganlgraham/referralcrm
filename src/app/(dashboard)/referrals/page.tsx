@@ -21,6 +21,9 @@ export default async function ReferralsPage({
   const role = (session?.user?.role as 'admin' | 'manager' | 'mc' | 'agent' | 'viewer' | undefined) ?? 'viewer';
   const tableMode: 'admin' | 'mc' | 'agent' = role === 'agent' ? 'agent' : role === 'mc' ? 'mc' : 'admin';
   const ahaBucketParam = searchParams.ahaBucket?.toString();
+  const agentReferralsParam = searchParams.agentReferrals?.toString();
+  const agentReferrals =
+    agentReferralsParam === 'yes' || agentReferralsParam === 'no' ? agentReferralsParam : 'all';
 
   const data = await getReferrals({
     session,
@@ -30,7 +33,8 @@ export default async function ReferralsPage({
     agent: searchParams.agent?.toString(),
     state: searchParams.state?.toString(),
     zip: searchParams.zip?.toString(),
-    ahaBucket: ahaBucketParam === 'AHA' || ahaBucketParam === 'AHA_OOS' ? ahaBucketParam : null
+    ahaBucket: ahaBucketParam === 'AHA' || ahaBucketParam === 'AHA_OOS' ? ahaBucketParam : null,
+    agentReferrals: role === 'admin' && agentReferrals !== 'all' ? agentReferrals : null
   });
 
   const items = data.items as ReferralRow[];
@@ -41,6 +45,7 @@ export default async function ReferralsPage({
     closeRate: 0,
     activeReferrals: 0
   };
+  const showAgentOriginIndicator = tableMode === 'admin' && agentReferrals === 'all';
 
   return (
     <div className="space-y-6">
@@ -71,7 +76,11 @@ export default async function ReferralsPage({
           {tableMode !== 'admin' && (
             <ReferralSummary summary={summary} mode={tableMode === 'agent' ? 'agent' : 'mc'} />
           )}
-          <ReferralTable data={items} mode={tableMode} />
+          <ReferralTable
+            data={items}
+            mode={tableMode}
+            showAgentOriginIndicator={showAgentOriginIndicator}
+          />
         </div>
       ) : (
         <div className="rounded-lg border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-500">

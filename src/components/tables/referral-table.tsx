@@ -45,6 +45,7 @@ export interface ReferralRow {
   preApprovalAmountCents?: number;
   dealStatus?: string | null;
   dealStatusLabel?: string | null;
+  origin?: 'agent' | 'mc' | 'admin';
 }
 
 type TableMode = 'admin' | 'mc' | 'agent';
@@ -52,6 +53,7 @@ type TableMode = 'admin' | 'mc' | 'agent';
 type ReferralTableProps = {
   data: ReferralRow[];
   mode: TableMode;
+  showAgentOriginIndicator?: boolean;
 };
 
 interface StatusSelectProps {
@@ -314,7 +316,12 @@ const sortableHeader = (label: string): ((props: { column: any }) => ReactNode) 
   <SortButton column={column} label={label} />
 );
 
-function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
+function buildColumns(
+  mode: TableMode,
+  options: { showAgentOriginIndicator?: boolean } = {}
+): ColumnDef<ReferralRow>[] {
+  const { showAgentOriginIndicator = false } = options;
+
   const borrowerColumn: ColumnDef<ReferralRow> = {
     header: sortableHeader('Borrower'),
     accessorKey: 'borrowerName',
@@ -322,9 +329,18 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
       const { _id, borrowerName, borrowerPhone } = row.original;
       return (
         <div className="flex flex-col">
-          <Link href={`/referrals/${_id}`} className="font-medium text-brand">
-            {borrowerName}
-          </Link>
+          <div className="flex items-center gap-2">
+            {showAgentOriginIndicator && row.original.origin === 'agent' ? (
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500"
+                aria-label="Agent-created referral"
+                title="Agent-created referral"
+              />
+            ) : null}
+            <Link href={`/referrals/${_id}`} className="font-medium text-brand">
+              {borrowerName}
+            </Link>
+          </div>
           {borrowerPhone ? (
             <span className="text-xs text-slate-500">{borrowerPhone}</span>
           ) : (
@@ -509,8 +525,11 @@ function buildColumns(mode: TableMode): ColumnDef<ReferralRow>[] {
   ];
 }
 
-export function ReferralTable({ data, mode }: ReferralTableProps) {
-  const columns = useMemo<ColumnDef<ReferralRow>[]>(() => buildColumns(mode), [mode]);
+export function ReferralTable({ data, mode, showAgentOriginIndicator }: ReferralTableProps) {
+  const columns = useMemo<ColumnDef<ReferralRow>[]>(
+    () => buildColumns(mode, { showAgentOriginIndicator }),
+    [mode, showAgentOriginIndicator]
+  );
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const table = useReactTable({

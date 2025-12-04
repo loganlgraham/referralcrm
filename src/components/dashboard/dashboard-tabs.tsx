@@ -50,6 +50,8 @@ interface DashboardSummary {
   dealsClosed: number;
   dealsUnderContract: number;
   pendingClosings: number;
+  pendingClosingsThisMonth: number;
+  pendingClosingsNextMonth: number;
   closeRate: number;
   afcDealsLost: number;
   afcAttachRate: number;
@@ -239,12 +241,32 @@ const CHART_HEIGHT = 180;
 const CHART_PADDING_X = 36;
 const CHART_PADDING_Y = 28;
 
-function SummaryCard({ title, value, helper }: { title: string; value: string; helper?: string }) {
+function SummaryCard({
+  title,
+  value,
+  helper,
+  extraStats
+}: {
+  title: string;
+  value: string;
+  helper?: string;
+  extraStats?: { label: string; value: string }[];
+}) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
       <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
       {helper ? <p className="mt-1 text-xs text-slate-500">{helper}</p> : null}
+      {extraStats?.length ? (
+        <dl className="mt-3 grid grid-cols-2 gap-2">
+          {extraStats.map((stat) => (
+            <div key={`${title}-${stat.label}`} className="rounded bg-slate-50 px-2 py-1">
+              <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{stat.label}</dt>
+              <dd className="text-sm font-semibold text-slate-900">{stat.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
     </div>
   );
 }
@@ -1134,26 +1156,39 @@ function MainDashboard({
 }) {
   const summary = data.summary;
 
-  const highlights = [
+  const highlights: {
+    title: string;
+    value: string;
+    helper?: string;
+    extraStats: { label: string; value: string }[];
+  }[] = [
     {
       title: 'Realized revenue',
       value: formatCurrency(summary.realizedRevenueCents),
-      helper: `Closed, not paid ${formatCurrency(summary.closedNotPaidCents)}`
+      extraStats: [{ label: 'Closed, not paid', value: formatCurrency(summary.closedNotPaidCents) }]
     },
     {
       title: 'Pending closings',
       value: formatNumber(summary.pendingClosings),
-      helper: 'Deals under contract closing after today'
+      extraStats: [
+        { label: 'This month', value: formatNumber(summary.pendingClosingsThisMonth) },
+        { label: 'Next month', value: formatNumber(summary.pendingClosingsNextMonth) }
+      ]
     },
     {
       title: 'Total referrals',
       value: formatNumber(summary.totalReferrals),
-      helper: `${formatNumber(summary.dealsClosed)} closed`
+      extraStats: [{ label: 'Closed', value: formatNumber(summary.dealsClosed) }]
     },
     {
       title: 'Close rate',
       value: `${summary.closeRate.toFixed(1)}%`,
-      helper: `Avg. days closed → paid ${summary.averageDaysClosedToPaid.toFixed(1)} days`
+      extraStats: [
+        {
+          label: 'Avg. days closed → paid',
+          value: `${summary.averageDaysClosedToPaid.toFixed(1)} days`
+        }
+      ]
     }
   ];
 
@@ -1184,7 +1219,13 @@ function MainDashboard({
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {highlights.map((card) => (
-          <SummaryCard key={card.title} title={card.title} value={card.value} helper={card.helper} />
+          <SummaryCard
+            key={card.title}
+            title={card.title}
+            value={card.value}
+            helper={card.helper}
+            extraStats={card.extraStats}
+          />
         ))}
       </div>
 
