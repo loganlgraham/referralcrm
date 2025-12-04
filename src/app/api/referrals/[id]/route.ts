@@ -7,6 +7,8 @@ import { getCurrentSession } from '@/lib/auth';
 import { canManageReferral, canViewReferral } from '@/lib/rbac';
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
+import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
+import { calculateReferralFeeDue } from '@/utils/referral';
 
 interface RouteContext {
   params: { id: string };
@@ -20,6 +22,8 @@ const DETAIL_FIELD_LABELS = {
   borrowerCurrentAddress: 'Borrower Current Address',
   stageOnTransfer: 'Stage on Transfer',
   loanFileNumber: 'Loan File #',
+  loanType: 'Loan Type',
+  preApprovalAmount: 'Pre-approval Amount',
 } as const;
 
 export async function GET(request: NextRequest, context: RouteContext): Promise<NextResponse> {
@@ -88,6 +92,11 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     return new NextResponse('Forbidden', { status: 403 });
   }
   const updatePayload = parsed.data as Record<string, unknown>;
+  const preApprovalAmountCents =
+    parsed.data.preApprovalAmount !== undefined
+      ? Math.max(0, Math.round(parsed.data.preApprovalAmount * 100))
+      : undefined;
+
   if (Array.isArray(parsed.data.lookingInZips)) {
     const uniqueZips = Array.from(
       new Set(
@@ -100,6 +109,10 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     if (uniqueZips.length > 0) {
       updatePayload.lookingInZip = uniqueZips[0];
     }
+  }
+  if (preApprovalAmountCents !== undefined) {
+    updatePayload.preApprovalAmountCents = preApprovalAmountCents;
+    updatePayload.estPurchasePriceCents = preApprovalAmountCents;
   }
   const detailFieldKeys = Object.keys(DETAIL_FIELD_LABELS) as (keyof typeof DETAIL_FIELD_LABELS)[];
   const toComparableString = (value: unknown) => {
@@ -121,6 +134,8 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     return previousValue !== nextValue;
   });
 
+  delete updatePayload.preApprovalAmount;
+
   let referral;
   const auditActorId = resolveAuditActorId(session.user.id);
   try {
@@ -139,7 +154,7 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     referral = await Referral.findByIdAndUpdate(
       context.params.id,
       {
-        ...parsed.data,
+        ...updatePayload,
         $push: {
           audit: auditEntry
         }
@@ -155,6 +170,33 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
 
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
+  }
+
+  if (preApprovalAmountCents !== undefined) {
+    const commissionBasisPoints =
+      typeof updatePayload.commissionBasisPoints === 'number'
+        ? updatePayload.commissionBasisPoints
+        : referral.commissionBasisPoints ?? DEFAULT_AGENT_COMMISSION_BPS;
+    const referralFeeBasisPoints =
+      typeof updatePayload.referralFeeBasisPoints === 'number'
+        ? updatePayload.referralFeeBasisPoints
+        : referral.referralFeeBasisPoints ?? DEFAULT_REFERRAL_FEE_BPS;
+
+    if (!['Under Contract', 'Closed', 'Terminated', 'Lost'].includes(String(referral.status))) {
+      referral.referralFeeDueCents = calculateReferralFeeDue(
+        preApprovalAmountCents,
+        commissionBasisPoints,
+        referralFeeBasisPoints
+      );
+      await Payment.updateMany(
+        { referralId: referral._id },
+        { $set: { expectedAmountCents: referral.referralFeeDueCents ?? 0 } }
+      );
+    }
+
+    referral.preApprovalAmountCents = preApprovalAmountCents;
+    referral.estPurchasePriceCents = preApprovalAmountCents;
+    await referral.save();
   }
 
   if (changedDetailFields.length > 0) {
@@ -188,7 +230,11 @@ export async function DELETE(request: NextRequest, context: RouteContext): Promi
   if (referral.deletedAt) {
     return new NextResponse('Not found', { status: 404 });
   }
-  if (!canViewReferral(session, { assignedAgent: referral.assignedAgent, lender: referral.lender, org: referral.org })) {
+  const agentDeletingAgentReferral = session.user.role === 'agent' && referral.origin === 'agent';
+  const adminDeletingAdminReferral = session.user.role === 'admin' && referral.origin === 'admin';
+  const canDelete = agentDeletingAgentReferral || adminDeletingAdminReferral;
+
+  if (!canDelete) {
     return new NextResponse('Forbidden', { status: 403 });
   }
   await Payment.deleteMany({ referralId: referral._id });

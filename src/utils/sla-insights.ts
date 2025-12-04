@@ -569,6 +569,11 @@ const computeAgentReferralRecommendations = (
   const { createdAt, statusLastUpdated, status } = clock;
   const now = new Date();
   const hoursSinceStatusUpdate = differenceInHours(now, statusLastUpdated);
+  const statusAgeDays = differenceInDays(now, statusLastUpdated);
+  const durations = computeSlaDurations(referral);
+  const underContractMinutes = durations.find((item) => item.key === 'communication-to-contract')?.minutes;
+  const closedMinutes = durations.find((item) => item.key === 'contract-to-close')?.minutes;
+  const paidMinutes = durations.find((item) => item.key === 'close-to-paid')?.minutes;
   const latestNoteAt = getLatestNoteTimestamp(referral.notes);
   const lastEngagementAt = clock.lastCompletedAt
     ? max([clock.lastCompletedAt, latestNoteAt ?? statusLastUpdated])
@@ -577,20 +582,41 @@ const computeAgentReferralRecommendations = (
 
   const recommendations: SlaRecommendation[] = [];
 
-  if (!referral.lender) {
-    const dueBy = addHours(createdAt, 1);
-    recommendations.push(
-      buildRecommendation({
-        id: 'assign-mc-agent-origin',
-        title: 'Loop in your AFC mortgage consultant',
-        message: 'Pick the AFC MC who should receive this referral so they can reach out quickly.',
-        priority: 'urgent',
-        category: 'assignment',
-        dueAt: minDueDate(dueBy),
-        supportingMetric: 'Awaiting MC assignment',
-      })
-    );
-  }
+  recommendations.push(
+    buildRecommendation({
+      id: 'agent-assign-mc',
+      title: 'Assign MC',
+      message: 'Pick the AFC mortgage consultant who should own this referral so they can begin outreach.',
+      priority: 'urgent',
+      category: 'assignment',
+      dueAt: minDueDate(addHours(createdAt, 1)),
+      supportingMetric: referral.lender ? 'MC already assigned — mark complete' : 'Awaiting MC assignment',
+    })
+  );
+
+  recommendations.push(
+    buildRecommendation({
+      id: 'agent-mc-contact-check',
+      title: 'Check MC contact',
+      message: 'Confirm the MC has acknowledged the referral and connected with the borrower.',
+      priority: 'high',
+      category: 'communication',
+      dueAt: minDueDate(addHours(createdAt, 24)),
+      supportingMetric: `${hoursSinceStatusUpdate}h since referral creation`,
+    })
+  );
+
+  recommendations.push(
+    buildRecommendation({
+      id: 'agent-preapproval-followup',
+      title: 'Follow up on pre-approval',
+      message: 'Check with the MC a few days after intake to confirm pre-approval progress and needed docs.',
+      priority: 'medium',
+      category: 'finance',
+      dueAt: minDueDate(addDays(createdAt, 3)),
+      supportingMetric: 'Goal: pre-approval in the first week',
+    })
+  );
 
   if (referral.lender && (status === 'New Lead' || status === 'Paired') && hoursSinceStatusUpdate >= 4) {
     const dueBy = addHours(statusLastUpdated, 4);
@@ -661,6 +687,103 @@ const computeAgentReferralRecommendations = (
         priority: 'medium',
         category: 'finance',
         supportingMetric: 'Keep MC, agent, and borrower aligned on budget',
+      })
+    );
+  }
+
+  if (ACTIVE_LEAD_STATUSES.has(status) || status === 'In Communication') {
+    if (!underContractMinutes && statusAgeDays >= SLA_THRESHOLDS.daysToUnderContract) {
+      const dueBy = addDays(statusLastUpdated, SLA_THRESHOLDS.daysToUnderContract);
+      recommendations.push(
+        buildRecommendation({
+          id: 'review-conversion-plan-agent',
+          title: 'Review conversion plan',
+          message: 'Share open houses, financing refreshers, or incentives to help the borrower move forward.',
+          priority: 'medium',
+          category: 'pipeline',
+          dueAt: minDueDate(dueBy),
+          supportingMetric: `${statusAgeDays} days without contract`,
+        })
+      );
+    }
+  }
+
+  if (status === 'Under Contract') {
+    recommendations.push(
+      buildRecommendation({
+        id: 'schedule-inspection-agent',
+        title: 'Schedule inspections',
+        message: 'Confirm inspection timelines and share key dates with admin, agent, and MC.',
+        priority: 'high',
+        category: 'pipeline',
+        supportingMetric: 'Under contract milestone: inspections',
+      })
+    );
+
+    recommendations.push(
+      buildRecommendation({
+        id: 'order-appraisal-agent',
+        title: 'Order appraisal and confirm financing steps',
+        message: 'Ensure the appraisal is ordered and MC has updated docs to keep loan on track.',
+        priority: 'high',
+        category: 'finance',
+        supportingMetric: 'Finance milestones on track',
+      })
+    );
+
+    recommendations.push(
+      buildRecommendation({
+        id: 'share-closing-timeline-agent',
+        title: 'Share closing timeline',
+        message: 'Send a summary of contingencies, appraisal, loan commitment, and closing dates.',
+        priority: 'medium',
+        category: 'communication',
+        supportingMetric: 'Keep parties aligned post-contract',
+      })
+    );
+
+    if (!closedMinutes && statusAgeDays >= SLA_THRESHOLDS.daysToClose) {
+      const dueBy = addDays(statusLastUpdated, SLA_THRESHOLDS.daysToClose);
+      recommendations.push(
+        buildRecommendation({
+          id: 'check-escrow-milestones-agent',
+          title: 'Check escrow milestones',
+          message: 'Confirm appraisal, inspection, and financing checkpoints are on track to avoid delays.',
+          priority: 'high',
+          category: 'pipeline',
+          dueAt: minDueDate(dueBy),
+          supportingMetric: `${statusAgeDays} days since contract`,
+        })
+      );
+    }
+  }
+
+  if (status === 'Closed') {
+    if (!paidMinutes || paidMinutes / 60 / 24 > SLA_THRESHOLDS.daysToPaymentAfterClose) {
+      const dueBy = addDays(statusLastUpdated, SLA_THRESHOLDS.daysToPaymentAfterClose);
+      recommendations.push(
+        buildRecommendation({
+          id: 'confirm-referral-fee-agent',
+          title: 'Confirm referral fee payment',
+          message: 'Closed files should have invoices tracked. Verify the payment status and log receipt.',
+          priority: 'medium',
+          category: 'finance',
+          dueAt: minDueDate(dueBy),
+          supportingMetric: 'Awaiting payment confirmation',
+        })
+      );
+    }
+  }
+
+  if ((status === 'Terminated' || status === 'Lost') && hoursSinceLastNote !== null && hoursSinceLastNote > 24) {
+    recommendations.push(
+      buildRecommendation({
+        id: 'capture-termination-reason-agent',
+        title: 'Capture termination context',
+        message: 'Document the reason for termination to inform performance analytics and follow-up campaigns.',
+        priority: 'medium',
+        category: 'ops',
+        supportingMetric: `Last note ${hoursSinceLastNote}h ago`,
       })
     );
   }
