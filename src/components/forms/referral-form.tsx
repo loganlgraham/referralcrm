@@ -1,6 +1,6 @@
 'use client';
 
-import { FocusEvent, useMemo, useState } from 'react';
+import { ChangeEvent, FocusEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { toast } from 'sonner';
@@ -46,6 +46,13 @@ const inputClasses =
   'mt-2 w-full rounded-lg border border-slate-300/80 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-1 focus:ring-offset-white';
 
 const labelClasses = 'flex flex-col text-sm font-medium text-slate-700';
+
+const LOCAL_STORAGE_KEYS = {
+  sourceHistory: 'adminReferralSources',
+  endorserHistory: 'adminReferralEndorsers',
+} as const;
+
+const MAX_HISTORY_ITEMS = 20;
 
 const formatPhoneNumber = (value: string) => {
   const digits = value.replace(/\D/g, '').slice(0, 10);
@@ -98,15 +105,53 @@ const handleCurrencyBlur = (event: FocusEvent<HTMLInputElement>) => {
   event.currentTarget.value = formatCurrencyInputValue(event.currentTarget.value);
 };
 
+const readHistory = (key: string) => {
+  if (typeof window === 'undefined') return [] as string[];
+
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [] as string[];
+
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed.filter((item) => typeof item === 'string') as string[]) : [];
+  } catch (error) {
+    console.error('Failed to read referral history', error);
+    return [] as string[];
+  }
+};
+
+const writeHistory = (key: string, values: string[]) => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify(values.slice(0, MAX_HISTORY_ITEMS)));
+  } catch (error) {
+    console.error('Failed to save referral history', error);
+  }
+};
+
+const upsertHistoryValue = (existing: string[], value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return existing;
+
+  const filtered = existing.filter((item) => item.toLowerCase() !== trimmed.toLowerCase());
+  return [trimmed, ...filtered].slice(0, MAX_HISTORY_ITEMS);
+};
+
 export function ReferralForm() {
   const router = useRouter();
   const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
   const [borrowerPhone, setBorrowerPhone] = useState('');
   const [selectedStage, setSelectedStage] = useState<StageOption>('Pre-approval TBD');
+  const [sourceHistory, setSourceHistory] = useState<string[]>([]);
+  const [endorserHistory, setEndorserHistory] = useState<string[]>([]);
+  const [sourceValue, setSourceValue] = useState('');
+  const [endorserValue, setEndorserValue] = useState('');
   const stageOptions = useMemo(() => STAGE_OPTIONS, []);
   const userRole = session?.user?.role ?? null;
   const isAgent = userRole === 'agent';
+  const isAdmin = userRole === 'admin';
 
   const parseZipList = (value: string): string[] =>
     Array.from(
@@ -117,6 +162,38 @@ export function ReferralForm() {
           .filter((zip) => /^\d{5}$/u.test(zip))
       )
     );
+
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const savedSources = readHistory(LOCAL_STORAGE_KEYS.sourceHistory);
+    const savedEndorsers = readHistory(LOCAL_STORAGE_KEYS.endorserHistory);
+
+    setSourceHistory(savedSources);
+    setEndorserHistory(savedEndorsers);
+  }, [isAdmin]);
+
+  const handleSourceChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const value = event.currentTarget.value;
+    setSourceValue(value);
+
+    if (!isAdmin) return;
+
+    const nextHistory = upsertHistoryValue(sourceHistory, value);
+    setSourceHistory(nextHistory);
+    writeHistory(LOCAL_STORAGE_KEYS.sourceHistory, nextHistory);
+  };
+
+  const handleEndorserChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const value = event.currentTarget.value;
+    setEndorserValue(value);
+
+    if (!isAdmin) return;
+
+    const nextHistory = upsertHistoryValue(endorserHistory, value);
+    setEndorserHistory(nextHistory);
+    writeHistory(LOCAL_STORAGE_KEYS.endorserHistory, nextHistory);
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -149,6 +226,16 @@ export function ReferralForm() {
     if (zipList.length === 0) {
       toast.error('Add at least one 5-digit ZIP code.');
       return;
+    }
+
+    if (isAdmin) {
+      const nextSources = upsertHistoryValue(sourceHistory, result.data.source ?? '');
+      const nextEndorsers = upsertHistoryValue(endorserHistory, result.data.endorser ?? '');
+
+      setSourceHistory(nextSources);
+      setEndorserHistory(nextEndorsers);
+      writeHistory(LOCAL_STORAGE_KEYS.sourceHistory, nextSources);
+      writeHistory(LOCAL_STORAGE_KEYS.endorserHistory, nextEndorsers);
     }
 
     const loanFileNumber = result.data.loanFileNumber?.trim() ?? '';
@@ -307,7 +394,17 @@ export function ReferralForm() {
                       name="source"
                       placeholder="e.g. Past client, Open house"
                       className={inputClasses}
+                      value={isAdmin ? sourceValue : undefined}
+                      onChange={isAdmin ? handleSourceChange : undefined}
+                      list={isAdmin && sourceHistory.length > 0 ? 'source-history' : undefined}
                     />
+                    {isAdmin && sourceHistory.length > 0 ? (
+                      <datalist id="source-history">
+                        {sourceHistory.map((entry) => (
+                          <option key={entry} value={entry} />
+                        ))}
+                      </datalist>
+                    ) : null}
                   </label>
                   <label className={labelClasses}>
                     Endorser
@@ -315,7 +412,17 @@ export function ReferralForm() {
                       name="endorser"
                       placeholder="Who sent this referral?"
                       className={inputClasses}
+                      value={isAdmin ? endorserValue : undefined}
+                      onChange={isAdmin ? handleEndorserChange : undefined}
+                      list={isAdmin && endorserHistory.length > 0 ? 'endorser-history' : undefined}
                     />
+                    {isAdmin && endorserHistory.length > 0 ? (
+                      <datalist id="endorser-history">
+                        {endorserHistory.map((entry) => (
+                          <option key={entry} value={entry} />
+                        ))}
+                      </datalist>
+                    ) : null}
                   </label>
                 </>
               )}
