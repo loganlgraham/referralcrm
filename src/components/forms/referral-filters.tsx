@@ -25,6 +25,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const [isPending, startTransition] = useTransition();
 
   const isAgentMode = mode === 'agent';
+  const isAdminMode = mode === 'admin';
 
   const handleChange = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -45,6 +46,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const agentValue = isAgentMode ? '' : searchParams.get('agent') ?? '';
   const lenderValue = searchParams.get('mc') ?? '';
   const ahaBucketValue = isAgentMode ? '' : searchParams.get('ahaBucket') ?? '';
+  const agentReferralValue = isAdminMode ? searchParams.get('agentReferrals') ?? '' : '';
 
   return (
     <div className="grid grid-cols-1 gap-4 rounded-lg bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -64,6 +66,21 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
           ))}
         </select>
       </label>
+      {isAdminMode && (
+        <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+          Agent referrals
+          <select
+            value={agentReferralValue}
+            onChange={(event) => handleChange('agentReferrals', event.target.value)}
+            className="mt-1 w-full rounded border border-slate-200 px-2 py-1 text-sm"
+            disabled={isPending}
+          >
+            <option value="">All</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </label>
+      )}
       {!isAgentMode && (
         <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
           AHA Bucket

@@ -5,6 +5,8 @@ import {
   endOfDay,
   format,
   startOfDay,
+  endOfMonth,
+  addMonths,
   startOfHour,
   startOfMonth,
   startOfWeek,
@@ -511,6 +513,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           dealsClosed: 0,
           dealsUnderContract: 0,
           pendingClosings: 0,
+          pendingClosingsThisMonth: 0,
+          pendingClosingsNextMonth: 0,
           closeRate: 0,
           afcDealsLost: 0,
           afcAttachRate: 0,
@@ -762,6 +766,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       ? referrals
       : referrals.filter((referral) => matchesNetwork(getReferralDesignation(referral)));
 
+  const paymentsByNetwork =
+    context.networkFilter === 'ALL'
+      ? paymentsWithMetric
+      : paymentsWithMetric.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
+
   const filteredPaymentsByNetwork =
     context.networkFilter === 'ALL'
       ? filteredPayments
@@ -791,17 +800,41 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       (payment.status === 'closed' || payment.status === 'paid')
   );
   const endOfToday = endOfDay(new Date());
+  const startOfCurrentMonth = startOfMonth(new Date());
+  const endOfCurrentMonth = endOfMonth(new Date());
+  const startOfNextMonth = startOfMonth(addMonths(new Date(), 1));
+  const endOfNextMonth = endOfMonth(addMonths(new Date(), 1));
+  const dealStatuses = [
+    'under_contract',
+    'past_inspection',
+    'past_appraisal',
+    'clear_to_close',
+  ];
   const dealsUnderContract = filteredPaymentsByNetwork.filter((payment) =>
-    [
-      'under_contract',
-      'past_inspection',
-      'past_appraisal',
-      'clear_to_close',
-    ].includes(payment.status)
+    dealStatuses.includes(payment.status)
   );
-  const pendingClosings = dealsUnderContract.filter(
-    (payment) => payment.closingDate && payment.closingDate > endOfToday
-  );
+  const pendingClosings = paymentsByNetwork.filter((payment) => {
+    if (!dealStatuses.includes(payment.status)) return false;
+    const closingDate = payment.closingDate ? new Date(payment.closingDate) : null;
+    if (!closingDate) return false;
+    return closingDate > endOfToday;
+  });
+  const pendingClosingsThisMonth = pendingClosings.filter((payment) => {
+    const closingDate = payment.closingDate ? new Date(payment.closingDate) : null;
+    return (
+      closingDate &&
+      closingDate >= startOfCurrentMonth &&
+      closingDate <= endOfCurrentMonth
+    );
+  });
+  const pendingClosingsNextMonth = pendingClosings.filter((payment) => {
+    const closingDate = payment.closingDate ? new Date(payment.closingDate) : null;
+    return (
+      closingDate &&
+      closingDate >= startOfNextMonth &&
+      closingDate <= endOfNextMonth
+    );
+  });
   const closeRate = totalReferrals === 0 ? 0 : (dealsClosed.length / totalReferrals) * 100;
 
   const revenueEligiblePayments = filteredPaymentsByNetwork.filter(
@@ -1494,6 +1527,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         dealsClosed: dealsClosed.length,
         dealsUnderContract: dealsUnderContract.length,
         pendingClosings: pendingClosings.length,
+        pendingClosingsThisMonth: pendingClosingsThisMonth.length,
+        pendingClosingsNextMonth: pendingClosingsNextMonth.length,
         closeRate,
         afcDealsLost,
         afcAttachRate,

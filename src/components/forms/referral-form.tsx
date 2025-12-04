@@ -405,7 +405,7 @@ export function ReferralForm() {
               Notes for the team
             </legend>
             <p className="text-xs text-slate-500">
-              These notes will land in the referral\'s conversation thread so everyone has the same
+              These notes will land in the referral's conversation thread so everyone has the same
               context from the start.
             </p>
             <textarea
