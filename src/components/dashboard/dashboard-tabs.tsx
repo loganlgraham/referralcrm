@@ -1156,7 +1156,12 @@ function MainDashboard({
 }) {
   const summary = data.summary;
 
-  const highlights = [
+  const highlights: {
+    title: string;
+    value: string;
+    helper?: string;
+    extraStats: { label: string; value: string }[];
+  }[] = [
     {
       title: 'Realized revenue',
       value: formatCurrency(summary.realizedRevenueCents),
