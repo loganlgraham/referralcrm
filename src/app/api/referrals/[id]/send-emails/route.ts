@@ -16,6 +16,14 @@ type BasicContact = {
   phone?: string | null;
 };
 
+const firstNameFromContact = (contact: BasicContact | null, fallback: string): string => {
+  if (contact?.name) {
+    const [first] = contact.name.trim().split(/\s+/);
+    if (first) return first;
+  }
+  return fallback;
+};
+
 type SendResult = {
   sent: string[];
   skipped: string[];
@@ -136,6 +144,8 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
   const borrower = referral.borrower ?? {};
   const borrowerName = buildBorrowerName(borrower);
   const borrowerFirstName = buildBorrowerFirstName(borrower);
+  const agentFirstName = firstNameFromContact(primaryAgent, 'your agent');
+  const lenderFirstName = firstNameFromContact(lenderContact, 'your mortgage consultant');
   const borrowerEmail = typeof borrower.email === 'string' ? borrower.email : null;
   const borrowerPhone = typeof borrower.phone === 'string' ? borrower.phone : null;
   const referralLinkBase = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');
@@ -210,30 +220,28 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     borrowerEmail,
     "Welcome to American Financing's Buyer Concierge Service",
     [
-      `<p>Hi ${borrowerName},</p>`,
-      "<p>Thank you for choosing American Financing's Buyer Concierge Service. We're thrilled to support your home search and make the process easy.</p>",
-      primaryAgent
-        ? `<p>Your agent, ${primaryAgent.name ?? 'your partner agent'}, is here to help every step of the way.</p>`
-        : '<p>Your partner agent is excited to help every step of the way.</p>',
-      '<p>You can reach your agent at:</p>',
+      `<p>Hi ${borrowerFirstName},</p>`,
+      "<p>I want to thank you again for your interest in our Buyers Concierge Program. This program is tailored to support Buyers like you as you navigate the home-buying process with American Financing and to connect you with a top-tier local realtor.</p>",
+      `<p>I’m excited to introduce you to ${primaryAgent?.name ?? 'a local and trusted Real Estate Specialist'}, a local and trusted Real Estate Specialist who will be assisting you with your home purchase.</p>`,
+      `<p>Below are ${agentFirstName}'s contact details. You can expect them to reach out to you shortly:</p>`,
       '<ul>',
-      primaryAgent?.name ? `<li><strong>Name:</strong> ${primaryAgent.name}</li>` : null,
-      primaryAgent?.email ? `<li><strong>Email:</strong> ${primaryAgent.email}</li>` : null,
-      primaryAgent?.phone ? `<li><strong>Phone:</strong> ${primaryAgent.phone}</li>` : null,
+      primaryAgent?.name ? `<li>${primaryAgent.name}</li>` : null,
+      primaryAgent?.phone ? `<li>${primaryAgent.phone}</li>` : null,
+      primaryAgent?.email ? `<li>${primaryAgent.email}</li>` : null,
       '</ul>',
-      '<p>If you have any questions or need support, just let us know. Happy home hunting!</p>',
+      `<p>If, at any point, you have trouble reaching ${agentFirstName} or are not fully satisfied with the services provided, please don’t hesitate to contact ${lenderFirstName} or me. We are committed to supporting you every step of the way.</p>`,
+      '<p>Thank you once again, and happy home shopping!</p>',
     ],
     [
-      `Hi ${borrowerName},`,
-      "Thank you for choosing American Financing's Buyer Concierge Service. We're thrilled to support your home search and make the process easy.",
-      primaryAgent
-        ? `Your agent, ${primaryAgent.name ?? 'your partner agent'}, is here to help every step of the way.`
-        : 'Your partner agent is excited to help every step of the way.',
-      'You can reach your agent at:',
-      primaryAgent?.name ? `Name: ${primaryAgent.name}` : null,
-      primaryAgent?.email ? `Email: ${primaryAgent.email}` : null,
-      primaryAgent?.phone ? `Phone: ${primaryAgent.phone}` : null,
-      'If you have any questions or need support, just let us know. Happy home hunting!',
+      `Hi ${borrowerFirstName},`,
+      'I want to thank you again for your interest in our Buyers Concierge Program. This program is tailored to support Buyers like you as you navigate the home-buying process with American Financing and to connect you with a top-tier local realtor.',
+      `I’m excited to introduce you to ${primaryAgent?.name ?? 'a local and trusted Real Estate Specialist'}, a local and trusted Real Estate Specialist who will be assisting you with your home purchase.`,
+      `Below are ${agentFirstName}'s contact details. You can expect them to reach out to you shortly:`,
+      primaryAgent?.name ? `${primaryAgent.name}` : null,
+      primaryAgent?.phone ? `${primaryAgent.phone}` : null,
+      primaryAgent?.email ? `${primaryAgent.email}` : null,
+      `If, at any point, you have trouble reaching ${agentFirstName} or are not fully satisfied with the services provided, please don’t hesitate to contact ${lenderFirstName} or me. We are committed to supporting you every step of the way.`,
+      'Thank you once again, and happy home shopping!',
     ],
     'referral',
     result
