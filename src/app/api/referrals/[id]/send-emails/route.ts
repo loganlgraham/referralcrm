@@ -5,6 +5,7 @@ import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { logReferralActivity } from '@/lib/server/activities';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
+import { buildContactActionLink, buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
 
 interface Params {
   params: { id: string };
@@ -197,13 +198,13 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
   const lenderFirstName = firstNameFromContact(lenderContact, 'your mortgage consultant');
   const borrowerEmail = borrowerContact.email ?? null;
   const borrowerPhone = borrowerContact.phone;
-  const referralLinkBase = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');
-  const referralLink = referralLinkBase ? `${referralLinkBase}/referrals/${referral._id.toString()}` : '';
+  const referralLinkBase = getReferralAppBaseUrl();
+  const referralLink = referralLinkBase ? buildReferralLink(referral._id.toString()) : '';
   const contactMadeLink = referralLinkBase
-    ? `${referralLinkBase}/api/referrals/${referral._id.toString()}/contact-action?action=contact-made`
+    ? buildContactActionLink(referral._id.toString(), 'contact-made')
     : '';
   const contactAttemptedLink = referralLinkBase
-    ? `${referralLinkBase}/api/referrals/${referral._id.toString()}/contact-action?action=contact-attempted`
+    ? buildContactActionLink(referral._id.toString(), 'contact-attempted')
     : '';
 
   const result: SendResult = { sent: [], skipped: [], errors: [] };

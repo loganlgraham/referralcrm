@@ -5,9 +5,10 @@ import { Referral } from '@/models/referral';
 import { createReferralNoteSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { canViewReferral } from '@/lib/rbac';
-import { sendTransactionalEmail, isTransactionalEmailConfigured } from '@/lib/email';
+import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { logReferralActivity } from '@/lib/server/activities';
 import { User } from '@/models/user';
+import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
 
 type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknown';
 
@@ -131,10 +132,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       deliveryFailed = true;
       deliveryFailureReason = 'no_recipients';
     } else {
-      const baseUrl = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');
-      const referralLink = baseUrl
-        ? `${baseUrl}/referrals/${referral._id.toString()}`
-        : undefined;
+      const baseUrl = getReferralAppBaseUrl();
+      const referralLink = baseUrl ? buildReferralLink(referral._id.toString()) : undefined;
 
       const borrowerName = referral.borrower?.name ?? 'this referral';
       const authorName = note.authorName ?? 'A team member';
