@@ -30,8 +30,11 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
   }
 
   const isAdmin = session.user.role === 'admin';
+  const isAgent = session.user.role === 'agent';
+  const isViewingOwnProfile = isAgent && session.user.id === agent._id;
   const canEditNps = isAdmin;
   const canViewNotes = isAdmin;
+  const canViewDeals = !isAgent || isViewingOwnProfile;
 
   const metricCards = [
     { label: 'Closings (12 mo)', value: agent.metrics.closingsLast12Months.toString() },
@@ -103,12 +106,14 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
           </div>
         )}
       </div>
-      <div className="rounded-lg bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Deals</h2>
-        <div className="mt-4">
-          <PersonDealsTable deals={agent.deals} context="agent" />
+      {canViewDeals && (
+        <div className="rounded-lg bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Deals</h2>
+          <div className="mt-4">
+            <PersonDealsTable deals={agent.deals} context="agent" />
+          </div>
         </div>
-      </div>
+      )}
       {canViewNotes && (
         <PersonNotes
           subjectId={params.id}
