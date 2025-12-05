@@ -133,17 +133,15 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     'New referral introduction',
     [
       `<p>Hi ${primaryAgent?.name ?? 'there'},</p>`,
-      `<p>Thanks for partnering with American Financing's Buyer Concierge Service on ${borrowerName}.` +
-        " We're excited to help them on their home search.</p>",
+      `<p>Thanks for partnering with American Home Agents Buyer Concierge Service on ${borrowerName}.` +
+        " We're excited to help them with their home search.</p>",
       '<p>Here are the key details so you can reach out confidently:</p>',
       '<ul>',
-      `<li><strong>Borrower:</strong> ${borrowerName}</li>`,
+      `<li><strong>Buyer:</strong> ${borrowerName}</li>`,
       borrowerEmail ? `<li><strong>Email:</strong> ${borrowerEmail}</li>` : null,
       borrowerPhone ? `<li><strong>Phone:</strong> ${borrowerPhone}</li>` : null,
       lenderContact
-        ? '<li><strong>Mortgage Consultant:</strong><br/>' +
-          formatContactLines(lenderContact, 'Mortgage Consultant').join('<br/>') +
-          '</li>'
+        ? '<li>' + formatContactLines(lenderContact, 'Mortgage Consultant').join('<br/>') + '</li>'
         : null,
       '</ul>',
       referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
@@ -151,13 +149,13 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     ],
     [
       `Hi ${primaryAgent?.name ?? 'there'},`,
-      `Thanks for partnering with American Financing's Buyer Concierge Service on ${borrowerName}. We're excited to help them on their home search.`,
+      `Thanks for partnering with American Home Agents Buyer Concierge Service on ${borrowerName}. We're excited to help them with their home search.`,
       'Here are the key details so you can reach out confidently:',
-      `Borrower: ${borrowerName}`,
+      `Buyer: ${borrowerName}`,
       borrowerEmail ? `Email: ${borrowerEmail}` : null,
       borrowerPhone ? `Phone: ${borrowerPhone}` : null,
       lenderContact
-        ? `Mortgage Consultant: ${formatContactLines(lenderContact, 'Mortgage Consultant').join(' | ')}`
+        ? formatContactLines(lenderContact, 'Mortgage Consultant').join(' | ')
         : null,
       referralLink ? `Referral workspace: ${referralLink}` : null,
       'Thank you for taking great care of this client.',
