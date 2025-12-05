@@ -1,6 +1,7 @@
 'use client';
 
 import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useSWRConfig } from 'swr';
 import { differenceInDays } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -114,6 +115,7 @@ export function ReferralHeader({
   onSellSideAgentContactChange,
   onMcContactChange,
 }: ReferralHeaderProps) {
+  const { mutate } = useSWRConfig();
   const isAgentOrigin = referral.origin === 'agent';
   const normalizedStatus = normalizeReferralStatus(referral.status) ?? 'New Lead';
   const [status, setStatus] = useState<ReferralStatus>(normalizedStatus);
@@ -132,6 +134,7 @@ export function ReferralHeader({
   const [referralFeeBasisPoints, setReferralFeeBasisPoints] = useState<number | undefined>(
     referral.referralFeeBasisPoints
   );
+  const [sendingIntroductions, setSendingIntroductions] = useState(false);
   const [dealSide, setDealSide] = useState<'buy' | 'sell'>(
     referral.dealSide === 'sell' ? 'sell' : 'buy'
   );
@@ -148,6 +151,7 @@ export function ReferralHeader({
   const [auditEntries, setAuditEntries] = useState<any[]>(Array.isArray(referral.audit) ? referral.audit : []);
   const [ahaBucket, setAhaBucket] = useState<AhaBucketValue>((referral.ahaBucket as AhaBucketValue) ?? '');
   const [savingBucket, setSavingBucket] = useState(false);
+  const activityFeedKey = `/api/referrals/${referral._id}/activities`;
 
   useEffect(() => {
     const nextStatus = normalizeReferralStatus(referral.status);
@@ -398,6 +402,51 @@ export function ReferralHeader({
   const borrowerEmail = referral.borrower?.email?.trim() ?? '';
   const borrowerPhone = referral.borrower?.phone?.trim() ?? '';
   const hasBorrowerContact = Boolean(borrowerEmail || borrowerPhone);
+
+  const handleSendIntroductions = async () => {
+    setSendingIntroductions(true);
+    try {
+      const response = await fetch(`/api/referrals/${referral._id}/send-emails`, {
+        method: 'POST',
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message = typeof payload?.error === 'string' ? payload.error : 'Unable to send intro emails right now.';
+        throw new Error(message);
+      }
+
+      const sent = Array.isArray(payload?.sent) ? payload.sent : [];
+      const skipped = Array.isArray(payload?.skipped) ? payload.skipped : [];
+      const errors = Array.isArray(payload?.errors) ? payload.errors : [];
+
+      const summaryParts: string[] = [];
+      if (sent.length > 0) {
+        summaryParts.push(`Sent to ${sent.join(', ')}`);
+      }
+      if (skipped.length > 0) {
+        summaryParts.push(`Skipped ${skipped.join(', ')} (missing email)`);
+      }
+      if (errors.length > 0) {
+        summaryParts.push(`Failed for ${errors.join(', ')}`);
+      }
+
+      const summary = summaryParts.join('. ');
+      if (errors.length > 0) {
+        toast.error(summary || 'Some emails could not be sent.');
+      } else if (sent.length > 0) {
+        toast.success(summary || 'Intro emails sent.');
+      } else {
+        toast.info(summary || 'No emails were sent.');
+      }
+
+      void mutate(activityFeedKey);
+    } catch (error) {
+      console.error('Failed to send intro emails', error);
+      toast.error(error instanceof Error ? error.message : 'Unable to send intro emails right now.');
+    } finally {
+      setSendingIntroductions(false);
+    }
+  };
 
   const handleContractDraftChangeInternal = useCallback(
     (draft: ContractDraftSnapshot) => {
@@ -790,6 +839,27 @@ export function ReferralHeader({
             canAssign={canAssignMc}
             onContactChange={onMcContactChange}
           />
+          {viewerRole === 'admin' && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-0.5 text-xs text-slate-600">
+                  <p className="font-semibold uppercase tracking-wide text-slate-700">Intro emails</p>
+                  <p>Send friendly updates to the agent and MC.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSendIntroductions}
+                  disabled={sendingIntroductions}
+                  className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {sendingIntroductions ? 'Sending…' : 'Send now'}
+                </button>
+              </div>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Agent emails include the MC’s contact info, and the MC email highlights the agent’s details.
+              </p>
+            </div>
+          )}
         </section>
       </div>
 
