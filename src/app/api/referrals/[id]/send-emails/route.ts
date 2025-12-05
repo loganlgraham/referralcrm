@@ -264,37 +264,6 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     result
   );
 
-  await trySendEmail(
-    borrowerEmail,
-    "Welcome to American Financing's Buyer Concierge Service",
-    [
-      `<p>Hi ${borrowerFirstName},</p>`,
-      "<p>I want to thank you again for your interest in our Buyers Concierge Program. This program is tailored to support Buyers like you as you navigate the home-buying process with American Financing and to connect you with a top-tier local realtor.</p>",
-      `<p>I’m excited to introduce you to ${primaryAgent?.name ?? 'a local and trusted Real Estate Specialist'}, a local and trusted Real Estate Specialist who will be assisting you with your home purchase.</p>`,
-      `<p>Below are ${agentFirstName}'s contact details. You can expect them to reach out to you shortly:</p>`,
-      '<ul>',
-      primaryAgent?.name ? `<li>${primaryAgent.name}</li>` : null,
-      primaryAgent?.phone ? `<li>${primaryAgent.phone}</li>` : null,
-      primaryAgent?.email ? `<li>${primaryAgent.email}</li>` : null,
-      '</ul>',
-      `<p>If, at any point, you have trouble reaching ${agentFirstName} or are not fully satisfied with the services provided, please don’t hesitate to contact ${lenderFirstName} or me. We are committed to supporting you every step of the way.</p>`,
-      '<p>Thank you once again, and happy home shopping!</p>',
-    ],
-    [
-      `Hi ${borrowerFirstName},`,
-      'I want to thank you again for your interest in our Buyers Concierge Program. This program is tailored to support Buyers like you as you navigate the home-buying process with American Financing and to connect you with a top-tier local realtor.',
-      `I’m excited to introduce you to ${primaryAgent?.name ?? 'a local and trusted Real Estate Specialist'}, a local and trusted Real Estate Specialist who will be assisting you with your home purchase.`,
-      `Below are ${agentFirstName}'s contact details. You can expect them to reach out to you shortly:`,
-      primaryAgent?.name ? `${primaryAgent.name}` : null,
-      primaryAgent?.phone ? `${primaryAgent.phone}` : null,
-      primaryAgent?.email ? `${primaryAgent.email}` : null,
-      `If, at any point, you have trouble reaching ${agentFirstName} or are not fully satisfied with the services provided, please don’t hesitate to contact ${lenderFirstName} or me. We are committed to supporting you every step of the way.`,
-      'Thank you once again, and happy home shopping!',
-    ],
-    'referral',
-    result
-  );
-
   if (result.sent.length > 0) {
     await logReferralActivity({
       referralId: referral._id,

@@ -844,7 +844,7 @@ export function ReferralHeader({
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-0.5 text-xs text-slate-600">
                   <p className="font-semibold uppercase tracking-wide text-slate-700">Intro emails</p>
-                  <p>Send friendly updates to the agent, MC, and referral.</p>
+                  <p>Send friendly updates to the agent and MC.</p>
                 </div>
                 <button
                   type="button"
@@ -856,7 +856,7 @@ export function ReferralHeader({
                 </button>
               </div>
               <p className="mt-1 text-[11px] text-slate-500">
-                Agent emails include the MC’s contact info, and the referral email highlights the agent’s details.
+                Agent emails include the MC’s contact info, and the MC email highlights the agent’s details.
               </p>
             </div>
           )}
