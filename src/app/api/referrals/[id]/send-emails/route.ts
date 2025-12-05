@@ -47,6 +47,12 @@ const normalizeContact = (contact: unknown): BasicContact | null => {
   return { name, email, phone };
 };
 
+const coerceContactField = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
 const buildBorrowerName = (borrower: any): string => {
   const parts = [borrower?.firstName, borrower?.lastName]
     .map((part) => (typeof part === 'string' ? part.trim() : ''))
@@ -146,8 +152,11 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
   const borrowerFirstName = buildBorrowerFirstName(borrower);
   const agentFirstName = firstNameFromContact(primaryAgent, 'your agent');
   const lenderFirstName = firstNameFromContact(lenderContact, 'your mortgage consultant');
-  const borrowerEmail = typeof borrower.email === 'string' ? borrower.email : null;
-  const borrowerPhone = typeof borrower.phone === 'string' ? borrower.phone : null;
+  const borrowerEmail =
+    coerceContactField(borrower.email) ??
+    coerceContactField((borrower as any)?.emailAddress) ??
+    coerceContactField((borrower as any)?.contactEmail);
+  const borrowerPhone = coerceContactField(borrower.phone);
   const referralLinkBase = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');
   const referralLink = referralLinkBase ? `${referralLinkBase}/referrals/${referral._id.toString()}` : '';
 
