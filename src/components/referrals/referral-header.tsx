@@ -42,6 +42,46 @@ const formatFullAddress = (
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
 
+const extractFirstName = (name?: string | null, fallback = ''): string => {
+  if (typeof name !== 'string') return fallback;
+  const trimmed = name.trim();
+  if (!trimmed) return fallback;
+  const [first] = trimmed.split(/\s+/);
+  return first || fallback;
+};
+
+const buildBorrowerFirstName = (referral: any): string => {
+  const borrower = referral?.borrower ?? {};
+  return (
+    extractFirstName(borrower.firstName, '') ||
+    extractFirstName(borrower.name, '') ||
+    'there'
+  );
+};
+
+const buildIntroClipboardTemplate = (
+  referral: any,
+  agentContact: Contact | null,
+  mcContact: Contact | null
+): string => {
+  const borrowerFirstName = buildBorrowerFirstName(referral);
+  const agentFullName = agentContact?.name ?? 'your agent';
+  const agentPhone = agentContact?.phone ?? 'Not provided';
+  const agentEmail = agentContact?.email ?? 'Not provided';
+  const agentFirstName = extractFirstName(agentContact?.name, 'your agent');
+  const mcFirstName = extractFirstName(mcContact?.name, 'me');
+
+  return (
+    `Hi ${borrowerFirstName},\n\n` +
+    'I want to thank you again for your interest in our Buyers Concierge Program. This program is tailored to support Buyers like you as you navigate the home-buying process with American Financing and to connect you with a top-tier local realtor.\n\n' +
+    `I’m excited to introduce you to ${agentFullName}, a local and trusted Real Estate Specialist who will be assisting you with your home purchase.\n\n` +
+    `Below are ${agentFirstName}'s contact details. You can expect them to reach out to you shortly:\n\n` +
+    `${agentFullName}\n${agentPhone}\n${agentEmail}\n\n` +
+    `If, at any point, you have trouble reaching ${agentFirstName} or are not fully satisfied with the services provided, please don’t hesitate to contact ${mcFirstName} or me. We are committed to supporting you every step of the way.\n\n` +
+    'Thank you once again, and happy home shopping!\n\n---'
+  );
+};
+
 interface FinancialSnapshot {
   status: ReferralStatus;
   preApprovalAmountCents?: number;
@@ -135,6 +175,11 @@ export function ReferralHeader({
     referral.referralFeeBasisPoints
   );
   const [sendingIntroductions, setSendingIntroductions] = useState(false);
+  const [introEmailStatus, setIntroEmailStatus] = useState<{
+    summary: string;
+    sentAt: Date;
+    followUpAt?: Date;
+  } | null>(null);
   const [dealSide, setDealSide] = useState<'buy' | 'sell'>(
     referral.dealSide === 'sell' ? 'sell' : 'buy'
   );
@@ -440,6 +485,24 @@ export function ReferralHeader({
       }
 
       void mutate(activityFeedKey);
+
+      const clipboardContent = buildIntroClipboardTemplate(
+        referral,
+        effectiveAgentContact,
+        effectiveMcContact
+      );
+
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(clipboardContent).catch((error) => {
+          console.error('Failed to copy intro email to clipboard', error);
+        });
+      }
+
+      setIntroEmailStatus({
+        summary: summary || 'Intro emails sent.',
+        sentAt: new Date(),
+        followUpAt: payload?.followUpScheduledFor ? new Date(payload.followUpScheduledFor) : undefined,
+      });
     } catch (error) {
       console.error('Failed to send intro emails', error);
       toast.error(error instanceof Error ? error.message : 'Unable to send intro emails right now.');
@@ -858,6 +921,31 @@ export function ReferralHeader({
               <p className="mt-1 text-[11px] text-slate-500">
                 Agent emails include the MC’s contact info, and the MC email highlights the agent’s details.
               </p>
+              {introEmailStatus && (
+                <div className="mt-2 text-[11px] text-slate-600">
+                  <p>{introEmailStatus.summary}</p>
+                  <p>
+                    Copied intro email for Gmail and sent at{' '}
+                    {introEmailStatus.sentAt.toLocaleString([], {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                    .
+                  </p>
+                  {introEmailStatus.followUpAt ? (
+                    <p>
+                      Follow-up to agent scheduled for{' '}
+                      {introEmailStatus.followUpAt.toLocaleString([], {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                      .
+                    </p>
+                  ) : null}
+                </div>
+              )}
             </div>
           )}
         </section>

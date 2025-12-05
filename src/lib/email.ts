@@ -5,6 +5,7 @@ type EmailPayload = {
   subject: string;
   html: string;
   text: string;
+  scheduledAt?: Date;
 };
 
 let resendClient: Resend | null = null;
@@ -40,7 +41,8 @@ export async function sendTransactionalEmail(payload: EmailPayload): Promise<boo
       to: payload.to,
       subject: payload.subject,
       html: payload.html,
-      text: payload.text
+      text: payload.text,
+      scheduledAt: payload.scheduledAt?.toISOString(),
     });
     return true;
   } catch (error) {
