@@ -48,6 +48,20 @@ const buildBorrowerName = (borrower: any): string => {
   return 'the buyer';
 };
 
+const buildBorrowerFirstName = (borrower: any): string => {
+  const firstName = typeof borrower?.firstName === 'string' ? borrower.firstName.trim() : '';
+  if (firstName) return firstName;
+
+  if (typeof borrower?.name === 'string' && borrower.name.trim()) {
+    const [first] = borrower.name.trim().split(/\s+/);
+    if (first) return first;
+  }
+
+  const borrowerName = buildBorrowerName(borrower);
+  const [firstFromFull] = borrowerName.split(/\s+/);
+  return firstFromFull || 'the buyer';
+};
+
 const formatContactLines = (contact: BasicContact | null, label: string) => {
   if (!contact) return [] as string[];
   const lines: (string | null)[] = [
@@ -121,6 +135,7 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
   const lenderContact = normalizeContact(referral.lender);
   const borrower = referral.borrower ?? {};
   const borrowerName = buildBorrowerName(borrower);
+  const borrowerFirstName = buildBorrowerFirstName(borrower);
   const borrowerEmail = typeof borrower.email === 'string' ? borrower.email : null;
   const borrowerPhone = typeof borrower.phone === 'string' ? borrower.phone : null;
   const referralLinkBase = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');
@@ -169,33 +184,23 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     'New client referral',
     [
       `<p>Hi ${lenderContact?.name ?? 'there'},</p>`,
-      `<p>Thank you for supporting ${borrowerName} through American Financing's Buyer Concierge Service.</p>`,
-      '<p>Here is what you need to reach out:</p>',
+      `<p>The agent who will be helping ${borrowerName} is:</p>`,
       '<ul>',
-      `<li><strong>Borrower:</strong> ${borrowerName}</li>`,
-      borrowerEmail ? `<li><strong>Email:</strong> ${borrowerEmail}</li>` : null,
-      borrowerPhone ? `<li><strong>Phone:</strong> ${borrowerPhone}</li>` : null,
       primaryAgent
-        ? '<li><strong>Partner agent:</strong><br/>' +
-          formatContactLines(primaryAgent, 'Agent').join('<br/>') +
-          '</li>'
+        ? '<li>' + formatContactLines(primaryAgent, 'Agent').join('<br/>') + '</li>'
         : null,
       '</ul>',
       referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
-      '<p>Please keep the agent updated after you connect with the borrower.</p>',
+      `<p>Please reach out to the agent to introduce yourself and fill them in on the details of ${borrowerFirstName}'s financing.</p>`,
     ],
     [
       `Hi ${lenderContact?.name ?? 'there'},`,
-      `Thank you for supporting ${borrowerName} through American Financing's Buyer Concierge Service.`,
-      'Here is what you need to reach out:',
-      `Borrower: ${borrowerName}`,
-      borrowerEmail ? `Email: ${borrowerEmail}` : null,
-      borrowerPhone ? `Phone: ${borrowerPhone}` : null,
+      `The agent who will be helping ${borrowerName} is:`,
       primaryAgent
-        ? `Partner agent: ${formatContactLines(primaryAgent, 'Agent').join(' | ')}`
+        ? formatContactLines(primaryAgent, 'Agent').join(' | ')
         : null,
       referralLink ? `Referral workspace: ${referralLink}` : null,
-      'Please keep the agent updated after you connect with the borrower.',
+      `Please reach out to the agent to introduce yourself and fill them in on the details of ${borrowerFirstName}'s financing.`,
     ],
     'mc',
     result
