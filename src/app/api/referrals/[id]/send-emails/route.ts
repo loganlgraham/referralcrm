@@ -86,6 +86,47 @@ const formatContactLines = (contact: BasicContact | null, label: string) => {
   return lines.filter(Boolean) as string[];
 };
 
+const extractBorrowerContact = (referral: any): BasicContact => {
+  const borrower = referral?.borrower ?? {};
+  const normalizedName = buildBorrowerName(borrower);
+
+  const emailCandidates: Array<unknown> = [
+    borrower.email,
+    borrower.emailAddress,
+    borrower.contactEmail,
+    borrower.contact?.email,
+    referral.borrowerEmail,
+    referral.contactEmail,
+    referral.inboundEmail?.from?.email,
+    referral.inboundEmail?.fields?.email,
+    referral.inboundEmail?.fields?.borroweremail,
+  ];
+
+  const phoneCandidates: Array<unknown> = [
+    borrower.phone,
+    borrower.phoneNumber,
+    borrower.contact?.phone,
+    referral.borrowerPhone,
+    referral.contactPhone,
+    referral.inboundEmail?.fields?.phone,
+    referral.inboundEmail?.fields?.borrowerphone,
+  ];
+
+  const firstNonEmpty = (values: Array<unknown>) => {
+    for (const value of values) {
+      const coerced = coerceContactField(value);
+      if (coerced) return coerced;
+    }
+    return null;
+  };
+
+  return {
+    name: normalizedName,
+    email: firstNonEmpty(emailCandidates),
+    phone: firstNonEmpty(phoneCandidates),
+  };
+};
+
 const trySendEmail = async (
   toAddress: string | null,
   subject: string,
@@ -148,15 +189,13 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     normalizeContact(referral.assignedAgent);
   const lenderContact = normalizeContact(referral.lender);
   const borrower = referral.borrower ?? {};
-  const borrowerName = buildBorrowerName(borrower);
+  const borrowerContact = extractBorrowerContact(referral);
+  const borrowerName = borrowerContact.name || buildBorrowerName(borrower);
   const borrowerFirstName = buildBorrowerFirstName(borrower);
   const agentFirstName = firstNameFromContact(primaryAgent, 'your agent');
   const lenderFirstName = firstNameFromContact(lenderContact, 'your mortgage consultant');
-  const borrowerEmail =
-    coerceContactField(borrower.email) ??
-    coerceContactField((borrower as any)?.emailAddress) ??
-    coerceContactField((borrower as any)?.contactEmail);
-  const borrowerPhone = coerceContactField(borrower.phone);
+  const borrowerEmail = borrowerContact.email;
+  const borrowerPhone = borrowerContact.phone;
   const referralLinkBase = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');
   const referralLink = referralLinkBase ? `${referralLinkBase}/referrals/${referral._id.toString()}` : '';
 
