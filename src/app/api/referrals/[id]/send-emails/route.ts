@@ -194,7 +194,7 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
   const borrowerFirstName = buildBorrowerFirstName(borrower);
   const agentFirstName = firstNameFromContact(primaryAgent, 'your agent');
   const lenderFirstName = firstNameFromContact(lenderContact, 'your mortgage consultant');
-  const borrowerEmail = borrowerContact.email;
+  const borrowerEmail = borrowerContact.email ?? null;
   const borrowerPhone = borrowerContact.phone;
   const referralLinkBase = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');
   const referralLink = referralLinkBase ? `${referralLinkBase}/referrals/${referral._id.toString()}` : '';
