@@ -12,6 +12,7 @@ import { User } from '@/models/user';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
+import { buildReferralLink } from '@/lib/referral-links';
 
 type ReferralSummary = {
   _id: Types.ObjectId;
@@ -699,8 +700,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       const formattedAmount = amountCents
         ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amountCents / 100)
         : 'the referral fee';
-      const baseUrl = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');
-      const referralLink = referral && baseUrl ? `${baseUrl}/referrals/${referral._id.toString()}` : null;
+      const referralLink = referral ? buildReferralLink(referral._id.toString()) : null;
       const agentName = session.user.name ?? 'An agent';
 
       const textBody = [

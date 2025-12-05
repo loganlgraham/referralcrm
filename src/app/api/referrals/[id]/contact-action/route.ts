@@ -7,6 +7,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { canManageReferral } from '@/lib/rbac';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
+import { getReferralAppBaseUrl } from '@/lib/referral-links';
 
 interface Params {
   params: { id: string };
@@ -135,7 +136,7 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
     content: activityContent,
   });
 
-  const baseUrl = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');
+  const baseUrl = getReferralAppBaseUrl();
   const redirectUrl = baseUrl ? `${baseUrl}/referrals/${referral._id.toString()}?action=${action}` : null;
 
   if (redirectUrl) {

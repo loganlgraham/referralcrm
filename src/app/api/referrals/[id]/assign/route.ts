@@ -9,6 +9,7 @@ import { canManageReferral } from '@/lib/rbac';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
 import { Agent } from '@/models/agent';
+import { normalizeReferralStatus } from '@/constants/referrals';
 
 interface Params {
   params: { id: string };
@@ -84,6 +85,46 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
 
   referral.audit.push(auditEntry as any);
+
+  const hasBuySideAgent = Boolean(referral.buySideAgent);
+  const hasSellSideAgent = Boolean(referral.sellSideAgent);
+  const shouldPairStatus =
+    referral.clientType === 'Both'
+      ? hasBuySideAgent && hasSellSideAgent
+      : assignmentSide === 'sell'
+      ? hasSellSideAgent
+      : hasBuySideAgent;
+
+  const normalizedStatus = normalizeReferralStatus(referral.status as string) ?? 'New Lead';
+  const eligibleForPairing = normalizedStatus === 'New Lead';
+  const statusChanged = shouldPairStatus && eligibleForPairing;
+
+  if (statusChanged) {
+    const now = new Date();
+    referral.status = 'Paired' as any;
+    referral.statusLastUpdated = now;
+    referral.audit.push({
+      actorRole: session.user.role,
+      field: 'status',
+      previousValue: normalizedStatus,
+      newValue: 'Paired',
+      timestamp: now,
+      actorId: auditActorId,
+    } as any);
+
+    const sla = (referral.sla ??= {} as any);
+    sla.lastPairedAt = now;
+    referral.markModified('sla');
+
+    await logReferralActivity({
+      referralId: referral._id,
+      actorRole: session.user.role,
+      actorId: auditActorId ?? session.user.id,
+      channel: 'status',
+      content: 'Status updated to Paired after agent assignment.',
+    });
+  }
+
   await referral.save();
 
   type AgentNameLean = { _id: Types.ObjectId; name?: string | null; email?: string | null };

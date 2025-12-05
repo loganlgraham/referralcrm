@@ -5,6 +5,7 @@ type EmailPayload = {
   subject: string;
   html: string;
   text: string;
+  scheduledAt?: Date;
 };
 
 let resendClient: Resend | null = null;
@@ -35,13 +36,19 @@ export async function sendTransactionalEmail(payload: EmailPayload): Promise<boo
   }
 
   try {
-    await client.emails.send({
+    const emailOptions: Parameters<Resend['emails']['send']>[0] & { scheduledAt?: string } = {
       from: fromAddress,
       to: payload.to,
       subject: payload.subject,
       html: payload.html,
-      text: payload.text
-    });
+      text: payload.text,
+    };
+
+    if (payload.scheduledAt) {
+      emailOptions.scheduledAt = payload.scheduledAt.toISOString();
+    }
+
+    await client.emails.send(emailOptions);
     return true;
   } catch (error) {
     console.error('Failed to send transactional email', error);

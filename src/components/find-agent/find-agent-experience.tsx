@@ -247,25 +247,12 @@ export function FindAgentExperience() {
               const coverageLabels = agent.coverageLocations?.map((location) => location.label) ?? agent.coverageAreas ?? [];
               return (
                 <div key={agent._id} className="rounded-lg border border-slate-200 p-4 shadow-sm">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div>
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div className="space-y-1">
                       <h2 className="text-lg font-semibold text-slate-900">{agent.name}</h2>
                       <p className="text-sm text-slate-600">{agent.brokerage || 'Brokerage not provided'}</p>
-                      <div className="mt-2 flex flex-wrap gap-3 text-sm text-slate-600">
-                        <span className="inline-flex items-center gap-1 text-xs font-medium uppercase text-slate-500">
-                          <MapPinIcon className="h-3 w-3 text-brand" />
-                          {coverageLabels.slice(0, 5).join(', ') || 'Coverage pending'}
-                        </span>
-                        <span className="text-xs text-slate-500">Licensed: {agent.statesLicensed.join(', ') || '—'}</span>
-                        {agent.specialties && agent.specialties.length > 0 && (
-                          <span className="text-xs text-slate-500">Specialties: {agent.specialties.join(', ')}</span>
-                        )}
-                        {agent.languages && agent.languages.length > 0 && (
-                          <span className="text-xs text-slate-500">Languages: {agent.languages.join(', ')}</span>
-                        )}
-                      </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3 md:justify-end">
                       <a
                         href={`mailto:${agent.email}`}
                         className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-brand hover:text-brand"
@@ -276,7 +263,7 @@ export function FindAgentExperience() {
                       {agent.phone && (
                         <a
                           href={`tel:${agent.phone}`}
-                          className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-brand hover:text-brand"
+                          className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-brand hover:text-brand whitespace-nowrap"
                         >
                           <PhoneIcon className="h-4 w-4" />
                           {formatPhoneNumber(agent.phone) || 'Call'}
@@ -290,6 +277,20 @@ export function FindAgentExperience() {
                         <ArrowRightIcon className="h-4 w-4" />
                       </Link>
                     </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span className="inline-flex items-center gap-1 font-medium uppercase text-slate-500">
+                      <MapPinIcon className="h-3 w-3 text-brand" />
+                      {coverageLabels.slice(0, 5).join(', ') || 'Coverage pending'}
+                    </span>
+                    <span>Licensed: {agent.statesLicensed.join(', ') || '—'}</span>
+                    {agent.specialties && agent.specialties.length > 0 && (
+                      <span>Specialties: {agent.specialties.join(', ')}</span>
+                    )}
+                    {agent.languages && agent.languages.length > 0 && (
+                      <span>Languages: {agent.languages.join(', ')}</span>
+                    )}
                   </div>
 
                   <div className="mt-4 grid gap-3 text-sm text-slate-600 sm:grid-cols-2 md:grid-cols-4">
