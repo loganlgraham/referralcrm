@@ -76,7 +76,9 @@ export function MobileNav({ session }: MobileNavProps) {
                   onClick={() => setOpen(false)}
                   className={clsx(
                     'px-4 py-3 text-sm font-medium transition hover:bg-slate-100',
-                    active ? 'bg-brand text-white hover:bg-brand' : 'text-slate-700'
+                    active
+                      ? 'bg-brand text-white hover:bg-brand-dark hover:text-white'
+                      : 'text-slate-700'
                   )}
                 >
                   {item.label}
