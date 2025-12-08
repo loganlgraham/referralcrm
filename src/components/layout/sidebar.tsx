@@ -80,8 +80,10 @@ export function Sidebar({ session, className }: { session: Session; className?: 
               key={item.href}
               href={item.href}
               className={clsx(
-                'rounded-md px-4 py-2 text-sm font-medium transition hover:bg-slate-100',
-                active && 'bg-brand text-white hover:bg-brand-dark hover:text-white'
+                'rounded-md px-4 py-2 text-sm font-medium transition',
+                active
+                  ? 'bg-brand text-white hover:bg-brand-dark hover:text-white'
+                  : 'hover:bg-slate-100'
               )}
             >
               {item.label}

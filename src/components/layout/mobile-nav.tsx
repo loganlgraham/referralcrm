@@ -75,10 +75,10 @@ export function MobileNav({ session }: MobileNavProps) {
                   href={item.href}
                   onClick={() => setOpen(false)}
                   className={clsx(
-                    'px-4 py-3 text-sm font-medium transition hover:bg-slate-100',
+                    'px-4 py-3 text-sm font-medium transition',
                     active
                       ? 'bg-brand text-white hover:bg-brand-dark hover:text-white'
-                      : 'text-slate-700'
+                      : 'text-slate-700 hover:bg-slate-100'
                   )}
                 >
                   {item.label}
