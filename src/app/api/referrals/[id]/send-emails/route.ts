@@ -328,7 +328,7 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     mcAgentContacts.push({ label: 'Agent', contact: primaryAgent });
   }
 
-  const mcEmailHtmlLines: string[] = [
+  const mcEmailHtmlLines: Array<string | null> = [
     `<p>Hi ${lenderContact?.name ?? 'there'},</p>`,
     `<p>The agent team who will be helping ${borrowerName} is:</p>`,
     '<ul>',
