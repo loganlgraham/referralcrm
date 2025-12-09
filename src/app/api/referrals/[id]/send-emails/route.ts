@@ -328,31 +328,59 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     mcAgentContacts.push({ label: 'Agent', contact: primaryAgent });
   }
 
+  const mcEmailHtmlLines: string[] = [
+    `<p>Hi ${lenderContact?.name ?? 'there'},</p>`,
+    `<p>The agent team who will be helping ${borrowerName} is:</p>`,
+    '<ul>',
+    ...mcAgentContacts.map(
+      ({ label, contact }) => `<li>${formatContactLines(contact, label).join('<br/>')}</li>`
+    ),
+    '</ul>',
+  ];
+
+  const mcEmailTextLines: Array<string | null> = [
+    `Hi ${lenderContact?.name ?? 'there'},`,
+    `The agent team who will be helping ${borrowerName} is:`,
+    mcAgentContacts.length > 0
+      ? mcAgentContacts
+          .map(({ label, contact }) => formatContactLines(contact, label).join(' | '))
+          .join(' || ')
+      : null,
+  ];
+
+  if (session.user.role === 'agent') {
+    mcEmailHtmlLines.push(
+      `<p>Borrower contact details to connect directly:</p>`,
+      '<ul>',
+      `<li><strong>Borrower:</strong> ${borrowerName}</li>`,
+      borrowerEmail ? `<li><strong>Email:</strong> ${borrowerEmail}</li>` : null,
+      borrowerPhone ? `<li><strong>Phone:</strong> ${borrowerPhone}</li>` : null,
+      '</ul>'
+    );
+
+    mcEmailTextLines.push(
+      'Borrower contact details to connect directly:',
+      `Borrower: ${borrowerName}`,
+      borrowerEmail ? `Email: ${borrowerEmail}` : null,
+      borrowerPhone ? `Phone: ${borrowerPhone}` : null
+    );
+  }
+
+  mcEmailHtmlLines.push(
+    referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
+    `<p>Please reach out to the agent to introduce yourself and fill them in on the details of ${borrowerFirstName}'s financing.</p>`
+  );
+
+  mcEmailTextLines.push(
+    referralLink ? `Referral workspace: ${referralLink}` : null,
+    `Please reach out to the agent to introduce yourself and fill them in on the details of ${borrowerFirstName}'s financing.`
+  );
+
   await trySendEmail(
     lenderContact?.email ?? null,
     'New client referral',
-    [
-      `<p>Hi ${lenderContact?.name ?? 'there'},</p>`,
-      `<p>The agent team who will be helping ${borrowerName} is:</p>`,
-      '<ul>',
-      ...mcAgentContacts.map(
-        ({ label, contact }) => `<li>${formatContactLines(contact, label).join('<br/>')}</li>`
-      ),
-      '</ul>',
-      referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
-      `<p>Please reach out to the agent to introduce yourself and fill them in on the details of ${borrowerFirstName}'s financing.</p>`,
-    ],
-    [
-      `Hi ${lenderContact?.name ?? 'there'},`,
-      `The agent team who will be helping ${borrowerName} is:`,
-      mcAgentContacts.length > 0
-        ? mcAgentContacts
-            .map(({ label, contact }) => formatContactLines(contact, label).join(' | '))
-            .join(' || ')
-        : null,
-      referralLink ? `Referral workspace: ${referralLink}` : null,
-      `Please reach out to the agent to introduce yourself and fill them in on the details of ${borrowerFirstName}'s financing.`,
-    ],
+    mcEmailHtmlLines.filter(Boolean),
+    mcEmailTextLines.filter(Boolean),
     'mc',
     result
   );
