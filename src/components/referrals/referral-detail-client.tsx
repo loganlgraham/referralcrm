@@ -10,7 +10,7 @@ import { ReferralHeader } from '@/components/referrals/referral-header';
 import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import type { Contact } from '@/components/referrals/contact-assignment';
-import type { ReferralStatus } from '@/constants/referrals';
+import { normalizeReferralStatus, type ReferralStatus } from '@/constants/referrals';
 import { ReferralDeals } from '@/components/referrals/referral-deals';
 import type { ReferralPayment } from '@/types/referral-payment';
 import { formatCurrency } from '@/utils/formatters';
@@ -321,12 +321,90 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   );
   const handleBuySideAgentContactChange = (contact: Contact | null) => {
     setBuySideAgentContact(contact);
+    setReferral((previous) => {
+      const normalizedClientType = (() => {
+        const raw = typeof previous.clientType === 'string' ? previous.clientType.trim().toLowerCase() : '';
+        if (raw === 'buyer') return 'Buyer' as const;
+        if (raw === 'seller') return 'Seller' as const;
+        if (raw.includes('buy') && raw.includes('sell')) return 'Both' as const;
+        return previous.clientType as 'Buyer' | 'Seller' | 'Both' | undefined;
+      })();
+
+      const nextBuySideAgent = contact
+        ? {
+            _id: contact.id ?? undefined,
+            id: contact.id ?? undefined,
+            name: contact.name ?? undefined,
+            email: contact.email ?? undefined,
+            phone: contact.phone ?? undefined,
+          }
+        : null;
+
+      const nextReferral: ReferralDetail = {
+        ...previous,
+        buySideAgent: nextBuySideAgent,
+        assignedAgent: nextBuySideAgent ?? previous.sellSideAgent ?? previous.assignedAgent ?? null,
+      };
+
+      const normalizedStatus = normalizeReferralStatus(previous.status) ?? 'New Lead';
+      const hasBuySide = Boolean(nextReferral.buySideAgent);
+      const hasSellSide = Boolean(nextReferral.sellSideAgent ?? null);
+      const requiresDual = normalizedClientType === 'Both';
+      const shouldPair = requiresDual ? hasBuySide && hasSellSide : hasBuySide;
+
+      if (shouldPair && normalizedStatus === 'New Lead') {
+        nextReferral.status = 'Paired';
+        nextReferral.statusLastUpdated = new Date().toISOString();
+        setFinancials((current) => ({ ...current, status: 'Paired' }));
+      }
+
+      return nextReferral;
+    });
     router.refresh();
     void mutate(activityFeedKey);
   };
 
   const handleSellSideAgentContactChange = (contact: Contact | null) => {
     setSellSideAgentContact(contact);
+    setReferral((previous) => {
+      const normalizedClientType = (() => {
+        const raw = typeof previous.clientType === 'string' ? previous.clientType.trim().toLowerCase() : '';
+        if (raw === 'buyer') return 'Buyer' as const;
+        if (raw === 'seller') return 'Seller' as const;
+        if (raw.includes('buy') && raw.includes('sell')) return 'Both' as const;
+        return previous.clientType as 'Buyer' | 'Seller' | 'Both' | undefined;
+      })();
+
+      const nextSellSideAgent = contact
+        ? {
+            _id: contact.id ?? undefined,
+            id: contact.id ?? undefined,
+            name: contact.name ?? undefined,
+            email: contact.email ?? undefined,
+            phone: contact.phone ?? undefined,
+          }
+        : null;
+
+      const nextReferral: ReferralDetail = {
+        ...previous,
+        sellSideAgent: nextSellSideAgent,
+        assignedAgent: previous.buySideAgent ?? nextSellSideAgent ?? previous.assignedAgent ?? null,
+      };
+
+      const normalizedStatus = normalizeReferralStatus(previous.status) ?? 'New Lead';
+      const hasBuySide = Boolean(nextReferral.buySideAgent ?? null);
+      const hasSellSide = Boolean(nextReferral.sellSideAgent);
+      const requiresDual = normalizedClientType === 'Both';
+      const shouldPair = requiresDual ? hasBuySide && hasSellSide : hasSellSide;
+
+      if (shouldPair && normalizedStatus === 'New Lead') {
+        nextReferral.status = 'Paired';
+        nextReferral.statusLastUpdated = new Date().toISOString();
+        setFinancials((current) => ({ ...current, status: 'Paired' }));
+      }
+
+      return nextReferral;
+    });
     router.refresh();
     void mutate(activityFeedKey);
   };
