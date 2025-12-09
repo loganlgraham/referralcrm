@@ -109,13 +109,10 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   const hasBuySideAgent = Boolean(referral.buySideAgent);
   const hasSellSideAgent = Boolean(referral.sellSideAgent);
+  const requiresDualAgents = normalizedClientType === 'Both';
   const shouldPairStatus = (() => {
-    if (hasBuySideAgent && hasSellSideAgent) {
-      return true;
-    }
-
-    if (normalizedClientType === 'Both') {
-      return false;
+    if (requiresDualAgents) {
+      return hasBuySideAgent && hasSellSideAgent;
     }
 
     if (assignmentSide === 'sell') {
