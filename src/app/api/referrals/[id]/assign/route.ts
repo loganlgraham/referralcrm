@@ -54,7 +54,21 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     const raw = typeof referral.clientType === 'string' ? referral.clientType.trim().toLowerCase() : '';
     if (raw === 'seller') return 'Seller' as const;
     if (raw === 'buyer') return 'Buyer' as const;
-    if (raw === 'both' || raw === 'buyer & seller' || raw === 'buyer and seller') return 'Both' as const;
+    if (
+      raw === 'both' ||
+      raw === 'buyer & seller' ||
+      raw === 'buyer and seller' ||
+      raw === 'buying and selling' ||
+      raw === 'buying & selling' ||
+      raw === 'buy/sell'
+    ) {
+      return 'Both' as const;
+    }
+
+    if (raw.includes('buy') && raw.includes('sell')) {
+      return 'Both' as const;
+    }
+
     return null;
   })();
 
@@ -95,12 +109,21 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   const hasBuySideAgent = Boolean(referral.buySideAgent);
   const hasSellSideAgent = Boolean(referral.sellSideAgent);
-  const shouldPairStatus =
-    normalizedClientType === 'Both'
-      ? hasBuySideAgent && hasSellSideAgent
-      : assignmentSide === 'sell'
-      ? hasSellSideAgent
-      : hasBuySideAgent;
+  const shouldPairStatus = (() => {
+    if (hasBuySideAgent && hasSellSideAgent) {
+      return true;
+    }
+
+    if (normalizedClientType === 'Both') {
+      return false;
+    }
+
+    if (assignmentSide === 'sell') {
+      return hasSellSideAgent;
+    }
+
+    return hasBuySideAgent;
+  })();
 
   const normalizedStatus = normalizeReferralStatus(referral.status as string) ?? 'New Lead';
   const eligibleForPairing = normalizedStatus === 'New Lead';

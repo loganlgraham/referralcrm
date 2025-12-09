@@ -281,8 +281,8 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
   }
 
   const agentContacts: Array<{ label: string; contact: BasicContact }> = [
-    buySideContact ? { label: 'Buy-side Agent', contact: buySideContact } : null,
-    sellSideContact ? { label: 'Sell-side Agent', contact: sellSideContact } : null,
+    buySideContact ? { label: 'Buying Agent', contact: buySideContact } : null,
+    sellSideContact ? { label: 'Selling Agent', contact: sellSideContact } : null,
   ].filter((item): item is { label: string; contact: BasicContact } => Boolean(item));
 
   if (agentContacts.length === 0 && primaryAgent) {
