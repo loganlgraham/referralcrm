@@ -36,7 +36,7 @@ export async function sendTransactionalEmail(payload: EmailPayload): Promise<boo
   }
 
   try {
-    const emailOptions: Parameters<Resend['emails']['send']>[0] & { scheduledAt?: string } = {
+    const emailOptions: Parameters<Resend['emails']['send']>[0] & { scheduled_at?: string } = {
       from: fromAddress,
       to: payload.to,
       subject: payload.subject,
@@ -45,7 +45,7 @@ export async function sendTransactionalEmail(payload: EmailPayload): Promise<boo
     };
 
     if (payload.scheduledAt) {
-      emailOptions.scheduledAt = payload.scheduledAt.toISOString();
+      emailOptions.scheduled_at = payload.scheduledAt.toISOString();
     }
 
     await client.emails.send(emailOptions);

@@ -185,10 +185,9 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     return new NextResponse('Not found', { status: 404 });
   }
 
-  const primaryAgent =
-    normalizeContact(referral.buySideAgent) ||
-    normalizeContact(referral.sellSideAgent) ||
-    normalizeContact(referral.assignedAgent);
+  const buySideContact = normalizeContact(referral.buySideAgent);
+  const sellSideContact = normalizeContact(referral.sellSideAgent);
+  const primaryAgent = buySideContact || sellSideContact || normalizeContact(referral.assignedAgent);
   const lenderContact = normalizeContact(referral.lender);
   const borrower = referral.borrower ?? {};
   const borrowerContact = extractBorrowerContact(referral);
@@ -281,25 +280,36 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     }
   }
 
+  const agentContacts: Array<{ label: string; contact: BasicContact }> = [
+    buySideContact ? { label: 'Buy-side Agent', contact: buySideContact } : null,
+    sellSideContact ? { label: 'Sell-side Agent', contact: sellSideContact } : null,
+  ].filter((item): item is { label: string; contact: BasicContact } => Boolean(item));
+
+  if (agentContacts.length === 0 && primaryAgent) {
+    agentContacts.push({ label: 'Agent', contact: primaryAgent });
+  }
+
   await trySendEmail(
     lenderContact?.email ?? null,
     'New client referral',
     [
       `<p>Hi ${lenderContact?.name ?? 'there'},</p>`,
-      `<p>The agent who will be helping ${borrowerName} is:</p>`,
+      `<p>The agent team who will be helping ${borrowerName} is:</p>`,
       '<ul>',
-      primaryAgent
-        ? '<li>' + formatContactLines(primaryAgent, 'Agent').join('<br/>') + '</li>'
-        : null,
+      ...agentContacts.map(
+        ({ label, contact }) => `<li>${formatContactLines(contact, label).join('<br/>')}</li>`
+      ),
       '</ul>',
       referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
       `<p>Please reach out to the agent to introduce yourself and fill them in on the details of ${borrowerFirstName}'s financing.</p>`,
     ],
     [
       `Hi ${lenderContact?.name ?? 'there'},`,
-      `The agent who will be helping ${borrowerName} is:`,
-      primaryAgent
-        ? formatContactLines(primaryAgent, 'Agent').join(' | ')
+      `The agent team who will be helping ${borrowerName} is:`,
+      agentContacts.length > 0
+        ? agentContacts
+            .map(({ label, contact }) => formatContactLines(contact, label).join(' | '))
+            .join(' || ')
         : null,
       referralLink ? `Referral workspace: ${referralLink}` : null,
       `Please reach out to the agent to introduce yourself and fill them in on the details of ${borrowerFirstName}'s financing.`,
