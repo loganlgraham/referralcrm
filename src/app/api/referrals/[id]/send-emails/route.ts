@@ -55,6 +55,37 @@ const coerceContactField = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const extractMcContact = (referral: any): BasicContact | null => {
+  const lenderContact = normalizeContact(referral.lender);
+  if (lenderContact) return lenderContact;
+
+  const fallbackEmail =
+    coerceContactField(referral.lenderEmail) ||
+    coerceContactField(referral.borrower?.loanOfficerEmail) ||
+    coerceContactField(referral.borrower?.lenderEmail) ||
+    coerceContactField(referral.inboundEmail?.fields?.loanofficeremail);
+
+  const fallbackName =
+    coerceContactField(referral.borrower?.loanOfficerName) ||
+    coerceContactField(referral.inboundEmail?.fields?.loanofficername) ||
+    coerceContactField(referral.inboundEmail?.fields?.mcname);
+
+  const fallbackPhone =
+    coerceContactField(referral.borrower?.loanOfficerPhone) ||
+    coerceContactField(referral.inboundEmail?.fields?.loanofficerphone) ||
+    coerceContactField(referral.inboundEmail?.fields?.mcphone);
+
+  if (!fallbackEmail && !fallbackName && !fallbackPhone) {
+    return null;
+  }
+
+  return {
+    name: fallbackName,
+    email: fallbackEmail,
+    phone: fallbackPhone,
+  };
+};
+
 const buildBorrowerName = (borrower: any): string => {
   const parts = [borrower?.firstName, borrower?.lastName]
     .map((part) => (typeof part === 'string' ? part.trim() : ''))
@@ -189,7 +220,7 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
   const buySideContact = normalizeContact(referral.buySideAgent);
   const sellSideContact = normalizeContact(referral.sellSideAgent);
   const primaryAgent = buySideContact || sellSideContact || normalizeContact(referral.assignedAgent);
-  const lenderContact = normalizeContact(referral.lender);
+  const lenderContact = extractMcContact(referral);
   const borrower = referral.borrower ?? {};
   const borrowerContact = extractBorrowerContact(referral);
   const borrowerName = borrowerContact.name || buildBorrowerName(borrower);
