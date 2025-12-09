@@ -228,6 +228,7 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
   const borrowerContact = extractBorrowerContact(referral);
   const borrowerName = borrowerContact.name || buildBorrowerName(borrower);
   const borrowerFirstName = buildBorrowerFirstName(borrower);
+  const loanFileNumber = referral.loanFileNumber?.trim() || 'N/A';
   const agentFirstName = firstNameFromContact(primaryAgent, 'your agent');
   const lenderFirstName = firstNameFromContact(lenderContact, 'your mortgage consultant');
   const borrowerEmail = borrowerContact.email ?? null;
@@ -332,24 +333,29 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
   }
 
   const mcEmailHtmlLines: Array<string | null> = [
-    `<p>Hi ${lenderContact?.name ?? 'there'},</p>`,
-    `<p>The agent team who will be helping ${borrowerName} is:</p>`,
-    '<ul>',
+    `<p>Hi ${lenderFirstName},</p>`,
+    `<p>The agent team who will be helping ${borrowerName}, file number ${loanFileNumber}, is:</p>`,
     ...mcAgentContacts.map(
-      ({ label, contact }) => `<li>${formatContactLines(contact, label).join('<br/>')}</li>`
+      ({ label, contact }) =>
+        `<p><strong>${label}:</strong> ${contact.name ?? 'N/A'}<br/>Email: ${contact.email ?? 'N/A'}<br/>Phone: ${
+          contact.phone ?? 'N/A'
+        }</p>`
     ),
-    '</ul>',
   ];
 
   const mcEmailTextLines: Array<string | null> = [
-    `Hi ${lenderContact?.name ?? 'there'},`,
-    `The agent team who will be helping ${borrowerName} is:`,
-    mcAgentContacts.length > 0
-      ? mcAgentContacts
-          .map(({ label, contact }) => formatContactLines(contact, label).join(' | '))
-          .join(' || ')
-      : null,
+    `Hi ${lenderFirstName},`,
+    `The agent team who will be helping ${borrowerName}, file number ${loanFileNumber}, is:`,
   ];
+
+  for (const { label, contact } of mcAgentContacts) {
+    mcEmailTextLines.push(
+      `${label}: ${contact.name ?? 'N/A'}`,
+      `Email: ${contact.email ?? 'N/A'}`,
+      `Phone: ${contact.phone ?? 'N/A'}`,
+      ''
+    );
+  }
 
   if (session.user.role === 'agent') {
     mcEmailHtmlLines.push(
@@ -371,17 +377,21 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
 
   mcEmailHtmlLines.push(
     referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
-    `<p>Please reach out to the agent to introduce yourself and fill them in on the details of ${borrowerFirstName}'s financing.</p>`
+    `<p>Please reach out to the agent to introduce yourself and fill them in on the details of ${
+      borrowerFirstName || borrowerName || 'the borrower'
+    }'s financing and add their contact information to the LOS.</p>`
   );
 
   mcEmailTextLines.push(
     referralLink ? `Referral workspace: ${referralLink}` : null,
-    `Please reach out to the agent to introduce yourself and fill them in on the details of ${borrowerFirstName}'s financing.`
+    `Please reach out to the agent to introduce yourself and fill them in on the details of ${
+      borrowerFirstName || borrowerName || 'the borrower'
+    }'s financing and add their contact information to the LOS.`
   );
 
   await trySendEmail(
     lenderContact?.email ?? null,
-    'New client referral',
+    `Agent helping ${borrowerName}`,
     mcEmailHtmlLines.filter(Boolean),
     mcEmailTextLines.filter(Boolean),
     'mc',
