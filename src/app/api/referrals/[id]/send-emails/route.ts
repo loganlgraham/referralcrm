@@ -312,13 +312,20 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     }
   }
 
-  const agentContacts: Array<{ label: string; contact: BasicContact }> = [
-    buySideContact ? { label: 'Buying Agent', contact: buySideContact } : null,
-    sellSideContact ? { label: 'Selling Agent', contact: sellSideContact } : null,
-  ].filter((item): item is { label: string; contact: BasicContact } => Boolean(item));
+  const mcAgentContacts: Array<{ label: string; contact: BasicContact }> = [];
 
-  if (agentContacts.length === 0 && primaryAgent) {
-    agentContacts.push({ label: 'Agent', contact: primaryAgent });
+  const pairedFallbackContact = primaryAgent ?? normalizeContact(referral.assignedAgent);
+
+  if (buySideContact || pairedFallbackContact) {
+    mcAgentContacts.push({ label: 'Buying Agent', contact: buySideContact ?? pairedFallbackContact! });
+  }
+
+  if (sellSideContact || pairedFallbackContact) {
+    mcAgentContacts.push({ label: 'Selling Agent', contact: sellSideContact ?? pairedFallbackContact! });
+  }
+
+  if (mcAgentContacts.length === 0 && primaryAgent) {
+    mcAgentContacts.push({ label: 'Agent', contact: primaryAgent });
   }
 
   await trySendEmail(
@@ -328,7 +335,7 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
       `<p>Hi ${lenderContact?.name ?? 'there'},</p>`,
       `<p>The agent team who will be helping ${borrowerName} is:</p>`,
       '<ul>',
-      ...agentContacts.map(
+      ...mcAgentContacts.map(
         ({ label, contact }) => `<li>${formatContactLines(contact, label).join('<br/>')}</li>`
       ),
       '</ul>',
@@ -338,8 +345,8 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     [
       `Hi ${lenderContact?.name ?? 'there'},`,
       `The agent team who will be helping ${borrowerName} is:`,
-      agentContacts.length > 0
-        ? agentContacts
+      mcAgentContacts.length > 0
+        ? mcAgentContacts
             .map(({ label, contact }) => formatContactLines(contact, label).join(' | '))
             .join(' || ')
         : null,

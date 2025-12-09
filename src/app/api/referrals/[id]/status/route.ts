@@ -119,6 +119,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     } else if (PRE_CONTRACT_STATUSES.has(nextStatus)) {
       if (nextStatus === 'Paired') {
         sla.lastPairedAt = now;
+        sla.timeToFirstAgentContactHours = null;
         slaModified = true;
       } else if (nextStatus === 'In Communication') {
         let pairedAt: Date | null = null;
