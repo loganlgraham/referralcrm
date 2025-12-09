@@ -75,7 +75,8 @@ async function buildAgentRows(): Promise<string[][]> {
 
   const headers = ['Agent', 'Brokerage', 'Primary market', 'Active referrals', 'Total referrals', 'Email'];
   const rows = agents.map((agent) => {
-    const stats = totals.get(agent._id?.toString()) ?? { total: 0, active: 0 };
+    const agentId = agent._id?.toString();
+    const stats = agentId ? totals.get(agentId) ?? { total: 0, active: 0 } : { total: 0, active: 0 };
     const primaryMarket = agent.markets?.[0] ?? '—';
     return [
       agent.name,
