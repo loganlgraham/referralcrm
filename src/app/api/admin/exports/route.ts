@@ -115,7 +115,8 @@ async function buildMcRows(): Promise<string[][]> {
 
   const headers = ['MC', 'Team / Company', 'Region', 'Referrals received', 'Pre-approvals'];
   const rows = lenders.map((lender) => {
-    const stats = byLender.get(lender._id?.toString()) ?? { total: 0, preApprovals: 0 };
+    const lenderId = lender._id?.toString();
+    const stats = lenderId ? byLender.get(lenderId) ?? { total: 0, preApprovals: 0 } : { total: 0, preApprovals: 0 };
     return [
       lender.name,
       lender.team || '—',
