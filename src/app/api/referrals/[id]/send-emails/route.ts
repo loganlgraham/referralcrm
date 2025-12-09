@@ -194,7 +194,7 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
-  const allowedRoles = new Set(['admin', 'manager', 'mc']);
+  const allowedRoles = new Set(['admin', 'manager', 'mc', 'agent']);
   if (!allowedRoles.has(session.user.role)) {
     return new NextResponse('Forbidden', { status: 403 });
   }

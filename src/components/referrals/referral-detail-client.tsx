@@ -340,7 +340,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
       return nextReferral;
     });
-    router.refresh();
     void mutate(activityFeedKey);
   };
 
@@ -365,7 +364,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
       return nextReferral;
     });
-    router.refresh();
     void mutate(activityFeedKey);
   };
 
