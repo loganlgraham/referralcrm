@@ -55,6 +55,40 @@ const coerceContactField = (value: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const extractMcContact = (referral: any): BasicContact | null => {
+  const lenderContact = normalizeContact(referral.lender);
+  if (lenderContact) return lenderContact;
+
+  const fallbackEmail =
+    coerceContactField(referral.lenderEmail) ||
+    coerceContactField(referral.borrower?.loanOfficerEmail) ||
+    coerceContactField(referral.borrower?.lenderEmail) ||
+    coerceContactField(referral.inboundEmail?.fields?.loanofficeremail) ||
+    coerceContactField(referral.inboundEmail?.fields?.mcemail);
+
+  const fallbackName =
+    coerceContactField(referral.borrower?.loanOfficerName) ||
+    coerceContactField(referral.inboundEmail?.fields?.loanofficername) ||
+    coerceContactField(referral.inboundEmail?.fields?.mcname) ||
+    coerceContactField(referral.lenderName);
+
+  const fallbackPhone =
+    coerceContactField(referral.borrower?.loanOfficerPhone) ||
+    coerceContactField(referral.inboundEmail?.fields?.loanofficerphone) ||
+    coerceContactField(referral.inboundEmail?.fields?.mcphone) ||
+    coerceContactField(referral.lenderPhone);
+
+  if (!fallbackEmail && !fallbackName && !fallbackPhone) {
+    return null;
+  }
+
+  return {
+    name: fallbackName,
+    email: fallbackEmail,
+    phone: fallbackPhone,
+  };
+};
+
 const buildBorrowerName = (borrower: any): string => {
   const parts = [borrower?.firstName, borrower?.lastName]
     .map((part) => (typeof part === 'string' ? part.trim() : ''))
@@ -163,7 +197,8 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
-  if (session.user.role !== 'admin') {
+  const allowedRoles = new Set(['admin', 'manager', 'mc', 'agent']);
+  if (!allowedRoles.has(session.user.role)) {
     return new NextResponse('Forbidden', { status: 403 });
   }
 
@@ -185,11 +220,10 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     return new NextResponse('Not found', { status: 404 });
   }
 
-  const primaryAgent =
-    normalizeContact(referral.buySideAgent) ||
-    normalizeContact(referral.sellSideAgent) ||
-    normalizeContact(referral.assignedAgent);
-  const lenderContact = normalizeContact(referral.lender);
+  const buySideContact = normalizeContact(referral.buySideAgent);
+  const sellSideContact = normalizeContact(referral.sellSideAgent);
+  const primaryAgent = buySideContact || sellSideContact || normalizeContact(referral.assignedAgent);
+  const lenderContact = extractMcContact(referral);
   const borrower = referral.borrower ?? {};
   const borrowerContact = extractBorrowerContact(referral);
   const borrowerName = borrowerContact.name || buildBorrowerName(borrower);
@@ -281,29 +315,75 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     }
   }
 
+  const mcAgentContacts: Array<{ label: string; contact: BasicContact }> = [];
+
+  const pairedFallbackContact = primaryAgent ?? normalizeContact(referral.assignedAgent);
+
+  if (buySideContact || pairedFallbackContact) {
+    mcAgentContacts.push({ label: 'Buying Agent', contact: buySideContact ?? pairedFallbackContact! });
+  }
+
+  if (sellSideContact || pairedFallbackContact) {
+    mcAgentContacts.push({ label: 'Selling Agent', contact: sellSideContact ?? pairedFallbackContact! });
+  }
+
+  if (mcAgentContacts.length === 0 && primaryAgent) {
+    mcAgentContacts.push({ label: 'Agent', contact: primaryAgent });
+  }
+
+  const mcEmailHtmlLines: Array<string | null> = [
+    `<p>Hi ${lenderContact?.name ?? 'there'},</p>`,
+    `<p>The agent team who will be helping ${borrowerName} is:</p>`,
+    '<ul>',
+    ...mcAgentContacts.map(
+      ({ label, contact }) => `<li>${formatContactLines(contact, label).join('<br/>')}</li>`
+    ),
+    '</ul>',
+  ];
+
+  const mcEmailTextLines: Array<string | null> = [
+    `Hi ${lenderContact?.name ?? 'there'},`,
+    `The agent team who will be helping ${borrowerName} is:`,
+    mcAgentContacts.length > 0
+      ? mcAgentContacts
+          .map(({ label, contact }) => formatContactLines(contact, label).join(' | '))
+          .join(' || ')
+      : null,
+  ];
+
+  if (session.user.role === 'agent') {
+    mcEmailHtmlLines.push(
+      `<p>Borrower contact details to connect directly:</p>`,
+      '<ul>',
+      `<li><strong>Borrower:</strong> ${borrowerName}</li>`,
+      borrowerEmail ? `<li><strong>Email:</strong> ${borrowerEmail}</li>` : null,
+      borrowerPhone ? `<li><strong>Phone:</strong> ${borrowerPhone}</li>` : null,
+      '</ul>'
+    );
+
+    mcEmailTextLines.push(
+      'Borrower contact details to connect directly:',
+      `Borrower: ${borrowerName}`,
+      borrowerEmail ? `Email: ${borrowerEmail}` : null,
+      borrowerPhone ? `Phone: ${borrowerPhone}` : null
+    );
+  }
+
+  mcEmailHtmlLines.push(
+    referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
+    `<p>Please reach out to the agent to introduce yourself and fill them in on the details of ${borrowerFirstName}'s financing.</p>`
+  );
+
+  mcEmailTextLines.push(
+    referralLink ? `Referral workspace: ${referralLink}` : null,
+    `Please reach out to the agent to introduce yourself and fill them in on the details of ${borrowerFirstName}'s financing.`
+  );
+
   await trySendEmail(
     lenderContact?.email ?? null,
     'New client referral',
-    [
-      `<p>Hi ${lenderContact?.name ?? 'there'},</p>`,
-      `<p>The agent who will be helping ${borrowerName} is:</p>`,
-      '<ul>',
-      primaryAgent
-        ? '<li>' + formatContactLines(primaryAgent, 'Agent').join('<br/>') + '</li>'
-        : null,
-      '</ul>',
-      referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
-      `<p>Please reach out to the agent to introduce yourself and fill them in on the details of ${borrowerFirstName}'s financing.</p>`,
-    ],
-    [
-      `Hi ${lenderContact?.name ?? 'there'},`,
-      `The agent who will be helping ${borrowerName} is:`,
-      primaryAgent
-        ? formatContactLines(primaryAgent, 'Agent').join(' | ')
-        : null,
-      referralLink ? `Referral workspace: ${referralLink}` : null,
-      `Please reach out to the agent to introduce yourself and fill them in on the details of ${borrowerFirstName}'s financing.`,
-    ],
+    mcEmailHtmlLines.filter(Boolean),
+    mcEmailTextLines.filter(Boolean),
     'mc',
     result
   );

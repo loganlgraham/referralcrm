@@ -9,7 +9,6 @@ import { canManageReferral } from '@/lib/rbac';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
 import { Agent } from '@/models/agent';
-import { normalizeReferralStatus } from '@/constants/referrals';
 
 interface Params {
   params: { id: string };
@@ -50,7 +49,29 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   ) {
     return new NextResponse('Forbidden', { status: 403 });
   }
-  const assignmentSide = parsed.data.side ?? (referral.clientType === 'Seller' ? 'sell' : 'buy');
+  const normalizedClientType = (() => {
+    const raw = typeof referral.clientType === 'string' ? referral.clientType.trim().toLowerCase() : '';
+    if (raw === 'seller') return 'Seller' as const;
+    if (raw === 'buyer') return 'Buyer' as const;
+    if (
+      raw === 'both' ||
+      raw === 'buyer & seller' ||
+      raw === 'buyer and seller' ||
+      raw === 'buying and selling' ||
+      raw === 'buying & selling' ||
+      raw === 'buy/sell'
+    ) {
+      return 'Both' as const;
+    }
+
+    if (raw.includes('buy') && raw.includes('sell')) {
+      return 'Both' as const;
+    }
+
+    return null;
+  })();
+
+  const assignmentSide = parsed.data.side ?? (normalizedClientType === 'Seller' ? 'sell' : 'buy');
   const previousAgentValue = (() => {
     if (assignmentSide === 'sell') return (referral.sellSideAgent as any)?._id ?? referral.sellSideAgent ?? null;
     return (referral.buySideAgent as any)?._id ?? referral.buySideAgent ?? null;
@@ -62,7 +83,6 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     referral.buySideAgent = parsed.data.agentId as any;
   }
   referral.assignedAgent = referral.buySideAgent ?? referral.sellSideAgent ?? null;
-  referral.statusLastUpdated = new Date();
   const sla = (referral.sla ??= {} as any);
   const createdAt = referral.createdAt instanceof Date ? referral.createdAt : new Date(referral.createdAt ?? Date.now());
   if (!Number.isNaN(createdAt.getTime()) && sla.timeToAssignmentHours == null) {
@@ -85,45 +105,6 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
 
   referral.audit.push(auditEntry as any);
-
-  const hasBuySideAgent = Boolean(referral.buySideAgent);
-  const hasSellSideAgent = Boolean(referral.sellSideAgent);
-  const shouldPairStatus =
-    referral.clientType === 'Both'
-      ? hasBuySideAgent && hasSellSideAgent
-      : assignmentSide === 'sell'
-      ? hasSellSideAgent
-      : hasBuySideAgent;
-
-  const normalizedStatus = normalizeReferralStatus(referral.status as string) ?? 'New Lead';
-  const eligibleForPairing = normalizedStatus === 'New Lead';
-  const statusChanged = shouldPairStatus && eligibleForPairing;
-
-  if (statusChanged) {
-    const now = new Date();
-    referral.status = 'Paired' as any;
-    referral.statusLastUpdated = now;
-    referral.audit.push({
-      actorRole: session.user.role,
-      field: 'status',
-      previousValue: normalizedStatus,
-      newValue: 'Paired',
-      timestamp: now,
-      actorId: auditActorId,
-    } as any);
-
-    const sla = (referral.sla ??= {} as any);
-    sla.lastPairedAt = now;
-    referral.markModified('sla');
-
-    await logReferralActivity({
-      referralId: referral._id,
-      actorRole: session.user.role,
-      actorId: auditActorId ?? session.user.id,
-      channel: 'status',
-      content: 'Status updated to Paired after agent assignment.',
-    });
-  }
 
   await referral.save();
 

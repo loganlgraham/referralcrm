@@ -10,7 +10,7 @@ import { ReferralHeader } from '@/components/referrals/referral-header';
 import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import type { Contact } from '@/components/referrals/contact-assignment';
-import type { ReferralStatus } from '@/constants/referrals';
+import { normalizeReferralStatus, type ReferralStatus } from '@/constants/referrals';
 import { ReferralDeals } from '@/components/referrals/referral-deals';
 import type { ReferralPayment } from '@/types/referral-payment';
 import { formatCurrency } from '@/utils/formatters';
@@ -321,13 +321,49 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   );
   const handleBuySideAgentContactChange = (contact: Contact | null) => {
     setBuySideAgentContact(contact);
-    router.refresh();
+    setReferral((previous) => {
+      const nextBuySideAgent = contact
+        ? {
+            _id: contact.id ?? undefined,
+            id: contact.id ?? undefined,
+            name: contact.name ?? undefined,
+            email: contact.email ?? undefined,
+            phone: contact.phone ?? undefined,
+          }
+        : null;
+
+      const nextReferral: ReferralDetail = {
+        ...previous,
+        buySideAgent: nextBuySideAgent,
+        assignedAgent: nextBuySideAgent ?? previous.sellSideAgent ?? previous.assignedAgent ?? null,
+      };
+
+      return nextReferral;
+    });
     void mutate(activityFeedKey);
   };
 
   const handleSellSideAgentContactChange = (contact: Contact | null) => {
     setSellSideAgentContact(contact);
-    router.refresh();
+    setReferral((previous) => {
+      const nextSellSideAgent = contact
+        ? {
+            _id: contact.id ?? undefined,
+            id: contact.id ?? undefined,
+            name: contact.name ?? undefined,
+            email: contact.email ?? undefined,
+            phone: contact.phone ?? undefined,
+          }
+        : null;
+
+      const nextReferral: ReferralDetail = {
+        ...previous,
+        sellSideAgent: nextSellSideAgent,
+        assignedAgent: previous.buySideAgent ?? nextSellSideAgent ?? previous.assignedAgent ?? null,
+      };
+
+      return nextReferral;
+    });
     void mutate(activityFeedKey);
   };
 

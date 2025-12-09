@@ -61,23 +61,39 @@ const buildBorrowerFirstName = (referral: any): string => {
 
 const buildIntroClipboardTemplate = (
   referral: any,
-  agentContact: Contact | null,
+  buyingAgent: Contact | null,
+  sellingAgent: Contact | null,
   mcContact: Contact | null
 ): string => {
   const borrowerFirstName = buildBorrowerFirstName(referral);
-  const agentFullName = agentContact?.name ?? 'your agent';
-  const agentPhone = agentContact?.phone ?? 'Not provided';
-  const agentEmail = agentContact?.email ?? 'Not provided';
-  const agentFirstName = extractFirstName(agentContact?.name, 'your agent');
+  const buyerFullName = buyingAgent?.name ?? 'your buying agent';
+  const buyerPhone = buyingAgent?.phone ?? 'Not provided';
+  const buyerEmail = buyingAgent?.email ?? 'Not provided';
+  const buyerFirstName = extractFirstName(buyingAgent?.name, 'your buying agent');
+  const sellerFullName = sellingAgent?.name ?? 'your selling agent';
+  const sellerPhone = sellingAgent?.phone ?? 'Not provided';
+  const sellerEmail = sellingAgent?.email ?? 'Not provided';
+  const sellerFirstName = extractFirstName(sellingAgent?.name, 'your selling agent');
   const mcFirstName = extractFirstName(mcContact?.name, 'me');
+
+  const buyingAgentBlock = [buyerFullName, buyerPhone, buyerEmail].join('\n');
+  const sellingAgentBlock = [sellerFullName, sellerPhone, sellerEmail].join('\n');
+
+  const agentsIntro = buyingAgent && sellingAgent
+    ? `${buyerFullName} and ${sellerFullName}, both local and trusted Real Estate Specialists who will be assisting you with your home purchase.`
+    : `${buyerFullName}, a local and trusted Real Estate Specialist who will be assisting you with your home purchase.`;
+
+  const dualAgents = Boolean(buyingAgent && sellingAgent);
 
   return (
     `Hi ${borrowerFirstName},\n\n` +
-    'I want to thank you again for your interest in our Buyers Concierge Program. This program is tailored to support Buyers like you as you navigate the home-buying process with American Financing and to connect you with a top-tier local realtor.\n\n' +
-    `I’m excited to introduce you to ${agentFullName}, a local and trusted Real Estate Specialist who will be assisting you with your home purchase.\n\n` +
-    `Below are ${agentFirstName}'s contact details. You can expect them to reach out to you shortly:\n\n` +
-    `${agentFullName}\n${agentPhone}\n${agentEmail}\n\n` +
-    `If, at any point, you have trouble reaching ${agentFirstName} or are not fully satisfied with the services provided, please don’t hesitate to contact ${mcFirstName} or me. We are committed to supporting you every step of the way.\n\n` +
+    'I want to thank you again for your interest in our Agent Concierge Program. This program is tailored to support clients like you as you navigate the home-buying and selling process with American Financing and to connect you with top-tier local agents.\n\n' +
+    `I’m excited to introduce you to ${agentsIntro}\n\n` +
+    `Below are ${dualAgents ? `${buyerFirstName} and ${sellerFirstName}` : buyerFirstName}'s contact details. You can expect them to reach out to you shortly:\n\n` +
+    'Buying Agent\n' +
+    `${buyingAgentBlock}\n\n` +
+    (dualAgents ? `Selling Agent\n${sellingAgentBlock}\n\n` : '') +
+    `If, at any point, you have trouble reaching ${dualAgents ? `${buyerFirstName} or ${sellerFirstName}` : buyerFirstName} or are not fully satisfied with the services provided, please don’t hesitate to contact ${mcFirstName} or me. We are committed to supporting you every step of the way.\n\n` +
     'Thank you once again, and happy home shopping!\n\n---'
   );
 };
@@ -488,7 +504,8 @@ export function ReferralHeader({
 
       const clipboardContent = buildIntroClipboardTemplate(
         referral,
-        effectiveAgentContact,
+        effectiveBuySideContact,
+        effectiveSellSideContact,
         effectiveMcContact
       );
 
