@@ -256,13 +256,13 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
       lenderContact
         ? `<p><b>Mortgage Consultant at American Financing:</b> ${lenderContact.name ?? 'Not provided'}<br><b>Email:</b> ${
             lenderContact.email ?? 'Not provided'
-          }<br><b>Phone:</b> ${lenderContact.phone ?? 'Not provided'}</p>`
-        : `<p><b>Mortgage Consultant at American Financing:</b> Not provided</p>`,
+          }<br><b>Phone:</b> ${lenderContact.phone ?? 'Not provided'}<br><b>Loan File Number:</b> ${loanFileNumber}</p>`
+        : `<p><b>Mortgage Consultant at American Financing:</b> Not provided<br><b>Loan File Number:</b> ${loanFileNumber}</p>`,
       contactMadeLink && contactAttemptedLink
         ? `<p>Please select one of the following after attempting to contact ${borrowerFirstName}: </p>`
         : null,
       contactMadeLink && contactAttemptedLink
-        ? `<p><a href="${contactMadeLink}">Made Contact</a> (sets referral status to "in communication")<br><a href="${contactAttemptedLink}">Unable to reach after first attempt</a> (leaves status as paired, but adds activity to log at the end of the individual referral page)</p>`
+        ? `<p><a href="${contactMadeLink}">Made Contact</a><br><a href="${contactAttemptedLink}">Unable to reach after first attempt</a></p>`
         : null,
       referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
       `<p>Thank you for taking great care of ${borrowerFirstName}!</p>`,
@@ -277,16 +277,16 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
       lenderContact
         ? `Mortgage Consultant at American Financing: ${lenderContact.name ?? 'Not provided'} | Email: ${
             lenderContact.email ?? 'Not provided'
-          } | Phone: ${lenderContact.phone ?? 'Not provided'}`
-        : 'Mortgage Consultant at American Financing: Not provided',
+          } | Phone: ${lenderContact.phone ?? 'Not provided'} | Loan File Number: ${loanFileNumber}`
+        : `Mortgage Consultant at American Financing: Not provided | Loan File Number: ${loanFileNumber}`,
       contactMadeLink && contactAttemptedLink
         ? `Please select one of the following after attempting to contact ${borrowerFirstName}:`
         : null,
       contactMadeLink && contactAttemptedLink
-        ? `Made Contact: ${contactMadeLink} (sets referral status to "in communication")`
+        ? `Made Contact: ${contactMadeLink}`
         : null,
       contactMadeLink && contactAttemptedLink
-        ? `Unable to reach after first attempt: ${contactAttemptedLink} (leaves status as paired, but adds activity to log at the end of the individual referral page)`
+        ? `Unable to reach after first attempt: ${contactAttemptedLink}`
         : null,
       referralLink ? `Referral workspace: ${referralLink}` : null,
       `Thank you for taking great care of ${borrowerFirstName}!`,
