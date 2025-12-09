@@ -63,17 +63,20 @@ const extractMcContact = (referral: any): BasicContact | null => {
     coerceContactField(referral.lenderEmail) ||
     coerceContactField(referral.borrower?.loanOfficerEmail) ||
     coerceContactField(referral.borrower?.lenderEmail) ||
-    coerceContactField(referral.inboundEmail?.fields?.loanofficeremail);
+    coerceContactField(referral.inboundEmail?.fields?.loanofficeremail) ||
+    coerceContactField(referral.inboundEmail?.fields?.mcemail);
 
   const fallbackName =
     coerceContactField(referral.borrower?.loanOfficerName) ||
     coerceContactField(referral.inboundEmail?.fields?.loanofficername) ||
-    coerceContactField(referral.inboundEmail?.fields?.mcname);
+    coerceContactField(referral.inboundEmail?.fields?.mcname) ||
+    coerceContactField(referral.lenderName);
 
   const fallbackPhone =
     coerceContactField(referral.borrower?.loanOfficerPhone) ||
     coerceContactField(referral.inboundEmail?.fields?.loanofficerphone) ||
-    coerceContactField(referral.inboundEmail?.fields?.mcphone);
+    coerceContactField(referral.inboundEmail?.fields?.mcphone) ||
+    coerceContactField(referral.lenderPhone);
 
   if (!fallbackEmail && !fallbackName && !fallbackPhone) {
     return null;
