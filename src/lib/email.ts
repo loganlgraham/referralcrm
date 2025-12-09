@@ -9,6 +9,9 @@ type EmailPayload = {
 };
 
 let resendClient: Resend | null = null;
+const EMAIL_RATE_LIMIT_INTERVAL_MS = 600;
+let rateLimitChain: Promise<unknown> = Promise.resolve();
+let lastSendTimestamp = 0;
 
 function hasResendConfiguration(): boolean {
   return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
@@ -26,6 +29,23 @@ function getResendClient(): Resend | null {
 
 export function isTransactionalEmailConfigured(): boolean {
   return hasResendConfiguration();
+}
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function enqueueRateLimited<T>(operation: () => Promise<T>): Promise<T> {
+  rateLimitChain = rateLimitChain.then(async () => {
+    const now = Date.now();
+    const elapsed = now - lastSendTimestamp;
+    const waitMs = Math.max(0, EMAIL_RATE_LIMIT_INTERVAL_MS - elapsed);
+    if (waitMs > 0) {
+      await delay(waitMs);
+    }
+    lastSendTimestamp = Date.now();
+    return operation();
+  });
+
+  return rateLimitChain as Promise<T>;
 }
 
 export async function sendTransactionalEmail(payload: EmailPayload): Promise<boolean> {
@@ -48,7 +68,7 @@ export async function sendTransactionalEmail(payload: EmailPayload): Promise<boo
       emailOptions.scheduled_at = payload.scheduledAt.toISOString();
     }
 
-    await client.emails.send(emailOptions);
+    await enqueueRateLimited(() => client.emails.send(emailOptions));
     return true;
   } catch (error) {
     console.error('Failed to send transactional email', error);

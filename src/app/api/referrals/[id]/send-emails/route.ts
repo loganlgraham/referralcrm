@@ -29,7 +29,6 @@ type SendResult = {
   sent: string[];
   skipped: string[];
   errors: string[];
-  followUpScheduledFor?: string;
 };
 
 const normalizeContact = (contact: unknown): BasicContact | null => {
@@ -228,6 +227,7 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
   const borrowerContact = extractBorrowerContact(referral);
   const borrowerName = borrowerContact.name || buildBorrowerName(borrower);
   const borrowerFirstName = buildBorrowerFirstName(borrower);
+  const loanFileNumber = referral.loanFileNumber?.trim() || 'N/A';
   const agentFirstName = firstNameFromContact(primaryAgent, 'your agent');
   const lenderFirstName = firstNameFromContact(lenderContact, 'your mortgage consultant');
   const borrowerEmail = borrowerContact.email ?? null;
@@ -245,75 +245,55 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
 
   await trySendEmail(
     primaryAgent?.email ?? null,
-    'New referral introduction',
+    `New referral for ${borrowerName}`,
     [
-      `<p>Hi ${primaryAgent?.name ?? 'there'},</p>`,
-      `<p>Thanks for partnering with American Home Agents Buyer Concierge Service on ${borrowerName}.` +
-        " We're excited to help them with their home search.</p>",
+      `<p>Hi ${agentFirstName},</p>`,
+      `<p>Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName}. We're excited to get them in their new home!</p>`,
       '<p>Here are the key details so you can reach out confidently:</p>',
-      '<ul>',
-      `<li><strong>Buyer:</strong> ${borrowerName}</li>`,
-      borrowerEmail ? `<li><strong>Email:</strong> ${borrowerEmail}</li>` : null,
-      borrowerPhone ? `<li><strong>Phone:</strong> ${borrowerPhone}</li>` : null,
+      `<p><b>Client Name:</b> ${borrowerName}<br><b>Email:</b> ${borrowerEmail ?? 'Not provided'}<br><b>Phone:</b> ${
+        borrowerPhone ?? 'Not provided'
+      }</p>`,
       lenderContact
-        ? '<li>' + formatContactLines(lenderContact, 'Mortgage Consultant').join('<br/>') + '</li>'
+        ? `<p><b>Mortgage Consultant at American Financing:</b> ${lenderContact.name ?? 'Not provided'}<br><b>Email:</b> ${
+            lenderContact.email ?? 'Not provided'
+          }<br><b>Phone:</b> ${lenderContact.phone ?? 'Not provided'}<br><b>Loan File Number:</b> ${loanFileNumber}</p>`
+        : `<p><b>Mortgage Consultant at American Financing:</b> Not provided<br><b>Loan File Number:</b> ${loanFileNumber}</p>`,
+      contactMadeLink && contactAttemptedLink
+        ? `<p>Please select one of the following after attempting to contact ${borrowerFirstName}: </p>`
         : null,
-      '</ul>',
+      contactMadeLink && contactAttemptedLink
+        ? `<p><a href="${contactMadeLink}">Made Contact</a><br><a href="${contactAttemptedLink}">Unable to reach after first attempt</a></p>`
+        : null,
       referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
-      '<p>Thank you for taking great care of this client.</p>',
+      `<p>Thank you for taking great care of ${borrowerFirstName}!</p>`,
     ],
     [
-      `Hi ${primaryAgent?.name ?? 'there'},`,
-      `Thanks for partnering with American Home Agents Buyer Concierge Service on ${borrowerName}. We're excited to help them with their home search.`,
+      `Hi ${agentFirstName},`,
+      `Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName}. We're excited to get them in their new home!`,
       'Here are the key details so you can reach out confidently:',
-      `Buyer: ${borrowerName}`,
-      borrowerEmail ? `Email: ${borrowerEmail}` : null,
-      borrowerPhone ? `Phone: ${borrowerPhone}` : null,
+      `Client Name: ${borrowerName}`,
+      `Email: ${borrowerEmail ?? 'Not provided'}`,
+      `Phone: ${borrowerPhone ?? 'Not provided'}`,
       lenderContact
-        ? formatContactLines(lenderContact, 'Mortgage Consultant').join(' | ')
+        ? `Mortgage Consultant at American Financing: ${lenderContact.name ?? 'Not provided'} | Email: ${
+            lenderContact.email ?? 'Not provided'
+          } | Phone: ${lenderContact.phone ?? 'Not provided'} | Loan File Number: ${loanFileNumber}`
+        : `Mortgage Consultant at American Financing: Not provided | Loan File Number: ${loanFileNumber}`,
+      contactMadeLink && contactAttemptedLink
+        ? `Please select one of the following after attempting to contact ${borrowerFirstName}:`
+        : null,
+      contactMadeLink && contactAttemptedLink
+        ? `Made Contact: ${contactMadeLink}`
+        : null,
+      contactMadeLink && contactAttemptedLink
+        ? `Unable to reach after first attempt: ${contactAttemptedLink}`
         : null,
       referralLink ? `Referral workspace: ${referralLink}` : null,
-      'Thank you for taking great care of this client.',
+      `Thank you for taking great care of ${borrowerFirstName}!`,
     ],
     'agent',
     result
   );
-
-  const followUpSendTime = new Date(Date.now() + 4 * 60 * 60 * 1000);
-
-  if (primaryAgent?.email && contactMadeLink && contactAttemptedLink) {
-    const followUpScheduled = await sendTransactionalEmail({
-      to: [primaryAgent.email],
-      subject: `Quick check-in for ${borrowerName}`,
-      html: [
-        `<p>Hi ${primaryAgent?.name ?? 'there'},</p>`,
-        `<p>Were you able to connect with ${borrowerName}? Let us know:</p>`,
-        '<ul>',
-        `<li><a href="${contactMadeLink}">Made contact</a></li>`,
-        `<li><a href="${contactAttemptedLink}">Unable to make contact</a></li>`,
-        '</ul>',
-        referralLink
-          ? `<p>You can also review the details here: <a href="${referralLink}">${referralLink}</a></p>`
-          : null,
-        `<p>Thank you for keeping us updated.</p>`,
-      ].filter(Boolean).join(''),
-      text: [
-        `Hi ${primaryAgent?.name ?? 'there'},`,
-        `Were you able to connect with ${borrowerName}? Let us know:`,
-        `Made contact: ${contactMadeLink}`,
-        `Unable to make contact: ${contactAttemptedLink}`,
-        referralLink ? `Referral workspace: ${referralLink}` : null,
-        'Thank you for keeping us updated.',
-      ]
-        .filter(Boolean)
-        .join('\n'),
-      scheduledAt: followUpSendTime,
-    });
-
-    if (followUpScheduled) {
-      result.followUpScheduledFor = followUpSendTime.toISOString();
-    }
-  }
 
   const mcAgentContacts: Array<{ label: string; contact: BasicContact }> = [];
 
@@ -332,24 +312,29 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
   }
 
   const mcEmailHtmlLines: Array<string | null> = [
-    `<p>Hi ${lenderContact?.name ?? 'there'},</p>`,
-    `<p>The agent team who will be helping ${borrowerName} is:</p>`,
-    '<ul>',
+    `<p>Hi ${lenderFirstName},</p>`,
+    `<p>The agent team who will be helping ${borrowerName}, file number ${loanFileNumber}, is:</p>`,
     ...mcAgentContacts.map(
-      ({ label, contact }) => `<li>${formatContactLines(contact, label).join('<br/>')}</li>`
+      ({ label, contact }) =>
+        `<p><strong>${label}:</strong> ${contact.name ?? 'N/A'}<br/>Email: ${contact.email ?? 'N/A'}<br/>Phone: ${
+          contact.phone ?? 'N/A'
+        }</p>`
     ),
-    '</ul>',
   ];
 
   const mcEmailTextLines: Array<string | null> = [
-    `Hi ${lenderContact?.name ?? 'there'},`,
-    `The agent team who will be helping ${borrowerName} is:`,
-    mcAgentContacts.length > 0
-      ? mcAgentContacts
-          .map(({ label, contact }) => formatContactLines(contact, label).join(' | '))
-          .join(' || ')
-      : null,
+    `Hi ${lenderFirstName},`,
+    `The agent team who will be helping ${borrowerName}, file number ${loanFileNumber}, is:`,
   ];
+
+  for (const { label, contact } of mcAgentContacts) {
+    mcEmailTextLines.push(
+      `${label}: ${contact.name ?? 'N/A'}`,
+      `Email: ${contact.email ?? 'N/A'}`,
+      `Phone: ${contact.phone ?? 'N/A'}`,
+      ''
+    );
+  }
 
   if (session.user.role === 'agent') {
     mcEmailHtmlLines.push(
@@ -371,17 +356,21 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
 
   mcEmailHtmlLines.push(
     referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
-    `<p>Please reach out to the agent to introduce yourself and fill them in on the details of ${borrowerFirstName}'s financing.</p>`
+    `<p>Please reach out to the agent to introduce yourself and fill them in on the details of ${
+      borrowerFirstName || borrowerName || 'the borrower'
+    }'s financing and add their contact information to the LOS.</p>`
   );
 
   mcEmailTextLines.push(
     referralLink ? `Referral workspace: ${referralLink}` : null,
-    `Please reach out to the agent to introduce yourself and fill them in on the details of ${borrowerFirstName}'s financing.`
+    `Please reach out to the agent to introduce yourself and fill them in on the details of ${
+      borrowerFirstName || borrowerName || 'the borrower'
+    }'s financing and add their contact information to the LOS.`
   );
 
   await trySendEmail(
     lenderContact?.email ?? null,
-    'New client referral',
+    `Agent helping ${borrowerName}`,
     mcEmailHtmlLines.filter(Boolean),
     mcEmailTextLines.filter(Boolean),
     'mc',

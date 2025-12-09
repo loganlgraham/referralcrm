@@ -194,7 +194,6 @@ export function ReferralHeader({
   const [introEmailStatus, setIntroEmailStatus] = useState<{
     summary: string;
     sentAt: Date;
-    followUpAt?: Date;
   } | null>(null);
   const [dealSide, setDealSide] = useState<'buy' | 'sell'>(
     referral.dealSide === 'sell' ? 'sell' : 'buy'
@@ -518,7 +517,6 @@ export function ReferralHeader({
       setIntroEmailStatus({
         summary: summary || 'Intro emails sent.',
         sentAt: new Date(),
-        followUpAt: payload?.followUpScheduledFor ? new Date(payload.followUpScheduledFor) : undefined,
       });
     } catch (error) {
       console.error('Failed to send intro emails', error);
@@ -949,18 +947,6 @@ export function ReferralHeader({
                     })}
                     .
                   </p>
-                  {introEmailStatus.followUpAt ? (
-                    <p>
-                      Follow-up to agent scheduled for{' '}
-                      {introEmailStatus.followUpAt.toLocaleString([], {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      })}
-                      .
-                    </p>
-                  ) : null}
                 </div>
               )}
             </div>
