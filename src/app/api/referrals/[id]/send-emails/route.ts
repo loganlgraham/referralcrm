@@ -29,7 +29,6 @@ type SendResult = {
   sent: string[];
   skipped: string[];
   errors: string[];
-  followUpScheduledFor?: string;
 };
 
 const normalizeContact = (contact: unknown): BasicContact | null => {
@@ -295,42 +294,6 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
     'agent',
     result
   );
-
-  const followUpSendTime = new Date(Date.now() + 4 * 60 * 60 * 1000);
-
-  if (primaryAgent?.email && contactMadeLink && contactAttemptedLink) {
-    const followUpScheduled = await sendTransactionalEmail({
-      to: [primaryAgent.email],
-      subject: `Quick check-in for ${borrowerName}`,
-      html: [
-        `<p>Hi ${primaryAgent?.name ?? 'there'},</p>`,
-        `<p>Were you able to connect with ${borrowerName}? Let us know:</p>`,
-        '<ul>',
-        `<li><a href="${contactMadeLink}">Made contact</a></li>`,
-        `<li><a href="${contactAttemptedLink}">Unable to make contact</a></li>`,
-        '</ul>',
-        referralLink
-          ? `<p>You can also review the details here: <a href="${referralLink}">${referralLink}</a></p>`
-          : null,
-        `<p>Thank you for keeping us updated.</p>`,
-      ].filter(Boolean).join(''),
-      text: [
-        `Hi ${primaryAgent?.name ?? 'there'},`,
-        `Were you able to connect with ${borrowerName}? Let us know:`,
-        `Made contact: ${contactMadeLink}`,
-        `Unable to make contact: ${contactAttemptedLink}`,
-        referralLink ? `Referral workspace: ${referralLink}` : null,
-        'Thank you for keeping us updated.',
-      ]
-        .filter(Boolean)
-        .join('\n'),
-      scheduledAt: followUpSendTime,
-    });
-
-    if (followUpScheduled) {
-      result.followUpScheduledFor = followUpSendTime.toISOString();
-    }
-  }
 
   const mcAgentContacts: Array<{ label: string; contact: BasicContact }> = [];
 
