@@ -50,7 +50,15 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   ) {
     return new NextResponse('Forbidden', { status: 403 });
   }
-  const assignmentSide = parsed.data.side ?? (referral.clientType === 'Seller' ? 'sell' : 'buy');
+  const normalizedClientType = (() => {
+    const raw = typeof referral.clientType === 'string' ? referral.clientType.trim().toLowerCase() : '';
+    if (raw === 'seller') return 'Seller' as const;
+    if (raw === 'buyer') return 'Buyer' as const;
+    if (raw === 'both' || raw === 'buyer & seller' || raw === 'buyer and seller') return 'Both' as const;
+    return null;
+  })();
+
+  const assignmentSide = parsed.data.side ?? (normalizedClientType === 'Seller' ? 'sell' : 'buy');
   const previousAgentValue = (() => {
     if (assignmentSide === 'sell') return (referral.sellSideAgent as any)?._id ?? referral.sellSideAgent ?? null;
     return (referral.buySideAgent as any)?._id ?? referral.buySideAgent ?? null;
@@ -62,7 +70,6 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     referral.buySideAgent = parsed.data.agentId as any;
   }
   referral.assignedAgent = referral.buySideAgent ?? referral.sellSideAgent ?? null;
-  referral.statusLastUpdated = new Date();
   const sla = (referral.sla ??= {} as any);
   const createdAt = referral.createdAt instanceof Date ? referral.createdAt : new Date(referral.createdAt ?? Date.now());
   if (!Number.isNaN(createdAt.getTime()) && sla.timeToAssignmentHours == null) {
@@ -89,7 +96,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const hasBuySideAgent = Boolean(referral.buySideAgent);
   const hasSellSideAgent = Boolean(referral.sellSideAgent);
   const shouldPairStatus =
-    referral.clientType === 'Both'
+    normalizedClientType === 'Both'
       ? hasBuySideAgent && hasSellSideAgent
       : assignmentSide === 'sell'
       ? hasSellSideAgent
