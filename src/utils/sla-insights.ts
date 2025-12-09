@@ -873,7 +873,23 @@ export const computeSlaRecommendations = (
         priority: 'urgent',
         category: 'communication',
         dueAt: minDueDate(dueBy),
-        supportingMetric: 'Admin SLA: borrower contact within 24 hours of creation',
+      supportingMetric: 'Admin SLA: borrower contact within 24 hours of creation',
+    })
+  );
+  }
+
+  if (status === 'New Lead' && assignedAgentName) {
+    const dueBy = addHours(statusLastUpdated, 4);
+    const agentLabel = `the borrower${assignedAgentName ? ` and ${assignedAgentName}` : ''}`;
+    recommendations.push(
+      buildRecommendation({
+        id: 'advance-to-paired',
+        title: 'Update status to Paired after introduction',
+        message: `Once you connect ${agentLabel}, move this referral to Paired so downstream timelines stay accurate.`,
+        priority: 'medium',
+        category: 'ops',
+        dueAt: minDueDate(dueBy),
+        supportingMetric: 'Status still New Lead after assigning an agent',
       })
     );
   }
