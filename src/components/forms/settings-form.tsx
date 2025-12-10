@@ -20,49 +20,24 @@ type DashboardMetricId = (typeof DASHBOARD_METRICS)[number]['id'];
 
 type ExportReport = 'referrals' | 'agents' | 'mcs' | 'deals';
 
-const EXPORT_DEFINITIONS: Record<ExportReport, { label: string; helper: string; headers: string[]; rows: string[][] }>
-  = {
-    referrals: {
-      label: 'Referrals',
-      helper: 'All inbound and assigned referrals with borrower, source, and status.',
-      headers: ['Referral ID', 'Borrower', 'Status', 'Assigned Agent', 'Source'],
-      rows: [
-        ['REF-4129', 'Jordan Lee', 'Active pipeline', 'Taylor Woods', 'Sphere of influence'],
-        ['REF-4132', 'Priya Patel', 'Pre-approved', 'Amari Chen', 'Lender partner'],
-        ['REF-4139', 'Chris Douglas', 'Under contract', 'Jamie Patel', 'AFC intake']
-      ]
-    },
-    agents: {
-      label: 'Agents',
-      helper: 'Roster with market centers, production, and key contact info.',
-      headers: ['Agent', 'Market center', 'Primary market', 'Active referrals', 'Email'],
-      rows: [
-        ['Taylor Woods', 'MC 104 - Denver', 'Denver, CO', '12', 'taylor.woods@example.com'],
-        ['Amari Chen', 'MC 208 - Austin', 'Austin, TX', '7', 'amari.chen@example.com'],
-        ['Jamie Patel', 'MC 332 - Phoenix', 'Phoenix, AZ', '9', 'jamie.patel@example.com']
-      ]
-    },
-    mcs: {
-      label: 'Mortgage consultants',
-      helper: 'Lender partners with referral totals and pre-approval conversions.',
-      headers: ['MC', 'Company', 'Market', 'Referrals received', 'Pre-approvals'],
-      rows: [
-        ['Alex Rivers', 'AFC Lending', 'Denver, CO', '18', '11'],
-        ['Morgan Diaz', 'Summit Home Loans', 'Seattle, WA', '10', '6'],
-        ['Skyler Ray', 'Gateway Mortgage', 'Dallas, TX', '14', '9']
-      ]
-    },
-    deals: {
-      label: 'Deals',
-      helper: 'Closed and active deals with referral fee details.',
-      headers: ['Deal', 'Status', 'Volume', 'Referral fee %', 'Assigned agent'],
-      rows: [
-        ['Deal-9821', 'Closed', '$725,000', '25%', 'Taylor Woods'],
-        ['Deal-9824', 'Under contract', '$515,000', '35%', 'Amari Chen'],
-        ['Deal-9833', 'Closed - awaiting payment', '$845,000', '30%', 'Jamie Patel']
-      ]
-    }
-  };
+const EXPORT_DEFINITIONS: Record<ExportReport, { label: string; helper: string }> = {
+  referrals: {
+    label: 'Referrals',
+    helper: 'All inbound and assigned referrals with borrower, source, and status.'
+  },
+  agents: {
+    label: 'Agents',
+    helper: 'Roster with market centers, production, and key contact info.'
+  },
+  mcs: {
+    label: 'Mortgage consultants',
+    helper: 'Lender partners with referral totals and pre-approval conversions.'
+  },
+  deals: {
+    label: 'Deals',
+    helper: 'Closed and active deals with referral fee details.'
+  }
+};
 
 export function SettingsForm() {
   const [tier1, setTier1] = useState(25);
@@ -118,42 +93,67 @@ export function SettingsForm() {
     }
 
     setReportLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 700));
-    const timeframeLabel =
-      reportTimeframe === 'Custom export window'
-        ? `${customStartDate || 'Start'} to ${customEndDate || 'End'}`
-        : reportTimeframe;
-    toast.success(
-      `Dashboard report "${reportName}" (${timeframeLabel}) created for ${selectedMetrics.length} metric${
-        selectedMetrics.length === 1 ? '' : 's'
-      }. We'll send it to ${reportRecipient}.`
-    );
-    setReportLoading(false);
-  };
+    try {
+      const response = await fetch('/api/admin/dashboard-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reportName,
+          reportTimeframe,
+          customStartDate,
+          customEndDate,
+          metrics: selectedMetrics,
+          recipient: reportRecipient
+        })
+      });
 
-  const buildCsvContent = (headers: string[], rows: string[][]) => {
-    const escapeCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
-    return [headers, ...rows]
-      .map((row) => row.map((cell) => escapeCell(cell)).join(','))
-      .join('\n');
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || 'Unable to email dashboard metrics.');
+      }
+
+      const timeframeLabel =
+        reportTimeframe === 'Custom export window'
+          ? `${customStartDate || 'Start'} to ${customEndDate || 'End'}`
+          : reportTimeframe;
+      toast.success(
+        `Dashboard report "${reportName}" (${timeframeLabel}) sent for ${selectedMetrics.length} metric${
+          selectedMetrics.length === 1 ? '' : 's'
+        } to ${reportRecipient}.`
+      );
+    } catch (error) {
+      console.error(error);
+      toast.error('Unable to send dashboard metrics right now.');
+    } finally {
+      setReportLoading(false);
+    }
   };
 
   const handleDownloadCsv = async (report: ExportReport) => {
-    const { headers, rows, label } = EXPORT_DEFINITIONS[report];
+    const { label } = EXPORT_DEFINITIONS[report];
     setExporting(report);
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    const csvContent = buildCsvContent(headers, rows);
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `${report}-report.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    setExporting(null);
-    toast.success(`${label} report is downloading.`);
+    try {
+      const response = await fetch(`/api/admin/exports?report=${report}`);
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || 'Unable to download export.');
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${report}-report.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success(`${label} report is downloading.`);
+    } catch (error) {
+      console.error(error);
+      toast.error('Unable to generate CSV export right now.');
+    } finally {
+      setExporting(null);
+    }
   };
 
   return (
