@@ -15,7 +15,6 @@ import { getCurrentSession } from '@/lib/auth';
 import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
 import { Agent } from '@/models/agent';
-import { LenderMC } from '@/models/lender';
 
 type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd' | 'all' | 'custom';
 
@@ -140,40 +139,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const role = session.user?.role ?? null;
   const userId = session.user?.id ?? null;
-  if (!userId || (role !== 'mc' && role !== 'agent')) {
+  if (!userId || role !== 'agent') {
     return NextResponse.json({ role, metrics: null, timeframeLabel: timeframe.label });
   }
 
-  let referralMatch: Partial<Record<'lender' | 'assignedAgent', unknown>> | null = null;
-
-  let referralKey: 'lender' | 'assignedAgent' | null = null;
-  let agentProfile: { npsScore: number | null } | null = null;
-
-  if (role === 'mc') {
-    const lender = await LenderMC.findOne({ userId }).select('_id');
-    if (!lender) {
-      return NextResponse.json({ role, metrics: null, timeframeLabel: timeframe.label });
-    }
-    referralMatch = { lender: lender._id };
-    referralKey = 'lender';
-  }
-
-  if (role === 'agent') {
-    const agent = await Agent.findOne({ userId }).select('_id npsScore');
-    if (!agent) {
-      return NextResponse.json({ role, metrics: null, timeframeLabel: timeframe.label });
-    }
-    referralMatch = { assignedAgent: agent._id };
-    referralKey = 'assignedAgent';
-    const agentData = agent.toObject();
-    agentProfile = {
-      npsScore: typeof agentData.npsScore === 'number' ? agentData.npsScore : null
-    };
-  }
-
-  if (!referralMatch || !referralKey) {
+  const agent = await Agent.findOne({ userId }).select('_id npsScore');
+  if (!agent) {
     return NextResponse.json({ role, metrics: null, timeframeLabel: timeframe.label });
   }
+
+  const referralMatch: Partial<Record<'assignedAgent', unknown>> = { assignedAgent: agent._id };
+  const referralKey: 'assignedAgent' = 'assignedAgent';
+  const agentData = agent.toObject();
+  const agentProfile = {
+    npsScore: typeof agentData.npsScore === 'number' ? agentData.npsScore : null
+  };
 
   const [referrals, payments] = await Promise.all([
     Referral.find({
@@ -236,16 +216,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return sum;
   }, 0);
 
-  const averageCommissionCents = role === 'agent'
-    ? (() => {
-        const commissions = paymentsWithMetric
-          .filter((payment) => (payment.receivedAmountCents ?? 0) > 0)
-          .map((payment) => payment.receivedAmountCents ?? 0);
-        if (!commissions.length) return 0;
-        const total = commissions.reduce((sum, value) => sum + value, 0);
-        return Math.round(total / commissions.length);
-      })()
-    : undefined;
+  const averageCommissionCents = (() => {
+    const commissions = paymentsWithMetric
+      .filter((payment) => (payment.receivedAmountCents ?? 0) > 0)
+      .map((payment) => payment.receivedAmountCents ?? 0);
+    if (!commissions.length) return 0;
+    const total = commissions.reduce((sum, value) => sum + value, 0);
+    return Math.round(total / commissions.length);
+  })();
 
   const responseSamples = referrals
     .map((referral: any) => referral.sla?.timeToFirstAgentContactHours ?? null)

@@ -36,8 +36,13 @@ interface ProfileMetricsResponse {
 
 export function ProfileMetrics() {
   const { data: session } = useSession();
-  const role = session?.user?.role ?? null;
-  const shouldFetch = role === 'mc' || role === 'agent';
+  const normalizedRole = (() => {
+    const role = (session?.user?.role as string | null) ?? null;
+    if (role === 'mortgage-consultant') return 'mc';
+    return role;
+  })();
+
+  const shouldFetch = normalizedRole === 'agent';
 
   const [timeframe, setTimeframe] = useState<TimeframeKey>('month');
   const [customRange, setCustomRange] = useState<DateRange>(() => getPresetRange('month'));
@@ -85,7 +90,7 @@ export function ProfileMetrics() {
   }
 
   if (isLoading || !data) {
-    const placeholderCount = role === 'agent' ? 9 : 6;
+    const placeholderCount = normalizedRole === 'agent' ? 9 : normalizedRole === 'mc' ? 9 : 6;
     return (
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: placeholderCount }).map((_, index) => (
@@ -119,7 +124,7 @@ export function ProfileMetrics() {
     { label: 'Revenue expected', value: formatCurrency(metrics.revenueExpectedCents) }
   ];
 
-  if (role === 'agent') {
+  if (normalizedRole === 'agent') {
     cards.push({ label: 'Avg. commission', value: formatCurrency(metrics.averageCommissionCents ?? 0) });
     cards.push({
       label: 'Avg. response time',

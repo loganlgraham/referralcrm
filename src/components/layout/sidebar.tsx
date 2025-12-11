@@ -19,7 +19,7 @@ export const navItems: NavItem[] = [
   { type: 'link', href: '/deals', label: 'Deals', roles: ['admin', 'agent'] },
   { type: 'link', href: '/referrals/follow-ups', label: 'Follow-up Tasks', roles: ['admin', 'mc', 'agent'] },
   { type: 'divider' },
-  { type: 'link', href: '/agents', label: 'Agents', roles: ['admin', 'mc'] },
+  { type: 'link', href: '/agents', label: 'Agents', roles: ['admin'] },
   { type: 'link', href: '/find-agent', label: 'Find Referral Agent', roles: ['agent'] },
   { type: 'link', href: '/lenders', label: 'Mortgage Consultants', roles: ['admin', 'agent'] },
   { type: 'divider' },

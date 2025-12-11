@@ -36,6 +36,7 @@ interface McProfileResponse {
   name: string;
   email: string;
   phone: string;
+  nmlsId: string;
   licensedStates: string[];
 }
 
@@ -56,6 +57,7 @@ type FormState = {
   coverageLocations: CoverageLocation[];
   licenseNumber: string;
   brokerage: string;
+  nmlsId: string;
   markets: string;
   experienceSince: string;
   specialties: string[];
@@ -161,6 +163,7 @@ export function ProfileForm() {
         name: '',
         email: '',
         phone: '',
+        nmlsId: '',
         states: '',
         coverageDescription: '',
         coverageLocations: [],
@@ -182,6 +185,7 @@ export function ProfileForm() {
         name: data.name,
         email: data.email,
         phone: data.phone ?? '',
+        nmlsId: '',
         states: (data.statesLicensed ?? []).join(', '),
         coverageDescription: '',
         coverageLocations,
@@ -199,6 +203,7 @@ export function ProfileForm() {
         name: data.name,
         email: data.email,
         phone: data.phone ?? '',
+        nmlsId: data.nmlsId ?? '',
         states: (data.licensedStates ?? []).join(', '),
         coverageDescription: '',
         coverageLocations: [],
@@ -211,15 +216,16 @@ export function ProfileForm() {
       };
     }
 
-    return {
-      name: data.name ?? '',
-      email: data.email ?? '',
-      phone: '',
-      states: '',
-      coverageDescription: '',
-      coverageLocations: [],
-      licenseNumber: '',
-      brokerage: '',
+      return {
+        name: data.name ?? '',
+        email: data.email ?? '',
+        phone: '',
+        nmlsId: '',
+        states: '',
+        coverageDescription: '',
+        coverageLocations: [],
+        licenseNumber: '',
+        brokerage: '',
       markets: '',
       experienceSince: '',
       specialties: [],
@@ -296,7 +302,10 @@ export function ProfileForm() {
     }
 
     if (data.role === 'mc') {
-      const needsDetails = !data.phone?.trim() || (data.licensedStates?.length ?? 0) === 0;
+      const needsDetails =
+        !data.phone?.trim() ||
+        !data.nmlsId?.trim() ||
+        (data.licensedStates?.length ?? 0) === 0;
       setIsEditing(needsDetails);
       return;
     }
@@ -580,6 +589,7 @@ export function ProfileForm() {
 
     setSaving(true);
     try {
+      const nmlsId = form.nmlsId.trim();
       const payload: Record<string, unknown> =
         data.role === 'agent'
           ? createAgentPatchPayload(form.coverageLocations)
@@ -587,8 +597,13 @@ export function ProfileForm() {
               name: form.name.trim(),
               email: form.email.trim().toLowerCase(),
               phone: form.phone.trim(),
+              nmlsId,
               licensedStates: parseList(form.states, (value) => value.toUpperCase()),
             };
+
+      if (data.role === 'mc' && !nmlsId) {
+        throw new Error('Please enter your NMLS ID.');
+      }
 
       const response = await fetch('/api/me/profile', {
         method: 'PATCH',
@@ -728,6 +743,10 @@ export function ProfileForm() {
               {profile.phone ? profile.phone : 'Not provided'}
             </p>
           </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-slate-400">NMLS ID</p>
+            <p className="mt-1 text-base font-medium text-slate-900">{profile.nmlsId || 'Not provided'}</p>
+          </div>
         </div>
       </section>
 
@@ -810,6 +829,20 @@ export function ProfileForm() {
                   disabled={saving}
                 />
               </label>
+              {data.role === 'mc' && (
+                <label className="text-sm font-semibold text-slate-600">
+                  NMLS ID
+                  <input
+                    type="text"
+                    value={form.nmlsId}
+                    onChange={handleChange('nmlsId')}
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                    placeholder="123456"
+                    disabled={saving}
+                    required
+                  />
+                </label>
+              )}
             </div>
           </section>
 

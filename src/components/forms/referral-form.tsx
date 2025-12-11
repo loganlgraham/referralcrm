@@ -199,6 +199,10 @@ export function ReferralForm() {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
 
+    const stageOnTransfer: StageOption = isAgent
+      ? 'Pre-approval TBD'
+      : ((formData.get('stageOnTransfer')?.toString() as StageOption) || 'Pre-approval TBD');
+
     const payload = {
       borrowerFirstName: (formData.get('borrowerFirstName')?.toString() ?? '').trim(),
       borrowerLastName: (formData.get('borrowerLastName')?.toString() ?? '').trim(),
@@ -209,7 +213,7 @@ export function ReferralForm() {
       clientType: (formData.get('clientType')?.toString() as ClientTypeOption) || 'Buyer',
       lookingInZip: (formData.get('lookingInZip')?.toString() ?? '').trim(),
       borrowerCurrentAddress: (formData.get('borrowerCurrentAddress')?.toString() ?? '').trim(),
-      stageOnTransfer: (formData.get('stageOnTransfer')?.toString() as StageOption) || 'Pre-approval TBD',
+      stageOnTransfer,
       loanFileNumber: (formData.get('loanFileNumber')?.toString() ?? '').trim(),
       initialNotes: formData.get('initialNotes')?.toString(),
       loanType: formData.get('loanType')?.toString(),
@@ -440,23 +444,23 @@ export function ReferralForm() {
                   ))}
                 </select>
               </label>
-              <label className={labelClasses}>
-                Stage on transfer
-                <select
-                  name="stageOnTransfer"
-                  value={selectedStage}
-                  onChange={handleStageChange}
-                  className={inputClasses}
-                >
-                  {stageOptions.map((stage) => (
-                    <option key={stage} value={stage}>
-                      {stage}
-                    </option>
-                  ))}
-                </select>
-              </label>
               {!isAgent && (
                 <>
+                  <label className={labelClasses}>
+                    Stage on transfer
+                    <select
+                      name="stageOnTransfer"
+                      value={selectedStage}
+                      onChange={handleStageChange}
+                      className={inputClasses}
+                    >
+                      {stageOptions.map((stage) => (
+                        <option key={stage} value={stage}>
+                          {stage}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <label className={labelClasses}>
                     Loan file number
                     <input name="loanFileNumber" required className={inputClasses} />

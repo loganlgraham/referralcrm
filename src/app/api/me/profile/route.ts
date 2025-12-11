@@ -37,6 +37,7 @@ const lenderProfileSchema = z.object({
   name: z.string().trim().min(1),
   email: z.string().trim().email().transform((value) => value.toLowerCase()),
   phone: z.string().trim().optional(),
+  nmlsId: z.string().trim().min(1),
   licensedStates: z.array(z.string().trim().min(2)).optional().default([]),
 });
 
@@ -200,6 +201,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     lender.name = parsed.data.name;
     lender.email = parsed.data.email;
     lender.phone = parsed.data.phone ?? '';
+    lender.nmlsId = parsed.data.nmlsId;
     lender.licensedStates = parsed.data.licensedStates;
     await lender.save();
 
@@ -215,6 +217,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       name: lender.name,
       email: lender.email,
       phone: lender.phone,
+      nmlsId: lender.nmlsId,
       licensedStates: lender.licensedStates,
     });
   }

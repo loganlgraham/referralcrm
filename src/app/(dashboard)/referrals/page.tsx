@@ -46,6 +46,7 @@ export default async function ReferralsPage({
     activeReferrals: 0
   };
   const showAgentOriginIndicator = tableMode === 'admin' && agentReferrals === 'all';
+  const showAddReferralButton = role !== 'mc';
 
   return (
     <div className="space-y-6">
@@ -62,13 +63,15 @@ export default async function ReferralsPage({
               : 'Track every lead from intake through close.'}
           </p>
         </div>
-        <Link
-          href="/referrals/new"
-          className="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-        >
-          <PlusIcon className="h-4 w-4" />
-          {role === 'admin' ? 'Add Referral' : 'Add Referral for AFC'}
-        </Link>
+        {showAddReferralButton && (
+          <Link
+            href="/referrals/new"
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          >
+            <PlusIcon className="h-4 w-4" />
+            {role === 'admin' ? 'Add Referral' : 'Add Referral for AFC'}
+          </Link>
+        )}
       </div>
       <Filters mode={tableMode} />
       {hasReferrals ? (
