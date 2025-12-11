@@ -136,20 +136,34 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ...normalizedCoverageLocations.flatMap((location) => location.zipCodes),
   ]);
 
-  const agent = await Agent.create({
-    name: parsed.data.name,
-    email: parsed.data.email,
-    phone: parsed.data.phone ?? '',
-    licenseNumber: parsed.data.licenseNumber ?? '',
-    brokerage: parsed.data.brokerage ?? '',
-    statesLicensed: parsed.data.statesLicensed,
-    zipCoverage: combinedZipCoverage,
-    coverageLocations: normalizedCoverageLocations,
-    specialties: parsed.data.specialties,
-    languages: parsed.data.languages,
-    ahaDesignation: parsed.data.ahaDesignation,
-    active: true,
-  });
+  type CreatedAgent = Awaited<ReturnType<typeof Agent.create>>;
+  let agent: CreatedAgent;
+  try {
+    agent = await Agent.create({
+      name: parsed.data.name,
+      email: parsed.data.email,
+      phone: parsed.data.phone ?? '',
+      licenseNumber: parsed.data.licenseNumber ?? '',
+      brokerage: parsed.data.brokerage ?? '',
+      statesLicensed: parsed.data.statesLicensed,
+      zipCoverage: combinedZipCoverage,
+      coverageLocations: normalizedCoverageLocations,
+      specialties: parsed.data.specialties,
+      languages: parsed.data.languages,
+      ahaDesignation: parsed.data.ahaDesignation,
+      active: true,
+    });
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && (error as { code?: number }).code === 11000) {
+      return NextResponse.json(
+        { message: 'An agent with this email already exists. Try updating their profile instead.' },
+        { status: 409 }
+      );
+    }
+
+    console.error('Failed to create agent', error);
+    return NextResponse.json({ message: 'Unable to create agent' }, { status: 500 });
+  }
 
   await syncAgentZipCoverage({
     agentId: agent._id,
