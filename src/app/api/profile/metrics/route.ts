@@ -182,7 +182,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ])
   ]);
 
-  const lostReferrals = await Referral.find({
+  const lostReferrals: Array<Pick<ReferralDocument, 'lostAssignments'>> = await Referral.find({
     deletedAt: null,
     lostAssignments: {
       $elemMatch: {
@@ -192,7 +192,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   })
     .select('lostAssignments')
-    .lean<Pick<ReferralDocument, 'lostAssignments'>>();
+    .lean();
 
   const paymentsWithMetric = payments
     .map((payment) => ({
