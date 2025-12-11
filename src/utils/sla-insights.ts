@@ -69,6 +69,7 @@ export interface ReferralLike {
   daysInStatus?: number;
   clientType?: 'Buyer' | 'Seller' | 'Both' | null;
   dealSide?: 'buy' | 'sell' | null;
+  stageOnTransfer?: string | null;
   assignedAgent?: { name?: string | null; fullName?: string | null } | null;
   assignedAgentName?: string;
   buySideAgent?: { name?: string | null; fullName?: string | null } | null;
@@ -562,131 +563,192 @@ const buildSlaClock = (
   return { statusLastUpdated, createdAt, status, lastCompletedAt };
 };
 
-const computeAgentReferralRecommendations = (
+const buildStatusRecommendations = (
   referral: ReferralLike,
-  clock: ReturnType<typeof buildSlaClock>
+  clock: ReturnType<typeof buildSlaClock>,
+  params: {
+    lenderName: string | null;
+    communicationMinutes: number | null | undefined;
+    underContractMinutes: number | null | undefined;
+    closedMinutes: number | null | undefined;
+    paidMinutes: number | null | undefined;
+    statusAgeDays: number;
+    hoursSinceStatusUpdate: number;
+    hoursSinceLastNote: number | null;
+    isBuyer: boolean;
+    isSeller: boolean;
+  }
 ): SlaRecommendation[] => {
-  const { createdAt, statusLastUpdated, status } = clock;
-  const now = new Date();
-  const hoursSinceStatusUpdate = differenceInHours(now, statusLastUpdated);
-  const statusAgeDays = differenceInDays(now, statusLastUpdated);
-  const durations = computeSlaDurations(referral);
-  const underContractMinutes = durations.find((item) => item.key === 'communication-to-contract')?.minutes;
-  const closedMinutes = durations.find((item) => item.key === 'contract-to-close')?.minutes;
-  const paidMinutes = durations.find((item) => item.key === 'close-to-paid')?.minutes;
-  const latestNoteAt = getLatestNoteTimestamp(referral.notes);
-  const lastEngagementAt = clock.lastCompletedAt
-    ? max([clock.lastCompletedAt, latestNoteAt ?? statusLastUpdated])
-    : latestNoteAt;
-  const hoursSinceLastNote = lastEngagementAt ? differenceInHours(now, lastEngagementAt) : null;
-
+  const { lenderName, communicationMinutes, underContractMinutes, closedMinutes, paidMinutes } = params;
+  const { statusAgeDays, hoursSinceStatusUpdate, hoursSinceLastNote, isBuyer, isSeller } = params;
+  const { statusLastUpdated, status } = clock;
   const recommendations: SlaRecommendation[] = [];
 
-  recommendations.push(
-    buildRecommendation({
-      id: 'agent-assign-mc',
-      title: 'Assign MC',
-      message: 'Pick the AFC mortgage consultant who should own this referral so they can begin outreach.',
-      priority: 'urgent',
-      category: 'assignment',
-      dueAt: minDueDate(addHours(createdAt, 1)),
-      supportingMetric: referral.lender ? 'MC already assigned — mark complete' : 'Awaiting MC assignment',
-    })
-  );
-
-  recommendations.push(
-    buildRecommendation({
-      id: 'agent-mc-contact-check',
-      title: 'Check MC contact',
-      message: 'Confirm the MC has acknowledged the referral and connected with the borrower.',
-      priority: 'high',
-      category: 'communication',
-      dueAt: minDueDate(addHours(createdAt, 24)),
-      supportingMetric: `${hoursSinceStatusUpdate}h since referral creation`,
-    })
-  );
-
-  recommendations.push(
-    buildRecommendation({
-      id: 'agent-preapproval-followup',
-      title: 'Follow up on pre-approval',
-      message: 'Check with the MC a few days after intake to confirm pre-approval progress and needed docs.',
-      priority: 'medium',
-      category: 'finance',
-      dueAt: minDueDate(addDays(createdAt, 3)),
-      supportingMetric: 'Goal: pre-approval in the first week',
-    })
-  );
-
-  if (referral.lender && (status === 'New Lead' || status === 'Paired') && hoursSinceStatusUpdate >= 4) {
+  if (status === 'New Lead' && lenderName) {
     const dueBy = addHours(statusLastUpdated, 4);
+    const mcLabel = `the borrower and ${lenderName}`;
     recommendations.push(
       buildRecommendation({
-        id: 'confirm-borrower-intro',
-        title: 'Confirm borrower introduction to MC',
-        message:
-          'Send a warm handoff connecting the borrower to the MC and confirm the MC has acknowledged the referral.',
-        priority: 'high',
-        category: 'communication',
+        id: 'advance-to-paired',
+        title: 'Update status to Paired after introduction',
+        message: `Once you connect ${mcLabel}, move this referral to Paired so downstream timelines stay accurate.`,
+        priority: 'medium',
+        category: 'ops',
         dueAt: minDueDate(dueBy),
-        supportingMetric: `${hoursSinceStatusUpdate}h since transfer`,
+        supportingMetric: 'Status still New Lead after adding an MC',
       })
     );
   }
 
-  if (hoursSinceLastNote !== null && hoursSinceLastNote > 48) {
+  if (status === 'Paired') {
+    if (hoursSinceStatusUpdate > SLA_THRESHOLDS.hoursToFirstConversation) {
+      const dueBy = addHours(statusLastUpdated, SLA_THRESHOLDS.hoursToFirstConversation);
+      recommendations.push(
+        buildRecommendation({
+          id: 'nudge-first-conversation',
+          title: 'Agent to borrower within 24 hours',
+          message: 'Hold the agent accountable for making contact within a day of pairing and logging the touchpoint.',
+          priority: 'high',
+          category: 'communication',
+          dueAt: minDueDate(dueBy),
+          supportingMetric: `Hours since paired: ${hoursSinceStatusUpdate}`,
+        })
+      );
+    }
+    if (!communicationMinutes) {
+      recommendations.push(
+        buildRecommendation({
+          id: 'log-communication-update',
+          title: 'Capture communication progress',
+          message: 'Record a timeline update once the agent makes contact so SLA tracking stays accurate.',
+          priority: 'medium',
+          category: 'ops',
+          supportingMetric: 'Awaiting communication milestone',
+        })
+      );
+    }
+  }
+
+  if (status === 'In Communication' || ACTIVE_LEAD_STATUSES.has(status)) {
+    const touchpointThreshold = ACTIVE_LEAD_STATUSES.has(status)
+      ? SLA_THRESHOLDS.activeLeadCheckInDays
+      : SLA_THRESHOLDS.daysWithoutTouchPoint;
+
+    if (statusAgeDays >= touchpointThreshold) {
+      const dueBy = addDays(statusLastUpdated, touchpointThreshold);
+      recommendations.push(
+        buildRecommendation({
+          id: 'schedule-proactive-check-in',
+          title: 'Schedule a proactive check-in',
+          message: ACTIVE_LEAD_STATUSES.has(status)
+            ? 'Light-touch check-in to keep the relationship warm while the agent works the active lead.'
+            : 'It has been a few days without movement. Suggest next steps or resources to keep momentum.',
+          priority: ACTIVE_LEAD_STATUSES.has(status) ? 'low' : 'medium',
+          category: 'communication',
+          dueAt: minDueDate(dueBy),
+          supportingMetric: `${statusAgeDays} days in current stage`,
+        })
+      );
+    }
+    if (hoursSinceLastNote !== null && hoursSinceLastNote > 48) {
+      recommendations.push(
+        buildRecommendation({
+          id: 'refresh-activity-log',
+          title: 'Log a borrower update',
+          message: 'Share borrower progress so the admin, agent, and MC stay aligned.',
+          priority: ACTIVE_LEAD_STATUSES.has(status) ? 'low' : 'medium',
+          category: 'ops',
+          supportingMetric: `Last note ${hoursSinceLastNote}h ago`,
+        })
+      );
+    }
+  }
+
+  if ((status === 'Paired' || status === 'In Communication') && isBuyer) {
+    const dueBy = addHours(statusLastUpdated, 24);
     recommendations.push(
       buildRecommendation({
-        id: 'share-agent-update',
-        title: 'Share borrower context with the MC',
-        message: 'Post a quick note so the MC knows how the borrower conversation is progressing.',
+        id: 'confirm-preapproval-readiness',
+        title: 'Verify full buyer pre-approval',
+        message:
+          'Confirm income, assets, and credit docs are collected so the MC can issue a rock-solid pre-approval.',
+        priority: 'high',
+        category: 'finance',
+        dueAt: minDueDate(dueBy),
+        supportingMetric: 'Pre-approval needed before showings',
+      })
+    );
+    recommendations.push(
+      buildRecommendation({
+        id: 'agent-mc-sync',
+        title: 'Align agent and MC on budget',
+        message: 'Ensure the agent and MC have discussed pre-approval terms before scheduling showings.',
         priority: 'medium',
         category: 'communication',
-        supportingMetric: `Last update ${hoursSinceLastNote}h ago`,
+        supportingMetric: 'Keep budget and home search in sync',
       })
     );
   }
 
-  if (status === 'In Communication' && hoursSinceStatusUpdate >= 72) {
-    const dueBy = addHours(statusLastUpdated, 72);
+  if ((status === 'In Communication' || ACTIVE_LEAD_STATUSES.has(status)) && isBuyer) {
     recommendations.push(
       buildRecommendation({
-        id: 'plan-next-step',
-        title: 'Plan the borrower’s next milestone',
-        message: 'Suggest documents, education, or follow-ups to keep the borrower moving forward.',
+        id: 'schedule-first-showings',
+        title: 'Schedule first home tours',
+        message: 'Book initial showings to move the borrower into Active Lead status.',
         priority: 'medium',
         category: 'pipeline',
-        dueAt: minDueDate(dueBy),
-        supportingMetric: `${hoursSinceStatusUpdate}h in current stage`,
+        supportingMetric: 'Goal: active lead with scheduled tours',
+      })
+    );
+
+    recommendations.push(
+      buildRecommendation({
+        id: 'buyers-agency-agreement',
+        title: 'Secure buyer agency agreement',
+        message: 'Confirm the buyer representation agreement is signed before touring widely.',
+        priority: 'medium',
+        category: 'ops',
+        supportingMetric: 'Protect representation before heavy touring',
       })
     );
   }
 
-  if (status === 'Paired' || status === 'In Communication') {
-    const dueBy = addHours(statusLastUpdated, SLA_THRESHOLDS.hoursToFirstConversation);
+  if ((status === 'Paired' || status === 'In Communication') && isSeller) {
+    const dueBy = addHours(statusLastUpdated, 24);
     recommendations.push(
       buildRecommendation({
-        id: 'mc-sync-preapproval',
-        title: 'Equip the MC for pre-approval',
-        message:
-          'Gather income, assets, and credit docs from the borrower so the MC can validate full pre-approval.',
+        id: 'schedule-listing-consult',
+        title: 'Hold a listing consultation',
+        message: 'Book the listing consult to cover pricing, prep, and timelines with the seller.',
         priority: 'high',
         category: 'communication',
         dueAt: minDueDate(dueBy),
-        supportingMetric: 'Target: borrower in communication within 24 hours of pairing',
+        supportingMetric: 'Consult within 24 hours of pairing',
       })
     );
   }
 
-  if (status === 'In Communication' || status === 'Active Lead') {
+  if ((status === 'In Communication' || ACTIVE_LEAD_STATUSES.has(status)) && isSeller) {
     recommendations.push(
       buildRecommendation({
-        id: 'mc-prepare-loan-options',
-        title: 'Share budget guidance with the MC',
-        message: 'Send price range and constraints so the MC can tailor 2–3 loan scenarios for the borrower.',
+        id: 'listing-paperwork',
+        title: 'Collect listing paperwork',
+        message: 'Confirm agency disclosures and listing agreements are signed.',
         priority: 'medium',
-        category: 'finance',
-        supportingMetric: 'Keep MC, agent, and borrower aligned on budget',
+        category: 'ops',
+        supportingMetric: 'Signed listing docs on file',
+      })
+    );
+
+    recommendations.push(
+      buildRecommendation({
+        id: 'prep-listing',
+        title: 'Prepare listing timeline',
+        message: 'Book photography and prep tasks so the property can go live cleanly.',
+        priority: 'medium',
+        category: 'pipeline',
+        supportingMetric: 'Listing prep before go-live',
       })
     );
   }
@@ -791,6 +853,95 @@ const computeAgentReferralRecommendations = (
   return recommendations;
 };
 
+const computeAgentReferralRecommendations = (
+  referral: ReferralLike,
+  clock: ReturnType<typeof buildSlaClock>
+): SlaRecommendation[] => {
+  const { createdAt, statusLastUpdated, status } = clock;
+  const now = new Date();
+  const statusAgeDays = differenceInDays(now, statusLastUpdated);
+  const durations = computeSlaDurations(referral);
+  const communicationMinutes = durations.find((item) => item.key === 'paired-to-communication')?.minutes;
+  const underContractMinutes = durations.find((item) => item.key === 'communication-to-contract')?.minutes;
+  const closedMinutes = durations.find((item) => item.key === 'contract-to-close')?.minutes;
+  const paidMinutes = durations.find((item) => item.key === 'close-to-paid')?.minutes;
+  const latestNoteAt = getLatestNoteTimestamp(referral.notes);
+  const lastEngagementAt = clock.lastCompletedAt
+    ? max([clock.lastCompletedAt, latestNoteAt ?? statusLastUpdated])
+    : latestNoteAt;
+  const hoursSinceLastNote = lastEngagementAt ? differenceInHours(now, lastEngagementAt) : null;
+  const referringAgent = resolvePrimaryAgentName(referral) ?? 'the referring agent';
+  const lenderName = normalizeAgentName(referral.lender?.name);
+  const hoursSinceStatusUpdate = differenceInHours(now, statusLastUpdated);
+
+  const recommendations: SlaRecommendation[] = [];
+
+  if (referral.lender) {
+    recommendations.push(
+      buildRecommendation({
+        id: 'mc-borrower-outreach',
+        title: 'Contact borrower within 2 hours',
+        message: `Call or text the borrower and acknowledge ${referringAgent}'s referral right away.`,
+        priority: 'urgent',
+        category: 'communication',
+        dueAt: minDueDate(addHours(statusLastUpdated ?? createdAt, 2)),
+        supportingMetric: 'MC SLA: borrower touchpoint within 2 hours of assignment',
+      })
+    );
+
+    recommendations.push(
+      buildRecommendation({
+        id: 'mc-agent-update-after-outreach',
+        title: 'Update the referring agent',
+        message: `After connecting with the borrower, message ${referringAgent} with a quick status update.`,
+        priority: 'high',
+        category: 'communication',
+        dueAt: minDueDate(addHours(statusLastUpdated ?? createdAt, 4)),
+      })
+    );
+  }
+
+  recommendations.push(
+    buildRecommendation({
+      id: 'mc-drive-preapproval',
+      title: 'Collect docs for pre-approval',
+      message: 'Gather income, assets, and credit documentation so you can issue a confident pre-approval.',
+      priority: 'high',
+      category: 'finance',
+      dueAt: minDueDate(addDays(createdAt, 2)),
+      supportingMetric: 'Goal: pre-approval shortly after intake',
+    })
+  );
+
+  recommendations.push(
+    buildRecommendation({
+      id: 'mc-confirm-preapproval-with-agent',
+      title: 'Confirm pre-approval with agent',
+      message: `Share the approved amount and terms with ${referringAgent} as soon as it is ready.`,
+      priority: 'medium',
+      category: 'communication',
+      dueAt: minDueDate(addDays(createdAt, 3)),
+    })
+  );
+
+  recommendations.push(
+    ...buildStatusRecommendations(referral, clock, {
+      lenderName: lenderName ?? null,
+      communicationMinutes,
+      underContractMinutes,
+      closedMinutes,
+      paidMinutes,
+      statusAgeDays,
+      hoursSinceStatusUpdate,
+      hoursSinceLastNote,
+      isBuyer: referral.clientType === 'Buyer' || referral.dealSide === 'buy' || referral.clientType === 'Both',
+      isSeller: referral.clientType === 'Seller' || referral.dealSide === 'sell' || referral.clientType === 'Both',
+    })
+  );
+
+  return recommendations;
+};
+
 export const computeSlaRecommendations = (
   referral: ReferralLike,
   options?: { lastCompletedAt?: Date | null }
@@ -854,9 +1005,35 @@ export const computeSlaRecommendations = (
         priority: 'high',
         category: 'communication',
         dueAt: minDueDate(dueBy),
-        supportingMetric: `Current lead-to-pairing: ${assignmentsMinutes ? formatDuration(assignmentsMinutes) : 'Pending'}`,
-      })
+      supportingMetric: `Current lead-to-pairing: ${assignmentsMinutes ? formatDuration(assignmentsMinutes) : 'Pending'}`,
+    })
     );
+  }
+
+  if (referral.origin === 'admin' && referral.lender) {
+    if (referral.stageOnTransfer === 'Pre-approved') {
+      const dueBy = addHours(createdAt, 24);
+      recommendations.push(
+        buildRecommendation({
+          id: 'mc-connect-with-agent-on-preapproval',
+          title: 'Review pre-approval details with agent',
+          message: 'Reach out to the assigned agent within 24 hours to confirm pre-approval terms and documents.',
+          priority: 'high',
+          category: 'communication',
+          dueAt: minDueDate(dueBy),
+        })
+      );
+    } else {
+      recommendations.push(
+        buildRecommendation({
+          id: 'mc-update-agent-on-preapproval-progress',
+          title: 'Keep agent updated on pre-approval status',
+          message: 'Share pre-approval milestones and needed items so the agent stays aligned with the borrower.',
+          priority: 'medium',
+          category: 'communication',
+        })
+      );
+    }
   }
 
   if (
