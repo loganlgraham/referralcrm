@@ -15,6 +15,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
 import { Agent } from '@/models/agent';
+import { DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
 
 type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd' | 'all' | 'custom';
 
@@ -181,6 +182,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ])
   ]);
 
+  const lostReferrals = await Referral.find({
+    deletedAt: null,
+    lostAssignments: {
+      $elemMatch: {
+        agent: agent._id,
+        lostAt: { $gte: timeframe.start, $lte: timeframe.end }
+      }
+    }
+  })
+    .select('lostAssignments')
+    .lean();
+
   const paymentsWithMetric = payments
     .map((payment) => ({
       ...payment,
@@ -225,6 +238,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return Math.round(total / commissions.length);
   })();
 
+  const lostReferralsCount = lostReferrals.reduce((count, referral) => {
+    const matches = (referral.lostAssignments ?? []).filter(
+      (lost) =>
+        lost.agent?.toString() === agent._id.toString() &&
+        lost.lostAt >= timeframe.start &&
+        lost.lostAt <= timeframe.end
+    );
+    return count + matches.length;
+  }, 0);
+
+  const { totalAgentRevenueCents, referralFeesPaidCents } = paymentsWithMetric.reduce(
+    (acc, payment) => {
+      const baseAmount = payment.receivedAmountCents ?? payment.expectedAmountCents ?? 0;
+      const referralFeeBasisPoints =
+        payment.referralFeeBasisPoints ??
+        payment.referral?.referralFeeBasisPoints ??
+        DEFAULT_REFERRAL_FEE_BPS;
+      const referralFeeCents = Math.round(baseAmount * (referralFeeBasisPoints ?? 0) * 0.0001);
+      acc.totalAgentRevenueCents += baseAmount - referralFeeCents;
+      acc.referralFeesPaidCents += referralFeeCents;
+      return acc;
+    },
+    { totalAgentRevenueCents: 0, referralFeesPaidCents: 0 }
+  );
+
   const responseSamples = referrals
     .map((referral: any) => referral.sla?.timeToFirstAgentContactHours ?? null)
     .filter((value): value is number => value != null);
@@ -241,6 +279,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     revenueRealizedCents,
     revenueExpectedCents,
     averageCommissionCents,
+    lostReferrals: lostReferralsCount,
+    totalAgentRevenueCents,
+    referralFeesPaidCents,
     avgResponseHours,
     npsScore: agentProfile?.npsScore ?? null
   };

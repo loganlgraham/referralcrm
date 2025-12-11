@@ -146,6 +146,13 @@ const referralSchema = new Schema(
     attachments: [attachmentSchema],
     inboundEmail: inboundEmailSchema,
     audit: [auditSchema],
+    lostAssignments: [
+      {
+        agent: { type: Schema.Types.ObjectId, ref: 'Agent' },
+        lostAt: { type: Date, default: Date.now },
+        reason: { type: String, default: 'reassigned' }
+      }
+    ],
     lender: { type: Schema.Types.ObjectId, ref: 'LenderMC' },
     buyer: { type: Schema.Types.ObjectId, ref: 'Buyer' },
     sla: {
@@ -257,6 +264,11 @@ export interface ReferralDocument {
   origin?: 'agent' | 'mc' | 'admin';
   deletedAt?: Date;
   audit?: AuditEntry[];
+  lostAssignments?: {
+    agent?: Types.ObjectId;
+    lostAt: Date;
+    reason?: string;
+  }[];
   inboundEmail?: {
     messageId: string;
     routeHint?: string;
