@@ -182,7 +182,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ])
   ]);
 
-  const lostReferrals: Array<Pick<ReferralDocument, 'lostAssignments'>> = await Referral.find({
+  const lostReferrals = await Referral.find<{ lostAssignments?: ReferralDocument['lostAssignments'] }>({
     deletedAt: null,
     lostAssignments: {
       $elemMatch: {
