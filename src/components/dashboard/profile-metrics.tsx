@@ -30,9 +30,6 @@ interface ProfileMetricsResponse {
     averageCommissionCents?: number;
     avgResponseHours: number | null;
     npsScore: number | null;
-    mcTwoHourContactRate?: number | null;
-    mcTwoHourContacts?: number;
-    preApprovalsIssued?: number;
   } | null;
   timeframeLabel: string;
 }
@@ -45,7 +42,7 @@ export function ProfileMetrics() {
     return role;
   })();
 
-  const shouldFetch = normalizedRole === 'mc' || normalizedRole === 'agent';
+  const shouldFetch = normalizedRole === 'agent';
 
   const [timeframe, setTimeframe] = useState<TimeframeKey>('month');
   const [customRange, setCustomRange] = useState<DateRange>(() => getPresetRange('month'));
@@ -139,27 +136,6 @@ export function ProfileMetrics() {
     cards.push({
       label: 'NPS score',
       value: typeof metrics.npsScore === 'number' ? metrics.npsScore.toString() : 'Not set'
-    });
-  }
-
-  if (normalizedRole === 'mc') {
-    cards.push({
-      label: 'Avg. response time',
-      value:
-        typeof metrics.avgResponseHours === 'number'
-          ? `${metrics.avgResponseHours.toFixed(1)} hrs`
-          : 'Not set'
-    });
-    cards.push({
-      label: 'Contacted within 2 hrs',
-      value:
-        typeof metrics.mcTwoHourContactRate === 'number'
-          ? `${metrics.mcTwoHourContactRate.toFixed(0)}%`
-          : 'Not set'
-    });
-    cards.push({
-      label: 'Pre-approvals issued',
-      value: formatNumber(metrics.preApprovalsIssued ?? 0)
     });
   }
 
