@@ -7,7 +7,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { canManageReferral } from '@/lib/rbac';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
-import { getReferralAppBaseUrl } from '@/lib/referral-links';
+import { getReferralAppBaseUrl, verifyContactActionToken } from '@/lib/referral-links';
 
 interface Params {
   params: { id: string };
@@ -17,7 +17,9 @@ const CONTACT_ACTIONS = new Set(['contact-made', 'contact-attempted']);
 
 export async function GET(request: NextRequest, { params }: Params): Promise<NextResponse> {
   const session = await getCurrentSession();
-  if (!session) {
+  const token = request.nextUrl.searchParams.get('token');
+  const hasValidToken = verifyContactActionToken(params.id, token);
+  if (!session && !hasValidToken) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
@@ -42,6 +44,7 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
   }
 
   if (
+    !hasValidToken &&
     !canManageReferral(session, {
       assignedAgent: referral.assignedAgent,
       buySideAgent: referral.buySideAgent,
@@ -63,6 +66,7 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
     : null;
   const nextStatus = 'In Communication';
   const shouldUpdateStatus = previousStatus !== nextStatus;
+  const shouldUpdateCommunicationSla = action === 'contact-made';
   const sla = (referral.sla ??= {} as any);
 
   const pairedAt = (() => {
@@ -96,14 +100,14 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
     referral.statusLastUpdated = now;
     referral.audit = referral.audit || [];
     const auditEntry: Record<string, unknown> = {
-      actorRole: session.user.role,
+      actorRole: session?.user.role ?? 'agent',
       field: 'status',
       previousValue: previousStatus,
       newValue: nextStatus,
       timestamp: now,
     };
 
-    const actorId = resolveAuditActorId(session.user.id);
+    const actorId = session ? resolveAuditActorId(session.user.id) : null;
     if (actorId) {
       auditEntry.actorId = actorId;
     }
@@ -114,7 +118,7 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
 
   referral.statusLastUpdated = now;
 
-  if (pairedAt) {
+  if (pairedAt && shouldUpdateCommunicationSla) {
     const minutes = Math.max(differenceInMinutes(now, pairedAt), 0);
     const timeToContactHours = Math.round((minutes / 60) * 10) / 10;
     if (sla.timeToFirstAgentContactHours == null || sla.timeToFirstAgentContactHours !== timeToContactHours) {
@@ -131,11 +135,16 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
       ? 'Agent reported contact made with borrower via quick link.'
       : 'Agent reported attempted outreach but could not reach the borrower via quick link.';
 
-  const auditActorId = resolveAuditActorId(session.user.id);
+  const auditActorId = session ? resolveAuditActorId(session.user.id) : null;
+  const activityActorId =
+    auditActorId ??
+    (referral.assignedAgent && typeof (referral.assignedAgent as any) === 'object'
+      ? ((referral.assignedAgent as any).userId ?? (referral.assignedAgent as any)._id ?? null)
+      : referral.assignedAgent ?? null);
   await logReferralActivity({
     referralId: referral._id,
-    actorRole: session.user.role,
-    actorId: auditActorId ?? session.user.id,
+    actorRole: session?.user.role ?? 'agent',
+    actorId: activityActorId ?? session?.user.id,
     channel: 'update',
     content: activityContent,
   });
