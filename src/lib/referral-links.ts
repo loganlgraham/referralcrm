@@ -52,7 +52,13 @@ export const verifyContactActionToken = (
   if (!expected || !token) return false;
 
   try {
-    return timingSafeEqual(Buffer.from(expected), Buffer.from(token));
+    const encoder = new TextEncoder();
+    const expectedBytes = encoder.encode(expected);
+    const tokenBytes = encoder.encode(token);
+
+    if (expectedBytes.length !== tokenBytes.length) return false;
+
+    return timingSafeEqual(expectedBytes, tokenBytes);
   } catch (error) {
     console.error('Failed to verify contact action token', error);
     return false;
