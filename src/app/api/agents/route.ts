@@ -182,19 +182,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const baseUrl = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');
   if (baseUrl && isTransactionalEmailConfigured()) {
     const inviteLink = `${baseUrl}/signup?role=agent&email=${encodeURIComponent(agent.email)}`;
+    const agentFirstName = agent.name?.trim().split(/\s+/)[0] ?? agent.name;
     const html = `
-      <p>Hi ${agent.name},</p>
-      <p>You have been added to Referral CRM. Please complete your profile and create your password so you can log in.</p>
+      <p>Hi ${agentFirstName},</p>
+      <p>You have been added to Referrio, American Home Agent's CRM. Please complete your profile and create your password so you can log in.</p>
       <p><a href="${inviteLink}">Finish your setup</a> to save your login and start collaborating with the team.</p>
-      <p>If you were not expecting this invitation, please contact your admin.</p>
+      <p>We look forward to working with you!</p>
     `;
-    const text = `Hi ${agent.name},
+    const text = `Hi ${agentFirstName},
 
-You have been added to Referral CRM. Please complete your profile and create your password so you can log in.
+You have been added to Referrio, American Home Agent's CRM. Please complete your profile and create your password so you can log in.
 
 Finish your setup: ${inviteLink}
 
-If you were not expecting this invitation, please contact your admin.`;
+We look forward to working with you!`;
 
     try {
       await sendTransactionalEmail({
