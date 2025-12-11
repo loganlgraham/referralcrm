@@ -3,7 +3,7 @@ import { Types } from 'mongoose';
 import { z } from 'zod';
 
 import { connectMongo } from '@/lib/mongoose';
-import { Agent } from '@/models/agent';
+import { Agent, AgentDocument } from '@/models/agent';
 import { getCurrentSession } from '@/lib/auth';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { computeAgentMetrics, EMPTY_AGENT_METRICS } from '@/lib/server/agent-metrics';
@@ -136,10 +136,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ...normalizedCoverageLocations.flatMap((location) => location.zipCodes),
   ]);
 
-  type CreatedAgent = Awaited<ReturnType<typeof Agent.create>>;
-  let agent: CreatedAgent;
+  let agent: AgentDocument;
   try {
-    agent = await Agent.create({
+    agent = await Agent.create<AgentDocument>({
       name: parsed.data.name,
       email: parsed.data.email,
       phone: parsed.data.phone ?? '',
