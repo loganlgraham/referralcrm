@@ -26,6 +26,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
 
   const isAgentMode = mode === 'agent';
   const isAdminMode = mode === 'admin';
+  const showAhaBucket = isAdminMode;
 
   const handleChange = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -45,7 +46,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
 
   const agentValue = isAgentMode ? '' : searchParams.get('agent') ?? '';
   const lenderValue = searchParams.get('mc') ?? '';
-  const ahaBucketValue = isAgentMode ? '' : searchParams.get('ahaBucket') ?? '';
+  const ahaBucketValue = showAhaBucket ? searchParams.get('ahaBucket') ?? '' : '';
   const agentReferralValue = isAdminMode ? searchParams.get('agentReferrals') ?? '' : '';
 
   return (
@@ -81,7 +82,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
           </select>
         </label>
       )}
-      {!isAgentMode && (
+      {showAhaBucket && (
         <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
           AHA Bucket
           <select

@@ -134,6 +134,16 @@ export function ProfileMetrics() {
     });
   }
 
+  if (role === 'mc') {
+    cards.push({
+      label: 'Avg. response time',
+      value:
+        typeof metrics.avgResponseHours === 'number'
+          ? `${metrics.avgResponseHours.toFixed(1)} hrs`
+          : 'Not set'
+    });
+  }
+
   return (
     <div className="mt-8 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-4">

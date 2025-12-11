@@ -434,7 +434,8 @@ export function ReferralHeader({
   const effectiveAgentContact = primarySide === 'sell' ? effectiveSellSideContact : effectiveBuySideContact;
   const effectiveMcContact = mcContact ?? fallbackMcContact;
   const canEditBucket = viewerRole === 'admin' || viewerRole === 'manager';
-  const showBucketSummary = viewerRole !== 'agent' && viewerRole !== 'admin';
+  const showBucketSummary =
+    viewerRole !== 'agent' && viewerRole !== 'admin' && viewerRole !== 'mc';
 
   const locationLabel = useMemo(() => {
     const zips = Array.isArray(referral.lookingInZips)
