@@ -12,7 +12,7 @@ import {
 
 import { connectMongo } from '@/lib/mongoose';
 import { getCurrentSession } from '@/lib/auth';
-import { Referral } from '@/models/referral';
+import { Referral, ReferralDocument } from '@/models/referral';
 import { Payment } from '@/models/payment';
 import { Agent } from '@/models/agent';
 import { DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
@@ -192,7 +192,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   })
     .select('lostAssignments')
-    .lean();
+    .lean<Pick<ReferralDocument, 'lostAssignments'>>();
 
   const paymentsWithMetric = payments
     .map((payment) => ({
@@ -239,8 +239,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   })();
 
   const lostReferralsCount = lostReferrals.reduce((count, referral) => {
+    type LostAssignment = NonNullable<ReferralDocument['lostAssignments']>[number];
+
     const matches = (referral.lostAssignments ?? []).filter(
-      (lost) =>
+      (lost: LostAssignment) =>
         lost.agent?.toString() === agent._id.toString() &&
         lost.lostAt >= timeframe.start &&
         lost.lostAt <= timeframe.end
