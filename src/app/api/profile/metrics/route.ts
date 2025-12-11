@@ -255,6 +255,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ? responseSamples.reduce((sum, value) => sum + value, 0) / responseSamples.length
     : null;
 
+  const mcTwoHourContacts = role === 'mc'
+    ? referrals.filter((referral: any) => {
+        const firstTouch = referral.sla?.timeToFirstAgentContactHours;
+        return typeof firstTouch === 'number' && firstTouch <= 2;
+      }).length
+    : undefined;
+
+  const mcTwoHourContactRate =
+    role === 'mc' && totalReferrals > 0 && typeof mcTwoHourContacts === 'number'
+      ? (mcTwoHourContacts / totalReferrals) * 100
+      : role === 'mc'
+        ? 0
+        : null;
+
+  const preApprovalsIssued = role === 'mc'
+    ? referrals.filter((referral: any) => {
+        const preApprovalAmount = referral.preApprovalAmountCents ?? 0;
+        return preApprovalAmount > 0 || referral.stageOnTransfer === 'Pre-Approved';
+      }).length
+    : undefined;
+
   const metrics = {
     totalReferrals,
     dealsClosed: dealsClosed.length,
@@ -264,7 +285,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     revenueExpectedCents,
     averageCommissionCents,
     avgResponseHours,
-    npsScore: agentProfile?.npsScore ?? null
+    npsScore: agentProfile?.npsScore ?? null,
+    mcTwoHourContactRate,
+    mcTwoHourContacts,
+    preApprovalsIssued
   };
 
   return NextResponse.json({ role, metrics, timeframeLabel: timeframe.label });

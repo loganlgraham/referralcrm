@@ -30,6 +30,9 @@ interface ProfileMetricsResponse {
     averageCommissionCents?: number;
     avgResponseHours: number | null;
     npsScore: number | null;
+    mcTwoHourContactRate?: number | null;
+    mcTwoHourContacts?: number;
+    preApprovalsIssued?: number;
   } | null;
   timeframeLabel: string;
 }
@@ -85,7 +88,7 @@ export function ProfileMetrics() {
   }
 
   if (isLoading || !data) {
-    const placeholderCount = role === 'agent' ? 9 : 6;
+    const placeholderCount = role === 'agent' ? 9 : role === 'mc' ? 9 : 6;
     return (
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: placeholderCount }).map((_, index) => (
@@ -141,6 +144,17 @@ export function ProfileMetrics() {
         typeof metrics.avgResponseHours === 'number'
           ? `${metrics.avgResponseHours.toFixed(1)} hrs`
           : 'Not set'
+    });
+    cards.push({
+      label: 'Contacted within 2 hrs',
+      value:
+        typeof metrics.mcTwoHourContactRate === 'number'
+          ? `${metrics.mcTwoHourContactRate.toFixed(0)}%`
+          : 'Not set'
+    });
+    cards.push({
+      label: 'Pre-approvals issued',
+      value: formatNumber(metrics.preApprovalsIssued ?? 0)
     });
   }
 
