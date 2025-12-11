@@ -194,6 +194,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .select('lostAssignments')
     .lean();
 
+  const lostStatusMatch: Record<string, unknown> = {
+    deletedAt: null,
+    assignedAgent: agent._id,
+    status: 'Lost'
+  };
+
+  if (timeframe.start || timeframe.end) {
+    const updatedAtMatch: Record<string, Date> = {};
+    if (timeframe.start) {
+      updatedAtMatch.$gte = timeframe.start;
+    }
+    if (timeframe.end) {
+      updatedAtMatch.$lte = timeframe.end;
+    }
+    lostStatusMatch.statusLastUpdated = updatedAtMatch;
+  }
+
+  const lostStatusReferrals = await Referral.find<{ statusLastUpdated?: Date }>(lostStatusMatch)
+    .select('status statusLastUpdated')
+    .lean();
+
   const paymentsWithMetric = payments
     .map((payment) => ({
       ...payment,
@@ -250,6 +271,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return count + matches.length;
   }, 0);
 
+  const lostStatusCount = lostStatusReferrals.length;
+
   const { totalAgentRevenueCents, referralFeesPaidCents } = paymentsWithMetric.reduce(
     (acc, payment) => {
       const baseAmount = payment.receivedAmountCents ?? payment.expectedAmountCents ?? 0;
@@ -281,7 +304,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     revenueRealizedCents,
     revenueExpectedCents,
     averageCommissionCents,
-    lostReferrals: lostReferralsCount,
+    lostReferrals: lostReferralsCount + lostStatusCount,
     totalAgentRevenueCents,
     referralFeesPaidCents,
     avgResponseHours,
