@@ -799,6 +799,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
       (payment.status === 'closed' || payment.status === 'paid')
   );
+  const lostReferrals = filteredReferrals.filter((referral) => referral.status === 'Lost');
   const endOfToday = endOfDay(new Date());
   const startOfCurrentMonth = startOfMonth(new Date());
   const endOfCurrentMonth = endOfMonth(new Date());
@@ -1536,18 +1537,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         ahaAttachRate,
         ahaOosDealsLost,
         ahaOosAttachRate,
-        activePipeline,
-        expectedRevenueCents,
-        realizedRevenueCents,
-        closedNotPaidCents,
-        averageDaysClosedToPaid,
-        averageClosedDealAmountCents,
-        averageRevenuePerDealCents,
-        totalVolumeClosedCents,
-        averagePaAmountCents,
-        averageReferralFeePaidCents,
-        pipelineValueCents
-      },
+    activePipeline,
+    expectedRevenueCents,
+    realizedRevenueCents,
+    closedNotPaidCents,
+    averageDaysClosedToPaid,
+    averageClosedDealAmountCents,
+    averageRevenuePerDealCents,
+    totalVolumeClosedCents,
+    averagePaAmountCents,
+    averageReferralFeePaidCents,
+    pipelineValueCents,
+    lostReferrals: lostReferrals.length
+  },
       trends: {
         revenue: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.revenueReceivedCents })),
         deals: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.dealsClosed })),

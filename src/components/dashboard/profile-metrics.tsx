@@ -28,6 +28,9 @@ interface ProfileMetricsResponse {
     revenueRealizedCents: number;
     revenueExpectedCents: number;
     averageCommissionCents?: number;
+    lostReferrals?: number;
+    totalAgentRevenueCents?: number;
+    referralFeesPaidCents?: number;
     avgResponseHours: number | null;
     npsScore: number | null;
   } | null;
@@ -90,7 +93,7 @@ export function ProfileMetrics() {
   }
 
   if (isLoading || !data) {
-    const placeholderCount = normalizedRole === 'agent' ? 9 : normalizedRole === 'mc' ? 9 : 6;
+    const placeholderCount = normalizedRole === 'agent' ? 12 : normalizedRole === 'mc' ? 9 : 6;
     return (
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: placeholderCount }).map((_, index) => (
@@ -137,6 +140,9 @@ export function ProfileMetrics() {
       label: 'NPS score',
       value: typeof metrics.npsScore === 'number' ? metrics.npsScore.toString() : 'Not set'
     });
+    cards.push({ label: 'Lost referrals', value: formatNumber(metrics.lostReferrals ?? 0) });
+    cards.push({ label: 'Total agent revenue', value: formatCurrency(metrics.totalAgentRevenueCents ?? 0) });
+    cards.push({ label: 'Referral fees paid', value: formatCurrency(metrics.referralFeesPaidCents ?? 0) });
   }
 
   return (

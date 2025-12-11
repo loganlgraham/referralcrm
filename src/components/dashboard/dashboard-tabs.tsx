@@ -68,6 +68,7 @@ interface DashboardSummary {
   averagePaAmountCents: number;
   averageReferralFeePaidCents: number;
   pipelineValueCents: number;
+  lostReferrals: number;
 }
 
 interface DashboardResponse {
@@ -1195,6 +1196,7 @@ function MainDashboard({
   const pipelineMetrics = [
     { label: 'Pipeline value', value: formatCurrency(summary.pipelineValueCents) },
     { label: 'Active pipeline', value: formatNumber(summary.activePipeline) },
+    { label: 'Lost referrals', value: formatNumber(summary.lostReferrals) },
     {
       label: 'AFC attach rate',
       value: `${summary.afcAttachRate.toFixed(1)}%`,

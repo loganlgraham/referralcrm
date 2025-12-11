@@ -77,6 +77,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     return (referral.buySideAgent as any)?._id ?? referral.buySideAgent ?? null;
   })();
   const previousAgent = previousAgentValue ? previousAgentValue.toString() : null;
+  const previousAgentObjectId = previousAgentValue ? new Types.ObjectId(previousAgentValue) : null;
   if (assignmentSide === 'sell') {
     referral.sellSideAgent = parsed.data.agentId as any;
   } else {
@@ -105,6 +106,16 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
 
   referral.audit.push(auditEntry as any);
+
+  if (previousAgentObjectId && previousAgent !== parsed.data.agentId) {
+    referral.lostAssignments = referral.lostAssignments || ([] as any);
+    referral.lostAssignments.push({
+      agent: previousAgentObjectId,
+      lostAt: new Date(),
+      reason: 'reassigned'
+    } as any);
+    referral.markModified('lostAssignments');
+  }
 
   await referral.save();
 
