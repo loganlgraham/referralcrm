@@ -243,57 +243,61 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
 
   const result: SendResult = { sent: [], skipped: [], errors: [] };
 
-  await trySendEmail(
-    primaryAgent?.email ?? null,
-    `New referral for ${borrowerName}`,
-    [
-      `<p>Hi ${agentFirstName},</p>`,
-      `<p>Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName}. We're excited to get them in their new home!</p>`,
-      '<p>Here are the key details so you can reach out confidently:</p>',
-      `<p><b>Client Name:</b> ${borrowerName}<br><b>Email:</b> ${borrowerEmail ?? 'Not provided'}<br><b>Phone:</b> ${
-        borrowerPhone ?? 'Not provided'
-      }</p>`,
-      lenderContact
-        ? `<p><b>Mortgage Consultant at American Financing:</b> ${lenderContact.name ?? 'Not provided'}<br><b>Email:</b> ${
-            lenderContact.email ?? 'Not provided'
-          }<br><b>Phone:</b> ${lenderContact.phone ?? 'Not provided'}<br><b>Loan File Number:</b> ${loanFileNumber}</p>`
-        : `<p><b>Mortgage Consultant at American Financing:</b> Not provided<br><b>Loan File Number:</b> ${loanFileNumber}</p>`,
-      contactMadeLink && contactAttemptedLink
-        ? `<p>Please select one of the following after attempting to contact ${borrowerFirstName}: </p>`
-        : null,
-      contactMadeLink && contactAttemptedLink
-        ? `<p><a href="${contactMadeLink}">Made Contact</a><br><a href="${contactAttemptedLink}">Unable to reach after first attempt</a></p>`
-        : null,
-      referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
-      `<p>Thank you for taking great care of ${borrowerFirstName}!</p>`,
-    ],
-    [
-      `Hi ${agentFirstName},`,
-      `Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName}. We're excited to get them in their new home!`,
-      'Here are the key details so you can reach out confidently:',
-      `Client Name: ${borrowerName}`,
-      `Email: ${borrowerEmail ?? 'Not provided'}`,
-      `Phone: ${borrowerPhone ?? 'Not provided'}`,
-      lenderContact
-        ? `Mortgage Consultant at American Financing: ${lenderContact.name ?? 'Not provided'} | Email: ${
-            lenderContact.email ?? 'Not provided'
-          } | Phone: ${lenderContact.phone ?? 'Not provided'} | Loan File Number: ${loanFileNumber}`
-        : `Mortgage Consultant at American Financing: Not provided | Loan File Number: ${loanFileNumber}`,
-      contactMadeLink && contactAttemptedLink
-        ? `Please select one of the following after attempting to contact ${borrowerFirstName}:`
-        : null,
-      contactMadeLink && contactAttemptedLink
-        ? `Made Contact: ${contactMadeLink}`
-        : null,
-      contactMadeLink && contactAttemptedLink
-        ? `Unable to reach after first attempt: ${contactAttemptedLink}`
-        : null,
-      referralLink ? `Referral workspace: ${referralLink}` : null,
-      `Thank you for taking great care of ${borrowerFirstName}!`,
-    ],
-    'agent',
-    result
-  );
+  const shouldEmailAgent = referral.origin !== 'agent';
+
+  if (shouldEmailAgent) {
+    await trySendEmail(
+      primaryAgent?.email ?? null,
+      `New referral for ${borrowerName}`,
+      [
+        `<p>Hi ${agentFirstName},</p>`,
+        `<p>Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName}. We're excited to get them in their new home!</p>`,
+        '<p>Here are the key details so you can reach out confidently:</p>',
+        `<p><b>Client Name:</b> ${borrowerName}<br><b>Email:</b> ${borrowerEmail ?? 'Not provided'}<br><b>Phone:</b> ${
+          borrowerPhone ?? 'Not provided'
+        }</p>`,
+        lenderContact
+          ? `<p><b>Mortgage Consultant at American Financing:</b> ${lenderContact.name ?? 'Not provided'}<br><b>Email:</b> ${
+              lenderContact.email ?? 'Not provided'
+            }<br><b>Phone:</b> ${lenderContact.phone ?? 'Not provided'}<br><b>Loan File Number:</b> ${loanFileNumber}</p>`
+          : `<p><b>Mortgage Consultant at American Financing:</b> Not provided<br><b>Loan File Number:</b> ${loanFileNumber}</p>`,
+        contactMadeLink && contactAttemptedLink
+          ? `<p>Please select one of the following after attempting to contact ${borrowerFirstName}: </p>`
+          : null,
+        contactMadeLink && contactAttemptedLink
+          ? `<p><a href="${contactMadeLink}">Made Contact</a><br><a href="${contactAttemptedLink}">Unable to reach after first attempt</a></p>`
+          : null,
+        referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
+        `<p>Thank you for taking great care of ${borrowerFirstName}!</p>`,
+      ],
+      [
+        `Hi ${agentFirstName},`,
+        `Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName}. We're excited to get them in their new home!`,
+        'Here are the key details so you can reach out confidently:',
+        `Client Name: ${borrowerName}`,
+        `Email: ${borrowerEmail ?? 'Not provided'}`,
+        `Phone: ${borrowerPhone ?? 'Not provided'}`,
+        lenderContact
+          ? `Mortgage Consultant at American Financing: ${lenderContact.name ?? 'Not provided'} | Email: ${
+              lenderContact.email ?? 'Not provided'
+            } | Phone: ${lenderContact.phone ?? 'Not provided'} | Loan File Number: ${loanFileNumber}`
+          : `Mortgage Consultant at American Financing: Not provided | Loan File Number: ${loanFileNumber}`,
+        contactMadeLink && contactAttemptedLink
+          ? `Please select one of the following after attempting to contact ${borrowerFirstName}:`
+          : null,
+        contactMadeLink && contactAttemptedLink
+          ? `Made Contact: ${contactMadeLink}`
+          : null,
+        contactMadeLink && contactAttemptedLink
+          ? `Unable to reach after first attempt: ${contactAttemptedLink}`
+          : null,
+        referralLink ? `Referral workspace: ${referralLink}` : null,
+        `Thank you for taking great care of ${borrowerFirstName}!`,
+      ],
+      'agent',
+      result
+    );
+  }
 
   const mcAgentContacts: Array<{ label: string; contact: BasicContact }> = [];
 
