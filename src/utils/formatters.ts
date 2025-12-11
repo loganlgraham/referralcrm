@@ -42,6 +42,33 @@ export function formatPhoneNumber(value?: string | null) {
   return value;
 }
 
+export function formatPhoneInput(value: string) {
+  const digits = value.replace(/\D+/g, '');
+  if (!digits) {
+    return '';
+  }
+
+  if (digits.startsWith('1')) {
+    const normalized = digits.slice(1, 11);
+    if (normalized.length <= 3) {
+      return `1-${normalized}`;
+    }
+    if (normalized.length <= 6) {
+      return `1-${normalized.slice(0, 3)}-${normalized.slice(3)}`;
+    }
+    return `1-${normalized.slice(0, 3)}-${normalized.slice(3, 6)}-${normalized.slice(6)}`;
+  }
+
+  const normalized = digits.slice(0, 10);
+  if (normalized.length <= 3) {
+    return normalized;
+  }
+  if (normalized.length <= 6) {
+    return `${normalized.slice(0, 3)}-${normalized.slice(3)}`;
+  }
+  return `${normalized.slice(0, 3)}-${normalized.slice(3, 6)}-${normalized.slice(6)}`;
+}
+
 export function formatDate(value?: string | Date | null) {
   if (!value) {
     return '—';

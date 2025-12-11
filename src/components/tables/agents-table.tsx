@@ -14,7 +14,7 @@ import useSWR from 'swr';
 import { toast } from 'sonner';
 
 import { fetcher } from '@/utils/fetcher';
-import { formatCurrency, formatDecimal, formatPhoneNumber } from '@/utils/formatters';
+import { formatCurrency, formatDecimal, formatPhoneInput, formatPhoneNumber } from '@/utils/formatters';
 import {
   AGENT_AHA_CLASSIFICATION_OPTIONS,
   AGENT_LANGUAGE_OPTIONS,
@@ -240,7 +240,8 @@ export function AgentsTable() {
   const handleChange = (field: TextField) => (
     event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    setForm((previous) => ({ ...previous, [field]: event.target.value }));
+    const value = field === 'phone' ? formatPhoneInput(event.target.value) : event.target.value;
+    setForm((previous) => ({ ...previous, [field]: value }));
   };
 
   const handleSelectChange = (field: 'specialties' | 'languages') => (
