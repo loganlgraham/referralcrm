@@ -810,6 +810,7 @@ export const computeSlaRecommendations = (
   const paidMinutes = durations.find((item) => item.key === 'close-to-paid')?.minutes;
 
   const assignedAgentName = resolvePrimaryAgentName(referral);
+  const lenderName = normalizeAgentName(referral.lender?.name);
 
   const statusAgeDays = differenceInDays(now, statusLastUpdated);
   const hoursSinceStatusUpdate = differenceInHours(now, statusLastUpdated);
@@ -878,18 +879,18 @@ export const computeSlaRecommendations = (
   );
   }
 
-  if (status === 'New Lead' && assignedAgentName) {
+  if (status === 'New Lead' && lenderName) {
     const dueBy = addHours(statusLastUpdated, 4);
-    const agentLabel = `the borrower${assignedAgentName ? ` and ${assignedAgentName}` : ''}`;
+    const mcLabel = `the borrower and ${lenderName}`;
     recommendations.push(
       buildRecommendation({
         id: 'advance-to-paired',
         title: 'Update status to Paired after introduction',
-        message: `Once you connect ${agentLabel}, move this referral to Paired so downstream timelines stay accurate.`,
+        message: `Once you connect ${mcLabel}, move this referral to Paired so downstream timelines stay accurate.`,
         priority: 'medium',
         category: 'ops',
         dueAt: minDueDate(dueBy),
-        supportingMetric: 'Status still New Lead after assigning an agent',
+        supportingMetric: 'Status still New Lead after adding an MC',
       })
     );
   }

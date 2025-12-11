@@ -10,7 +10,8 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { Types } from 'mongoose';
 
 import { LenderMC } from '@/models/lender';
-import { Agent } from '@/models/agent';
+import { buildReferralLink } from '@/lib/referral-links';
+import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 
 interface Params {
   params: { id: string };
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   await connectMongo();
   const referral = await Referral.findById(params.id)
-    .populate('assignedAgent', 'userId')
+    .populate('assignedAgent', 'userId name email phone')
     .populate('buySideAgent', 'userId')
     .populate('sellSideAgent', 'userId')
     .populate('lender', 'userId name');
@@ -98,6 +99,61 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     channel: 'update',
     content: activityContent,
   });
+
+  const isNewAssignment = !previousLender || previousLender !== parsed.data.lenderId;
+  const lenderEmail = nextLenderDoc?.email?.trim();
+
+  if (isNewAssignment && lenderEmail && isTransactionalEmailConfigured()) {
+    const borrowerName = referral.borrower?.name?.trim() || 'your referral';
+    const borrowerEmail = referral.borrower?.email?.trim();
+    const borrowerPhone = referral.borrower?.phone?.trim();
+    const referralLink = buildReferralLink(referral._id.toString());
+    const agentContact = referral.assignedAgent as
+      | { name?: string; email?: string; phone?: string }
+      | null
+      | undefined;
+    const agentName = typeof agentContact?.name === 'string' ? agentContact.name.trim() : '';
+    const agentEmail = typeof agentContact?.email === 'string' ? agentContact.email.trim() : '';
+    const agentPhone = typeof agentContact?.phone === 'string' ? agentContact.phone.trim() : '';
+
+    const borrowerLines = [
+      `Borrower: ${borrowerName}`,
+      borrowerEmail ? `Email: ${borrowerEmail}` : null,
+      borrowerPhone ? `Phone: ${borrowerPhone}` : null,
+    ].filter(Boolean) as string[];
+
+    const agentLines = [agentName, agentEmail, agentPhone].filter((line) => line && line.trim()) as string[];
+
+    const greetingName = nextLenderDoc?.name?.trim() || 'there';
+    const html = `
+      <p>Hi ${greetingName},</p>
+      <p>You have been assigned a new referral.</p>
+      <p>${borrowerLines.join('<br />')}</p>
+      ${
+        agentLines.length > 0
+          ? `<p><strong>Agent who sent it:</strong><br />${agentLines.join('<br />')}</p>`
+          : ''
+      }
+      <p><a href="${referralLink}">View the referral</a> to acknowledge and follow up.</p>
+    `;
+    const text = `Hi ${greetingName},
+
+You have been assigned a new referral.
+${borrowerLines.join('\n')}
+
+${agentLines.length > 0 ? `Agent who sent it:\n${agentLines.join('\n')}\n\n` : ''}View the referral: ${referralLink}`;
+
+    try {
+      await sendTransactionalEmail({
+        to: [lenderEmail],
+        subject: `New referral: ${borrowerName}`,
+        html,
+        text,
+      });
+    } catch (error) {
+      console.error('Failed to deliver MC assignment email', error);
+    }
+  }
 
   return NextResponse.json({ id: referral._id.toString() });
 }
