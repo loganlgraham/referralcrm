@@ -63,6 +63,33 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
     : null;
   const nextStatus = 'In Communication';
   const shouldUpdateStatus = previousStatus !== nextStatus;
+  const sla = (referral.sla ??= {} as any);
+
+  const pairedAt = (() => {
+    if (sla.lastPairedAt) {
+      const candidate = sla.lastPairedAt instanceof Date ? sla.lastPairedAt : new Date(sla.lastPairedAt);
+      if (!Number.isNaN(candidate.getTime())) {
+        return candidate;
+      }
+    }
+
+    if (previousStatus === 'Paired' && previousStatusUpdatedAt) {
+      return previousStatusUpdatedAt;
+    }
+
+    const auditEntries = Array.isArray(referral.audit) ? referral.audit : [];
+    for (let index = auditEntries.length - 1; index >= 0; index -= 1) {
+      const entry = auditEntries[index];
+      if (entry?.field === 'status' && entry.newValue === 'Paired' && entry.timestamp) {
+        const timestamp = entry.timestamp instanceof Date ? entry.timestamp : new Date(entry.timestamp);
+        if (!Number.isNaN(timestamp.getTime())) {
+          return timestamp;
+        }
+      }
+    }
+
+    return null;
+  })();
 
   if (shouldUpdateStatus) {
     referral.status = nextStatus as any;
@@ -83,43 +110,20 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
 
     referral.audit.push(auditEntry as any);
 
-    const sla = (referral.sla ??= {} as any);
-    let pairedAt: Date | null = null;
+  }
 
-    if (sla.lastPairedAt) {
-      const candidate = sla.lastPairedAt instanceof Date ? sla.lastPairedAt : new Date(sla.lastPairedAt);
-      if (!Number.isNaN(candidate.getTime())) {
-        pairedAt = candidate;
-      }
-    }
+  referral.statusLastUpdated = now;
 
-    if (!pairedAt && previousStatus === 'Paired' && previousStatusUpdatedAt) {
-      pairedAt = previousStatusUpdatedAt;
-    }
-
-    if (!pairedAt) {
-      const auditEntries = Array.isArray(referral.audit) ? referral.audit : [];
-      for (let index = auditEntries.length - 1; index >= 0; index -= 1) {
-        const entry = auditEntries[index];
-        if (entry?.field === 'status' && entry.newValue === 'Paired' && entry.timestamp) {
-          const timestamp = entry.timestamp instanceof Date ? entry.timestamp : new Date(entry.timestamp);
-          if (!Number.isNaN(timestamp.getTime())) {
-            pairedAt = timestamp;
-            break;
-          }
-        }
-      }
-    }
-
-    if (pairedAt) {
-      const minutes = Math.max(differenceInMinutes(now, pairedAt), 0);
-      sla.timeToFirstAgentContactHours = Math.round((minutes / 60) * 10) / 10;
+  if (pairedAt) {
+    const minutes = Math.max(differenceInMinutes(now, pairedAt), 0);
+    const timeToContactHours = Math.round((minutes / 60) * 10) / 10;
+    if (sla.timeToFirstAgentContactHours == null || sla.timeToFirstAgentContactHours !== timeToContactHours) {
+      sla.timeToFirstAgentContactHours = timeToContactHours;
       sla.lastPairedAt = pairedAt;
       referral.markModified('sla');
     }
   }
 
-  referral.statusLastUpdated = now;
   await referral.save();
 
   const activityContent =
