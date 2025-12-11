@@ -40,7 +40,7 @@ interface ProfileMetricsResponse {
 export function ProfileMetrics() {
   const { data: session } = useSession();
   const normalizedRole = (() => {
-    const role = session?.user?.role ?? null;
+    const role = (session?.user?.role as string | null) ?? null;
     if (role === 'mortgage-consultant') return 'mc';
     return role;
   })();
