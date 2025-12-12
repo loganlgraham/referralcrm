@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
+import { AdminAgentsView } from '@/components/agents/admin-agents-view';
 import { AgentsTable } from '@/components/tables/agents-table';
-import { FindAgentExperience } from '@/components/find-agent/find-agent-experience';
 import { getCurrentSession } from '@/lib/auth';
 
 export const metadata: Metadata = {
@@ -15,8 +15,7 @@ export default async function AgentsPage() {
 
   return (
     <div className="space-y-6">
-      {isAdmin && <FindAgentExperience variant="admin" />}
-      <AgentsTable />
+      {isAdmin ? <AdminAgentsView /> : <AgentsTable />}
     </div>
   );
 }

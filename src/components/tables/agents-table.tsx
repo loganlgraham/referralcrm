@@ -4,7 +4,9 @@ import Link from 'next/link';
 import {
   ChangeEvent,
   CSSProperties,
+  Dispatch,
   FormEvent,
+  SetStateAction,
   useEffect,
   useMemo,
   useState,
@@ -82,12 +84,20 @@ const createEmptyForm = (): AgentFormState => ({
   ahaDesignation: '',
 });
 
-export function AgentsTable() {
+interface AgentsTableProps {
+  showForm?: boolean;
+  setShowForm?: Dispatch<SetStateAction<boolean>>;
+}
+
+export function AgentsTable({ showForm: externalShowForm, setShowForm: externalSetShowForm }: AgentsTableProps) {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'admin';
 
   const { data, mutate } = useSWR<AgentRow[]>('/api/agents', fetcher);
-  const [showForm, setShowForm] = useState(false);
+  const [internalShowForm, setInternalShowForm] = useState(false);
+  const showForm = externalShowForm ?? internalShowForm;
+  const setShowForm = externalSetShowForm ?? setInternalShowForm;
+  const hasExternalControl = externalShowForm !== undefined && externalSetShowForm !== undefined;
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<AgentFormState>(() => createEmptyForm());
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
@@ -471,7 +481,7 @@ export function AgentsTable() {
 
   return (
     <div className="space-y-4">
-      {isAdmin && (
+      {isAdmin && !hasExternalControl && (
         <div className="flex justify-end">
           <button
             type="button"
