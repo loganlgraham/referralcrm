@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useState, useTransition } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState, useTransition } from 'react';
 import useSWR from 'swr';
 
 import { REFERRAL_STATUSES } from '@/constants/referrals';
@@ -23,17 +23,19 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
-  
+  const searchParamsString = useMemo(() => searchParams.toString(), [searchParams]);
+
   const isAgentMode = mode === 'agent';
   const isAdminMode = mode === 'admin';
   const showAhaBucket = isAdminMode;
 
   const searchValue = searchParams.get('search') ?? '';
   const [searchTerm, setSearchTerm] = useState(searchValue);
+  const deferredSearch = useDeferredValue(searchTerm);
 
   const handleChange = useCallback(
     (key: string, value: string) => {
-      const params = new URLSearchParams(searchParams.toString());
+      const params = new URLSearchParams(searchParamsString);
       if (!value) {
         params.delete(key);
       } else {
@@ -44,7 +46,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
         router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
       });
     },
-    [router, searchParams, startTransition]
+    [router, searchParamsString, startTransition]
   );
 
   const { data: agents } = useSWR<DirectoryOption[]>(isAgentMode ? null : '/api/agents', fetcher);
@@ -59,35 +61,28 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
     if (searchValue !== searchTerm) {
       setSearchTerm(searchValue);
     }
-  }, [searchTerm, searchValue]);
+  }, [searchValue]);
 
   useEffect(() => {
-    const handle = window.setTimeout(() => {
-      const trimmed = searchTerm.trim();
-      const existing = searchParams.get('search') ?? '';
+    const params = new URLSearchParams(searchParamsString);
+    const existing = params.get('search') ?? '';
+    const trimmed = deferredSearch.trim();
 
-      if (trimmed === existing) {
-        return;
-      }
+    if (trimmed === existing) {
+      return;
+    }
 
-      const params = new URLSearchParams(searchParams.toString());
+    if (!trimmed) {
+      params.delete('search');
+    } else {
+      params.set('search', trimmed);
+    }
 
-      if (!trimmed) {
-        params.delete('search');
-      } else {
-        params.set('search', trimmed);
-      }
-
-      startTransition(() => {
-        const queryString = params.toString();
-        router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
-      });
-    }, 200);
-
-    return () => {
-      window.clearTimeout(handle);
-    };
-  }, [router, searchParams, searchTerm, startTransition]);
+    startTransition(() => {
+      const queryString = params.toString();
+      router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
+    });
+  }, [deferredSearch, router, searchParamsString, startTransition]);
 
   const handleSearchInput = useCallback((value: string) => {
     setSearchTerm(value);
