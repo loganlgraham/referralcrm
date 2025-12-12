@@ -56,6 +56,9 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const lenderValue = searchParams.get('mc') ?? '';
   const ahaBucketValue = showAhaBucket ? searchParams.get('ahaBucket') ?? '' : '';
   const agentReferralValue = isAdminMode ? searchParams.get('agentReferrals') ?? '' : '';
+  const stateValue = searchParams.get('state') ?? '';
+
+  const [stateInput, setStateInput] = useState(stateValue);
 
   useEffect(() => {
     setSearchTerm(searchValue);
@@ -90,6 +93,42 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
       router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
     });
   }, [debouncedSearch, router, searchParamsString, startTransition]);
+
+  const commitStateValue = useCallback(
+    (value: string) => {
+      const normalized = value.trim().toUpperCase();
+      const params = new URLSearchParams(searchParamsString);
+      const existing = (params.get('state') ?? '').trim().toUpperCase();
+
+      if (normalized === existing) {
+        return;
+      }
+
+      if (!normalized) {
+        params.delete('state');
+      } else {
+        params.set('state', normalized);
+      }
+
+      startTransition(() => {
+        const queryString = params.toString();
+        router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
+      });
+    },
+    [router, searchParamsString, startTransition]
+  );
+
+  useEffect(() => {
+    setStateInput(stateValue);
+  }, [stateValue]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      commitStateValue(stateInput);
+    }, 300);
+
+    return () => window.clearTimeout(timeout);
+  }, [commitStateValue, stateInput]);
 
   const handleSearchInput = useCallback((value: string) => {
     setSearchTerm(value);
@@ -196,8 +235,15 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
             <input
               type="text"
               maxLength={5}
-              defaultValue={searchParams.get('state') ?? ''}
-              onBlur={(event) => handleChange('state', event.target.value.toUpperCase())}
+              value={stateInput}
+              onChange={(event) => setStateInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  commitStateValue(stateInput);
+                }
+              }}
+              onBlur={(event) => commitStateValue(event.target.value)}
               className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
               placeholder="CO or 80202"
               disabled={isPending}
