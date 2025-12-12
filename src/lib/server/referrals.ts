@@ -11,7 +11,7 @@ import { ACTIVE_REFERRAL_STATUS_VALUES, normalizeReferralStatus } from '@/consta
 import { User } from '@/models/user';
 import { DEAL_STATUS_LABELS } from '@/constants/deals';
 import { Zip } from '@/models/zip';
-import { inferZipCodesFromLocation } from '@/utils/location';
+import { inferZipCodesFromLocation, normalizeStateInput } from '@/utils/location';
 
 interface GetReferralsParams {
   session: Session | null;
@@ -102,21 +102,38 @@ export async function getReferrals(params: GetReferralsParams) {
   if (location) {
     const trimmedLocation = location.trim();
     if (trimmedLocation) {
-      const locationRegex = new RegExp(trimmedLocation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const locationRegex = new RegExp(escapeRegExp(trimmedLocation), 'i');
+      const normalizedState = normalizeStateInput(trimmedLocation);
       const zipCandidateSet = new Set<string>();
 
       if (/^\d{5}(?:-\d{4})?$/.test(trimmedLocation)) {
         zipCandidateSet.add(trimmedLocation.slice(0, 5));
       }
 
-      const zipDocs = await Zip.find({
-        $or: [
-          { code: new RegExp(`^${trimmedLocation}`, 'i') },
-          { city: locationRegex },
-          { state: new RegExp(`^${trimmedLocation}$`, 'i') },
-          { county: locationRegex }
-        ]
-      })
+      const textOnly = trimmedLocation.replace(/\d+/g, '').replace(/,+/g, ' ').trim();
+      const cityOrCountyText = normalizedState
+        ? textOnly.replace(new RegExp(`\b${normalizedState}\b`, 'i'), '').trim()
+        : textOnly;
+      const cityOrCountyRegex = cityOrCountyText
+        ? new RegExp(escapeRegExp(cityOrCountyText).replace(/\s+/g, '.*'), 'i')
+        : null;
+
+      const zipSearchConditions: Record<string, unknown>[] = [
+        { code: new RegExp(`^${escapeRegExp(trimmedLocation)}`, 'i') },
+      ];
+
+      if (cityOrCountyRegex) {
+        zipSearchConditions.push({ city: cityOrCountyRegex }, { county: cityOrCountyRegex });
+      }
+
+      if (normalizedState) {
+        zipSearchConditions.push({ state: new RegExp(`^${normalizedState}$`, 'i') });
+      } else {
+        zipSearchConditions.push({ state: new RegExp(`^${escapeRegExp(trimmedLocation)}$`, 'i') });
+      }
+
+      const zipDocs = await Zip.find({ $or: zipSearchConditions })
         .select('code state city county')
         .lean();
 
@@ -145,8 +162,8 @@ export async function getReferrals(params: GetReferralsParams) {
       locationFilters.push(
         { lookingInZip: locationRegex },
         { lookingInZips: locationRegex },
-        { propertyCity: locationRegex },
-        { propertyState: new RegExp(`^${trimmedLocation}$`, 'i') },
+        { propertyCity: cityOrCountyRegex ?? locationRegex },
+        { propertyState: normalizedState ? new RegExp(`^${normalizedState}$`, 'i') : new RegExp(`^${escapeRegExp(trimmedLocation)}$`, 'i') },
         { borrowerCurrentAddress: locationRegex },
         { propertyAddress: locationRegex }
       );

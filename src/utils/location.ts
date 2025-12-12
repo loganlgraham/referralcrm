@@ -1,11 +1,84 @@
 const stateCache = new Map<string, string>();
 const locationZipCache = new Map<string, string[]>();
 
+const stateNameToCode: Record<string, string> = {
+  ALABAMA: 'AL',
+  ALASKA: 'AK',
+  ARIZONA: 'AZ',
+  ARKANSAS: 'AR',
+  CALIFORNIA: 'CA',
+  COLORADO: 'CO',
+  CONNECTICUT: 'CT',
+  DELAWARE: 'DE',
+  FLORIDA: 'FL',
+  GEORGIA: 'GA',
+  HAWAII: 'HI',
+  IDAHO: 'ID',
+  ILLINOIS: 'IL',
+  INDIANA: 'IN',
+  IOWA: 'IA',
+  KANSAS: 'KS',
+  KENTUCKY: 'KY',
+  LOUISIANA: 'LA',
+  MAINE: 'ME',
+  MARYLAND: 'MD',
+  MASSACHUSETTS: 'MA',
+  MICHIGAN: 'MI',
+  MINNESOTA: 'MN',
+  MISSISSIPPI: 'MS',
+  MISSOURI: 'MO',
+  MONTANA: 'MT',
+  NEBRASKA: 'NE',
+  NEVADA: 'NV',
+  NEW_HAMPSHIRE: 'NH',
+  NEW_JERSEY: 'NJ',
+  NEW_MEXICO: 'NM',
+  NEW_YORK: 'NY',
+  NORTH_CAROLINA: 'NC',
+  NORTH_DAKOTA: 'ND',
+  OHIO: 'OH',
+  OKLAHOMA: 'OK',
+  OREGON: 'OR',
+  PENNSYLVANIA: 'PA',
+  RHODE_ISLAND: 'RI',
+  SOUTH_CAROLINA: 'SC',
+  SOUTH_DAKOTA: 'SD',
+  TENNESSEE: 'TN',
+  TEXAS: 'TX',
+  UTAH: 'UT',
+  VERMONT: 'VT',
+  VIRGINIA: 'VA',
+  WASHINGTON: 'WA',
+  WEST_VIRGINIA: 'WV',
+  WISCONSIN: 'WI',
+  WYOMING: 'WY',
+  DISTRICT_OF_COLUMBIA: 'DC'
+};
+
 const extractStateCode = (content: string): string | null => {
   if (!content) return null;
   const match = content.toUpperCase().match(/\b([A-Z]{2})\b/);
   return match?.[1] ?? null;
 };
+
+export function normalizeStateInput(location: string): string | null {
+  if (!location) return null;
+  const upper = location.toUpperCase();
+  if (stateNameToCode[upper]) {
+    return stateNameToCode[upper];
+  }
+
+  const condensed = upper.replace(/[^A-Z]/g, ' ').trim();
+  if (stateNameToCode[condensed.replace(/\s+/g, '_')]) {
+    return stateNameToCode[condensed.replace(/\s+/g, '_')];
+  }
+
+  if (/^[A-Z]{2}$/.test(upper)) {
+    return upper;
+  }
+
+  return null;
+}
 
 export async function inferStateFromPostalCode(postalCode: string): Promise<string | null> {
   const trimmed = postalCode.trim();
