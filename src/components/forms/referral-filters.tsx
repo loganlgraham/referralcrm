@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useState, useTransition } from 'react';
 import useSWR from 'swr';
 
 import { REFERRAL_STATUSES } from '@/constants/referrals';
@@ -55,37 +55,41 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const ahaBucketValue = showAhaBucket ? searchParams.get('ahaBucket') ?? '' : '';
   const agentReferralValue = isAdminMode ? searchParams.get('agentReferrals') ?? '' : '';
 
-  const lastAppliedSearchRef = useRef(searchValue);
-
   useEffect(() => {
     if (searchValue !== searchTerm) {
-      lastAppliedSearchRef.current = searchValue;
       setSearchTerm(searchValue);
     }
   }, [searchTerm, searchValue]);
 
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      if (searchTerm === lastAppliedSearchRef.current) {
-        return;
-      }
-      lastAppliedSearchRef.current = searchTerm;
-      handleChange('search', searchTerm);
-    }, 200);
+  const handleSearchInput = useCallback(
+    (value: string) => {
+      setSearchTerm(value);
 
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, [handleChange, searchTerm]);
+      const params = new URLSearchParams(searchParams.toString());
+      const trimmed = value.trim();
+
+      if (!trimmed) {
+        params.delete('search');
+      } else {
+        params.set('search', trimmed);
+      }
+
+      startTransition(() => {
+        const queryString = params.toString();
+        router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
+      });
+    },
+    [router, searchParams, startTransition]
+  );
 
   return (
     <div className="space-y-4 rounded-lg bg-white p-4 shadow-sm">
-      <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+      <label className="flex flex-col text-xs font-semibold text-slate-600">
         Search
         <input
           type="text"
           value={searchTerm}
-          onChange={(event) => setSearchTerm(event.target.value)}
+          onChange={(event) => handleSearchInput(event.target.value)}
           className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm"
           placeholder="Name, email, phone, loan #"
         />
