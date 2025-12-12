@@ -48,9 +48,21 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const lenderValue = searchParams.get('mc') ?? '';
   const ahaBucketValue = showAhaBucket ? searchParams.get('ahaBucket') ?? '' : '';
   const agentReferralValue = isAdminMode ? searchParams.get('agentReferrals') ?? '' : '';
+  const searchValue = searchParams.get('search') ?? '';
 
   return (
-    <div className="grid grid-cols-1 gap-4 rounded-lg bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+    <div className="grid grid-cols-1 gap-4 rounded-lg bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
+      <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+        Search
+        <input
+          type="text"
+          value={searchValue}
+          onChange={(event) => handleChange('search', event.target.value)}
+          className="mt-1 w-full rounded border border-slate-200 px-2 py-1 text-sm"
+          placeholder="Name, email, phone, loan #"
+          disabled={isPending}
+        />
+      </label>
       <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
         Status
         <select
