@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import useSWR from 'swr';
 
 import { REFERRAL_STATUSES } from '@/constants/referrals';
@@ -23,7 +23,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
-
+  
   const isAgentMode = mode === 'agent';
   const isAdminMode = mode === 'admin';
   const showAhaBucket = isAdminMode;
@@ -31,18 +31,21 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const searchValue = searchParams.get('search') ?? '';
   const [searchTerm, setSearchTerm] = useState(searchValue);
 
-  const handleChange = (key: string, value: string) => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (!value) {
-      params.delete(key);
-    } else {
-      params.set(key, value);
-    }
-    startTransition(() => {
-      const queryString = params.toString();
-      router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
-    });
-  };
+  const handleChange = useCallback(
+    (key: string, value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (!value) {
+        params.delete(key);
+      } else {
+        params.set(key, value);
+      }
+      startTransition(() => {
+        const queryString = params.toString();
+        router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
+      });
+    },
+    [router, searchParams, startTransition]
+  );
 
   const { data: agents } = useSWR<DirectoryOption[]>(isAgentMode ? null : '/api/agents', fetcher);
   const { data: lenders } = useSWR<DirectoryOption[]>('/api/lenders', fetcher);
@@ -52,22 +55,28 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const ahaBucketValue = showAhaBucket ? searchParams.get('ahaBucket') ?? '' : '';
   const agentReferralValue = isAdminMode ? searchParams.get('agentReferrals') ?? '' : '';
 
+  const lastAppliedSearchRef = useRef(searchValue);
+
   useEffect(() => {
-    setSearchTerm(searchValue);
-  }, [searchValue]);
+    if (searchValue !== searchTerm) {
+      lastAppliedSearchRef.current = searchValue;
+      setSearchTerm(searchValue);
+    }
+  }, [searchTerm, searchValue]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      if (searchTerm === searchValue) {
+      if (searchTerm === lastAppliedSearchRef.current) {
         return;
       }
+      lastAppliedSearchRef.current = searchTerm;
       handleChange('search', searchTerm);
-    }, 300);
+    }, 200);
 
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [searchTerm, searchValue]);
+  }, [handleChange, searchTerm]);
 
   return (
     <div className="grid grid-cols-1 gap-4 rounded-lg bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
