@@ -4,6 +4,7 @@
 
 :root {
   --font-sans: 'Inter', sans-serif;
+  color-scheme: light;
 }
 
 html,

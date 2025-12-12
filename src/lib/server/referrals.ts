@@ -21,6 +21,7 @@ interface GetReferralsParams {
   zip?: string | null;
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   agentReferrals?: 'yes' | 'no' | null;
+  search?: string | null;
 }
 
 interface PopulatedAgent {
@@ -82,11 +83,11 @@ interface ReferralListItem {
 const PAGE_SIZE = 20;
 
 export async function getReferrals(params: GetReferralsParams) {
-  const { session, page = 1, status, mc, agent, state, zip, ahaBucket, agentReferrals } = params;
+  const { session, page = 1, status, mc, agent, state, zip, ahaBucket, agentReferrals, search } = params;
   await connectMongo();
 
   const query: Record<string, unknown> = { deletedAt: null };
-  const appendAgentFilter = (conditions: Record<string, unknown>[]) => {
+  const appendOrConditions = (conditions: Record<string, unknown>[]) => {
     if (query.$or) {
       query.$and = [...(Array.isArray(query.$and) ? (query.$and as unknown[]) : []), { $or: query.$or }, { $or: conditions }];
       delete query.$or;
@@ -108,6 +109,22 @@ export async function getReferrals(params: GetReferralsParams) {
     query.$or = orFilters;
   }
   if (ahaBucket === 'AHA' || ahaBucket === 'AHA_OOS') query.ahaBucket = ahaBucket;
+
+  const searchTerm = search?.trim();
+  if (searchTerm) {
+    const escapedSearch = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const normalizedDigits = searchTerm.replace(/\D/g, '');
+    const searchConditions: Record<string, unknown>[] = [
+      { 'borrower.name': new RegExp(escapedSearch, 'i') },
+      { 'borrower.email': new RegExp(escapedSearch, 'i') },
+      { 'borrower.phone': new RegExp(escapedSearch, 'i') },
+      { loanFileNumber: new RegExp(escapedSearch, 'i') },
+    ];
+    if (normalizedDigits) {
+      searchConditions.push({ 'borrower.phone': new RegExp(normalizedDigits) });
+    }
+    appendOrConditions(searchConditions);
+  }
 
   if (session?.user?.role === 'admin') {
     if (agentReferrals === 'yes') {
@@ -139,7 +156,7 @@ export async function getReferrals(params: GetReferralsParams) {
         pageSize: PAGE_SIZE
       };
     }
-    appendAgentFilter([
+    appendOrConditions([
       { assignedAgent: agent._id },
       { buySideAgent: agent._id },
       { sellSideAgent: agent._id },
@@ -159,7 +176,7 @@ export async function getReferrals(params: GetReferralsParams) {
   }
   if (agent) {
     if (Types.ObjectId.isValid(agent)) {
-      appendAgentFilter([
+      appendOrConditions([
         { assignedAgent: new Types.ObjectId(agent) },
         { buySideAgent: new Types.ObjectId(agent) },
         { sellSideAgent: new Types.ObjectId(agent) },
@@ -169,7 +186,7 @@ export async function getReferrals(params: GetReferralsParams) {
         $or: [{ name: new RegExp(agent, 'i') }, { email: new RegExp(agent, 'i') }]
       });
       if (agentDoc) {
-        appendAgentFilter([
+        appendOrConditions([
           { assignedAgent: agentDoc._id },
           { buySideAgent: agentDoc._id },
           { sellSideAgent: agentDoc._id },

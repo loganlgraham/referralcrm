@@ -93,6 +93,7 @@ export function AgentsTable() {
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
   const [coverageProgress, setCoverageProgress] = useState(0);
   const [ahaFilter, setAhaFilter] = useState<'all' | 'AHA' | 'AHA_OOS'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
     null
   );
@@ -145,17 +146,31 @@ export function AgentsTable() {
   }, [coverageProgress, isGeneratingCoverage]);
   const formDisabled = saving;
 
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const normalizedDigits = normalizedSearch.replace(/\D/g, '');
+
   const agents = useMemo(() => {
     if (!data) {
       return [];
     }
 
-    if (ahaFilter === 'all') {
-      return data;
+    const ahaScoped = ahaFilter === 'all' ? data : data.filter((agent) => agent.ahaDesignation === ahaFilter);
+    if (!normalizedSearch) {
+      return ahaScoped;
     }
 
-    return data.filter((agent) => agent.ahaDesignation === ahaFilter);
-  }, [data, ahaFilter]);
+    return ahaScoped.filter((agent) => {
+      const haystack = [agent.name, agent.email, agent.phone, agent.brokerage, agent.licenseNumber]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      const phoneDigits = (agent.phone ?? '').replace(/\D/g, '');
+      const matchesText = haystack.includes(normalizedSearch);
+      const matchesDigits = normalizedDigits ? phoneDigits.includes(normalizedDigits) : false;
+
+      return matchesText || matchesDigits;
+    });
+  }, [ahaFilter, data, normalizedDigits, normalizedSearch]);
 
   type SortKey =
     | 'name'
@@ -662,13 +677,25 @@ export function AgentsTable() {
         </div>
       )}
 
-      <div className="flex items-center justify-end">
+      <div className="flex flex-col gap-3">
+        {isAdmin && (
+          <label className="text-xs font-semibold text-slate-600">
+            Search
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="mt-2 w-full max-w-2xl rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm"
+              placeholder="Name, email, phone, brokerage"
+            />
+          </label>
+        )}
         <label className="text-xs font-semibold text-slate-600">
           AHA filter
           <select
             value={ahaFilter}
             onChange={(event) => setAhaFilter(event.target.value as typeof ahaFilter)}
-            className="ml-2 rounded border border-slate-200 px-3 py-1 text-xs"
+            className="mt-1 rounded border border-slate-200 px-3 py-2 text-sm"
           >
             <option value="all">All agents</option>
             <option value="AHA">AHA</option>
