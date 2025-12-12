@@ -162,7 +162,7 @@ function LoginForm() {
                 />
                 <div className="flex justify-between text-xs text-slate-500">
                   <span />
-                  <Link href="/reset-password" className="font-medium text-brand hover:text-brand-dark">
+                  <Link href="/reset-password" className="font-medium text-brand-accent hover:text-brand-accent-dark">
                     Forgot password?
                   </Link>
                 </div>
@@ -171,7 +171,7 @@ function LoginForm() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-lg bg-brand px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-lg bg-brand-accent px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-accent-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent/70 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? 'Signing in…' : 'Sign in'}
               </button>
@@ -180,7 +180,7 @@ function LoginForm() {
 
           <p className="text-center text-sm text-slate-600">
             Don't have an account?{' '}
-            <Link href="/signup" className="font-medium text-brand hover:text-brand-dark">
+            <Link href="/signup" className="font-medium text-brand-accent hover:text-brand-accent-dark">
               Sign up
             </Link>
           </p>
@@ -189,7 +189,7 @@ function LoginForm() {
             Need help?{' '}
             <a
               href="mailto:logan.graham@americanfinancing.net?subject=Referrio%20Assistance%20Needed&body=Hello%2C%0A%0AI%20need%20help%20with%20Referrio.%20Please%20assist.%0A%0AThank%20you."
-              className="font-medium text-brand hover:text-brand-dark"
+              className="font-medium text-brand-accent hover:text-brand-accent-dark"
             >
               Contact support
             </a>

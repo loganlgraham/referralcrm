@@ -4,7 +4,23 @@
 
 :root {
   --font-sans: 'Inter', sans-serif;
+  --accent: #4ea66d;
+  --accent-strong: #3b8556;
   color-scheme: light;
+}
+
+a {
+  color: var(--accent);
+}
+
+a:hover,
+a:focus-visible {
+  color: var(--accent-strong);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 35%, white);
+  color: #0f172a;
 }
 
 html,
@@ -22,11 +38,16 @@ body {
 }
 
 .top-progress-track {
-  background: linear-gradient(90deg, rgba(148, 163, 184, 0.35), rgba(51, 65, 85, 0.5));
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0.35),
+    color-mix(in srgb, var(--accent) 22%, transparent),
+    rgba(51, 65, 85, 0.5)
+  );
 }
 
 .top-progress-bar {
-  background: linear-gradient(90deg, #0f172a, #334155 40%, #0f172a);
+  background: linear-gradient(90deg, #0f172a, #4ea66d 45%, #0f172a);
 }
 
 .top-progress-animate {

@@ -209,7 +209,7 @@ function ResetPasswordForm() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-lg bg-brand px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-lg bg-brand-accent px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-accent-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent/70 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading
                   ? isResetMode
@@ -224,7 +224,7 @@ function ResetPasswordForm() {
 
           <p className="text-center text-sm text-slate-600">
             Remembered your password?{' '}
-            <Link href="/login" className="font-medium text-brand hover:text-brand-dark">
+            <Link href="/login" className="font-medium text-brand-accent hover:text-brand-accent-dark">
               Go back to sign in
             </Link>
           </p>

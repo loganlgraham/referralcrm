@@ -17,7 +17,9 @@ const config: Config = {
         brand: {
           DEFAULT: '#1F2937',
           light: '#334155',
-          dark: '#0F172A'
+          dark: '#0F172A',
+          accent: '#4EA66D',
+          'accent-dark': '#3b8556'
         }
       }
     }
