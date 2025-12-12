@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useDeferredValue, useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import useSWR from 'swr';
 
 import { REFERRAL_STATUSES } from '@/constants/referrals';
@@ -31,7 +31,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
 
   const searchValue = searchParams.get('search') ?? '';
   const [searchTerm, setSearchTerm] = useState(searchValue);
-  const deferredSearch = useDeferredValue(searchTerm);
+  const [debouncedSearch, setDebouncedSearch] = useState(searchValue);
 
   const handleChange = useCallback(
     (key: string, value: string) => {
@@ -58,17 +58,24 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const agentReferralValue = isAdminMode ? searchParams.get('agentReferrals') ?? '' : '';
 
   useEffect(() => {
-    if (searchValue !== searchTerm) {
-      setSearchTerm(searchValue);
-    }
+    setSearchTerm(searchValue);
+    setDebouncedSearch(searchValue);
   }, [searchValue]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+    }, 200);
+
+    return () => window.clearTimeout(timeout);
+  }, [searchTerm]);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParamsString);
     const existing = params.get('search') ?? '';
-    const trimmed = deferredSearch.trim();
+    const trimmed = debouncedSearch.trim();
 
-    if (trimmed === existing) {
+    if (trimmed === existing.trim()) {
       return;
     }
 
@@ -82,7 +89,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
       const queryString = params.toString();
       router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
     });
-  }, [deferredSearch, router, searchParamsString, startTransition]);
+  }, [debouncedSearch, router, searchParamsString, startTransition]);
 
   const handleSearchInput = useCallback((value: string) => {
     setSearchTerm(value);
