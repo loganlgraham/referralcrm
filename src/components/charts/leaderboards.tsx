@@ -254,7 +254,7 @@ export function Leaderboards() {
                     {formatNumber(entry.closings)} closings · {formatNumber(entry.totalReferrals)} referrals
                   </p>
                 </div>
-                <span className="text-xs font-semibold text-emerald-600">{entry.closeRate.toFixed(1)}%</span>
+                <span className="text-xs font-semibold text-slate-700">{entry.closeRate.toFixed(1)}%</span>
               </li>
             )}
           />

@@ -864,7 +864,7 @@ export function DealsTable() {
             })();
             const outcomeColor =
               outcome === 'Won'
-                ? 'text-emerald-600'
+                ? 'text-slate-800'
                 : outcome === 'Lost'
                   ? 'text-rose-600'
                   : 'text-slate-500';

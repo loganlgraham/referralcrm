@@ -184,7 +184,7 @@ function FollowUpTaskGroup({ referral, tasks }: { referral: BoardReferral; tasks
                 type="button"
                 onClick={task.toggle}
                 className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border transition hover:bg-slate-100 ${
-                  task.completed ? 'border-emerald-500 text-emerald-600' : 'border-slate-300 text-slate-500'
+                  task.completed ? 'border-slate-500 text-slate-700' : 'border-slate-300 text-slate-500'
                 }`}
                 aria-pressed={task.completed}
                 aria-label={task.completed ? 'Mark task incomplete' : 'Mark task complete'}
@@ -225,7 +225,7 @@ function FollowUpTaskGroup({ referral, tasks }: { referral: BoardReferral; tasks
           ))}
         </ul>
       ) : (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+        <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
           Nothing on deck—this referral is on track.
         </div>
       )}

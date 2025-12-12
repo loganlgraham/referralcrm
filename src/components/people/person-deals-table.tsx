@@ -50,7 +50,7 @@ const computeOutcome = (deal: PersonDealSummary, context: 'agent' | 'mc'): 'Won'
 
 const outcomeClassName = (outcome: 'Won' | 'Lost' | 'Pending'): string => {
   if (outcome === 'Won') {
-    return 'text-emerald-600';
+    return 'text-slate-800';
   }
   if (outcome === 'Lost') {
     return 'text-rose-600';

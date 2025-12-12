@@ -1096,7 +1096,7 @@ function PreApprovalConversionSection({
       ) : null}
       {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
       {status === 'saved' && !errorMessage ? (
-        <p className="text-sm text-emerald-600">Pre-approvals saved.</p>
+        <p className="text-sm text-slate-700">Pre-approvals saved.</p>
       ) : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <MultiLineChartCard

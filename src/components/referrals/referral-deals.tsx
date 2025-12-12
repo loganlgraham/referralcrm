@@ -353,7 +353,7 @@ function DealCard({
               type="button"
               onClick={() => onStatusChange(deal, 'paid')}
               disabled={statusUpdating}
-              className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-70"
+              className="rounded border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
             >
               Mark Paid
             </button>

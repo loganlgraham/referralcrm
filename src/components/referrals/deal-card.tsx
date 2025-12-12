@@ -1071,13 +1071,13 @@ export function DealCard({
                   status === 'terminated'
                     ? 'bg-rose-50 text-rose-600'
                     : status === 'paid'
-                      ? 'bg-emerald-50 text-emerald-600'
+                      ? 'bg-slate-100 text-slate-700'
                       : status === 'payment_sent'
                         ? 'bg-indigo-50 text-indigo-600'
                         : status === 'closed'
                           ? 'bg-sky-50 text-sky-600'
                           : status === 'clear_to_close'
-                            ? 'bg-teal-50 text-teal-600'
+                            ? 'bg-slate-100 text-slate-700'
                             : status === 'past_appraisal'
                               ? 'bg-blue-50 text-blue-600'
                               : status === 'past_inspection'
@@ -1264,7 +1264,7 @@ export function DealCard({
                   <p className="text-indigo-600">Agent marked payment as sent. Awaiting admin confirmation.</p>
                 )}
                 {status === 'paid' && (
-                  <p className="text-emerald-600">Payment received and confirmed by admin.</p>
+                  <p className="text-slate-700">Payment received and confirmed by admin.</p>
                 )}
                 {status !== 'payment_sent' && status !== 'paid' && (
                   <p>Track the payment journey from contract through payout for this referral.</p>
