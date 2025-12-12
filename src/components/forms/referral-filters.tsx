@@ -56,9 +56,8 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const lenderValue = searchParams.get('mc') ?? '';
   const ahaBucketValue = showAhaBucket ? searchParams.get('ahaBucket') ?? '' : '';
   const agentReferralValue = isAdminMode ? searchParams.get('agentReferrals') ?? '' : '';
-  const locationValue = searchParams.get('location') ?? '';
-
-  const [locationInput, setLocationInput] = useState(locationValue);
+  const zipValue = searchParams.get('zip') ?? '';
+  const [zipInput, setZipInput] = useState(zipValue);
 
   useEffect(() => {
     setSearchTerm(searchValue);
@@ -94,41 +93,34 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
     });
   }, [debouncedSearch, router, searchParamsString, startTransition]);
 
-  const commitLocationValue = useCallback(
-    (value: string) => {
-      const normalized = value.trim();
-      const params = new URLSearchParams(searchParamsString);
-      const existing = (params.get('location') ?? '').trim();
+  useEffect(() => {
+    setZipInput(zipValue);
+  }, [zipValue]);
 
-      if (normalized === existing) {
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const trimmed = zipInput.trim();
+      const params = new URLSearchParams(searchParamsString);
+      const existing = (params.get('zip') ?? '').trim();
+
+      if (trimmed === existing) {
         return;
       }
 
-      if (!normalized) {
-        params.delete('location');
+      if (!trimmed) {
+        params.delete('zip');
       } else {
-        params.set('location', normalized);
+        params.set('zip', trimmed);
       }
 
       startTransition(() => {
         const queryString = params.toString();
         router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
       });
-    },
-    [router, searchParamsString, startTransition]
-  );
-
-  useEffect(() => {
-    setLocationInput(locationValue);
-  }, [locationValue]);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      commitLocationValue(locationInput);
-    }, 300);
+    }, 200);
 
     return () => window.clearTimeout(timeout);
-  }, [commitLocationValue, locationInput]);
+  }, [zipInput, router, searchParamsString, startTransition]);
 
   const handleSearchInput = useCallback((value: string) => {
     setSearchTerm(value);
@@ -231,21 +223,14 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
         )}
         {!isAgentMode && (
           <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
-            Location
+            Looking in ZIP
             <input
               type="text"
               maxLength={64}
-              value={locationInput}
-              onChange={(event) => setLocationInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  commitLocationValue(locationInput);
-                }
-              }}
-              onBlur={(event) => commitLocationValue(event.target.value)}
+              value={zipInput}
+              onChange={(event) => setZipInput(event.target.value)}
               className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-              placeholder="City, state, ZIP, or county"
+              placeholder="Filter by Looking in ZIP"
               disabled={isPending}
             />
           </label>

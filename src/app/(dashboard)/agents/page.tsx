@@ -1,5 +1,7 @@
 import { Metadata } from 'next';
 import { AgentsTable } from '@/components/tables/agents-table';
+import { FindAgentExperience } from '@/components/find-agent/find-agent-experience';
+import { getCurrentSession } from '@/lib/auth';
 
 export const metadata: Metadata = {
   title: 'Agents | Referral CRM'
@@ -7,9 +9,13 @@ export const metadata: Metadata = {
 
 export const dynamic = 'force-dynamic';
 
-export default function AgentsPage() {
+export default async function AgentsPage() {
+  const session = await getCurrentSession();
+  const isAdmin = session?.user?.role === 'admin';
+
   return (
     <div className="space-y-6">
+      {isAdmin && <FindAgentExperience variant="admin" />}
       <AgentsTable />
     </div>
   );

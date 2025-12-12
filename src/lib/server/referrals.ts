@@ -11,7 +11,6 @@ import { ACTIVE_REFERRAL_STATUS_VALUES, normalizeReferralStatus } from '@/consta
 import { User } from '@/models/user';
 import { DEAL_STATUS_LABELS } from '@/constants/deals';
 import { Zip } from '@/models/zip';
-import { inferZipCodesFromLocation, normalizeStateInput } from '@/utils/location';
 
 interface GetReferralsParams {
   session: Session | null;
@@ -19,7 +18,7 @@ interface GetReferralsParams {
   status?: string | null;
   mc?: string | null;
   agent?: string | null;
-  location?: string | null;
+  zip?: string | null;
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   agentReferrals?: 'yes' | 'no' | null;
   search?: string | null;
@@ -84,7 +83,7 @@ interface ReferralListItem {
 const PAGE_SIZE = 20;
 
 export async function getReferrals(params: GetReferralsParams) {
-  const { session, page = 1, status, mc, agent, location, ahaBucket, agentReferrals, search } = params;
+  const { session, page = 1, status, mc, agent, zip, ahaBucket, agentReferrals, search } = params;
   await connectMongo();
 
   const query: Record<string, unknown> = { deletedAt: null };
@@ -99,76 +98,31 @@ export async function getReferrals(params: GetReferralsParams) {
 
   if (status) query.status = status;
 
-  if (location) {
-    const trimmedLocation = location.trim();
-    if (trimmedLocation) {
+  if (zip) {
+    const trimmedZip = zip.trim();
+    if (trimmedZip) {
       const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const locationRegex = new RegExp(escapeRegExp(trimmedLocation), 'i');
-      const normalizedState = normalizeStateInput(trimmedLocation);
-      const zipCandidateSet = new Set<string>();
-
-      if (/^\d{5}(?:-\d{4})?$/.test(trimmedLocation)) {
-        zipCandidateSet.add(trimmedLocation.slice(0, 5));
-      }
-
-      const textOnly = trimmedLocation.replace(/\d+/g, '').replace(/,+/g, ' ').trim();
-      const cityOrCountyText = normalizedState
-        ? textOnly.replace(new RegExp(`\b${normalizedState}\b`, 'i'), '').trim()
-        : textOnly;
-      const cityOrCountyRegex = cityOrCountyText
-        ? new RegExp(escapeRegExp(cityOrCountyText).replace(/\s+/g, '.*'), 'i')
-        : null;
-
-      const zipSearchConditions: Record<string, unknown>[] = [
-        { code: new RegExp(`^${escapeRegExp(trimmedLocation)}`, 'i') },
-      ];
-
-      if (cityOrCountyRegex) {
-        zipSearchConditions.push({ city: cityOrCountyRegex }, { county: cityOrCountyRegex });
-      }
-
-      if (normalizedState) {
-        zipSearchConditions.push({ state: new RegExp(`^${normalizedState}$`, 'i') });
-      } else {
-        zipSearchConditions.push({ state: new RegExp(`^${escapeRegExp(trimmedLocation)}$`, 'i') });
-      }
-
-      const zipDocs = await Zip.find({ $or: zipSearchConditions })
-        .select('code state city county')
-        .lean();
+      const zipRegex = new RegExp(`^${escapeRegExp(trimmedZip)}`, 'i');
+      const zipDocs = await Zip.find({ code: zipRegex }).select('code').limit(100).lean();
+      const zipCandidates = new Set<string>();
 
       zipDocs.forEach((entry) => {
         if (entry.code) {
-          zipCandidateSet.add(entry.code);
+          zipCandidates.add(entry.code);
         }
       });
 
-      if (zipCandidateSet.size === 0) {
-        const inferredZips = await inferZipCodesFromLocation(trimmedLocation);
-        inferredZips.forEach((code) => zipCandidateSet.add(code));
+      const normalizedZip = trimmedZip.replace(/\D/g, '').slice(0, 5);
+      if (normalizedZip) {
+        zipCandidates.add(normalizedZip);
       }
 
-      const zipCandidates = Array.from(zipCandidateSet);
-      const locationFilters: Record<string, unknown>[] = [];
-
-      if (zipCandidates.length > 0) {
-        locationFilters.push(
-          { lookingInZip: { $in: zipCandidates } },
-          { lookingInZips: { $in: zipCandidates } },
-          { propertyPostalCode: { $in: zipCandidates } }
-        );
-      }
-
-      locationFilters.push(
-        { lookingInZip: locationRegex },
-        { lookingInZips: locationRegex },
-        { propertyCity: cityOrCountyRegex ?? locationRegex },
-        { propertyState: normalizedState ? new RegExp(`^${normalizedState}$`, 'i') : new RegExp(`^${escapeRegExp(trimmedLocation)}$`, 'i') },
-        { borrowerCurrentAddress: locationRegex },
-        { propertyAddress: locationRegex }
-      );
-
-      appendOrConditions(locationFilters);
+      const zipList = Array.from(zipCandidates).filter(Boolean);
+      appendOrConditions([
+        { lookingInZip: { $in: zipList } },
+        { lookingInZips: { $in: zipList } },
+        { propertyPostalCode: zipRegex },
+      ]);
     }
   }
   if (ahaBucket === 'AHA' || ahaBucket === 'AHA_OOS') query.ahaBucket = ahaBucket;
