@@ -4,7 +4,7 @@
 
 :root {
   --font-sans: 'Inter', sans-serif;
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 html,
@@ -19,10 +19,4 @@ body {
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    @apply bg-slate-900 text-slate-50;
-  }
 }
