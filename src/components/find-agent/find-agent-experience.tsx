@@ -108,7 +108,7 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
   }, [matches.length, zipCodes.length]);
 
   const isAdminVariant = variant === 'admin';
-  const headline = isAdminVariant ? 'Find an agent for this referral' : 'Find Agent';
+  const headline = isAdminVariant ? 'Find an agent' : 'Find Agent';
   const introCopy = isAdminVariant
     ? 'Enter a ZIP, city, county, or state to surface agents who cover the area, ranked by volume, conversion, and responsiveness.'
     : 'Use the Suggested Agent AI search to uncover partners who cover your buyer’s area. Browse profiles to review performance, specialties, and contact details before you reach out.';
