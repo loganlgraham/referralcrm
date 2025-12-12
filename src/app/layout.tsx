@@ -4,6 +4,7 @@ import { ReactNode } from 'react';
 import { Toaster } from 'sonner';
 import { Inter } from 'next/font/google';
 import { NextAuthProvider } from '@/components/providers/next-auth-provider';
+import { NavigationProgress } from '@/components/layout/navigation-progress';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen bg-slate-100 text-slate-900">
+        <NavigationProgress />
         <Toaster position="top-right" richColors closeButton />
         <NextAuthProvider>
           {children}

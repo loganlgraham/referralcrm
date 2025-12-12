@@ -26,8 +26,15 @@ body {
 }
 
 .top-progress-bar {
-  animation: top-progress 0.9s ease-in-out infinite;
   background: linear-gradient(90deg, #0f172a, #334155 40%, #0f172a);
+}
+
+.top-progress-animate {
+  animation: top-progress 0.9s ease-in-out infinite;
+}
+
+.top-progress-finish {
+  animation: top-progress-finish 0.35s ease-out forwards;
 }
 
 @keyframes top-progress {
@@ -41,6 +48,17 @@ body {
   }
   100% {
     transform: translateX(120%);
-    opacity: 0.8;
+    opacity: 0.85;
+  }
+}
+
+@keyframes top-progress-finish {
+  0% {
+    transform: translateX(0%);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translateX(130%);
+    opacity: 0.4;
   }
 }
