@@ -31,7 +31,7 @@ export default async function ReferralsPage({
     status: searchParams.status?.toString(),
     mc: searchParams.mc?.toString(),
     agent: searchParams.agent?.toString(),
-    state: searchParams.state?.toString(),
+    location: searchParams.location?.toString() ?? searchParams.state?.toString(),
     search: searchParams.search?.toString() ?? null,
     ahaBucket: ahaBucketParam === 'AHA' || ahaBucketParam === 'AHA_OOS' ? ahaBucketParam : null,
     agentReferrals: role === 'admin' && agentReferrals !== 'all' ? agentReferrals : null

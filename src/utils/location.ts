@@ -1,4 +1,5 @@
 const stateCache = new Map<string, string>();
+const locationZipCache = new Map<string, string[]>();
 
 const extractStateCode = (content: string): string | null => {
   if (!content) return null;
@@ -62,5 +63,68 @@ export async function inferStateFromPostalCode(postalCode: string): Promise<stri
   } catch (error) {
     console.error('Failed to infer state from ZIP', error);
     return null;
+  }
+}
+
+export async function inferZipCodesFromLocation(location: string): Promise<string[]> {
+  const trimmed = location.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const cached = locationZipCache.get(trimmed.toLowerCase());
+  if (cached) {
+    return cached;
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return [];
+  }
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        temperature: 0,
+        max_tokens: 64,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You return a short, comma-separated list of relevant 5-digit U.S. ZIP codes that match a city, state, county, or ZIP description.'
+          },
+          {
+            role: 'user',
+            content: `Location: ${trimmed}`,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const payload = await response.json();
+    const content = payload?.choices?.[0]?.message?.content ?? '';
+    const codes = content
+      .split(/[,\s]+/)
+      .map((entry: string) => entry.trim())
+      .filter((entry: string) => /^\d{5}$/.test(entry));
+
+    if (codes.length > 0) {
+      locationZipCache.set(trimmed.toLowerCase(), codes);
+    }
+
+    return codes;
+  } catch (error) {
+    console.error('Failed to infer ZIPs from location', error);
+    return [];
   }
 }

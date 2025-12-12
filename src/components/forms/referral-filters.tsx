@@ -56,9 +56,9 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const lenderValue = searchParams.get('mc') ?? '';
   const ahaBucketValue = showAhaBucket ? searchParams.get('ahaBucket') ?? '' : '';
   const agentReferralValue = isAdminMode ? searchParams.get('agentReferrals') ?? '' : '';
-  const stateValue = searchParams.get('state') ?? '';
+  const locationValue = searchParams.get('location') ?? '';
 
-  const [stateInput, setStateInput] = useState(stateValue);
+  const [locationInput, setLocationInput] = useState(locationValue);
 
   useEffect(() => {
     setSearchTerm(searchValue);
@@ -94,20 +94,20 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
     });
   }, [debouncedSearch, router, searchParamsString, startTransition]);
 
-  const commitStateValue = useCallback(
+  const commitLocationValue = useCallback(
     (value: string) => {
-      const normalized = value.trim().toUpperCase();
+      const normalized = value.trim();
       const params = new URLSearchParams(searchParamsString);
-      const existing = (params.get('state') ?? '').trim().toUpperCase();
+      const existing = (params.get('location') ?? '').trim();
 
       if (normalized === existing) {
         return;
       }
 
       if (!normalized) {
-        params.delete('state');
+        params.delete('location');
       } else {
-        params.set('state', normalized);
+        params.set('location', normalized);
       }
 
       startTransition(() => {
@@ -119,16 +119,16 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   );
 
   useEffect(() => {
-    setStateInput(stateValue);
-  }, [stateValue]);
+    setLocationInput(locationValue);
+  }, [locationValue]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      commitStateValue(stateInput);
+      commitLocationValue(locationInput);
     }, 300);
 
     return () => window.clearTimeout(timeout);
-  }, [commitStateValue, stateInput]);
+  }, [commitLocationValue, locationInput]);
 
   const handleSearchInput = useCallback((value: string) => {
     setSearchTerm(value);
@@ -231,21 +231,21 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
         )}
         {!isAgentMode && (
           <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
-            State
+            Location
             <input
               type="text"
-              maxLength={5}
-              value={stateInput}
-              onChange={(event) => setStateInput(event.target.value)}
+              maxLength={64}
+              value={locationInput}
+              onChange={(event) => setLocationInput(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault();
-                  commitStateValue(stateInput);
+                  commitLocationValue(locationInput);
                 }
               }}
-              onBlur={(event) => commitStateValue(event.target.value)}
+              onBlur={(event) => commitLocationValue(event.target.value)}
               className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-              placeholder="CO or 80202"
+              placeholder="City, state, ZIP, or county"
               disabled={isPending}
             />
           </label>
