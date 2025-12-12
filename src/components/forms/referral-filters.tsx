@@ -61,12 +61,16 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
     }
   }, [searchTerm, searchValue]);
 
-  const handleSearchInput = useCallback(
-    (value: string) => {
-      setSearchTerm(value);
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      const trimmed = searchTerm.trim();
+      const existing = searchParams.get('search') ?? '';
+
+      if (trimmed === existing) {
+        return;
+      }
 
       const params = new URLSearchParams(searchParams.toString());
-      const trimmed = value.trim();
 
       if (!trimmed) {
         params.delete('search');
@@ -78,9 +82,16 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
         const queryString = params.toString();
         router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
       });
-    },
-    [router, searchParams, startTransition]
-  );
+    }, 200);
+
+    return () => {
+      window.clearTimeout(handle);
+    };
+  }, [router, searchParams, searchTerm, startTransition]);
+
+  const handleSearchInput = useCallback((value: string) => {
+    setSearchTerm(value);
+  }, []);
 
   return (
     <div className="space-y-4 rounded-lg bg-white p-4 shadow-sm">
