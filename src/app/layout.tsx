@@ -1,10 +1,10 @@
 import '@/app/globals.css';
 import { Metadata } from 'next';
-import { ReactNode } from 'react';
-import { Toaster } from 'sonner';
 import { Inter } from 'next/font/google';
-import { NextAuthProvider } from '@/components/providers/next-auth-provider';
+import { ReactNode, Suspense } from 'react';
+import { Toaster } from 'sonner';
 import { NavigationProgress } from '@/components/layout/navigation-progress';
+import { NextAuthProvider } from '@/components/providers/next-auth-provider';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
@@ -18,7 +18,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen bg-slate-100 text-slate-900">
-        <NavigationProgress />
+        <Suspense
+          fallback={(
+            <div className="pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden top-progress-track" aria-hidden>
+              <div className="top-progress-bar top-progress-animate h-full w-2/5" />
+            </div>
+          )}
+        >
+          <NavigationProgress />
+        </Suspense>
         <Toaster position="top-right" richColors closeButton />
         <NextAuthProvider>
           {children}

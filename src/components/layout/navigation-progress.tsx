@@ -105,7 +105,7 @@ export function NavigationProgress() {
       aria-live="polite"
       aria-hidden={!isVisible}
     >
-      <div className="h-0.5 overflow-hidden bg-slate-200/80">
+      <div className="top-progress-track h-0.5 overflow-hidden">
         <div className={barClass} />
       </div>
     </div>
