@@ -677,27 +677,25 @@ export function AgentsTable() {
         </div>
       )}
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center">
-          {isAdmin && (
-            <label className="text-xs font-semibold text-slate-600">
-              Search
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm md:w-64"
-                placeholder="Name, email, phone, brokerage"
-              />
-            </label>
-          )}
-        </div>
+      <div className="flex flex-col gap-3">
+        {isAdmin && (
+          <label className="text-xs font-semibold text-slate-600">
+            Search
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="mt-2 w-full max-w-2xl rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm"
+              placeholder="Name, email, phone, brokerage"
+            />
+          </label>
+        )}
         <label className="text-xs font-semibold text-slate-600">
           AHA filter
           <select
             value={ahaFilter}
             onChange={(event) => setAhaFilter(event.target.value as typeof ahaFilter)}
-            className="ml-2 rounded border border-slate-200 px-3 py-1 text-xs"
+            className="mt-1 rounded border border-slate-200 px-3 py-2 text-sm"
           >
             <option value="all">All agents</option>
             <option value="AHA">AHA</option>
