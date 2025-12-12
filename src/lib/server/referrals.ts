@@ -10,6 +10,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { ACTIVE_REFERRAL_STATUS_VALUES, normalizeReferralStatus } from '@/constants/referrals';
 import { User } from '@/models/user';
 import { DEAL_STATUS_LABELS } from '@/constants/deals';
+import { Zip } from '@/models/zip';
 
 interface GetReferralsParams {
   session: Session | null;
@@ -18,7 +19,6 @@ interface GetReferralsParams {
   mc?: string | null;
   agent?: string | null;
   state?: string | null;
-  zip?: string | null;
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   agentReferrals?: 'yes' | 'no' | null;
   search?: string | null;
@@ -83,7 +83,7 @@ interface ReferralListItem {
 const PAGE_SIZE = 20;
 
 export async function getReferrals(params: GetReferralsParams) {
-  const { session, page = 1, status, mc, agent, state, zip, ahaBucket, agentReferrals, search } = params;
+  const { session, page = 1, status, mc, agent, state, ahaBucket, agentReferrals, search } = params;
   await connectMongo();
 
   const query: Record<string, unknown> = { deletedAt: null };
@@ -98,12 +98,24 @@ export async function getReferrals(params: GetReferralsParams) {
 
   if (status) query.status = status;
   const orFilters: Record<string, unknown>[] = [];
-  if (zip) {
-    orFilters.push({ lookingInZip: zip }, { lookingInZips: zip });
-  }
   if (state) {
-    const regex = new RegExp(`^${state}`, 'i');
+    const normalizedState = state.trim().toUpperCase();
+    const regex = new RegExp(`^${normalizedState}`, 'i');
     orFilters.push({ lookingInZip: regex }, { lookingInZips: regex });
+
+    const zipMatches = await Zip.find({ state: new RegExp(`^${normalizedState}$`, 'i') })
+      .select('code')
+      .lean();
+    const matchingZipCodes = zipMatches
+      .map((entry) => entry.code)
+      .filter((code): code is string => Boolean(code));
+
+    if (matchingZipCodes.length > 0) {
+      orFilters.push(
+        { lookingInZip: { $in: matchingZipCodes } },
+        { lookingInZips: { $in: matchingZipCodes } }
+      );
+    }
   }
   if (orFilters.length > 0) {
     query.$or = orFilters;

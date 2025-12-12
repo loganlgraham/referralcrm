@@ -195,26 +195,15 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
             State
             <input
               type="text"
-              maxLength={2}
+              maxLength={5}
               defaultValue={searchParams.get('state') ?? ''}
               onBlur={(event) => handleChange('state', event.target.value.toUpperCase())}
               className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-              placeholder="CO"
+              placeholder="CO or 80202"
               disabled={isPending}
             />
           </label>
         )}
-        <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
-          Zip
-          <input
-            type="text"
-            defaultValue={searchParams.get('zip') ?? ''}
-            onBlur={(event) => handleChange('zip', event.target.value)}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-            placeholder="80202"
-            disabled={isPending}
-          />
-        </label>
       </div>
     </div>
   );
