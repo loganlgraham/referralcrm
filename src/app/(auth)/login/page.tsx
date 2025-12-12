@@ -140,7 +140,7 @@ function LoginForm() {
                   id="identifier"
                   type="text"
                   autoComplete="username"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
                   placeholder="yourname or you@example.com"
                   value={identifier}
                   onChange={(event) => setIdentifier(event.target.value)}
@@ -155,14 +155,14 @@ function LoginForm() {
                   id="password"
                   type="password"
                   autoComplete="current-password"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
                   placeholder="Enter your password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
                 <div className="flex justify-between text-xs text-slate-500">
                   <span />
-                  <Link href="/reset-password" className="font-medium text-brand-accent hover:text-brand-accent-dark">
+                  <Link href="/reset-password" className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950 hover:decoration-slate-500">
                     Forgot password?
                   </Link>
                 </div>
@@ -171,7 +171,7 @@ function LoginForm() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-lg bg-brand-accent px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-accent-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent/70 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/60 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? 'Signing in…' : 'Sign in'}
               </button>
@@ -180,7 +180,7 @@ function LoginForm() {
 
           <p className="text-center text-sm text-slate-600">
             Don't have an account?{' '}
-            <Link href="/signup" className="font-medium text-brand-accent hover:text-brand-accent-dark">
+            <Link href="/signup" className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950 hover:decoration-slate-500">
               Sign up
             </Link>
           </p>
@@ -189,7 +189,7 @@ function LoginForm() {
             Need help?{' '}
             <a
               href="mailto:logan.graham@americanfinancing.net?subject=Referrio%20Assistance%20Needed&body=Hello%2C%0A%0AI%20need%20help%20with%20Referrio.%20Please%20assist.%0A%0AThank%20you."
-              className="font-medium text-brand-accent hover:text-brand-accent-dark"
+              className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950 hover:decoration-slate-500"
             >
               Contact support
             </a>

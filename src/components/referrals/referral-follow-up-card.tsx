@@ -167,7 +167,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
           <div className="flex justify-end">
             <button
               type="submit"
-              className="inline-flex items-center rounded-md bg-brand-accent px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-brand-accent-dark"
+              className="inline-flex items-center rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-slate-800"
             >
               Save manual task
             </button>

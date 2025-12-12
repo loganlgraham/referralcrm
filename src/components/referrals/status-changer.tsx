@@ -244,7 +244,7 @@ export function StatusChanger({
                   type="button"
                   onClick={handlePreApprovalSave}
                   disabled={preApprovalSaving || !preApprovalDirty}
-                  className="inline-flex flex-1 items-center justify-center rounded bg-brand-accent px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-accent-dark disabled:cursor-not-allowed disabled:opacity-70"
+                  className="inline-flex flex-1 items-center justify-center rounded bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {preApprovalSaving ? 'Saving…' : 'Save'}
                 </button>
