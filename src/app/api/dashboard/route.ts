@@ -602,17 +602,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const timeframeStart = timeframe.start;
   const timeframeEnd = timeframe.end;
 
-  const createdAtMatch: Record<string, Date> = {};
-  if (timeframeStart) {
-    createdAtMatch.$gte = timeframeStart;
-  }
-  if (timeframeEnd) {
-    createdAtMatch.$lte = timeframeEnd;
-  }
-
   const referralsPromise: Promise<DashboardReferral[]> = Referral.find({
     ...referralMatch,
-    ...(Object.keys(createdAtMatch).length ? { createdAt: createdAtMatch } : {})
   })
     .select(
       'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin sla'
@@ -761,11 +752,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return designation === context.networkFilter;
   };
 
-  const filteredReferrals =
-    context.networkFilter === 'ALL'
-      ? referrals
-      : referrals.filter((referral) => matchesNetwork(getReferralDesignation(referral)));
-
   const paymentsByNetwork =
     context.networkFilter === 'ALL'
       ? paymentsWithMetric
@@ -775,6 +761,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     context.networkFilter === 'ALL'
       ? filteredPayments
       : filteredPayments.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
+
+  const isWithinTimeframe = (date: Date | string | null | undefined) => {
+    if (!date) return true;
+    const candidate = new Date(date);
+    if (Number.isNaN(candidate.getTime())) return false;
+    if (timeframeStart && candidate < timeframeStart) return false;
+    if (timeframeEnd && candidate > timeframeEnd) return false;
+    return true;
+  };
+
+  const referralsByNetwork =
+    context.networkFilter === 'ALL'
+      ? referrals
+      : referrals.filter((referral) => matchesNetwork(getReferralDesignation(referral)));
+
+  const filteredReferrals = referralsByNetwork.filter((referral) =>
+    isWithinTimeframe(referral.createdAt)
+  );
 
   const terminatedWithinNetwork =
     context.networkFilter === 'ALL'
@@ -971,27 +975,46 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .map(([label, value]) => ({ label, value }))
     .sort((a, b) => b.value - a.value);
 
-  const referralsMonthlyStart = startOfMonth(subMonths(new Date(), 11));
+  const monthCandidates: Date[] = [];
+  referralsByNetwork.forEach((referral) => {
+    if (referral.createdAt) monthCandidates.push(new Date(referral.createdAt));
+  });
+  paymentsByNetwork.forEach((payment) => {
+    if (payment.metricDate) monthCandidates.push(payment.metricDate);
+  });
+
+  const preApprovalMetrics = await PreApprovalMetric.find()
+    .sort({ month: 1 })
+    .lean();
+
+  preApprovalMetrics.forEach((metric) => monthCandidates.push(metric.month));
+
+  const earliestMonth = monthCandidates.length
+    ? startOfMonth(
+        monthCandidates.reduce((earliest, date) => (date < earliest ? date : earliest), monthCandidates[0])
+      )
+    : startOfMonth(subMonths(new Date(), 11));
 
   const monthBuckets: { key: string; label: string; year: number; month: number }[] = [];
-  const startMonth = referralsMonthlyStart;
+  let cursor = earliestMonth;
+  const finalMonth = startOfMonth(new Date());
 
-  for (let i = 0; i < 12; i += 1) {
-    const date = startOfMonth(new Date(startMonth.getFullYear(), startMonth.getMonth() + i));
+  while (cursor <= finalMonth) {
     monthBuckets.push({
-      key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
-      label: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-      year: date.getFullYear(),
-      month: date.getMonth() + 1
+      key: `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`,
+      label: cursor.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      year: cursor.getFullYear(),
+      month: cursor.getMonth() + 1
     });
+    cursor = startOfMonth(addMonths(cursor, 1));
   }
 
   const referralMonthlyMap = new Map<
     string,
     { total: number; transfers: number; ahaReferrals: number; ahaOosReferrals: number }
   >();
-  filteredReferrals.forEach((referral) => {
-    if (!referral.createdAt || referral.createdAt < referralsMonthlyStart) return;
+  referralsByNetwork.forEach((referral) => {
+    if (!referral.createdAt) return;
     const createdAt = new Date(referral.createdAt);
     const key = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
     const current =
@@ -1010,9 +1033,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   const dealMonthlyMap = new Map<string, { dealsClosed: number; revenueReceivedCents: number }>();
-  filteredPaymentsByNetwork.forEach((payment) => {
+  paymentsByNetwork.forEach((payment) => {
     const metricDate = payment.metricDate ?? resolveMetricDate(payment);
-    if (!metricDate || metricDate < referralsMonthlyStart) return;
+    if (!metricDate) return;
     if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
     if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return;
 
@@ -1022,12 +1045,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     current.revenueReceivedCents += payment.receivedAmountCents ?? 0;
     dealMonthlyMap.set(key, current);
   });
-
-  const preApprovalMetrics = await PreApprovalMetric.find({
-    month: { $gte: referralsMonthlyStart }
-  })
-    .sort({ month: 1 })
-    .lean();
 
   const preApprovalMap = new Map<
     string,
@@ -1484,20 +1501,30 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     { all: [] as TrendPoint[], aha: [] as TrendPoint[], ahaOos: [] as TrendPoint[] }
   );
 
-  const preApprovalEntries = monthlyReferrals.map((entry) => ({
-    monthKey: entry.monthKey,
-    label: entry.label,
-    totalReferrals: entry.totalReferrals,
-    ahaReferrals: entry.ahaReferrals,
-    ahaOosReferrals: entry.ahaOosReferrals,
-    preApprovals: entry.preApprovals,
-    ahaPreApprovals: entry.ahaPreApprovals,
-    ahaOosPreApprovals: entry.ahaOosPreApprovals,
-    conversionRate: entry.conversionRate,
-    conversionRateAha: entry.conversionRateAha,
-    conversionRateAhaOos: entry.conversionRateAhaOos,
-    updatedAt: entry.preApprovalsUpdatedAt
-  }));
+  const hasMonthlyActivity = (entry: (typeof monthlyReferrals)[number]) =>
+    entry.totalReferrals > 0 ||
+    entry.preApprovals > 0 ||
+    entry.ahaPreApprovals > 0 ||
+    entry.ahaOosPreApprovals > 0 ||
+    entry.dealsClosed > 0 ||
+    entry.revenueReceivedCents > 0;
+
+  const preApprovalEntries = monthlyReferrals
+    .filter(hasMonthlyActivity)
+    .map((entry) => ({
+      monthKey: entry.monthKey,
+      label: entry.label,
+      totalReferrals: entry.totalReferrals,
+      ahaReferrals: entry.ahaReferrals,
+      ahaOosReferrals: entry.ahaOosReferrals,
+      preApprovals: entry.preApprovals,
+      ahaPreApprovals: entry.ahaPreApprovals,
+      ahaOosPreApprovals: entry.ahaOosPreApprovals,
+      conversionRate: entry.conversionRate,
+      conversionRateAha: entry.conversionRateAha,
+      conversionRateAhaOos: entry.conversionRateAhaOos,
+      updatedAt: entry.preApprovalsUpdatedAt
+    }));
 
   const timeframeResponse = {
     key: timeframe.key,
