@@ -14,6 +14,7 @@ import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatNumber } from '@/utils/formatters';
+import { Trash2 } from 'lucide-react';
 import {
   TimeframeDropdown,
   TIMEFRAME_PRESETS,
@@ -44,6 +45,8 @@ interface LeaderboardEntry {
   totalReferrals?: number;
   referrals?: number;
 }
+
+const LIST_PREVIEW_LIMIT = 5;
 
 interface DashboardSummary {
   totalReferrals: number;
@@ -806,6 +809,9 @@ function TerminatedDealsList({
   totalLostReferralFeeCents: number;
   totalDeals: number;
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const displayedDeals = showAll ? deals : deals.slice(0, LIST_PREVIEW_LIMIT);
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-baseline justify-between gap-3">
@@ -818,7 +824,7 @@ function TerminatedDealsList({
 
       <div className="mt-4 divide-y divide-slate-100">
         {deals.length ? (
-          deals.map((deal) => (
+          displayedDeals.map((deal) => (
             <div key={deal.id} className="flex items-start justify-between gap-3 py-3">
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-slate-900">{deal.address}</p>
@@ -833,6 +839,15 @@ function TerminatedDealsList({
           <p className="py-6 text-center text-sm text-slate-500">No terminated deals this period.</p>
         )}
       </div>
+      {deals.length > LIST_PREVIEW_LIMIT ? (
+        <button
+          type="button"
+          className="mt-3 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+          onClick={() => setShowAll((prev) => !prev)}
+        >
+          {showAll ? 'Show less' : 'Show more'}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -848,21 +863,35 @@ function RankedList({
   formatValue?: (value: number) => string;
   emptyMessage?: string;
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const displayedItems = showAll ? items : items.slice(0, LIST_PREVIEW_LIMIT);
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
-      <ul className="mt-4 space-y-3">
-        {items.length ? (
-          items.slice(0, 8).map((item) => (
-            <li key={item.label} className="flex items-center justify-between text-sm text-slate-700">
-              <span className="font-medium text-slate-900">{item.label}</span>
-              <span>{formatValue(item.value)}</span>
-            </li>
-          ))
-        ) : (
-          <li className="text-sm text-slate-500">{emptyMessage}</li>
-        )}
-      </ul>
+      <div className="mt-4 space-y-3">
+        <ul className="space-y-3">
+          {items.length ? (
+            displayedItems.map((item) => (
+              <li key={item.label} className="flex items-center justify-between text-sm text-slate-700">
+                <span className="font-medium text-slate-900">{item.label}</span>
+                <span>{formatValue(item.value)}</span>
+              </li>
+            ))
+          ) : (
+            <li className="text-sm text-slate-500">{emptyMessage}</li>
+          )}
+        </ul>
+        {items.length > LIST_PREVIEW_LIMIT ? (
+          <button
+            type="button"
+            className="text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+            onClick={() => setShowAll((prev) => !prev)}
+          >
+            {showAll ? 'Show less' : 'Show more'}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -878,6 +907,9 @@ function LeaderboardTable({
   valueLabel: string;
   actions?: ReactNode;
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const displayedEntries = showAll ? entries : entries.slice(0, LIST_PREVIEW_LIMIT);
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -894,7 +926,7 @@ function LeaderboardTable({
         </thead>
         <tbody>
           {entries.length ? (
-            entries.map((entry, index) => (
+            displayedEntries.map((entry, index) => (
               <tr key={`${entry.id}-${index}`} className="border-t border-slate-100 text-slate-700">
                 <td className="py-2">#{index + 1}</td>
                 <td className="py-2 font-medium text-slate-900">{entry.name}</td>
@@ -922,6 +954,15 @@ function LeaderboardTable({
           )}
         </tbody>
       </table>
+      {entries.length > LIST_PREVIEW_LIMIT ? (
+        <button
+          type="button"
+          className="mt-3 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+          onClick={() => setShowAll((prev) => !prev)}
+        >
+          {showAll ? 'Show less' : 'Show more'}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -941,6 +982,7 @@ function PreApprovalConversionSection({
   const [inputAhaValue, setInputAhaValue] = useState<string>('');
   const [inputAhaOosValue, setInputAhaOosValue] = useState<string>('');
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [deletingMonth, setDeletingMonth] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -975,7 +1017,15 @@ function PreApprovalConversionSection({
   const ahaOosConversion = ahaOosPreApprovals > 0 ? (ahaOosReferrals / ahaOosPreApprovals) * 100 : 0;
 
   const sortedEntries = useMemo(() => {
-    return [...conversion.entries].sort((a, b) => (a.monthKey < b.monthKey ? 1 : -1));
+    return conversion.entries
+      .filter(
+        (entry) =>
+          entry.totalReferrals > 0 ||
+          entry.preApprovals > 0 ||
+          entry.ahaPreApprovals > 0 ||
+          entry.ahaOosPreApprovals > 0
+      )
+      .sort((a, b) => (a.monthKey < b.monthKey ? 1 : -1));
   }, [conversion.entries]);
 
   const conversionSeries = useMemo(
@@ -1021,6 +1071,31 @@ function PreApprovalConversionSection({
       return;
     }
 
+    setStatus('saved');
+    onSaved();
+  };
+
+  const handleDelete = async (monthKey: string) => {
+    if (!canEdit || deletingMonth) return;
+
+    setDeletingMonth(monthKey);
+    setErrorMessage(null);
+
+    const response = await fetch('/api/dashboard/pre-approvals', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ month: monthKey })
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      setErrorMessage(payload.error ?? 'Unable to delete pre-approvals for this month.');
+      setStatus('error');
+      setDeletingMonth(null);
+      return;
+    }
+
+    setDeletingMonth(null);
     setStatus('saved');
     onSaved();
   };
@@ -1116,6 +1191,7 @@ function PreApprovalConversionSection({
                 <th className="px-3 py-2 font-medium text-right">Conversion (All)</th>
                 <th className="px-3 py-2 font-medium text-right">Conversion (AHA)</th>
                 <th className="px-3 py-2 font-medium text-right">Conversion (AHA OOS)</th>
+                {canEdit ? <th className="px-3 py-2 font-medium text-right">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -1129,11 +1205,24 @@ function PreApprovalConversionSection({
                     <td className="px-3 py-2 text-right">{entry.conversionRate.toFixed(1)}%</td>
                     <td className="px-3 py-2 text-right">{entry.conversionRateAha.toFixed(1)}%</td>
                     <td className="px-3 py-2 text-right">{entry.conversionRateAhaOos.toFixed(1)}%</td>
+                    {canEdit ? (
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          className="inline-flex items-center rounded border border-transparent px-2 py-1 text-sm text-slate-600 hover:text-red-600 disabled:opacity-50"
+                          onClick={() => handleDelete(entry.monthKey)}
+                          disabled={deletingMonth === entry.monthKey}
+                          aria-label={`Delete ${entry.label} pre-approvals`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={canEdit ? 8 : 7} className="px-3 py-6 text-center text-sm text-slate-500">
                     No pre-approval history captured yet.
                   </td>
                 </tr>
