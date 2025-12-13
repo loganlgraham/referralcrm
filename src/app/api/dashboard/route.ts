@@ -787,15 +787,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const totalReferrals = filteredReferrals.length;
   const referralZipMap = new Map<string, number>();
-  filteredReferrals.forEach((referral) => {
-    const candidates = [referral.lookingInZip, referral.propertyPostalCode];
-    const zipCandidate = candidates.find((value) => {
-      if (value == null) return false;
-      const trimmed = value.toString().trim();
-      return trimmed.length > 0;
-    });
+  referralsByNetwork.forEach((referral) => {
+    const zipCandidate = referral.lookingInZip;
     if (!zipCandidate) return;
     const zip = zipCandidate.toString().trim();
+    if (!zip) return;
     referralZipMap.set(zip, (referralZipMap.get(zip) ?? 0) + 1);
   });
   const dealsClosed = filteredPaymentsByNetwork.filter(
