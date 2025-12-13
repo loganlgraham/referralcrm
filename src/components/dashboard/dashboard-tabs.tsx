@@ -46,6 +46,8 @@ interface LeaderboardEntry {
   referrals?: number;
 }
 
+const LIST_PREVIEW_LIMIT = 5;
+
 interface DashboardSummary {
   totalReferrals: number;
   dealsClosed: number;
@@ -807,6 +809,9 @@ function TerminatedDealsList({
   totalLostReferralFeeCents: number;
   totalDeals: number;
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const displayedDeals = showAll ? deals : deals.slice(0, LIST_PREVIEW_LIMIT);
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-baseline justify-between gap-3">
@@ -819,7 +824,7 @@ function TerminatedDealsList({
 
       <div className="mt-4 divide-y divide-slate-100">
         {deals.length ? (
-          deals.map((deal) => (
+          displayedDeals.map((deal) => (
             <div key={deal.id} className="flex items-start justify-between gap-3 py-3">
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-slate-900">{deal.address}</p>
@@ -834,6 +839,15 @@ function TerminatedDealsList({
           <p className="py-6 text-center text-sm text-slate-500">No terminated deals this period.</p>
         )}
       </div>
+      {deals.length > LIST_PREVIEW_LIMIT ? (
+        <button
+          type="button"
+          className="mt-3 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+          onClick={() => setShowAll((prev) => !prev)}
+        >
+          {showAll ? 'Show less' : 'Show more'}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -849,21 +863,35 @@ function RankedList({
   formatValue?: (value: number) => string;
   emptyMessage?: string;
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const displayedItems = showAll ? items : items.slice(0, LIST_PREVIEW_LIMIT);
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
-      <ul className="mt-4 space-y-3">
-        {items.length ? (
-          items.slice(0, 8).map((item) => (
-            <li key={item.label} className="flex items-center justify-between text-sm text-slate-700">
-              <span className="font-medium text-slate-900">{item.label}</span>
-              <span>{formatValue(item.value)}</span>
-            </li>
-          ))
-        ) : (
-          <li className="text-sm text-slate-500">{emptyMessage}</li>
-        )}
-      </ul>
+      <div className="mt-4 space-y-3">
+        <ul className="space-y-3">
+          {items.length ? (
+            displayedItems.map((item) => (
+              <li key={item.label} className="flex items-center justify-between text-sm text-slate-700">
+                <span className="font-medium text-slate-900">{item.label}</span>
+                <span>{formatValue(item.value)}</span>
+              </li>
+            ))
+          ) : (
+            <li className="text-sm text-slate-500">{emptyMessage}</li>
+          )}
+        </ul>
+        {items.length > LIST_PREVIEW_LIMIT ? (
+          <button
+            type="button"
+            className="text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+            onClick={() => setShowAll((prev) => !prev)}
+          >
+            {showAll ? 'Show less' : 'Show more'}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -879,6 +907,9 @@ function LeaderboardTable({
   valueLabel: string;
   actions?: ReactNode;
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const displayedEntries = showAll ? entries : entries.slice(0, LIST_PREVIEW_LIMIT);
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -895,7 +926,7 @@ function LeaderboardTable({
         </thead>
         <tbody>
           {entries.length ? (
-            entries.map((entry, index) => (
+            displayedEntries.map((entry, index) => (
               <tr key={`${entry.id}-${index}`} className="border-t border-slate-100 text-slate-700">
                 <td className="py-2">#{index + 1}</td>
                 <td className="py-2 font-medium text-slate-900">{entry.name}</td>
@@ -923,6 +954,15 @@ function LeaderboardTable({
           )}
         </tbody>
       </table>
+      {entries.length > LIST_PREVIEW_LIMIT ? (
+        <button
+          type="button"
+          className="mt-3 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+          onClick={() => setShowAll((prev) => !prev)}
+        >
+          {showAll ? 'Show less' : 'Show more'}
+        </button>
+      ) : null}
     </div>
   );
 }
