@@ -70,6 +70,7 @@ interface AggregatedPayment {
     origin?: 'agent' | 'mc' | 'admin' | '';
     org?: 'AFC' | 'AHA';
     lookingInZip?: string;
+    lookingInZips?: string[] | null;
     propertyAddress?: string;
     propertyCity?: string;
     propertyState?: string;
@@ -109,6 +110,7 @@ interface DashboardReferral {
   origin?: 'agent' | 'mc' | 'admin' | '';
   org?: 'AFC' | 'AHA';
   lookingInZip?: string;
+  lookingInZips?: string[] | null;
   propertyAddress?: string;
   propertyCity?: string;
   propertyState?: string;
