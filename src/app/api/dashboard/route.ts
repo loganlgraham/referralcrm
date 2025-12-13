@@ -1474,40 +1474,30 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .slice(0, 10)
   };
 
-  const preApprovalConversionTrend = monthlyReferrals
-    .filter(
-      (entry) =>
-        entry.preApprovals > 0 || entry.ahaPreApprovals > 0 || entry.ahaOosPreApprovals > 0
-    )
-    .reduce(
-      (acc, entry) => {
-        acc.all.push({ key: entry.monthKey, label: entry.label, value: entry.conversionRate });
-        acc.aha.push({ key: entry.monthKey, label: entry.label, value: entry.conversionRateAha });
-        acc.ahaOos.push({ key: entry.monthKey, label: entry.label, value: entry.conversionRateAhaOos });
-        return acc;
-      },
-      { all: [] as TrendPoint[], aha: [] as TrendPoint[], ahaOos: [] as TrendPoint[] }
-    );
+  const preApprovalConversionTrend = monthlyReferrals.reduce(
+    (acc, entry) => {
+      acc.all.push({ key: entry.monthKey, label: entry.label, value: entry.conversionRate });
+      acc.aha.push({ key: entry.monthKey, label: entry.label, value: entry.conversionRateAha });
+      acc.ahaOos.push({ key: entry.monthKey, label: entry.label, value: entry.conversionRateAhaOos });
+      return acc;
+    },
+    { all: [] as TrendPoint[], aha: [] as TrendPoint[], ahaOos: [] as TrendPoint[] }
+  );
 
-  const preApprovalEntries = monthlyReferrals
-    .filter(
-      (entry) =>
-        entry.preApprovals > 0 || entry.ahaPreApprovals > 0 || entry.ahaOosPreApprovals > 0
-    )
-    .map((entry) => ({
-      monthKey: entry.monthKey,
-      label: entry.label,
-      totalReferrals: entry.totalReferrals,
-      ahaReferrals: entry.ahaReferrals,
-      ahaOosReferrals: entry.ahaOosReferrals,
-      preApprovals: entry.preApprovals,
-      ahaPreApprovals: entry.ahaPreApprovals,
-      ahaOosPreApprovals: entry.ahaOosPreApprovals,
-      conversionRate: entry.conversionRate,
-      conversionRateAha: entry.conversionRateAha,
-      conversionRateAhaOos: entry.conversionRateAhaOos,
-      updatedAt: entry.preApprovalsUpdatedAt
-    }));
+  const preApprovalEntries = monthlyReferrals.map((entry) => ({
+    monthKey: entry.monthKey,
+    label: entry.label,
+    totalReferrals: entry.totalReferrals,
+    ahaReferrals: entry.ahaReferrals,
+    ahaOosReferrals: entry.ahaOosReferrals,
+    preApprovals: entry.preApprovals,
+    ahaPreApprovals: entry.ahaPreApprovals,
+    ahaOosPreApprovals: entry.ahaOosPreApprovals,
+    conversionRate: entry.conversionRate,
+    conversionRateAha: entry.conversionRateAha,
+    conversionRateAhaOos: entry.conversionRateAhaOos,
+    updatedAt: entry.preApprovalsUpdatedAt
+  }));
 
   const timeframeResponse = {
     key: timeframe.key,
