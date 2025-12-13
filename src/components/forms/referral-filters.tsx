@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import useSWR from 'swr';
 
 import { REFERRAL_STATUSES } from '@/constants/referrals';
@@ -32,6 +32,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const searchValue = searchParams.get('search') ?? '';
   const [searchTerm, setSearchTerm] = useState(searchValue);
   const [debouncedSearch, setDebouncedSearch] = useState(searchValue);
+  const isTypingRef = useRef(false);
 
   const handleChange = useCallback(
     (key: string, value: string) => {
@@ -60,17 +61,13 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const [zipInput, setZipInput] = useState(zipValue);
 
   useEffect(() => {
+    if (isTypingRef.current) {
+      return;
+    }
+
     setSearchTerm(searchValue);
     setDebouncedSearch(searchValue);
   }, [searchValue]);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setDebouncedSearch(searchTerm);
-    }, 200);
-
-    return () => window.clearTimeout(timeout);
-  }, [searchTerm]);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParamsString);
@@ -123,8 +120,18 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   }, [zipInput, router, searchParamsString, startTransition]);
 
   const handleSearchInput = useCallback((value: string) => {
+    isTypingRef.current = true;
     setSearchTerm(value);
   }, []);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      isTypingRef.current = false;
+    }, 200);
+
+    return () => window.clearTimeout(timeout);
+  }, [searchTerm]);
 
   return (
     <div className="space-y-4 rounded-lg bg-white p-4 shadow-sm">
