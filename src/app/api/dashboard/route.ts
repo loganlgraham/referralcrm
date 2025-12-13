@@ -1405,7 +1405,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const adminEligibleReferrals = referrals.filter((referral) => {
     const metricDate = getSlaMetricDate(referral, referral.createdAt ?? null);
-    return metricDate ? isWithinTimeframe(metricDate, timeframe) : false;
+    return metricDate ? isWithinTimeframe(metricDate) : false;
   });
 
   const assignedReferrals = adminEligibleReferrals.filter((referral) => Boolean(referral.assignedAgent)).length;
