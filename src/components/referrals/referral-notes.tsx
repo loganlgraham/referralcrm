@@ -263,7 +263,7 @@ export function ReferralNotes({
               </span>
             )}
             {showEmailBadge && (
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700">
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700">
                 {`Emailed: ${note.emailedTargets
                   ?.map((target) => {
                     if (target === 'agent') {

@@ -167,7 +167,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
           <div className="flex justify-end">
             <button
               type="submit"
-              className="inline-flex items-center rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-brand-dark"
+              className="inline-flex items-center rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-slate-800"
             >
               Save manual task
             </button>
@@ -184,7 +184,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
                     type="button"
                     onClick={task.toggle}
                     className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border text-slate-500 transition hover:bg-slate-100 ${
-                      task.completed ? 'border-emerald-500 text-emerald-600' : 'border-slate-300'
+                      task.completed ? 'border-slate-500 text-slate-700' : 'border-slate-300'
                     }`}
                     aria-pressed={task.completed}
                     aria-label={task.completed ? 'Mark task incomplete' : 'Mark task complete'}
@@ -223,7 +223,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
               ))}
             </ul>
           ) : (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+            <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
               No outstanding follow-ups. Keep monitoring the AI coach for fresh recommendations.
             </div>
           )}
@@ -245,7 +245,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
                       <button
                         type="button"
                         onClick={task.toggle}
-                        className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-emerald-500 text-emerald-600 transition hover:bg-emerald-50"
+                        className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-500 text-slate-700 transition hover:bg-slate-100"
                         aria-pressed={task.completed}
                         aria-label="Mark task incomplete"
                       >
@@ -287,7 +287,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
           )}
         </>
       ) : (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+        <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
           No outstanding follow-ups. Keep monitoring the AI coach for fresh recommendations.
         </div>
       )}

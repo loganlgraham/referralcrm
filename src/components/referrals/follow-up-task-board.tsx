@@ -104,7 +104,7 @@ export function FollowUpTasksBoard({ referrals }: FollowUpTasksBoardProps) {
           AI-generated reminders consolidate here so you can coach agents across every active referral.
         </p>
         <div className="flex flex-wrap gap-3 text-xs">
-          <span className="rounded-full bg-brand/10 px-3 py-1 font-medium text-brand">
+          <span className="rounded-full bg-slate-900/10 px-3 py-1 font-semibold text-slate-800">
             {summary.outstanding} outstanding
           </span>
           <span className="rounded-full bg-slate-200 px-3 py-1 font-medium text-slate-600">
@@ -155,7 +155,7 @@ function FollowUpTaskGroup({ referral, tasks }: { referral: BoardReferral; tasks
     <section className="space-y-3 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand">{referral.status}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{referral.status}</p>
           <h2 className="text-lg font-semibold text-slate-900">{referral.borrowerName}</h2>
           <p className="text-xs text-slate-500">
             {assignmentName ? `Assigned to ${assignmentName}` : 'Agent assignment pending'}
@@ -184,7 +184,7 @@ function FollowUpTaskGroup({ referral, tasks }: { referral: BoardReferral; tasks
                 type="button"
                 onClick={task.toggle}
                 className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border transition hover:bg-slate-100 ${
-                  task.completed ? 'border-emerald-500 text-emerald-600' : 'border-slate-300 text-slate-500'
+                  task.completed ? 'border-slate-500 text-slate-700' : 'border-slate-300 text-slate-500'
                 }`}
                 aria-pressed={task.completed}
                 aria-label={task.completed ? 'Mark task incomplete' : 'Mark task complete'}
@@ -225,7 +225,7 @@ function FollowUpTaskGroup({ referral, tasks }: { referral: BoardReferral; tasks
           ))}
         </ul>
       ) : (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+        <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
           Nothing on deck—this referral is on track.
         </div>
       )}

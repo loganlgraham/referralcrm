@@ -31,7 +31,6 @@ export default async function ReferralsPage({
     status: searchParams.status?.toString(),
     mc: searchParams.mc?.toString(),
     agent: searchParams.agent?.toString(),
-    state: searchParams.state?.toString(),
     zip: searchParams.zip?.toString(),
     search: searchParams.search?.toString() ?? null,
     ahaBucket: ahaBucketParam === 'AHA' || ahaBucketParam === 'AHA_OOS' ? ahaBucketParam : null,

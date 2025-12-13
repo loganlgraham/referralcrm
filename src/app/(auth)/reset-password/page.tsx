@@ -150,7 +150,7 @@ function ResetPasswordForm() {
           )}
 
           {message && (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+            <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-900">
               <p className="font-medium">{message}</p>
             </div>
           )}
@@ -182,7 +182,7 @@ function ResetPasswordForm() {
                       id="password"
                       type="password"
                       autoComplete="new-password"
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
                       placeholder="Enter a new password"
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
@@ -197,7 +197,7 @@ function ResetPasswordForm() {
                       id="confirmPassword"
                       type="password"
                       autoComplete="new-password"
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
                       placeholder="Re-enter your new password"
                       value={confirmPassword}
                       onChange={(event) => setConfirmPassword(event.target.value)}
@@ -209,7 +209,7 @@ function ResetPasswordForm() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-lg bg-brand px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/60 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading
                   ? isResetMode
@@ -224,7 +224,7 @@ function ResetPasswordForm() {
 
           <p className="text-center text-sm text-slate-600">
             Remembered your password?{' '}
-            <Link href="/login" className="font-medium text-brand hover:text-brand-dark">
+            <Link href="/login" className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950 hover:decoration-slate-500">
               Go back to sign in
             </Link>
           </p>

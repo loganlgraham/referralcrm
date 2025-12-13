@@ -4,7 +4,9 @@ import Link from 'next/link';
 import {
   ChangeEvent,
   CSSProperties,
+  Dispatch,
   FormEvent,
+  SetStateAction,
   useEffect,
   useMemo,
   useState,
@@ -82,12 +84,20 @@ const createEmptyForm = (): AgentFormState => ({
   ahaDesignation: '',
 });
 
-export function AgentsTable() {
+interface AgentsTableProps {
+  showForm?: boolean;
+  setShowForm?: Dispatch<SetStateAction<boolean>>;
+}
+
+export function AgentsTable({ showForm: externalShowForm, setShowForm: externalSetShowForm }: AgentsTableProps) {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'admin';
 
   const { data, mutate } = useSWR<AgentRow[]>('/api/agents', fetcher);
-  const [showForm, setShowForm] = useState(false);
+  const [internalShowForm, setInternalShowForm] = useState(false);
+  const showForm = externalShowForm ?? internalShowForm;
+  const setShowForm = externalSetShowForm ?? setInternalShowForm;
+  const hasExternalControl = externalShowForm !== undefined && externalSetShowForm !== undefined;
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<AgentFormState>(() => createEmptyForm());
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
@@ -471,23 +481,20 @@ export function AgentsTable() {
 
   return (
     <div className="space-y-4">
-      {isAdmin && (
-        <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-800">Add an agent</h2>
-              <p className="text-xs text-slate-500">Create directory entries for new signups so teams can assign referrals.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowForm((previous) => !previous)}
-              className="rounded border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
-            >
-              {showForm ? 'Close' : 'New agent'}
-            </button>
-          </div>
-          {showForm && (
-            <form onSubmit={handleCreate} className="mt-4 grid gap-3 md:grid-cols-2">
+      {isAdmin && !hasExternalControl && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setShowForm((previous) => !previous)}
+            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+          >
+            {showForm ? 'Close form' : 'Add agent'}
+          </button>
+        </div>
+      )}
+      {isAdmin && showForm && (
+        <form onSubmit={handleCreate} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="grid gap-3 md:grid-cols-2">
               <label className="text-xs font-semibold text-slate-600">
                 Name
                 <input
@@ -518,6 +525,12 @@ export function AgentsTable() {
                   onChange={handleChange('phone')}
                   className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
                   disabled={formDisabled}
+                  onBlur={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      phone: formatPhoneInput(event.target.value),
+                    }))
+                  }
                 />
               </label>
               <label className="text-xs font-semibold text-slate-600">
@@ -672,10 +685,9 @@ export function AgentsTable() {
                   {saving ? 'Saving…' : 'Save agent'}
                 </button>
               </div>
-            </form>
-          )}
-        </div>
-      )}
+            </div>
+          </form>
+        )}
 
       <div className="flex flex-col gap-3">
         {isAdmin && (

@@ -10,6 +10,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { ACTIVE_REFERRAL_STATUS_VALUES, normalizeReferralStatus } from '@/constants/referrals';
 import { User } from '@/models/user';
 import { DEAL_STATUS_LABELS } from '@/constants/deals';
+import { Zip } from '@/models/zip';
 
 interface GetReferralsParams {
   session: Session | null;
@@ -17,7 +18,6 @@ interface GetReferralsParams {
   status?: string | null;
   mc?: string | null;
   agent?: string | null;
-  state?: string | null;
   zip?: string | null;
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   agentReferrals?: 'yes' | 'no' | null;
@@ -83,7 +83,7 @@ interface ReferralListItem {
 const PAGE_SIZE = 20;
 
 export async function getReferrals(params: GetReferralsParams) {
-  const { session, page = 1, status, mc, agent, state, zip, ahaBucket, agentReferrals, search } = params;
+  const { session, page = 1, status, mc, agent, zip, ahaBucket, agentReferrals, search } = params;
   await connectMongo();
 
   const query: Record<string, unknown> = { deletedAt: null };
@@ -97,16 +97,33 @@ export async function getReferrals(params: GetReferralsParams) {
   };
 
   if (status) query.status = status;
-  const orFilters: Record<string, unknown>[] = [];
+
   if (zip) {
-    orFilters.push({ lookingInZip: zip }, { lookingInZips: zip });
-  }
-  if (state) {
-    const regex = new RegExp(`^${state}`, 'i');
-    orFilters.push({ lookingInZip: regex }, { lookingInZips: regex });
-  }
-  if (orFilters.length > 0) {
-    query.$or = orFilters;
+    const trimmedZip = zip.trim();
+    if (trimmedZip) {
+      const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const zipRegex = new RegExp(`^${escapeRegExp(trimmedZip)}`, 'i');
+      const zipDocs = await Zip.find({ code: zipRegex }).select('code').limit(100).lean();
+      const zipCandidates = new Set<string>();
+
+      zipDocs.forEach((entry) => {
+        if (entry.code) {
+          zipCandidates.add(entry.code);
+        }
+      });
+
+      const normalizedZip = trimmedZip.replace(/\D/g, '').slice(0, 5);
+      if (normalizedZip) {
+        zipCandidates.add(normalizedZip);
+      }
+
+      const zipList = Array.from(zipCandidates).filter(Boolean);
+      appendOrConditions([
+        { lookingInZip: { $in: zipList } },
+        { lookingInZips: { $in: zipList } },
+        { propertyPostalCode: zipRegex },
+      ]);
+    }
   }
   if (ahaBucket === 'AHA' || ahaBucket === 'AHA_OOS') query.ahaBucket = ahaBucket;
 

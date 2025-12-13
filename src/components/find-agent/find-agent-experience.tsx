@@ -88,7 +88,7 @@ const sortMatches = (agents: AgentSuggestion[]) =>
     return (a.metrics.avgResponseHours ?? Infinity) - (b.metrics.avgResponseHours ?? Infinity);
   });
 
-export function FindAgentExperience() {
+export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' | 'admin' }) {
   const { data: agents, isLoading } = useSWR<AgentSuggestion[]>('/api/agents', fetcher);
   const [description, setDescription] = useState('');
   const [zipCodes, setZipCodes] = useState<string[]>([]);
@@ -106,6 +106,20 @@ export function FindAgentExperience() {
     }
     return `${matches.length} agent${matches.length === 1 ? '' : 's'} cover these areas`;
   }, [matches.length, zipCodes.length]);
+
+  const isAdminVariant = variant === 'admin';
+  const headline = isAdminVariant ? 'Find an agent' : 'Find Agent';
+  const introCopy = isAdminVariant
+    ? 'Enter a ZIP, city, county, or state to surface agents who cover the area, ranked by volume, conversion, and responsiveness.'
+    : 'Use the Suggested Agent AI search to uncover partners who cover your buyer’s area. Browse profiles to review performance, specialties, and contact details before you reach out.';
+  const promptLabel = isAdminVariant ? 'Location to match' : 'Where is your buyer looking?';
+  const helperCopy = isAdminVariant
+    ? 'We will translate the area into ZIP coverage and rank matching agents by their performance metrics.'
+    : 'We’ll translate your notes into ZIP coverage and surface matching agents.';
+  const placeholder = isAdminVariant
+    ? 'e.g., 98103 or King County WA or Tampa, FL'
+    : 'e.g., Austin metro near Round Rock and Cedar Park; open to north San Antonio';
+  const ctaLabel = isAdminVariant ? 'Find matching agents' : 'Run Suggested Agent Search';
 
   const derivedCoverageLabels = useMemo(() => {
     if (locations.length > 0) {
@@ -176,36 +190,44 @@ export function FindAgentExperience() {
             <SparklesIcon className="h-5 w-5" />
           </div>
           <div className="space-y-2">
-            <h1 className="text-2xl font-semibold text-slate-900">Find Agent</h1>
-            <p className="text-sm text-slate-600">
-              Use the Suggested Agent AI search to uncover partners who cover your buyer’s area. Browse profiles to review
-              performance, specialties, and contact details before you reach out.
-            </p>
+            <h1 className="text-2xl font-semibold text-slate-900">{headline}</h1>
+            <p className="text-sm text-slate-600">{introCopy}</p>
           </div>
         </div>
 
         <form onSubmit={handleSearch} className="mt-6 space-y-4">
           <label className="block space-y-2">
-            <span className="text-sm font-medium text-slate-700">Where is your buyer looking?</span>
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              rows={3}
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
-              placeholder="e.g., Austin metro near Round Rock and Cedar Park; open to north San Antonio"
-              disabled={isSearching}
-            />
+            <span className="text-sm font-medium text-slate-700">{promptLabel}</span>
+            {isAdminVariant ? (
+              <input
+                type="text"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
+                placeholder={placeholder}
+                disabled={isSearching}
+              />
+            ) : (
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                rows={3}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
+                placeholder={placeholder}
+                disabled={isSearching}
+              />
+            )}
           </label>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-slate-500">We’ll translate your notes into ZIP coverage and surface matching agents.</p>
+            <p className="text-sm text-slate-500">{helperCopy}</p>
             <button
               type="submit"
               disabled={isSearching || isLoading}
               className="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {isSearching ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <SearchIcon className="h-4 w-4" />}
-              {isSearching ? 'Searching...' : 'Run Suggested Agent Search'}
+              {isSearching ? 'Searching...' : ctaLabel}
             </button>
           </div>
         </form>

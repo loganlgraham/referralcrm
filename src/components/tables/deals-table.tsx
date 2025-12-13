@@ -125,6 +125,7 @@ export function DealsTable() {
   const { data, mutate } = useSWR<DealRow[]>('/api/payments', fetcher);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
     null
   );
@@ -141,6 +142,9 @@ export function DealsTable() {
   const isAgentView = role === 'agent';
   const isMcView = role === 'mc';
   const isAdminView = role === 'admin' || role === 'manager';
+
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const normalizedDigits = normalizedSearch.replace(/\D/g, '');
 
   const calculateCommission = (row: DealRow) => {
     if (row.status === 'terminated') {
@@ -160,7 +164,35 @@ export function DealsTable() {
     return Math.round((baseAmountCents * commissionBps) / 10000);
   };
 
-  const filteredDeals = deals;
+  const filteredDeals = useMemo(() => {
+    if (!normalizedSearch) {
+      return deals;
+    }
+
+    return deals.filter((deal) => {
+      const address = getDealAddress(deal) || '';
+      const haystack = [
+        deal.referral?.borrowerName,
+        deal.agent?.name,
+        deal.referral?.loanFileNumber,
+        address,
+        deal.referral?.lookingInZip,
+        ...(deal.referral?.lookingInZips ?? []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      const matchesText = haystack.includes(normalizedSearch);
+      const matchesDigits = normalizedDigits
+        ? [deal.referral?.loanFileNumber ?? '', address].some((value) =>
+            value.replace(/\D/g, '').includes(normalizedDigits)
+          )
+        : false;
+
+      return matchesText || matchesDigits;
+    });
+  }, [deals, normalizedDigits, normalizedSearch]);
 
   type SortKey =
     | 'referral'
@@ -864,7 +896,7 @@ export function DealsTable() {
             })();
             const outcomeColor =
               outcome === 'Won'
-                ? 'text-emerald-600'
+                ? 'text-slate-800'
                 : outcome === 'Lost'
                   ? 'text-rose-600'
                   : 'text-slate-500';
@@ -900,6 +932,16 @@ export function DealsTable() {
 
   return (
     <div className="space-y-4">
+      <label className="block text-xs font-semibold text-slate-600">
+        Search
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          className="mt-2 w-full max-w-2xl rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm"
+          placeholder="Borrower, address, loan #, agent"
+        />
+      </label>
       {summarySection}
       {isAdminView ? renderAdminTable() : renderDefaultTable()}
     </div>

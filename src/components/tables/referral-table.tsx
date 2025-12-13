@@ -123,15 +123,15 @@ const STATUS_BADGE_STYLES: Record<string, string> = {
   'In Communication': 'bg-amber-100 text-amber-700',
   'Active Lead': 'bg-violet-100 text-violet-700',
   'Showing Homes': 'bg-violet-100 text-violet-700',
-  'Under Contract': 'bg-emerald-100 text-emerald-700',
-  Closed: 'bg-green-100 text-green-700',
+  'Under Contract': 'bg-slate-100 text-slate-700',
+  Closed: 'bg-slate-200 text-slate-800',
   Lost: 'bg-slate-200 text-slate-600',
   Terminated: 'bg-rose-100 text-rose-700',
   'Past Inspection': 'bg-amber-100 text-amber-700',
   'Past Appraisal': 'bg-blue-100 text-blue-700',
-  'Clear to Close': 'bg-teal-100 text-teal-700',
+  'Clear to Close': 'bg-slate-100 text-slate-700',
   'Payment Sent': 'bg-indigo-100 text-indigo-700',
-  'Payment Received': 'bg-emerald-100 text-emerald-700'
+  'Payment Received': 'bg-slate-200 text-slate-800'
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -332,7 +332,7 @@ function buildColumns(
           <div className="flex items-center gap-2">
             {showAgentOriginIndicator && row.original.origin === 'agent' ? (
               <span
-                className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500"
+                className="inline-block h-2.5 w-2.5 rounded-full bg-slate-700"
                 aria-label="Agent-created referral"
                 title="Agent-created referral"
               />

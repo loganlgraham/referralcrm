@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import useSWR from 'swr';
 
 import { REFERRAL_STATUSES } from '@/constants/referrals';
@@ -23,17 +23,19 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
-  
+  const searchParamsString = useMemo(() => searchParams.toString(), [searchParams]);
+
   const isAgentMode = mode === 'agent';
   const isAdminMode = mode === 'admin';
   const showAhaBucket = isAdminMode;
 
   const searchValue = searchParams.get('search') ?? '';
   const [searchTerm, setSearchTerm] = useState(searchValue);
+  const [debouncedSearch, setDebouncedSearch] = useState(searchValue);
 
   const handleChange = useCallback(
     (key: string, value: string) => {
-      const params = new URLSearchParams(searchParams.toString());
+      const params = new URLSearchParams(searchParamsString);
       if (!value) {
         params.delete(key);
       } else {
@@ -44,7 +46,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
         router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
       });
     },
-    [router, searchParams, startTransition]
+    [router, searchParamsString, startTransition]
   );
 
   const { data: agents } = useSWR<DirectoryOption[]>(isAgentMode ? null : '/api/agents', fetcher);
@@ -54,38 +56,84 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const lenderValue = searchParams.get('mc') ?? '';
   const ahaBucketValue = showAhaBucket ? searchParams.get('ahaBucket') ?? '' : '';
   const agentReferralValue = isAdminMode ? searchParams.get('agentReferrals') ?? '' : '';
-
-  const lastAppliedSearchRef = useRef(searchValue);
+  const zipValue = searchParams.get('zip') ?? '';
+  const [zipInput, setZipInput] = useState(zipValue);
 
   useEffect(() => {
-    if (searchValue !== searchTerm) {
-      lastAppliedSearchRef.current = searchValue;
-      setSearchTerm(searchValue);
-    }
-  }, [searchTerm, searchValue]);
+    setSearchTerm(searchValue);
+    setDebouncedSearch(searchValue);
+  }, [searchValue]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
-      if (searchTerm === lastAppliedSearchRef.current) {
-        return;
-      }
-      lastAppliedSearchRef.current = searchTerm;
-      handleChange('search', searchTerm);
+      setDebouncedSearch(searchTerm);
     }, 200);
 
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, [handleChange, searchTerm]);
+    return () => window.clearTimeout(timeout);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParamsString);
+    const existing = params.get('search') ?? '';
+    const trimmed = debouncedSearch.trim();
+
+    if (trimmed === existing.trim()) {
+      return;
+    }
+
+    if (!trimmed) {
+      params.delete('search');
+    } else {
+      params.set('search', trimmed);
+    }
+
+    startTransition(() => {
+      const queryString = params.toString();
+      router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
+    });
+  }, [debouncedSearch, router, searchParamsString, startTransition]);
+
+  useEffect(() => {
+    setZipInput(zipValue);
+  }, [zipValue]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const trimmed = zipInput.trim();
+      const params = new URLSearchParams(searchParamsString);
+      const existing = (params.get('zip') ?? '').trim();
+
+      if (trimmed === existing) {
+        return;
+      }
+
+      if (!trimmed) {
+        params.delete('zip');
+      } else {
+        params.set('zip', trimmed);
+      }
+
+      startTransition(() => {
+        const queryString = params.toString();
+        router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
+      });
+    }, 200);
+
+    return () => window.clearTimeout(timeout);
+  }, [zipInput, router, searchParamsString, startTransition]);
+
+  const handleSearchInput = useCallback((value: string) => {
+    setSearchTerm(value);
+  }, []);
 
   return (
     <div className="space-y-4 rounded-lg bg-white p-4 shadow-sm">
-      <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+      <label className="flex flex-col text-xs font-semibold text-slate-600">
         Search
         <input
           type="text"
           value={searchTerm}
-          onChange={(event) => setSearchTerm(event.target.value)}
+          onChange={(event) => handleSearchInput(event.target.value)}
           className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm"
           placeholder="Name, email, phone, loan #"
         />
@@ -175,29 +223,18 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
         )}
         {!isAgentMode && (
           <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
-            State
+            Looking in ZIP
             <input
               type="text"
-              maxLength={2}
-              defaultValue={searchParams.get('state') ?? ''}
-              onBlur={(event) => handleChange('state', event.target.value.toUpperCase())}
+              maxLength={64}
+              value={zipInput}
+              onChange={(event) => setZipInput(event.target.value)}
               className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-              placeholder="CO"
+              placeholder="Filter by Looking in ZIP"
               disabled={isPending}
             />
           </label>
         )}
-        <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
-          Zip
-          <input
-            type="text"
-            defaultValue={searchParams.get('zip') ?? ''}
-            onBlur={(event) => handleChange('zip', event.target.value)}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-            placeholder="80202"
-            disabled={isPending}
-          />
-        </label>
       </div>
     </div>
   );

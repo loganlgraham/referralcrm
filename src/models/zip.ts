@@ -5,6 +5,7 @@ const zipSchema = new Schema(
     code: { type: String, required: true, unique: true, index: true },
     city: { type: String, default: '' },
     state: { type: String, default: '' },
+    county: { type: String, default: '' },
     agents: [{ type: Schema.Types.ObjectId, ref: 'Agent' }]
   },
   { timestamps: true }

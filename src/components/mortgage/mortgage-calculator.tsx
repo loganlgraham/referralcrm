@@ -303,7 +303,7 @@ export function MortgageCalculator() {
                   </div>
                 )}
                 {extraPrincipal > 0 && (
-                  <div className="flex items-center justify-between text-emerald-700">
+                  <div className="flex items-center justify-between text-slate-700">
                     <dt className="flex items-center gap-2 font-semibold">Extra principal</dt>
                     <dd className="font-semibold">{formatCurrency(extraPrincipal)}</dd>
                   </div>
