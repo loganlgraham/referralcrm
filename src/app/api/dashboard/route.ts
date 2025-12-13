@@ -1403,7 +1403,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .sort((a, b) => b.referrals - a.referrals)
     .slice(0, 10);
 
-  const adminEligibleReferrals = referrals.filter((referral) => {
+  const adminEligibleReferrals = referralsByNetwork.filter((referral) => {
     const metricDate = getSlaMetricDate(referral, referral.createdAt ?? null);
     return metricDate ? isWithinTimeframe(metricDate) : false;
   });
