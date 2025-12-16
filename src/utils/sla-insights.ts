@@ -341,11 +341,26 @@ const calculateBusinessMinutes = (start: Date, end: Date): number | null => {
   return totalMinutes;
 };
 
-const minutesBetween = (start: Date | null, end: Date | null): number | null => {
+const minutesBetween = (
+  start: Date | null,
+  end: Date | null,
+  options: { businessHoursOnly?: boolean } = {}
+): number | null => {
   if (!start || !end) {
     return null;
   }
-  return calculateBusinessMinutes(start, end);
+
+  const { businessHoursOnly = true } = options;
+
+  if (isBefore(end, start)) {
+    return null;
+  }
+
+  if (businessHoursOnly) {
+    return calculateBusinessMinutes(start, end);
+  }
+
+  return differenceInMinutes(end, start);
 };
 
 const formatMinutesValue = (minutes: number): string => {
@@ -471,11 +486,15 @@ export const computeSlaDurations = (referral: ReferralLike): SlaDuration[] => {
   const dealPaidAt = findFirstDealTimestamp(deals, 'paid');
 
   const communicationStart = resolveCommunicationStart(getFirstStatusTimestamp, createdAt, pairedAt);
-  const newLeadToPaired = minutesBetween(createdAt, pairedAt);
-  const pairedToCommunication = minutesBetween(pairedAt, inCommunicationAt ?? communicationStart);
-  const communicationToContract = minutesBetween(communicationStart, underContractAt);
-  const contractToClose = minutesBetween(dealUnderContractAt, dealClosedAt);
-  const closeToPaid = minutesBetween(dealClosedAt, dealPaidAt);
+  const newLeadToPaired = minutesBetween(createdAt, pairedAt, { businessHoursOnly: true });
+  const pairedToCommunication = minutesBetween(pairedAt, inCommunicationAt ?? communicationStart, {
+    businessHoursOnly: true,
+  });
+  const communicationToContract = minutesBetween(communicationStart, underContractAt, {
+    businessHoursOnly: false,
+  });
+  const contractToClose = minutesBetween(dealUnderContractAt, dealClosedAt, { businessHoursOnly: false });
+  const closeToPaid = minutesBetween(dealClosedAt, dealPaidAt, { businessHoursOnly: false });
 
   const contractToCloseMinutes = isPreContractStatus
     ? null
