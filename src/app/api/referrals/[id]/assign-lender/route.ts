@@ -103,7 +103,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const isNewAssignment = !previousLender || previousLender !== parsed.data.lenderId;
   const lenderEmail = nextLenderDoc?.email?.trim();
 
-  if (isNewAssignment && lenderEmail && isTransactionalEmailConfigured()) {
+  const shouldNotifyMc = referral.origin === 'agent';
+
+  if (isNewAssignment && lenderEmail && shouldNotifyMc && isTransactionalEmailConfigured()) {
     const borrowerName = referral.borrower?.name?.trim() || 'your referral';
     const borrowerEmail = referral.borrower?.email?.trim();
     const borrowerPhone = referral.borrower?.phone?.trim();

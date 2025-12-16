@@ -244,14 +244,20 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
   const result: SendResult = { sent: [], skipped: [], errors: [] };
 
   const shouldEmailAgent = referral.origin !== 'agent';
+  const agentEmailSubject =
+    session.user.role === 'admin' ? 'American Home Agents - New Referral!' : `New referral for ${borrowerName}`;
+  const agentIntroCopy =
+    session.user.role === 'admin'
+      ? `Thanks for partnering with the American Home Agents Concierge Service to help our referral, ${borrowerName}. We're excited to get them in their new home!`
+      : `Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName}. We're excited to get them in their new home!`;
 
   if (shouldEmailAgent) {
     await trySendEmail(
       primaryAgent?.email ?? null,
-      `New referral for ${borrowerName}`,
+      agentEmailSubject,
       [
         `<p>Hi ${agentFirstName},</p>`,
-        `<p>Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName}. We're excited to get them in their new home!</p>`,
+        `<p>${agentIntroCopy}</p>`,
         '<p>Here are the key details so you can reach out confidently:</p>',
         `<p><b>Client Name:</b> ${borrowerName}<br><b>Email:</b> ${borrowerEmail ?? 'Not provided'}<br><b>Phone:</b> ${
           borrowerPhone ?? 'Not provided'
@@ -272,7 +278,7 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
       ],
       [
         `Hi ${agentFirstName},`,
-        `Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName}. We're excited to get them in their new home!`,
+        agentIntroCopy,
         'Here are the key details so you can reach out confidently:',
         `Client Name: ${borrowerName}`,
         `Email: ${borrowerEmail ?? 'Not provided'}`,
@@ -303,12 +309,22 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
 
   const pairedFallbackContact = primaryAgent ?? normalizeContact(referral.assignedAgent);
 
-  if (buySideContact || pairedFallbackContact) {
-    mcAgentContacts.push({ label: 'Buying Agent', contact: buySideContact ?? pairedFallbackContact! });
-  }
+  if (referral.clientType === 'Both') {
+    if (buySideContact || pairedFallbackContact) {
+      mcAgentContacts.push({ label: 'Buying Agent', contact: buySideContact ?? pairedFallbackContact! });
+    }
 
-  if (sellSideContact || pairedFallbackContact) {
-    mcAgentContacts.push({ label: 'Selling Agent', contact: sellSideContact ?? pairedFallbackContact! });
+    if (sellSideContact) {
+      mcAgentContacts.push({ label: 'Selling Agent', contact: sellSideContact });
+    }
+  } else if (referral.clientType === 'Seller') {
+    if (sellSideContact || pairedFallbackContact) {
+      mcAgentContacts.push({ label: 'Selling Agent', contact: sellSideContact ?? pairedFallbackContact! });
+    }
+  } else {
+    if (buySideContact || pairedFallbackContact) {
+      mcAgentContacts.push({ label: 'Buying Agent', contact: buySideContact ?? pairedFallbackContact! });
+    }
   }
 
   if (mcAgentContacts.length === 0 && primaryAgent) {
