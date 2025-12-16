@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -126,9 +126,12 @@ export function DealsTable() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilters, setStatusFilters] = useState<DealStatus[]>([]);
+  const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
     null
   );
+  const statusMenuRef = useRef<HTMLDivElement | null>(null);
 
   const deals = data ?? [];
   const isLoading = !data;
@@ -165,11 +168,17 @@ export function DealsTable() {
   };
 
   const filteredDeals = useMemo(() => {
-    if (!normalizedSearch) {
-      return deals;
+    let result = deals;
+
+    if (isAdminView && statusFilters.length > 0) {
+      result = result.filter((deal) => statusFilters.includes(deal.status));
     }
 
-    return deals.filter((deal) => {
+    if (!normalizedSearch) {
+      return result;
+    }
+
+    return result.filter((deal) => {
       const address = getDealAddress(deal) || '';
       const haystack = [
         deal.referral?.borrowerName,
@@ -192,7 +201,20 @@ export function DealsTable() {
 
       return matchesText || matchesDigits;
     });
-  }, [deals, normalizedDigits, normalizedSearch]);
+  }, [deals, isAdminView, normalizedDigits, normalizedSearch, statusFilters]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (statusMenuRef.current && !statusMenuRef.current.contains(event.target as Node)) {
+        setIsStatusMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   type SortKey =
     | 'referral'
@@ -932,16 +954,76 @@ export function DealsTable() {
 
   return (
     <div className="space-y-4">
-      <label className="block text-xs font-semibold text-slate-600">
-        Search
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          className="mt-2 w-full max-w-2xl rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm"
-          placeholder="Borrower, address, loan #, agent"
-        />
-      </label>
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <label className="block text-xs font-semibold text-slate-600 md:flex-1">
+          Search
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm"
+            placeholder="Borrower, address, loan #, agent"
+          />
+        </label>
+        {isAdminView && (
+          <div className="md:w-80" ref={statusMenuRef}>
+            <span className="block text-xs font-semibold text-slate-600">Status</span>
+            <div className="relative mt-2">
+              <button
+                type="button"
+                onClick={() => setIsStatusMenuOpen((open) => !open)}
+                className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand"
+              >
+                <span className="truncate">
+                  {statusFilters.length > 0
+                    ? `${statusFilters.length} status${statusFilters.length > 1 ? 'es' : ''} selected`
+                    : 'All statuses'}
+                </span>
+                <span className="text-xs text-slate-500">{isStatusMenuOpen ? '▲' : '▼'}</span>
+              </button>
+              {isStatusMenuOpen && (
+                <div className="absolute left-0 right-0 z-10 mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+                  <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600">
+                    <span>Filter statuses</span>
+                    <button
+                      type="button"
+                      className="text-brand hover:text-brand/80"
+                      onClick={() => setStatusFilters([])}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="max-h-60 space-y-2 overflow-auto pr-1">
+                    {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                      <label
+                        key={value}
+                        className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        <span className="text-slate-700">{label}</span>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                          checked={statusFilters.includes(value as DealStatus)}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            setStatusFilters((previous) => {
+                              if (checked) {
+                                return [...previous, value as DealStatus];
+                              }
+
+                              return previous.filter((status) => status !== value);
+                            });
+                          }}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
       {summarySection}
       {isAdminView ? renderAdminTable() : renderDefaultTable()}
     </div>
