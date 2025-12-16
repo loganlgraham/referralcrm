@@ -126,7 +126,7 @@ export function DealsTable() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<DealStatus | 'all'>('all');
+  const [statusFilters, setStatusFilters] = useState<DealStatus[]>([]);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
     null
   );
@@ -168,8 +168,8 @@ export function DealsTable() {
   const filteredDeals = useMemo(() => {
     let result = deals;
 
-    if (isAdminView && statusFilter !== 'all') {
-      result = result.filter((deal) => deal.status === statusFilter);
+    if (isAdminView && statusFilters.length > 0) {
+      result = result.filter((deal) => statusFilters.includes(deal.status));
     }
 
     if (!normalizedSearch) {
@@ -199,7 +199,7 @@ export function DealsTable() {
 
       return matchesText || matchesDigits;
     });
-  }, [deals, isAdminView, normalizedDigits, normalizedSearch, statusFilter]);
+  }, [deals, isAdminView, normalizedDigits, normalizedSearch, statusFilters]);
 
   type SortKey =
     | 'referral'
@@ -951,21 +951,38 @@ export function DealsTable() {
           />
         </label>
         {isAdminView && (
-          <label className="block text-xs font-semibold text-slate-600 md:w-72">
-            Status
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as DealStatus | 'all')}
-              className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm"
-            >
-              <option value="all">All statuses</option>
+          <fieldset className="block text-xs font-semibold text-slate-600 md:w-80">
+            <legend className="mb-2">Status</legend>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
               {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
+                <label key={value} className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                    checked={statusFilters.includes(value as DealStatus)}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setStatusFilters((previous) => {
+                        if (checked) {
+                          return [...previous, value as DealStatus];
+                        }
+
+                        return previous.filter((status) => status !== value);
+                      });
+                    }}
+                  />
+                  <span className="text-slate-700">{label}</span>
+                </label>
               ))}
-            </select>
-          </label>
+              <button
+                type="button"
+                className="col-span-2 justify-self-start text-xs font-semibold text-brand hover:text-brand/80"
+                onClick={() => setStatusFilters([])}
+              >
+                Clear selection
+              </button>
+            </div>
+          </fieldset>
         )}
       </div>
       {summarySection}
