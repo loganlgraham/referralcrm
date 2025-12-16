@@ -303,12 +303,22 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
 
   const pairedFallbackContact = primaryAgent ?? normalizeContact(referral.assignedAgent);
 
-  if (buySideContact || pairedFallbackContact) {
-    mcAgentContacts.push({ label: 'Buying Agent', contact: buySideContact ?? pairedFallbackContact! });
-  }
+  if (referral.clientType === 'Both') {
+    if (buySideContact || pairedFallbackContact) {
+      mcAgentContacts.push({ label: 'Buying Agent', contact: buySideContact ?? pairedFallbackContact! });
+    }
 
-  if (sellSideContact || pairedFallbackContact) {
-    mcAgentContacts.push({ label: 'Selling Agent', contact: sellSideContact ?? pairedFallbackContact! });
+    if (sellSideContact) {
+      mcAgentContacts.push({ label: 'Selling Agent', contact: sellSideContact });
+    }
+  } else if (referral.clientType === 'Seller') {
+    if (sellSideContact || pairedFallbackContact) {
+      mcAgentContacts.push({ label: 'Selling Agent', contact: sellSideContact ?? pairedFallbackContact! });
+    }
+  } else {
+    if (buySideContact || pairedFallbackContact) {
+      mcAgentContacts.push({ label: 'Buying Agent', contact: buySideContact ?? pairedFallbackContact! });
+    }
   }
 
   if (mcAgentContacts.length === 0 && primaryAgent) {
