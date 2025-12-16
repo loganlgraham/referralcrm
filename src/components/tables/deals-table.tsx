@@ -361,15 +361,16 @@ export function DealsTable() {
       }
 
       const expectedBase = row.expectedAmountCents ?? row.referral?.referralFeeDueCents ?? 0;
-      const expected = isTerminated ? 0 : expectedBase;
-      const paidAmount =
-        row.status === 'paid'
-          ? row.receivedAmountCents || row.expectedAmountCents || 0
+      const paidAmount = row.receivedAmountCents || 0;
+      const outstanding = isTerminated ? 0 : Math.max(expectedBase - paidAmount, 0);
+      const effectivePaid = isTerminated
+        ? 0
+        : row.status === 'paid'
+          ? paidAmount || expectedBase
           : 0;
-      const effectivePaid = isTerminated ? 0 : paidAmount;
       const commission = calculateCommission(row);
 
-      acc.expectedRevenue += expected;
+      acc.expectedRevenue += outstanding;
       acc.receivedRevenue += effectivePaid;
       acc.referralFeesPaid += effectivePaid;
       acc.commissionEarned += commission;
