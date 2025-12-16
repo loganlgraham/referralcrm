@@ -6,44 +6,15 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
+import { DEAL_STATUS_LABELS, DEAL_STATUS_VALUES, type DealStatus } from '@/constants/deals';
 import { DEFAULT_AGENT_COMMISSION_BPS } from '@/constants/referrals';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 
-type DealStatus =
-  | 'under_contract'
-  | 'past_inspection'
-  | 'past_appraisal'
-  | 'clear_to_close'
-  | 'closed'
-  | 'payment_sent'
-  | 'paid'
-  | 'terminated';
 type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
 type AgentAttribution = 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT' | null;
-const STATUS_LABELS: Record<DealStatus, string> = {
-  under_contract: 'Under Contract',
-  past_inspection: 'Past Inspection',
-  past_appraisal: 'Past Appraisal',
-  clear_to_close: 'Clear to Close',
-  closed: 'Closed',
-  payment_sent: 'Payment Sent',
-  paid: 'Paid',
-  terminated: 'Terminated',
-};
-
-const STATUS_FILTER_OPTIONS: { value: DealStatus; label: string }[] = (
-  [
-    'under_contract',
-    'past_inspection',
-    'past_appraisal',
-    'clear_to_close',
-    'closed',
-    'payment_sent',
-    'paid',
-    'terminated',
-  ] as const
-).map((status) => ({ value: status, label: STATUS_LABELS[status] }));
+const STATUS_FILTER_OPTIONS: { value: DealStatus; label: string }[] =
+  DEAL_STATUS_VALUES.map((status) => ({ value: status, label: DEAL_STATUS_LABELS[status] }));
 
 const TERMINATED_REASON_OPTIONS: { value: TerminatedReason; label: string }[] = [
   { value: 'inspection', label: 'Inspection' },
@@ -259,7 +230,7 @@ export function DealsTable() {
       return '';
     }
 
-    return (STATUS_LABELS[status] ?? status).toString();
+    return (DEAL_STATUS_LABELS[status] ?? status).toString();
   };
 
   const sortedDeals = useMemo(() => {
