@@ -126,6 +126,7 @@ export function DealsTable() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<DealStatus | 'all'>('all');
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
     null
   );
@@ -165,11 +166,17 @@ export function DealsTable() {
   };
 
   const filteredDeals = useMemo(() => {
-    if (!normalizedSearch) {
-      return deals;
+    let result = deals;
+
+    if (isAdminView && statusFilter !== 'all') {
+      result = result.filter((deal) => deal.status === statusFilter);
     }
 
-    return deals.filter((deal) => {
+    if (!normalizedSearch) {
+      return result;
+    }
+
+    return result.filter((deal) => {
       const address = getDealAddress(deal) || '';
       const haystack = [
         deal.referral?.borrowerName,
@@ -192,7 +199,7 @@ export function DealsTable() {
 
       return matchesText || matchesDigits;
     });
-  }, [deals, normalizedDigits, normalizedSearch]);
+  }, [deals, isAdminView, normalizedDigits, normalizedSearch, statusFilter]);
 
   type SortKey =
     | 'referral'
@@ -932,16 +939,35 @@ export function DealsTable() {
 
   return (
     <div className="space-y-4">
-      <label className="block text-xs font-semibold text-slate-600">
-        Search
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          className="mt-2 w-full max-w-2xl rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm"
-          placeholder="Borrower, address, loan #, agent"
-        />
-      </label>
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <label className="block text-xs font-semibold text-slate-600 md:flex-1">
+          Search
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm"
+            placeholder="Borrower, address, loan #, agent"
+          />
+        </label>
+        {isAdminView && (
+          <label className="block text-xs font-semibold text-slate-600 md:w-72">
+            Status
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as DealStatus | 'all')}
+              className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm"
+            >
+              <option value="all">All statuses</option>
+              {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
       {summarySection}
       {isAdminView ? renderAdminTable() : renderDefaultTable()}
     </div>
