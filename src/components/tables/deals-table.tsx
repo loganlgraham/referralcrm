@@ -32,6 +32,19 @@ const STATUS_LABELS: Record<DealStatus, string> = {
   terminated: 'Terminated',
 };
 
+const STATUS_FILTER_OPTIONS: { value: DealStatus; label: string }[] = (
+  [
+    'under_contract',
+    'past_inspection',
+    'past_appraisal',
+    'clear_to_close',
+    'closed',
+    'payment_sent',
+    'paid',
+    'terminated',
+  ] as const
+).map((status) => ({ value: status, label: STATUS_LABELS[status] }));
+
 const TERMINATED_REASON_OPTIONS: { value: TerminatedReason; label: string }[] = [
   { value: 'inspection', label: 'Inspection' },
   { value: 'appraisal', label: 'Appraisal' },
@@ -995,7 +1008,7 @@ export function DealsTable() {
                     </button>
                   </div>
                   <div className="max-h-60 space-y-2 overflow-auto pr-1">
-                    {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                    {STATUS_FILTER_OPTIONS.map(({ value, label }) => (
                       <label
                         key={value}
                         className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
