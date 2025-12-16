@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -127,9 +127,11 @@ export function DealsTable() {
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilters, setStatusFilters] = useState<DealStatus[]>([]);
+  const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
     null
   );
+  const statusMenuRef = useRef<HTMLDivElement | null>(null);
 
   const deals = data ?? [];
   const isLoading = !data;
@@ -200,6 +202,19 @@ export function DealsTable() {
       return matchesText || matchesDigits;
     });
   }, [deals, isAdminView, normalizedDigits, normalizedSearch, statusFilters]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (statusMenuRef.current && !statusMenuRef.current.contains(event.target as Node)) {
+        setIsStatusMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   type SortKey =
     | 'referral'
@@ -951,38 +966,62 @@ export function DealsTable() {
           />
         </label>
         {isAdminView && (
-          <fieldset className="block text-xs font-semibold text-slate-600 md:w-80">
-            <legend className="mb-2">Status</legend>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-              {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                <label key={value} className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-                    checked={statusFilters.includes(value as DealStatus)}
-                    onChange={(event) => {
-                      const checked = event.target.checked;
-                      setStatusFilters((previous) => {
-                        if (checked) {
-                          return [...previous, value as DealStatus];
-                        }
-
-                        return previous.filter((status) => status !== value);
-                      });
-                    }}
-                  />
-                  <span className="text-slate-700">{label}</span>
-                </label>
-              ))}
+          <div className="md:w-80" ref={statusMenuRef}>
+            <span className="block text-xs font-semibold text-slate-600">Status</span>
+            <div className="relative mt-2">
               <button
                 type="button"
-                className="col-span-2 justify-self-start text-xs font-semibold text-brand hover:text-brand/80"
-                onClick={() => setStatusFilters([])}
+                onClick={() => setIsStatusMenuOpen((open) => !open)}
+                className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand"
               >
-                Clear selection
+                <span className="truncate">
+                  {statusFilters.length > 0
+                    ? `${statusFilters.length} status${statusFilters.length > 1 ? 'es' : ''} selected`
+                    : 'All statuses'}
+                </span>
+                <span className="text-xs text-slate-500">{isStatusMenuOpen ? '▲' : '▼'}</span>
               </button>
+              {isStatusMenuOpen && (
+                <div className="absolute left-0 right-0 z-10 mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+                  <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600">
+                    <span>Filter statuses</span>
+                    <button
+                      type="button"
+                      className="text-brand hover:text-brand/80"
+                      onClick={() => setStatusFilters([])}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="max-h-60 space-y-2 overflow-auto pr-1">
+                    {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                      <label
+                        key={value}
+                        className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        <span className="text-slate-700">{label}</span>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                          checked={statusFilters.includes(value as DealStatus)}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            setStatusFilters((previous) => {
+                              if (checked) {
+                                return [...previous, value as DealStatus];
+                              }
+
+                              return previous.filter((status) => status !== value);
+                            });
+                          }}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          </fieldset>
+          </div>
         )}
       </div>
       {summarySection}
