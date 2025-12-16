@@ -6,31 +6,15 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
+import { DEAL_STATUS_LABELS, DEAL_STATUS_VALUES, type DealStatus } from '@/constants/deals';
 import { DEFAULT_AGENT_COMMISSION_BPS } from '@/constants/referrals';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 
-type DealStatus =
-  | 'under_contract'
-  | 'past_inspection'
-  | 'past_appraisal'
-  | 'clear_to_close'
-  | 'closed'
-  | 'payment_sent'
-  | 'paid'
-  | 'terminated';
 type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
 type AgentAttribution = 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT' | null;
-const STATUS_LABELS: Record<DealStatus, string> = {
-  under_contract: 'Under Contract',
-  past_inspection: 'Past Inspection',
-  past_appraisal: 'Past Appraisal',
-  clear_to_close: 'Clear to Close',
-  closed: 'Closed',
-  payment_sent: 'Payment Sent',
-  paid: 'Paid',
-  terminated: 'Terminated',
-};
+const STATUS_FILTER_OPTIONS: { value: DealStatus; label: string }[] =
+  DEAL_STATUS_VALUES.map((status) => ({ value: status, label: DEAL_STATUS_LABELS[status] }));
 
 const TERMINATED_REASON_OPTIONS: { value: TerminatedReason; label: string }[] = [
   { value: 'inspection', label: 'Inspection' },
@@ -246,7 +230,7 @@ export function DealsTable() {
       return '';
     }
 
-    return (STATUS_LABELS[status] ?? status).toString();
+    return (DEAL_STATUS_LABELS[status] ?? status).toString();
   };
 
   const sortedDeals = useMemo(() => {
@@ -361,15 +345,16 @@ export function DealsTable() {
       }
 
       const expectedBase = row.expectedAmountCents ?? row.referral?.referralFeeDueCents ?? 0;
-      const expected = isTerminated ? 0 : expectedBase;
-      const paidAmount =
-        row.status === 'paid'
-          ? row.receivedAmountCents || row.expectedAmountCents || 0
+      const paidAmount = row.receivedAmountCents || 0;
+      const outstanding = isTerminated ? 0 : Math.max(expectedBase - paidAmount, 0);
+      const effectivePaid = isTerminated
+        ? 0
+        : row.status === 'paid'
+          ? paidAmount || expectedBase
           : 0;
-      const effectivePaid = isTerminated ? 0 : paidAmount;
       const commission = calculateCommission(row);
 
-      acc.expectedRevenue += expected;
+      acc.expectedRevenue += outstanding;
       acc.receivedRevenue += effectivePaid;
       acc.referralFeesPaid += effectivePaid;
       acc.commissionEarned += commission;
@@ -994,7 +979,7 @@ export function DealsTable() {
                     </button>
                   </div>
                   <div className="max-h-60 space-y-2 overflow-auto pr-1">
-                    {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                    {STATUS_FILTER_OPTIONS.map(({ value, label }) => (
                       <label
                         key={value}
                         className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
