@@ -12,7 +12,7 @@
     },
     {
       "path": "/api/cron/follow-up-reminders?frequency=weekly",
-      "schedule": "0 14 * * MON"
+      "schedule": "0 14 * * 1"
     }
   ]
 }
