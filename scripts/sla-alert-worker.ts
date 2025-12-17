@@ -130,7 +130,7 @@ async function evaluateSlaAlerts() {
         { path: 'sellSideAgent', select: 'name fullName' },
         { path: 'lender', select: 'name' },
       ])
-      .lean<ReferralDocument>(),
+      .lean<ReferralDocument[]>(),
     buildPaymentsByReferral(),
   ]);
 
