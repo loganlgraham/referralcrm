@@ -258,7 +258,7 @@ export async function GET(request: NextRequest) {
             title: task.title,
             message: task.message,
             dueAt: task.dueAt ?? null,
-            referralName: task.referralName ?? null,
+            referralName: task.referralName ?? undefined,
             priority: task.priority,
             category: task.category,
           });
