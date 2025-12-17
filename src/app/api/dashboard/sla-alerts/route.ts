@@ -53,20 +53,36 @@ export async function GET() {
 
   await connectMongo();
 
-  const alerts: SlaAlertDocument[] = await SlaAlert.find({ status: 'open' })
-    .sort({ priority: 1, dueAt: 1, createdAt: -1 })
-    .limit(50)
-    .lean<SlaAlertDocument[]>();
+  const [alerts, summaryStats] = await Promise.all([
+    SlaAlert.find({ status: 'open' })
+      .sort({ priority: 1, dueAt: 1, createdAt: -1 })
+      .limit(50)
+      .lean<SlaAlertDocument[]>(),
+    SlaAlert.aggregate<{
+      _id: RecommendationPriority;
+      count: number;
+      lastEvaluatedAt?: Date | null;
+    }>([
+      { $match: { status: 'open' } },
+      {
+        $group: {
+          _id: '$priority',
+          count: { $sum: 1 },
+          lastEvaluatedAt: { $max: '$lastEvaluatedAt' },
+        },
+      },
+    ]),
+  ]);
 
   const ordered = sortByPriority(alerts);
 
-  const summary = ordered.reduce(
-    (acc, alert) => {
-      acc.totalOpen += 1;
-      acc[alert.priority] = (acc[alert.priority] ?? 0) + 1;
+  const summary = summaryStats.reduce(
+    (acc, item) => {
+      acc.totalOpen += item.count;
+      acc[item._id] = item.count;
       acc.lastEvaluatedAt = acc.lastEvaluatedAt
-        ? Math.max(acc.lastEvaluatedAt, alert.lastEvaluatedAt?.getTime() ?? 0)
-        : alert.lastEvaluatedAt?.getTime() ?? null;
+        ? Math.max(acc.lastEvaluatedAt, item.lastEvaluatedAt?.getTime() ?? 0)
+        : item.lastEvaluatedAt?.getTime() ?? null;
       return acc;
     },
     {
