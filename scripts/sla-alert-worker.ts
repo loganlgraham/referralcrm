@@ -6,7 +6,7 @@ import mongoose, { Types } from 'mongoose';
 import { connectMongo } from '../src/lib/mongoose';
 import { Referral, type ReferralDocument } from '../src/models/referral';
 import { Payment } from '../src/models/payment';
-import { SlaAlert } from '../src/models/sla-alert';
+import { SlaAlert, type SlaAlertDocument } from '../src/models/sla-alert';
 import { SLA_ALERT_CONFIG, SLA_ALERT_PRIORITY_WEIGHT } from '../src/config/sla-alerts';
 import {
   computeSlaInsights,
@@ -60,7 +60,7 @@ const upsertSlaAlert = async (
   evaluatedAt: Date
 ) => {
   const query = { referralId: referral._id, recommendationId: recommendation.id };
-  const existing = await SlaAlert.findOne(query).lean();
+  const existing = await SlaAlert.findOne(query).lean<SlaAlertDocument | null>();
 
   const dueAt = recommendation.dueAt ? new Date(recommendation.dueAt) : null;
   const update = {
@@ -92,7 +92,7 @@ const upsertSlaAlert = async (
       },
     },
     { new: true, upsert: true, setDefaultsOnInsert: true }
-  ).lean();
+  ).lean<SlaAlertDocument | null>();
 
   const wasNew = !existing;
   const priorityRaised =
