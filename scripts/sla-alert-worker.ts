@@ -120,7 +120,7 @@ async function evaluateSlaAlerts() {
   await connectMongo();
 
   const [referrals, paymentsByReferral] = await Promise.all([
-    Referral.find<ReferralDocument>({ deletedAt: null })
+    Referral.find<ReferralDocument[]>({ deletedAt: null })
       .select(
         'borrower status statusLastUpdated clientType dealSide stageOnTransfer assignedAgent buySideAgent sellSideAgent lender origin audit notes sla ahaBucket org lookingInZip createdAt'
       )
@@ -130,7 +130,7 @@ async function evaluateSlaAlerts() {
         { path: 'sellSideAgent', select: 'name fullName' },
         { path: 'lender', select: 'name' },
       ])
-      .lean<ReferralDocument>(),
+      .lean<ReferralDocument[]>(),
     buildPaymentsByReferral(),
   ]);
 
