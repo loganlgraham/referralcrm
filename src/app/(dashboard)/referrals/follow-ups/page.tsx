@@ -32,6 +32,8 @@ export default async function FollowUpTasksPage() {
     clientType: item.clientType ?? null,
     dealSide: item.dealSide ?? null,
     lenderName: item.lenderName ?? null,
+    dealStatus: item.dealStatus ?? null,
+    dealStatusLabel: item.dealStatusLabel ?? null,
     origin: item.origin ?? null,
   }));
 

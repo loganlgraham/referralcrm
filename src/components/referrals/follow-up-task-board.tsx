@@ -14,11 +14,14 @@ import {
 import { type ReferralLike, resolvePrimaryAgentName, SLA_TIME_ZONE } from '@/utils/sla-insights';
 import { useTaskReminderEmails } from '@/components/referrals/use-task-reminder-emails';
 import { ReminderSettingsToggle } from './reminder-settings-toggle';
+import { normalizeReferralStatus, REFERRAL_STATUSES } from '@/constants/referrals';
 
 interface BoardReferral {
   _id: string;
   borrowerName: string;
   status: string;
+  dealStatus?: string | null;
+  dealStatusLabel?: string | null;
   createdAt: string;
   statusLastUpdated?: string | null;
   daysInStatus?: number;
@@ -55,6 +58,25 @@ const toReferralLike = (referral: BoardReferral): ReferralLike & { borrower: { n
   payments: [],
   audit: [],
 });
+
+const UNDER_CONTRACT_INDEX = REFERRAL_STATUSES.indexOf('Under Contract');
+
+const isUnderContractOrLater = (status?: string | null) => {
+  if (!status) return false;
+  const normalized = normalizeReferralStatus(status);
+  if (!normalized) return false;
+
+  const statusIndex = REFERRAL_STATUSES.indexOf(normalized);
+  return statusIndex >= UNDER_CONTRACT_INDEX && statusIndex !== -1;
+};
+
+const getStatusLabel = (referral: BoardReferral) => {
+  if (isUnderContractOrLater(referral.status) && referral.dealStatusLabel) {
+    return referral.dealStatusLabel;
+  }
+
+  return referral.status;
+};
 
 const formatDueDate = (value: string): string => {
   try {
@@ -193,7 +215,7 @@ function FollowUpTaskGroup({
     <section className="space-y-3 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{referral.status}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{getStatusLabel(referral)}</p>
           <Link href={`/referrals/${referral._id}`} className="text-lg font-semibold text-slate-900 underline-offset-2 hover:underline">
             {referral.borrowerName}
           </Link>
