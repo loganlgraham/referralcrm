@@ -143,17 +143,24 @@ const buildAlertsOnDemand = async () => {
   return { alerts: ordered, summary } as const;
 };
 
-const sortByPriority = <T extends { priority: RecommendationPriority; dueAt?: Date | null }>(
+const sortByPriority = <T extends { priority: RecommendationPriority; dueAt?: Date | string | null }>(
   items: T[]
 ): T[] => {
+  const asEpoch = (value?: Date | string | null) => {
+    if (!value) return Infinity;
+    const normalized = typeof value === 'string' ? new Date(value) : value;
+    const epoch = normalized.getTime();
+    return Number.isNaN(epoch) ? Infinity : epoch;
+  };
+
   return [...items].sort((a, b) => {
     const priorityDiff = SLA_ALERT_PRIORITY_WEIGHT[a.priority] - SLA_ALERT_PRIORITY_WEIGHT[b.priority];
     if (priorityDiff !== 0) {
       return priorityDiff;
     }
 
-    const aDue = a.dueAt ? a.dueAt.getTime() : Infinity;
-    const bDue = b.dueAt ? b.dueAt.getTime() : Infinity;
+    const aDue = asEpoch(a.dueAt);
+    const bDue = asEpoch(b.dueAt);
     return aDue - bDue;
   });
 };
