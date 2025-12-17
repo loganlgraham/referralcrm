@@ -6,7 +6,7 @@ const config: Config = {
     '^@/(.*)$': '<rootDir>/src/$1'
   },
   transform: {
-    '^.+\\.(t|j)sx?$': ['ts-jest', { tsconfig: 'tsconfig.json' }]
+    '^.+\\.(t|j)sx?$': ['ts-jest', { tsconfig: 'tsconfig.jest.json' }]
   },
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts']
 };
