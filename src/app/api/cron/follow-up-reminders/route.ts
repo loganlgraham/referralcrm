@@ -98,7 +98,7 @@ async function getReferralsForUser(userId: string, role: string | null) {
     if (!lender) {
       return [];
     }
-    query.lender = lender._id;
+    query.lender = (lender as { _id: Types.ObjectId })._id;
     return Referral.find(query)
       .populate('assignedAgent', 'name')
       .populate('buySideAgent', 'name')
@@ -112,13 +112,14 @@ async function getReferralsForUser(userId: string, role: string | null) {
     if (!agent) {
       return [];
     }
+    const agentId = (agent as { _id: Types.ObjectId })._id;
     // Agent users see referrals where they are assigned, buySideAgent, or sellSideAgent
     return Referral.find({
       ...query,
       $or: [
-        { assignedAgent: agent._id },
-        { buySideAgent: agent._id },
-        { sellSideAgent: agent._id },
+        { assignedAgent: agentId },
+        { buySideAgent: agentId },
+        { sellSideAgent: agentId },
       ],
     })
       .populate('assignedAgent', 'name')
