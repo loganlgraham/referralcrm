@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { RecommendationPriority } from '@/utils/sla-insights';
-import type { FollowUpTask } from '@/components/referrals/use-follow-up-tasks';
+import type { FollowUpTask, FollowUpTaskRole } from '@/components/referrals/use-follow-up-tasks';
 import { useFollowUpTaskContext, type ReminderFrequency } from '@/components/referrals/follow-up-task-provider';
 
 export interface ReminderTaskInput {
@@ -16,6 +16,7 @@ export interface ReminderTaskInput {
   referralName?: string | null;
   priority: RecommendationPriority | FollowUpTask['priority'];
   category: FollowUpTask['category'];
+  role?: FollowUpTaskRole;
 }
 
 export type ReminderCadence = ReminderFrequency;
@@ -30,7 +31,10 @@ interface ReminderSubmissionResult {
   reminderFrequency: ReminderCadence;
 }
 
-export function useTaskReminderEmails(referralId?: string): ReminderSubmissionResult {
+export function useTaskReminderEmails(
+  referralId?: string,
+  viewerRole: FollowUpTaskRole = 'admin'
+): ReminderSubmissionResult {
   const { getReminderSettings } = useFollowUpTaskContext();
   const [sendingTaskId, setSendingTaskId] = useState<string | null>(null);
   const [bulkSending, setBulkSending] = useState(false);
@@ -38,7 +42,11 @@ export function useTaskReminderEmails(referralId?: string): ReminderSubmissionRe
 
   const sendReminders = useCallback(
     async (tasks: ReminderTaskInput[], mode: SubmissionMode) => {
-      if (!Array.isArray(tasks) || tasks.length === 0) {
+      const filteredTasks = Array.isArray(tasks)
+        ? tasks.filter((task) => (task.role ? task.role === viewerRole : true))
+        : [];
+
+      if (filteredTasks.length === 0) {
         toast.info('No tasks available for reminder emails.');
         return;
       }
@@ -49,7 +57,7 @@ export function useTaskReminderEmails(referralId?: string): ReminderSubmissionRe
       }
 
       if (mode === 'single') {
-        setSendingTaskId(tasks[0]?.taskId ?? null);
+        setSendingTaskId(filteredTasks[0]?.taskId ?? null);
       } else {
         setBulkSending(true);
       }
@@ -60,7 +68,7 @@ export function useTaskReminderEmails(referralId?: string): ReminderSubmissionRe
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             frequency: reminderSettings.frequency,
-            tasks: tasks.map((task) => ({
+            tasks: filteredTasks.map((task) => ({
               taskId: task.taskId,
               referralId: task.referralId,
               title: task.title,
@@ -98,7 +106,7 @@ export function useTaskReminderEmails(referralId?: string): ReminderSubmissionRe
         }
       }
     },
-    [reminderSettings]
+    [reminderSettings, viewerRole]
   );
 
   return {

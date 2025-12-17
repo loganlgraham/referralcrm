@@ -6,7 +6,11 @@ import { CheckCircle2, Circle, Loader2, MailCheck } from 'lucide-react';
 import { formatInTimeZone } from 'date-fns-tz';
 
 import { useFollowUpTaskContext } from '@/components/referrals/follow-up-task-provider';
-import { buildFollowUpTasksForReferral, type FollowUpTask } from '@/components/referrals/use-follow-up-tasks';
+import {
+  buildFollowUpTasksForReferral,
+  type FollowUpTask,
+  type FollowUpTaskRole,
+} from '@/components/referrals/use-follow-up-tasks';
 import { type ReferralLike, resolvePrimaryAgentName, SLA_TIME_ZONE } from '@/utils/sla-insights';
 import { useTaskReminderEmails } from '@/components/referrals/use-task-reminder-emails';
 import { ReminderSettingsToggle } from './reminder-settings-toggle';
@@ -29,6 +33,7 @@ interface BoardReferral {
 
 interface FollowUpTasksBoardProps {
   referrals: BoardReferral[];
+  viewerRole: FollowUpTaskRole;
 }
 
 const toReferralLike = (referral: BoardReferral): ReferralLike & { borrower: { name: string } } => ({
@@ -59,9 +64,10 @@ const formatDueDate = (value: string): string => {
   }
 };
 
-export function FollowUpTasksBoard({ referrals }: FollowUpTasksBoardProps) {
+export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoardProps) {
   const { completions, manualTasks, toggleTask, removeManualTask } = useFollowUpTaskContext();
-  const { sendReminders, bulkSending, sendingTaskId, reminderFrequency, reminderEnabled } = useTaskReminderEmails();
+  const { sendReminders, bulkSending, sendingTaskId, reminderFrequency, reminderEnabled } =
+    useTaskReminderEmails(undefined, viewerRole);
 
   const tasksByReferral = useMemo(() => {
     return referrals.reduce<Record<string, FollowUpTask[]>>((acc, referral) => {
@@ -71,11 +77,12 @@ export function FollowUpTasksBoard({ referrals }: FollowUpTasksBoardProps) {
         manualTasks,
         toggleTask,
         removeManualTask,
+        viewerRole,
       });
       acc[referral._id] = tasks;
       return acc;
     }, {});
-  }, [completions, manualTasks, referrals, removeManualTask, toggleTask]);
+  }, [completions, manualTasks, referrals, removeManualTask, toggleTask, viewerRole]);
 
   const outstandingTasks = useMemo(
     () => Object.values(tasksByReferral).flat().filter((task) => !task.completed),
@@ -139,20 +146,48 @@ export function FollowUpTasksBoard({ referrals }: FollowUpTasksBoardProps) {
       </div>
       <div className="space-y-5">
         {referrals.map((referral) => (
-          <FollowUpTaskGroup key={referral._id} referral={referral} tasks={tasksByReferral[referral._id] ?? []} />
+          <FollowUpTaskGroup
+            key={referral._id}
+            referral={referral}
+            tasks={tasksByReferral[referral._id] ?? []}
+            viewerRole={viewerRole}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function FollowUpTaskGroup({ referral, tasks }: { referral: BoardReferral; tasks: FollowUpTask[] }) {
+function FollowUpTaskGroup({
+  referral,
+  tasks,
+  viewerRole,
+}: {
+  referral: BoardReferral;
+  tasks: FollowUpTask[];
+  viewerRole: FollowUpTaskRole;
+}) {
   const referralLike = toReferralLike(referral);
-  const incompleteTasks = useMemo(() => tasks.filter((task) => !task.completed), [tasks]);
-  const completedTasks = useMemo(() => tasks.filter((task) => task.completed), [tasks]);
+  const roleFilteredTasks = useMemo(
+    () => tasks.filter((task) => task.role === viewerRole),
+    [tasks, viewerRole]
+  );
+  const incompleteTasks = useMemo(
+    () => roleFilteredTasks.filter((task) => !task.completed),
+    [roleFilteredTasks]
+  );
+  const completedTasks = useMemo(
+    () => roleFilteredTasks.filter((task) => task.completed),
+    [roleFilteredTasks]
+  );
   const [showCompleted, setShowCompleted] = useState(false);
   const outstanding = incompleteTasks.length;
   const assignmentName = resolvePrimaryAgentName(referralLike);
+  const roleLabel: Record<FollowUpTaskRole, string> = {
+    admin: 'Admin/Manager tasks',
+    mc: 'MC tasks',
+    agent: 'Agent tasks',
+  };
 
   return (
     <section className="space-y-3 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
@@ -176,7 +211,10 @@ function FollowUpTaskGroup({ referral, tasks }: { referral: BoardReferral; tasks
         referralId={referral._id}
         helperText="Defaults to your global reminder setting unless you override this referral."
       />
-      {tasks.length > 0 ? (
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {roleLabel[viewerRole]}
+      </p>
+      {roleFilteredTasks.length > 0 ? (
         <>
           {incompleteTasks.length > 0 ? (
             <ul className="space-y-3">
@@ -288,7 +326,7 @@ function FollowUpTaskGroup({ referral, tasks }: { referral: BoardReferral; tasks
         </>
       ) : (
         <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
-          Nothing on deck—this referral is on track.
+          No {roleLabel[viewerRole].toLowerCase()} for this referral right now.
         </div>
       )}
     </section>
