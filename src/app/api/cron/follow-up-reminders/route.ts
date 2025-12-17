@@ -200,12 +200,13 @@ export async function GET(request: NextRequest) {
 
     try {
       const viewerRole = getViewerRole(user.role);
-      const referrals = await getReferralsForUser(user._id.toString(), user.role || null);
+      const userId = (user._id as Types.ObjectId).toString();
+      const referrals = await getReferralsForUser(userId, user.role || null);
 
       if (referrals.length === 0) {
         console.log(`No referrals found for user ${user.email}`);
         results.push({
-          userId: user._id.toString(),
+          userId,
           email: user.email || '',
           frequency,
           success: true,
@@ -266,7 +267,7 @@ export async function GET(request: NextRequest) {
       if (allTasks.length === 0) {
         console.log(`No outstanding tasks for user ${user.email}`);
         results.push({
-          userId: user._id.toString(),
+          userId,
           email: user.email || '',
           frequency,
           success: true,
@@ -305,7 +306,7 @@ export async function GET(request: NextRequest) {
           responseData.error || 'Unknown error'
         );
         results.push({
-          userId: user._id.toString(),
+          userId,
           email: user.email || '',
           frequency,
           success: false,
@@ -315,7 +316,7 @@ export async function GET(request: NextRequest) {
       } else {
         console.log(`Successfully sent ${allTasks.length} task reminders to ${user.email}`);
         results.push({
-          userId: user._id.toString(),
+          userId,
           email: user.email || '',
           frequency,
           success: true,
@@ -325,7 +326,7 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       console.error(`Error processing reminders for user ${user.email}:`, error);
       results.push({
-        userId: user._id.toString(),
+        userId,
         email: user.email || '',
         frequency,
         success: false,
