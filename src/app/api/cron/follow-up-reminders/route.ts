@@ -198,9 +198,9 @@ export async function GET(request: NextRequest) {
       // Daily reminders run every day including Monday
     }
 
+    const userId = (user._id as Types.ObjectId).toString();
     try {
       const viewerRole = getViewerRole(user.role);
-      const userId = (user._id as Types.ObjectId).toString();
       const referrals = await getReferralsForUser(userId, user.role || null);
 
       if (referrals.length === 0) {
