@@ -1,7 +1,7 @@
 import 'dotenv/config';
 
 import { format } from 'date-fns';
-import mongoose, { Types } from 'mongoose';
+import mongoose, { type FilterQuery, Types } from 'mongoose';
 
 import { connectMongo } from '../src/lib/mongoose';
 import { Referral, type ReferralDocument } from '../src/models/referral';
@@ -24,7 +24,9 @@ const PRIORITY_LABEL: Record<RecommendationPriority, string> = {
   low: 'Low',
 };
 
-const OPEN_ALERT_FILTER = { $or: [{ status: 'open' }, { status: { $exists: false } }] } as const;
+const OPEN_ALERT_FILTER: FilterQuery<SlaAlertDocument> = {
+  $or: [{ status: 'open' }, { status: { $exists: false } }],
+};
 
 const shouldEmailPriority = (priority: RecommendationPriority): boolean => {
   const minPriority = SLA_ALERT_CONFIG.notifications.email.minPriority || 'high';
