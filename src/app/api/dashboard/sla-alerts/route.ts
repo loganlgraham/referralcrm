@@ -53,10 +53,10 @@ export async function GET() {
 
   await connectMongo();
 
-  const alerts = await SlaAlert.find({ status: 'open' })
+  const alerts: SlaAlertDocument[] = await SlaAlert.find({ status: 'open' })
     .sort({ priority: 1, dueAt: 1, createdAt: -1 })
     .limit(50)
-    .lean<SlaAlertDocument>();
+    .lean<SlaAlertDocument[]>();
 
   const ordered = sortByPriority(alerts);
 
