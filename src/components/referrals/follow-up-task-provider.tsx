@@ -10,16 +10,13 @@ import {
   useReducer,
 } from 'react';
 
-import type { RecommendationPriority } from '@/utils/sla-insights';
-
-interface TaskCompletionState {
-  completed: boolean;
-  completedAt?: string | null;
-}
-
-type CompletionMap = Record<string, TaskCompletionState>;
-
-export type ManualTaskCategory = 'assignment' | 'communication' | 'pipeline' | 'finance' | 'ops';
+import {
+  type CompletionMap,
+  type ManualTask,
+  type ManualTaskCategory,
+  type ManualTaskInput,
+} from '@/lib/follow-up-tasks';
+export type { ManualTaskCategory, ManualTask, ManualTaskInput } from '@/lib/follow-up-tasks';
 
 export type ReminderFrequency = 'daily' | 'weekly';
 
@@ -31,24 +28,6 @@ interface ReminderSettings {
 interface ReminderState {
   global: ReminderSettings;
   overrides: Record<string, ReminderSettings>;
-}
-
-export interface ManualTask {
-  id: string;
-  title: string;
-  message: string;
-  dueAt?: string | null;
-  priority: RecommendationPriority;
-  category: ManualTaskCategory;
-  createdAt: string;
-}
-
-export interface ManualTaskInput {
-  title: string;
-  message: string;
-  dueAt?: string | null;
-  priority: RecommendationPriority;
-  category: ManualTaskCategory;
 }
 
 export interface StoredTaskState {
