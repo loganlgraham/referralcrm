@@ -1042,6 +1042,40 @@ export const computeSlaRecommendations = (
           dueAt: minDueDate(dueBy),
         })
       );
+    } else if (referral.stageOnTransfer === 'Pre-approval TBD') {
+      const dueBy = addHours(createdAt, 24);
+      recommendations.push(
+        buildRecommendation({
+          id: 'mc-secure-preapproval-path',
+          title: 'Secure pre-approval path',
+          message: 'Coordinate with the borrower and lender to collect docs and lock the pre-approval plan within 24 hours.',
+          priority: 'high',
+          category: 'finance',
+          dueAt: minDueDate(dueBy),
+        })
+      );
+
+      recommendations.push(
+        buildRecommendation({
+          id: 'preapproval-plan-admin-visibility',
+          title: 'Keep admin updated on pre-approval plan',
+          message: 'Share the required documents and ETA so admin can monitor borrower readiness.',
+          priority: 'medium',
+          category: 'communication',
+          dueAt: minDueDate(dueBy),
+        })
+      );
+
+      recommendations.push(
+        buildRecommendation({
+          id: 'preapproval-plan-agent',
+          title: 'Loop agent into pre-approval next steps',
+          message: 'Notify the agent about the path to pre-approval and any borrower commitments.',
+          priority: 'medium',
+          category: 'communication',
+          dueAt: minDueDate(dueBy),
+        })
+      );
     } else {
       recommendations.push(
         buildRecommendation({

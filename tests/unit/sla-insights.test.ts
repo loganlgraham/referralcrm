@@ -1,4 +1,4 @@
-import { computeSlaDurations, type ReferralLike } from '@/utils/sla-insights';
+import { computeSlaDurations, computeSlaInsights, type ReferralLike } from '@/utils/sla-insights';
 
 describe('computeSlaDurations', () => {
   it('uses business hours for early stages and calendar time for post-communication stages', () => {
@@ -36,5 +36,52 @@ describe('computeSlaDurations', () => {
     expect(durationByKey['communication-to-contract']).toBe(2880);
     expect(durationByKey['contract-to-close']).toBe(1440);
     expect(durationByKey['close-to-paid']).toBe(1440);
+  });
+});
+
+describe('computeSlaInsights', () => {
+  it('creates targeted tasks when pre-approval is TBD on transfer', () => {
+    const now = new Date('2024-04-01T18:00:00Z');
+    jest.useFakeTimers().setSystemTime(now);
+
+    const referral: ReferralLike = {
+      _id: 'ref-preapproval-tbd',
+      status: 'New Lead',
+      statusLastUpdated: now.toISOString(),
+      createdAt: now.toISOString(),
+      origin: 'admin',
+      lender: { name: 'Sample Lender' },
+      stageOnTransfer: 'Pre-approval TBD',
+      buySideAgent: { name: 'Taylor Agent' },
+    } as ReferralLike;
+
+    const insights = computeSlaInsights(referral);
+    const ids = insights.recommendations.map((item) => item.id);
+
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        'mc-secure-preapproval-path',
+        'preapproval-plan-admin-visibility',
+        'preapproval-plan-agent',
+      ])
+    );
+
+    const mcTask = insights.recommendations.find((item) => item.id === 'mc-secure-preapproval-path');
+    const adminTask = insights.recommendations.find((item) => item.id === 'preapproval-plan-admin-visibility');
+    const agentTask = insights.recommendations.find((item) => item.id === 'preapproval-plan-agent');
+
+    expect(mcTask?.priority).toBe('high');
+    expect(mcTask?.category).toBe('finance');
+    expect(mcTask?.dueAt).toBeDefined();
+
+    expect(adminTask?.priority).toBe('medium');
+    expect(adminTask?.category).toBe('communication');
+    expect(adminTask?.dueAt).toBeDefined();
+
+    expect(agentTask?.priority).toBe('medium');
+    expect(agentTask?.category).toBe('communication');
+    expect(agentTask?.dueAt).toBeDefined();
+
+    jest.useRealTimers();
   });
 });
