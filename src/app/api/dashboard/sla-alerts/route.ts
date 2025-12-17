@@ -53,8 +53,10 @@ export async function GET() {
 
   await connectMongo();
 
+  const openFilter = { $or: [{ status: 'open' }, { status: { $exists: false } }] };
+
   const [alerts, summaryStats] = await Promise.all([
-    SlaAlert.find({ status: 'open' })
+    SlaAlert.find(openFilter)
       .sort({ priority: 1, dueAt: 1, createdAt: -1 })
       .limit(50)
       .lean<SlaAlertDocument[]>(),
@@ -63,7 +65,7 @@ export async function GET() {
       count: number;
       lastEvaluatedAt?: Date | null;
     }>([
-      { $match: { status: 'open' } },
+      { $match: openFilter },
       {
         $group: {
           _id: '$priority',

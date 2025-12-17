@@ -24,6 +24,8 @@ const PRIORITY_LABEL: Record<RecommendationPriority, string> = {
   low: 'Low',
 };
 
+const OPEN_ALERT_FILTER = { $or: [{ status: 'open' }, { status: { $exists: false } }] } as const;
+
 const shouldEmailPriority = (priority: RecommendationPriority): boolean => {
   const minPriority = SLA_ALERT_CONFIG.notifications.email.minPriority || 'high';
   return SLA_ALERT_PRIORITY_WEIGHT[priority] <= SLA_ALERT_PRIORITY_WEIGHT[minPriority];
@@ -187,7 +189,7 @@ async function evaluateSlaAlerts() {
     });
   }
 
-  const openCount = await SlaAlert.countDocuments({ status: 'open' });
+  const openCount = await SlaAlert.countDocuments(OPEN_ALERT_FILTER);
   const totalCount = await SlaAlert.countDocuments({});
 
   console.log(`Evaluated ${referrals.length} referrals. Open alerts: ${openCount}/${totalCount}.`);
