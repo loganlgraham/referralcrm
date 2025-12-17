@@ -3,7 +3,7 @@
 import { format, formatDistanceToNow } from 'date-fns';
 import { AlertTriangle, Bell, Clock3, MailWarning } from 'lucide-react';
 
-import { cn } from '@/utils/cn';
+import clsx from 'clsx';
 import { type RecommendationPriority } from '@/utils/sla-insights';
 
 export interface SlaAlertApiResponse {
@@ -105,7 +105,7 @@ export function SlaAlertPanel({ data, isLoading }: { data?: SlaAlertApiResponse;
             { label: 'Total open', value: summary?.totalOpen ?? 0, tone: 'text-slate-700 bg-slate-50' },
           ] as const
         ).map((item) => (
-          <div key={item.label} className={cn('rounded-lg border p-3 shadow-sm', item.tone)}>
+          <div key={item.label} className={clsx('rounded-lg border p-3 shadow-sm', item.tone)}>
             <div className="text-sm font-medium text-slate-600">{item.label}</div>
             <div className="text-2xl font-semibold">{isLoading ? '—' : item.value}</div>
           </div>
@@ -130,7 +130,7 @@ export function SlaAlertPanel({ data, isLoading }: { data?: SlaAlertApiResponse;
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', priorityBadgeStyles[alert.priority])}>
+                    <span className={clsx('rounded-full px-2 py-0.5 text-xs font-semibold', priorityBadgeStyles[alert.priority])}>
                       {priorityLabel[alert.priority]}
                     </span>
                     {alert.category && <span className="text-xs uppercase text-slate-500">{alert.category}</span>}
