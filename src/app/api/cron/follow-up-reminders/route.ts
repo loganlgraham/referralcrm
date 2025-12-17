@@ -244,7 +244,8 @@ export async function GET(request: NextRequest) {
       }> = [];
 
       for (const referral of referrals) {
-        const referralPayments = paymentsByReferralId.get(referral._id.toString()) || [];
+        const referralId = (referral._id as Types.ObjectId).toString();
+        const referralPayments = paymentsByReferralId.get(referralId) || [];
         const referralLike = toReferralLike(referral, referralPayments);
         const tasks = computeFollowUpTasksForReferral(referralLike, viewerRole);
 
