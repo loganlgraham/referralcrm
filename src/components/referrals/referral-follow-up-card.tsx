@@ -1,10 +1,11 @@
 'use client';
 
 import { FormEvent, useMemo, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { CheckCircle2, Circle } from 'lucide-react';
 import { formatInTimeZone } from 'date-fns-tz';
 
-import { useFollowUpTasks } from '@/components/referrals/use-follow-up-tasks';
+import { useFollowUpTasks, type FollowUpTaskRole } from '@/components/referrals/use-follow-up-tasks';
 import { ReminderSettingsToggle } from '@/components/referrals/reminder-settings-toggle';
 import { useFollowUpTaskContext, type ManualTaskCategory } from '@/components/referrals/follow-up-task-provider';
 import { SLA_TIME_ZONE, type RecommendationPriority, type ReferralLike } from '@/utils/sla-insights';
@@ -20,7 +21,15 @@ const PRIORITY_OPTIONS: RecommendationPriority[] = ['urgent', 'high', 'medium', 
 const CATEGORY_OPTIONS: ManualTaskCategory[] = ['assignment', 'communication', 'pipeline', 'finance', 'ops'];
 
 export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
-  const tasks = useFollowUpTasks(referral);
+  const { data: session } = useSession();
+  const viewerRole = useMemo<FollowUpTaskRole>(() => {
+    const role = session?.user?.role;
+    if (role === 'mc') return 'mc';
+    if (role === 'agent') return 'agent';
+    return 'admin';
+  }, [session?.user?.role]);
+
+  const tasks = useFollowUpTasks(referral, viewerRole);
   const hasTasks = tasks.length > 0;
   const incompleteTasks = useMemo(() => tasks.filter((task) => !task.completed), [tasks]);
   const completedTasks = useMemo(() => tasks.filter((task) => task.completed), [tasks]);

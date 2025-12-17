@@ -13,6 +13,12 @@ export const metadata: Metadata = {
 export default async function FollowUpTasksPage() {
   const session = await getCurrentSession();
   const data = await getReferrals({ session, page: 1 });
+  const viewerRole: 'admin' | 'mc' | 'agent' = (() => {
+    const role = session?.user?.role;
+    if (role === 'mc') return 'mc';
+    if (role === 'agent') return 'agent';
+    return 'admin';
+  })();
   const referrals = data.items.map((item) => ({
     _id: item._id,
     borrowerName: item.borrowerName,
@@ -29,5 +35,5 @@ export default async function FollowUpTasksPage() {
     origin: item.origin ?? null,
   }));
 
-  return <FollowUpTasksBoard referrals={referrals} />;
+  return <FollowUpTasksBoard referrals={referrals} viewerRole={viewerRole} />;
 }

@@ -35,7 +35,46 @@ export interface FollowUpTask extends SlaRecommendation {
   toggle: () => void;
   isManual?: boolean;
   remove?: () => void;
+  role: FollowUpTaskRole;
 }
+
+export type FollowUpTaskRole = 'admin' | 'mc' | 'agent';
+
+const AGENT_OWNED_TASK_IDS = new Set<string>([
+  'schedule-first-showings',
+  'buyers-agency-agreement',
+  'schedule-listing-consult',
+  'listing-paperwork',
+  'prep-listing',
+  'prep-photos',
+  'target-list-date',
+  'review-conversion-plan',
+  'review-conversion-plan-agent',
+  'schedule-inspection',
+  'schedule-inspection-agent',
+  'order-appraisal',
+  'order-appraisal-agent',
+  'share-closing-timeline',
+  'share-closing-timeline-agent',
+  'check-escrow-milestones',
+  'check-escrow-milestones-agent',
+  'confirm-referral-fee',
+  'confirm-referral-fee-agent',
+  'capture-termination-reason',
+  'capture-termination-reason-agent',
+]);
+
+const resolveTaskRole = (recommendationId: string): FollowUpTaskRole => {
+  if (recommendationId.startsWith('mc-')) {
+    return 'mc';
+  }
+
+  if (recommendationId.endsWith('-agent') || AGENT_OWNED_TASK_IDS.has(recommendationId)) {
+    return 'agent';
+  }
+
+  return 'admin';
+};
 
 export function buildFollowUpTasksForReferral(
   referral: ReferralLike & { borrower?: { name?: string } },
@@ -44,11 +83,13 @@ export function buildFollowUpTasksForReferral(
     manualTasks,
     toggleTask,
     removeManualTask,
+    viewerRole,
   }: {
     completions: Record<string, { completed: boolean; completedAt?: string | null }>;
     manualTasks: Record<string, ManualTask[]>;
     toggleTask: (taskId: string, completed: boolean) => void;
     removeManualTask: (referralId: string, taskId: string) => void;
+    viewerRole: FollowUpTaskRole;
   }
 ) {
   const lastCompletedAt = getLatestCompletionForReferral(referral._id, completions);
@@ -81,30 +122,40 @@ export function buildFollowUpTasksForReferral(
       isManual: true,
       remove: handleRemove,
       supportingMetric: undefined,
+      role: viewerRole,
     };
   });
 
-  const automated = ordered.map<FollowUpTask>((item) => {
-    const taskId = `${referral._id}::${item.id}`;
-    const completion = completions[taskId]?.completed ?? false;
-    const handleToggle = () => {
-      toggleTask(taskId, !completion);
-    };
+  const automated = ordered
+    .map<FollowUpTask>((item) => {
+      const role = resolveTaskRole(item.id);
+      const taskId = `${referral._id}::${item.id}`;
+      const completion = completions[taskId]?.completed ?? false;
+      const handleToggle = () => {
+        toggleTask(taskId, !completion);
+      };
 
-    return {
-      ...item,
-      taskId,
-      referralId: referral._id,
-      referralName: referral.borrower?.name,
-      completed: completion,
-      toggle: handleToggle,
-    };
-  });
+      return {
+        ...item,
+        taskId,
+        referralId: referral._id,
+        referralName: referral.borrower?.name,
+        completed: completion,
+        toggle: handleToggle,
+        role,
+      };
+    })
+    .filter((task) => task.role === viewerRole);
 
-  return [...manualFollowUps, ...automated];
+  const visibleManualTasks = manualFollowUps.filter((task) => task.role === viewerRole);
+
+  return [...visibleManualTasks, ...automated];
 }
 
-export function useFollowUpTasks(referral: ReferralLike & { borrower?: { name?: string } }) {
+export function useFollowUpTasks(
+  referral: ReferralLike & { borrower?: { name?: string } },
+  viewerRole: FollowUpTaskRole = 'admin'
+) {
   const { completions, toggleTask, manualTasks, removeManualTask } = useFollowUpTaskContext();
 
   return useMemo(
@@ -114,7 +165,8 @@ export function useFollowUpTasks(referral: ReferralLike & { borrower?: { name?: 
         manualTasks,
         toggleTask,
         removeManualTask,
+        viewerRole,
       }),
-    [completions, manualTasks, referral, removeManualTask, toggleTask]
+    [completions, manualTasks, referral, removeManualTask, toggleTask, viewerRole]
   );
 }
