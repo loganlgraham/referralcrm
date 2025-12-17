@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
+import Link from 'next/link';
+import { useMemo, useState } from 'react';
 import { CheckCircle2, Circle, Loader2, MailCheck } from 'lucide-react';
 import { formatInTimeZone } from 'date-fns-tz';
 
@@ -148,6 +149,8 @@ export function FollowUpTasksBoard({ referrals }: FollowUpTasksBoardProps) {
 function FollowUpTaskGroup({ referral, tasks }: { referral: BoardReferral; tasks: FollowUpTask[] }) {
   const referralLike = toReferralLike(referral);
   const incompleteTasks = useMemo(() => tasks.filter((task) => !task.completed), [tasks]);
+  const completedTasks = useMemo(() => tasks.filter((task) => task.completed), [tasks]);
+  const [showCompleted, setShowCompleted] = useState(false);
   const outstanding = incompleteTasks.length;
   const assignmentName = resolvePrimaryAgentName(referralLike);
 
@@ -156,7 +159,9 @@ function FollowUpTaskGroup({ referral, tasks }: { referral: BoardReferral; tasks
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{referral.status}</p>
-          <h2 className="text-lg font-semibold text-slate-900">{referral.borrowerName}</h2>
+          <Link href={`/dashboard/referrals/${referral._id}`} className="text-lg font-semibold text-slate-900 underline-offset-2 hover:underline">
+            {referral.borrowerName}
+          </Link>
           <p className="text-xs text-slate-500">
             {assignmentName ? `Assigned to ${assignmentName}` : 'Agent assignment pending'}
           </p>
@@ -172,58 +177,115 @@ function FollowUpTaskGroup({ referral, tasks }: { referral: BoardReferral; tasks
         helperText="Defaults to your global reminder setting unless you override this referral."
       />
       {tasks.length > 0 ? (
-        <ul className="space-y-3">
-          {tasks.map((task) => (
-            <li
-              key={task.taskId}
-              className={`flex items-start gap-3 rounded-lg border border-slate-200 p-3 ${
-                task.completed ? 'bg-slate-50 opacity-70' : 'bg-white'
-              }`}
-            >
+        <>
+          {incompleteTasks.length > 0 ? (
+            <ul className="space-y-3">
+              {incompleteTasks.map((task) => (
+                <li key={task.taskId} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                  <button
+                    type="button"
+                    onClick={task.toggle}
+                    className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-slate-500 transition hover:bg-slate-100"
+                    aria-pressed={task.completed}
+                    aria-label={task.completed ? 'Mark task incomplete' : 'Mark task complete'}
+                  >
+                    {task.completed ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
+                  </button>
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium text-slate-900">{task.title}</p>
+                      <span className="text-xs uppercase tracking-wide text-slate-400">{task.category}</span>
+                      {task.isManual && (
+                        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
+                          Manual
+                        </span>
+                      )}
+                      <span className="text-xs font-semibold uppercase text-slate-400">{task.priority}</span>
+                    </div>
+                    <p className="text-sm text-slate-600">{task.message}</p>
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                      {task.supportingMetric && <span>{task.supportingMetric}</span>}
+                      {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
+                    </div>
+                    {task.isManual && task.remove && (
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          onClick={task.remove}
+                          className="inline-flex items-center rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+                        >
+                          Remove task
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
+              Nothing on deck—this referral is on track.
+            </div>
+          )}
+          {completedTasks.length > 0 && (
+            <div className="border-t border-slate-200 pt-3 text-xs text-slate-600">
               <button
                 type="button"
-                onClick={task.toggle}
-                className={`mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border transition hover:bg-slate-100 ${
-                  task.completed ? 'border-slate-500 text-slate-700' : 'border-slate-300 text-slate-500'
-                }`}
-                aria-pressed={task.completed}
-                aria-label={task.completed ? 'Mark task incomplete' : 'Mark task complete'}
+                className="font-semibold text-slate-700 underline underline-offset-4"
+                onClick={() => setShowCompleted((previous) => !previous)}
               >
-                {task.completed ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
+                {showCompleted
+                  ? 'Hide completed tasks'
+                  : `Show ${completedTasks.length} completed ${completedTasks.length === 1 ? 'task' : 'tasks'}`}
               </button>
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className={`font-medium ${task.completed ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
-                    {task.title}
-                  </p>
-                  <span className="text-xs uppercase tracking-wide text-slate-400">{task.category}</span>
-                  {task.isManual && (
-                    <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
-                      Manual
-                    </span>
-                  )}
-                  <span className="text-xs font-semibold uppercase text-slate-400">{task.priority}</span>
-                </div>
-                <p className={`text-sm ${task.completed ? 'text-slate-500' : 'text-slate-600'}`}>{task.message}</p>
-                <div className={`flex flex-wrap items-center gap-3 text-xs ${task.completed ? 'text-slate-400' : 'text-slate-500'}`}>
-                  {task.supportingMetric && <span>{task.supportingMetric}</span>}
-                  {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
-                </div>
-                {task.isManual && task.remove && (
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={task.remove}
-                      className="inline-flex items-center rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
-                    >
-                      Remove task
-                    </button>
-                  </div>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+              {showCompleted && (
+                <ul className="mt-3 space-y-3">
+                  {completedTasks.map((task) => (
+                    <li key={task.taskId} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <button
+                        type="button"
+                        onClick={task.toggle}
+                        className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-500 text-slate-700 transition hover:bg-slate-100"
+                        aria-pressed={task.completed}
+                        aria-label="Mark task incomplete"
+                      >
+                        <CheckCircle2 className="h-5 w-5" />
+                      </button>
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium text-slate-900 line-through">{task.title}</p>
+                          <span className="text-xs uppercase tracking-wide text-slate-400">{task.category}</span>
+                          {task.isManual && (
+                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
+                              Manual
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-600">{task.message}</p>
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                          <span className="font-medium uppercase text-slate-400">{task.priority}</span>
+                          {task.supportingMetric && <span>{task.supportingMetric}</span>}
+                          {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
+                        </div>
+                        {task.isManual && task.remove && (
+                          <div className="pt-2">
+                            <button
+                              type="button"
+                              onClick={task.remove}
+                              className="inline-flex items-center rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+                            >
+                              Remove task
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </>
       ) : (
         <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
           Nothing on deck—this referral is on track.
