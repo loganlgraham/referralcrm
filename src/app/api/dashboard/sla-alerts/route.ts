@@ -53,7 +53,7 @@ export async function GET() {
 
   await connectMongo();
 
-  const openFilter = { $or: [{ status: 'open' }, { status: { $exists: false } }] };
+  const openFilter = { $or: [{ status: 'open' }, { status: null }, { status: { $exists: false } }] };
 
   const [alerts, summaryStats] = await Promise.all([
     SlaAlert.find(openFilter)

@@ -25,7 +25,7 @@ const PRIORITY_LABEL: Record<RecommendationPriority, string> = {
 };
 
 const OPEN_ALERT_FILTER: FilterQuery<SlaAlertDocument> = {
-  $or: [{ status: 'open' }, { status: { $exists: false } }],
+  $or: [{ status: 'open' }, { status: null }, { status: { $exists: false } }],
 };
 
 const shouldEmailPriority = (priority: RecommendationPriority): boolean => {
