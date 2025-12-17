@@ -159,7 +159,7 @@ function FollowUpTaskGroup({ referral, tasks }: { referral: BoardReferral; tasks
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{referral.status}</p>
-          <Link href={`/dashboard/referrals/${referral._id}`} className="text-lg font-semibold text-slate-900 underline-offset-2 hover:underline">
+          <Link href={`/referrals/${referral._id}`} className="text-lg font-semibold text-slate-900 underline-offset-2 hover:underline">
             {referral.borrowerName}
           </Link>
           <p className="text-xs text-slate-500">
