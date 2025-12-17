@@ -4,5 +4,11 @@
   "buildCommand": "npm run build",
   "devCommand": "next dev",
   "installCommand": "npm install",
-  "outputDirectory": ".next"
+  "outputDirectory": ".next",
+  "crons": [
+    {
+      "path": "/api/cron/follow-up-reminders",
+      "schedule": "0 15 * * *"
+    }
+  ]
 }

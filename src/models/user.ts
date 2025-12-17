@@ -9,6 +9,8 @@ const UserSchema = new Schema(
     image: String,
     role: { type: String, enum: ['agent', 'mortgage-consultant', 'admin'], default: null },
     passwordHash: { type: String, required: true, select: false },
+    reminderEnabled: { type: Boolean, default: false },
+    reminderFrequency: { type: String, enum: ['daily', 'weekly'], default: 'daily' },
   },
   { timestamps: true }
 );
