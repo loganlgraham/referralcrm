@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { formatPhoneNumber } from '@/utils/formatters';
 import { LenderAdminEditor, type LenderAdminEditorProps } from '@/components/people/lender-admin-editor';
+import { SendWelcomeEmailButton } from '@/components/people/send-welcome-email-button';
 
 interface LenderOverviewCardProps {
   lender: LenderAdminEditorProps['lender'];
@@ -30,13 +31,20 @@ export function LenderOverviewCard({ lender, isAdmin }: LenderOverviewCardProps)
           </div>
         </div>
         {isAdmin && (
-          <button
-            type="button"
-            className="inline-flex items-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90"
-            onClick={() => setShowEditor((previous) => !previous)}
-          >
-            {showEditor ? 'Close edit' : 'Edit details'}
-          </button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <SendWelcomeEmailButton
+              endpoint={`/api/lenders/${lender._id}/welcome-email`}
+              recipientEmail={lender.email}
+              recipientName={lender.name}
+            />
+            <button
+              type="button"
+              className="inline-flex items-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90"
+              onClick={() => setShowEditor((previous) => !previous)}
+            >
+              {showEditor ? 'Close edit' : 'Edit details'}
+            </button>
+          </div>
         )}
       </div>
 
