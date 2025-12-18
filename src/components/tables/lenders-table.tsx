@@ -27,6 +27,12 @@ interface LenderRow {
 
 type SortKey = 'name' | 'email' | 'phone' | 'nmls' | 'states';
 
+type CreatedLenderSummary = {
+  id: string;
+  name: string;
+  email: string;
+};
+
 export function LendersTable() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'admin';
@@ -40,6 +46,8 @@ export function LendersTable() {
     nmlsId: '',
     licensedStates: '',
   });
+  const [lastCreatedLender, setLastCreatedLender] = useState<CreatedLenderSummary | null>(null);
+  const [sendingWelcome, setSendingWelcome] = useState(false);
 
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
     null
@@ -131,13 +139,25 @@ export function LendersTable() {
         }),
       });
 
+      const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error('Unable to create mortgage consultant');
+        throw new Error(payload?.message ?? 'Unable to create mortgage consultant');
       }
+
+      const createdId = typeof payload?.id === 'string' ? payload.id : null;
 
       toast.success('Mortgage consultant added');
       setForm({ name: '', email: '', phone: '', nmlsId: '', licensedStates: '' });
       setShowForm(false);
+      setLastCreatedLender(
+        createdId
+          ? {
+              id: createdId,
+              name: form.name,
+              email: form.email,
+            }
+          : null
+      );
       await mutate();
     } catch (error) {
       console.error(error);
@@ -147,8 +167,65 @@ export function LendersTable() {
     }
   };
 
+  const handleSendWelcomeEmail = async () => {
+    if (!lastCreatedLender) {
+      return;
+    }
+
+    setSendingWelcome(true);
+
+    try {
+      const response = await fetch(`/api/lenders/${lastCreatedLender.id}/welcome-email`, {
+        method: 'POST',
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error ?? payload?.message ?? 'Unable to send welcome email');
+      }
+
+      toast.success(`Welcome email sent to ${lastCreatedLender.name}`);
+      setLastCreatedLender(null);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Unable to send welcome email');
+    } finally {
+      setSendingWelcome(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {isAdmin && lastCreatedLender && (
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">
+                Send welcome email to {lastCreatedLender.name}
+              </p>
+              <p className="text-xs text-slate-600">{lastCreatedLender.email}</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleSendWelcomeEmail}
+                disabled={sendingWelcome}
+                className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {sendingWelcome ? 'Sending…' : 'Send welcome email'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setLastCreatedLender(null)}
+                className="rounded border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isAdmin && (
         <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
