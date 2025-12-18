@@ -70,6 +70,12 @@ type AgentFormState = {
   ahaDesignation: '' | 'AHA' | 'AHA_OOS';
 };
 
+type CreatedAgentSummary = {
+  id: string;
+  name: string;
+  email: string;
+};
+
 const createEmptyForm = (): AgentFormState => ({
   name: '',
   email: '',
@@ -107,6 +113,8 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
     null
   );
+  const [lastCreatedAgent, setLastCreatedAgent] = useState<CreatedAgentSummary | null>(null);
+  const [sendingWelcome, setSendingWelcome] = useState(false);
 
   useEffect(() => {
     if (!isGeneratingCoverage) {
@@ -462,12 +470,23 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
         }),
       });
 
+      const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
         throw new Error(payload?.message ?? 'Unable to create agent');
       }
 
+      const createdId = typeof payload?.id === 'string' ? payload.id : null;
+
       toast.success('Agent added');
+      setLastCreatedAgent(
+        createdId
+          ? {
+              id: createdId,
+              name: form.name,
+              email: form.email,
+            }
+          : null
+      );
       setForm(createEmptyForm());
       setShowForm(false);
       await mutate();
@@ -479,8 +498,65 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
     }
   };
 
+  const handleSendWelcomeEmail = async () => {
+    if (!lastCreatedAgent) {
+      return;
+    }
+
+    setSendingWelcome(true);
+
+    try {
+      const response = await fetch(`/api/agents/${lastCreatedAgent.id}/welcome-email`, {
+        method: 'POST',
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error ?? payload?.message ?? 'Unable to send welcome email');
+      }
+
+      toast.success(`Welcome email sent to ${lastCreatedAgent.name}`);
+      setLastCreatedAgent(null);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Unable to send welcome email');
+    } finally {
+      setSendingWelcome(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {isAdmin && lastCreatedAgent && (
+        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">
+                Send welcome email to {lastCreatedAgent.name}
+              </p>
+              <p className="text-xs text-slate-600">{lastCreatedAgent.email}</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleSendWelcomeEmail}
+                disabled={sendingWelcome}
+                className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {sendingWelcome ? 'Sending…' : 'Send welcome email'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setLastCreatedAgent(null)}
+                className="rounded border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isAdmin && !hasExternalControl && (
         <div className="flex justify-end">
           <button
