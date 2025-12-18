@@ -26,6 +26,7 @@ import {
   type TimeframeKey,
   type TimeframePreset
 } from '@/components/dashboard/timeframe-controls';
+import { SlaAlertPanel, type SlaAlertApiResponse } from '@/components/dashboard/sla-alert-panel';
 
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
 
@@ -1436,7 +1437,7 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
   );
 }
 
-function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
+function AdminDashboard({ data, slaAlerts, slaAlertsLoading }: { data: DashboardResponse['admin']; slaAlerts?: SlaAlertApiResponse; slaAlertsLoading?: boolean }) {
   const assignmentRate = data.totalReferrals
     ? (data.assignedReferrals / data.totalReferrals) * 100
     : 0;
@@ -1476,6 +1477,7 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
           <SummaryCard key={card.title} title={card.title} value={card.value} helper={card.helper} />
         ))}
       </div>
+      <SlaAlertPanel data={slaAlerts} isLoading={slaAlertsLoading} />
     </div>
   );
 }
@@ -1507,6 +1509,11 @@ export function DashboardTabs() {
   const { data, error, isLoading, mutate } = useSWR<DashboardResponse>(swrKey, fetcher, {
     refreshInterval: 60_000
   });
+  const { data: slaAlertData, isLoading: slaAlertLoading } = useSWR<SlaAlertApiResponse>(
+    activeTab === 'admin' ? '/api/dashboard/sla-alerts' : null,
+    fetcher,
+    { refreshInterval: 5 * 60_000 }
+  );
 
   const handleNetworkFilterChange = (tab: TabValue, value: NetworkFilter) => {
     setNetworkFilters((prev) => {
@@ -1650,7 +1657,7 @@ export function DashboardTabs() {
           ) : null}
           {activeTab === 'mc' ? <McDashboard data={data.mc} /> : null}
           {activeTab === 'agent' ? <AgentDashboard data={data.agent} /> : null}
-          {activeTab === 'admin' ? <AdminDashboard data={data.admin} /> : null}
+          {activeTab === 'admin' ? <AdminDashboard data={data.admin} slaAlerts={slaAlertData} slaAlertsLoading={slaAlertLoading} /> : null}
         </div>
       ) : null}
     </div>

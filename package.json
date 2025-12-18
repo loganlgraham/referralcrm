@@ -11,7 +11,8 @@
     "test:unit": "jest --config jest.config.ts",
     "test:api": "cross-env NODE_ENV=test TZ=America/Denver jest --config jest.api.config.ts",
     "test:e2e": "playwright test",
-    "seed": "tsx scripts/seed.ts"
+    "seed": "tsx scripts/seed.ts",
+    "sla-alerts": "tsx scripts/sla-alert-worker.ts"
   },
   "dependencies": {
     "@next-auth/mongodb-adapter": "^1.1.1",
