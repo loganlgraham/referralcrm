@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { connectMongo } from '@/lib/mongoose';
 import { Agent, AgentDocument } from '@/models/agent';
 import { getCurrentSession } from '@/lib/auth';
-import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { computeAgentMetrics, EMPTY_AGENT_METRICS } from '@/lib/server/agent-metrics';
 import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
 import {
@@ -177,36 +176,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await rememberCoverageSuggestions(coverageSuggestionLabels);
   } else if (combinedZipCoverage.length > 0) {
     await rememberCoverageSuggestions(combinedZipCoverage);
-  }
-
-  const baseUrl = (process.env.NEXTAUTH_URL || process.env.APP_URL || '').replace(/\/$/, '');
-  if (baseUrl && isTransactionalEmailConfigured()) {
-    const inviteLink = `${baseUrl}/signup?role=agent&email=${encodeURIComponent(agent.email)}`;
-    const agentFirstName = agent.name?.trim().split(/\s+/)[0] ?? agent.name;
-    const html = `
-      <p>Hi ${agentFirstName},</p>
-      <p>You have been added to Referrio, American Home Agent's CRM. Please complete your profile and create your password so you can log in.</p>
-      <p><a href="${inviteLink}">Finish your setup</a> to save your login and start collaborating with the team.</p>
-      <p>We look forward to working with you!</p>
-    `;
-    const text = `Hi ${agentFirstName},
-
-You have been added to Referrio, American Home Agent's CRM. Please complete your profile and create your password so you can log in.
-
-Finish your setup: ${inviteLink}
-
-We look forward to working with you!`;
-
-    try {
-      await sendTransactionalEmail({
-        to: [agent.email],
-        subject: 'Welcome to Referral CRM — complete your profile',
-        html,
-        text,
-      });
-    } catch (error) {
-      console.error('Failed to deliver agent invite email', error);
-    }
   }
 
   return NextResponse.json({ id: agent._id.toString() }, { status: 201 });

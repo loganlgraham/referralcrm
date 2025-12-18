@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 
 import { AgentAdminEditor, type AgentAdminEditorProps } from '@/components/people/agent-admin-editor';
+import { SendWelcomeEmailButton } from '@/components/people/send-welcome-email-button';
 import { formatPhoneNumber } from '@/utils/formatters';
 
 interface AgentOverviewCardProps {
@@ -51,13 +52,20 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
           </div>
         </div>
         {isAdmin && (
-          <button
-            type="button"
-            className="inline-flex items-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90"
-            onClick={() => setShowEditor((previous) => !previous)}
-          >
-            {showEditor ? 'Close edit' : 'Edit details'}
-          </button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <SendWelcomeEmailButton
+              endpoint={`/api/agents/${agent._id}/welcome-email`}
+              recipientEmail={agent.email}
+              recipientName={agent.name}
+            />
+            <button
+              type="button"
+              className="inline-flex items-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90"
+              onClick={() => setShowEditor((previous) => !previous)}
+            >
+              {showEditor ? 'Close edit' : 'Edit details'}
+            </button>
+          </div>
         )}
       </div>
 
