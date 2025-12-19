@@ -118,7 +118,7 @@ function DealCard({
   const [agentId, setAgentId] = useState(deal.agentId ?? deal.agent?.id ?? '');
   const [side, setSide] = useState<'buy' | 'sell'>(deal.side ?? 'buy');
   const [usedAfc, setUsedAfc] = useState(Boolean(deal.usedAfc));
-  const [usedAssignedAgent, setUsedAssignedAgent] = useState(Boolean(deal.usedAssignedAgent));
+  const [usedAssignedAgent, setUsedAssignedAgent] = useState(deal.usedAssignedAgent ?? true);
   const [markPaid, setMarkPaid] = useState(deal.status === 'paid');
   const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | null>(
     (deal.terminatedReason as TerminatedReason | undefined) ?? null
@@ -140,7 +140,7 @@ function DealCard({
     setAgentId(deal.agentId ?? deal.agent?.id ?? '');
     setSide(deal.side ?? 'buy');
     setUsedAfc(Boolean(deal.usedAfc));
-    setUsedAssignedAgent(Boolean(deal.usedAssignedAgent));
+    setUsedAssignedAgent(deal.usedAssignedAgent ?? true);
     setMarkPaid(deal.status === 'paid');
     setTerminatedReason((deal.terminatedReason as TerminatedReason | undefined) ?? null);
   }, [deal]);
@@ -167,7 +167,7 @@ function DealCard({
     if (!canManage || saving) return;
 
     const expectedAmountCents = agentCreatedReferral ? 0 : toCents(expectedAmount);
-    const netReferralFeePaidCents = agentCreatedReferral ? 0 : toCents(netReferralFeePaid);
+    let netReferralFeePaidCents = agentCreatedReferral ? 0 : toCents(netReferralFeePaid);
     const contractPriceCents = contractPrice ? toCents(contractPrice) : null;
     const commissionBasisPoints = agentCreatedReferral
       ? null
@@ -190,6 +190,10 @@ function DealCard({
       ? Math.round((contractPriceCents * commissionBasisPoints * referralFeeBasisPoints) / 100_000_000)
       : 0;
     const finalExpectedAmountCents = agentCreatedReferral ? 0 : expectedAmountCents || computedExpected;
+
+    if (!agentCreatedReferral && markPaid && !netReferralFeePaidCents && finalExpectedAmountCents) {
+      netReferralFeePaidCents = finalExpectedAmountCents;
+    }
 
     if (!agentCreatedReferral && !finalExpectedAmountCents) {
       toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
@@ -236,8 +240,12 @@ function DealCard({
   };
 
   const statusLabel = DEAL_STATUS_LABELS[(deal.status as DealStatus | undefined) ?? 'under_contract'];
-  const expected = formatCurrency(deal.expectedAmountCents ?? 0);
-  const netPaid = formatCurrency((deal.netReferralFeePaidCents ?? deal.receivedAmountCents ?? 0) ?? 0);
+  const expected = formatCurrency(deal.status === 'paid' ? 0 : deal.expectedAmountCents ?? 0);
+  const netPaidCents =
+    deal.netReferralFeePaidCents ??
+    deal.receivedAmountCents ??
+    (deal.status === 'paid' ? deal.expectedAmountCents ?? 0 : 0);
+  const netPaid = formatCurrency(netPaidCents ?? 0);
   const contractPriceValue = deal.contractPriceCents ? formatCurrency(deal.contractPriceCents) : '—';
   const dealSide = deal.side === 'sell' ? 'Sell-side' : 'Buy-side';
   const terminatedReasonLabel = terminatedReason
@@ -592,6 +600,9 @@ function DealCard({
                   setMarkPaid(checked);
                   if (checked) {
                     setStatus('paid');
+                    if (!netReferralFeePaid) {
+                      setNetReferralFeePaid(expectedAmount);
+                    }
                   }
                 }}
                 disabled={saving}
@@ -715,7 +726,7 @@ export function ReferralDeals({
     if (!canManage || submitting) return;
 
     const expectedAmountCents = isAgentOrigin ? 0 : toCents(expectedAmount);
-    const netReferralFeePaidCents = isAgentOrigin ? 0 : toCents(netReferralFeePaid);
+    let netReferralFeePaidCents = isAgentOrigin ? 0 : toCents(netReferralFeePaid);
     const contractPriceCents = contractPrice ? toCents(contractPrice) : null;
     const commissionBasisPoints = isAgentOrigin
       ? null
@@ -734,6 +745,10 @@ export function ReferralDeals({
       ? Math.round((contractPriceCents * commissionBasisPoints * referralFeeBasisPoints) / 100_000_000)
       : 0;
     const finalExpectedAmountCents = isAgentOrigin ? 0 : expectedAmountCents || computedExpected;
+
+    if (!isAgentOrigin && markPaid && !netReferralFeePaidCents && finalExpectedAmountCents) {
+      netReferralFeePaidCents = finalExpectedAmountCents;
+    }
 
     if (!isAgentOrigin && !finalExpectedAmountCents) {
       toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
@@ -831,6 +846,13 @@ export function ReferralDeals({
     setStatusUpdating((previous) => ({ ...previous, [deal._id]: true }));
     try {
       const closingDate = nextStatus === 'closed' ? new Date().toISOString() : undefined;
+      const fallbackPaidCents =
+        nextStatus === 'paid'
+          ? deal.netReferralFeePaidCents ??
+            deal.receivedAmountCents ??
+            deal.expectedAmountCents ??
+            0
+          : undefined;
       const response = await fetch('/api/payments', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -839,6 +861,8 @@ export function ReferralDeals({
           status: nextStatus,
           terminatedReason: nextStatus === 'terminated' ? terminationReason : null,
           closingDate,
+          receivedAmountCents: fallbackPaidCents,
+          netReferralFeePaidCents: fallbackPaidCents,
         }),
       });
 
@@ -1188,6 +1212,9 @@ export function ReferralDeals({
                   setMarkPaid(checked);
                   if (checked) {
                     setStatus('paid');
+                    if (!netReferralFeePaid) {
+                      setNetReferralFeePaid(expectedAmount);
+                    }
                   }
                 }}
                 disabled={submitting}
