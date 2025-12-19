@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { differenceInDays, differenceInMinutes } from 'date-fns';
+import { differenceInDays } from 'date-fns';
 
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
@@ -12,6 +12,7 @@ import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/consta
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { inferStateFromPostalCode } from '@/utils/location';
+import { calculateBusinessMinutesBetween } from '@/utils/sla-insights';
 
 interface Params {
   params: { id: string };
@@ -145,10 +146,12 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
           }
         }
         if (pairedAt) {
-          const minutes = Math.max(differenceInMinutes(now, pairedAt), 0);
-          sla.timeToFirstAgentContactHours = Math.round((minutes / 60) * 10) / 10;
-          sla.lastPairedAt = pairedAt;
-          slaModified = true;
+          const minutes = calculateBusinessMinutesBetween(pairedAt, now);
+          if (minutes != null) {
+            sla.timeToFirstAgentContactHours = Math.round((minutes / 60) * 10) / 10;
+            sla.lastPairedAt = pairedAt;
+            slaModified = true;
+          }
         }
       } else if (nextStatus === 'New Lead' && sla.lastPairedAt) {
         sla.lastPairedAt = null;
