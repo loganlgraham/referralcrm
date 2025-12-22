@@ -20,6 +20,23 @@ function isInternalNavigation(anchor: HTMLAnchorElement) {
   }
 }
 
+function isSameLocation(target?: string | URL | null) {
+  if (!target) {
+    return true;
+  }
+
+  try {
+    const url = new URL(target.toString(), window.location.href);
+    return (
+      url.pathname === window.location.pathname &&
+      url.search === window.location.search &&
+      url.hash === window.location.hash
+    );
+  } catch {
+    return true;
+  }
+}
+
 export function NavigationProgress() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -42,7 +59,7 @@ export function NavigationProgress() {
       const target = event.target as HTMLElement | null;
       const anchor = target?.closest('a');
 
-      if (anchor instanceof HTMLAnchorElement && isInternalNavigation(anchor)) {
+      if (anchor instanceof HTMLAnchorElement && isInternalNavigation(anchor) && !isSameLocation(anchor.href)) {
         start();
       }
     };
@@ -57,7 +74,10 @@ export function NavigationProgress() {
 
     const wrapHistoryMethod = (method: typeof history.pushState) =>
       function wrapped(this: History, ...args: Parameters<typeof method>) {
-        start();
+        const nextUrl = args[2];
+        if (!isSameLocation(nextUrl)) {
+          start();
+        }
         return method.apply(this, args as never);
       };
 

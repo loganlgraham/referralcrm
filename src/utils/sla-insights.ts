@@ -341,6 +341,9 @@ const calculateBusinessMinutes = (start: Date, end: Date): number | null => {
   return totalMinutes;
 };
 
+export const calculateBusinessMinutesBetween = (start: Date, end: Date): number | null =>
+  calculateBusinessMinutes(start, end);
+
 const minutesBetween = (
   start: Date | null,
   end: Date | null,
@@ -1460,4 +1463,3 @@ export const sortRecommendations = (items: SlaRecommendation[]): SlaRecommendati
     return aDue - bDue;
   });
 };
-

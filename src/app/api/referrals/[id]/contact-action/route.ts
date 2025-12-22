@@ -1,4 +1,3 @@
-import { differenceInMinutes } from 'date-fns';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { connectMongo } from '@/lib/mongoose';
@@ -8,6 +7,7 @@ import { canManageReferral } from '@/lib/rbac';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
 import { getReferralAppBaseUrl, verifyContactActionToken } from '@/lib/referral-links';
+import { calculateBusinessMinutesBetween } from '@/utils/sla-insights';
 
 interface Params {
   params: { id: string };
@@ -119,12 +119,14 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
   referral.statusLastUpdated = now;
 
   if (pairedAt && shouldUpdateCommunicationSla) {
-    const minutes = Math.max(differenceInMinutes(now, pairedAt), 0);
-    const timeToContactHours = Math.round((minutes / 60) * 10) / 10;
-    if (sla.timeToFirstAgentContactHours == null || sla.timeToFirstAgentContactHours !== timeToContactHours) {
-      sla.timeToFirstAgentContactHours = timeToContactHours;
-      sla.lastPairedAt = pairedAt;
-      referral.markModified('sla');
+    const minutes = calculateBusinessMinutesBetween(pairedAt, now);
+    if (minutes != null) {
+      const timeToContactHours = Math.round((minutes / 60) * 10) / 10;
+      if (sla.timeToFirstAgentContactHours == null || sla.timeToFirstAgentContactHours !== timeToContactHours) {
+        sla.timeToFirstAgentContactHours = timeToContactHours;
+        sla.lastPairedAt = pairedAt;
+        referral.markModified('sla');
+      }
     }
   }
 
