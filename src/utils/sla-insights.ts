@@ -106,7 +106,7 @@ const DEAL_STAGE_PRIORITIES: { key: string; label: string }[] = [
   { key: 'under_contract', label: 'Under Contract' },
 ];
 
-const SLA_THRESHOLDS = {
+export const SLA_THRESHOLDS = {
   minutesToAssignment: 120,
   hoursToFirstConversation: 24,
   daysToUnderContract: 14,
