@@ -191,6 +191,7 @@ export function ReferralHeader({
     referral.referralFeeBasisPoints
   );
   const [sendingIntroductions, setSendingIntroductions] = useState(false);
+  const [introNotes, setIntroNotes] = useState('');
   const [introEmailStatus, setIntroEmailStatus] = useState<{
     summary: string;
     sentAt: Date;
@@ -469,6 +470,8 @@ export function ReferralHeader({
     try {
       const response = await fetch(`/api/referrals/${referral._id}/send-emails`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: introNotes }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -519,6 +522,7 @@ export function ReferralHeader({
         summary: summary || 'Intro emails sent.',
         sentAt: new Date(),
       });
+      setIntroNotes('');
     } catch (error) {
       console.error('Failed to send intro emails', error);
       toast.error(error instanceof Error ? error.message : 'Unable to send intro emails right now.');
@@ -934,8 +938,16 @@ export function ReferralHeader({
                   {sendingIntroductions ? 'Sending…' : 'Send now'}
                 </button>
               </div>
+              <textarea
+                value={introNotes}
+                onChange={(event) => setIntroNotes(event.target.value)}
+                rows={2}
+                className="mt-2 w-full rounded border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 placeholder:text-slate-400 focus:border-brand focus:outline-none"
+                placeholder="Add a note to include in the agent email (optional)"
+                disabled={sendingIntroductions}
+              />
               <p className="mt-1 text-[11px] text-slate-500">
-                Agent emails include the MC’s contact info, and the MC email highlights the agent’s details.
+                Agent emails include the MC's contact info, and the MC email highlights the agent's details.
               </p>
               {introEmailStatus && (
                 <div className="mt-2 text-[11px] text-slate-600">

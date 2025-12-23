@@ -190,7 +190,7 @@ const trySendEmail = async (
   }
 };
 
-export async function POST(_request: NextRequest, { params }: Params): Promise<NextResponse> {
+export async function POST(request: NextRequest, { params }: Params): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });
@@ -206,6 +206,16 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
       { error: 'Transactional email is not configured.' },
       { status: 503 }
     );
+  }
+
+  let notes: string | null = null;
+  try {
+    const body = await request.json();
+    if (typeof body?.notes === 'string' && body.notes.trim()) {
+      notes = body.notes.trim();
+    }
+  } catch {
+    // Body is empty or not JSON, which is fine
   }
 
   await connectMongo();
@@ -252,12 +262,18 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
       : `Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName}. We're excited to get them in their new home!`;
 
   if (shouldEmailAgent) {
+    const notesHtml = notes
+      ? `<blockquote style="margin: 1rem 0; padding-left: 1rem; border-left: 4px solid #cbd5f5;">${notes.replace(/\n/g, '<br>')}</blockquote>`
+      : null;
+    const notesText = notes ? `\nNote:\n${notes}\n` : null;
+
     await trySendEmail(
       primaryAgent?.email ?? null,
       agentEmailSubject,
       [
         `<p>Hi ${agentFirstName},</p>`,
         `<p>${agentIntroCopy}</p>`,
+        notesHtml,
         '<p>Here are the key details so you can reach out confidently:</p>',
         `<p><b>Client Name:</b> ${borrowerName}<br><b>Email:</b> ${borrowerEmail ?? 'Not provided'}<br><b>Phone:</b> ${
           borrowerPhone ?? 'Not provided'
@@ -279,6 +295,7 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
       [
         `Hi ${agentFirstName},`,
         agentIntroCopy,
+        notesText,
         'Here are the key details so you can reach out confidently:',
         `Client Name: ${borrowerName}`,
         `Email: ${borrowerEmail ?? 'Not provided'}`,
