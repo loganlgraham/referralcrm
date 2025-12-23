@@ -190,7 +190,7 @@ const trySendEmail = async (
   }
 };
 
-export async function POST(_request: NextRequest, { params }: Params): Promise<NextResponse> {
+export async function POST(request: NextRequest, { params }: Params): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });
@@ -206,6 +206,16 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
       { error: 'Transactional email is not configured.' },
       { status: 503 }
     );
+  }
+
+  let notes: string | null = null;
+  try {
+    const body = await request.json();
+    if (typeof body?.notes === 'string' && body.notes.trim()) {
+      notes = body.notes.trim();
+    }
+  } catch {
+    // Body is empty or not JSON, which is fine
   }
 
   await connectMongo();
@@ -252,6 +262,9 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
       : `Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName}. We're excited to get them in their new home!`;
 
   if (shouldEmailAgent) {
+    const notesHtmlLine = notes ? `<br><b>Notes:</b> ${notes.replace(/\n/g, '<br>')}` : '';
+    const notesTextLine = notes ? `Notes: ${notes}` : null;
+
     await trySendEmail(
       primaryAgent?.email ?? null,
       agentEmailSubject,
@@ -261,7 +274,7 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
         '<p>Here are the key details so you can reach out confidently:</p>',
         `<p><b>Client Name:</b> ${borrowerName}<br><b>Email:</b> ${borrowerEmail ?? 'Not provided'}<br><b>Phone:</b> ${
           borrowerPhone ?? 'Not provided'
-        }</p>`,
+        }${notesHtmlLine}</p>`,
         lenderContact
           ? `<p><b>Mortgage Consultant at American Financing:</b> ${lenderContact.name ?? 'Not provided'}<br><b>Email:</b> ${
               lenderContact.email ?? 'Not provided'
@@ -283,6 +296,7 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
         `Client Name: ${borrowerName}`,
         `Email: ${borrowerEmail ?? 'Not provided'}`,
         `Phone: ${borrowerPhone ?? 'Not provided'}`,
+        notesTextLine,
         lenderContact
           ? `Mortgage Consultant at American Financing: ${lenderContact.name ?? 'Not provided'} | Email: ${
               lenderContact.email ?? 'Not provided'

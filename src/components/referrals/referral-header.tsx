@@ -191,6 +191,10 @@ export function ReferralHeader({
     referral.referralFeeBasisPoints
   );
   const [sendingIntroductions, setSendingIntroductions] = useState(false);
+  const [introNotes, setIntroNotes] = useState('');
+  const [cleanedNotes, setCleanedNotes] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
+  const [cleaningNotes, setCleaningNotes] = useState(false);
   const [introEmailStatus, setIntroEmailStatus] = useState<{
     summary: string;
     sentAt: Date;
@@ -464,11 +468,47 @@ export function ReferralHeader({
   const borrowerPhone = referral.borrower?.phone?.trim() ?? '';
   const hasBorrowerContact = Boolean(borrowerEmail || borrowerPhone);
 
-  const handleSendIntroductions = async () => {
+  const handlePreviewIntroductions = async () => {
+    if (!introNotes.trim()) {
+      // No notes to clean up, show preview with empty notes
+      setCleanedNotes('');
+      setShowPreview(true);
+      return;
+    }
+
+    setCleaningNotes(true);
+    try {
+      const response = await fetch(`/api/referrals/${referral._id}/cleanup-notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: introNotes }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        // If cleanup fails, use original notes
+        setCleanedNotes(introNotes);
+        toast.error('Could not clean up notes, using original text.');
+      } else {
+        setCleanedNotes(payload.cleanedNotes || introNotes);
+      }
+      setShowPreview(true);
+    } catch (error) {
+      console.error('Failed to clean up notes', error);
+      setCleanedNotes(introNotes);
+      setShowPreview(true);
+    } finally {
+      setCleaningNotes(false);
+    }
+  };
+
+  const handleConfirmSend = async () => {
     setSendingIntroductions(true);
+    setShowPreview(false);
     try {
       const response = await fetch(`/api/referrals/${referral._id}/send-emails`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: cleanedNotes }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -519,12 +559,19 @@ export function ReferralHeader({
         summary: summary || 'Intro emails sent.',
         sentAt: new Date(),
       });
+      setIntroNotes('');
+      setCleanedNotes('');
     } catch (error) {
       console.error('Failed to send intro emails', error);
       toast.error(error instanceof Error ? error.message : 'Unable to send intro emails right now.');
     } finally {
       setSendingIntroductions(false);
     }
+  };
+
+  const handleCancelPreview = () => {
+    setShowPreview(false);
+    setCleanedNotes('');
   };
 
   const handleContractDraftChangeInternal = useCallback(
@@ -927,15 +974,23 @@ export function ReferralHeader({
                 </div>
                 <button
                   type="button"
-                  onClick={handleSendIntroductions}
-                  disabled={sendingIntroductions}
+                  onClick={handlePreviewIntroductions}
+                  disabled={sendingIntroductions || cleaningNotes}
                   className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {sendingIntroductions ? 'Sending…' : 'Send now'}
+                  {sendingIntroductions ? 'Sending…' : cleaningNotes ? 'Preparing…' : 'Send now'}
                 </button>
               </div>
+              <textarea
+                value={introNotes}
+                onChange={(event) => setIntroNotes(event.target.value)}
+                rows={2}
+                className="mt-2 w-full rounded border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 placeholder:text-slate-400 focus:border-brand focus:outline-none"
+                placeholder="Add a note to include in the agent email (optional)"
+                disabled={sendingIntroductions || cleaningNotes}
+              />
               <p className="mt-1 text-[11px] text-slate-500">
-                Agent emails include the MC’s contact info, and the MC email highlights the agent’s details.
+                Agent emails include the MC's contact info, and the MC email highlights the agent's details.
               </p>
               {introEmailStatus && (
                 <div className="mt-2 text-[11px] text-slate-600">
@@ -948,6 +1003,48 @@ export function ReferralHeader({
                     })}
                     .
                   </p>
+                </div>
+              )}
+              {showPreview && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                  <div className="mx-4 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
+                    <h3 className="text-lg font-semibold text-slate-900">Preview Email Notes</h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Review the cleaned-up notes before sending to the agent.
+                    </p>
+                    {cleanedNotes ? (
+                      <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Notes (cleaned up)</p>
+                        <textarea
+                          value={cleanedNotes}
+                          onChange={(event) => setCleanedNotes(event.target.value)}
+                          rows={4}
+                          className="mt-2 w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-brand focus:outline-none"
+                        />
+                      </div>
+                    ) : (
+                      <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                        <p className="text-sm text-slate-600">No notes will be included in the email.</p>
+                      </div>
+                    )}
+                    <div className="mt-6 flex justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={handleCancelPreview}
+                        className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleConfirmSend}
+                        disabled={sendingIntroductions}
+                        className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        {sendingIntroductions ? 'Sending…' : 'Confirm & Send'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
