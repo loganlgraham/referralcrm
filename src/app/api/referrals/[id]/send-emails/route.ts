@@ -262,10 +262,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       : `Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName}. We're excited to get them in their new home!`;
 
   if (shouldEmailAgent) {
-    const notesHtml = notes
-      ? `<blockquote style="margin: 1rem 0; padding-left: 1rem; border-left: 4px solid #cbd5f5;">${notes.replace(/\n/g, '<br>')}</blockquote>`
-      : null;
-    const notesText = notes ? `\nNote:\n${notes}\n` : null;
+    const notesHtmlLine = notes ? `<br><b>Notes:</b> ${notes.replace(/\n/g, '<br>')}` : '';
+    const notesTextLine = notes ? `Notes: ${notes}` : null;
 
     await trySendEmail(
       primaryAgent?.email ?? null,
@@ -273,11 +271,10 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       [
         `<p>Hi ${agentFirstName},</p>`,
         `<p>${agentIntroCopy}</p>`,
-        notesHtml,
         '<p>Here are the key details so you can reach out confidently:</p>',
         `<p><b>Client Name:</b> ${borrowerName}<br><b>Email:</b> ${borrowerEmail ?? 'Not provided'}<br><b>Phone:</b> ${
           borrowerPhone ?? 'Not provided'
-        }</p>`,
+        }${notesHtmlLine}</p>`,
         lenderContact
           ? `<p><b>Mortgage Consultant at American Financing:</b> ${lenderContact.name ?? 'Not provided'}<br><b>Email:</b> ${
               lenderContact.email ?? 'Not provided'
@@ -295,11 +292,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       [
         `Hi ${agentFirstName},`,
         agentIntroCopy,
-        notesText,
         'Here are the key details so you can reach out confidently:',
         `Client Name: ${borrowerName}`,
         `Email: ${borrowerEmail ?? 'Not provided'}`,
         `Phone: ${borrowerPhone ?? 'Not provided'}`,
+        notesTextLine,
         lenderContact
           ? `Mortgage Consultant at American Financing: ${lenderContact.name ?? 'Not provided'} | Email: ${
               lenderContact.email ?? 'Not provided'
