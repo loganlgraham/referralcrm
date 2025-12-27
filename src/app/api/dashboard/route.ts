@@ -528,6 +528,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           expectedRevenueCents: 0,
           realizedRevenueCents: 0,
           closedNotPaidCents: 0,
+          averageDaysNewLeadToContract: 0,
           averageDaysClosedToPaid: 0,
           averageClosedDealAmountCents: 0,
           averageRevenuePerDealCents: 0,
@@ -909,6 +910,45 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         return null;
       })
       .filter((value): value is number => value != null)
+  );
+
+  const underContractOrLaterStatuses = new Set<AggregatedPayment['status']>([
+    'under_contract',
+    'past_inspection',
+    'past_appraisal',
+    'clear_to_close',
+    'closed',
+    'payment_sent',
+    'paid'
+  ]);
+  const paymentsUnderContractOrLater = revenueEligiblePayments.filter((payment) =>
+    underContractOrLaterStatuses.has(payment.status)
+  );
+  const averageDaysNewLeadToContract = computeAverage(
+    paymentsUnderContractOrLater
+      .map((payment) => {
+        const storedDays = payment.referral?.sla?.daysToContract;
+        if (storedDays != null && storedDays >= 0) {
+          return storedDays;
+        }
+
+        const createdAt = payment.referral?.createdAt ? new Date(payment.referral.createdAt) : null;
+        const underContractAt = payment.referral?.sla?.lastUnderContractAt
+          ? new Date(payment.referral.sla.lastUnderContractAt)
+          : null;
+
+        if (createdAt && underContractAt) {
+          return differenceInCalendarDays(underContractAt, createdAt);
+        }
+
+        if (createdAt && payment.status === 'under_contract') {
+          const paymentCreatedAt = new Date(payment.updatedAt);
+          return differenceInCalendarDays(paymentCreatedAt, createdAt);
+        }
+
+        return null;
+      })
+      .filter((value): value is number => value != null && value >= 0)
   );
 
   const revenueContributingClosedDeals = revenueEligiblePayments.filter(
@@ -1568,6 +1608,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     expectedRevenueCents,
     realizedRevenueCents,
     closedNotPaidCents,
+    averageDaysNewLeadToContract,
     averageDaysClosedToPaid,
     averageClosedDealAmountCents,
     averageRevenuePerDealCents,
