@@ -172,6 +172,15 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       slaModified = true;
     } else if (nextStatus === 'Closed') {
       sla.lastClosedAt = now;
+      // Calculate and store daysToClose if we have lastUnderContractAt
+      if (sla.daysToClose == null && sla.lastUnderContractAt) {
+        const underContractAt = sla.lastUnderContractAt instanceof Date 
+          ? sla.lastUnderContractAt 
+          : new Date(sla.lastUnderContractAt);
+        if (!Number.isNaN(underContractAt.getTime())) {
+          sla.daysToClose = Math.max(differenceInDays(now, underContractAt), 0);
+        }
+      }
       slaModified = true;
     }
   }
