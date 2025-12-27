@@ -528,6 +528,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           expectedRevenueCents: 0,
           realizedRevenueCents: 0,
           closedNotPaidCents: 0,
+          averageDaysNewLeadToContract: 0,
           averageDaysClosedToPaid: 0,
           averageClosedDealAmountCents: 0,
           averageRevenuePerDealCents: 0,
@@ -808,11 +809,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       referralZipMap.set(zip, (referralZipMap.get(zip) ?? 0) + 1);
     });
   });
+  // Close rate calculation: For accurate close rate, we need to match deals to referrals
+  // created in the timeframe, not just deals closed in the timeframe.
+  // This ensures we're measuring "of referrals created this period, how many closed?"
+  const filteredReferralIds = new Set(filteredReferrals.map((r) => r._id.toString()));
+  
   const dealsClosed = filteredPaymentsByNetwork.filter(
     (payment) =>
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
-      (payment.status === 'closed' || payment.status === 'paid')
+      (payment.status === 'closed' || payment.status === 'paid') &&
+      filteredReferralIds.has(payment.referral._id.toString())
   );
+  
   const lostReferrals = filteredReferrals.filter((referral) => referral.status === 'Lost');
   const endOfToday = endOfDay(new Date());
   const startOfCurrentMonth = startOfMonth(new Date());
@@ -909,6 +917,45 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         return null;
       })
       .filter((value): value is number => value != null)
+  );
+
+  const underContractOrLaterStatuses = new Set<AggregatedPayment['status']>([
+    'under_contract',
+    'past_inspection',
+    'past_appraisal',
+    'clear_to_close',
+    'closed',
+    'payment_sent',
+    'paid'
+  ]);
+  const paymentsUnderContractOrLater = revenueEligiblePayments.filter((payment) =>
+    underContractOrLaterStatuses.has(payment.status)
+  );
+  const averageDaysNewLeadToContract = computeAverage(
+    paymentsUnderContractOrLater
+      .map((payment) => {
+        const storedDays = payment.referral?.sla?.daysToContract;
+        if (storedDays != null && storedDays >= 0) {
+          return storedDays;
+        }
+
+        const createdAt = payment.referral?.createdAt ? new Date(payment.referral.createdAt) : null;
+        const underContractAt = payment.referral?.sla?.lastUnderContractAt
+          ? new Date(payment.referral.sla.lastUnderContractAt)
+          : null;
+
+        if (createdAt && underContractAt) {
+          return differenceInCalendarDays(underContractAt, createdAt);
+        }
+
+        if (createdAt && payment.status === 'under_contract') {
+          const paymentCreatedAt = new Date(payment.updatedAt);
+          return differenceInCalendarDays(paymentCreatedAt, createdAt);
+        }
+
+        return null;
+      })
+      .filter((value): value is number => value != null && value >= 0)
   );
 
   const revenueContributingClosedDeals = revenueEligiblePayments.filter(
@@ -1146,6 +1193,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ? (ahaOosAttached.length / ahaOosRelevant.length) * 100
     : 0;
 
+  // MC Leaderboard: Build leaderboard from referral counts by MC
+  // Sorts by referral count descending and returns top 10
   const buildMcRequestLeaderboard = (sourceMap: Map<string, number>) =>
     Array.from(sourceMap.entries())
       .map(([key, value]) => ({
@@ -1156,6 +1205,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .sort((a, b) => b.referrals - a.referrals)
       .slice(0, 10);
 
+  // MC Revenue and Close Rate tracking
+  // Revenue map tracks: realized revenue, expected revenue, closed deals, and total referrals per MC
+  // Close rate map tracks: closed deals and total referrals for calculating close rate percentage
   const mcRevenueMap = new Map<string, { revenue: number; expected: number; closed: number; totalReferrals: number }>();
   const mcCloseRateMap = new Map<string, { closed: number; total: number }>();
 
@@ -1185,6 +1237,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ahaOos: groupTrendByTimeframe(ahaOosReferralDates, timeframe)
   };
 
+  // Aggregate MC metrics from payments
+  // Excludes deals attributed to outside agents from revenue/close rate calculations
   filteredPaymentsByNetwork.forEach((payment) => {
     const key = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     const current = mcRevenueMap.get(key) ?? { revenue: 0, expected: 0, closed: 0, totalReferrals: referralByMcMap.get(key) ?? 0 };
@@ -1234,12 +1288,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ahaOos: buildMcRequestLeaderboard(referralByMcAhaOosMap)
   };
 
+  // Agent Leaderboard: Count referrals per agent from filtered referrals
   const agentReferralCount = new Map<string, number>();
   filteredReferrals.forEach((referral) => {
     const key = referral.assignedAgent ? referral.assignedAgent.toString() : 'unassigned';
     agentReferralCount.set(key, (agentReferralCount.get(key) ?? 0) + 1);
   });
 
+  // Agent Revenue Map: Comprehensive tracking of agent performance metrics
+  // - revenue: Realized revenue (received amounts)
+  // - expected: Outstanding expected revenue
+  // - closed: Number of closed deals
+  // - totalReferrals: Total referrals assigned to agent
+  // - commissionCents/Percentages: For calculating average commission
+  // - referralFeePercentages: For calculating average referral fee
+  // - netCommissionCents: Agent's net earnings (commission - referral fee paid)
+  // - closedVolumeCents: Total contract value of closed deals
   const agentRevenueMap = new Map<
     string,
     {
@@ -1254,8 +1318,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       closedVolumeCents: number;
     }
   >();
+  // Track deals lost to outside agents per agent
   const agentLostDealsMap = new Map<string, number>();
 
+  // Aggregate agent metrics from payments
+  // Excludes terminated deals and tracks outside agent attribution separately
   filteredPaymentsByNetwork.forEach((payment) => {
     if (payment.status === 'terminated') {
       return;
@@ -1275,16 +1342,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const isOutsideAgentDeal = payment.agentAttribution === 'OUTSIDE_AGENT';
     const contractPriceCents =
       payment.contractPriceCents ?? payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
+    
+    // Only count revenue for deals that stayed with assigned agent
     if (!isOutsideAgentDeal) {
       current.revenue += payment.receivedAmountCents ?? 0;
       current.expected += calculateOutstandingExpected(payment);
     }
+    
     if (payment.status === 'closed' || payment.status === 'paid') {
       if (!isOutsideAgentDeal) {
         current.closed += 1;
         if (contractPriceCents > 0) {
           current.closedVolumeCents += contractPriceCents;
         }
+        
+        // Calculate commission and referral fee percentages for averages
         const referralFeeCents = payment.referral?.referralFeeDueCents ?? 0;
         let referralFeePercent: number | null =
           typeof payment.referral?.referralFeeBasisPoints === 'number'
@@ -1296,6 +1368,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         const commissionBasisPoints = payment.referral?.commissionBasisPoints ?? 0;
         const commissionPercent = commissionBasisPoints / 100;
         const commissionCents = (contractPriceCents * commissionBasisPoints) / 10000;
+        
         if (commissionPercent > 0) {
           current.commissionPercentages.push(commissionPercent);
           if (commissionCents > 0) {
@@ -1305,11 +1378,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         if (referralFeePercent && referralFeePercent > 0) {
           current.referralFeePercentages.push(referralFeePercent);
         }
+        
+        // Net commission = commission earned - referral fee paid (only for paid deals)
         if (payment.status === 'paid' && commissionBasisPoints > 0) {
           const paidReferralFeeCents = payment.receivedAmountCents ?? referralFeeCents;
           current.netCommissionCents += commissionCents - paidReferralFeeCents;
         }
       } else {
+        // Track deals lost to outside agents
         agentLostDealsMap.set(key, (agentLostDealsMap.get(key) ?? 0) + 1);
       }
     }
@@ -1568,6 +1644,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     expectedRevenueCents,
     realizedRevenueCents,
     closedNotPaidCents,
+    averageDaysNewLeadToContract,
     averageDaysClosedToPaid,
     averageClosedDealAmountCents,
     averageRevenuePerDealCents,
