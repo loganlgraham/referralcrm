@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { addDays, endOfDay, startOfMonth, startOfWeek, startOfYear, subDays } from 'date-fns';
 
 import { connectMongo } from '@/lib/mongoose';
-import { getCurrentSession } from '@/lib/auth';
+import { requireAdmin } from '@/lib/auth';
 import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
@@ -148,82 +148,58 @@ async function computeMetrics(range: DateRange) {
   };
 }
 
-function buildHtmlReport(payload: ReportPayload, metrics: Awaited<ReturnType<typeof computeMetrics>>) {
-  const sections: string[] = [];
+type MetricsData = Awaited<ReturnType<typeof computeMetrics>>;
 
-  payload.metrics.forEach((metric) => {
-    const label = METRIC_LABELS[metric] ?? metric;
-    switch (metric) {
-      case 'summary':
-        sections.push(`
-          <h3>${label}</h3>
-          <ul>
-            <li>Total referrals: ${metrics.summary.totalReferrals}</li>
-            <li>Closed referrals: ${metrics.summary.closedReferrals}</li>
-            <li>Close rate: ${metrics.summary.closeRate.toFixed(1)}%</li>
-            <li>Expected revenue: ${formatCurrency(metrics.summary.expectedRevenueCents)}</li>
-            <li>Revenue received: ${formatCurrency(metrics.summary.revenueReceivedCents)}</li>
-          </ul>
-        `);
-        break;
-      case 'revenue':
-        sections.push(`
-          <h3>${label}</h3>
-          <ul>
-            <li>Expected revenue: ${formatCurrency(metrics.revenue.expectedRevenueCents)}</li>
-            <li>Revenue received: ${formatCurrency(metrics.revenue.revenueReceivedCents)}</li>
-          </ul>
-        `);
-        break;
-      case 'deals':
-        sections.push(`
-          <h3>${label}</h3>
-          <ul>
-            <li>Active pipeline: ${metrics.deals.activePipeline}</li>
-            <li>Closed deals: ${metrics.deals.closedReferrals}</li>
-          </ul>
-        `);
-        break;
-      case 'attachRate':
-        sections.push(`
-          <h3>${label}</h3>
-          <p>Agent attach rate: ${metrics.attachRate.attachRate.toFixed(1)}%</p>
-        `);
-        break;
-      case 'preApprovals':
-        sections.push(`
-          <h3>${label}</h3>
-          <p>Pre-approvals recorded: ${metrics.preApprovals.count}</p>
-        `);
-        break;
-      case 'geography':
-        sections.push(`
-          <h3>${label}</h3>
-          <p>${Object.entries(metrics.geography)
-            .map(([state, count]) => `${state}: ${count}`)
-            .join('<br/>') || 'No geography data available.'}</p>
-        `);
-        break;
-      case 'network':
-        sections.push(`
-          <h3>${label}</h3>
-          <p>${Object.entries(metrics.network)
-            .map(([bucket, count]) => `${bucket}: ${count}`)
-            .join('<br/>') || 'No network data available.'}</p>
-        `);
-        break;
-      case 'termination':
-        sections.push(`
-          <h3>${label}</h3>
-          <p>${Object.entries(metrics.termination)
-            .map(([reason, count]) => `${reason}: ${count}`)
-            .join('<br/>') || 'No terminated deals recorded.'}</p>
-        `);
-        break;
-      default:
-        break;
-    }
-  });
+const formatRecordList = (record: Record<string, number>, fallback: string): string => {
+  const entries = Object.entries(record);
+  return entries.length > 0
+    ? entries.map(([key, count]) => `${key}: ${count}`).join('<br/>')
+    : fallback;
+};
+
+const metricRenderers: Record<DashboardMetricId, (m: MetricsData) => string> = {
+  summary: (m) => `
+    <h3>${METRIC_LABELS.summary}</h3>
+    <ul>
+      <li>Total referrals: ${m.summary.totalReferrals}</li>
+      <li>Closed referrals: ${m.summary.closedReferrals}</li>
+      <li>Close rate: ${m.summary.closeRate.toFixed(1)}%</li>
+      <li>Expected revenue: ${formatCurrency(m.summary.expectedRevenueCents)}</li>
+      <li>Revenue received: ${formatCurrency(m.summary.revenueReceivedCents)}</li>
+    </ul>`,
+  revenue: (m) => `
+    <h3>${METRIC_LABELS.revenue}</h3>
+    <ul>
+      <li>Expected revenue: ${formatCurrency(m.revenue.expectedRevenueCents)}</li>
+      <li>Revenue received: ${formatCurrency(m.revenue.revenueReceivedCents)}</li>
+    </ul>`,
+  deals: (m) => `
+    <h3>${METRIC_LABELS.deals}</h3>
+    <ul>
+      <li>Active pipeline: ${m.deals.activePipeline}</li>
+      <li>Closed deals: ${m.deals.closedReferrals}</li>
+    </ul>`,
+  attachRate: (m) => `
+    <h3>${METRIC_LABELS.attachRate}</h3>
+    <p>Agent attach rate: ${m.attachRate.attachRate.toFixed(1)}%</p>`,
+  preApprovals: (m) => `
+    <h3>${METRIC_LABELS.preApprovals}</h3>
+    <p>Pre-approvals recorded: ${m.preApprovals.count}</p>`,
+  geography: (m) => `
+    <h3>${METRIC_LABELS.geography}</h3>
+    <p>${formatRecordList(m.geography, 'No geography data available.')}</p>`,
+  network: (m) => `
+    <h3>${METRIC_LABELS.network}</h3>
+    <p>${formatRecordList(m.network, 'No network data available.')}</p>`,
+  termination: (m) => `
+    <h3>${METRIC_LABELS.termination}</h3>
+    <p>${formatRecordList(m.termination, 'No terminated deals recorded.')}</p>`,
+};
+
+function buildHtmlReport(payload: ReportPayload, metrics: MetricsData) {
+  const sections = payload.metrics
+    .map((metric) => metricRenderers[metric]?.(metrics))
+    .filter(Boolean);
 
   const reportWindow = payload.reportTimeframe === 'Custom export window'
     ? `${payload.customStartDate || 'Start'} to ${payload.customEndDate || 'End'}`
@@ -250,10 +226,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   await connectMongo();
-  const session = await getCurrentSession();
 
-  if (!session || session.user?.role !== 'admin') {
-    return new NextResponse('Unauthorized', { status: 401 });
+  try {
+    await requireAdmin();
+  } catch (err) {
+    const { status = 401, message = 'Unauthorized' } = err as { status?: number; message?: string };
+    return new NextResponse(message, { status });
   }
 
   if (!isTransactionalEmailConfigured()) {

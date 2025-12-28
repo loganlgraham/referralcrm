@@ -64,49 +64,33 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
 
   const update: Record<string, unknown> = {};
 
-  if (parsed.data.name !== undefined) {
-    update.name = parsed.data.name;
+  // Copy simple fields that don't require special handling
+  const simpleFields = [
+    'name', 'email', 'phone', 'licenseNumber', 'brokerage',
+    'statesLicensed', 'specialties', 'languages', 'ahaDesignation'
+  ] as const;
+  for (const field of simpleFields) {
+    if (parsed.data[field] !== undefined) {
+      update[field] = parsed.data[field];
+    }
   }
-  if (parsed.data.email !== undefined) {
-    update.email = parsed.data.email;
-  }
-  if (parsed.data.phone !== undefined) {
-    update.phone = parsed.data.phone;
-  }
-  if (parsed.data.licenseNumber !== undefined) {
-    update.licenseNumber = parsed.data.licenseNumber;
-  }
-  if (parsed.data.brokerage !== undefined) {
-    update.brokerage = parsed.data.brokerage;
-  }
-  if (parsed.data.statesLicensed !== undefined) {
-    update.statesLicensed = parsed.data.statesLicensed;
-  }
+
+  // Handle coverage locations with ZIP normalization
   if (parsed.data.coverageLocations !== undefined) {
-    const zippedFromLocations = parsed.data.coverageLocations.flatMap((location) => location.zipCodes);
+    const zippedFromLocations = parsed.data.coverageLocations.flatMap((loc) => loc.zipCodes);
     const zippedFromPayload = parsed.data.coverageAreas ?? [];
     update.coverageLocations = parsed.data.coverageLocations;
-    update.zipCoverage = mergeAndNormalizeZipCodes([
-      ...zippedFromPayload,
-      ...zippedFromLocations,
-    ]);
+    update.zipCoverage = mergeAndNormalizeZipCodes([...zippedFromPayload, ...zippedFromLocations]);
   } else if (parsed.data.coverageAreas !== undefined) {
     update.zipCoverage = mergeAndNormalizeZipCodes(parsed.data.coverageAreas);
   }
+
+  // NPS score requires admin
   if (parsed.data.npsScore !== undefined) {
     if (!isAdmin) {
       return new NextResponse('Forbidden', { status: 403 });
     }
     update.npsScore = parsed.data.npsScore;
-  }
-  if (parsed.data.specialties !== undefined) {
-    update.specialties = parsed.data.specialties;
-  }
-  if (parsed.data.languages !== undefined) {
-    update.languages = parsed.data.languages;
-  }
-  if (parsed.data.ahaDesignation !== undefined) {
-    update.ahaDesignation = parsed.data.ahaDesignation;
   }
 
   const updated = await Agent.findByIdAndUpdate(params.id, { $set: update }, { new: true });
