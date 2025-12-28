@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { connectMongo } from '@/lib/mongoose';
-import { getCurrentSession } from '@/lib/auth';
+import { requireAdmin } from '@/lib/auth';
 import { Referral } from '@/models/referral';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
@@ -9,6 +9,35 @@ import { Payment } from '@/models/payment';
 import { ACTIVE_REFERRAL_STATUS_VALUES } from '@/constants/referrals';
 
 type ExportReport = 'referrals' | 'agents' | 'mcs' | 'deals';
+
+// Populated document types for type safety
+interface PopulatedAgent {
+  _id: unknown;
+  name: string;
+}
+
+interface PopulatedReferral {
+  _id?: unknown;
+  borrower?: { name?: string; firstName?: string; lastName?: string };
+  status?: string;
+  assignedAgent?: PopulatedAgent | null;
+  source?: string;
+  origin?: string;
+  loanFileNumber?: string;
+  referralFeeBasisPoints?: number;
+  closedPriceCents?: number;
+}
+
+interface PopulatedPayment {
+  _id?: unknown;
+  status: string;
+  expectedAmountCents?: number;
+  receivedAmountCents?: number;
+  contractPriceCents?: number;
+  referralFeeBasisPoints?: number;
+  referralId?: PopulatedReferral | null;
+  agentAttribution?: unknown;
+}
 
 type CsvPayload = {
   filename: string;
@@ -31,14 +60,14 @@ async function buildReferralRows(): Promise<string[][]> {
   const referrals = await Referral.find({ deletedAt: null })
     .select('borrower status assignedAgent source origin loanFileNumber createdAt referralFeeDueCents lender lookingInZip propertyCity propertyState')
     .populate('assignedAgent', 'name')
-    .lean();
+    .lean() as unknown as PopulatedReferral[];
 
   const headers = ['Referral ID', 'Borrower', 'Status', 'Assigned Agent', 'Source'];
   const rows = referrals.map((referral) => {
     const referralId = referral.loanFileNumber || referral._id?.toString();
     const borrowerName = referral.borrower?.name ||
       [referral.borrower?.firstName, referral.borrower?.lastName].filter(Boolean).join(' ');
-    const assignedAgent = (referral as any).assignedAgent?.name ?? 'Unassigned';
+    const assignedAgent = referral.assignedAgent?.name ?? 'Unassigned';
     const source = referral.source || referral.origin || 'Unknown';
 
     return [referralId ?? 'Unknown', borrowerName || 'Unknown', referral.status || 'Unknown', assignedAgent, source];
@@ -133,11 +162,11 @@ async function buildDealRows(): Promise<string[][]> {
   const payments = await Payment.find({})
     .select('status expectedAmountCents receivedAmountCents contractPriceCents referralFeeBasisPoints referralId agentAttribution')
     .populate({ path: 'referralId', select: 'assignedAgent referralFeeBasisPoints commissionBasisPoints closedPriceCents borrower status', populate: { path: 'assignedAgent', select: 'name' } })
-    .lean();
+    .lean() as unknown as PopulatedPayment[];
 
   const headers = ['Deal', 'Status', 'Volume', 'Referral fee %', 'Assigned agent'];
   const rows = payments.map((payment) => {
-    const referral = (payment as any).referralId;
+    const referral = payment.referralId;
     const id = referral?._id?.toString() ?? payment._id?.toString();
     const statusLabel = payment.status.replace(/_/g, ' ');
     const volumeCents = payment.contractPriceCents ?? referral?.closedPriceCents ?? 0;
@@ -177,16 +206,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   await connectMongo();
-  const session = await getCurrentSession();
-  if (!session || session.user?.role !== 'admin') {
-    return new NextResponse('Unauthorized', { status: 401 });
+
+  try {
+    await requireAdmin();
+  } catch (err) {
+    const { status = 401, message = 'Unauthorized' } = err as { status?: number; message?: string };
+    return new NextResponse(message, { status });
   }
 
   try {
     const csvPayload = await buildCsv(report);
     return toCsv(csvPayload);
-  } catch (error) {
-    console.error('Failed to build CSV export', error);
+  } catch (err) {
+    console.error('Failed to build CSV export', err);
     return new NextResponse('Unable to generate export right now.', { status: 500 });
   }
 }

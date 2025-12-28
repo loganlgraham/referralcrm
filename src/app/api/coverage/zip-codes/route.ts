@@ -25,12 +25,20 @@ Return JSON with a "locations" array. Each entry must have:
 - "zipCodes": an array of unique five-digit ZIP codes that fall within that coverage area.
 Also include a top-level "zipCodes" array that contains every unique ZIP code mentioned across all locations. If a location does not map cleanly to specific ZIP codes, omit it instead of guessing.`;
 
-const normalizeZipCode = (value: string) => {
+const normalizeZipCode = (value: string): string | null => {
   const digits = value.replace(/\D/g, '');
   if (digits.length < 5) {
     return null;
   }
   return digits.slice(0, 5);
+};
+
+const dedupeAndNormalizeZips = (zips: string[], limit?: number): string[] => {
+  const normalized = zips
+    .map(normalizeZipCode)
+    .filter((zip): zip is string => Boolean(zip));
+  const unique = Array.from(new Set(normalized));
+  return limit ? unique.slice(0, limit) : unique;
 };
 
 export async function POST(request: NextRequest) {
@@ -114,8 +122,8 @@ export async function POST(request: NextRequest) {
     let candidate: unknown;
     try {
       candidate = JSON.parse(content);
-    } catch (error) {
-      console.error('ZIP code generation parse error', error);
+    } catch {
+      console.error('ZIP code generation parse error');
       return NextResponse.json({ zipCodes: [] });
     }
 
@@ -124,22 +132,11 @@ export async function POST(request: NextRequest) {
     const normalizedLocations = candidateLocations
       .map((location) => {
         const label = location.label?.trim();
-        if (!label) {
-          return null;
-        }
+        if (!label) return null;
 
         const zipCodes = Array.isArray(location.zipCodes) ? location.zipCodes : [];
-        const normalizedZipCodes = Array.from(
-          new Set(
-            zipCodes
-              .map((zip) => normalizeZipCode(zip))
-              .filter((zip: string | null): zip is string => Boolean(zip))
-          )
-        );
-
-        if (normalizedZipCodes.length === 0) {
-          return null;
-        }
+        const normalizedZipCodes = dedupeAndNormalizeZips(zipCodes);
+        if (normalizedZipCodes.length === 0) return null;
 
         return { label, zipCodes: normalizedZipCodes };
       })
@@ -147,19 +144,14 @@ export async function POST(request: NextRequest) {
 
     const candidateZipCodes = parsedContent.success ? parsedContent.data.zipCodes ?? [] : [];
     const combinedZipCodes = normalizedLocations.flatMap((location) => location.zipCodes);
-    const allZipCodes = [...candidateZipCodes, ...combinedZipCodes];
-    const uniqueZipCodes = Array.from(
-      new Set(
-        allZipCodes
-          .map((zip) => normalizeZipCode(zip))
-          .filter((zip: string | null): zip is string => Boolean(zip))
-          .slice(0, MAX_ZIP_CODES)
-      )
+    const uniqueZipCodes = dedupeAndNormalizeZips(
+      [...candidateZipCodes, ...combinedZipCodes],
+      MAX_ZIP_CODES
     );
 
     return NextResponse.json({ zipCodes: uniqueZipCodes, locations: normalizedLocations });
-  } catch (error) {
-    console.error('ZIP code generation error', error);
+  } catch (err) {
+    console.error('ZIP code generation error', err);
     return NextResponse.json(
       { error: 'Unable to generate ZIP codes right now.' },
       { status: 500 }

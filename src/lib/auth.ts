@@ -108,4 +108,31 @@ export async function getSessionToken(req: Request) {
   });
 }
 
+/**
+ * Returns the current session if the user is an admin.
+ * Throws an object with status code if not authorized.
+ */
+export async function requireAdmin(): Promise<Session> {
+  const session = await getCurrentSession();
+  if (!session) {
+    throw { status: 401, message: 'Unauthorized' };
+  }
+  if (session.user?.role !== 'admin') {
+    throw { status: 403, message: 'Forbidden' };
+  }
+  return session;
+}
+
+/**
+ * Returns the current session if authenticated.
+ * Throws an object with status code if not authorized.
+ */
+export async function requireAuth(): Promise<Session> {
+  const session = await getCurrentSession();
+  if (!session) {
+    throw { status: 401, message: 'Unauthorized' };
+  }
+  return session;
+}
+
 export type { Session } from 'next-auth';
