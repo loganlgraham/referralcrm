@@ -94,6 +94,14 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
               : '—'}
           </p>
         </div>
+        {agent.npsScore !== null && agent.npsScore !== undefined && (
+          <div>
+            <p className="text-xs uppercase text-slate-400">NPS Score</p>
+            <p className="font-medium text-slate-900">
+              {typeof agent.npsScore === 'number' ? agent.npsScore.toFixed(1) : '—'}
+            </p>
+          </div>
+        )}
       </div>
 
       {isAdmin && showEditor && (

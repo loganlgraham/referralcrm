@@ -13,6 +13,7 @@ import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/em
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { buildReferralLink } from '@/lib/referral-links';
+import { sendNPSSurveysForClosedDeal } from '@/lib/server/nps';
 
 type ReferralSummary = {
   _id: Types.ObjectId;
@@ -675,6 +676,26 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         channel: 'status',
         content: `Status changed from ${previousReferralStatus ?? 'Unknown'} to ${referral.status}`,
       });
+    }
+
+    // Send NPS surveys when deal is closed
+    if (isClosingNow && isTransactionalEmailConfigured()) {
+      const usedAfc = payment.usedAfc ?? existingPayment.usedAfc ?? false;
+      const origin = process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : request.headers.get('origin') || new URL(request.url).origin;
+
+      try {
+        await sendNPSSurveysForClosedDeal(
+          existingPayment._id.toString(),
+          referral._id.toString(),
+          Boolean(usedAfc),
+          origin
+        );
+      } catch (error) {
+        console.error('Failed to send NPS surveys:', error);
+        // Don't fail the request if NPS emails fail
+      }
     }
   }
 

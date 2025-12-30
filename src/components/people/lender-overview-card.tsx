@@ -53,6 +53,14 @@ export function LenderOverviewCard({ lender, isAdmin }: LenderOverviewCardProps)
           <p className="text-xs uppercase text-slate-400">Licensed States</p>
           <p className="font-medium text-slate-900">{(lender.licensedStates ?? []).join(', ') || '—'}</p>
         </div>
+        {lender.npsScore !== null && lender.npsScore !== undefined && (
+          <div>
+            <p className="text-xs uppercase text-slate-400">NPS Score</p>
+            <p className="font-medium text-slate-900">
+              {typeof lender.npsScore === 'number' ? lender.npsScore.toFixed(1) : '—'}
+            </p>
+          </div>
+        )}
       </div>
 
       {isAdmin && showEditor && (
