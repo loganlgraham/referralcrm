@@ -202,8 +202,10 @@ export async function sendNPSSurveysForClosedDeal(
     if (agentId) {
       // Get full agent name from database
       const { Agent } = await import('@/models/agent');
-      const agentDoc = await Agent.findById(agentId).select('name').lean();
-      const agentFullName = agentDoc?.name || agent.name || 'this agent';
+      const agentDoc = await Agent.findById(agentId)
+        .select('name')
+        .lean<{ name?: string } | null>();
+      const agentFullName = agentDoc?.name || (agent as any).name || 'this agent';
 
       const token = await createNPSToken({
         paymentId,
