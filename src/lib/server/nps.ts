@@ -151,7 +151,11 @@ export async function sendNPSSurveysForClosedDeal(
   const referral = await Referral.findById(referralId)
     .populate('assignedAgent', 'name email')
     .populate('lender', 'name email')
-    .lean();
+    .lean<{
+      assignedAgent?: { _id?: any; name?: string; email?: string } | null;
+      lender?: { _id?: any; name?: string; email?: string } | null;
+      borrower?: { email?: string; name?: string; firstName?: string } | null;
+    } | null>();
 
   if (!referral) return;
 
