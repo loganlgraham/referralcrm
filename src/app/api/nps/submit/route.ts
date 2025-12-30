@@ -23,9 +23,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const { token, score } = parsed.data;
 
   // Find and validate token
-  const npsToken = await NPSToken.findOne({ token }).lean();
+  const npsToken = await NPSToken.findOne({ token })
+    .lean<{
+      _id?: any;
+      type?: 'lender' | 'agent';
+      submitted?: boolean;
+      expiresAt?: Date;
+      targetId?: any;
+    } | null>();
 
-  if (!npsToken) {
+  if (!npsToken || !npsToken._id) {
     return NextResponse.json({ error: 'Invalid survey link' }, { status: 404 });
   }
 
@@ -33,8 +40,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Survey already submitted' }, { status: 400 });
   }
 
-  if (new Date() > new Date(npsToken.expiresAt)) {
+  if (npsToken.expiresAt && new Date() > new Date(npsToken.expiresAt)) {
     return NextResponse.json({ error: 'Survey link has expired' }, { status: 400 });
+  }
+
+  if (!npsToken.type || !npsToken.targetId) {
+    return NextResponse.json({ error: 'Invalid survey link' }, { status: 400 });
   }
 
   // Update token

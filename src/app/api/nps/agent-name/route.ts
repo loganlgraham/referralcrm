@@ -13,13 +13,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   await connectMongo();
 
-  const npsToken = await NPSToken.findOne({ token }).lean();
+  const npsToken = await NPSToken.findOne({ token })
+    .lean<{ type?: 'lender' | 'agent'; targetId?: any } | null>();
 
   if (!npsToken || npsToken.type !== 'agent') {
     return NextResponse.json({ error: 'Invalid token' }, { status: 404 });
   }
 
-  const agent = await Agent.findById(npsToken.targetId).select('name').lean();
+  const agent = await Agent.findById(npsToken.targetId).select('name').lean<{ name?: string } | null>();
 
   return NextResponse.json({
     agentName: agent?.name || 'this agent',

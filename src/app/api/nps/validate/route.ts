@@ -13,7 +13,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   await connectMongo();
 
-  const npsToken = await NPSToken.findOne({ token }).lean();
+  const npsToken = await NPSToken.findOne({ token })
+    .lean<{
+      type?: 'lender' | 'agent';
+      submitted?: boolean;
+      expiresAt?: Date;
+      targetId?: any;
+      recipientName?: string;
+    } | null>();
 
   if (!npsToken) {
     return NextResponse.json({ valid: false, error: 'Invalid survey link' }, { status: 404 });
@@ -23,14 +30,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ valid: false, error: 'Survey already submitted', submitted: true });
   }
 
-  if (new Date() > new Date(npsToken.expiresAt)) {
+  if (npsToken.expiresAt && new Date() > new Date(npsToken.expiresAt)) {
     return NextResponse.json({ valid: false, error: 'Survey link has expired', expired: true });
   }
 
   // Get agent name if this is an agent survey
   let agentName: string | undefined;
-  if (npsToken.type === 'agent') {
-    const agent = await Agent.findById(npsToken.targetId).select('name').lean();
+  if (npsToken.type === 'agent' && npsToken.targetId) {
+    const agent = await Agent.findById(npsToken.targetId).select('name').lean<{ name?: string } | null>();
     agentName = agent?.name;
   }
 
