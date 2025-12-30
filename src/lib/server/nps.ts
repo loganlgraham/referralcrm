@@ -102,6 +102,28 @@ This link will expire in 30 days.
 }
 
 /**
+ * Calculate NPS from a set of scores
+ * NPS = (Promoter% - Detractor%) * 100
+ * Promoters: 9-10, Passives: 7-8, Detractors: 0-6
+ */
+function calculateNPS(scores: number[]): number | null {
+  if (scores.length === 0) {
+    return null;
+  }
+
+  const totalResponses = scores.length;
+  const promoterCount = scores.filter((s) => s >= 9).length;
+  const detractorCount = scores.filter((s) => s <= 6).length;
+
+  const promoterPercentage = (promoterCount / totalResponses) * 100;
+  const detractorPercentage = (detractorCount / totalResponses) * 100;
+
+  const nps = promoterPercentage - detractorPercentage;
+
+  return nps;
+}
+
+/**
  * Update NPS score for agent or lender
  */
 export async function updateNPSScore(
@@ -121,15 +143,19 @@ export async function updateNPSScore(
     .select('score')
     .lean<{ score: number }[]>();
 
-  // Calculate average
-  const scores = submittedTokens.map((t) => t.score).filter((s): s is number => typeof s === 'number');
-  const average = scores.length > 0 ? scores.reduce((sum, s) => sum + s, 0) / scores.length : null;
+  // Extract scores
+  const scores = submittedTokens
+    .map((t) => t.score)
+    .filter((s): s is number => typeof s === 'number' && s >= 0 && s <= 10);
+
+  // Calculate NPS using the correct formula
+  const nps = calculateNPS(scores);
 
   // Update the agent or lender
   if (type === 'agent') {
-    await Agent.findByIdAndUpdate(targetId, { npsScore: average });
+    await Agent.findByIdAndUpdate(targetId, { npsScore: nps });
   } else {
-    await LenderMC.findByIdAndUpdate(targetId, { npsScore: average });
+    await LenderMC.findByIdAndUpdate(targetId, { npsScore: nps });
   }
 }
 
