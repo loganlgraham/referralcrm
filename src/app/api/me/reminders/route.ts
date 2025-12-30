@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { connectMongo } from '@/lib/mongoose';
-import { getCurrentSession } from '@/lib/session';
+import { getCurrentSession } from '@/lib/auth';
 import { User } from '@/models/user';
 
 const updateSchema = z.object({
