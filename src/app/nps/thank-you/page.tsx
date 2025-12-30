@@ -12,6 +12,8 @@ function ThankYouContent() {
     ? 'Thank you for your feedback about American Financing!'
     : 'Thank you for your feedback about the agent!';
 
+  const showButton = type === 'lender'; // Only show button for lender surveys (agents have accounts)
+
   return (
     <main className="flex min-h-[60vh] items-center justify-center bg-slate-100 px-4 py-12">
       <div className="w-full max-w-xl rounded-2xl bg-white p-8 shadow-lg ring-1 ring-slate-200">
@@ -34,14 +36,16 @@ function ThankYouContent() {
           <h1 className="text-2xl font-semibold text-slate-900">Thank You!</h1>
           <p className="text-sm text-slate-600">{message}</p>
           <p className="text-sm text-slate-600">Your response helps us improve our service.</p>
-          <div className="pt-4">
-            <Link
-              href="/"
-              className="inline-flex items-center justify-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90"
-            >
-              Return to home
-            </Link>
-          </div>
+          {showButton && (
+            <div className="pt-4">
+              <Link
+                href="/"
+                className="inline-flex items-center justify-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90"
+              >
+                Return to home
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </main>
