@@ -12,6 +12,7 @@ interface LenderAdminEditorProps {
     phone?: string;
     nmlsId?: string;
     licensedStates?: string[];
+    npsScore?: number | null;
   };
   className?: string;
   onSaved?: () => void;

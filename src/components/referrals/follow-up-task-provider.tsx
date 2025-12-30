@@ -269,6 +269,26 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     return parseFollowUpTaskState(window.localStorage.getItem(FOLLOW_UP_TASK_STORAGE_KEY));
   });
 
+  // Fetch reminder settings from the server on mount (source of truth for cron job)
+  useEffect(() => {
+    fetch('/api/me/reminders')
+      .then((res) => {
+        if (!res.ok) return null;
+        return res.json();
+      })
+      .then((data) => {
+        if (data && typeof data.enabled === 'boolean') {
+          dispatch({
+            type: 'set-global-reminders',
+            settings: { enabled: data.enabled, frequency: data.frequency || 'daily' },
+          });
+        }
+      })
+      .catch(() => {
+        // Silently ignore errors (e.g., user not logged in)
+      });
+  }, []);
+
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
@@ -326,6 +346,15 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       return;
     }
     dispatch({ type: 'set-global-reminders', settings });
+
+    // Sync global reminder settings to the server (required for cron job to work)
+    fetch('/api/me/reminders', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    }).catch(() => {
+      // Silently ignore errors (optimistic update - localStorage already updated)
+    });
   }, []);
 
   const clearReminderOverride = useCallback((referralId: string) => {

@@ -29,6 +29,7 @@ export interface AgentAdminEditorProps {
     specialties?: string[];
     languages?: string[];
     ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
+    npsScore?: number | null;
   };
   variant?: 'standalone' | 'embedded';
   className?: string;

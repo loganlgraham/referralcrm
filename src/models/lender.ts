@@ -22,6 +22,7 @@ const lenderSchema = new Schema(
     licensedStates: [{ type: String, index: true }],
     team: String,
     region: String,
+    npsScore: { type: Number, default: null },
     notes: { type: [lenderNoteSchema], default: [] }
   },
   { timestamps: true }
