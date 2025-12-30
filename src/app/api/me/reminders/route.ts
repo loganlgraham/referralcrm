@@ -41,7 +41,7 @@ export async function GET() {
   await connectMongo();
   const user = await User.findById(session.user.id)
     .select('reminderEnabled reminderFrequency')
-    .lean();
+    .lean<{ reminderEnabled?: boolean; reminderFrequency?: 'daily' | 'weekly' } | null>();
 
   return NextResponse.json({
     enabled: user?.reminderEnabled ?? false,
