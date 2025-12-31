@@ -9,6 +9,7 @@ const notificationSchema = new Schema(
       required: true 
     },
     referralId: { type: Schema.Types.ObjectId, ref: 'Referral', required: true },
+    borrowerName: { type: String, required: true },
     actorRole: { type: String, required: true },
     actorName: { type: String, required: true },
     content: { type: String, required: true },

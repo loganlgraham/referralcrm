@@ -135,6 +135,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     await createAdminNotifications({
       type: 'email_response',
       referralId: params.id,
+      borrowerName,
       actorRole: session.user.role,
       actorName,
       content: `${actorName} responded via email to ${borrowerName}`,

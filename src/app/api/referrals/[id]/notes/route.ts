@@ -186,6 +186,7 @@ ${referralLink ? `Review the referral: ${referralLink}` : ''}`
     await createAdminNotifications({
       type: 'note',
       referralId: referral._id,
+      borrowerName,
       actorRole: session.user.role,
       actorName: note.authorName,
       content: `${note.authorName} added a note on ${borrowerName}`,

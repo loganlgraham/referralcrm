@@ -7,6 +7,7 @@ type NotificationType = 'note' | 'status_change' | 'email_response';
 interface CreateNotificationParams {
   type: NotificationType;
   referralId: Types.ObjectId | string;
+  borrowerName: string;
   actorRole: string;
   actorName: string;
   content: string;
@@ -18,6 +19,7 @@ interface CreateNotificationParams {
 export async function createAdminNotifications({
   type,
   referralId,
+  borrowerName,
   actorRole,
   actorName,
   content,
@@ -41,6 +43,7 @@ export async function createAdminNotifications({
       userId: admin._id,
       type,
       referralId: normalizedReferralId,
+      borrowerName,
       actorRole,
       actorName,
       content,
@@ -77,6 +80,7 @@ interface NotificationLean {
   userId: Types.ObjectId;
   type: string;
   referralId: Types.ObjectId;
+  borrowerName: string;
   actorRole: string;
   actorName: string;
   content: string;
@@ -129,5 +133,21 @@ export async function markNotificationsAsRead(userId: string): Promise<number> {
   } catch (error) {
     console.error('Failed to mark notifications as read:', error);
     return 0;
+  }
+}
+
+/**
+ * Delete a single notification by ID
+ */
+export async function deleteNotification(notificationId: string, userId: string): Promise<boolean> {
+  try {
+    const result = await Notification.deleteOne({
+      _id: new Types.ObjectId(notificationId),
+      userId: new Types.ObjectId(userId),
+    });
+    return result.deletedCount === 1;
+  } catch (error) {
+    console.error('Failed to delete notification:', error);
+    return false;
   }
 }

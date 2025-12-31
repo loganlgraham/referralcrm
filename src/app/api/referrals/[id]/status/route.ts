@@ -338,6 +338,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       await createAdminNotifications({
         type: 'status_change',
         referralId: referral._id,
+        borrowerName,
         actorRole: session.user.role,
         actorName,
         content: `${actorName} changed status from ${previousStatus} to ${referral.status} for ${borrowerName}`,
