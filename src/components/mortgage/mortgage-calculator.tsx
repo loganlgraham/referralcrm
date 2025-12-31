@@ -165,6 +165,14 @@ export function MortgageCalculator() {
 
   const handleReset = () => {
     setInputs(defaultInputs);
+    // Clear URL parameters
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.search = '';
+      window.history.replaceState({}, '', url.toString());
+    }
+    // Reset to calculator tab
+    setActiveTab('calculator');
   };
 
   const handleShareLink = () => {
