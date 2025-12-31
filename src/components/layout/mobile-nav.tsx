@@ -9,6 +9,7 @@ import clsx from 'clsx';
 import { signOut } from 'next-auth/react';
 
 import { navItems } from './sidebar';
+import { NotificationBell } from './notification-bell';
 
 type MobileNavProps = {
   session: Session;
@@ -48,14 +49,17 @@ export function MobileNav({ session }: MobileNavProps) {
           <p className="text-sm font-semibold text-brand">AFC · AHA</p>
           <p className="text-xs text-slate-500">Referral CRM</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setOpen((prev) => !prev)}
-          className="inline-flex items-center rounded-md border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:bg-slate-50 focus:outline-none"
-          aria-label="Toggle navigation"
-        >
-          {open ? <XIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
-        </button>
+        <div className="flex items-center gap-2">
+          <NotificationBell session={session} />
+          <button
+            type="button"
+            onClick={() => setOpen((prev) => !prev)}
+            className="inline-flex items-center rounded-md border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:bg-slate-50 focus:outline-none"
+            aria-label="Toggle navigation"
+          >
+            {open ? <XIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
+          </button>
+        </div>
       </div>
       {open && (
         <div className="border-t border-slate-200 bg-white">

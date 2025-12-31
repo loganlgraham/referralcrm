@@ -8,6 +8,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { canViewReferral } from '@/lib/rbac';
 import { Referral } from '@/models/referral';
 import { resolveActivityActor } from '@/lib/server/activities';
+import { createAdminNotifications } from '@/lib/server/notifications';
 
 interface Params {
   params: { id: string };
@@ -101,10 +102,10 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   await connectMongo();
   const referral = await Referral.findById(params.id)
-    .select('assignedAgent lender org deletedAt')
+    .select('assignedAgent lender org deletedAt borrower')
     .populate('assignedAgent', 'userId')
     .populate('lender', 'userId')
-    .lean<LeanReferralAccess>();
+    .lean<LeanReferralAccess & { borrower?: { name?: string } }>();
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
   }
@@ -126,6 +127,19 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     channel: parsed.data.channel,
     content: parsed.data.content
   });
+
+  // Create notifications for admins if this is an email activity from non-admin
+  if (parsed.data.channel === 'email' && activity.actor !== 'Admin') {
+    const actorName = session.user.name || session.user.email || 'A team member';
+    const borrowerName = referral.borrower?.name || 'a referral';
+    await createAdminNotifications({
+      type: 'email_response',
+      referralId: params.id,
+      actorRole: session.user.role,
+      actorName,
+      content: `${actorName} responded via email to ${borrowerName}`,
+    });
+  }
 
   return NextResponse.json({ id: activity._id.toString() }, { status: 201 });
 }

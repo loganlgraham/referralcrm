@@ -13,6 +13,7 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { inferStateFromPostalCode } from '@/utils/location';
 import { calculateBusinessMinutesBetween } from '@/utils/sla-insights';
+import { createAdminNotifications } from '@/lib/server/notifications';
 
 interface Params {
   params: { id: string };
@@ -329,6 +330,19 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       channel: 'status',
       content: `Status changed from ${previousStatus} to ${referral.status}`,
     });
+
+    // Create notifications for admins if the status change was not made by an admin
+    if (session.user.role !== 'admin') {
+      const actorName = session.user.name || session.user.email || 'A team member';
+      const borrowerName = referral.borrower?.name || 'a referral';
+      await createAdminNotifications({
+        type: 'status_change',
+        referralId: referral._id,
+        actorRole: session.user.role,
+        actorName,
+        content: `${actorName} changed status from ${previousStatus} to ${referral.status} for ${borrowerName}`,
+      });
+    }
   }
 
   const statusLastUpdated = referral.statusLastUpdated ?? new Date();
