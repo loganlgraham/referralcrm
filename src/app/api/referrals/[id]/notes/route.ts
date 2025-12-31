@@ -9,6 +9,7 @@ import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/em
 import { logReferralActivity } from '@/lib/server/activities';
 import { User } from '@/models/user';
 import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
+import { createAdminNotifications } from '@/lib/server/notifications';
 
 type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknown';
 
@@ -178,6 +179,19 @@ ${referralLink ? `Review the referral: ${referralLink}` : ''}`
     channel: 'note',
     content: parsed.data.content.trim(),
   });
+
+  // Create notifications for admins if the note was not created by an admin
+  if (session.user.role !== 'admin') {
+    const borrowerName = referral.borrower?.name || 'a referral';
+    await createAdminNotifications({
+      type: 'note',
+      referralId: referral._id,
+      borrowerName,
+      actorRole: session.user.role,
+      actorName: note.authorName,
+      content: `${note.authorName} added a note on ${borrowerName}`,
+    });
+  }
 
   const saved = referral.notes[referral.notes.length - 1];
 

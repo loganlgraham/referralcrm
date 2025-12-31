@@ -6,6 +6,7 @@ import clsx from 'clsx';
 import { Session } from 'next-auth';
 import { LogOutIcon } from 'lucide-react';
 import { signOut } from 'next-auth/react';
+import { NotificationBell } from './notification-bell';
 
 type Role = 'admin' | 'mc' | 'agent' | string;
 
@@ -63,6 +64,7 @@ export function Sidebar({ session, className }: { session: Session; className?: 
           <p className="text-sm font-semibold text-brand">AFC · AHA</p>
           <p className="text-xs text-slate-500">Referral CRM</p>
         </div>
+        <NotificationBell session={session} />
       </div>
       <nav className="flex flex-col space-y-1 p-4">
         {compactNavItems.map((item, index) => {
