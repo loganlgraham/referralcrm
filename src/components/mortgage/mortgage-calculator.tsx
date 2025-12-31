@@ -92,10 +92,16 @@ export function MortgageCalculator() {
       setInputs((prev) => ({ ...prev, [key]: rawValue as LoanType }));
       return;
     }
-    // Parse to number and normalize (removes leading zeros)
-    const parsed = Number.parseFloat(rawValue);
+    // Remove commas and parse to number
+    const cleanValue = rawValue.replace(/,/g, '');
+    const parsed = Number.parseFloat(cleanValue);
     const value = Number.isNaN(parsed) ? 0 : parsed;
     setInputs((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const formatNumberInput = (value: number): string => {
+    if (value === 0) return '0';
+    return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
   };
 
   const calculations = useMemo(() => calculateMortgage(inputs), [inputs]);
@@ -381,9 +387,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         <span className="text-xs text-slate-500">USD</span>
                       </div>
                       <input
-                        type="number"
-                        min={0}
-                        value={purchasePrice}
+                        type="text"
+                        inputMode="numeric"
+                        value={formatNumberInput(purchasePrice)}
                         onChange={onChange('purchasePrice')}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                       />
@@ -394,11 +400,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         <span className="text-xs text-slate-500">% of price</span>
                       </div>
                       <input
-                        type="number"
-                        min={loanTypeInfo.minDownPaymentPercent}
-                        max={100}
-                        step={0.25}
-                        value={downPaymentPercent}
+                        type="text"
+                        inputMode="decimal"
+                        value={formatNumberInput(downPaymentPercent)}
                         onChange={onChange('downPaymentPercent')}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                       />
@@ -410,10 +414,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         <span className="text-xs text-slate-500">Annual %</span>
                       </div>
                       <input
-                        type="number"
-                        min={0}
-                        step={0.05}
-                        value={interestRate}
+                        type="text"
+                        inputMode="decimal"
+                        value={formatNumberInput(interestRate)}
                         onChange={onChange('interestRate')}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                       />
@@ -424,11 +427,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         <span className="text-xs text-slate-500">Years</span>
                       </div>
                       <input
-                        type="number"
-                        min={5}
-                        max={40}
-                        step={1}
-                        value={termYears}
+                        type="text"
+                        inputMode="numeric"
+                        value={formatNumberInput(termYears)}
                         onChange={onChange('termYears')}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                       />
@@ -439,10 +440,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         <span className="text-xs text-slate-500">% / year</span>
                       </div>
                       <input
-                        type="number"
-                        min={0}
-                        step={0.05}
-                        value={propertyTaxRate}
+                        type="text"
+                        inputMode="decimal"
+                        value={formatNumberInput(propertyTaxRate)}
                         onChange={onChange('propertyTaxRate')}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                       />
@@ -454,10 +454,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         <span className="text-xs text-slate-500">Monthly</span>
                       </div>
                       <input
-                        type="number"
-                        min={0}
-                        step={10}
-                        value={insuranceMonthly}
+                        type="text"
+                        inputMode="numeric"
+                        value={formatNumberInput(insuranceMonthly)}
                         onChange={onChange('insuranceMonthly')}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                       />
@@ -468,10 +467,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         <span className="text-xs text-slate-500">Monthly</span>
                       </div>
                       <input
-                        type="number"
-                        min={0}
-                        step={10}
-                        value={hoaMonthly}
+                        type="text"
+                        inputMode="numeric"
+                        value={formatNumberInput(hoaMonthly)}
                         onChange={onChange('hoaMonthly')}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                       />
@@ -483,10 +481,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                           <span className="text-xs text-slate-500">Annual %</span>
                         </div>
                         <input
-                          type="number"
-                          min={0}
-                          step={0.05}
-                          value={pmiRate}
+                          type="text"
+                          inputMode="decimal"
+                          value={formatNumberInput(pmiRate)}
                           onChange={onChange('pmiRate')}
                           className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                         />
@@ -501,10 +498,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         <span className="text-xs text-slate-500">Monthly</span>
                       </div>
                       <input
-                        type="number"
-                        min={0}
-                        step={25}
-                        value={extraPrincipal}
+                        type="text"
+                        inputMode="numeric"
+                        value={formatNumberInput(extraPrincipal)}
                         onChange={onChange('extraPrincipal')}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                       />

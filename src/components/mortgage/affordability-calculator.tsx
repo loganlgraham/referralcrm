@@ -51,8 +51,16 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
 
   const onChange = (key: keyof AffordabilityInputs) => (event: ChangeEvent<HTMLInputElement>) => {
     const rawValue = event.target.value;
-    const value = rawValue === '' ? 0 : Number.parseFloat(rawValue) || 0;
+    // Remove commas and parse to number
+    const cleanValue = rawValue.replace(/,/g, '');
+    const parsed = Number.parseFloat(cleanValue);
+    const value = Number.isNaN(parsed) ? 0 : parsed;
     setInputs((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const formatNumberInput = (value: number): string => {
+    if (value === 0) return '0';
+    return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
   };
 
   const results = useMemo(() => {
@@ -101,10 +109,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                     <span className="text-xs text-slate-500">For housing</span>
                   </div>
                   <input
-                    type="number"
-                    min={0}
-                    step={100}
-                    value={inputs.monthlyBudget}
+                    type="text"
+                    inputMode="numeric"
+                    value={formatNumberInput(inputs.monthlyBudget)}
                     onChange={onChange('monthlyBudget')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
@@ -115,10 +122,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                     <span className="text-xs text-slate-500">USD</span>
                   </div>
                   <input
-                    type="number"
-                    min={0}
-                    step={1000}
-                    value={inputs.downPaymentAmount}
+                    type="text"
+                    inputMode="numeric"
+                    value={formatNumberInput(inputs.downPaymentAmount)}
                     onChange={onChange('downPaymentAmount')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
@@ -129,10 +135,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                     <span className="text-xs text-slate-500">Before tax</span>
                   </div>
                   <input
-                    type="number"
-                    min={0}
-                    step={100}
-                    value={inputs.grossMonthlyIncome}
+                    type="text"
+                    inputMode="numeric"
+                    value={formatNumberInput(inputs.grossMonthlyIncome)}
                     onChange={onChange('grossMonthlyIncome')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
@@ -143,10 +148,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                     <span className="text-xs text-slate-500">Other debts</span>
                   </div>
                   <input
-                    type="number"
-                    min={0}
-                    step={50}
-                    value={inputs.monthlyDebts}
+                    type="text"
+                    inputMode="numeric"
+                    value={formatNumberInput(inputs.monthlyDebts)}
                     onChange={onChange('monthlyDebts')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
@@ -163,10 +167,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                     <span className="text-xs text-slate-500">Annual %</span>
                   </div>
                   <input
-                    type="number"
-                    min={0}
-                    step={0.05}
-                    value={inputs.interestRate}
+                    type="text"
+                    inputMode="decimal"
+                    value={formatNumberInput(inputs.interestRate)}
                     onChange={onChange('interestRate')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
@@ -177,11 +180,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                     <span className="text-xs text-slate-500">Years</span>
                   </div>
                   <input
-                    type="number"
-                    min={5}
-                    max={40}
-                    step={1}
-                    value={inputs.termYears}
+                    type="text"
+                    inputMode="numeric"
+                    value={formatNumberInput(inputs.termYears)}
                     onChange={onChange('termYears')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
@@ -192,10 +193,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                     <span className="text-xs text-slate-500">% / year</span>
                   </div>
                   <input
-                    type="number"
-                    min={0}
-                    step={0.05}
-                    value={inputs.propertyTaxRate}
+                    type="text"
+                    inputMode="decimal"
+                    value={formatNumberInput(inputs.propertyTaxRate)}
                     onChange={onChange('propertyTaxRate')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
@@ -206,10 +206,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                     <span className="text-xs text-slate-500">Monthly</span>
                   </div>
                   <input
-                    type="number"
-                    min={0}
-                    step={10}
-                    value={inputs.insuranceMonthly}
+                    type="text"
+                    inputMode="numeric"
+                    value={formatNumberInput(inputs.insuranceMonthly)}
                     onChange={onChange('insuranceMonthly')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
@@ -220,10 +219,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                     <span className="text-xs text-slate-500">Monthly</span>
                   </div>
                   <input
-                    type="number"
-                    min={0}
-                    step={10}
-                    value={inputs.hoaMonthly}
+                    type="text"
+                    inputMode="numeric"
+                    value={formatNumberInput(inputs.hoaMonthly)}
                     onChange={onChange('hoaMonthly')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
@@ -234,10 +232,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                     <span className="text-xs text-slate-500">Annual %</span>
                   </div>
                   <input
-                    type="number"
-                    min={0}
-                    step={0.05}
-                    value={inputs.pmiRate}
+                    type="text"
+                    inputMode="decimal"
+                    value={formatNumberInput(inputs.pmiRate)}
                     onChange={onChange('pmiRate')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
