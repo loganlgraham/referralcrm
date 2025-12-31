@@ -48,9 +48,14 @@ interface AffordabilityCalculatorProps {
 
 export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculatorProps) {
   const [inputs, setInputs] = useState<AffordabilityInputs>(defaultAffordabilityInputs);
+  const [rawInputs, setRawInputs] = useState<Record<string, string>>({});
 
   const onChange = (key: keyof AffordabilityInputs) => (event: ChangeEvent<HTMLInputElement>) => {
     const rawValue = event.target.value;
+    
+    // Store raw input value to preserve decimals and formatting while typing
+    setRawInputs((prev) => ({ ...prev, [key]: rawValue }));
+    
     // Remove commas and parse to number
     const cleanValue = rawValue.replace(/,/g, '');
     const parsed = Number.parseFloat(cleanValue);
@@ -58,9 +63,37 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
     setInputs((prev) => ({ ...prev, [key]: value }));
   };
 
-  const formatNumberInput = (value: number): string => {
+  const onBlur = (key: keyof AffordabilityInputs) => () => {
+    // Clear raw input on blur so formatted value shows
+    setRawInputs((prev) => {
+      const newRaw = { ...prev };
+      delete newRaw[key];
+      return newRaw;
+    });
+  };
+
+  const formatNumberInput = (key: keyof AffordabilityInputs, value: number): string => {
+    // If user is currently typing in this field, use the raw value
+    if (rawInputs[key] !== undefined) {
+      return rawInputs[key];
+    }
+    
+    // Otherwise format the number value
     if (value === 0) return '0';
-    return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    
+    // Check if value has decimals
+    const hasDecimals = value % 1 !== 0;
+    
+    if (hasDecimals) {
+      // Preserve decimals up to 2 places
+      return value.toLocaleString('en-US', { 
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2 
+      });
+    } else {
+      // Whole numbers with thousand separators
+      return value.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    }
   };
 
   const results = useMemo(() => {
@@ -111,8 +144,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={formatNumberInput(inputs.monthlyBudget)}
+                    value={formatNumberInput('monthlyBudget', inputs.monthlyBudget)}
                     onChange={onChange('monthlyBudget')}
+                    onBlur={onBlur('monthlyBudget')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
                 </label>
@@ -124,8 +158,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={formatNumberInput(inputs.downPaymentAmount)}
+                    value={formatNumberInput('downPaymentAmount', inputs.downPaymentAmount)}
                     onChange={onChange('downPaymentAmount')}
+                    onBlur={onBlur('downPaymentAmount')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
                 </label>
@@ -137,8 +172,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={formatNumberInput(inputs.grossMonthlyIncome)}
+                    value={formatNumberInput('grossMonthlyIncome', inputs.grossMonthlyIncome)}
                     onChange={onChange('grossMonthlyIncome')}
+                    onBlur={onBlur('grossMonthlyIncome')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
                 </label>
@@ -150,8 +186,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={formatNumberInput(inputs.monthlyDebts)}
+                    value={formatNumberInput('monthlyDebts', inputs.monthlyDebts)}
                     onChange={onChange('monthlyDebts')}
+                    onBlur={onBlur('monthlyDebts')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
                 </label>
@@ -169,8 +206,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                   <input
                     type="text"
                     inputMode="decimal"
-                    value={formatNumberInput(inputs.interestRate)}
+                    value={formatNumberInput('interestRate', inputs.interestRate)}
                     onChange={onChange('interestRate')}
+                    onBlur={onBlur('interestRate')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
                 </label>
@@ -182,8 +220,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={formatNumberInput(inputs.termYears)}
+                    value={formatNumberInput('termYears', inputs.termYears)}
                     onChange={onChange('termYears')}
+                    onBlur={onBlur('termYears')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
                 </label>
@@ -195,8 +234,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                   <input
                     type="text"
                     inputMode="decimal"
-                    value={formatNumberInput(inputs.propertyTaxRate)}
+                    value={formatNumberInput('propertyTaxRate', inputs.propertyTaxRate)}
                     onChange={onChange('propertyTaxRate')}
+                    onBlur={onBlur('propertyTaxRate')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
                 </label>
@@ -208,8 +248,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={formatNumberInput(inputs.insuranceMonthly)}
+                    value={formatNumberInput('insuranceMonthly', inputs.insuranceMonthly)}
                     onChange={onChange('insuranceMonthly')}
+                    onBlur={onBlur('insuranceMonthly')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
                 </label>
@@ -221,8 +262,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={formatNumberInput(inputs.hoaMonthly)}
+                    value={formatNumberInput('hoaMonthly', inputs.hoaMonthly)}
                     onChange={onChange('hoaMonthly')}
+                    onBlur={onBlur('hoaMonthly')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
                 </label>
@@ -234,8 +276,9 @@ export function AffordabilityCalculator({ onUseResults }: AffordabilityCalculato
                   <input
                     type="text"
                     inputMode="decimal"
-                    value={formatNumberInput(inputs.pmiRate)}
+                    value={formatNumberInput('pmiRate', inputs.pmiRate)}
                     onChange={onChange('pmiRate')}
+                    onBlur={onBlur('pmiRate')}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                   />
                 </label>

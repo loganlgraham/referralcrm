@@ -85,6 +85,8 @@ export function MortgageCalculator() {
     loanType,
   } = inputs;
 
+  const [rawInputs, setRawInputs] = useState<Record<string, string>>({});
+
   const onChange = (key: keyof MortgageInputs) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const rawValue = event.target.value;
     // Handle loan type specially
@@ -92,6 +94,10 @@ export function MortgageCalculator() {
       setInputs((prev) => ({ ...prev, [key]: rawValue as LoanType }));
       return;
     }
+    
+    // Store raw input value to preserve decimals and formatting while typing
+    setRawInputs((prev) => ({ ...prev, [key]: rawValue }));
+    
     // Remove commas and parse to number
     const cleanValue = rawValue.replace(/,/g, '');
     const parsed = Number.parseFloat(cleanValue);
@@ -99,9 +105,37 @@ export function MortgageCalculator() {
     setInputs((prev) => ({ ...prev, [key]: value }));
   };
 
-  const formatNumberInput = (value: number): string => {
+  const onBlur = (key: keyof MortgageInputs) => () => {
+    // Clear raw input on blur so formatted value shows
+    setRawInputs((prev) => {
+      const newRaw = { ...prev };
+      delete newRaw[key];
+      return newRaw;
+    });
+  };
+
+  const formatNumberInput = (key: keyof MortgageInputs, value: number): string => {
+    // If user is currently typing in this field, use the raw value
+    if (rawInputs[key] !== undefined) {
+      return rawInputs[key];
+    }
+    
+    // Otherwise format the number value
     if (value === 0) return '0';
-    return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    
+    // Check if value has decimals
+    const hasDecimals = value % 1 !== 0;
+    
+    if (hasDecimals) {
+      // Preserve decimals up to 2 places
+      return value.toLocaleString('en-US', { 
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2 
+      });
+    } else {
+      // Whole numbers with thousand separators
+      return value.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    }
   };
 
   const calculations = useMemo(() => calculateMortgage(inputs), [inputs]);
@@ -165,6 +199,7 @@ export function MortgageCalculator() {
 
   const handleReset = () => {
     setInputs(defaultInputs);
+    setRawInputs({}); // Clear raw inputs
     // Clear URL parameters
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -397,8 +432,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <input
                         type="text"
                         inputMode="numeric"
-                        value={formatNumberInput(purchasePrice)}
+                        value={formatNumberInput('purchasePrice', purchasePrice)}
                         onChange={onChange('purchasePrice')}
+                        onBlur={onBlur('purchasePrice')}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                       />
                     </label>
@@ -410,8 +446,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <input
                         type="text"
                         inputMode="decimal"
-                        value={formatNumberInput(downPaymentPercent)}
+                        value={formatNumberInput('downPaymentPercent', downPaymentPercent)}
                         onChange={onChange('downPaymentPercent')}
+                        onBlur={onBlur('downPaymentPercent')}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                       />
                       <p className="text-xs text-slate-500">{formatCurrency(calculations.downPaymentAmount)} down</p>
@@ -424,8 +461,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <input
                         type="text"
                         inputMode="decimal"
-                        value={formatNumberInput(interestRate)}
+                        value={formatNumberInput('interestRate', interestRate)}
                         onChange={onChange('interestRate')}
+                        onBlur={onBlur('interestRate')}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                       />
                     </label>
@@ -437,8 +475,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <input
                         type="text"
                         inputMode="numeric"
-                        value={formatNumberInput(termYears)}
+                        value={formatNumberInput('termYears', termYears)}
                         onChange={onChange('termYears')}
+                        onBlur={onBlur('termYears')}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                       />
                     </label>
@@ -450,8 +489,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <input
                         type="text"
                         inputMode="decimal"
-                        value={formatNumberInput(propertyTaxRate)}
+                        value={formatNumberInput('propertyTaxRate', propertyTaxRate)}
                         onChange={onChange('propertyTaxRate')}
+                        onBlur={onBlur('propertyTaxRate')}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                       />
                       <p className="text-xs text-slate-500">{formatCurrency(calculations.propertyTaxes)} per month</p>
@@ -464,8 +504,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <input
                         type="text"
                         inputMode="numeric"
-                        value={formatNumberInput(insuranceMonthly)}
+                        value={formatNumberInput('insuranceMonthly', insuranceMonthly)}
                         onChange={onChange('insuranceMonthly')}
+                        onBlur={onBlur('insuranceMonthly')}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                       />
                     </label>
@@ -477,8 +518,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <input
                         type="text"
                         inputMode="numeric"
-                        value={formatNumberInput(hoaMonthly)}
+                        value={formatNumberInput('hoaMonthly', hoaMonthly)}
                         onChange={onChange('hoaMonthly')}
+                        onBlur={onBlur('hoaMonthly')}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                       />
                     </label>
@@ -491,8 +533,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         <input
                           type="text"
                           inputMode="decimal"
-                          value={formatNumberInput(pmiRate)}
+                          value={formatNumberInput('pmiRate', pmiRate)}
                           onChange={onChange('pmiRate')}
+                          onBlur={onBlur('pmiRate')}
                           className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                         />
                         <p className="text-xs text-slate-500">
@@ -508,8 +551,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <input
                         type="text"
                         inputMode="numeric"
-                        value={formatNumberInput(extraPrincipal)}
+                        value={formatNumberInput('extraPrincipal', extraPrincipal)}
                         onChange={onChange('extraPrincipal')}
+                        onBlur={onBlur('extraPrincipal')}
                         className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
                       />
                       <p className="text-xs text-slate-500">Shows payoff acceleration potential.</p>
