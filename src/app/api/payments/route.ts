@@ -417,7 +417,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     return new NextResponse('Not found', { status: 404 });
   }
 
-  const referral = await Referral.findById(existingPayment.referralId);
+  const referral = await Referral.findById(existingPayment.referralId).populate('assignedAgent', 'name email');
   const isAgentOrigin = referral?.origin === 'agent';
 
   const previousStatus = existingPayment.status;
@@ -695,6 +695,57 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       } catch (error) {
         console.error('Failed to send NPS surveys:', error);
         // Don't fail the request if NPS emails fail
+      }
+
+      // Send congratulatory emails to referral and agent when deal is closed
+      try {
+        const usedAssignedAgent = payment.usedAssignedAgent ?? existingPayment.usedAssignedAgent ?? false;
+        
+        // Email to referral (borrower) - only if usedAssignedAgent is true
+        if (usedAssignedAgent) {
+          const borrowerEmail = referral.borrower?.email;
+          const borrowerFirstName = referral.borrower?.firstName || 
+            (referral.borrower?.name ? referral.borrower.name.split(' ')[0] : null) ||
+            'there';
+          
+          if (borrowerEmail) {
+            await sendTransactionalEmail({
+              to: [borrowerEmail],
+              subject: 'Congrats on Your New Home!',
+              html: `
+                <p>Hi ${borrowerFirstName},</p>
+                <p>Congratulations on closing on your new home! 🎉</p>
+                <p>If you have a quick moment, we'd really appreciate you leaving a rating or short review for your agent—your feedback means a lot and helps others tremendously.</p>
+                <p>Wishing you all the best in your new place!</p>
+              `,
+              text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your new home! 🎉\n\nIf you have a quick moment, we'd really appreciate you leaving a rating or short review for your agent—your feedback means a lot and helps others tremendously.\n\nWishing you all the best in your new place!`,
+            });
+          }
+        }
+
+        // Email to agent (only if usedAfc is true)
+        if (usedAfc) {
+          const agent = referral.assignedAgent as { name?: string; email?: string } | null;
+          const agentEmail = agent?.email;
+          const agentFirstName = agent?.name ? agent.name.split(' ')[0] : 'there';
+          
+          if (agentEmail) {
+            await sendTransactionalEmail({
+              to: [agentEmail],
+              subject: 'Congrats on your closing!',
+              html: `
+                <p>Hi ${agentFirstName},</p>
+                <p>Congrats on the recent closing! 🎉 It was great working together.</p>
+                <p>If you have a quick moment, we'd really appreciate you leaving a short rating or review for American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships.</p>
+                <p>Thanks again, and looking forward to the next one!</p>
+              `,
+              text: `Hi ${agentFirstName},\n\nCongrats on the recent closing! 🎉 It was great working together.\n\nIf you have a quick moment, we'd really appreciate you leaving a short rating or review for American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships.\n\nThanks again, and looking forward to the next one!`,
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to send congratulatory emails:', error);
+        // Don't fail the request if congratulatory emails fail
       }
     }
   }
