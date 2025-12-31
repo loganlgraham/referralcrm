@@ -72,6 +72,18 @@ export async function getUnreadNotificationCount(userId: string): Promise<number
   }
 }
 
+interface NotificationLean {
+  _id: Types.ObjectId;
+  userId: Types.ObjectId;
+  type: string;
+  referralId: Types.ObjectId;
+  actorRole: string;
+  actorName: string;
+  content: string;
+  readAt: Date | null;
+  createdAt: Date;
+}
+
 /**
  * Get notifications for a user
  */
@@ -85,7 +97,7 @@ export async function getNotifications(
     })
       .sort({ createdAt: -1 })
       .limit(limit)
-      .lean();
+      .lean<NotificationLean[]>();
 
     return notifications.map((notification) => ({
       ...notification,
