@@ -216,41 +216,48 @@ export function calculateAffordability(params: {
   const monthlyRate = Math.max(asNumber(params.interestRate), 0) / 100 / 12;
   const totalPayments = Math.max(Math.floor(asNumber(params.termYears) * 12), 1);
   
-  // Available for P&I after other expenses
-  const availableForPI = Math.max(
-    params.monthlyBudget - params.insuranceMonthly - params.hoaMonthly,
-    0
-  );
-
-  // Calculate max loan using reverse mortgage formula
-  const maxLoan = monthlyRate > 0
-    ? availableForPI * ((1 - Math.pow(1 + monthlyRate, -totalPayments)) / monthlyRate)
-    : availableForPI * totalPayments;
-
-  // Estimate purchase price (iterative approach accounting for taxes and PMI)
-  let estimatedPrice = maxLoan + params.downPaymentAmount;
+  // Iterative approach to find max purchase price
+  // We need to account for: P&I, property taxes, insurance, HOA, and PMI
+  let estimatedPrice = 0;
   let iterations = 0;
-  const maxIterations = 10;
+  const maxIterations = 20;
+  const tolerance = 1; // Within $1
+
+  // Start with a reasonable estimate: assume 80% of budget goes to P&I
+  let initialAvailableForPI = params.monthlyBudget - params.insuranceMonthly - params.hoaMonthly;
+  let initialMaxLoan = monthlyRate > 0
+    ? initialAvailableForPI * 0.8 * ((1 - Math.pow(1 + monthlyRate, -totalPayments)) / monthlyRate)
+    : initialAvailableForPI * 0.8 * totalPayments;
+  estimatedPrice = initialMaxLoan + params.downPaymentAmount;
 
   while (iterations < maxIterations) {
+    // Calculate all monthly expenses based on current price estimate
     const propertyTaxes = (estimatedPrice * (params.propertyTaxRate / 100)) / 12;
-    const ltv = maxLoan / estimatedPrice;
-    const pmiMonthly = ltv > 0.8 ? (maxLoan * (params.pmiRate / 100)) / 12 : 0;
+    const loanAmount = estimatedPrice - params.downPaymentAmount;
+    const ltv = estimatedPrice > 0 ? loanAmount / estimatedPrice : 0;
+    const pmiMonthly = ltv > 0.8 ? (loanAmount * (params.pmiRate / 100)) / 12 : 0;
 
-    const totalHousingExpense = availableForPI + propertyTaxes + pmiMonthly;
-    
-    if (totalHousingExpense <= params.monthlyBudget + 10) {
-      // Close enough (within $10)
+    // Calculate what's left for Principal & Interest
+    const availableForPI = Math.max(
+      params.monthlyBudget - params.insuranceMonthly - params.hoaMonthly - propertyTaxes - pmiMonthly,
+      0
+    );
+
+    // Calculate max loan amount based on available P&I
+    const maxLoan = monthlyRate > 0
+      ? availableForPI * ((1 - Math.pow(1 + monthlyRate, -totalPayments)) / monthlyRate)
+      : availableForPI * totalPayments;
+
+    // Calculate new estimated price
+    const newEstimatedPrice = maxLoan + params.downPaymentAmount;
+
+    // Check if we've converged
+    if (Math.abs(newEstimatedPrice - estimatedPrice) < tolerance) {
+      estimatedPrice = newEstimatedPrice;
       break;
     }
 
-    // Adjust estimate
-    const adjustedAvailableForPI = params.monthlyBudget - params.insuranceMonthly - params.hoaMonthly - propertyTaxes - pmiMonthly;
-    const adjustedMaxLoan = monthlyRate > 0
-      ? adjustedAvailableForPI * ((1 - Math.pow(1 + monthlyRate, -totalPayments)) / monthlyRate)
-      : adjustedAvailableForPI * totalPayments;
-    
-    estimatedPrice = adjustedMaxLoan + params.downPaymentAmount;
+    estimatedPrice = newEstimatedPrice;
     iterations++;
   }
 
