@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChangeEvent, FormEvent, useMemo, useState } from 'react';
+import { ChangeEvent, Dispatch, FormEvent, SetStateAction, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import useSWR from 'swr';
 import { toast } from 'sonner';
@@ -33,11 +33,19 @@ type CreatedLenderSummary = {
   email: string;
 };
 
-export function LendersTable() {
+interface LendersTableProps {
+  showForm?: boolean;
+  setShowForm?: Dispatch<SetStateAction<boolean>>;
+}
+
+export function LendersTable({ showForm: externalShowForm, setShowForm: externalSetShowForm }: LendersTableProps) {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'admin';
   const { data, mutate } = useSWR<LenderRow[]>('/api/lenders', fetcher);
-  const [showForm, setShowForm] = useState(false);
+  const [internalShowForm, setInternalShowForm] = useState(false);
+  const showForm = externalShowForm ?? internalShowForm;
+  const setShowForm = externalSetShowForm ?? setInternalShowForm;
+  const hasExternalControl = externalShowForm !== undefined && externalSetShowForm !== undefined;
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: '',
@@ -226,7 +234,7 @@ export function LendersTable() {
         </div>
       )}
 
-      {isAdmin && (
+      {isAdmin && !hasExternalControl && (
         <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
@@ -309,6 +317,75 @@ export function LendersTable() {
             </form>
           )}
         </div>
+      )}
+      {isAdmin && showForm && hasExternalControl && (
+        <form onSubmit={handleCreate} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="text-xs font-semibold text-slate-600">
+              Name
+              <input
+                type="text"
+                value={form.name}
+                onChange={handleChange('name')}
+                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                required
+                disabled={saving}
+              />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">
+              Email
+              <input
+                type="email"
+                value={form.email}
+                onChange={handleChange('email')}
+                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                required
+                disabled={saving}
+              />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">
+              Phone
+              <input
+                type="tel"
+                value={form.phone}
+                onChange={handleChange('phone')}
+                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                disabled={saving}
+              />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">
+              NMLS ID
+              <input
+                type="text"
+                value={form.nmlsId}
+                onChange={handleChange('nmlsId')}
+                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                required
+                disabled={saving}
+              />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">
+              Licensed states (comma separated)
+              <input
+                type="text"
+                value={form.licensedStates}
+                onChange={handleChange('licensedStates')}
+                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                placeholder="CO, UT"
+                disabled={saving}
+              />
+            </label>
+            <div className="md:col-span-2">
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {saving ? 'Saving…' : 'Save MC'}
+              </button>
+            </div>
+          </div>
+        </form>
       )}
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200">
