@@ -67,7 +67,9 @@ export function MortgageCalculator() {
   } = inputs;
 
   const onChange = (key: keyof CalculatorInputs) => (event: ChangeEvent<HTMLInputElement>) => {
-    const value = Number.parseFloat(event.target.value) || 0;
+    const rawValue = event.target.value;
+    // Allow empty string temporarily during typing, otherwise parse to number
+    const value = rawValue === '' ? 0 : Number.parseFloat(rawValue) || 0;
     setInputs((prev) => ({ ...prev, [key]: value }));
   };
 
