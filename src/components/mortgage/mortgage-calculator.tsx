@@ -92,8 +92,9 @@ export function MortgageCalculator() {
       setInputs((prev) => ({ ...prev, [key]: rawValue as LoanType }));
       return;
     }
-    // Allow empty string temporarily during typing, otherwise parse to number
-    const value = rawValue === '' ? 0 : Number.parseFloat(rawValue) || 0;
+    // Parse to number and normalize (removes leading zeros)
+    const parsed = Number.parseFloat(rawValue);
+    const value = Number.isNaN(parsed) ? 0 : parsed;
     setInputs((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -581,13 +582,13 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <dt className="text-xs text-slate-500">Total scheduled interest</dt>
                       <dd className="text-base font-semibold text-slate-900">{formatCurrency(calculations.totalInterest)}</dd>
                     </div>
-                    {calculations.upfrontMIP && calculations.upfrontMIP > 0 && (
+                    {calculations.upfrontMIP && (
                       <div className="rounded-md bg-slate-50 px-3 py-2">
                         <dt className="text-xs text-slate-500">Upfront MIP (FHA)</dt>
                         <dd className="text-base font-semibold text-slate-900">{formatCurrency(calculations.upfrontMIP)}</dd>
                       </div>
                     )}
-                    {calculations.fundingFee && calculations.fundingFee > 0 && (
+                    {calculations.fundingFee && (
                       <div className="rounded-md bg-slate-50 px-3 py-2">
                         <dt className="text-xs text-slate-500">VA Funding Fee</dt>
                         <dd className="text-base font-semibold text-slate-900">{formatCurrency(calculations.fundingFee)}</dd>

@@ -108,8 +108,8 @@ export function calculateMortgage(inputs: MortgageInputs): MortgageCalculations 
     totalMonthly,
     totalInterest,
     ltv,
-    fundingFee,
-    upfrontMIP,
+    fundingFee: fundingFee > 0 ? fundingFee : undefined,
+    upfrontMIP: upfrontMIP > 0 ? upfrontMIP : undefined,
   };
 }
 
