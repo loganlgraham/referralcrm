@@ -27,6 +27,7 @@ const registerModels = async () => {
     import('@/models/payment'),
     import('@/models/pre-approval-metric'),
     import('@/models/referral'),
+    import('@/models/referral-metadata'),
     import('@/models/user'),
     import('@/models/zip')
   ]);
