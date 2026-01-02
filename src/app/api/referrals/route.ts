@@ -9,6 +9,7 @@ import { calculateReferralFeeDue } from '@/utils/referral';
 import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
+import { ReferralMetadata } from '@/models/referral-metadata';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
 import {
@@ -1020,6 +1021,86 @@ export async function POST(request: Request) {
   }
 
   const referral = await Referral.create(referralData);
+
+  // Save source and endorser to metadata collection (admin only)
+  if (session.user.role === 'admin') {
+    const metadataUpdates: Promise<unknown>[] = [];
+
+    if (providedSource) {
+      const trimmedSource = providedSource.trim();
+      metadataUpdates.push(
+        (async () => {
+          try {
+            // Find existing entry case-insensitively
+            const existing = await ReferralMetadata.findOne({
+              type: 'source',
+              value: { $regex: new RegExp(`^${trimmedSource.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+            });
+
+            if (existing) {
+              // Update existing entry (preserve original casing, update usage)
+              existing.usageCount += 1;
+              existing.lastUsedAt = new Date();
+              await existing.save();
+            } else {
+              // Create new entry
+              await ReferralMetadata.create({
+                type: 'source',
+                value: trimmedSource,
+                usageCount: 1,
+                lastUsedAt: new Date()
+              });
+            }
+          } catch (error) {
+            // Ignore duplicate key errors (race condition)
+            if ((error as any)?.code !== 11000) {
+              console.error('Failed to save source metadata', error);
+            }
+          }
+        })()
+      );
+    }
+
+    if (providedEndorser) {
+      const trimmedEndorser = providedEndorser.trim();
+      metadataUpdates.push(
+        (async () => {
+          try {
+            // Find existing entry case-insensitively
+            const existing = await ReferralMetadata.findOne({
+              type: 'endorser',
+              value: { $regex: new RegExp(`^${trimmedEndorser.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+            });
+
+            if (existing) {
+              // Update existing entry (preserve original casing, update usage)
+              existing.usageCount += 1;
+              existing.lastUsedAt = new Date();
+              await existing.save();
+            } else {
+              // Create new entry
+              await ReferralMetadata.create({
+                type: 'endorser',
+                value: trimmedEndorser,
+                usageCount: 1,
+                lastUsedAt: new Date()
+              });
+            }
+          } catch (error) {
+            // Ignore duplicate key errors (race condition)
+            if ((error as any)?.code !== 11000) {
+              console.error('Failed to save endorser metadata', error);
+            }
+          }
+        })()
+      );
+    }
+
+    // Don't await - run in background to avoid slowing down referral creation
+    Promise.all(metadataUpdates).catch((error) => {
+      console.error('Failed to update referral metadata', error);
+    });
+  }
 
   await logReferralActivity({
     referralId: referral._id,

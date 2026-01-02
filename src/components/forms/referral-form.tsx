@@ -47,13 +47,6 @@ const inputClasses =
 
 const labelClasses = 'flex flex-col text-sm font-medium text-slate-700';
 
-const LOCAL_STORAGE_KEYS = {
-  sourceHistory: 'adminReferralSources',
-  endorserHistory: 'adminReferralEndorsers',
-} as const;
-
-const MAX_HISTORY_ITEMS = 20;
-
 const formatPhoneNumber = (value: string) => {
   const digits = value.replace(/\D/g, '').slice(0, 10);
   const area = digits.slice(0, 3);
@@ -105,39 +98,6 @@ const handleCurrencyBlur = (event: FocusEvent<HTMLInputElement>) => {
   event.currentTarget.value = formatCurrencyInputValue(event.currentTarget.value);
 };
 
-const readHistory = (key: string) => {
-  if (typeof window === 'undefined') return [] as string[];
-
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return [] as string[];
-
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed.filter((item) => typeof item === 'string') as string[]) : [];
-  } catch (error) {
-    console.error('Failed to read referral history', error);
-    return [] as string[];
-  }
-};
-
-const writeHistory = (key: string, values: string[]) => {
-  if (typeof window === 'undefined') return;
-
-  try {
-    window.localStorage.setItem(key, JSON.stringify(values.slice(0, MAX_HISTORY_ITEMS)));
-  } catch (error) {
-    console.error('Failed to save referral history', error);
-  }
-};
-
-const upsertHistoryValue = (existing: string[], value: string) => {
-  const trimmed = value.trim();
-  if (!trimmed) return existing;
-
-  const filtered = existing.filter((item) => item.toLowerCase() !== trimmed.toLowerCase());
-  return [trimmed, ...filtered].slice(0, MAX_HISTORY_ITEMS);
-};
-
 export function ReferralForm() {
   const router = useRouter();
   const { data: session } = useSession();
@@ -166,33 +126,30 @@ export function ReferralForm() {
   useEffect(() => {
     if (!isAdmin) return;
 
-    const savedSources = readHistory(LOCAL_STORAGE_KEYS.sourceHistory);
-    const savedEndorsers = readHistory(LOCAL_STORAGE_KEYS.endorserHistory);
+    const fetchMetadata = async () => {
+      try {
+        const response = await fetch('/api/referrals/metadata');
+        if (response.ok) {
+          const data = (await response.json()) as { sources: string[]; endorsers: string[] };
+          setSourceHistory(data.sources);
+          setEndorserHistory(data.endorsers);
+        }
+      } catch (error) {
+        console.error('Failed to fetch referral metadata', error);
+      }
+    };
 
-    setSourceHistory(savedSources);
-    setEndorserHistory(savedEndorsers);
+    fetchMetadata();
   }, [isAdmin]);
 
   const handleSourceChange = (event: ChangeEvent<HTMLInputElement>) => {
     const value = event.currentTarget.value;
     setSourceValue(value);
-
-    if (!isAdmin) return;
-
-    const nextHistory = upsertHistoryValue(sourceHistory, value);
-    setSourceHistory(nextHistory);
-    writeHistory(LOCAL_STORAGE_KEYS.sourceHistory, nextHistory);
   };
 
   const handleEndorserChange = (event: ChangeEvent<HTMLInputElement>) => {
     const value = event.currentTarget.value;
     setEndorserValue(value);
-
-    if (!isAdmin) return;
-
-    const nextHistory = upsertHistoryValue(endorserHistory, value);
-    setEndorserHistory(nextHistory);
-    writeHistory(LOCAL_STORAGE_KEYS.endorserHistory, nextHistory);
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -232,15 +189,7 @@ export function ReferralForm() {
       return;
     }
 
-    if (isAdmin) {
-      const nextSources = upsertHistoryValue(sourceHistory, result.data.source ?? '');
-      const nextEndorsers = upsertHistoryValue(endorserHistory, result.data.endorser ?? '');
-
-      setSourceHistory(nextSources);
-      setEndorserHistory(nextEndorsers);
-      writeHistory(LOCAL_STORAGE_KEYS.sourceHistory, nextSources);
-      writeHistory(LOCAL_STORAGE_KEYS.endorserHistory, nextEndorsers);
-    }
+    // Metadata is automatically saved to database by the API endpoint
 
     const loanFileNumber = result.data.loanFileNumber?.trim() ?? '';
 
