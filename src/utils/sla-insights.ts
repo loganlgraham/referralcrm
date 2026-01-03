@@ -1036,7 +1036,7 @@ export const computeSlaRecommendations = (
   const isBuyer = referral.clientType === 'Buyer' || referral.dealSide === 'buy' || referral.clientType === 'Both';
   const isSeller = referral.clientType === 'Seller' || referral.dealSide === 'sell' || referral.clientType === 'Both';
 
-  const recommendations: SlaRecommendation[] = [];
+  recommendations = [];
 
   if (!assignedAgentName) {
     const dueBy = addHours(createdAt, SLA_THRESHOLDS.minutesToAssignment / 60);
