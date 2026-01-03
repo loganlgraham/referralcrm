@@ -376,9 +376,11 @@ export function ReferralNotes({
           <p className="text-sm text-slate-500">No notes yet.</p>
         ) : (
           <div className="space-y-2">
-            <div className="space-y-2">
-              {previewNotes.map(renderNoteCard)}
-            </div>
+            {!showNotesDropdown && (
+              <div className="space-y-2">
+                {previewNotes.map(renderNoteCard)}
+              </div>
+            )}
             {sortedNotes.length > 2 && (
               <button
                 type="button"
