@@ -581,6 +581,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referral.lookingInZips,
     referral.borrowerCurrentAddress,
     referral.stageOnTransfer,
+    referral.timeline,
   ]);
 
   useEffect(() => {
@@ -876,6 +877,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         borrowerCurrentAddress: normalizedDraft.borrowerCurrentAddress,
         stageOnTransfer: normalizedDraft.stageOnTransfer,
         loanType: normalizedDraft.loanType,
+        timeline: normalizedDraft.timeline,
         preApprovalAmountCents:
           preApprovalAmountValue === undefined
             ? previous.preApprovalAmountCents
@@ -1417,6 +1419,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             <div className="space-y-1">
               <dt className="text-xs uppercase text-slate-500">Stage on Transfer</dt>
               <dd className="text-sm text-slate-700">{referral.stageOnTransfer?.trim() ? referral.stageOnTransfer : '—'}</dd>
+            </div>
+            <div className="space-y-1">
+              <dt className="text-xs uppercase text-slate-500">Timeline</dt>
+              <dd className="text-sm text-slate-700">
+                {referral.timeline && REFERRAL_TIMELINE_OPTIONS.find((opt) => opt.value === referral.timeline)
+                  ? REFERRAL_TIMELINE_OPTIONS.find((opt) => opt.value === referral.timeline)?.label
+                  : '—'}
+              </dd>
             </div>
             <div className="space-y-1 sm:col-span-2 lg:col-span-3">
               <dt className="text-xs uppercase text-slate-500">Borrower Current Address</dt>
