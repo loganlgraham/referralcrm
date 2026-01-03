@@ -260,6 +260,7 @@ const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
   stageOnTransfer: normalizeStageOnTransfer(draft.stageOnTransfer),
   loanType: draft.loanType.trim(),
   preApprovalAmount: sanitizeCurrencyInput(draft.preApprovalAmount),
+  timeline: draft.timeline,
 });
 
 const formatFullAddress = (
