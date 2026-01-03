@@ -58,8 +58,6 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const ahaBucketValue = showAhaBucket ? searchParams.get('ahaBucket') ?? '' : '';
   const agentReferralValue = isAdminMode ? searchParams.get('agentReferrals') ?? '' : '';
   const timelineValue = searchParams.get('timeline') ?? '';
-  const zipValue = searchParams.get('zip') ?? '';
-  const [zipInput, setZipInput] = useState(zipValue);
 
   useEffect(() => {
     if (isTypingRef.current) {
@@ -90,35 +88,6 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
       router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
     });
   }, [debouncedSearch, router, searchParamsString, startTransition]);
-
-  useEffect(() => {
-    setZipInput(zipValue);
-  }, [zipValue]);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      const trimmed = zipInput.trim();
-      const params = new URLSearchParams(searchParamsString);
-      const existing = (params.get('zip') ?? '').trim();
-
-      if (trimmed === existing) {
-        return;
-      }
-
-      if (!trimmed) {
-        params.delete('zip');
-      } else {
-        params.set('zip', trimmed);
-      }
-
-      startTransition(() => {
-        const queryString = params.toString();
-        router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
-      });
-    }, 200);
-
-    return () => window.clearTimeout(timeout);
-  }, [zipInput, router, searchParamsString, startTransition]);
 
   const handleSearchInput = useCallback((value: string) => {
     isTypingRef.current = true;
@@ -227,20 +196,6 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
                 </option>
               ))}
             </select>
-          </label>
-        )}
-        {!isAgentMode && (
-          <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
-            Looking in ZIP
-            <input
-              type="text"
-              maxLength={64}
-              value={zipInput}
-              onChange={(event) => setZipInput(event.target.value)}
-              className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-              placeholder="Filter by Looking in ZIP"
-              disabled={isPending}
-            />
           </label>
         )}
         <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
