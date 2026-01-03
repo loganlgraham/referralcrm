@@ -1426,6 +1426,7 @@ export const computeSlaRecommendations = (
       })
     );
   }
+  }
 
   // Apply timeline-based priority adjustments to all recommendations
   return recommendations.map((rec) => ({
