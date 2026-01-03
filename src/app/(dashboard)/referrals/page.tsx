@@ -34,7 +34,8 @@ export default async function ReferralsPage({
     zip: searchParams.zip?.toString(),
     search: searchParams.search?.toString() ?? null,
     ahaBucket: ahaBucketParam === 'AHA' || ahaBucketParam === 'AHA_OOS' ? ahaBucketParam : null,
-    agentReferrals: role === 'admin' && agentReferrals !== 'all' ? agentReferrals : null
+    agentReferrals: role === 'admin' && agentReferrals !== 'all' ? agentReferrals : null,
+    timeline: searchParams.timeline?.toString() ?? null
   });
 
   const items = data.items as ReferralRow[];

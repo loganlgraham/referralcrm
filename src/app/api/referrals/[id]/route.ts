@@ -24,6 +24,7 @@ const DETAIL_FIELD_LABELS = {
   loanFileNumber: 'Loan File #',
   loanType: 'Loan Type',
   preApprovalAmount: 'Pre-approval Amount',
+  timeline: 'Timeline',
 } as const;
 
 export async function GET(request: NextRequest, context: RouteContext): Promise<NextResponse> {

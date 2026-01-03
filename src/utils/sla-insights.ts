@@ -82,6 +82,7 @@ export interface ReferralLike {
   notes?: NoteLike[];
   payments?: DealLike[];
   audit?: AuditEntryLike[];
+  timeline?: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified';
   sla?: {
     contractToCloseMinutes?: number | null;
     closedToPaidMinutes?: number | null;
@@ -964,14 +965,51 @@ const computeAgentReferralRecommendations = (
   return recommendations;
 };
 
+const adjustPriorityForTimeline = (
+  priority: RecommendationPriority,
+  timeline?: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified'
+): RecommendationPriority => {
+  if (!timeline || timeline === 'not_specified' || timeline === '3-6_months') {
+    return priority;
+  }
+
+  switch (timeline) {
+    case 'asap':
+      // Boost by one level (except urgent stays urgent)
+      if (priority === 'low') return 'medium';
+      if (priority === 'medium') return 'high';
+      if (priority === 'high') return 'urgent';
+      return priority; // urgent stays urgent
+    case '1-3_months':
+      // Boost high→urgent, medium→high
+      if (priority === 'high') return 'urgent';
+      if (priority === 'medium') return 'high';
+      return priority;
+    case '6-12_months':
+      // Reduce urgent→high, high→medium
+      if (priority === 'urgent') return 'high';
+      if (priority === 'high') return 'medium';
+      return priority;
+    case '12+_months':
+      // Decrease by one level (except low stays low)
+      if (priority === 'urgent') return 'high';
+      if (priority === 'high') return 'medium';
+      if (priority === 'medium') return 'low';
+      return priority; // low stays low
+    default:
+      return priority;
+  }
+};
+
 export const computeSlaRecommendations = (
   referral: ReferralLike,
   options?: { lastCompletedAt?: Date | null }
 ): SlaRecommendation[] => {
   const clock = buildSlaClock(referral, options?.lastCompletedAt ?? null);
+  let recommendations: SlaRecommendation[];
   if (referral.origin === 'agent') {
-    return computeAgentReferralRecommendations(referral, clock);
-  }
+    recommendations = computeAgentReferralRecommendations(referral, clock);
+  } else {
 
   const { createdAt, statusLastUpdated, status } = clock;
   const now = new Date();
@@ -1389,7 +1427,11 @@ export const computeSlaRecommendations = (
     );
   }
 
-  return recommendations;
+  // Apply timeline-based priority adjustments to all recommendations
+  return recommendations.map((rec) => ({
+    ...rec,
+    priority: adjustPriorityForTimeline(rec.priority, referral.timeline),
+  }));
 };
 
 export const computeRiskSummary = (referral: ReferralLike, recommendations: SlaRecommendation[]): SlaInsights['riskSummary'] => {

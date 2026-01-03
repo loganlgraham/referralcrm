@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import useSWR from 'swr';
 
-import { REFERRAL_STATUSES } from '@/constants/referrals';
+import { REFERRAL_STATUSES, REFERRAL_TIMELINE_OPTIONS } from '@/constants/referrals';
 import { fetcher } from '@/utils/fetcher';
 
 type FilterMode = 'admin' | 'mc' | 'agent';
@@ -57,6 +57,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const lenderValue = searchParams.get('mc') ?? '';
   const ahaBucketValue = showAhaBucket ? searchParams.get('ahaBucket') ?? '' : '';
   const agentReferralValue = isAdminMode ? searchParams.get('agentReferrals') ?? '' : '';
+  const timelineValue = searchParams.get('timeline') ?? '';
   const zipValue = searchParams.get('zip') ?? '';
   const [zipInput, setZipInput] = useState(zipValue);
 
@@ -242,6 +243,22 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
             />
           </label>
         )}
+        <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+          Timeline
+          <select
+            value={timelineValue}
+            onChange={(event) => handleChange('timeline', event.target.value)}
+            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            disabled={isPending}
+          >
+            <option value="">All</option>
+            {REFERRAL_TIMELINE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
     </div>
   );

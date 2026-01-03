@@ -4,7 +4,8 @@ import {
   DEFAULT_AGENT_COMMISSION_BPS,
   DEFAULT_REFERRAL_FEE_BPS,
   REFERRAL_STATUSES,
-  REFERRAL_STATUS_VALUES
+  REFERRAL_STATUS_VALUES,
+  REFERRAL_TIMELINE_VALUES
 } from '@/constants/referrals';
 
 export type ReferralStatus = (typeof REFERRAL_STATUSES)[number];
@@ -180,6 +181,12 @@ const referralSchema = new Schema(
       enum: ['agent', 'mc', 'admin'],
       default: 'admin',
     },
+    timeline: {
+      type: String,
+      enum: REFERRAL_TIMELINE_VALUES,
+      default: 'not_specified',
+      index: true,
+    },
     deletedAt: { type: Date, default: null },
     deals: [DealSchema], // Ensure this is an array
   },
@@ -262,6 +269,7 @@ export interface ReferralDocument {
   org: 'AFC' | 'AHA';
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   origin?: 'agent' | 'mc' | 'admin';
+  timeline?: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified';
   deletedAt?: Date;
   audit?: AuditEntry[];
   lostAssignments?: {
