@@ -14,8 +14,9 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 
-import { REFERRAL_STATUSES, ReferralStatus } from '@/constants/referrals';
+import { REFERRAL_STATUSES, ReferralStatus, type ReferralTimeline } from '@/constants/referrals';
 import { formatCurrency, formatNumber, formatPhoneNumber } from '@/utils/formatters';
+import { calculateTimelineDaysRemaining, formatTimelineCountdown } from '@/utils/timeline-countdown';
 
 export interface ReferralRow {
   _id: string;
@@ -46,6 +47,7 @@ export interface ReferralRow {
   dealStatus?: string | null;
   dealStatusLabel?: string | null;
   origin?: 'agent' | 'mc' | 'admin';
+  timeline?: ReferralTimeline;
 }
 
 type TableMode = 'admin' | 'mc' | 'agent';
@@ -359,20 +361,27 @@ function buildColumns(
       new Date(a.original.createdAt).getTime() - new Date(b.original.createdAt).getTime(),
   };
 
-  const renderLocation = (row: ReferralRow) => {
-    const zips = Array.isArray(row.lookingInZips)
-      ? row.lookingInZips.filter((zip) => typeof zip === 'string' && zip.trim().length > 0)
-      : [];
-    if (zips.length > 0) {
-      return zips.join(', ');
-    }
-    return row.lookingInZip?.trim() ? row.lookingInZip : '—';
+  const renderTimelineCountdown = (row: ReferralRow) => {
+    const daysRemaining = calculateTimelineDaysRemaining(row.timeline, row.createdAt);
+    return formatTimelineCountdown(daysRemaining, row.timeline);
   };
 
-  const locationColumn: ColumnDef<ReferralRow> = {
-    header: sortableHeader('Looking In (Zip)'),
-    accessorKey: 'lookingInZip',
-    cell: ({ row }) => renderLocation(row.original)
+  const timelineColumn: ColumnDef<ReferralRow> = {
+    header: sortableHeader('Timeline'),
+    accessorKey: 'timeline',
+    cell: ({ row }) => renderTimelineCountdown(row.original),
+    sortingFn: (a, b) => {
+      const daysA = calculateTimelineDaysRemaining(a.original.timeline, a.original.createdAt);
+      const daysB = calculateTimelineDaysRemaining(b.original.timeline, b.original.createdAt);
+      
+      // Handle null values - expired/not specified go to end
+      if (daysA === null && daysB === null) return 0;
+      if (daysA === null) return 1; // null goes after
+      if (daysB === null) return -1; // null goes after
+      
+      // Sort: expired (negative) first, then by days remaining ascending
+      return daysA - daysB;
+    }
   };
 
   if (mode === 'agent') {
@@ -382,7 +391,7 @@ function buildColumns(
         header: sortableHeader('Loan File #'),
         accessorKey: 'loanFileNumber'
       },
-      locationColumn,
+      timelineColumn,
       {
         header: sortableHeader('Pre-approval'),
         accessorKey: 'preApprovalAmountCents',
@@ -425,6 +434,7 @@ function buildColumns(
         header: sortableHeader('Loan File #'),
         accessorKey: 'loanFileNumber'
       },
+      timelineColumn,
       {
         header: 'Agent Contact',
         id: 'agentContact',
@@ -462,7 +472,7 @@ function buildColumns(
         header: sortableHeader('Loan File #'),
         accessorKey: 'loanFileNumber'
       },
-      locationColumn,
+      timelineColumn,
     {
       header: sortableHeader('Status'),
       accessorKey: 'status',
