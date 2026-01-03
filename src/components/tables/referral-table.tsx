@@ -10,7 +10,6 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 
@@ -21,6 +20,7 @@ import { calculateTimelineDaysRemaining, formatTimelineCountdown } from '@/utils
 export interface ReferralRow {
   _id: string;
   createdAt: string;
+  updatedAt?: string | null;
   borrowerName: string;
   borrowerEmail: string;
   borrowerPhone: string;
@@ -253,50 +253,6 @@ function NoteComposer({ referralId }: { referralId: string }) {
   );
 }
 
-function DeleteReferralButton({ referralId, borrowerName }: { referralId: string; borrowerName: string }) {
-  const router = useRouter();
-  const [deleting, setDeleting] = useState(false);
-
-  const handleDelete = async () => {
-    if (deleting) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Delete this referral for ${borrowerName}? This action cannot be undone and will remove any associated deals.`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setDeleting(true);
-    try {
-      const response = await fetch(`/api/referrals/${referralId}`, { method: 'DELETE' });
-      if (!response.ok) {
-        throw new Error('Unable to delete referral');
-      }
-      toast.success('Referral deleted');
-      router.refresh();
-    } catch (error) {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : 'Unable to delete referral');
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={handleDelete}
-      disabled={deleting}
-      className="whitespace-nowrap rounded border border-rose-200 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
-    >
-      {deleting ? 'Deleting…' : 'Delete'}
-    </button>
-  );
-}
 
 function SortButton({ column, label }: { column: any; label: string }) {
   const direction = column.getIsSorted();
@@ -359,6 +315,20 @@ function buildColumns(
     cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString(),
     sortingFn: (a, b) =>
       new Date(a.original.createdAt).getTime() - new Date(b.original.createdAt).getTime(),
+  };
+
+  const lastUpdatedColumn: ColumnDef<ReferralRow> = {
+    header: sortableHeader('Last Updated'),
+    accessorKey: 'updatedAt',
+    cell: ({ row }) => {
+      const updatedAt = row.original.updatedAt;
+      return updatedAt ? new Date(updatedAt).toLocaleDateString() : '—';
+    },
+    sortingFn: (a, b) => {
+      const dateA = a.original.updatedAt ? new Date(a.original.updatedAt).getTime() : 0;
+      const dateB = b.original.updatedAt ? new Date(b.original.updatedAt).getTime() : 0;
+      return dateA - dateB;
+    },
   };
 
   const renderTimelineCountdown = (row: ReferralRow) => {
@@ -521,17 +491,7 @@ function buildColumns(
       }
     },
     createdColumn,
-    {
-      header: '',
-      id: 'actions',
-      cell: ({ row }) => (
-        <DeleteReferralButton
-          referralId={row.original._id}
-          borrowerName={row.original.borrowerName}
-        />
-      ),
-      enableSorting: false,
-    }
+    lastUpdatedColumn
   ];
 }
 

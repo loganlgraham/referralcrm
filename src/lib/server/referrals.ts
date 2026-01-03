@@ -50,6 +50,7 @@ interface PopulatedReferral
 interface ReferralListItem {
   _id: string;
   createdAt: string;
+  updatedAt?: string | null;
   borrowerName: string;
   borrowerEmail: string;
   borrowerPhone: string;
@@ -362,6 +363,7 @@ export async function getReferrals(params: GetReferralsParams) {
       return {
         _id: item._id.toString(),
         createdAt: item.createdAt.toISOString(),
+        updatedAt: item.updatedAt ? item.updatedAt.toISOString() : null,
         borrowerName: item.borrower.name,
         borrowerEmail: item.borrower.email,
         borrowerPhone: item.borrower.phone,
