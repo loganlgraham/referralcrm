@@ -558,6 +558,34 @@ const buildRecommendation = (
   recommendation: Omit<SlaRecommendation, 'id'> & { id: string }
 ): SlaRecommendation => recommendation;
 
+/**
+ * Compute 3-month check-in task for Lost referrals
+ * Returns a recommendation if the referral has been in Lost status for 3+ months (90+ days)
+ */
+const computeLostReferralThreeMonthCheckIn = (
+  statusLastUpdated: Date,
+  now: Date
+): SlaRecommendation | null => {
+  const daysSinceLost = differenceInDays(now, statusLastUpdated);
+  
+  // Only show the task if 90+ days (3 months) have passed
+  if (daysSinceLost < 90) {
+    return null;
+  }
+
+  const dueDate = addDays(statusLastUpdated, 90);
+  
+  return buildRecommendation({
+    id: 'lost-three-month-check-in',
+    title: 'Send 3-month check-in email',
+    message: "Send a check-in email to see if the customer's situation has changed",
+    priority: 'low',
+    category: 'communication',
+    dueAt: minDueDate(dueDate),
+    supportingMetric: `${daysSinceLost} days since marked as Lost`,
+  });
+};
+
 const minDueDate = (candidate: Date | null | undefined): string | null => {
   if (!candidate) {
     return null;
@@ -860,7 +888,7 @@ const buildStatusRecommendations = (
     }
   }
 
-  if ((status === 'Terminated' || status === 'Lost') && hoursSinceLastNote !== null && hoursSinceLastNote > 24) {
+  if (status === 'Terminated' && hoursSinceLastNote !== null && hoursSinceLastNote > 24) {
     recommendations.push(
       buildRecommendation({
         id: 'capture-termination-reason-agent',
@@ -1006,6 +1034,15 @@ export const computeSlaRecommendations = (
   options?: { lastCompletedAt?: Date | null }
 ): SlaRecommendation[] => {
   const clock = buildSlaClock(referral, options?.lastCompletedAt ?? null);
+  const { status, statusLastUpdated } = clock;
+  const now = new Date();
+  
+  // Handle Lost status: only return 3-month check-in task, no other recommendations
+  if (status === 'Lost') {
+    const threeMonthTask = computeLostReferralThreeMonthCheckIn(statusLastUpdated, now);
+    return threeMonthTask ? [threeMonthTask] : [];
+  }
+  
   let recommendations: SlaRecommendation[];
   if (referral.origin === 'agent') {
     recommendations = computeAgentReferralRecommendations(referral, clock);
@@ -1414,7 +1451,7 @@ export const computeSlaRecommendations = (
     }
   }
 
-  if ((status === 'Terminated' || status === 'Lost') && hoursSinceLastNote !== null && hoursSinceLastNote > 24) {
+  if (status === 'Terminated' && hoursSinceLastNote !== null && hoursSinceLastNote > 24) {
     recommendations.push(
       buildRecommendation({
         id: 'capture-termination-reason',
