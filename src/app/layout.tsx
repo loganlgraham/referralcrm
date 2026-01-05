@@ -1,4 +1,5 @@
 import '@/app/globals.css';
+import { Analytics } from '@vercel/analytics/next';
 import { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { ReactNode, Suspense } from 'react';
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <NextAuthProvider>
           {children}
         </NextAuthProvider>
+        <Analytics />
       </body>
     </html>
   );
