@@ -138,7 +138,8 @@ interface DashboardResponse {
         reasonKey: string;
         reasonLabel: string;
         lostReferralFeeCents: number;
-        address: string;
+        mcName: string;
+        agentName: string;
       }[];
     };
   };
@@ -828,7 +829,7 @@ function TerminatedDealsList({
           displayedDeals.map((deal) => (
             <div key={deal.id} className="flex items-start justify-between gap-3 py-3">
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-900">{deal.address}</p>
+                <p className="truncate text-sm font-semibold text-slate-900">{deal.mcName}, {deal.agentName}</p>
                 <p className="text-xs text-slate-500">{deal.reasonLabel}</p>
               </div>
               <p className="whitespace-nowrap text-sm font-semibold text-rose-600">

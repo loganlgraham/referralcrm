@@ -290,7 +290,6 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
                   value={form.nmlsId}
                   onChange={handleChange('nmlsId')}
                   className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                  required
                   disabled={saving}
                 />
               </label>
@@ -360,7 +359,6 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
                 value={form.nmlsId}
                 onChange={handleChange('nmlsId')}
                 className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                required
                 disabled={saving}
               />
             </label>

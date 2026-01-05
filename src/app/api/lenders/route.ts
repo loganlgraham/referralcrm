@@ -12,7 +12,7 @@ const createLenderSchema = z.object({
   name: z.string().trim().min(1),
   email: z.string().trim().email().transform((value) => value.toLowerCase()),
   phone: z.string().trim().optional(),
-  nmlsId: z.string().trim().min(1),
+  nmlsId: z.string().trim().optional().default(''),
   licensedStates: z.array(z.string().trim().min(2)).optional().default([]),
 });
 
@@ -194,7 +194,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     name: parsed.data.name,
     email: parsed.data.email,
     phone: parsed.data.phone ?? '',
-    nmlsId: parsed.data.nmlsId,
+    nmlsId: parsed.data.nmlsId ?? '',
     licensedStates: parsed.data.licensedStates,
   });
 
