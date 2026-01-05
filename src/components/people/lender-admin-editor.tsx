@@ -126,7 +126,6 @@ export function LenderAdminEditor({ lender, className, onSaved }: LenderAdminEdi
             value={form.nmlsId}
             onChange={handleChange('nmlsId')}
             className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-            required
             disabled={saving}
           />
         </label>
