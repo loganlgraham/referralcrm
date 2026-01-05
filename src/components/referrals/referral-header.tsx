@@ -66,6 +66,7 @@ const buildIntroClipboardTemplate = (
   mcContact: Contact | null
 ): string => {
   const borrowerFirstName = buildBorrowerFirstName(referral);
+  const isSellerOnly = referral.clientType === 'Seller';
   const buyerFullName = buyingAgent?.name ?? 'your buying agent';
   const buyerPhone = buyingAgent?.phone ?? 'Not provided';
   const buyerEmail = buyingAgent?.email ?? 'Not provided';
@@ -79,6 +80,21 @@ const buildIntroClipboardTemplate = (
   const buyingAgentBlock = [buyerFullName, buyerPhone, buyerEmail].join('\n');
   const sellingAgentBlock = [sellerFullName, sellerPhone, sellerEmail].join('\n');
 
+  if (isSellerOnly) {
+    const agentsIntro = `${sellerFullName}, a local and trusted Real Estate Specialist who will be assisting you with selling your home.`;
+
+    return (
+      `Hi ${borrowerFirstName},\n\n` +
+      'I want to thank you again for your interest in our Agent Concierge Program. This program is tailored to support clients like you as you navigate the home-selling process with American Financing and to connect you with top-tier local agents.\n\n' +
+      `I'm excited to introduce you to ${agentsIntro}\n\n` +
+      `Below are ${sellerFirstName}'s contact details. You can expect them to reach out to you shortly:\n\n` +
+      'Selling Agent\n' +
+      `${sellingAgentBlock}\n\n` +
+      `If, at any point, you have trouble reaching ${sellerFirstName} or are not fully satisfied with the services provided, please don't hesitate to contact me. We are committed to supporting you every step of the way.\n\n` +
+      'Thank you once again, and best of luck with your home sale!\n\n---'
+    );
+  }
+
   const agentsIntro = buyingAgent && sellingAgent
     ? `${buyerFullName} and ${sellerFullName}, both local and trusted Real Estate Specialists who will be assisting you with your home purchase.`
     : `${buyerFullName}, a local and trusted Real Estate Specialist who will be assisting you with your home purchase.`;
@@ -88,12 +104,12 @@ const buildIntroClipboardTemplate = (
   return (
     `Hi ${borrowerFirstName},\n\n` +
     'I want to thank you again for your interest in our Agent Concierge Program. This program is tailored to support clients like you as you navigate the home-buying and selling process with American Financing and to connect you with top-tier local agents.\n\n' +
-    `I’m excited to introduce you to ${agentsIntro}\n\n` +
+    `I'm excited to introduce you to ${agentsIntro}\n\n` +
     `Below are ${dualAgents ? `${buyerFirstName} and ${sellerFirstName}` : buyerFirstName}'s contact details. You can expect them to reach out to you shortly:\n\n` +
     'Buying Agent\n' +
     `${buyingAgentBlock}\n\n` +
     (dualAgents ? `Selling Agent\n${sellingAgentBlock}\n\n` : '') +
-    `If, at any point, you have trouble reaching ${dualAgents ? `${buyerFirstName} or ${sellerFirstName}` : buyerFirstName} or are not fully satisfied with the services provided, please don’t hesitate to contact ${mcFirstName} or me. We are committed to supporting you every step of the way.\n\n` +
+    `If, at any point, you have trouble reaching ${dualAgents ? `${buyerFirstName} or ${sellerFirstName}` : buyerFirstName} or are not fully satisfied with the services provided, please don't hesitate to contact ${mcFirstName} or me. We are committed to supporting you every step of the way.\n\n` +
     'Thank you once again, and happy home shopping!\n\n---'
   );
 };
@@ -397,6 +413,13 @@ export function ReferralHeader({
   const canUseAssignedForBuySide = allowAssignedFallback && referral.clientType !== 'Seller';
   const canUseAssignedForSellSide = allowAssignedFallback && referral.clientType !== 'Buyer';
   const primarySide = useMemo<'buy' | 'sell'>(() => {
+    // Prioritize clientType over dealSide for Seller referrals
+    if (referral.clientType === 'Seller') {
+      return 'sell';
+    }
+    if (referral.clientType === 'Buyer') {
+      return 'buy';
+    }
     if (dealSide === 'sell') {
       return 'sell';
     }
@@ -407,12 +430,6 @@ export function ReferralHeader({
       if (!buySideAgentContact && !fallbackBuySideContact && (sellSideAgentContact || fallbackSellSideContact)) {
         return 'sell';
       }
-      return 'buy';
-    }
-    if (referral.clientType === 'Seller') {
-      return 'sell';
-    }
-    if (referral.clientType === 'Buyer') {
       return 'buy';
     }
     if (!buySideAgentContact && !fallbackBuySideContact && (sellSideAgentContact || fallbackSellSideContact)) {
@@ -958,13 +975,15 @@ export function ReferralHeader({
               }
             />
           )}
-          <ContactAssignment
-            referralId={referral._id}
-            type="mc"
-            contact={effectiveMcContact}
-            canAssign={canAssignMc}
-            onContactChange={onMcContactChange}
-          />
+          {referral.clientType !== 'Seller' && (
+            <ContactAssignment
+              referralId={referral._id}
+              type="mc"
+              contact={effectiveMcContact}
+              canAssign={canAssignMc}
+              onContactChange={onMcContactChange}
+            />
+          )}
           {viewerRole === 'admin' && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
               <div className="flex flex-wrap items-center justify-between gap-3">
