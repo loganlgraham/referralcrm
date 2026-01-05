@@ -4,7 +4,7 @@ import { Inter } from 'next/font/google';
 import { ReactNode, Suspense } from 'react';
 import { Toaster } from 'sonner';
 import { Analytics } from '@vercel/analytics/react';
-import { SpeedInsights } from '@vercel/speed-insights/react';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import { NavigationProgress } from '@/components/layout/navigation-progress';
 import { NextAuthProvider } from '@/components/providers/next-auth-provider';
 
