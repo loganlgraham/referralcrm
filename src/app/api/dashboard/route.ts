@@ -1565,7 +1565,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     reasonLabel: TERMINATED_REASON_LABELS[payment.terminatedReason ?? 'unknown'] ?? 'Unknown',
     lostReferralFeeCents:
       payment.expectedAmountCents ?? payment.referral?.referralFeeDueCents ?? 0,
-    address: formatTerminatedAddress(payment.referral)
+    mcName: payment.referral?.lender
+      ? lenderNameMap.get(payment.referral.lender.toString()) ?? 'Unassigned MC'
+      : 'Unassigned MC',
+    agentName: payment.referral?.assignedAgent
+      ? agentNameMap.get(payment.referral.assignedAgent.toString()) ?? 'Unassigned Agent'
+      : 'Unassigned Agent'
   }));
 
   const terminatedDealsSummary = {
