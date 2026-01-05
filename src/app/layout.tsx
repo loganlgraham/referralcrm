@@ -3,6 +3,7 @@ import { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import { ReactNode, Suspense } from 'react';
 import { Toaster } from 'sonner';
+import { Analytics } from '@vercel/analytics/next';
 import { NavigationProgress } from '@/components/layout/navigation-progress';
 import { NextAuthProvider } from '@/components/providers/next-auth-provider';
 
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <NextAuthProvider>
           {children}
         </NextAuthProvider>
+        <Analytics />
       </body>
     </html>
   );
