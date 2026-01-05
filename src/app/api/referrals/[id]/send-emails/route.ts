@@ -254,16 +254,36 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const result: SendResult = { sent: [], skipped: [], errors: [] };
 
   const shouldEmailAgent = referral.origin !== 'agent';
+  const isSellerOnly = referral.clientType === 'Seller';
   const agentEmailSubject =
     session.user.role === 'admin' ? 'American Home Agents - New Referral!' : `New referral for ${borrowerName}`;
-  const agentIntroCopy =
-    session.user.role === 'admin'
-      ? `Thanks for partnering with the American Home Agents Concierge Service to help our referral, ${borrowerName}. We're excited to get them in their new home!`
-      : `Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName}. We're excited to get them in their new home!`;
+  const agentIntroCopy = isSellerOnly
+    ? session.user.role === 'admin'
+      ? `Thanks for partnering with the American Home Agents Concierge Service to help our referral, ${borrowerName}, sell their home. We're excited to help them through this process!`
+      : `Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName} sell their home. We're excited to help them through this process!`
+    : session.user.role === 'admin'
+    ? `Thanks for partnering with the American Home Agents Concierge Service to help our referral, ${borrowerName}. We're excited to get them in their new home!`
+    : `Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName}. We're excited to get them in their new home!`;
 
   if (shouldEmailAgent) {
     const notesHtmlLine = notes ? `<br><b>Notes:</b> ${notes.replace(/\n/g, '<br>')}` : '';
     const notesTextLine = notes ? `Notes: ${notes}` : null;
+
+    const mcInfoHtml = isSellerOnly
+      ? null
+      : lenderContact
+      ? `<p><b>Mortgage Consultant at American Financing:</b> ${lenderContact.name ?? 'Not provided'}<br><b>Email:</b> ${
+          lenderContact.email ?? 'Not provided'
+        }<br><b>Phone:</b> ${lenderContact.phone ?? 'Not provided'}<br><b>Loan File Number:</b> ${loanFileNumber}</p>`
+      : `<p><b>Mortgage Consultant at American Financing:</b> Not provided<br><b>Loan File Number:</b> ${loanFileNumber}</p>`;
+
+    const mcInfoText = isSellerOnly
+      ? null
+      : lenderContact
+      ? `Mortgage Consultant at American Financing: ${lenderContact.name ?? 'Not provided'} | Email: ${
+          lenderContact.email ?? 'Not provided'
+        } | Phone: ${lenderContact.phone ?? 'Not provided'} | Loan File Number: ${loanFileNumber}`
+      : `Mortgage Consultant at American Financing: Not provided | Loan File Number: ${loanFileNumber}`;
 
     await trySendEmail(
       primaryAgent?.email ?? null,
@@ -275,11 +295,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         `<p><b>Client Name:</b> ${borrowerName}<br><b>Email:</b> ${borrowerEmail ?? 'Not provided'}<br><b>Phone:</b> ${
           borrowerPhone ?? 'Not provided'
         }${notesHtmlLine}</p>`,
-        lenderContact
-          ? `<p><b>Mortgage Consultant at American Financing:</b> ${lenderContact.name ?? 'Not provided'}<br><b>Email:</b> ${
-              lenderContact.email ?? 'Not provided'
-            }<br><b>Phone:</b> ${lenderContact.phone ?? 'Not provided'}<br><b>Loan File Number:</b> ${loanFileNumber}</p>`
-          : `<p><b>Mortgage Consultant at American Financing:</b> Not provided<br><b>Loan File Number:</b> ${loanFileNumber}</p>`,
+        mcInfoHtml,
         contactMadeLink && contactAttemptedLink
           ? `<p>Please select one of the following after attempting to contact ${borrowerFirstName}: </p>`
           : null,
@@ -297,11 +313,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         `Email: ${borrowerEmail ?? 'Not provided'}`,
         `Phone: ${borrowerPhone ?? 'Not provided'}`,
         notesTextLine,
-        lenderContact
-          ? `Mortgage Consultant at American Financing: ${lenderContact.name ?? 'Not provided'} | Email: ${
-              lenderContact.email ?? 'Not provided'
-            } | Phone: ${lenderContact.phone ?? 'Not provided'} | Loan File Number: ${loanFileNumber}`
-          : `Mortgage Consultant at American Financing: Not provided | Loan File Number: ${loanFileNumber}`,
+        mcInfoText,
         contactMadeLink && contactAttemptedLink
           ? `Please select one of the following after attempting to contact ${borrowerFirstName}:`
           : null,
@@ -402,14 +414,17 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     }'s financing and add their contact information to the LOS.`
   );
 
-  await trySendEmail(
-    lenderContact?.email ?? null,
-    `Agent helping ${borrowerName}`,
-    mcEmailHtmlLines.filter(Boolean),
-    mcEmailTextLines.filter(Boolean),
-    'mc',
-    result
-  );
+  // Skip MC email for seller-only referrals (no mortgage consultant needed)
+  if (referral.clientType !== 'Seller') {
+    await trySendEmail(
+      lenderContact?.email ?? null,
+      `Agent helping ${borrowerName}`,
+      mcEmailHtmlLines.filter(Boolean),
+      mcEmailTextLines.filter(Boolean),
+      'mc',
+      result
+    );
+  }
 
   if (result.sent.length > 0) {
     await logReferralActivity({
