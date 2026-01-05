@@ -79,3 +79,76 @@ body {
     opacity: 0.4;
   }
 }
+
+/* Modern gradient animations for login page */
+.gradient-animated {
+  background: linear-gradient(-45deg, #8b5cf6, #3b82f6, #ec4899, #8b5cf6);
+  background-size: 400% 400%;
+  animation: gradient-shift 15s ease infinite;
+}
+
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Floating orb animations */
+@keyframes float-1 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.3;
+  }
+  33% {
+    transform: translate(30px, -30px) scale(1.1);
+    opacity: 0.4;
+  }
+  66% {
+    transform: translate(-20px, 20px) scale(0.9);
+    opacity: 0.35;
+  }
+}
+
+@keyframes float-2 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.3;
+  }
+  33% {
+    transform: translate(-25px, 25px) scale(1.15);
+    opacity: 0.4;
+  }
+  66% {
+    transform: translate(20px, -20px) scale(0.85);
+    opacity: 0.35;
+  }
+}
+
+@keyframes float-3 {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.2;
+  }
+  50% {
+    transform: translate(-45%, -55%) scale(1.2);
+    opacity: 0.3;
+  }
+}
+
+.animate-float-1 {
+  animation: float-1 20s ease-in-out infinite;
+}
+
+.animate-float-2 {
+  animation: float-2 25s ease-in-out infinite;
+}
+
+.animate-float-3 {
+  animation: float-3 18s ease-in-out infinite;
+}

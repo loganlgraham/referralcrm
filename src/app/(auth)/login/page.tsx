@@ -95,26 +95,24 @@ function LoginForm() {
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-100 lg:flex-row">
-      <div className="relative hidden w-full flex-col justify-between overflow-hidden bg-gradient-to-br from-brand to-brand-dark p-12 text-white lg:flex lg:max-w-xl xl:max-w-2xl">
-        <div className="space-y-6">
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-white/80">AFC · AHA</p>
-          <h2 className="text-4xl font-semibold leading-tight xl:text-5xl">Referral relationships, coordinated in one workspace.</h2>
-          <p className="max-w-md text-sm text-white/80">
-            Manage referrals, follow-ups, and lender partnerships with the tools your teams already trust.
-          </p>
+      <div className="relative hidden w-full flex-col justify-between overflow-hidden p-12 text-white lg:flex lg:max-w-xl xl:max-w-2xl gradient-animated">
+        <div className="relative z-10 space-y-8">
+          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-white/90">AFC · AHA</p>
+          <div className="space-y-2">
+            <h1 className="text-5xl font-bold leading-tight xl:text-6xl">Referrio</h1>
+            <h2 className="text-2xl font-medium text-white/90 xl:text-3xl">Welcome back.</h2>
+          </div>
         </div>
-        <div className="space-y-1 text-sm text-white/70">
-          <p className="font-semibold">Referral CRM</p>
-          <p>Built for the AFC &amp; AHA network.</p>
-        </div>
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_55%)]" aria-hidden="true" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.15),transparent_60%)]" aria-hidden="true" />
+        <div className="pointer-events-none absolute -top-40 -right-40 h-80 w-80 rounded-full bg-purple-500/30 blur-3xl animate-float-1" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-32 -left-32 h-96 w-96 rounded-full bg-pink-500/30 blur-3xl animate-float-2" aria-hidden="true" />
+        <div className="pointer-events-none absolute top-1/2 left-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500/20 blur-3xl animate-float-3" aria-hidden="true" />
       </div>
       <div className="flex w-full flex-1 flex-col items-start justify-start px-6 pb-8 pt-4 sm:px-10 sm:pb-12 sm:pt-6 lg:flex-row lg:items-center lg:justify-center lg:px-12 lg:pt-0">
-        <div className="relative w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl ring-1 ring-black/5">
-          <div className="space-y-2 text-center">
+        <div className="relative w-full max-w-md space-y-8 rounded-2xl bg-white/95 backdrop-blur-sm p-8 shadow-2xl ring-1 ring-black/5">
+          <div className="space-y-1 text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-brand">AFC · AHA</p>
-            <h1 className="text-3xl font-semibold text-slate-900">Sign in to Referral CRM</h1>
-            <p className="text-sm text-slate-600">Use your Referral CRM credentials to sign in.</p>
+            <h1 className="text-2xl font-bold text-slate-900">Sign in to Referrio</h1>
           </div>
 
           {displayProviderError && (
@@ -140,7 +138,7 @@ function LoginForm() {
                   id="identifier"
                   type="text"
                   autoComplete="username"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
+                  className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm shadow-sm transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:ring-offset-0"
                   placeholder="yourname or you@example.com"
                   value={identifier}
                   onChange={(event) => setIdentifier(event.target.value)}
@@ -155,14 +153,13 @@ function LoginForm() {
                   id="password"
                   type="password"
                   autoComplete="current-password"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
+                  className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm shadow-sm transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:ring-offset-0"
                   placeholder="Enter your password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
-                <div className="flex justify-between text-xs text-slate-500">
-                  <span />
-                  <Link href="/reset-password" className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950 hover:decoration-slate-500">
+                <div className="flex justify-end text-xs">
+                  <Link href="/reset-password" className="font-medium text-slate-600 hover:text-slate-900 transition-colors">
                     Forgot password?
                   </Link>
                 </div>
@@ -171,7 +168,7 @@ function LoginForm() {
               <button
                 type="submit"
                 disabled={loading}
-              className="w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/60 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-lg bg-gradient-to-r from-purple-600 via-blue-600 to-pink-600 px-4 py-3 text-sm font-semibold text-white shadow-lg transition-all hover:shadow-xl hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100"
               >
                 {loading ? 'Signing in…' : 'Sign in'}
               </button>
@@ -180,19 +177,9 @@ function LoginForm() {
 
           <p className="text-center text-sm text-slate-600">
             Don't have an account?{' '}
-            <Link href="/signup" className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950 hover:decoration-slate-500">
+            <Link href="/signup" className="font-semibold text-slate-900 hover:text-purple-600 transition-colors">
               Sign up
             </Link>
-          </p>
-
-          <p className="text-center text-xs text-slate-400">
-            Need help?{' '}
-            <a
-              href="mailto:logan.graham@americanfinancing.net?subject=Referrio%20Assistance%20Needed&body=Hello%2C%0A%0AI%20need%20help%20with%20Referrio.%20Please%20assist.%0A%0AThank%20you."
-              className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950 hover:decoration-slate-500"
-            >
-              Contact support
-            </a>
           </p>
         </div>
       </div>
