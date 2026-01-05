@@ -71,6 +71,24 @@ const basisPointsToDisplay = (value?: number | null) => {
   return (value / 100).toFixed(2);
 };
 
+// Convert a date string (YYYY-MM-DD) to ISO string preserving the date
+// This prevents timezone shifts that cause dates to display as one day earlier
+// by creating a date in local timezone and formatting it correctly
+const dateStringToLocalISO = (dateString: string): string => {
+  if (!dateString) return '';
+  // If the date string is already in ISO format with time, use it as-is
+  if (dateString.includes('T')) {
+    return dateString;
+  }
+  // Parse the date string components
+  const [year, month, day] = dateString.split('-').map(Number);
+  // Create a date in local timezone (not UTC)
+  const localDate = new Date(year, month - 1, day);
+  // Format as ISO string - this will be in UTC but represents the correct local date
+  // The key is that we created it from local components, so getTime() gives us the right value
+  return localDate.toISOString();
+};
+
 function DealCard({
   deal,
   agents,
@@ -211,7 +229,7 @@ function DealCard({
       statusToSend === 'closed'
         ? new Date().toISOString()
         : closingDate
-          ? new Date(closingDate).toISOString()
+          ? dateStringToLocalISO(closingDate)
           : null;
     const success = await onUpdate(deal, {
       status: statusToSend,
@@ -535,7 +553,17 @@ function DealCard({
               type="text"
               value={propertyState}
               maxLength={2}
-              onChange={(event) => setPropertyState(event.target.value.toUpperCase())}
+              onChange={(event) => {
+                const value = event.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2);
+                setPropertyState(value);
+              }}
+              onPaste={(event) => {
+                event.preventDefault();
+                const pastedText = event.clipboardData.getData('text');
+                const processed = pastedText.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2);
+                setPropertyState(processed);
+                event.currentTarget.value = processed;
+              }}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm uppercase focus:border-brand focus:outline-none"
               placeholder="ST"
               disabled={saving}
@@ -767,7 +795,7 @@ export function ReferralDeals({
           statusToSend === 'closed'
             ? new Date().toISOString()
             : closingDate
-              ? new Date(closingDate).toISOString()
+              ? dateStringToLocalISO(closingDate)
               : null;
         const response = await fetch('/api/payments', {
           method: 'POST',
@@ -1147,7 +1175,17 @@ export function ReferralDeals({
               type="text"
               value={propertyState}
               maxLength={2}
-              onChange={(event) => setPropertyState(event.target.value.toUpperCase())}
+              onChange={(event) => {
+                const value = event.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2);
+                setPropertyState(value);
+              }}
+              onPaste={(event) => {
+                event.preventDefault();
+                const pastedText = event.clipboardData.getData('text');
+                const processed = pastedText.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2);
+                setPropertyState(processed);
+                event.currentTarget.value = processed;
+              }}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm uppercase focus:border-brand focus:outline-none"
               placeholder="ST"
               disabled={submitting}
