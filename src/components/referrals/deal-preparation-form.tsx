@@ -1,6 +1,6 @@
 'use client';
 
-import { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, ClipboardEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -312,6 +312,8 @@ export function DealPreparationForm({
         const digitsOnly = value.replace(/[^0-9]/g, '');
         nextValue = digitsOnly;
       } else if (field === 'propertyState') {
+        // Extract only letters, convert to uppercase, and limit to 2 characters
+        // Use the full value to ensure we don't lose characters during rapid typing
         nextValue = value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2);
       } else if (field === 'propertyPostalCode') {
         const sanitized = value.replace(/[^0-9-]/g, '');
@@ -324,6 +326,22 @@ export function DealPreparationForm({
       return next;
     });
     setDirty(true);
+  };
+
+  const handleStatePaste = (event: ClipboardEvent<HTMLInputElement>) => {
+    event.preventDefault();
+    const pastedText = event.clipboardData.getData('text');
+    // Extract only letters, convert to uppercase, and limit to 2 characters
+    const processed = pastedText.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2);
+    setForm((previous) => {
+      const next = { ...previous, propertyState: processed };
+      broadcastDraft(next, true);
+      return next;
+    });
+    setDirty(true);
+    // Update the input value directly
+    const target = event.currentTarget;
+    target.value = processed;
   };
 
   const handleSave = async () => {
@@ -577,6 +595,7 @@ export function DealPreparationForm({
               type="text"
               value={form.propertyState}
               onChange={handleFieldChange('propertyState')}
+              onPaste={handleStatePaste}
               className="mt-1 w-full rounded border border-slate-200 px-3 py-2 uppercase"
               placeholder="TX"
               maxLength={2}

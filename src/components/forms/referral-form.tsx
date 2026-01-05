@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
 import { REFERRAL_TIMELINE_VALUES, REFERRAL_TIMELINE_OPTIONS } from '@/constants/referrals';
+import { formatPhoneInput } from '@/utils/formatters';
 
 const STAGE_OPTIONS = ['Pre-approval TBD', 'Pre-approved'] as const;
 const CLIENT_TYPE_OPTIONS = [
@@ -49,20 +50,7 @@ const inputClasses =
 
 const labelClasses = 'flex flex-col text-sm font-medium text-slate-700';
 
-const formatPhoneNumber = (value: string) => {
-  const digits = value.replace(/\D/g, '').slice(0, 10);
-  const area = digits.slice(0, 3);
-  const prefix = digits.slice(3, 6);
-  const line = digits.slice(6, 10);
-
-  if (digits.length <= 3) {
-    return area;
-  }
-  if (digits.length <= 6) {
-    return `${area}-${prefix}`;
-  }
-  return `${area}-${prefix}-${line}`;
-};
+// Use the robust formatPhoneInput utility which handles various formats including paste events
 
 const formatCurrencyInputValue = (value: string) => {
   const digits = value.replace(/[^0-9]/g, '');
@@ -270,8 +258,18 @@ export function ReferralForm() {
   };
 
   const handlePhoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatPhoneNumber(event.target.value);
+    const formatted = formatPhoneInput(event.target.value);
     setBorrowerPhone(formatted);
+  };
+
+  const handlePhonePaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
+    event.preventDefault();
+    const pastedText = event.clipboardData.getData('text');
+    const formatted = formatPhoneInput(pastedText);
+    setBorrowerPhone(formatted);
+    // Update the input value directly
+    const target = event.currentTarget;
+    target.value = formatted;
   };
 
   const handleStageChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -330,10 +328,11 @@ export function ReferralForm() {
                   name="borrowerPhone"
                   required
                   inputMode="tel"
-                  maxLength={12}
+                  maxLength={14}
                   pattern="\d{3}-\d{3}-\d{4}"
                   value={borrowerPhone}
                   onChange={handlePhoneChange}
+                  onPaste={handlePhonePaste}
                   className={inputClasses}
                   placeholder="555-123-4567"
                 />
