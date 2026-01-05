@@ -98,10 +98,10 @@ function LoginForm() {
       <div className="relative hidden w-full flex-col justify-between overflow-hidden p-12 text-white lg:flex lg:max-w-xl xl:max-w-2xl gradient-animated">
         <div className="relative z-10 space-y-8">
           <p className="text-sm font-semibold uppercase tracking-[0.3em] text-white/90">AFC · AHA</p>
-          <h2 className="text-4xl font-bold leading-tight xl:text-5xl">Welcome back.</h2>
-        </div>
-        <div className="relative z-10">
-          <p className="text-sm font-semibold text-white/90">Referral CRM</p>
+          <div className="space-y-2">
+            <h1 className="text-5xl font-bold leading-tight xl:text-6xl">Referrio</h1>
+            <h2 className="text-2xl font-medium text-white/90 xl:text-3xl">Welcome back.</h2>
+          </div>
         </div>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.15),transparent_60%)]" aria-hidden="true" />
         <div className="pointer-events-none absolute -top-40 -right-40 h-80 w-80 rounded-full bg-purple-500/30 blur-3xl animate-float-1" aria-hidden="true" />
@@ -112,7 +112,7 @@ function LoginForm() {
         <div className="relative w-full max-w-md space-y-8 rounded-2xl bg-white/95 backdrop-blur-sm p-8 shadow-2xl ring-1 ring-black/5">
           <div className="space-y-1 text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-brand">AFC · AHA</p>
-            <h1 className="text-3xl font-bold text-slate-900">Sign in</h1>
+            <h1 className="text-2xl font-bold text-slate-900">Sign in to Referrio</h1>
           </div>
 
           {displayProviderError && (
