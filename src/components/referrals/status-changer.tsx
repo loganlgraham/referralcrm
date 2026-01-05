@@ -112,7 +112,7 @@ export function StatusChanger({
   }, [preApprovalAmountCents]);
 
   const pipelineOptions = useMemo(() => {
-    const filtered = statuses.filter((item) => item !== 'Closed' && item !== 'Terminated' && item !== 'Lost');
+    const filtered = statuses.filter((item) => item !== 'Closed' && item !== 'Terminated');
     const containsCurrent = filtered.some((item) => item === currentStatus);
     if (!containsCurrent) {
       return [...filtered, currentStatus];

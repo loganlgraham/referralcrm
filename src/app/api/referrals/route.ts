@@ -965,6 +965,7 @@ export async function POST(request: Request) {
             DEFAULT_AGENT_COMMISSION_BPS,
             referralFeeBasisPoints
           ),
+    timeline: parsed.data.timeline ?? 'not_specified',
     audit: [
       {
         ...(auditActorId ? { actorId: auditActorId } : {}),

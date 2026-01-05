@@ -7,7 +7,6 @@ import { getCurrentSession } from '@/lib/auth';
 import { canViewReferral } from '@/lib/rbac';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { logReferralActivity } from '@/lib/server/activities';
-import { User } from '@/models/user';
 import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
 import { createAdminNotifications } from '@/lib/server/notifications';
 
@@ -107,18 +106,19 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
 
   if (requestedTargets.has('admin')) {
-    const adminUsers = (await User.find({ role: 'admin', email: { $ne: null } })
-      .select('name email')
-      .lean()) as Array<{ name?: string | null; email?: string | null }>;
-    adminUsers.forEach((admin) => {
-      if (typeof admin.email === 'string' && admin.email.trim()) {
+    // Only email the current admin user who toggled the option
+    if (session.user.role === 'admin' && session.user.email) {
+      const adminEmail = typeof session.user.email === 'string' ? session.user.email.trim() : null;
+      if (adminEmail) {
         addRecipient({
-          email: admin.email,
-          name: admin.name && admin.name.trim() ? admin.name : 'Admin',
+          email: adminEmail,
+          name: (session.user.name && typeof session.user.name === 'string' && session.user.name.trim()) 
+            ? session.user.name 
+            : 'Admin',
           target: 'admin',
         });
       }
-    });
+    }
   }
 
   let emailedTargets: ('agent' | 'mc' | 'admin')[] = [];

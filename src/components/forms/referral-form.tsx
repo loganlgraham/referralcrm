@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
+import { REFERRAL_TIMELINE_VALUES, REFERRAL_TIMELINE_OPTIONS } from '@/constants/referrals';
 
 const STAGE_OPTIONS = ['Pre-approval TBD', 'Pre-approved'] as const;
 const CLIENT_TYPE_OPTIONS = [
@@ -40,6 +41,7 @@ const referralSchema = z.object({
     .number()
     .min(0, 'Pre-approval amount must be positive')
     .optional(),
+  timeline: z.enum(REFERRAL_TIMELINE_VALUES).optional(),
 });
 
 const inputClasses =
@@ -235,6 +237,11 @@ export function ReferralForm() {
     if (result.data.initialNotes?.trim()) {
       body.initialNotes = result.data.initialNotes.trim();
     }
+
+    if (result.data.timeline) {
+      body.timeline = result.data.timeline;
+    }
+
     if (typeof result.data.preApprovalAmount === 'number') {
       body.preApprovalAmount = result.data.preApprovalAmount;
     }
@@ -447,6 +454,16 @@ export function ReferralForm() {
                   placeholder="e.g. 80202, 80216, 80021"
                   className={inputClasses}
                 />
+              </label>
+              <label className={labelClasses}>
+                Timeline
+                <select name="timeline" className={inputClasses} defaultValue="not_specified">
+                  {REFERRAL_TIMELINE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className={`${labelClasses} md:col-span-2`}>
                 Borrower current address

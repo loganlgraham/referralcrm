@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { REFERRAL_STATUSES, REFERRAL_STATUS_VALUES } from '@/constants/referrals';
+import { REFERRAL_STATUSES, REFERRAL_STATUS_VALUES, REFERRAL_TIMELINE_VALUES } from '@/constants/referrals';
 
 const zipArraySchema = z
   .array(z.string().trim().regex(/^\d{5}$/))
@@ -20,7 +20,8 @@ export const createReferralSchema = z.object({
   loanFileNumber: z.string().optional(),
   initialNotes: z.string().optional(),
   loanType: z.string().optional(),
-  preApprovalAmount: z.number().optional()
+  preApprovalAmount: z.number().optional(),
+  timeline: z.enum(REFERRAL_TIMELINE_VALUES).optional()
 });
 
 export const updateReferralSchema = z.object({
@@ -38,6 +39,7 @@ export const updateReferralSchema = z.object({
   loanFileNumber: z.string().min(1).optional(),
   loanType: z.string().optional(),
   preApprovalAmount: z.number().min(0).optional(),
+  timeline: z.enum(REFERRAL_TIMELINE_VALUES).optional(),
 });
 
 export const createActivitySchema = z.object({

@@ -22,6 +22,7 @@ interface GetReferralsParams {
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   agentReferrals?: 'yes' | 'no' | null;
   search?: string | null;
+  timeline?: string | null;
 }
 
 interface PopulatedAgent {
@@ -44,11 +45,13 @@ interface PopulatedReferral
   buySideAgent?: PopulatedAgent;
   sellSideAgent?: PopulatedAgent;
   lender?: PopulatedLender;
+  updatedAt?: Date;
 }
 
 interface ReferralListItem {
   _id: string;
   createdAt: string;
+  updatedAt?: string | null;
   borrowerName: string;
   borrowerEmail: string;
   borrowerPhone: string;
@@ -78,12 +81,13 @@ interface ReferralListItem {
   dealStatus?: string | null;
   dealStatusLabel?: string | null;
   origin?: 'agent' | 'mc' | 'admin';
+  timeline?: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified';
 }
 
 const PAGE_SIZE = 20;
 
 export async function getReferrals(params: GetReferralsParams) {
-  const { session, page = 1, status, mc, agent, zip, ahaBucket, agentReferrals, search } = params;
+  const { session, page = 1, status, mc, agent, zip, ahaBucket, agentReferrals, search, timeline } = params;
   await connectMongo();
 
   const query: Record<string, unknown> = { deletedAt: null };
@@ -360,6 +364,7 @@ export async function getReferrals(params: GetReferralsParams) {
       return {
         _id: item._id.toString(),
         createdAt: item.createdAt.toISOString(),
+        updatedAt: item.updatedAt ? item.updatedAt.toISOString() : null,
         borrowerName: item.borrower.name,
         borrowerEmail: item.borrower.email,
         borrowerPhone: item.borrower.phone,
@@ -395,7 +400,8 @@ export async function getReferrals(params: GetReferralsParams) {
         origin:
           item.origin === 'agent' || item.origin === 'mc' || item.origin === 'admin'
             ? item.origin
-            : undefined
+            : undefined,
+        timeline: item.timeline
       } as ReferralListItem;
     }),
     total,
@@ -542,6 +548,7 @@ export async function getReferralById(id: string) {
       referral.origin === 'agent' || referral.origin === 'mc' || referral.origin === 'admin'
         ? referral.origin
         : 'admin',
+    timeline: referral.timeline ?? 'not_specified',
     daysInStatus,
     statusLastUpdated: referral.statusLastUpdated ? referral.statusLastUpdated.toISOString() : null,
     audit: Array.isArray(referral.audit)

@@ -10,7 +10,7 @@ import { ReferralHeader } from '@/components/referrals/referral-header';
 import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import type { Contact } from '@/components/referrals/contact-assignment';
-import { normalizeReferralStatus, type ReferralStatus } from '@/constants/referrals';
+import { normalizeReferralStatus, type ReferralStatus, REFERRAL_TIMELINE_OPTIONS, REFERRAL_TIMELINE_VALUES } from '@/constants/referrals';
 import { ReferralDeals } from '@/components/referrals/referral-deals';
 import type { ReferralPayment } from '@/types/referral-payment';
 import { formatCurrency } from '@/utils/formatters';
@@ -78,6 +78,7 @@ interface ReferralDetail {
   ahaBucket?: 'AHA' | 'AHA_OOS' | '' | null;
   org?: string;
   origin?: 'agent' | 'mc' | 'admin' | null;
+  timeline?: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified';
   adminContacts?: { name?: string | null; email?: string | null }[];
   audit?: {
     field?: string | null;
@@ -119,6 +120,7 @@ interface DetailDraft {
   stageOnTransfer: TransferStage;
   loanType: string;
   preApprovalAmount: string;
+  timeline: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified';
 }
 
 const DETAIL_FIELD_KEYS: (keyof DetailDraft)[] = [
@@ -131,6 +133,7 @@ const DETAIL_FIELD_KEYS: (keyof DetailDraft)[] = [
   'stageOnTransfer',
   'loanType',
   'preApprovalAmount',
+  'timeline',
 ];
 
 const ensureString = (value: unknown) => (typeof value === 'string' ? value : '');
@@ -242,6 +245,9 @@ const createDetailDraft = (referral: ReferralDetail): DetailDraft => ({
   stageOnTransfer: normalizeStageOnTransfer(referral?.stageOnTransfer),
   loanType: ensureString(referral?.loanType),
   preApprovalAmount: sanitizeCurrencyInput(centsToCurrencyInput(referral?.preApprovalAmountCents)),
+  timeline: (referral?.timeline && REFERRAL_TIMELINE_VALUES.includes(referral.timeline as any))
+    ? (referral.timeline as DetailDraft['timeline'])
+    : 'not_specified',
 });
 
 const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
@@ -254,6 +260,7 @@ const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
   stageOnTransfer: normalizeStageOnTransfer(draft.stageOnTransfer),
   loanType: draft.loanType.trim(),
   preApprovalAmount: sanitizeCurrencyInput(draft.preApprovalAmount),
+  timeline: draft.timeline,
 });
 
 const formatFullAddress = (
@@ -533,6 +540,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       referral.stageOnTransfer,
       referral.loanType,
       referral.preApprovalAmountCents,
+      referral.timeline,
     ]
   );
   const detailsChanged = useMemo(
@@ -573,6 +581,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referral.lookingInZips,
     referral.borrowerCurrentAddress,
     referral.stageOnTransfer,
+    referral.timeline,
   ]);
 
   useEffect(() => {
@@ -868,6 +877,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         borrowerCurrentAddress: normalizedDraft.borrowerCurrentAddress,
         stageOnTransfer: normalizedDraft.stageOnTransfer,
         loanType: normalizedDraft.loanType,
+        timeline: normalizedDraft.timeline,
         preApprovalAmountCents:
           preApprovalAmountValue === undefined
             ? previous.preApprovalAmountCents
@@ -1324,6 +1334,22 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   <option value="Pre-approved">Pre-approved</option>
                 </select>
               </label>
+              <label className="space-y-1 text-sm font-medium text-slate-600">
+                <span>Timeline</span>
+                <select
+                  name="timeline"
+                  value={detailsDraft.timeline}
+                  onChange={handleDetailInputChange('timeline')}
+                  disabled={savingDetails}
+                  className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                >
+                  {REFERRAL_TIMELINE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="space-y-1 text-sm font-medium text-slate-600 sm:col-span-2 lg:col-span-3">
                 <span>Borrower Current Address</span>
                 <input
@@ -1393,6 +1419,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             <div className="space-y-1">
               <dt className="text-xs uppercase text-slate-500">Stage on Transfer</dt>
               <dd className="text-sm text-slate-700">{referral.stageOnTransfer?.trim() ? referral.stageOnTransfer : '—'}</dd>
+            </div>
+            <div className="space-y-1">
+              <dt className="text-xs uppercase text-slate-500">Timeline</dt>
+              <dd className="text-sm text-slate-700">
+                {referral.timeline && REFERRAL_TIMELINE_OPTIONS.find((opt) => opt.value === referral.timeline)
+                  ? REFERRAL_TIMELINE_OPTIONS.find((opt) => opt.value === referral.timeline)?.label
+                  : '—'}
+              </dd>
             </div>
             <div className="space-y-1 sm:col-span-2 lg:col-span-3">
               <dt className="text-xs uppercase text-slate-500">Borrower Current Address</dt>

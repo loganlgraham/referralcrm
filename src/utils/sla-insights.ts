@@ -82,6 +82,7 @@ export interface ReferralLike {
   notes?: NoteLike[];
   payments?: DealLike[];
   audit?: AuditEntryLike[];
+  timeline?: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified';
   sla?: {
     contractToCloseMinutes?: number | null;
     closedToPaidMinutes?: number | null;
@@ -557,6 +558,34 @@ const buildRecommendation = (
   recommendation: Omit<SlaRecommendation, 'id'> & { id: string }
 ): SlaRecommendation => recommendation;
 
+/**
+ * Compute 3-month check-in task for Lost referrals
+ * Returns a recommendation if the referral has been in Lost status for 3+ months (90+ days)
+ */
+const computeLostReferralThreeMonthCheckIn = (
+  statusLastUpdated: Date,
+  now: Date
+): SlaRecommendation | null => {
+  const daysSinceLost = differenceInDays(now, statusLastUpdated);
+  
+  // Only show the task if 90+ days (3 months) have passed
+  if (daysSinceLost < 90) {
+    return null;
+  }
+
+  const dueDate = addDays(statusLastUpdated, 90);
+  
+  return buildRecommendation({
+    id: 'lost-three-month-check-in',
+    title: 'Send 3-month check-in email',
+    message: "Send a check-in email to see if the customer's situation has changed",
+    priority: 'low',
+    category: 'communication',
+    dueAt: minDueDate(dueDate),
+    supportingMetric: `${daysSinceLost} days since marked as Lost`,
+  });
+};
+
 const minDueDate = (candidate: Date | null | undefined): string | null => {
   if (!candidate) {
     return null;
@@ -859,7 +888,7 @@ const buildStatusRecommendations = (
     }
   }
 
-  if ((status === 'Terminated' || status === 'Lost') && hoursSinceLastNote !== null && hoursSinceLastNote > 24) {
+  if (status === 'Terminated' && hoursSinceLastNote !== null && hoursSinceLastNote > 24) {
     recommendations.push(
       buildRecommendation({
         id: 'capture-termination-reason-agent',
@@ -964,14 +993,60 @@ const computeAgentReferralRecommendations = (
   return recommendations;
 };
 
+const adjustPriorityForTimeline = (
+  priority: RecommendationPriority,
+  timeline?: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified'
+): RecommendationPriority => {
+  if (!timeline || timeline === 'not_specified' || timeline === '3-6_months') {
+    return priority;
+  }
+
+  switch (timeline) {
+    case 'asap':
+      // Boost by one level (except urgent stays urgent)
+      if (priority === 'low') return 'medium';
+      if (priority === 'medium') return 'high';
+      if (priority === 'high') return 'urgent';
+      return priority; // urgent stays urgent
+    case '1-3_months':
+      // Boost high→urgent, medium→high
+      if (priority === 'high') return 'urgent';
+      if (priority === 'medium') return 'high';
+      return priority;
+    case '6-12_months':
+      // Reduce urgent→high, high→medium
+      if (priority === 'urgent') return 'high';
+      if (priority === 'high') return 'medium';
+      return priority;
+    case '12+_months':
+      // Decrease by one level (except low stays low)
+      if (priority === 'urgent') return 'high';
+      if (priority === 'high') return 'medium';
+      if (priority === 'medium') return 'low';
+      return priority; // low stays low
+    default:
+      return priority;
+  }
+};
+
 export const computeSlaRecommendations = (
   referral: ReferralLike,
   options?: { lastCompletedAt?: Date | null }
 ): SlaRecommendation[] => {
   const clock = buildSlaClock(referral, options?.lastCompletedAt ?? null);
-  if (referral.origin === 'agent') {
-    return computeAgentReferralRecommendations(referral, clock);
+  const { status, statusLastUpdated } = clock;
+  const now = new Date();
+  
+  // Handle Lost status: only return 3-month check-in task, no other recommendations
+  if (status === 'Lost') {
+    const threeMonthTask = computeLostReferralThreeMonthCheckIn(statusLastUpdated, now);
+    return threeMonthTask ? [threeMonthTask] : [];
   }
+  
+  let recommendations: SlaRecommendation[];
+  if (referral.origin === 'agent') {
+    recommendations = computeAgentReferralRecommendations(referral, clock);
+  } else {
 
   const { createdAt, statusLastUpdated, status } = clock;
   const now = new Date();
@@ -998,7 +1073,7 @@ export const computeSlaRecommendations = (
   const isBuyer = referral.clientType === 'Buyer' || referral.dealSide === 'buy' || referral.clientType === 'Both';
   const isSeller = referral.clientType === 'Seller' || referral.dealSide === 'sell' || referral.clientType === 'Both';
 
-  const recommendations: SlaRecommendation[] = [];
+  recommendations = [];
 
   if (!assignedAgentName) {
     const dueBy = addHours(createdAt, SLA_THRESHOLDS.minutesToAssignment / 60);
@@ -1376,7 +1451,7 @@ export const computeSlaRecommendations = (
     }
   }
 
-  if ((status === 'Terminated' || status === 'Lost') && hoursSinceLastNote !== null && hoursSinceLastNote > 24) {
+  if (status === 'Terminated' && hoursSinceLastNote !== null && hoursSinceLastNote > 24) {
     recommendations.push(
       buildRecommendation({
         id: 'capture-termination-reason',
@@ -1388,8 +1463,13 @@ export const computeSlaRecommendations = (
       })
     );
   }
+  }
 
-  return recommendations;
+  // Apply timeline-based priority adjustments to all recommendations
+  return recommendations.map((rec) => ({
+    ...rec,
+    priority: adjustPriorityForTimeline(rec.priority, referral.timeline),
+  }));
 };
 
 export const computeRiskSummary = (referral: ReferralLike, recommendations: SlaRecommendation[]): SlaInsights['riskSummary'] => {

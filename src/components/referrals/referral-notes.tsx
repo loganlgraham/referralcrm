@@ -376,9 +376,11 @@ export function ReferralNotes({
           <p className="text-sm text-slate-500">No notes yet.</p>
         ) : (
           <div className="space-y-2">
-            <div className="space-y-2">
-              {previewNotes.map(renderNoteCard)}
-            </div>
+            {!showNotesDropdown && (
+              <div className="space-y-2">
+                {previewNotes.map(renderNoteCard)}
+              </div>
+            )}
             {sortedNotes.length > 2 && (
               <button
                 type="button"
@@ -386,23 +388,13 @@ export function ReferralNotes({
                 className="flex w-full items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
               >
                 <span>
-                  Show all notes ({sortedNotes.length})
+                  {showNotesDropdown ? 'Hide note drawer' : `Show all notes (${sortedNotes.length})`}
                 </span>
                 <span className={`transition-transform ${showNotesDropdown ? 'rotate-180' : ''}`} aria-hidden>
                   ▾
                 </span>
               </button>
             )}
-            <button
-              type="button"
-              onClick={handleDropdownToggle}
-              className="flex w-full items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-            >
-              <span>{showNotesDropdown ? 'Hide note drawer' : 'Show all notes'}</span>
-              <span className={`transition-transform ${showNotesDropdown ? 'rotate-180' : ''}`} aria-hidden>
-                ▾
-              </span>
-            </button>
             {showNotesDropdown && (
               <div className="max-h-80 space-y-2 overflow-y-auto rounded border border-slate-200 bg-slate-50 p-2">
                 {sortedNotes.map(renderNoteCard)}

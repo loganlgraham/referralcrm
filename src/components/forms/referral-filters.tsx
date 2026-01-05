@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import useSWR from 'swr';
 
-import { REFERRAL_STATUSES } from '@/constants/referrals';
+import { REFERRAL_STATUSES, REFERRAL_TIMELINE_OPTIONS } from '@/constants/referrals';
 import { fetcher } from '@/utils/fetcher';
 
 type FilterMode = 'admin' | 'mc' | 'agent';
@@ -57,8 +57,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const lenderValue = searchParams.get('mc') ?? '';
   const ahaBucketValue = showAhaBucket ? searchParams.get('ahaBucket') ?? '' : '';
   const agentReferralValue = isAdminMode ? searchParams.get('agentReferrals') ?? '' : '';
-  const zipValue = searchParams.get('zip') ?? '';
-  const [zipInput, setZipInput] = useState(zipValue);
+  const timelineValue = searchParams.get('timeline') ?? '';
 
   useEffect(() => {
     if (isTypingRef.current) {
@@ -89,35 +88,6 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
       router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
     });
   }, [debouncedSearch, router, searchParamsString, startTransition]);
-
-  useEffect(() => {
-    setZipInput(zipValue);
-  }, [zipValue]);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      const trimmed = zipInput.trim();
-      const params = new URLSearchParams(searchParamsString);
-      const existing = (params.get('zip') ?? '').trim();
-
-      if (trimmed === existing) {
-        return;
-      }
-
-      if (!trimmed) {
-        params.delete('zip');
-      } else {
-        params.set('zip', trimmed);
-      }
-
-      startTransition(() => {
-        const queryString = params.toString();
-        router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
-      });
-    }, 200);
-
-    return () => window.clearTimeout(timeout);
-  }, [zipInput, router, searchParamsString, startTransition]);
 
   const handleSearchInput = useCallback((value: string) => {
     isTypingRef.current = true;
@@ -228,20 +198,22 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
             </select>
           </label>
         )}
-        {!isAgentMode && (
-          <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
-            Looking in ZIP
-            <input
-              type="text"
-              maxLength={64}
-              value={zipInput}
-              onChange={(event) => setZipInput(event.target.value)}
-              className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-              placeholder="Filter by Looking in ZIP"
-              disabled={isPending}
-            />
-          </label>
-        )}
+        <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+          Timeline
+          <select
+            value={timelineValue}
+            onChange={(event) => handleChange('timeline', event.target.value)}
+            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            disabled={isPending}
+          >
+            <option value="">All</option>
+            {REFERRAL_TIMELINE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
     </div>
   );
