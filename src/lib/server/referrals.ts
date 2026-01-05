@@ -45,6 +45,7 @@ interface PopulatedReferral
   buySideAgent?: PopulatedAgent;
   sellSideAgent?: PopulatedAgent;
   lender?: PopulatedLender;
+  updatedAt?: Date;
 }
 
 interface ReferralListItem {
