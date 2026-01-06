@@ -85,7 +85,7 @@ export async function createAdminNotifications({
 
     // Use the new helper function
     await createNotificationsForUsers(
-      adminUsers.map((admin) => admin._id),
+      adminUsers.map((admin) => admin._id as Types.ObjectId),
       { type, referralId, borrowerName, actorRole, actorName, content }
     );
   } catch (error) {
@@ -112,7 +112,7 @@ export async function createAdminAndMcNotifications(
     // Find all admin users
     const adminUsers = await User.find({ role: 'admin' }).select('_id').lean();
     
-    const userIds: (Types.ObjectId | string)[] = adminUsers.map((admin) => admin._id);
+    const userIds: (Types.ObjectId | string)[] = adminUsers.map((admin) => admin._id as Types.ObjectId);
     
     // Add MC user ID if provided
     if (mcUserId) {
