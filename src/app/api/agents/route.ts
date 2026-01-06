@@ -22,12 +22,20 @@ const coverageLocationSchema = z.object({
     .transform((zipCodes) => Array.from(new Set(zipCodes))),
 });
 
+const officeAddressSchema = z.object({
+  street: z.string().trim().optional(),
+  city: z.string().trim().optional(),
+  state: z.string().trim().optional(),
+  zipCode: z.string().trim().optional(),
+});
+
 const createAgentSchema = z.object({
   name: z.string().trim().min(1),
   email: z.string().trim().email().transform((value) => value.toLowerCase()),
   phone: z.string().trim().optional(),
   licenseNumber: z.string().trim().optional(),
   brokerage: z.string().trim().optional(),
+  officeAddress: officeAddressSchema.optional(),
   statesLicensed: z.array(z.string().trim().min(2)).optional().default([]),
   coverageAreas: z.array(z.string().trim().min(1)).optional().default([]),
   coverageLocations: z.array(coverageLocationSchema).optional().default([]),
@@ -59,6 +67,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     phone?: string | null;
     licenseNumber?: string | null;
     brokerage?: string | null;
+    officeAddress?: {
+      street?: string | null;
+      city?: string | null;
+      state?: string | null;
+      zipCode?: string | null;
+    } | null;
     statesLicensed?: string[] | null;
     zipCoverage?: string[] | null;
     coverageLocations?: {
@@ -95,6 +109,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       phone: agent.phone ?? '',
       licenseNumber: agent.licenseNumber ?? '',
       brokerage: agent.brokerage ?? '',
+      officeAddress: agent.officeAddress
+        ? {
+            street: agent.officeAddress.street ?? undefined,
+            city: agent.officeAddress.city ?? undefined,
+            state: agent.officeAddress.state ?? undefined,
+            zipCode: agent.officeAddress.zipCode ?? undefined,
+          }
+        : undefined,
       statesLicensed: Array.isArray(agent.statesLicensed) ? agent.statesLicensed : [],
       coverageAreas: Array.isArray(agent.zipCoverage) ? agent.zipCoverage : [],
       coverageLocations: Array.isArray(agent.coverageLocations) ? agent.coverageLocations : [],
@@ -137,12 +159,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   let agent: AgentDocument;
   try {
+    const officeAddress = parsed.data.officeAddress
+      ? {
+          street: parsed.data.officeAddress.street || undefined,
+          city: parsed.data.officeAddress.city || undefined,
+          state: parsed.data.officeAddress.state || undefined,
+          zipCode: parsed.data.officeAddress.zipCode || undefined,
+        }
+      : undefined;
+    const hasOfficeAddress = officeAddress && Object.values(officeAddress).some((value) => value !== undefined);
+
     agent = await Agent.create<AgentDocument>({
       name: parsed.data.name,
       email: parsed.data.email,
       phone: parsed.data.phone ?? '',
       licenseNumber: parsed.data.licenseNumber ?? '',
       brokerage: parsed.data.brokerage ?? '',
+      officeAddress: hasOfficeAddress ? officeAddress : undefined,
       statesLicensed: parsed.data.statesLicensed,
       zipCoverage: combinedZipCoverage,
       coverageLocations: normalizedCoverageLocations,
