@@ -65,15 +65,9 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
   }
 
   const body = await request.json();
-  console.log('[DEBUG] Request body:', body);
   const parsed = updateReferralSchema.safeParse(body);
   if (!parsed.success) {
-    console.log('[DEBUG] Validation failed:', parsed.error.flatten());
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
-  }
-  console.log('[DEBUG] Validation passed. parsed.data keys:', Object.keys(parsed.data));
-  if ('createdAt' in parsed.data) {
-    console.log('[DEBUG] createdAt in parsed.data:', parsed.data.createdAt);
   }
 
   await connectMongo();
@@ -161,7 +155,6 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
   // Handle createdAt update - only allow for admin users
   let createdAtDate: Date | undefined;
   if ('createdAt' in updatePayload) {
-    console.log('[DEBUG] createdAt found in updatePayload:', updatePayload.createdAt);
     if (session.user.role !== 'admin') {
       return NextResponse.json({ error: 'Only admins can update the created date' }, { status: 403 });
     }
@@ -173,13 +166,10 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
         if (Number.isNaN(createdAtDate.getTime())) {
           return NextResponse.json({ error: 'Invalid created date format' }, { status: 422 });
         }
-        console.log('[DEBUG] createdAtDate parsed:', createdAtDate.toISOString());
       } catch {
         return NextResponse.json({ error: 'Invalid created date format' }, { status: 422 });
       }
     }
-  } else {
-    console.log('[DEBUG] createdAt NOT in updatePayload. Payload keys:', Object.keys(updatePayload));
   }
 
   let referral;
@@ -264,12 +254,10 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
   // This is necessary because timestamps: true might prevent $set from working on createdAt
   // We use updateOne directly to bypass Mongoose's timestamp management
   if (createdAtDate) {
-    console.log('[DEBUG] Updating createdAt with updateOne to:', createdAtDate.toISOString());
-    const updateResult = await Referral.updateOne(
+    await Referral.updateOne(
       { _id: context.params.id },
       { $set: { createdAt: createdAtDate } }
     );
-    console.log('[DEBUG] updateOne result:', { matchedCount: updateResult.matchedCount, modifiedCount: updateResult.modifiedCount });
     
     // Reload the referral to get the updated createdAt with populated fields
     referral = await Referral.findById(context.params.id)
@@ -280,7 +268,6 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     if (!referral) {
       return new NextResponse('Not found', { status: 404 });
     }
-    console.log('[DEBUG] Reloaded referral createdAt:', referral.createdAt);
   }
 
   if (changedDetailFields.length > 0) {
@@ -302,18 +289,6 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     referralResponse.createdAt = referralResponse.createdAt.toISOString();
   } else if (referralResponse.createdAt && typeof referralResponse.createdAt === 'object' && 'toISOString' in referralResponse.createdAt) {
     referralResponse.createdAt = (referralResponse.createdAt as Date).toISOString();
-  }
-
-  // Verify createdAt was updated if it was in the request
-  if (createdAtDate && referralResponse.createdAt) {
-    const responseDate = new Date(referralResponse.createdAt);
-    // Check if dates match (within 1 second tolerance for timezone/rounding)
-    if (Math.abs(responseDate.getTime() - createdAtDate.getTime()) > 1000) {
-      console.warn('CreatedAt update may not have persisted correctly', {
-        requested: createdAtDate.toISOString(),
-        returned: referralResponse.createdAt
-      });
-    }
   }
 
   return NextResponse.json(referralResponse);
