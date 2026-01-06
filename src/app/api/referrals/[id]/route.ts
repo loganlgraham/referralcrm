@@ -153,25 +153,21 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
   delete updatePayload.preApprovalAmount;
 
   // Handle createdAt update - only allow for admin users
-  const createdAtDate: Date | undefined = (() => {
-    if (!('createdAt' in updatePayload)) {
-      return undefined;
-    }
+  let createdAtDate: Date | undefined;
+  if ('createdAt' in updatePayload) {
     if (session.user.role !== 'admin') {
-      // createdAt was provided but user is not admin
-      throw NextResponse.json({ error: 'Only admins can update the created date' }, { status: 403 });
+      return NextResponse.json({ error: 'Only admins can update the created date' }, { status: 403 });
     }
     const createdAtValue = updatePayload.createdAt;
-    delete updatePayload.createdAt; // Remove from updatePayload, we'll use $set explicitly
+    delete updatePayload.createdAt; // Remove from updatePayload, we'll handle via raw Mongo update
     if (typeof createdAtValue === 'string') {
       const parsedDate = new Date(createdAtValue);
       if (Number.isNaN(parsedDate.getTime())) {
-        throw NextResponse.json({ error: 'Invalid created date format' }, { status: 422 });
+        return NextResponse.json({ error: 'Invalid created date format' }, { status: 422 });
       }
-      return parsedDate;
+      createdAtDate = parsedDate;
     }
-    return undefined;
-  })();
+  }
 
   let referral;
   const auditActorId = resolveAuditActorId(session.user.id);
@@ -197,11 +193,8 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
       }
     };
 
-    // Put all updatePayload fields in $set along with createdAt
+    // Put all updatePayload fields in $set
     const setFields: Record<string, unknown> = { ...updatePayload };
-    if (createdAtDate) {
-      setFields.createdAt = createdAtDate;
-    }
     
     // Only add $set if there are fields to set
     if (Object.keys(setFields).length > 0) {
@@ -251,12 +244,11 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     await referral.save();
   }
 
-  // Explicitly update createdAt on the document if it was changed
-  // This is necessary because timestamps: true might prevent $set from working on createdAt
-  // We use updateOne directly to bypass Mongoose's timestamp management
+  // Explicitly update createdAt if it was changed.
+  // IMPORTANT: Use the native collection to bypass Mongoose timestamp/update behavior.
   if (createdAtDate) {
-    await Referral.updateOne(
-      { _id: context.params.id },
+    await Referral.collection.updateOne(
+      { _id: referral._id },
       { $set: { createdAt: createdAtDate } }
     );
     
