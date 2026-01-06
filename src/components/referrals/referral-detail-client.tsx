@@ -306,8 +306,8 @@ const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
   stageOnTransfer: normalizeStageOnTransfer(draft.stageOnTransfer),
   loanType: draft.loanType.trim(),
   preApprovalAmount: sanitizeCurrencyInput(draft.preApprovalAmount),
-  createdAt: draft.createdAt.trim(),
   timeline: draft.timeline,
+  createdAt: draft.createdAt.trim(),
 });
 
 const formatFullAddress = (
@@ -856,7 +856,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     });
 
     // Handle createdAt separately - only for admin users
-    if (viewerRole === 'admin' && normalizedDraft.createdAt !== normalizedCurrent.createdAt) {
+    if (viewerRole === 'admin' && createdAtChanged) {
       const isoDate = dateTimeLocalToISO(normalizedDraft.createdAt);
       if (isoDate) {
         payload.createdAt = isoDate;
@@ -928,34 +928,75 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         throw new Error(message);
       }
 
-      await response.json().catch(() => undefined);
+      const updatedReferral = (await response.json().catch(() => undefined)) as ReferralDetail | undefined;
 
-      setReferral((previous) => ({
-        ...previous,
-        loanFileNumber: normalizedDraft.loanFileNumber,
-        source: normalizedDraft.source,
-        endorser: normalizedDraft.endorser,
-        clientType: normalizedDraft.clientType,
-        lookingInZip: parsedZips[0] ?? '',
-        lookingInZips: parsedZips,
-        borrowerCurrentAddress: normalizedDraft.borrowerCurrentAddress,
-        stageOnTransfer: normalizedDraft.stageOnTransfer,
-        loanType: normalizedDraft.loanType,
-        timeline: normalizedDraft.timeline,
-        preApprovalAmountCents:
-          preApprovalAmountValue === undefined
-            ? previous.preApprovalAmountCents
-            : Math.round(preApprovalAmountValue * 100),
-        estPurchasePriceCents:
-          preApprovalAmountValue === undefined
-            ? previous.estPurchasePriceCents
-            : Math.round(preApprovalAmountValue * 100),
-      }));
+      setReferral((previous) => {
+        const baseUpdate = {
+          ...previous,
+          loanFileNumber: normalizedDraft.loanFileNumber,
+          source: normalizedDraft.source,
+          endorser: normalizedDraft.endorser,
+          clientType: normalizedDraft.clientType,
+          lookingInZip: parsedZips[0] ?? '',
+          lookingInZips: parsedZips,
+          borrowerCurrentAddress: normalizedDraft.borrowerCurrentAddress,
+          stageOnTransfer: normalizedDraft.stageOnTransfer,
+          loanType: normalizedDraft.loanType,
+          timeline: normalizedDraft.timeline,
+          preApprovalAmountCents:
+            preApprovalAmountValue === undefined
+              ? previous.preApprovalAmountCents
+              : Math.round(preApprovalAmountValue * 100),
+          estPurchasePriceCents:
+            preApprovalAmountValue === undefined
+              ? previous.estPurchasePriceCents
+              : Math.round(preApprovalAmountValue * 100),
+        };
+
+        // Update createdAt from response if it was changed
+        if (createdAtChanged) {
+          if (updatedReferral?.createdAt) {
+            // API response will have createdAt as ISO string after JSON serialization
+            const responseCreatedAt = updatedReferral.createdAt;
+            if (typeof responseCreatedAt === 'string') {
+              baseUpdate.createdAt = responseCreatedAt;
+            } else {
+              // Fallback: try to parse as date (shouldn't happen with JSON, but just in case)
+              try {
+                baseUpdate.createdAt = new Date(responseCreatedAt as unknown as string | number | Date).toISOString();
+              } catch {
+                // If response parsing fails, use the ISO date we sent
+                const isoDate = dateTimeLocalToISO(normalizedDraft.createdAt);
+                if (isoDate) {
+                  baseUpdate.createdAt = isoDate;
+                }
+              }
+            }
+          } else {
+            // If response doesn't include createdAt, use the ISO date we sent
+            const isoDate = dateTimeLocalToISO(normalizedDraft.createdAt);
+            if (isoDate) {
+              baseUpdate.createdAt = isoDate;
+            }
+          }
+        }
+
+        return baseUpdate;
+      });
+      
+      // Update details draft with the normalized draft (which includes updated createdAt)
       setDetailsDraft(normalizedDraft);
       setIsEditingDetails(false);
       toast.success('Referral details updated');
+      
+      // Mutate activity feed in background
       void mutate(activityFeedKey);
-      router.refresh();
+      
+      // Delay router.refresh() slightly to allow state update to render first
+      // This prevents the flicker of old data before new data loads
+      setTimeout(() => {
+        router.refresh();
+      }, 100);
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Unable to update referral details');

@@ -153,23 +153,25 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
   delete updatePayload.preApprovalAmount;
 
   // Handle createdAt update - only allow for admin users
-  if ('createdAt' in updatePayload) {
+  const createdAtDate: Date | undefined = (() => {
+    if (!('createdAt' in updatePayload)) {
+      return undefined;
+    }
     if (session.user.role !== 'admin') {
-      return NextResponse.json({ error: 'Only admins can update the created date' }, { status: 403 });
+      // createdAt was provided but user is not admin
+      throw NextResponse.json({ error: 'Only admins can update the created date' }, { status: 403 });
     }
     const createdAtValue = updatePayload.createdAt;
+    delete updatePayload.createdAt; // Remove from updatePayload, we'll use $set explicitly
     if (typeof createdAtValue === 'string') {
-      try {
-        const createdAtDate = new Date(createdAtValue);
-        if (Number.isNaN(createdAtDate.getTime())) {
-          return NextResponse.json({ error: 'Invalid created date format' }, { status: 422 });
-        }
-        updatePayload.createdAt = createdAtDate;
-      } catch {
-        return NextResponse.json({ error: 'Invalid created date format' }, { status: 422 });
+      const parsedDate = new Date(createdAtValue);
+      if (Number.isNaN(parsedDate.getTime())) {
+        throw NextResponse.json({ error: 'Invalid created date format' }, { status: 422 });
       }
+      return parsedDate;
     }
-  }
+    return undefined;
+  })();
 
   let referral;
   const auditActorId = resolveAuditActorId(session.user.id);
@@ -186,15 +188,30 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
       auditEntry.actorId = auditActorId;
     }
 
+    // Build update object with $set for createdAt if it was changed
+    // Mongoose will automatically convert top-level fields to $set, but we use explicit $set for createdAt
+    // to ensure it's definitely updated (since createdAt is a special timestamp field)
+    const updateObject: Record<string, unknown> = {
+      $push: {
+        audit: auditEntry
+      }
+    };
+
+    // Put all updatePayload fields in $set along with createdAt
+    const setFields: Record<string, unknown> = { ...updatePayload };
+    if (createdAtDate) {
+      setFields.createdAt = createdAtDate;
+    }
+    
+    // Only add $set if there are fields to set
+    if (Object.keys(setFields).length > 0) {
+      updateObject.$set = setFields;
+    }
+
     referral = await Referral.findByIdAndUpdate(
       context.params.id,
-      {
-        ...updatePayload,
-        $push: {
-          audit: auditEntry
-        }
-      },
-      { new: true }
+      updateObject,
+      { new: true, runValidators: false }
     );
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && (error as { code?: number }).code === 11000) {
@@ -234,6 +251,26 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     await referral.save();
   }
 
+  // Explicitly update createdAt on the document if it was changed
+  // This is necessary because timestamps: true might prevent $set from working on createdAt
+  // We use updateOne directly to bypass Mongoose's timestamp management
+  if (createdAtDate) {
+    await Referral.updateOne(
+      { _id: context.params.id },
+      { $set: { createdAt: createdAtDate } }
+    );
+    
+    // Reload the referral to get the updated createdAt with populated fields
+    referral = await Referral.findById(context.params.id)
+      .populate('assignedAgent', 'userId')
+      .populate('buySideAgent', 'userId')
+      .populate('sellSideAgent', 'userId')
+      .populate('lender', 'userId');
+    if (!referral) {
+      return new NextResponse('Not found', { status: 404 });
+    }
+  }
+
   if (changedDetailFields.length > 0) {
     const updatedFieldsLabel = changedDetailFields
       .map((field) => DETAIL_FIELD_LABELS[field])
@@ -247,7 +284,15 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     });
   }
 
-  return NextResponse.json(referral);
+  // Ensure createdAt is properly serialized as ISO string
+  const referralResponse = referral.toObject ? referral.toObject() : referral;
+  if (referralResponse.createdAt instanceof Date) {
+    referralResponse.createdAt = referralResponse.createdAt.toISOString();
+  } else if (referralResponse.createdAt && typeof referralResponse.createdAt === 'object' && 'toISOString' in referralResponse.createdAt) {
+    referralResponse.createdAt = (referralResponse.createdAt as Date).toISOString();
+  }
+
+  return NextResponse.json(referralResponse);
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext): Promise<NextResponse> {

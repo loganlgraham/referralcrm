@@ -83,7 +83,6 @@ const DealSchema = new Schema({
 
 const referralSchema = new Schema(
   {
-    createdAt: { type: Date, default: Date.now, index: true },
     source: { type: String, trim: true, default: '' },
     endorser: { type: String, default: '' },
     clientType: {
