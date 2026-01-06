@@ -956,16 +956,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         // Update createdAt from response if it was changed
         if (createdAtChanged) {
           if (updatedReferral?.createdAt) {
+            // API response will have createdAt as ISO string after JSON serialization
             const responseCreatedAt = updatedReferral.createdAt;
-            // Handle different date formats from API response
             if (typeof responseCreatedAt === 'string') {
               baseUpdate.createdAt = responseCreatedAt;
-            } else if (responseCreatedAt instanceof Date) {
-              baseUpdate.createdAt = responseCreatedAt.toISOString();
             } else {
-              // Fallback: try to parse as date
+              // Fallback: try to parse as date (shouldn't happen with JSON, but just in case)
               try {
-                baseUpdate.createdAt = new Date(responseCreatedAt).toISOString();
+                baseUpdate.createdAt = new Date(responseCreatedAt as unknown as string | number | Date).toISOString();
               } catch {
                 // If response parsing fails, use the ISO date we sent
                 const isoDate = dateTimeLocalToISO(normalizedDraft.createdAt);
