@@ -109,11 +109,19 @@ export function ContactAssignment({
   const filteredOptions = useMemo(() => {
     if (!options) return [];
     const query = searchTerm.trim().toLowerCase();
-    if (!query) return options;
-    return options.filter((option) => {
-      const name = option.name?.toLowerCase() ?? '';
-      const email = option.email?.toLowerCase() ?? '';
-      return name.includes(query) || email.includes(query);
+    let filtered = options;
+    if (query) {
+      filtered = options.filter((option) => {
+        const name = option.name?.toLowerCase() ?? '';
+        const email = option.email?.toLowerCase() ?? '';
+        return name.includes(query) || email.includes(query);
+      });
+    }
+    // Sort alphabetically by name
+    return [...filtered].sort((a, b) => {
+      const nameA = (a.name ?? '').toLowerCase();
+      const nameB = (b.name ?? '').toLowerCase();
+      return nameA.localeCompare(nameB);
     });
   }, [options, searchTerm]);
 
