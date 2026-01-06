@@ -426,7 +426,96 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     );
   }
 
+  // Send notification email to logan.graham@americanfinancing.net when referral is paired
   if (result.sent.length > 0) {
+    (async () => {
+      try {
+        const escapeHtml = (value: string): string => {
+          return value.replace(/[&<>"']/g, (char) => {
+            switch (char) {
+              case '&':
+                return '&amp;';
+              case '<':
+                return '&lt;';
+              case '>':
+                return '&gt;';
+              case '"':
+                return '&quot;';
+              case "'":
+                return '&#39;';
+              default:
+                return char;
+            }
+          });
+        };
+
+        const pairedContacts: Array<{ label: string; contact: BasicContact }> = [];
+
+        if (primaryAgent) {
+          if (referral.clientType === 'Both') {
+            if (buySideContact) {
+              pairedContacts.push({ label: 'Buying Agent', contact: buySideContact });
+            }
+            if (sellSideContact) {
+              pairedContacts.push({ label: 'Selling Agent', contact: sellSideContact });
+            }
+          } else if (referral.clientType === 'Seller' && sellSideContact) {
+            pairedContacts.push({ label: 'Selling Agent', contact: sellSideContact });
+          } else if (buySideContact) {
+            pairedContacts.push({ label: 'Buying Agent', contact: buySideContact });
+          }
+          
+          // If no specific side agent but there's a primary agent
+          if (pairedContacts.length === 0 && primaryAgent) {
+            pairedContacts.push({ label: 'Agent', contact: primaryAgent });
+          }
+        }
+
+        if (lenderContact && referral.clientType !== 'Seller') {
+          pairedContacts.push({ label: 'Mortgage Consultant', contact: lenderContact });
+        }
+
+        const referralLink = referralLinkBase ? buildReferralLink(referral._id.toString()) : '';
+
+        const pairingSummaryHtml = [
+          `<p>A referral has been paired:</p>`,
+          `<p><strong>Borrower:</strong> ${escapeHtml(borrowerName)}</p>`,
+          `<p><strong>Loan File Number:</strong> ${escapeHtml(loanFileNumber)}</p>`,
+          `<p><strong>Client Type:</strong> ${referral.clientType}</p>`,
+          pairedContacts.length > 0
+            ? `<p><strong>Paired Team Members:</strong></p><ul>${pairedContacts.map(({ label, contact }) => 
+                `<li><strong>${label}:</strong> ${escapeHtml(contact.name ?? 'N/A')}${contact.email ? ` (${escapeHtml(contact.email)})` : ''}${contact.phone ? ` - ${escapeHtml(contact.phone)}` : ''}</li>`
+              ).join('')}</ul>`
+            : '<p>No team members paired yet.</p>',
+          referralLink ? `<p><a href="${referralLink}">View the referral</a></p>` : '',
+        ].filter(Boolean).join('');
+
+        const pairingSummaryText = [
+          'A referral has been paired:',
+          `Borrower: ${borrowerName}`,
+          `Loan File Number: ${loanFileNumber}`,
+          `Client Type: ${referral.clientType}`,
+          pairedContacts.length > 0
+            ? `Paired Team Members:\n${pairedContacts.map(({ label, contact }) => 
+                `${label}: ${contact.name ?? 'N/A'}${contact.email ? ` (${contact.email})` : ''}${contact.phone ? ` - ${contact.phone}` : ''}`
+              ).join('\n')}`
+            : 'No team members paired yet.',
+          referralLink ? `View the referral: ${referralLink}` : '',
+        ].filter(Boolean).join('\n\n');
+
+        await sendTransactionalEmail({
+          to: ['logan.graham@americanfinancing.net'],
+          subject: `Referral Paired: ${borrowerName}`,
+          html: pairingSummaryHtml,
+          text: pairingSummaryText
+        });
+      } catch (error) {
+        console.error('Failed to send referral pairing notification email', error);
+      }
+    })().catch((error) => {
+      console.error('Failed to send referral pairing notification email', error);
+    });
+
     await logReferralActivity({
       referralId: referral._id,
       actorRole: session.user.role,
