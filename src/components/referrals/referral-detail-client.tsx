@@ -928,29 +928,63 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         throw new Error(message);
       }
 
-      await response.json().catch(() => undefined);
+      const updatedReferral = (await response.json().catch(() => undefined)) as ReferralDetail | undefined;
 
-      setReferral((previous) => ({
-        ...previous,
-        loanFileNumber: normalizedDraft.loanFileNumber,
-        source: normalizedDraft.source,
-        endorser: normalizedDraft.endorser,
-        clientType: normalizedDraft.clientType,
-        lookingInZip: parsedZips[0] ?? '',
-        lookingInZips: parsedZips,
-        borrowerCurrentAddress: normalizedDraft.borrowerCurrentAddress,
-        stageOnTransfer: normalizedDraft.stageOnTransfer,
-        loanType: normalizedDraft.loanType,
-        timeline: normalizedDraft.timeline,
-        preApprovalAmountCents:
-          preApprovalAmountValue === undefined
-            ? previous.preApprovalAmountCents
-            : Math.round(preApprovalAmountValue * 100),
-        estPurchasePriceCents:
-          preApprovalAmountValue === undefined
-            ? previous.estPurchasePriceCents
-            : Math.round(preApprovalAmountValue * 100),
-      }));
+      setReferral((previous) => {
+        const baseUpdate = {
+          ...previous,
+          loanFileNumber: normalizedDraft.loanFileNumber,
+          source: normalizedDraft.source,
+          endorser: normalizedDraft.endorser,
+          clientType: normalizedDraft.clientType,
+          lookingInZip: parsedZips[0] ?? '',
+          lookingInZips: parsedZips,
+          borrowerCurrentAddress: normalizedDraft.borrowerCurrentAddress,
+          stageOnTransfer: normalizedDraft.stageOnTransfer,
+          loanType: normalizedDraft.loanType,
+          timeline: normalizedDraft.timeline,
+          preApprovalAmountCents:
+            preApprovalAmountValue === undefined
+              ? previous.preApprovalAmountCents
+              : Math.round(preApprovalAmountValue * 100),
+          estPurchasePriceCents:
+            preApprovalAmountValue === undefined
+              ? previous.estPurchasePriceCents
+              : Math.round(preApprovalAmountValue * 100),
+        };
+
+        // Update createdAt from response if it was changed
+        if (createdAtChanged) {
+          if (updatedReferral?.createdAt) {
+            const responseCreatedAt = updatedReferral.createdAt;
+            // Handle different date formats from API response
+            if (typeof responseCreatedAt === 'string') {
+              baseUpdate.createdAt = responseCreatedAt;
+            } else if (responseCreatedAt instanceof Date) {
+              baseUpdate.createdAt = responseCreatedAt.toISOString();
+            } else {
+              // Fallback: try to parse as date
+              try {
+                baseUpdate.createdAt = new Date(responseCreatedAt).toISOString();
+              } catch {
+                // If response parsing fails, use the ISO date we sent
+                const isoDate = dateTimeLocalToISO(normalizedDraft.createdAt);
+                if (isoDate) {
+                  baseUpdate.createdAt = isoDate;
+                }
+              }
+            }
+          } else {
+            // If response doesn't include createdAt, use the ISO date we sent
+            const isoDate = dateTimeLocalToISO(normalizedDraft.createdAt);
+            if (isoDate) {
+              baseUpdate.createdAt = isoDate;
+            }
+          }
+        }
+
+        return baseUpdate;
+      });
       setDetailsDraft(normalizedDraft);
       setIsEditingDetails(false);
       toast.success('Referral details updated');

@@ -247,7 +247,13 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     });
   }
 
-  return NextResponse.json(referral);
+  // Ensure createdAt is properly serialized as ISO string
+  const referralResponse = referral.toObject ? referral.toObject() : referral;
+  if (referralResponse.createdAt instanceof Date) {
+    referralResponse.createdAt = referralResponse.createdAt.toISOString();
+  }
+
+  return NextResponse.json(referralResponse);
 }
 
 export async function DELETE(request: NextRequest, context: RouteContext): Promise<NextResponse> {
