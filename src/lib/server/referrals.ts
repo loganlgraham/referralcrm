@@ -129,7 +129,23 @@ export async function getReferrals(params: GetReferralsParams) {
       ]);
     }
   }
-  if (ahaBucket === 'AHA' || ahaBucket === 'AHA_OOS') query.ahaBucket = ahaBucket;
+  if (ahaBucket === 'AHA' || ahaBucket === 'AHA_OOS') {
+    const agentsWithDesignation = await Agent.find({
+      ahaDesignation: ahaBucket
+    }).select('_id').lean<{ _id: Types.ObjectId }[]>();
+    
+    if (agentsWithDesignation.length > 0) {
+      const agentIds = agentsWithDesignation.map((agent) => agent._id);
+      appendOrConditions([
+        { assignedAgent: { $in: agentIds } },
+        { buySideAgent: { $in: agentIds } },
+        { sellSideAgent: { $in: agentIds } },
+      ]);
+    } else {
+      // If no agents match the designation, return no results
+      query._id = new Types.ObjectId('000000000000000000000000');
+    }
+  }
 
   const searchTerm = search?.trim();
   if (searchTerm) {
