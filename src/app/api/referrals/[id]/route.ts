@@ -210,7 +210,7 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     referral = await Referral.findByIdAndUpdate(
       context.params.id,
       updateObject,
-      { new: true }
+      { new: true, runValidators: false }
     );
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && (error as { code?: number }).code === 11000) {
@@ -248,6 +248,25 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     referral.preApprovalAmountCents = preApprovalAmountCents;
     referral.estPurchasePriceCents = preApprovalAmountCents;
     await referral.save();
+  }
+
+  // Explicitly update createdAt on the document if it was changed
+  // This is necessary because timestamps: true might prevent $set from working on createdAt
+  // We use updateOne directly to bypass Mongoose's timestamp management
+  if (createdAtDate) {
+    await Referral.updateOne(
+      { _id: context.params.id },
+      { $set: { createdAt: createdAtDate } }
+    );
+    // Reload the referral to get the updated createdAt with populated fields
+    referral = await Referral.findById(context.params.id)
+      .populate('assignedAgent', 'userId')
+      .populate('buySideAgent', 'userId')
+      .populate('sellSideAgent', 'userId')
+      .populate('lender', 'userId');
+    if (!referral) {
+      return new NextResponse('Not found', { status: 404 });
+    }
   }
 
   if (changedDetailFields.length > 0) {
