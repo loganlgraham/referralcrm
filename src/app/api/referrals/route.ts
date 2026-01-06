@@ -12,6 +12,8 @@ import { LenderMC } from '@/models/lender';
 import { ReferralMetadata } from '@/models/referral-metadata';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
+import { sendTransactionalEmail, isTransactionalEmailConfigured } from '@/lib/email';
+import { buildReferralLink } from '@/lib/referral-links';
 import {
   addWeeks,
   format,
@@ -1110,6 +1112,62 @@ export async function POST(request: Request) {
     channel: 'update',
     content: `Created referral for ${borrowerName || 'a new client'}`,
   });
+
+  // Send email notification to kristen.truong@americanhomeagents.com
+  if (isTransactionalEmailConfigured()) {
+    (async () => {
+      try {
+        const escapeHtml = (value: string): string => {
+          return value.replace(/[&<>"']/g, (char) => {
+            switch (char) {
+              case '&':
+                return '&amp;';
+              case '<':
+                return '&lt;';
+              case '>':
+                return '&gt;';
+              case '"':
+                return '&quot;';
+              case "'":
+                return '&#39;';
+              default:
+                return char;
+            }
+          });
+        };
+
+        const referralLink = buildReferralLink(referral._id.toString());
+        const summaryFields = [
+          `Client Type: ${referral.clientType}`,
+          `Zip${referral.lookingInZips && referral.lookingInZips.length > 1 ? 's' : ''}: ${(referral.lookingInZips || [referral.lookingInZip]).join(', ')}`,
+          referral.loanFileNumber ? `Loan File Number: ${referral.loanFileNumber}` : null,
+          referral.borrower?.email ? `Email: ${referral.borrower.email}` : null,
+          referral.borrower?.phone ? `Phone: ${referral.borrower.phone}` : null,
+        ].filter(Boolean) as string[];
+
+        const borrowerLabel = borrowerName || 'New Referral';
+        const html = `
+          <p>A new referral has been created for <strong>${escapeHtml(borrowerLabel)}</strong>.</p>
+          <ul>
+            ${summaryFields.map((field) => `<li>${escapeHtml(field)}</li>`).join('')}
+          </ul>
+          <p><a href="${referralLink}">View the referral</a></p>
+        `;
+        const text = `A new referral has been created for ${borrowerLabel}.\n\n${summaryFields.join('\n')}\n\nView the referral: ${referralLink}`;
+
+        await sendTransactionalEmail({
+          to: ['kristen.truong@americanhomeagents.com'],
+          subject: `New Referral: ${borrowerLabel}`,
+          html,
+          text
+        });
+      } catch (error) {
+        console.error('Failed to send new referral notification email', error);
+      }
+    })().catch((error) => {
+      console.error('Failed to send new referral notification email', error);
+    });
+  }
 
   return NextResponse.json({ id: referral._id.toString() }, { status: 201 });
 }

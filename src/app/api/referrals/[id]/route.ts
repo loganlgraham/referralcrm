@@ -153,19 +153,18 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
   delete updatePayload.preApprovalAmount;
 
   // Handle createdAt update - only allow for admin users
-  let createdAtDate: Date | undefined;
   if ('createdAt' in updatePayload) {
     if (session.user.role !== 'admin') {
       return NextResponse.json({ error: 'Only admins can update the created date' }, { status: 403 });
     }
     const createdAtValue = updatePayload.createdAt;
-    delete updatePayload.createdAt; // Remove from updatePayload, we'll use $set explicitly
     if (typeof createdAtValue === 'string') {
       try {
-        createdAtDate = new Date(createdAtValue);
+        const createdAtDate = new Date(createdAtValue);
         if (Number.isNaN(createdAtDate.getTime())) {
           return NextResponse.json({ error: 'Invalid created date format' }, { status: 422 });
         }
+        updatePayload.createdAt = createdAtDate;
       } catch {
         return NextResponse.json({ error: 'Invalid created date format' }, { status: 422 });
       }

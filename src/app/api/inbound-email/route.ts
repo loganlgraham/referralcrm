@@ -5,6 +5,7 @@ import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { uploadEmailAttachment } from '@/lib/server/gcs';
 import { sendTransactionalEmail } from '@/lib/email';
+import { buildReferralLink } from '@/lib/referral-links';
 import { parseSignatureHeader } from './signature';
 
 interface NormalizedAttachment {
@@ -732,6 +733,33 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       subject: `Referral received: ${borrowerName} (${channelInfo.channel})`,
       html: summaryHtml,
       text: summaryText
+    });
+
+    // Send email notification to kristen.truong@americanhomeagents.com
+    (async () => {
+      try {
+        const referralLink = buildReferralLink(referral._id.toString());
+        const borrowerLabel = escapeHtml(borrowerName);
+        const notificationHtml = `
+          <p>A new referral has been created for <strong>${borrowerLabel}</strong>.</p>
+          <ul>
+            ${summaryFields.map((field) => `<li>${escapeHtml(field)}</li>`).join('')}
+          </ul>
+          <p><a href="${referralLink}">View the referral</a></p>
+        `;
+        const notificationText = `A new referral has been created for ${borrowerName}.\n\n${summaryFields.join('\n')}\n\nView the referral: ${referralLink}`;
+
+        await sendTransactionalEmail({
+          to: ['kristen.truong@americanhomeagents.com'],
+          subject: `New Referral: ${borrowerName}`,
+          html: notificationHtml,
+          text: notificationText
+        });
+      } catch (error) {
+        console.error('Failed to send new referral notification email', error);
+      }
+    })().catch((error) => {
+      console.error('Failed to send new referral notification email', error);
     });
 
     return NextResponse.json({ status: 'created', referralId: referral._id.toString() });

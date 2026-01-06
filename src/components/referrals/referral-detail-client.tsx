@@ -306,6 +306,7 @@ const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
   stageOnTransfer: normalizeStageOnTransfer(draft.stageOnTransfer),
   loanType: draft.loanType.trim(),
   preApprovalAmount: sanitizeCurrencyInput(draft.preApprovalAmount),
+  createdAt: draft.createdAt.trim(),
   timeline: draft.timeline,
   createdAt: draft.createdAt.trim(),
 });
@@ -856,7 +857,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     });
 
     // Handle createdAt separately - only for admin users
-    if (viewerRole === 'admin' && createdAtChanged) {
+    if (viewerRole === 'admin' && normalizedDraft.createdAt !== normalizedCurrent.createdAt) {
       const isoDate = dateTimeLocalToISO(normalizedDraft.createdAt);
       if (isoDate) {
         payload.createdAt = isoDate;
