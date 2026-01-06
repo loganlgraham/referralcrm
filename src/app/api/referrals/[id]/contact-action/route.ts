@@ -8,6 +8,7 @@ import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
 import { getReferralAppBaseUrl, verifyContactActionToken } from '@/lib/referral-links';
 import { calculateBusinessMinutesBetween } from '@/utils/sla-insights';
+import { createAdminAndMcNotifications } from '@/lib/server/notifications';
 
 interface Params {
   params: { id: string };
@@ -64,8 +65,8 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
     : referral.statusLastUpdated
     ? new Date(referral.statusLastUpdated)
     : null;
-  const nextStatus = 'In Communication';
-  const shouldUpdateStatus = previousStatus !== nextStatus;
+  const nextStatus = action === 'contact-made' ? 'In Communication' : previousStatus;
+  const shouldUpdateStatus = action === 'contact-made' && previousStatus !== 'In Communication';
   const shouldUpdateCommunicationSla = action === 'contact-made';
   const sla = (referral.sla ??= {} as any);
 
@@ -113,10 +114,8 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
     }
 
     referral.audit.push(auditEntry as any);
-
+    referral.statusLastUpdated = now;
   }
-
-  referral.statusLastUpdated = now;
 
   if (pairedAt && shouldUpdateCommunicationSla) {
     const minutes = calculateBusinessMinutesBetween(pairedAt, now);
@@ -148,6 +147,23 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
     actorRole: session?.user.role ?? 'agent',
     actorId: activityActorId ?? session?.user.id,
     channel: 'update',
+    content: activityContent,
+  });
+
+  // Create notifications for admins and MC
+  const borrowerName = referral.borrower?.name || 'a referral';
+  const actorName = session?.user.name || 'Agent';
+  const mcUserId = 
+    referral.lender && typeof (referral.lender as any) === 'object'
+      ? (referral.lender as any).userId ?? null
+      : null;
+
+  await createAdminAndMcNotifications(mcUserId, {
+    type: 'status_change',
+    referralId: referral._id,
+    borrowerName,
+    actorRole: session?.user.role ?? 'agent',
+    actorName,
     content: activityContent,
   });
 
