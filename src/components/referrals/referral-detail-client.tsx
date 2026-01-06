@@ -983,11 +983,20 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
         return baseUpdate;
       });
+      
+      // Update details draft with the normalized draft (which includes updated createdAt)
       setDetailsDraft(normalizedDraft);
       setIsEditingDetails(false);
       toast.success('Referral details updated');
+      
+      // Mutate activity feed in background
       void mutate(activityFeedKey);
-      router.refresh();
+      
+      // Delay router.refresh() slightly to allow state update to render first
+      // This prevents the flicker of old data before new data loads
+      setTimeout(() => {
+        router.refresh();
+      }, 100);
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Unable to update referral details');
