@@ -13,7 +13,7 @@ import type { Contact } from '@/components/referrals/contact-assignment';
 import { normalizeReferralStatus, type ReferralStatus, REFERRAL_TIMELINE_OPTIONS, REFERRAL_TIMELINE_VALUES } from '@/constants/referrals';
 import { ReferralDeals } from '@/components/referrals/referral-deals';
 import type { ReferralPayment } from '@/types/referral-payment';
-import { formatCurrency } from '@/utils/formatters';
+import { formatCurrency, formatDate } from '@/utils/formatters';
 
 type ReferralSource = string;
 type ReferralClientType = 'Seller' | 'Buyer' | 'Both';
@@ -121,6 +121,7 @@ interface DetailDraft {
   loanType: string;
   preApprovalAmount: string;
   timeline: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified';
+  createdAt: string;
 }
 
 const DETAIL_FIELD_KEYS: (keyof DetailDraft)[] = [
@@ -227,6 +228,50 @@ const formatCurrencyInputDisplay = (value: string) => {
   return decimalPart !== undefined ? `${formattedInteger}.${decimalPart}` : formattedInteger;
 };
 
+// Convert ISO date string to datetime-local format (YYYY-MM-DDTHH:mm)
+const isoToDateTimeLocal = (isoString?: string | null): string => {
+  if (!isoString) {
+    return '';
+  }
+  try {
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+    // Get local date components
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  } catch {
+    return '';
+  }
+};
+
+// Convert datetime-local format (YYYY-MM-DDTHH:mm) to ISO string
+const dateTimeLocalToISO = (dateTimeLocal: string): string => {
+  if (!dateTimeLocal) {
+    return '';
+  }
+  try {
+    // Parse the datetime-local string and create a Date object in local timezone
+    const [datePart, timePart] = dateTimeLocal.split('T');
+    if (!datePart || !timePart) {
+      return '';
+    }
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hours, minutes] = timePart.split(':').map(Number);
+    
+    // Create date in local timezone
+    const localDate = new Date(year, month - 1, day, hours, minutes);
+    return localDate.toISOString();
+  } catch {
+    return '';
+  }
+};
+
 const createDetailDraft = (referral: ReferralDetail): DetailDraft => ({
   loanFileNumber: ensureString(referral?.loanFileNumber),
   source: normalizeSource(referral?.source),
@@ -248,6 +293,7 @@ const createDetailDraft = (referral: ReferralDetail): DetailDraft => ({
   timeline: (referral?.timeline && REFERRAL_TIMELINE_VALUES.includes(referral.timeline as any))
     ? (referral.timeline as DetailDraft['timeline'])
     : 'not_specified',
+  createdAt: isoToDateTimeLocal(referral?.createdAt),
 });
 
 const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
@@ -260,6 +306,7 @@ const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
   stageOnTransfer: normalizeStageOnTransfer(draft.stageOnTransfer),
   loanType: draft.loanType.trim(),
   preApprovalAmount: sanitizeCurrencyInput(draft.preApprovalAmount),
+  createdAt: draft.createdAt.trim(),
   timeline: draft.timeline,
 });
 
@@ -541,11 +588,16 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       referral.loanType,
       referral.preApprovalAmountCents,
       referral.timeline,
+      referral.createdAt,
     ]
   );
   const detailsChanged = useMemo(
-    () => DETAIL_FIELD_KEYS.some((field) => normalizedDetailDraft[field] !== normalizedCurrentDetails[field]),
-    [normalizedDetailDraft, normalizedCurrentDetails]
+    () => {
+      const standardFieldsChanged = DETAIL_FIELD_KEYS.some((field) => normalizedDetailDraft[field] !== normalizedCurrentDetails[field]);
+      const createdAtChanged = viewerRole === 'admin' && normalizedDetailDraft.createdAt !== normalizedCurrentDetails.createdAt;
+      return standardFieldsChanged || createdAtChanged;
+    },
+    [normalizedDetailDraft, normalizedCurrentDetails, viewerRole]
   );
 
   const lookingInZipDisplay = useMemo(() => {
@@ -582,6 +634,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referral.borrowerCurrentAddress,
     referral.stageOnTransfer,
     referral.timeline,
+    referral.createdAt,
   ]);
 
   useEffect(() => {
@@ -750,7 +803,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     const hasExistingPreApproval = Boolean(normalizedCurrent.preApprovalAmount);
     let preApprovalAmountValue: number | undefined;
 
-    if (!DETAIL_FIELD_KEYS.some((field) => normalizedDraft[field] !== normalizedCurrent[field])) {
+    const standardFieldsChanged = DETAIL_FIELD_KEYS.some((field) => normalizedDraft[field] !== normalizedCurrent[field]);
+    const createdAtChanged = viewerRole === 'admin' && normalizedDraft.createdAt !== normalizedCurrent.createdAt;
+    
+    if (!standardFieldsChanged && !createdAtChanged) {
       toast.info('No changes to save');
       setIsEditingDetails(false);
       return;
@@ -798,6 +854,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         }
       }
     });
+
+    // Handle createdAt separately - only for admin users
+    if (viewerRole === 'admin' && normalizedDraft.createdAt !== normalizedCurrent.createdAt) {
+      const isoDate = dateTimeLocalToISO(normalizedDraft.createdAt);
+      if (isoDate) {
+        payload.createdAt = isoDate;
+      }
+    }
 
     if (payload.lookingInZip) {
       payload.lookingInZips = parsedZips;
@@ -1350,6 +1414,19 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   ))}
                 </select>
               </label>
+              {viewerRole === 'admin' && (
+                <label className="space-y-1 text-sm font-medium text-slate-600">
+                  <span>Created Date</span>
+                  <input
+                    type="datetime-local"
+                    name="createdAt"
+                    value={detailsDraft.createdAt}
+                    onChange={handleDetailInputChange('createdAt')}
+                    disabled={savingDetails}
+                    className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  />
+                </label>
+              )}
               <label className="space-y-1 text-sm font-medium text-slate-600 sm:col-span-2 lg:col-span-3">
                 <span>Borrower Current Address</span>
                 <input
@@ -1428,6 +1505,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   : '—'}
               </dd>
             </div>
+            {viewerRole === 'admin' && (
+              <div className="space-y-1">
+                <dt className="text-xs uppercase text-slate-500">Created Date</dt>
+                <dd className="text-sm text-slate-700">{formatDate(referral.createdAt)}</dd>
+              </div>
+            )}
             <div className="space-y-1 sm:col-span-2 lg:col-span-3">
               <dt className="text-xs uppercase text-slate-500">Borrower Current Address</dt>
               <dd className="text-sm text-slate-700">

@@ -25,6 +25,7 @@ const DETAIL_FIELD_LABELS = {
   loanType: 'Loan Type',
   preApprovalAmount: 'Pre-approval Amount',
   timeline: 'Timeline',
+  createdAt: 'Created Date',
 } as const;
 
 export async function GET(request: NextRequest, context: RouteContext): Promise<NextResponse> {
@@ -120,6 +121,9 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     if (value === undefined || value === null) {
       return '';
     }
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
     if (typeof value === 'string') {
       return value;
     }
@@ -130,12 +134,42 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     if (!(field in updatePayload)) {
       return false;
     }
+    // Special handling for createdAt - compare ISO strings
+    if (field === 'createdAt') {
+      const nextValue = updatePayload[field];
+      const previousValue = (existing as Record<string, unknown>)[field];
+      if (nextValue instanceof Date && previousValue instanceof Date) {
+        return nextValue.getTime() !== previousValue.getTime();
+      }
+      const nextISO = nextValue instanceof Date ? nextValue.toISOString() : String(nextValue);
+      const prevISO = previousValue instanceof Date ? previousValue.toISOString() : String(previousValue);
+      return nextISO !== prevISO;
+    }
     const nextValue = toComparableString(updatePayload[field]);
     const previousValue = toComparableString((existing as Record<string, unknown>)[field]);
     return previousValue !== nextValue;
   });
 
   delete updatePayload.preApprovalAmount;
+
+  // Handle createdAt update - only allow for admin users
+  if ('createdAt' in updatePayload) {
+    if (session.user.role !== 'admin') {
+      return NextResponse.json({ error: 'Only admins can update the created date' }, { status: 403 });
+    }
+    const createdAtValue = updatePayload.createdAt;
+    if (typeof createdAtValue === 'string') {
+      try {
+        const createdAtDate = new Date(createdAtValue);
+        if (Number.isNaN(createdAtDate.getTime())) {
+          return NextResponse.json({ error: 'Invalid created date format' }, { status: 422 });
+        }
+        updatePayload.createdAt = createdAtDate;
+      } catch {
+        return NextResponse.json({ error: 'Invalid created date format' }, { status: 422 });
+      }
+    }
+  }
 
   let referral;
   const auditActorId = resolveAuditActorId(session.user.id);
