@@ -35,6 +35,12 @@ interface AgentRow {
   phone?: string;
   licenseNumber?: string;
   brokerage?: string;
+  officeAddress?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+  };
   statesLicensed: string[];
   coverageAreas?: string[];
   coverageLocations?: CoverageLocation[];
@@ -62,6 +68,12 @@ type AgentFormState = {
   phone: string;
   licenseNumber: string;
   brokerage: string;
+  officeAddress: {
+    street: string;
+    city: string;
+    state: string;
+    zipCode: string;
+  };
   states: string;
   coverageDescription: string;
   coverageLocations: CoverageLocation[];
@@ -82,6 +94,12 @@ const createEmptyForm = (): AgentFormState => ({
   phone: '',
   licenseNumber: '',
   brokerage: '',
+  officeAddress: {
+    street: '',
+    city: '',
+    state: '',
+    zipCode: '',
+  },
   states: '',
   coverageDescription: '',
   coverageLocations: [],
@@ -268,13 +286,25 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
     return <div className="rounded-lg bg-white p-4 shadow-sm">Loading agents…</div>;
   }
 
-  type TextField = Exclude<keyof AgentFormState, 'coverageLocations' | 'specialties' | 'languages'>;
+  type TextField = Exclude<keyof AgentFormState, 'coverageLocations' | 'specialties' | 'languages' | 'officeAddress'>;
 
   const handleChange = (field: TextField) => (
     event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const value = field === 'phone' ? formatPhoneInput(event.target.value) : event.target.value;
     setForm((previous) => ({ ...previous, [field]: value }));
+  };
+
+  const handleOfficeAddressChange = (field: 'street' | 'city' | 'state' | 'zipCode') => (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    setForm((previous) => ({
+      ...previous,
+      officeAddress: {
+        ...previous.officeAddress,
+        [field]: event.target.value,
+      },
+    }));
   };
 
   const handleSelectChange = (field: 'specialties' | 'languages') => (
@@ -452,6 +482,14 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
         .filter(Boolean);
       const normalizedCoverageLocations = mergeCoverageLocations([], form.coverageLocations);
       const coverageZipCodes = deriveZipCodes(normalizedCoverageLocations);
+      const officeAddress = {
+        street: form.officeAddress.street.trim() || undefined,
+        city: form.officeAddress.city.trim() || undefined,
+        state: form.officeAddress.state.trim() || undefined,
+        zipCode: form.officeAddress.zipCode.trim() || undefined,
+      };
+      const hasOfficeAddress = Object.values(officeAddress).some((value) => value !== undefined);
+
       const response = await fetch('/api/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -461,6 +499,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
           phone: form.phone,
           licenseNumber: form.licenseNumber,
           brokerage: form.brokerage,
+          officeAddress: hasOfficeAddress ? officeAddress : undefined,
           statesLicensed,
           coverageAreas: coverageZipCodes,
           coverageLocations: normalizedCoverageLocations,
@@ -629,6 +668,57 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
                   disabled={formDisabled}
                 />
               </label>
+              <div className="md:col-span-2 space-y-2">
+                <p className="text-xs font-semibold text-slate-600">Office Address</p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="text-xs font-semibold text-slate-600 md:col-span-2">
+                    Street
+                    <input
+                      type="text"
+                      value={form.officeAddress.street}
+                      onChange={handleOfficeAddressChange('street')}
+                      className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                      placeholder="123 Main St"
+                      disabled={formDisabled}
+                    />
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    City
+                    <input
+                      type="text"
+                      value={form.officeAddress.city}
+                      onChange={handleOfficeAddressChange('city')}
+                      className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                      placeholder="Denver"
+                      disabled={formDisabled}
+                    />
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    State
+                    <input
+                      type="text"
+                      value={form.officeAddress.state}
+                      onChange={handleOfficeAddressChange('state')}
+                      className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm uppercase"
+                      placeholder="CO"
+                      maxLength={2}
+                      disabled={formDisabled}
+                    />
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    ZIP Code
+                    <input
+                      type="text"
+                      value={form.officeAddress.zipCode}
+                      onChange={handleOfficeAddressChange('zipCode')}
+                      className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                      placeholder="80202"
+                      maxLength={5}
+                      disabled={formDisabled}
+                    />
+                  </label>
+                </div>
+              </div>
               <label className="text-xs font-semibold text-slate-600">
                 AHA classification
                 <select

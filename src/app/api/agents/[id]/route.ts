@@ -18,12 +18,20 @@ const coverageLocationSchema = z.object({
     .transform((zipCodes) => Array.from(new Set(zipCodes))),
 });
 
+const officeAddressSchema = z.object({
+  street: z.string().trim().optional(),
+  city: z.string().trim().optional(),
+  state: z.string().trim().optional(),
+  zipCode: z.string().trim().optional(),
+});
+
 const updateAgentSchema = z.object({
   name: z.string().trim().min(1).optional(),
   email: z.string().trim().email().transform((value) => value.toLowerCase()).optional(),
   phone: z.string().trim().optional(),
   licenseNumber: z.string().trim().optional(),
   brokerage: z.string().trim().optional(),
+  officeAddress: officeAddressSchema.optional(),
   statesLicensed: z.array(z.string().trim().min(2)).optional(),
   coverageAreas: z.array(z.string().trim().min(1)).optional(),
   coverageLocations: z.array(coverageLocationSchema).optional(),
@@ -73,6 +81,18 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     if (parsed.data[field] !== undefined) {
       update[field] = parsed.data[field];
     }
+  }
+
+  // Handle office address
+  if (parsed.data.officeAddress !== undefined) {
+    const officeAddress = {
+      street: parsed.data.officeAddress.street || undefined,
+      city: parsed.data.officeAddress.city || undefined,
+      state: parsed.data.officeAddress.state || undefined,
+      zipCode: parsed.data.officeAddress.zipCode || undefined,
+    };
+    const hasOfficeAddress = Object.values(officeAddress).some((value) => value !== undefined);
+    update.officeAddress = hasOfficeAddress ? officeAddress : null;
   }
 
   // Handle coverage locations with ZIP normalization
@@ -141,6 +161,14 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     phone: updatedAgent.phone,
     licenseNumber: updatedAgent.licenseNumber ?? '',
     brokerage: updatedAgent.brokerage ?? '',
+    officeAddress: updatedAgent.officeAddress
+      ? {
+          street: updatedAgent.officeAddress.street ?? undefined,
+          city: updatedAgent.officeAddress.city ?? undefined,
+          state: updatedAgent.officeAddress.state ?? undefined,
+          zipCode: updatedAgent.officeAddress.zipCode ?? undefined,
+        }
+      : undefined,
     statesLicensed: updatedAgent.statesLicensed ?? [],
     coverageAreas: updatedAgent.zipCoverage ?? [],
     coverageLocations: Array.isArray(updatedAgent.coverageLocations) ? updatedAgent.coverageLocations : [],

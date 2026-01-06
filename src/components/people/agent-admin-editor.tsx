@@ -23,6 +23,12 @@ export interface AgentAdminEditorProps {
     phone?: string;
     licenseNumber?: string;
     brokerage?: string;
+    officeAddress?: {
+      street?: string;
+      city?: string;
+      state?: string;
+      zipCode?: string;
+    };
     statesLicensed?: string[];
     coverageLocations?: CoverageLocation[];
     coverageAreas?: string[];
@@ -43,6 +49,12 @@ interface PatchResponse {
   phone?: string;
   licenseNumber?: string;
   brokerage?: string;
+  officeAddress?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+  };
   statesLicensed: string[];
   coverageAreas: string[];
   coverageLocations: CoverageLocation[];
@@ -57,6 +69,12 @@ type FormState = {
   phone: string;
   licenseNumber: string;
   brokerage: string;
+  officeAddress: {
+    street: string;
+    city: string;
+    state: string;
+    zipCode: string;
+  };
   states: string;
   coverageDescription: string;
   coverageLocations: CoverageLocation[];
@@ -151,6 +169,12 @@ const buildInitialFormState = (agent: AgentAdminEditorProps['agent']): FormState
     phone: agent.phone ?? '',
     licenseNumber: agent.licenseNumber ?? '',
     brokerage: agent.brokerage ?? '',
+    officeAddress: {
+      street: agent.officeAddress?.street ?? '',
+      city: agent.officeAddress?.city ?? '',
+      state: agent.officeAddress?.state ?? '',
+      zipCode: agent.officeAddress?.zipCode ?? '',
+    },
     states: Array.isArray(agent.statesLicensed) ? agent.statesLicensed.join(', ') : '',
     coverageDescription: '',
     coverageLocations,
@@ -220,10 +244,22 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
 
   const formDisabled = saving;
 
-  type TextField = Exclude<keyof FormState, 'coverageLocations' | 'specialties' | 'languages' | 'coverageDescription' | 'ahaDesignation'>;
+  type TextField = Exclude<keyof FormState, 'coverageLocations' | 'specialties' | 'languages' | 'coverageDescription' | 'ahaDesignation' | 'officeAddress'>;
 
   const handleChange = (field: TextField) => (event: ChangeEvent<HTMLInputElement>) => {
     setForm((previous) => ({ ...previous, [field]: event.target.value }));
+  };
+
+  const handleOfficeAddressChange = (field: 'street' | 'city' | 'state' | 'zipCode') => (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    setForm((previous) => ({
+      ...previous,
+      officeAddress: {
+        ...previous.officeAddress,
+        [field]: event.target.value,
+      },
+    }));
   };
 
   const handleCoverageDescriptionChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -341,6 +377,14 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
       const normalizedCoverageLocations = mergeCoverageLocations([], form.coverageLocations);
       const coverageZipCodes = deriveZipCodes(normalizedCoverageLocations);
 
+      const officeAddress = {
+        street: form.officeAddress.street.trim() || undefined,
+        city: form.officeAddress.city.trim() || undefined,
+        state: form.officeAddress.state.trim() || undefined,
+        zipCode: form.officeAddress.zipCode.trim() || undefined,
+      };
+      const hasOfficeAddress = Object.values(officeAddress).some((value) => value !== undefined);
+
       const response = await fetch(`/api/agents/${agent._id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -350,6 +394,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
           phone: form.phone,
           licenseNumber: form.licenseNumber,
           brokerage: form.brokerage,
+          officeAddress: hasOfficeAddress ? officeAddress : undefined,
           statesLicensed,
           coverageAreas: coverageZipCodes,
           coverageLocations: normalizedCoverageLocations,
@@ -371,6 +416,12 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
         phone: payload.phone ?? '',
         licenseNumber: payload.licenseNumber ?? '',
         brokerage: payload.brokerage ?? '',
+        officeAddress: {
+          street: payload.officeAddress?.street ?? '',
+          city: payload.officeAddress?.city ?? '',
+          state: payload.officeAddress?.state ?? '',
+          zipCode: payload.officeAddress?.zipCode ?? '',
+        },
         states: payload.statesLicensed.join(', '),
         coverageDescription: '',
         coverageLocations: mergeCoverageLocations([], payload.coverageLocations),
@@ -452,6 +503,57 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
             disabled={formDisabled}
           />
         </label>
+        <div className="md:col-span-2 space-y-2">
+          <p className="text-xs font-semibold text-slate-600">Office Address</p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="text-xs font-semibold text-slate-600 md:col-span-2">
+              Street
+              <input
+                type="text"
+                value={form.officeAddress.street}
+                onChange={handleOfficeAddressChange('street')}
+                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                placeholder="123 Main St"
+                disabled={formDisabled}
+              />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">
+              City
+              <input
+                type="text"
+                value={form.officeAddress.city}
+                onChange={handleOfficeAddressChange('city')}
+                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                placeholder="Denver"
+                disabled={formDisabled}
+              />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">
+              State
+              <input
+                type="text"
+                value={form.officeAddress.state}
+                onChange={handleOfficeAddressChange('state')}
+                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm uppercase"
+                placeholder="CO"
+                maxLength={2}
+                disabled={formDisabled}
+              />
+            </label>
+            <label className="text-xs font-semibold text-slate-600">
+              ZIP Code
+              <input
+                type="text"
+                value={form.officeAddress.zipCode}
+                onChange={handleOfficeAddressChange('zipCode')}
+                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                placeholder="80202"
+                maxLength={5}
+                disabled={formDisabled}
+              />
+            </label>
+          </div>
+        </div>
         <label className="text-xs font-semibold text-slate-600">
           AHA classification
           <select

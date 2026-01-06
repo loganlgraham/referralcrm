@@ -20,6 +20,16 @@ const coverageLocationSchema = new Schema(
   { _id: false }
 );
 
+const officeAddressSchema = new Schema(
+  {
+    street: { type: String },
+    city: { type: String },
+    state: { type: String },
+    zipCode: { type: String },
+  },
+  { _id: false }
+);
+
 const agentSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', index: true, sparse: true, unique: true },
@@ -36,6 +46,7 @@ const agentSchema = new Schema(
     npsScore: { type: Number, default: null },
     avgResponseHours: { type: Number, default: null },
     brokerage: { type: String },
+    officeAddress: { type: officeAddressSchema },
     markets: [{ type: String }],
     specialties: { type: [String], default: [] },
     languages: { type: [String], default: [] },
