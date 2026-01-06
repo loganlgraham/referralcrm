@@ -14,6 +14,57 @@ interface CreateNotificationParams {
 }
 
 /**
+ * Creates notifications for specific users by their user IDs
+ */
+export async function createNotificationsForUsers(
+  userIds: (Types.ObjectId | string)[],
+  {
+    type,
+    referralId,
+    borrowerName,
+    actorRole,
+    actorName,
+    content,
+  }: CreateNotificationParams
+): Promise<void> {
+  try {
+    if (userIds.length === 0) {
+      return;
+    }
+
+    // Normalize referralId to ObjectId
+    const normalizedReferralId = 
+      typeof referralId === 'string' 
+        ? new Types.ObjectId(referralId) 
+        : referralId;
+
+    // Normalize user IDs to ObjectId
+    const normalizedUserIds = userIds.map((id) => 
+      typeof id === 'string' ? new Types.ObjectId(id) : id
+    );
+
+    // Create notification documents for each user
+    const notifications = normalizedUserIds.map((userId) => ({
+      userId,
+      type,
+      referralId: normalizedReferralId,
+      borrowerName,
+      actorRole,
+      actorName,
+      content,
+      readAt: null,
+      createdAt: new Date(),
+    }));
+
+    // Bulk insert for efficiency
+    await Notification.insertMany(notifications);
+  } catch (error) {
+    console.error('Failed to create notifications for users:', error);
+    // Don't throw - notification creation should not break the main flow
+  }
+}
+
+/**
  * Creates notifications for all admin users
  */
 export async function createAdminNotifications({
@@ -32,29 +83,53 @@ export async function createAdminNotifications({
       return;
     }
 
-    // Normalize referralId to ObjectId
-    const normalizedReferralId = 
-      typeof referralId === 'string' 
-        ? new Types.ObjectId(referralId) 
-        : referralId;
-
-    // Create notification documents for each admin
-    const notifications = adminUsers.map((admin) => ({
-      userId: admin._id,
-      type,
-      referralId: normalizedReferralId,
-      borrowerName,
-      actorRole,
-      actorName,
-      content,
-      readAt: null,
-      createdAt: new Date(),
-    }));
-
-    // Bulk insert for efficiency
-    await Notification.insertMany(notifications);
+    // Use the new helper function
+    await createNotificationsForUsers(
+      adminUsers.map((admin) => admin._id),
+      { type, referralId, borrowerName, actorRole, actorName, content }
+    );
   } catch (error) {
     console.error('Failed to create admin notifications:', error);
+    // Don't throw - notification creation should not break the main flow
+  }
+}
+
+/**
+ * Creates notifications for admins and the assigned MC on a referral
+ */
+export async function createAdminAndMcNotifications(
+  mcUserId: Types.ObjectId | string | null | undefined,
+  {
+    type,
+    referralId,
+    borrowerName,
+    actorRole,
+    actorName,
+    content,
+  }: CreateNotificationParams
+): Promise<void> {
+  try {
+    // Find all admin users
+    const adminUsers = await User.find({ role: 'admin' }).select('_id').lean();
+    
+    const userIds: (Types.ObjectId | string)[] = adminUsers.map((admin) => admin._id);
+    
+    // Add MC user ID if provided
+    if (mcUserId) {
+      userIds.push(mcUserId);
+    }
+
+    if (userIds.length === 0) {
+      return;
+    }
+
+    // Use the new helper function
+    await createNotificationsForUsers(
+      userIds,
+      { type, referralId, borrowerName, actorRole, actorName, content }
+    );
+  } catch (error) {
+    console.error('Failed to create admin and MC notifications:', error);
     // Don't throw - notification creation should not break the main flow
   }
 }
