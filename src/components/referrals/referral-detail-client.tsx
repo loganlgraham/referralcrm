@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -336,6 +336,7 @@ const formatFullAddress = (
 export function ReferralDetailClient({ referral: initialReferral, viewerRole, notes, referralId }: ReferralDetailClientProps) {
   const router = useRouter();
   const { mutate } = useSWRConfig();
+  const [isPending, startTransition] = useTransition();
   const activityFeedKey = `/api/referrals/${referralId}/activities`;
   const [referral, setReferral] = useState<ReferralDetail>(initialReferral);
   const origin = referral.origin ?? initialReferral.origin ?? null;
@@ -994,8 +995,11 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       
       // Delay router.refresh() slightly to allow state update to render first
       // This prevents the flicker of old data before new data loads
+      // Use startTransition to prevent navigation blocking
       setTimeout(() => {
-        router.refresh();
+        startTransition(() => {
+          router.refresh();
+        });
       }, 100);
     } catch (error) {
       console.error(error);
