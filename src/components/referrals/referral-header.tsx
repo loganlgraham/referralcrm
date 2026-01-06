@@ -591,6 +591,27 @@ export function ReferralHeader({
     setCleanedNotes('');
   };
 
+  const handleRecopyIntroEmail = async () => {
+    try {
+      const clipboardContent = buildIntroClipboardTemplate(
+        referral,
+        effectiveBuySideContact,
+        effectiveSellSideContact,
+        effectiveMcContact
+      );
+
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(clipboardContent);
+        toast.success('Intro email template copied to clipboard');
+      } else {
+        toast.error('Clipboard access is not available');
+      }
+    } catch (error) {
+      console.error('Failed to copy intro email to clipboard', error);
+      toast.error('Failed to copy intro email template to clipboard');
+    }
+  };
+
   const handleContractDraftChangeInternal = useCallback(
     (draft: ContractDraftSnapshot) => {
       setDraftContract((previous) => {
@@ -1012,16 +1033,25 @@ export function ReferralHeader({
                 Agent emails include the MC's contact info, and the MC email highlights the agent's details.
               </p>
               {introEmailStatus && (
-                <div className="mt-2 text-[11px] text-slate-600">
-                  <p>{introEmailStatus.summary}</p>
-                  <p>
-                    Copied intro email for Gmail and sent at{' '}
-                    {introEmailStatus.sentAt.toLocaleString([], {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                    })}
-                    .
-                  </p>
+                <div className="mt-2 space-y-2">
+                  <div className="text-[11px] text-slate-600">
+                    <p>{introEmailStatus.summary}</p>
+                    <p>
+                      Copied intro email for Gmail and sent at{' '}
+                      {introEmailStatus.sentAt.toLocaleString([], {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                      .
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRecopyIntroEmail}
+                    className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+                  >
+                    Re-copy intro email
+                  </button>
                 </div>
               )}
               {showPreview && (
