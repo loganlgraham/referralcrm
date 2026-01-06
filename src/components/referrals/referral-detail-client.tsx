@@ -858,10 +858,17 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     // Handle createdAt separately - only for admin users
     if (viewerRole === 'admin' && createdAtChanged) {
       const isoDate = dateTimeLocalToISO(normalizedDraft.createdAt);
+      console.log('[DEBUG Frontend] createdAt changed, converting to ISO:', {
+        draft: normalizedDraft.createdAt,
+        current: normalizedCurrent.createdAt,
+        isoDate
+      });
       if (isoDate) {
         payload.createdAt = isoDate;
       }
     }
+
+    console.log('[DEBUG Frontend] Payload being sent:', payload);
 
     if (payload.lookingInZip) {
       payload.lookingInZips = parsedZips;
