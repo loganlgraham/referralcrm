@@ -53,6 +53,15 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const { data: agents } = useSWR<DirectoryOption[]>(isAgentMode ? null : '/api/agents', fetcher);
   const { data: lenders } = useSWR<DirectoryOption[]>('/api/lenders', fetcher);
 
+  const sortedAgents = useMemo(() => {
+    if (!agents) return undefined;
+    return [...agents].sort((a, b) => {
+      const nameA = a.name?.toLowerCase() ?? '';
+      const nameB = b.name?.toLowerCase() ?? '';
+      return nameA.localeCompare(nameB);
+    });
+  }, [agents]);
+
   const agentValue = isAgentMode ? '' : searchParams.get('agent') ?? '';
   const lenderValue = searchParams.get('mc') ?? '';
   const ahaBucketValue = showAhaBucket ? searchParams.get('ahaBucket') ?? '' : '';
@@ -189,7 +198,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
               disabled={isPending}
             >
               <option value="">All</option>
-              {agents?.map((agentOption) => (
+              {sortedAgents?.map((agentOption) => (
                 <option key={agentOption._id} value={agentOption._id}>
                   {agentOption.name}
                   {agentOption.email ? ` (${agentOption.email})` : ''}
