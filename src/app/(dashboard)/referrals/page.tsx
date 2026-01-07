@@ -26,10 +26,10 @@ export default async function ReferralsPage({
   const agentReferrals =
     agentReferralsParam === 'yes' || agentReferralsParam === 'no' ? agentReferralsParam : 'all';
 
-  // Validate pageSize - must be one of: 20, 25, 50, 100 (default to 20)
+  // Validate pageSize - must be one of: 20, 25, 50, 100 (default to 25)
   const validPageSizes = [20, 25, 50, 100];
-  const pageSizeParam = searchParams.pageSize ? Number(searchParams.pageSize) : 20;
-  const pageSize = validPageSizes.includes(pageSizeParam) ? pageSizeParam : 20;
+  const pageSizeParam = searchParams.pageSize ? Number(searchParams.pageSize) : 25;
+  const pageSize = validPageSizes.includes(pageSizeParam) ? pageSizeParam : 25;
 
   const data = await getReferrals({
     session,

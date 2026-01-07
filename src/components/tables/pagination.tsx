@@ -30,7 +30,7 @@ export function Pagination({ currentPage, totalItems, pageSize, totalPages }: Pa
       }
       
       if (updates.pageSize !== undefined) {
-        if (updates.pageSize === 20) {
+        if (updates.pageSize === 25) {
           params.delete('pageSize');
         } else {
           params.set('pageSize', updates.pageSize.toString());
@@ -89,7 +89,7 @@ export function Pagination({ currentPage, totalItems, pageSize, totalPages }: Pa
             disabled={isPending}
             className="rounded border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <option value={20}>20</option>
+            {pageSize === 20 && <option value={20}>20</option>}
             <option value={25}>25</option>
             <option value={50}>50</option>
             <option value={100}>100</option>

@@ -91,9 +91,9 @@ export async function getReferrals(params: GetReferralsParams) {
   const { session, page = 1, pageSize, status, mc, agent, zip, ahaBucket, agentReferrals, search, timeline } = params;
   await connectMongo();
   
-  // Validate pageSize - must be one of: 20, 25, 50, 100 (default to 20)
+  // Validate pageSize - must be one of: 20, 25, 50, 100 (default to 25)
   const validPageSizes = [20, 25, 50, 100];
-  const effectivePageSize = pageSize && validPageSizes.includes(pageSize) ? pageSize : 20;
+  const effectivePageSize = pageSize && validPageSizes.includes(pageSize) ? pageSize : 25;
 
   const query: Record<string, unknown> = { deletedAt: null };
   const appendOrConditions = (conditions: Record<string, unknown>[]) => {
