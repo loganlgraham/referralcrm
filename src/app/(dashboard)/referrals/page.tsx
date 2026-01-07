@@ -4,6 +4,7 @@ import { Metadata } from 'next';
 import Link from 'next/link';
 import { PlusIcon } from 'lucide-react';
 import { ReferralTable, ReferralRow, ReferralSummary } from '@/components/tables/referral-table';
+import { Pagination } from '@/components/tables/pagination';
 import { getCurrentSession } from '@/lib/auth';
 import { getReferrals } from '@/lib/server/referrals';
 import { Filters } from '@/components/forms/referral-filters';
@@ -25,9 +26,15 @@ export default async function ReferralsPage({
   const agentReferrals =
     agentReferralsParam === 'yes' || agentReferralsParam === 'no' ? agentReferralsParam : 'all';
 
+  // Validate pageSize - must be one of: 20, 25, 50, 100 (default to 25)
+  const validPageSizes = [20, 25, 50, 100];
+  const pageSizeParam = searchParams.pageSize ? Number(searchParams.pageSize) : 25;
+  const pageSize = validPageSizes.includes(pageSizeParam) ? pageSizeParam : 25;
+
   const data = await getReferrals({
     session,
     page: Number(searchParams.page || 1),
+    pageSize,
     status: searchParams.status?.toString(),
     mc: searchParams.mc?.toString(),
     agent: searchParams.agent?.toString(),
@@ -84,6 +91,12 @@ export default async function ReferralsPage({
             data={items}
             mode={tableMode}
             showAgentOriginIndicator={showAgentOriginIndicator}
+          />
+          <Pagination
+            currentPage={data.page}
+            totalItems={data.total}
+            pageSize={data.pageSize}
+            totalPages={Math.ceil(data.total / data.pageSize)}
           />
         </div>
       ) : (
