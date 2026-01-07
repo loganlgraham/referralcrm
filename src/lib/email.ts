@@ -6,6 +6,7 @@ type EmailPayload = {
   html: string;
   text: string;
   scheduledAt?: Date;
+  cc?: string[];
 };
 
 let resendClient: Resend | null = null;
@@ -63,6 +64,10 @@ export async function sendTransactionalEmail(payload: EmailPayload): Promise<boo
       html: payload.html,
       text: payload.text,
     };
+
+    if (payload.cc && payload.cc.length > 0) {
+      emailOptions.cc = payload.cc;
+    }
 
     if (payload.scheduledAt) {
       emailOptions.scheduled_at = payload.scheduledAt.toISOString();
