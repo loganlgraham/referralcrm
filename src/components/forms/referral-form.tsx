@@ -46,7 +46,7 @@ const referralSchema = z.object({
 });
 
 const inputClasses =
-  'mt-2 w-full rounded-lg border border-slate-300/80 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-1 focus:ring-offset-white';
+  'mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20';
 
 const labelClasses = 'flex flex-col text-sm font-medium text-slate-700';
 

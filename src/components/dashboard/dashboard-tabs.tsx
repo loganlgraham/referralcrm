@@ -259,16 +259,16 @@ function SummaryCard({
   extraStats?: { label: string; value: string }[];
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
-      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
-      {helper ? <p className="mt-1 text-xs text-slate-500">{helper}</p> : null}
+      <p className="mt-3 text-2xl font-semibold text-slate-900">{value}</p>
+      {helper ? <p className="mt-1.5 text-xs text-slate-500">{helper}</p> : null}
       {extraStats?.length ? (
-        <dl className="mt-3 grid grid-cols-2 gap-2">
+        <dl className="mt-4 grid grid-cols-2 gap-2.5">
           {extraStats.map((stat) => (
-            <div key={`${title}-${stat.label}`} className="rounded bg-slate-50 px-2 py-1">
+            <div key={`${title}-${stat.label}`} className="rounded-lg bg-slate-50 px-3 py-2">
               <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{stat.label}</dt>
-              <dd className="text-sm font-semibold text-slate-900">{stat.value}</dd>
+              <dd className="mt-0.5 text-sm font-semibold text-slate-900">{stat.value}</dd>
             </div>
           ))}
         </dl>
@@ -382,7 +382,7 @@ function LineChartCard({
   };
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
@@ -744,7 +744,7 @@ function PieChartCard({
   let currentAngle = -Math.PI / 2;
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
@@ -815,7 +815,7 @@ function TerminatedDealsList({
   const displayedDeals = showAll ? deals : deals.slice(0, LIST_PREVIEW_LIMIT);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex items-baseline justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Terminated deals</p>
@@ -869,7 +869,7 @@ function RankedList({
   const displayedItems = showAll ? items : items.slice(0, LIST_PREVIEW_LIMIT);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
       <div className="mt-4 space-y-3">
         <ul className="space-y-3">
@@ -913,7 +913,7 @@ function LeaderboardTable({
   const displayedEntries = showAll ? entries : entries.slice(0, LIST_PREVIEW_LIMIT);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -1103,7 +1103,7 @@ function PreApprovalConversionSection({
   };
 
   return (
-    <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Pre-approval conversion</p>
@@ -1592,8 +1592,8 @@ export function DashboardTabs() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Performance dashboards</h1>
-          <p className="text-sm text-slate-500">{timeframeLabel}</p>
+          <h1 className="text-3xl font-semibold text-slate-900">Performance dashboards</h1>
+          <p className="mt-1 text-sm text-slate-600 leading-relaxed">{timeframeLabel}</p>
         </div>
         <div className="flex flex-wrap items-start justify-end gap-6">
           <TimeframeDropdown

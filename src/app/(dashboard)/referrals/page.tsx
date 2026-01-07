@@ -50,13 +50,13 @@ export default async function ReferralsPage({
   const showAddReferralButton = role !== 'mc';
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">
+    <div className="space-y-8">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-semibold text-slate-900">
             {tableMode === 'agent' ? 'My referrals' : 'Referrals'}
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-600 leading-relaxed">
             {tableMode === 'agent'
               ? 'Review your leads, update their status, and capture quick notes as you work each opportunity.'
               : tableMode === 'mc'
@@ -67,7 +67,7 @@ export default async function ReferralsPage({
         {showAddReferralButton && (
           <Link
             href="/referrals/new"
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-dark hover:shadow focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           >
             <PlusIcon className="h-4 w-4" />
             {role === 'admin' ? 'Add Referral' : 'Add Referral for AFC'}
@@ -87,7 +87,7 @@ export default async function ReferralsPage({
           />
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
+        <div className="rounded-xl border border-dashed border-slate-200 bg-white p-12 text-center text-sm text-slate-500">
           No referrals yet. Add your first referral to get started.
         </div>
       )}

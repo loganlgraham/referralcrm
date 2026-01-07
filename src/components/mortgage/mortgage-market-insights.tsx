@@ -140,7 +140,7 @@ export function MortgageMarketInsights() {
           type="button"
           onClick={fetchInsights}
           disabled={loading}
-          className="inline-flex items-center justify-center gap-2 self-start rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-70"
+          className="inline-flex items-center justify-center gap-2 self-start rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-dark hover:shadow disabled:cursor-not-allowed disabled:opacity-70"
         >
           <RefreshCwIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           {loading ? 'Refreshing...' : 'Refresh insights'}

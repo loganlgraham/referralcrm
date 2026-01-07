@@ -120,7 +120,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
               <input
                 value={manualTitle}
                 onChange={(event) => setManualTitle(event.target.value)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 placeholder="Call the borrower"
                 required
               />
@@ -131,7 +131,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
                 type="datetime-local"
                 value={manualDueAt}
                 onChange={(event) => setManualDueAt(event.target.value)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               />
             </label>
             <label className="space-y-1 text-xs font-semibold text-slate-600">
@@ -139,7 +139,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
               <select
                 value={manualPriority}
                 onChange={(event) => setManualPriority(event.target.value as RecommendationPriority)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               >
                 {PRIORITY_OPTIONS.map((option) => (
                   <option key={option} value={option}>
@@ -153,7 +153,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
               <select
                 value={manualCategory}
                 onChange={(event) => setManualCategory(event.target.value as ManualTaskCategory)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               >
                 {CATEGORY_OPTIONS.map((option) => (
                   <option key={option} value={option}>

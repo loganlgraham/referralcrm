@@ -563,7 +563,7 @@ export function DealPreparationForm({
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <p className="text-xs uppercase text-slate-400">Deal preparation</p>
       <div className="space-y-2 text-sm">
         <label className="block">

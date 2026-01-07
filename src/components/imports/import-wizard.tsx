@@ -181,8 +181,8 @@ export function ImportWizard() {
   return (
     <div className="space-y-6 rounded-lg bg-white p-6 shadow-sm">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Import Wizard</h1>
-        <p className="text-sm text-slate-500">Upload CSV/XLSX/ZIP files and map to CRM fields.</p>
+        <h1 className="text-3xl font-semibold text-slate-900">Import Wizard</h1>
+        <p className="mt-1 text-sm text-slate-600 leading-relaxed">Upload CSV/XLSX/ZIP files and map to CRM fields.</p>
       </div>
       <div className="flex items-center gap-4 text-sm text-slate-500">
         {steps.map((item) => (
@@ -316,7 +316,7 @@ export function ImportWizard() {
           </div>
           <button
             type="button"
-            className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
+            className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-dark hover:shadow"
             onClick={() => setStep('Preview')}
           >
             Continue
@@ -393,7 +393,7 @@ export function ImportWizard() {
             <button type="button" className="rounded border border-slate-300 px-4 py-2 text-sm" onClick={() => setStep('Map Fields')}>
               Back
             </button>
-            <button type="button" className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white" onClick={() => setStep('Confirm')}>
+            <button type="button" className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-dark hover:shadow" onClick={() => setStep('Confirm')}>
               Continue
             </button>
           </div>
@@ -423,7 +423,7 @@ export function ImportWizard() {
             <button type="button" className="rounded border border-slate-300 px-4 py-2 text-sm" onClick={() => setStep('Preview')}>
               Back
             </button>
-            <button type="button" className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white" onClick={handleConfirm}>
+            <button type="button" className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-dark hover:shadow" onClick={handleConfirm}>
               Start import
             </button>
           </div>

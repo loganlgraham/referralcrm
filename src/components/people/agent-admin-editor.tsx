@@ -457,7 +457,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
             type="text"
             value={form.name}
             onChange={handleChange('name')}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             required
             disabled={formDisabled}
           />
@@ -468,7 +468,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
             type="email"
             value={form.email}
             onChange={handleChange('email')}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             required
             disabled={formDisabled}
           />
@@ -479,7 +479,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
             type="tel"
             value={form.phone}
             onChange={handleChange('phone')}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             disabled={formDisabled}
           />
         </label>
@@ -489,7 +489,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
             type="text"
             value={form.licenseNumber}
             onChange={handleChange('licenseNumber')}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             disabled={formDisabled}
           />
         </label>
@@ -499,7 +499,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
             type="text"
             value={form.brokerage}
             onChange={handleChange('brokerage')}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             disabled={formDisabled}
           />
         </label>
@@ -512,7 +512,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
                 type="text"
                 value={form.officeAddress.street}
                 onChange={handleOfficeAddressChange('street')}
-                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 placeholder="123 Main St"
                 disabled={formDisabled}
               />
@@ -523,7 +523,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
                 type="text"
                 value={form.officeAddress.city}
                 onChange={handleOfficeAddressChange('city')}
-                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 placeholder="Denver"
                 disabled={formDisabled}
               />
@@ -534,7 +534,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
                 type="text"
                 value={form.officeAddress.state}
                 onChange={handleOfficeAddressChange('state')}
-                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm uppercase"
+                className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm uppercase shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 placeholder="CO"
                 maxLength={2}
                 disabled={formDisabled}
@@ -546,7 +546,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
                 type="text"
                 value={form.officeAddress.zipCode}
                 onChange={handleOfficeAddressChange('zipCode')}
-                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 placeholder="80202"
                 maxLength={5}
                 disabled={formDisabled}
@@ -559,7 +559,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
           <select
             value={form.ahaDesignation}
             onChange={handleAhaChange}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             disabled={formDisabled}
           >
             <option value="">Not set</option>
@@ -576,7 +576,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
             type="text"
             value={form.states}
             onChange={handleChange('states')}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             placeholder="CO, UT"
             disabled={formDisabled}
           />
@@ -639,7 +639,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
               multiple
               value={form.specialties}
               onChange={handleSelectChange('specialties')}
-              className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+              className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               size={6}
               disabled={formDisabled}
             >
@@ -659,7 +659,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
               multiple
               value={form.languages}
               onChange={handleSelectChange('languages')}
-              className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+              className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               size={5}
               disabled={formDisabled}
             >
@@ -678,7 +678,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
           <button
             type="submit"
             disabled={formDisabled}
-            className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+            className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-dark hover:shadow disabled:cursor-not-allowed disabled:opacity-70"
           >
             {saving ? 'Saving…' : 'Save changes'}
           </button>

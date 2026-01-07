@@ -58,18 +58,18 @@ export function Sidebar({ session, className }: { session: Session; className?: 
   };
 
   return (
-    <aside className={clsx('fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-lg', className)}>
-      <div className="flex h-16 items-center justify-between border-b px-6">
+    <aside className={clsx('fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-slate-200', className)}>
+      <div className="flex h-16 items-center justify-between border-b border-slate-200 px-6">
         <div>
           <p className="text-sm font-semibold text-brand">AFC · AHA</p>
           <p className="text-xs text-slate-500">Referral CRM</p>
         </div>
         <NotificationBell session={session} />
       </div>
-      <nav className="flex flex-col space-y-1 p-4">
+      <nav className="flex flex-col space-y-1.5 p-5">
         {compactNavItems.map((item, index) => {
           if (item.type === 'divider') {
-            return <div key={`divider-${index}`} className="my-1 border-t border-slate-200" />;
+            return <div key={`divider-${index}`} className="my-2 border-t border-slate-200" />;
           }
 
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -82,10 +82,10 @@ export function Sidebar({ session, className }: { session: Session; className?: 
               key={item.href}
               href={item.href}
               className={clsx(
-                'rounded-md px-4 py-2 text-sm font-medium transition',
+                'rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200',
                 active
-                  ? 'bg-brand text-white hover:bg-brand-dark hover:text-white'
-                  : 'hover:bg-slate-100'
+                  ? 'bg-brand text-white shadow-sm hover:bg-brand-dark hover:text-white'
+                  : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
               )}
             >
               {item.label}
@@ -93,11 +93,11 @@ export function Sidebar({ session, className }: { session: Session; className?: 
           );
         })}
       </nav>
-      <div className="mt-auto p-4">
+      <div className="mt-auto p-5">
         <button
           type="button"
           onClick={handleSignOut}
-          className="flex w-full items-center justify-center gap-2 rounded-md bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-300"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 transition-all duration-200 hover:bg-slate-200 hover:text-slate-900"
         >
           <LogOutIcon className="h-4 w-4" />
           Sign out

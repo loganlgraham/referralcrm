@@ -129,8 +129,8 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
   return (
     <div className="space-y-6">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold text-slate-900">Follow-up tasks</h1>
-        <p className="text-sm text-slate-500">
+        <h1 className="text-3xl font-semibold text-slate-900">Follow-up tasks</h1>
+        <p className="text-sm text-slate-600 leading-relaxed">
           AI-generated reminders consolidate here so you can coach agents across every active referral.
         </p>
         <div className="flex flex-wrap gap-3 text-xs">

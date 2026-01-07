@@ -47,7 +47,7 @@ export function LenderOverviewCard({ lender, isAdmin }: LenderOverviewCardProps)
             />
             <button
               type="button"
-              className="inline-flex items-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90"
+              className="inline-flex items-center rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-dark hover:shadow"
               onClick={() => setShowEditor((previous) => !previous)}
             >
               {showEditor ? 'Close edit' : 'Edit details'}

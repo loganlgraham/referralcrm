@@ -43,8 +43,8 @@ export function MobileNav({ session }: MobileNavProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 bg-white shadow-sm md:hidden">
-      <div className="flex h-14 items-center justify-between px-4">
+    <header className="sticky top-0 z-30 bg-white border-b border-slate-200 md:hidden">
+      <div className="flex h-14 items-center justify-between px-5">
         <div>
           <p className="text-sm font-semibold text-brand">AFC · AHA</p>
           <p className="text-xs text-slate-500">Referral CRM</p>
@@ -54,7 +54,7 @@ export function MobileNav({ session }: MobileNavProps) {
           <button
             type="button"
             onClick={() => setOpen((prev) => !prev)}
-            className="inline-flex items-center rounded-md border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:bg-slate-50 focus:outline-none"
+            className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition-all duration-200 hover:bg-slate-50 hover:border-slate-300 focus:outline-none"
             aria-label="Toggle navigation"
           >
             {open ? <XIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
@@ -63,10 +63,10 @@ export function MobileNav({ session }: MobileNavProps) {
       </div>
       {open && (
         <div className="border-t border-slate-200 bg-white">
-          <nav className="flex flex-col">
+          <nav className="flex flex-col p-2">
             {compactNavItems.map((item, index) => {
               if (item.type === 'divider') {
-                return <div key={`mobile-divider-${index}`} className="my-1 border-t border-slate-200" />;
+                return <div key={`mobile-divider-${index}`} className="my-2 border-t border-slate-200" />;
               }
 
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -79,10 +79,10 @@ export function MobileNav({ session }: MobileNavProps) {
                   href={item.href}
                   onClick={() => setOpen(false)}
                   className={clsx(
-                    'px-4 py-3 text-sm font-medium transition',
+                    'rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200',
                     active
-                      ? 'bg-brand text-white hover:bg-brand-dark hover:text-white'
-                      : 'text-slate-700 hover:bg-slate-100'
+                      ? 'bg-brand text-white shadow-sm hover:bg-brand-dark hover:text-white'
+                      : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
                   )}
                 >
                   {item.label}
@@ -90,11 +90,11 @@ export function MobileNav({ session }: MobileNavProps) {
               );
             })}
           </nav>
-          <div className="p-4">
+          <div className="p-5">
             <button
               type="button"
               onClick={handleSignOut}
-              className="flex w-full items-center justify-center gap-2 rounded-md bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-300"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 transition-all duration-200 hover:bg-slate-200 hover:text-slate-900"
             >
               <LogOutIcon className="h-4 w-4" />
               Sign out

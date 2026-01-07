@@ -94,7 +94,7 @@ function LoginForm() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-100 lg:flex-row">
+    <div className="flex min-h-screen flex-col bg-slate-50 lg:flex-row">
       <div className="relative hidden w-full flex-col justify-between overflow-hidden bg-gradient-to-br from-brand to-brand-dark p-12 text-white lg:flex lg:max-w-xl xl:max-w-2xl">
         <div className="space-y-6">
           <p className="text-sm font-semibold uppercase tracking-[0.3em] text-white/80">AFC · AHA</p>
@@ -110,7 +110,7 @@ function LoginForm() {
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_55%)]" aria-hidden="true" />
       </div>
       <div className="flex w-full flex-1 flex-col items-start justify-start px-6 pb-8 pt-4 sm:px-10 sm:pb-12 sm:pt-6 lg:flex-row lg:items-center lg:justify-center lg:px-12 lg:pt-0">
-        <div className="relative w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl ring-1 ring-black/5">
+        <div className="relative w-full max-w-md space-y-8 rounded-2xl bg-white p-10 shadow-sm border border-slate-200">
           <div className="space-y-2 text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-brand">AFC · AHA</p>
             <h1 className="text-3xl font-semibold text-slate-900">Sign in to Referral CRM</h1>
@@ -118,14 +118,14 @@ function LoginForm() {
           </div>
 
           {displayProviderError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900 shadow-sm">
               <p className="font-medium">Authentication error</p>
               <p className="text-xs text-red-800">{displayProviderError}</p>
             </div>
           )}
 
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900 shadow-sm">
               <p className="font-medium">{error}</p>
             </div>
           )}
@@ -140,7 +140,7 @@ function LoginForm() {
                   id="identifier"
                   type="text"
                   autoComplete="username"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                   placeholder="yourname or you@example.com"
                   value={identifier}
                   onChange={(event) => setIdentifier(event.target.value)}
@@ -155,7 +155,7 @@ function LoginForm() {
                   id="password"
                   type="password"
                   autoComplete="current-password"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                   placeholder="Enter your password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
@@ -171,7 +171,7 @@ function LoginForm() {
               <button
                 type="submit"
                 disabled={loading}
-              className="w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/60 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-dark hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? 'Signing in…' : 'Sign in'}
               </button>

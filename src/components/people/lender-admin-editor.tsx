@@ -93,7 +93,7 @@ export function LenderAdminEditor({ lender, className, onSaved }: LenderAdminEdi
             type="text"
             value={form.name}
             onChange={handleChange('name')}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             required
             disabled={saving}
           />
@@ -104,7 +104,7 @@ export function LenderAdminEditor({ lender, className, onSaved }: LenderAdminEdi
             type="email"
             value={form.email}
             onChange={handleChange('email')}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             required
             disabled={saving}
           />
@@ -115,7 +115,7 @@ export function LenderAdminEditor({ lender, className, onSaved }: LenderAdminEdi
             type="tel"
             value={form.phone}
             onChange={handleChange('phone')}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             disabled={saving}
           />
         </label>
@@ -125,7 +125,7 @@ export function LenderAdminEditor({ lender, className, onSaved }: LenderAdminEdi
             type="text"
             value={form.nmlsId}
             onChange={handleChange('nmlsId')}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             disabled={saving}
           />
         </label>
@@ -135,7 +135,7 @@ export function LenderAdminEditor({ lender, className, onSaved }: LenderAdminEdi
             type="text"
             value={form.licensedStates}
             onChange={handleChange('licensedStates')}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
             placeholder="CO, UT"
             disabled={saving}
           />
@@ -145,7 +145,7 @@ export function LenderAdminEditor({ lender, className, onSaved }: LenderAdminEdi
         <button
           type="submit"
           disabled={saving}
-          className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-70"
+          className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-dark hover:shadow disabled:cursor-not-allowed disabled:opacity-70"
         >
           {saving ? 'Saving…' : 'Save changes'}
         </button>

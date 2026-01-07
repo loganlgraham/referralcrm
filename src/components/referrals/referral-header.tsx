@@ -1088,7 +1088,7 @@ export function ReferralHeader({
                         type="button"
                         onClick={handleConfirmSend}
                         disabled={sendingIntroductions}
-                        className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                        className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-dark hover:shadow disabled:cursor-not-allowed disabled:opacity-70"
                       >
                         {sendingIntroductions ? 'Sending…' : 'Confirm & Send'}
                       </button>

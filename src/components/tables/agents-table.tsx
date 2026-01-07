@@ -567,7 +567,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
   return (
     <div className="space-y-4">
       {isAdmin && lastCreatedAgent && (
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-semibold text-slate-900">
@@ -608,7 +608,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
         </div>
       )}
       {isAdmin && showForm && (
-        <form onSubmit={handleCreate} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <form onSubmit={handleCreate} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="grid gap-3 md:grid-cols-2">
               <label className="text-xs font-semibold text-slate-600">
                 Name
@@ -882,7 +882,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
         </label>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>

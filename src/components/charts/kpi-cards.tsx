@@ -81,7 +81,7 @@ const CHART_PADDING_Y = 40;
 
 function LoadingCard() {
   return (
-    <div className="rounded-lg bg-white p-4 shadow-sm animate-pulse">
+    <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-200 animate-pulse">
       <div className="h-4 w-24 rounded bg-slate-200" />
       <div className="mt-2 h-8 w-32 rounded bg-slate-200" />
     </div>
@@ -210,7 +210,7 @@ function MetricTrendChart({ monthly, weekly }: { monthly: TrendPoint[]; weekly?:
     : undefined;
 
   return (
-    <div className="rounded-lg bg-white p-4 shadow-sm">
+    <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-200">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-600">Performance trends</h3>
@@ -466,7 +466,7 @@ export function KPICards() {
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
-          <div key={card.title} className="rounded-lg bg-white p-4 shadow-sm">
+          <div key={card.title} className="rounded-xl bg-white p-6 shadow-sm border border-slate-200">
             <p className="text-sm font-medium text-slate-500">{card.title}</p>
             <p className="mt-2 text-2xl font-semibold text-slate-900">{card.value}</p>
           </div>

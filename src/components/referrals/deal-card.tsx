@@ -1062,7 +1062,7 @@ export function DealCard({
     };
 
     return (
-      <div key={deal._id} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div key={deal._id} className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center gap-4 bg-slate-50 px-4 py-3">
           <div className="flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:gap-4">
             <div className="flex flex-wrap items-center gap-3">
@@ -1336,7 +1336,7 @@ export function DealCard({
   };
 
   return (
-    <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Deals</h2>

@@ -163,8 +163,8 @@ export function SettingsForm() {
         helperText="Choose how often to receive task reminders across every referral assigned to you. Admins apply this to all referrals."
       />
       <form onSubmit={handleSubmit} className="space-y-4 rounded-lg bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Referral fee policy</h1>
-        <p className="text-sm text-slate-500">Configure default referral fee tiers.</p>
+        <h1 className="text-3xl font-semibold text-slate-900">Referral fee policy</h1>
+        <p className="mt-1 text-sm text-slate-600 leading-relaxed">Configure default referral fee tiers.</p>
         <div className="grid gap-4 md:grid-cols-2">
           <label className="text-sm font-medium text-slate-600">
             Closed price ≤ $400k (% of commission)
@@ -192,7 +192,7 @@ export function SettingsForm() {
         <button
           type="submit"
           disabled={loading}
-          className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white"
+          className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-dark hover:shadow"
         >
           {loading ? 'Saving…' : 'Save changes'}
         </button>
@@ -317,7 +317,7 @@ export function SettingsForm() {
             type="button"
             onClick={handleGenerateReport}
             disabled={reportLoading}
-            className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white disabled:opacity-70"
+            className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-dark hover:shadow disabled:opacity-70"
           >
             {reportLoading ? 'Preparing report…' : 'Create dashboard report'}
           </button>

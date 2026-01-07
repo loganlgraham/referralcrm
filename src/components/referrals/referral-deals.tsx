@@ -413,7 +413,7 @@ function DealCard({
               step="0.01"
               value={contractPrice}
               onChange={(event) => setContractPrice(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               placeholder="0.00"
               disabled={saving}
             />
@@ -427,7 +427,7 @@ function DealCard({
               step="0.01"
               value={commissionPercentage}
               onChange={(event) => setCommissionPercentage(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               placeholder="0.00"
               disabled={saving}
             />
@@ -441,7 +441,7 @@ function DealCard({
               step="0.01"
               value={referralFeePercentage}
               onChange={(event) => setReferralFeePercentage(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               placeholder="0.00"
               disabled={saving}
             />
@@ -459,7 +459,7 @@ function DealCard({
                 setExpectedManuallyEdited(Boolean(value));
                 setExpectedAmount(value);
               }}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               placeholder="0.00"
               disabled={saving}
             />
@@ -473,7 +473,7 @@ function DealCard({
               step="0.01"
               value={netReferralFeePaid}
               onChange={(event) => setNetReferralFeePaid(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               placeholder="0.00"
               disabled={saving}
             />
@@ -483,7 +483,7 @@ function DealCard({
               <select
                 value={status}
                 onChange={(event) => setStatus(event.target.value as DealStatus)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 disabled={saving}
               >
                 {DEAL_STATUS_OPTIONS.map((option) => (
@@ -503,7 +503,7 @@ function DealCard({
                       event.target.value ? (event.target.value as TerminatedReason) : null
                     )
                   }
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                   disabled={saving}
                 >
                   <option value="">Select reason</option>
@@ -521,7 +521,7 @@ function DealCard({
                 type="date"
                 value={closingDate}
               onChange={(event) => setClosingDate(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               disabled={saving}
             />
           </label>
@@ -531,7 +531,7 @@ function DealCard({
               type="text"
               value={propertyAddress}
               onChange={(event) => setPropertyAddress(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               placeholder="123 Main St, City, ST"
               disabled={saving}
             />
@@ -542,7 +542,7 @@ function DealCard({
               type="text"
               value={propertyCity}
               onChange={(event) => setPropertyCity(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               placeholder="City"
               disabled={saving}
             />
@@ -574,7 +574,7 @@ function DealCard({
             <select
               value={agentId}
               onChange={(event) => setAgentId(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               disabled={saving}
             >
               <option value="">Unassigned</option>
@@ -590,7 +590,7 @@ function DealCard({
             <select
               value={side}
               onChange={(event) => setSide(event.target.value as 'buy' | 'sell')}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               disabled={saving}
             >
               <option value="buy">Buy-side</option>
@@ -1031,7 +1031,7 @@ export function ReferralDeals({
               step="0.01"
               value={contractPrice}
               onChange={(event) => setContractPrice(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               placeholder="0.00"
               disabled={submitting}
             />
@@ -1047,7 +1047,7 @@ export function ReferralDeals({
                   step="0.01"
                   value={commissionPercentage}
                   onChange={(event) => setCommissionPercentage(event.target.value)}
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                   placeholder="0.00"
                   disabled={submitting}
                 />
@@ -1061,7 +1061,7 @@ export function ReferralDeals({
                   step="0.01"
                   value={referralFeePercentage}
                   onChange={(event) => setReferralFeePercentage(event.target.value)}
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                   placeholder="0.00"
                   disabled={submitting}
                 />
@@ -1079,7 +1079,7 @@ export function ReferralDeals({
                     setExpectedManuallyEdited(Boolean(value));
                     setExpectedAmount(value);
                   }}
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                   placeholder="0.00"
                   disabled={submitting}
                 />
@@ -1093,7 +1093,7 @@ export function ReferralDeals({
                   step="0.01"
                   value={netReferralFeePaid}
                   onChange={(event) => setNetReferralFeePaid(event.target.value)}
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                   placeholder="0.00"
                   disabled={submitting}
                 />
@@ -1105,7 +1105,7 @@ export function ReferralDeals({
               <select
                 value={status}
                 onChange={(event) => setStatus(event.target.value as DealStatus)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                 disabled={submitting}
               >
                 {DEAL_STATUS_OPTIONS.map((option) => (
@@ -1125,7 +1125,7 @@ export function ReferralDeals({
                       event.target.value ? (event.target.value as TerminatedReason) : null
                     )
                   }
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                   disabled={submitting}
                 >
                   <option value="">Select reason</option>
@@ -1143,7 +1143,7 @@ export function ReferralDeals({
                 type="date"
                 value={closingDate}
               onChange={(event) => setClosingDate(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               disabled={submitting}
             />
           </label>
@@ -1153,7 +1153,7 @@ export function ReferralDeals({
               type="text"
               value={propertyAddress}
               onChange={(event) => setPropertyAddress(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               placeholder="123 Main St, City, ST"
               disabled={submitting}
             />
@@ -1164,7 +1164,7 @@ export function ReferralDeals({
               type="text"
               value={propertyCity}
               onChange={(event) => setPropertyCity(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               placeholder="City"
               disabled={submitting}
             />
@@ -1196,7 +1196,7 @@ export function ReferralDeals({
             <select
               value={agentId}
               onChange={(event) => setAgentId(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               disabled={submitting}
             >
               <option value="">Unassigned</option>
@@ -1212,7 +1212,7 @@ export function ReferralDeals({
             <select
               value={side}
               onChange={(event) => setSide(event.target.value as 'buy' | 'sell')}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               disabled={submitting}
             >
               <option value="buy">Buy-side</option>

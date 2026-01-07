@@ -27,7 +27,7 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
   }, [agent.coverageAreas, agent.coverageLocations]);
 
   return (
-    <div className="rounded-lg bg-white p-6 shadow-sm">
+    <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-200">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">{agent.name}</h1>
@@ -60,7 +60,7 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
             />
             <button
               type="button"
-              className="inline-flex items-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90"
+              className="inline-flex items-center rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-dark hover:shadow"
               onClick={() => setShowEditor((previous) => !previous)}
             >
               {showEditor ? 'Close edit' : 'Edit details'}

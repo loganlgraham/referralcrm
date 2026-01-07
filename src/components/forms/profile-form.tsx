@@ -802,7 +802,7 @@ export function ProfileForm() {
                   type="text"
                   value={form.name}
                   onChange={handleChange('name')}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                  className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                   required
                   disabled={saving}
                 />
@@ -813,7 +813,7 @@ export function ProfileForm() {
                   type="email"
                   value={form.email}
                   onChange={handleChange('email')}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                  className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                   required
                   disabled={saving}
                 />
@@ -824,7 +824,7 @@ export function ProfileForm() {
                   type="tel"
                   value={form.phone}
                   onChange={handleChange('phone')}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                  className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                   placeholder="(555) 123-4567"
                   disabled={saving}
                 />
@@ -836,7 +836,7 @@ export function ProfileForm() {
                     type="text"
                     value={form.nmlsId}
                     onChange={handleChange('nmlsId')}
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                    className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                     placeholder="123456"
                     disabled={saving}
                     required
@@ -857,7 +857,7 @@ export function ProfileForm() {
                       type="text"
                       value={form.brokerage}
                       onChange={handleChange('brokerage')}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                       disabled={saving}
                     />
                   </label>
@@ -867,7 +867,7 @@ export function ProfileForm() {
                       type="text"
                       value={form.licenseNumber}
                       onChange={handleChange('licenseNumber')}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                       disabled={saving}
                     />
                   </label>
@@ -876,7 +876,7 @@ export function ProfileForm() {
                     <textarea
                       value={form.states}
                       onChange={handleChange('states')}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                       placeholder="CO, UT, AZ"
                       rows={2}
                       disabled={saving}
@@ -947,7 +947,7 @@ export function ProfileForm() {
                       type="date"
                       value={form.experienceSince}
                       onChange={handleChange('experienceSince')}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                       disabled={saving}
                     />
                   </label>
@@ -957,7 +957,7 @@ export function ProfileForm() {
                       multiple
                       value={form.specialties}
                       onChange={handleSelectChange('specialties')}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                       size={6}
                       disabled={saving}
                     >
@@ -977,7 +977,7 @@ export function ProfileForm() {
                       multiple
                       value={form.languages}
                       onChange={handleSelectChange('languages')}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      className="mt-1.5 w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
                       size={5}
                       disabled={saving}
                     >
@@ -1023,7 +1023,7 @@ export function ProfileForm() {
             <button
               type="submit"
               disabled={saving || !canEdit}
-              className="inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70"
+              className="inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-brand-dark hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70"
             >
               {saving ? 'Saving…' : 'Save profile'}
             </button>

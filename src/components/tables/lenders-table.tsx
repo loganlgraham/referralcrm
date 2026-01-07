@@ -205,7 +205,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
   return (
     <div className="space-y-4">
       {isAdmin && lastCreatedLender && (
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-semibold text-slate-900">
@@ -218,7 +218,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
                 type="button"
                 onClick={handleSendWelcomeEmail}
                 disabled={sendingWelcome}
-                className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-dark hover:shadow disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {sendingWelcome ? 'Sending…' : 'Send welcome email'}
               </button>
@@ -235,7 +235,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
       )}
 
       {isAdmin && !hasExternalControl && (
-        <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold text-slate-800">Add a mortgage consultant</h2>
@@ -308,7 +308,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
                 <button
                   type="submit"
                   disabled={saving}
-                  className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                  className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-dark hover:shadow disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {saving ? 'Saving…' : 'Save MC'}
                 </button>
@@ -318,7 +318,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
         </div>
       )}
       {isAdmin && showForm && hasExternalControl && (
-        <form onSubmit={handleCreate} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <form onSubmit={handleCreate} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="grid gap-3 md:grid-cols-2">
             <label className="text-xs font-semibold text-slate-600">
               Name
@@ -377,7 +377,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
               <button
                 type="submit"
                 disabled={saving}
-                className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-brand-dark hover:shadow disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {saving ? 'Saving…' : 'Save MC'}
               </button>
@@ -385,7 +385,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
           </div>
         </form>
       )}
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>

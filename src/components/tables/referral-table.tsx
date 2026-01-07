@@ -512,7 +512,7 @@ export function ReferralTable({ data, mode, showAgentOriginIndicator }: Referral
   });
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
       <table className="min-w-full divide-y divide-slate-200">
         <thead className="bg-slate-50">
           {table.getHeaderGroups().map((headerGroup) => (
@@ -520,7 +520,7 @@ export function ReferralTable({ data, mode, showAgentOriginIndicator }: Referral
               {headerGroup.headers.map((header) => (
                 <th
                   key={header.id}
-                  className={`px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 ${
+                  className={`px-5 py-3.5 text-xs font-semibold uppercase tracking-wide text-slate-500 ${
                     header.column.id === 'actions' ? 'text-right' : 'text-left'
                   }`}
                 >
@@ -530,13 +530,13 @@ export function ReferralTable({ data, mode, showAgentOriginIndicator }: Referral
             </tr>
           ))}
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-slate-100 bg-white">
           {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} className="hover:bg-slate-50">
+            <tr key={row.id} className="transition-colors duration-150 hover:bg-slate-50">
               {row.getVisibleCells().map((cell) => (
                 <td
                   key={cell.id}
-                  className={`px-4 py-3 text-sm text-slate-700 ${
+                  className={`px-5 py-3.5 text-sm text-slate-700 ${
                     cell.column.id === 'actions' ? 'text-right' : ''
                   }`}
                 >
@@ -607,7 +607,7 @@ export function ReferralSummary({
   const columnClass = mode === 'agent' ? 'md:grid-cols-4' : 'md:grid-cols-3';
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <dl className={clsx('grid gap-4', columnClass)}>
         {metrics.map((metric) => (
           <div key={metric.label}>

@@ -32,7 +32,7 @@ export function ReferralTimeline({ referralId }: { referralId: string }) {
   const canShowToggle = activities.length > 5;
 
   return (
-    <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <div>
         <h2 className="text-lg font-semibold text-slate-900">Activity timeline</h2>
         <p className="text-sm text-slate-500">Latest interactions and updates from your team.</p>
