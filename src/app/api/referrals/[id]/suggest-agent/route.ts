@@ -8,6 +8,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { Referral } from '@/models/referral';
 import { Agent } from '@/models/agent';
 import { canManageReferral } from '@/lib/rbac';
+import { expandZipCodesBy25Miles } from '@/utils/location';
 
 interface Params {
   params: { id: string };
@@ -115,9 +116,12 @@ export async function GET(request: Request, { params }: Params) {
     return NextResponse.json({ error: 'No valid ZIP codes found for this referral.' }, { status: 400 });
   }
 
+  // Expand ZIP codes by 25 miles
+  const expandedZips = await expandZipCodesBy25Miles(targetZips);
+
   const candidateAgents = await Agent.find<CandidateAgent>({
     active: true,
-    zipCoverage: { $in: targetZips },
+    zipCoverage: { $in: expandedZips },
     ...(excludedAgentIds.length ? { _id: { $nin: excludedAgentIds } } : {}),
   })
     .select('_id name coverageLocations zipCoverage specialties languages ahaDesignation closingRatePercentage npsScore')

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { expandZipCodesBy25Miles } from '@/utils/location';
 
 const requestSchema = z.object({
   description: z.string().trim().min(1).max(600),
@@ -149,7 +150,22 @@ export async function POST(request: NextRequest) {
       MAX_ZIP_CODES
     );
 
-    return NextResponse.json({ zipCodes: uniqueZipCodes, locations: normalizedLocations });
+    // Expand ZIP codes by 25 miles
+    const expandedZipCodes = await expandZipCodesBy25Miles(uniqueZipCodes);
+    const finalZipCodes = dedupeAndNormalizeZips(expandedZipCodes, MAX_ZIP_CODES);
+
+    // Also expand ZIP codes in locations
+    const expandedLocations = await Promise.all(
+      normalizedLocations.map(async (location) => {
+        const expanded = await expandZipCodesBy25Miles(location.zipCodes);
+        return {
+          ...location,
+          zipCodes: dedupeAndNormalizeZips(expanded),
+        };
+      })
+    );
+
+    return NextResponse.json({ zipCodes: finalZipCodes, locations: expandedLocations });
   } catch (err) {
     console.error('ZIP code generation error', err);
     return NextResponse.json(
