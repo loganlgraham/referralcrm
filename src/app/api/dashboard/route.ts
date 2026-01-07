@@ -838,6 +838,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   );
   const pendingClosings = paymentsByNetwork.filter((payment) => {
     if (!dealStatuses.includes(payment.status)) return false;
+    if (payment.usedAssignedAgent !== true) return false;
     const closingDate = payment.closingDate ? new Date(payment.closingDate) : null;
     if (!closingDate) return false;
     return closingDate > endOfToday;
