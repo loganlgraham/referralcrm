@@ -34,7 +34,7 @@ type ReferralSummary = {
 type AgentSummary = {
   _id: Types.ObjectId;
   name?: string | null;
-  ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
+  ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
 };
 
 type PaymentWithReferral = {
@@ -60,7 +60,7 @@ type PaymentWithReferral = {
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
   agentId?: Types.ObjectId | AgentSummary | null;
-  agentDesignation?: 'AHA' | 'AHA_OOS' | null;
+  agentDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
 };
 
 const toDate = (value?: Date | string | null): Date | null => {

@@ -591,6 +591,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         firstContactWithin24HoursRate: 0,
         firstContactWithin24HoursCount: 0,
         firstContactSampleSize: 0
+      },
+      agit: {
+        totalReferrals: 0,
+        glennBeckReferrals: 0,
+        usedAfcCount: 0,
+        usedAfcRate: 0,
+        lostReferrals: 0,
+        closeRate: 0,
+        dealsClosed: 0
       }
     });
   }
@@ -1618,6 +1627,60 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       updatedAt: entry.preApprovalsUpdatedAt
     }));
 
+  // AGIT Dashboard Metrics: Filter referrals where endorser is "Glenn Beck"
+  const glennBeckReferrals = referralsByNetwork.filter((referral) => {
+    const endorser = referral.endorser?.trim().toLowerCase();
+    return endorser === 'glenn beck';
+  });
+
+  const glennBeckReferralsInTimeframe = glennBeckReferrals.filter((referral) =>
+    isWithinTimeframe(referral.createdAt)
+  );
+
+  const glennBeckReferralIds = new Set(glennBeckReferralsInTimeframe.map((r) => r._id.toString()));
+
+  // Filter payments for Glenn Beck referrals
+  const glennBeckPayments = paymentsByNetwork.filter((payment) =>
+    glennBeckReferralIds.has(payment.referral._id.toString())
+  );
+
+  const glennBeckFilteredPayments = filteredPaymentsByNetwork.filter((payment) =>
+    glennBeckReferralIds.has(payment.referral._id.toString())
+  );
+
+  // Calculate AGIT metrics
+  const agitTotalReferrals = glennBeckReferralsInTimeframe.length;
+  const agitGlennBeckReferrals = agitTotalReferrals; // Same value for clarity
+
+  // Lost referrals (status === 'Lost')
+  const agitLostReferrals = glennBeckReferralsInTimeframe.filter(
+    (referral) => referral.status === 'Lost'
+  ).length;
+
+  // Closed/paid deals
+  const agitDealsClosed = glennBeckFilteredPayments.filter(
+    (payment) =>
+      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+      (payment.status === 'closed' || payment.status === 'paid')
+  ).length;
+
+  // Close rate
+  const agitCloseRate = agitTotalReferrals === 0 ? 0 : (agitDealsClosed / agitTotalReferrals) * 100;
+
+  // Used AFC / AFC Attach Rate
+  // Count payments where usedAfc === false (went to another lender, not AFC)
+  const agitClosedOrPaidPayments = glennBeckFilteredPayments.filter(
+    (payment) =>
+      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+      (payment.status === 'closed' || payment.status === 'paid')
+  );
+
+  const agitUsedAfcCount = agitClosedOrPaidPayments.filter((payment) => !payment.usedAfc).length;
+  const agitUsedAfcRate =
+    agitClosedOrPaidPayments.length === 0
+      ? 0
+      : (agitUsedAfcCount / agitClosedOrPaidPayments.length) * 100;
+
   const timeframeResponse = {
     key: timeframe.key,
     label: timeframe.label,
@@ -1727,6 +1790,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       firstContactWithin24HoursRate,
       firstContactWithin24HoursCount,
       firstContactSampleSize: firstContactRecords.length
+    },
+    agit: {
+      totalReferrals: agitTotalReferrals,
+      glennBeckReferrals: agitGlennBeckReferrals,
+      usedAfcCount: agitUsedAfcCount,
+      usedAfcRate: agitUsedAfcRate,
+      lostReferrals: agitLostReferrals,
+      closeRate: agitCloseRate,
+      dealsClosed: agitDealsClosed
     }
   };
 

@@ -34,7 +34,7 @@ export interface AgentAdminEditorProps {
     coverageAreas?: string[];
     specialties?: string[];
     languages?: string[];
-    ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
+    ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
     npsScore?: number | null;
   };
   variant?: 'standalone' | 'embedded';
@@ -60,7 +60,7 @@ interface PatchResponse {
   coverageLocations: CoverageLocation[];
   specialties: string[];
   languages: string[];
-  ahaDesignation: 'AHA' | 'AHA_OOS' | null;
+    ahaDesignation: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
 }
 
 type FormState = {
@@ -80,7 +80,7 @@ type FormState = {
   coverageLocations: CoverageLocation[];
   specialties: string[];
   languages: string[];
-  ahaDesignation: '' | 'AHA' | 'AHA_OOS';
+  ahaDesignation: '' | 'AHA' | 'AHA_OOS' | 'AGIT';
 };
 
 const normalizeZipCode = (value: string) => {

@@ -38,7 +38,7 @@ const updateAgentSchema = z.object({
   npsScore: z.number().min(-100).max(100).nullable().optional(),
   specialties: z.array(z.string().trim().min(1)).optional(),
   languages: z.array(z.string().trim().min(1)).optional(),
-  ahaDesignation: z.enum(['AHA', 'AHA_OOS']).nullable().optional(),
+  ahaDesignation: z.enum(['AHA', 'AHA_OOS', 'AGIT']).nullable().optional(),
 });
 
 interface Params {
@@ -175,7 +175,7 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     specialties: Array.isArray(updatedAgent.specialties) ? updatedAgent.specialties : [],
     languages: Array.isArray(updatedAgent.languages) ? updatedAgent.languages : [],
     ahaDesignation:
-      updatedAgent.ahaDesignation === 'AHA' || updatedAgent.ahaDesignation === 'AHA_OOS'
+      updatedAgent.ahaDesignation === 'AHA' || updatedAgent.ahaDesignation === 'AHA_OOS' || updatedAgent.ahaDesignation === 'AGIT'
         ? updatedAgent.ahaDesignation
         : null,
     metrics,
