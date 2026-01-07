@@ -168,7 +168,8 @@ const trySendEmail = async (
   htmlLines: Array<string | null>,
   textLines: Array<string | null>,
   label: string,
-  result: SendResult
+  result: SendResult,
+  cc?: string[]
 ) => {
   const to = typeof toAddress === 'string' && toAddress.trim().length > 0 ? toAddress.trim() : null;
   if (!to) {
@@ -181,6 +182,7 @@ const trySendEmail = async (
     subject,
     html: htmlLines.filter(Boolean).join(''),
     text: textLines.filter(Boolean).join('\n'),
+    cc,
   });
 
   if (success) {
@@ -252,6 +254,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     : '';
 
   const result: SendResult = { sent: [], skipped: [], errors: [] };
+
+  // CC email for intro emails
+  const introEmailCC = ['kristen.truong@americanhomeagents.com'];
 
   const shouldEmailAgent = referral.origin !== 'agent';
   const isSellerOnly = referral.clientType === 'Seller';
@@ -327,7 +332,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         `Thank you for taking great care of ${borrowerFirstName}!`,
       ],
       'agent',
-      result
+      result,
+      introEmailCC
     );
   }
 
@@ -422,7 +428,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       mcEmailHtmlLines.filter(Boolean),
       mcEmailTextLines.filter(Boolean),
       'mc',
-      result
+      result,
+      introEmailCC
     );
   }
 
