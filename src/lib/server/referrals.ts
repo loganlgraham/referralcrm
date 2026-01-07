@@ -15,6 +15,7 @@ import { Zip } from '@/models/zip';
 interface GetReferralsParams {
   session: Session | null;
   page?: number;
+  pageSize?: number;
   status?: string | null;
   mc?: string | null;
   agent?: string | null;
@@ -87,8 +88,12 @@ interface ReferralListItem {
 const PAGE_SIZE = 20;
 
 export async function getReferrals(params: GetReferralsParams) {
-  const { session, page = 1, status, mc, agent, zip, ahaBucket, agentReferrals, search, timeline } = params;
+  const { session, page = 1, pageSize, status, mc, agent, zip, ahaBucket, agentReferrals, search, timeline } = params;
   await connectMongo();
+  
+  // Validate pageSize - must be one of: 20, 25, 50, 100 (default to 20)
+  const validPageSizes = [20, 25, 50, 100];
+  const effectivePageSize = pageSize && validPageSizes.includes(pageSize) ? pageSize : 20;
 
   const query: Record<string, unknown> = { deletedAt: null };
   const appendOrConditions = (conditions: Record<string, unknown>[]) => {
@@ -282,8 +287,8 @@ export async function getReferrals(params: GetReferralsParams) {
       .populate<{ sellSideAgent: PopulatedAgent }>('sellSideAgent', 'name email phone')
       .populate<{ lender: PopulatedLender }>('lender', 'name email phone')
       .sort({ createdAt: -1 })
-      .skip((page - 1) * PAGE_SIZE)
-      .limit(PAGE_SIZE)
+      .skip((page - 1) * effectivePageSize)
+      .limit(effectivePageSize)
       .lean<PopulatedReferral[]>(),
     Referral.countDocuments(query),
     Payment.aggregate([
@@ -422,7 +427,7 @@ export async function getReferrals(params: GetReferralsParams) {
     }),
     total,
     page,
-    pageSize: PAGE_SIZE,
+    pageSize: effectivePageSize,
     summary: {
       total,
       closedDeals,
