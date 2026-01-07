@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 
 import { FollowUpTasksBoard } from '@/components/referrals/follow-up-task-board';
+import { Pagination } from '@/components/tables/pagination';
 import { getCurrentSession } from '@/lib/auth';
 import { getReferrals } from '@/lib/server/referrals';
 
@@ -10,9 +11,24 @@ export const metadata: Metadata = {
   title: 'Follow-up Tasks | Referral CRM',
 };
 
-export default async function FollowUpTasksPage() {
+export default async function FollowUpTasksPage({
+  searchParams
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
   const session = await getCurrentSession();
-  const data = await getReferrals({ session, page: 1 });
+  
+  // Validate pageSize - must be one of: 20, 25, 50, 100 (default to 25)
+  const validPageSizes = [20, 25, 50, 100];
+  const pageSizeParam = searchParams.pageSize ? Number(searchParams.pageSize) : 25;
+  const pageSize = validPageSizes.includes(pageSizeParam) ? pageSizeParam : 25;
+  
+  const data = await getReferrals({ 
+    session, 
+    page: Number(searchParams.page || 1),
+    pageSize
+  });
+  
   const viewerRole: 'admin' | 'mc' | 'agent' = (() => {
     const role = session?.user?.role;
     if (role === 'mc') return 'mc';
@@ -37,5 +53,16 @@ export default async function FollowUpTasksPage() {
     origin: item.origin ?? null,
   }));
 
-  return <FollowUpTasksBoard referrals={referrals} viewerRole={viewerRole} />;
+  return (
+    <div className="space-y-4">
+      <FollowUpTasksBoard referrals={referrals} viewerRole={viewerRole} />
+      <Pagination
+        currentPage={data.page}
+        totalItems={data.total}
+        pageSize={data.pageSize}
+        totalPages={Math.ceil(data.total / data.pageSize)}
+        itemLabel="referrals"
+      />
+    </div>
+  );
 }

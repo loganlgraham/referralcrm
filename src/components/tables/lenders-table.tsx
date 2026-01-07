@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { ChangeEvent, Dispatch, FormEvent, SetStateAction, useMemo, useState } from 'react';
+import { ChangeEvent, Dispatch, FormEvent, SetStateAction, useEffect, useMemo, useState, useCallback, useTransition } from 'react';
 import { useSession } from 'next-auth/react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import { toast } from 'sonner';
+import { Pagination } from '@/components/tables/pagination';
 import { fetcher } from '@/utils/fetcher';
 
 interface LenderRow {
@@ -38,10 +40,37 @@ interface LendersTableProps {
   setShowForm?: Dispatch<SetStateAction<boolean>>;
 }
 
+interface LendersResponse {
+  items: LenderRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export function LendersTable({ showForm: externalShowForm, setShowForm: externalSetShowForm }: LendersTableProps) {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'admin';
-  const { data, mutate } = useSWR<LenderRow[]>('/api/lenders', fetcher);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
+  const searchParamsString = useMemo(() => searchParams.toString(), [searchParams]);
+  
+  const page = Number(searchParams.get('page') || 1);
+  const pageSizeParam = searchParams.get('pageSize');
+  const validPageSizes = [20, 25, 50, 100];
+  const pageSize = pageSizeParam && validPageSizes.includes(Number(pageSizeParam)) 
+    ? Number(pageSizeParam) 
+    : 25;
+  const search = searchParams.get('search') || '';
+  
+  // Build API URL with filters
+  const apiParams = new URLSearchParams();
+  apiParams.set('page', page.toString());
+  apiParams.set('pageSize', pageSize.toString());
+  if (search) apiParams.set('search', search);
+  
+  const apiUrl = `/api/lenders?${apiParams.toString()}`;
+  const { data, mutate } = useSWR<LendersResponse>(apiUrl, fetcher);
   const [internalShowForm, setInternalShowForm] = useState(false);
   const showForm = externalShowForm ?? internalShowForm;
   const setShowForm = externalSetShowForm ?? setInternalShowForm;
@@ -56,18 +85,65 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
   });
   const [lastCreatedLender, setLastCreatedLender] = useState<CreatedLenderSummary | null>(null);
   const [sendingWelcome, setSendingWelcome] = useState(false);
+  const [searchQuery, setSearchQuery] = useState(search);
 
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
     null
   );
+  
+  const updateParams = useCallback(
+    (updates: { search?: string; page?: number }) => {
+      const params = new URLSearchParams(searchParamsString);
+      
+      if (updates.search !== undefined) {
+        if (!updates.search.trim()) {
+          params.delete('search');
+        } else {
+          params.set('search', updates.search.trim());
+        }
+        params.delete('page');
+      }
+      
+      if (updates.page !== undefined) {
+        if (updates.page <= 1) {
+          params.delete('page');
+        } else {
+          params.set('page', updates.page.toString());
+        }
+      }
+      
+      startTransition(() => {
+        const queryString = params.toString();
+        router.replace(queryString ? `/lenders?${queryString}` : '/lenders');
+      });
+    },
+    [router, searchParamsString, startTransition]
+  );
+  
+  // Debounce search input
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (searchQuery !== search) {
+        updateParams({ search: searchQuery });
+      }
+    }, 300);
+
+    return () => clearTimeout(timeout);
+  }, [searchQuery, search, updateParams]);
+
+  // Sync searchQuery with URL param
+  useEffect(() => {
+    setSearchQuery(search);
+  }, [search]);
 
   const sortedLenders = useMemo(() => {
+    const items = data?.items ?? [];
     if (!data) {
       return [];
     }
 
     if (!sortConfig) {
-      return data;
+      return items;
     }
 
     const getValue = (lender: LenderRow, key: SortKey): string => {
@@ -87,7 +163,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
       }
     };
 
-    return [...data].sort((a, b) => {
+    return [...items].sort((a, b) => {
       const aValue = getValue(a, sortConfig.key);
       const bValue = getValue(b, sortConfig.key);
       const direction = sortConfig.direction === 'asc' ? 1 : -1;
@@ -385,6 +461,19 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
           </div>
         </form>
       )}
+      {isAdmin && (
+        <label className="block text-xs font-semibold text-slate-600">
+          Search
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            disabled={isPending}
+            className="mt-2 w-full max-w-2xl rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+            placeholder="Name, email, phone, NMLS ID"
+          />
+        </label>
+      )}
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
@@ -419,6 +508,15 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
         </tbody>
         </table>
       </div>
+      {data && (
+        <Pagination
+          currentPage={data.page}
+          totalItems={data.total}
+          pageSize={data.pageSize}
+          totalPages={Math.ceil(data.total / data.pageSize)}
+          itemLabel="lenders"
+        />
+      )}
     </div>
   );
 }

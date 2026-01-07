@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useMemo, useTransition } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
 import { DEAL_STATUS_LABELS, DEAL_STATUS_VALUES, type DealStatus } from '@/constants/deals';
 import { DEFAULT_AGENT_COMMISSION_BPS } from '@/constants/referrals';
+import { Pagination } from '@/components/tables/pagination';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 
@@ -104,21 +107,90 @@ function ToggleSwitch({
   );
 }
 
+interface PaymentsResponse {
+  items: DealRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export function DealsTable() {
   const { data: session } = useSession();
-  const { data, mutate } = useSWR<DealRow[]>('/api/payments', fetcher);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
+  const searchParamsString = useMemo(() => searchParams.toString(), [searchParams]);
+  
+  const page = Number(searchParams.get('page') || 1);
+  const pageSizeParam = searchParams.get('pageSize');
+  const validPageSizes = [20, 25, 50, 100];
+  const pageSize = pageSizeParam && validPageSizes.includes(Number(pageSizeParam)) 
+    ? Number(pageSizeParam) 
+    : 25;
+  const search = searchParams.get('search') || '';
+  const statusParam = searchParams.get('status') || '';
+  const statusFilters = statusParam ? statusParam.split(',').filter(Boolean) as DealStatus[] : [];
+  
+  // Build API URL with filters
+  const apiParams = new URLSearchParams();
+  apiParams.set('page', page.toString());
+  apiParams.set('pageSize', pageSize.toString());
+  if (search) apiParams.set('search', search);
+  if (statusFilters.length > 0) apiParams.set('status', statusFilters.join(','));
+  
+  const apiUrl = `/api/payments?${apiParams.toString()}`;
+  const { data, mutate } = useSWR<PaymentsResponse>(apiUrl, fetcher);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilters, setStatusFilters] = useState<DealStatus[]>([]);
+  const [searchQuery, setSearchQuery] = useState(search);
   const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
     null
   );
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const deals = data ?? [];
+  const deals = data?.items ?? [];
   const isLoading = !data;
+  
+  const updateParams = useCallback(
+    (updates: { search?: string; status?: string; page?: number }) => {
+      const params = new URLSearchParams(searchParamsString);
+      
+      if (updates.search !== undefined) {
+        if (!updates.search.trim()) {
+          params.delete('search');
+        } else {
+          params.set('search', updates.search.trim());
+        }
+        // Reset to page 1 when search changes
+        params.delete('page');
+      }
+      
+      if (updates.status !== undefined) {
+        if (!updates.status) {
+          params.delete('status');
+        } else {
+          params.set('status', updates.status);
+        }
+        // Reset to page 1 when status changes
+        params.delete('page');
+      }
+      
+      if (updates.page !== undefined) {
+        if (updates.page <= 1) {
+          params.delete('page');
+        } else {
+          params.set('page', updates.page.toString());
+        }
+      }
+      
+      startTransition(() => {
+        const queryString = params.toString();
+        router.replace(queryString ? `/deals?${queryString}` : '/deals');
+      });
+    },
+    [router, searchParamsString, startTransition]
+  );
 
   const getDealAddress = (deal: DealRow) => {
     const address = (deal.propertyAddress ?? deal.referral?.propertyAddress ?? '').trim();
@@ -130,8 +202,21 @@ export function DealsTable() {
   const isMcView = role === 'mc';
   const isAdminView = role === 'admin' || role === 'manager';
 
-  const normalizedSearch = searchQuery.trim().toLowerCase();
-  const normalizedDigits = normalizedSearch.replace(/\D/g, '');
+  // Debounce search input
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (searchQuery !== search) {
+        updateParams({ search: searchQuery });
+      }
+    }, 300);
+
+    return () => clearTimeout(timeout);
+  }, [searchQuery, search, updateParams]);
+
+  // Sync searchQuery with URL param
+  useEffect(() => {
+    setSearchQuery(search);
+  }, [search]);
 
   const calculateCommission = (row: DealRow) => {
     if (row.status === 'terminated') {
@@ -151,41 +236,6 @@ export function DealsTable() {
     return Math.round((baseAmountCents * commissionBps) / 10000);
   };
 
-  const filteredDeals = useMemo(() => {
-    let result = deals;
-
-    if (isAdminView && statusFilters.length > 0) {
-      result = result.filter((deal) => statusFilters.includes(deal.status));
-    }
-
-    if (!normalizedSearch) {
-      return result;
-    }
-
-    return result.filter((deal) => {
-      const address = getDealAddress(deal) || '';
-      const haystack = [
-        deal.referral?.borrowerName,
-        deal.agent?.name,
-        deal.referral?.loanFileNumber,
-        address,
-        deal.referral?.lookingInZip,
-        ...(deal.referral?.lookingInZips ?? []),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-
-      const matchesText = haystack.includes(normalizedSearch);
-      const matchesDigits = normalizedDigits
-        ? [deal.referral?.loanFileNumber ?? '', address].some((value) =>
-            value.replace(/\D/g, '').includes(normalizedDigits)
-          )
-        : false;
-
-      return matchesText || matchesDigits;
-    });
-  }, [deals, isAdminView, normalizedDigits, normalizedSearch, statusFilters]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -234,7 +284,7 @@ export function DealsTable() {
   };
 
   const sortedDeals = useMemo(() => {
-    const rows = [...filteredDeals];
+    const rows = [...deals];
     if (!sortConfig) {
       return rows;
     }
@@ -310,7 +360,7 @@ export function DealsTable() {
         String(aValue).localeCompare(String(bValue), undefined, { sensitivity: 'base' }) * direction
       );
     });
-  }, [filteredDeals, sortConfig, isMcView]);
+  }, [deals, sortConfig, isMcView]);
 
   const SortableHeader = ({ label, sortKey }: { label: string; sortKey: SortKey }) => {
     const direction = sortConfig?.key === sortKey ? sortConfig.direction : null;
@@ -328,7 +378,7 @@ export function DealsTable() {
     );
   };
 
-  const aggregates = filteredDeals.reduce(
+  const aggregates = deals.reduce(
     (acc, row) => {
       const isTerminated = row.status === 'terminated';
 
@@ -946,7 +996,8 @@ export function DealsTable() {
             type="text"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm"
+            disabled={isPending}
+            className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
             placeholder="Borrower, address, loan #, agent"
           />
         </label>
@@ -957,7 +1008,8 @@ export function DealsTable() {
               <button
                 type="button"
                 onClick={() => setIsStatusMenuOpen((open) => !open)}
-                className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand"
+                disabled={isPending}
+                className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <span className="truncate">
                   {statusFilters.length > 0
@@ -973,7 +1025,7 @@ export function DealsTable() {
                     <button
                       type="button"
                       className="text-brand hover:text-brand/80"
-                      onClick={() => setStatusFilters([])}
+                      onClick={() => updateParams({ status: '' })}
                     >
                       Clear
                     </button>
@@ -991,13 +1043,10 @@ export function DealsTable() {
                           checked={statusFilters.includes(value as DealStatus)}
                           onChange={(event) => {
                             const checked = event.target.checked;
-                            setStatusFilters((previous) => {
-                              if (checked) {
-                                return [...previous, value as DealStatus];
-                              }
-
-                              return previous.filter((status) => status !== value);
-                            });
+                            const newFilters = checked
+                              ? [...statusFilters, value as DealStatus]
+                              : statusFilters.filter((status) => status !== value);
+                            updateParams({ status: newFilters.length > 0 ? newFilters.join(',') : '' });
                           }}
                         />
                       </label>
@@ -1011,6 +1060,15 @@ export function DealsTable() {
       </div>
       {summarySection}
       {isAdminView ? renderAdminTable() : renderDefaultTable()}
+      {data && (
+        <Pagination
+          currentPage={data.page}
+          totalItems={data.total}
+          pageSize={data.pageSize}
+          totalPages={Math.ceil(data.total / data.pageSize)}
+          itemLabel="deals"
+        />
+      )}
     </div>
   );
 }

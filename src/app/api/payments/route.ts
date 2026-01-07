@@ -96,9 +96,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return new NextResponse('Forbidden', { status: 403 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const page = Number(searchParams.get('page') || 1);
+  const pageSizeParam = searchParams.get('pageSize');
+  const validPageSizes = [20, 25, 50, 100];
+  const pageSize = pageSizeParam && validPageSizes.includes(Number(pageSizeParam)) 
+    ? Number(pageSizeParam) 
+    : 25;
+  const search = searchParams.get('search')?.trim() || null;
+  const statusFilter = searchParams.get('status')?.trim() || null;
+
   await connectMongo();
 
   const filter: Record<string, unknown> = {};
+  
+  // Add status filter if provided (can be comma-separated)
+  if (statusFilter) {
+    const statusList = statusFilter.split(',').map(s => s.trim()).filter(Boolean);
+    if (statusList.length === 1) {
+      filter.status = statusList[0];
+    } else if (statusList.length > 1) {
+      filter.status = { $in: statusList };
+    }
+  }
 
   if (role === 'agent') {
     const candidateIds: (Types.ObjectId | string)[] = [];
@@ -117,7 +137,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     if (candidateIds.length === 0) {
-      return NextResponse.json([]);
+      return NextResponse.json({
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 25
+      });
     }
 
     const referralDocs = await Referral.find({ assignedAgent: { $in: candidateIds } })
@@ -136,20 +161,124 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         ...(agentFilter ? [{ agentId: agentFilter }] : []),
       ];
     } else {
-      return NextResponse.json([]);
+      return NextResponse.json({
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 25
+      });
     }
   }
 
-  const payments = await Payment.find(filter)
-    .sort({ createdAt: -1 })
-    .limit(200)
-    .populate<{ referralId: ReferralSummary }>({
-      path: 'referralId',
-      select:
-        'borrower propertyAddress lookingInZip lookingInZips assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents ahaBucket loanFileNumber',
-    })
-    .populate<{ agentId: AgentSummary | Types.ObjectId | null }>({ path: 'agentId', select: 'name' })
-    .lean<PaymentWithReferral[]>();
+  // Use aggregation if search is provided, otherwise use simple find
+  let payments: PaymentWithReferral[];
+  let total: number;
+
+  if (search) {
+    // Build aggregation pipeline for search
+    const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const normalizedDigits = search.replace(/\D/g, '');
+    
+    const searchConditions: Record<string, unknown>[] = [
+      { 'referral.borrower.name': new RegExp(escapedSearch, 'i') },
+      { 'referral.loanFileNumber': new RegExp(escapedSearch, 'i') },
+      { propertyAddress: new RegExp(escapedSearch, 'i') },
+      { 'referral.propertyAddress': new RegExp(escapedSearch, 'i') }
+    ];
+    
+    if (normalizedDigits) {
+      searchConditions.push(
+        { 'referral.loanFileNumber': new RegExp(normalizedDigits) },
+        { propertyAddress: new RegExp(normalizedDigits) },
+        { 'referral.propertyAddress': new RegExp(normalizedDigits) }
+      );
+    }
+
+    const pipeline: unknown[] = [
+      { $match: filter },
+      {
+        $lookup: {
+          from: 'referrals',
+          localField: 'referralId',
+          foreignField: '_id',
+          as: 'referral'
+        }
+      },
+      { $unwind: '$referral' },
+      {
+        $lookup: {
+          from: 'agents',
+          localField: 'agentId',
+          foreignField: '_id',
+          as: 'agent'
+        }
+      },
+      {
+        $lookup: {
+          from: 'agents',
+          localField: 'referral.assignedAgent',
+          foreignField: '_id',
+          as: 'assignedAgent'
+        }
+      },
+      {
+        $match: {
+          $or: [
+            ...searchConditions,
+            { 'agent.name': new RegExp(escapedSearch, 'i') },
+            { 'assignedAgent.name': new RegExp(escapedSearch, 'i') }
+          ]
+        }
+      },
+      { $sort: { createdAt: -1 } }
+    ];
+
+    // Count total
+    const countPipeline = [...pipeline, { $count: 'total' }];
+    const countResult = await Payment.aggregate(countPipeline);
+    total = countResult[0]?.total ?? 0;
+
+    // Get payment IDs with pagination
+    const idsPipeline = [
+      ...pipeline,
+      { $project: { _id: 1 } },
+      { $skip: (page - 1) * pageSize },
+      { $limit: pageSize }
+    ];
+    const paymentDocs = await Payment.aggregate(idsPipeline);
+    const paymentIds = paymentDocs.map((doc: { _id: Types.ObjectId }) => doc._id);
+
+    // Fetch and populate the payments
+    if (paymentIds.length === 0) {
+      payments = [];
+    } else {
+      payments = await Payment.find({ _id: { $in: paymentIds } })
+      .populate<{ referralId: ReferralSummary }>({
+        path: 'referralId',
+        select:
+          'borrower propertyAddress lookingInZip lookingInZips assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents ahaBucket loanFileNumber',
+      })
+      .populate<{ agentId: AgentSummary | Types.ObjectId | null }>({ path: 'agentId', select: 'name' })
+      .sort({ createdAt: -1 })
+      .lean<PaymentWithReferral[]>();
+    }
+  } else {
+    // No search - use simple find
+    [payments, total] = await Promise.all([
+      Payment.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .populate<{ referralId: ReferralSummary }>({
+          path: 'referralId',
+          select:
+            'borrower propertyAddress lookingInZip lookingInZips assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents ahaBucket loanFileNumber',
+        })
+        .populate<{ agentId: AgentSummary | Types.ObjectId | null }>({ path: 'agentId', select: 'name' })
+        .lean<PaymentWithReferral[]>(),
+      Payment.countDocuments(filter)
+    ]);
+  }
 
   const agentIds = new Set<string>();
 
@@ -291,7 +420,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     };
   });
 
-  return NextResponse.json(serialized);
+  return NextResponse.json({
+    items: serialized,
+    total,
+    page,
+    pageSize
+  });
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {

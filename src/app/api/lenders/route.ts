@@ -138,22 +138,61 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
+  
+  const { searchParams } = new URL(request.url);
+  const page = Number(searchParams.get('page') || 1);
+  const pageSizeParam = searchParams.get('pageSize');
+  const validPageSizes = [20, 25, 50, 100];
+  const pageSize = pageSizeParam && validPageSizes.includes(Number(pageSizeParam)) 
+    ? Number(pageSizeParam) 
+    : 25;
+  const search = searchParams.get('search')?.trim() || null;
+  
   const filter: Record<string, unknown> = {};
+  
+  // Add search filter if provided
+  if (search) {
+    const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const normalizedDigits = search.replace(/\D/g, '');
+    
+    const searchConditions: Record<string, unknown>[] = [
+      { name: new RegExp(escapedSearch, 'i') },
+      { email: new RegExp(escapedSearch, 'i') },
+      { phone: new RegExp(escapedSearch, 'i') },
+      { nmlsId: new RegExp(escapedSearch, 'i') }
+    ];
+    
+    if (normalizedDigits) {
+      searchConditions.push(
+        { phone: new RegExp(normalizedDigits) },
+        { nmlsId: new RegExp(normalizedDigits) }
+      );
+    }
+    
+    filter.$or = searchConditions;
+  }
+  
   await connectMongo();
-  const lenders = await LenderMC.find(filter).lean<{
-    _id: Types.ObjectId | string;
-    name?: string;
-    email?: string;
-    phone?: string;
-    nmlsId?: string;
-    licensedStates?: string[];
-    team?: string;
-    region?: string;
-    notes?: unknown[];
-    userId?: Types.ObjectId | string | null;
-    createdAt?: Date;
-    updatedAt?: Date;
-  }[]>();
+  const [lenders, total] = await Promise.all([
+    LenderMC.find(filter)
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .lean<{
+        _id: Types.ObjectId | string;
+        name?: string;
+        email?: string;
+        phone?: string;
+        nmlsId?: string;
+        licensedStates?: string[];
+        team?: string;
+        region?: string;
+        notes?: unknown[];
+        userId?: Types.ObjectId | string | null;
+        createdAt?: Date;
+        updatedAt?: Date;
+      }[]>(),
+    LenderMC.countDocuments(filter)
+  ]);
 
   const lenderIds = lenders
     .map((lender) => {
@@ -173,7 +212,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     };
   });
 
-  return NextResponse.json(response);
+  return NextResponse.json({
+    items: response,
+    total,
+    page,
+    pageSize
+  });
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {

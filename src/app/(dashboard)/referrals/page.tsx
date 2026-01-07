@@ -97,6 +97,7 @@ export default async function ReferralsPage({
             totalItems={data.total}
             pageSize={data.pageSize}
             totalPages={Math.ceil(data.total / data.pageSize)}
+            itemLabel="referrals"
           />
         </div>
       ) : (
