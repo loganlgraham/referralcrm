@@ -13,7 +13,7 @@ interface PaginatedResponse<T> {
   pageSize: number;
 }
 
-const fetcher = async (url: string): Promise<AssignmentOption[]> => {
+const fetcher = async (url: string): Promise<PaginatedResponse<AssignmentOption>> => {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error('Failed to load directory');
@@ -22,17 +22,17 @@ const fetcher = async (url: string): Promise<AssignmentOption[]> => {
   
   // Handle both paginated response and direct array (for backward compatibility)
   if (Array.isArray(data)) {
-    return data;
+    return { items: data, total: data.length, page: 1, pageSize: data.length };
   }
   
-  // Extract items from paginated response
+  // Return paginated response
   if (data && typeof data === 'object' && 'items' in data && Array.isArray(data.items)) {
-    return data.items;
+    return data as PaginatedResponse<AssignmentOption>;
   }
   
-  // Fallback: return empty array if response structure is unexpected
+  // Fallback: return empty paginated response if structure is unexpected
   console.warn('Unexpected response structure from directory endpoint:', data);
-  return [];
+  return { items: [], total: 0, page: 1, pageSize: 0 };
 };
 
 export interface Contact {
