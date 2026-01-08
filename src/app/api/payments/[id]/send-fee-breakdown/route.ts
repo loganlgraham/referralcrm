@@ -11,6 +11,19 @@ import { generateFeeBreakdownEmailHTML } from '@/lib/email-templates/fee-breakdo
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 
+interface PaymentLean {
+  _id: Types.ObjectId;
+  closingDate?: Date | null;
+  agentId?: Types.ObjectId | { _id: Types.ObjectId; name?: string | null; email?: string | null } | null;
+  referralId?: Types.ObjectId | { _id: Types.ObjectId; borrower?: { name?: string | null } | null; propertyAddress?: string | null; loanFileNumber?: string | null } | null;
+  contractPriceCents?: number | null;
+  commissionBasisPoints?: number | null;
+  referralFeeBasisPoints?: number | null;
+  side?: 'buy' | 'sell' | null;
+  usedAfc?: boolean | null;
+  propertyAddress?: string | null;
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -49,7 +62,7 @@ export async function POST(
     const payment = await Payment.findById(paymentId)
       .populate('referralId')
       .populate('agentId')
-      .lean();
+      .lean<PaymentLean>();
 
     if (!payment) {
       return NextResponse.json({ error: 'Payment not found' }, { status: 404 });
@@ -68,14 +81,14 @@ export async function POST(
       return NextResponse.json({ error: 'Payment missing required financial data' }, { status: 400 });
     }
 
-    // Get agent email
-    const agent = payment.agentId as any;
-    if (!agent?.email) {
+    // Get agent email - agentId is populated, so it's an object
+    const agent = payment.agentId as { _id: Types.ObjectId; name?: string | null; email?: string | null } | null;
+    if (!agent || !agent.email) {
       return NextResponse.json({ error: 'Agent email not found' }, { status: 400 });
     }
 
-    // Get referral data
-    const referral = payment.referralId as any;
+    // Get referral data - referralId is populated, so it's an object
+    const referral = payment.referralId as { _id: Types.ObjectId; borrower?: { name?: string | null } | null; propertyAddress?: string | null; loanFileNumber?: string | null } | null;
     if (!referral) {
       return NextResponse.json({ error: 'Referral not found' }, { status: 404 });
     }
@@ -83,7 +96,7 @@ export async function POST(
     // Build platform URL
     const origin = process.env.NEXT_PUBLIC_APP_URL || 
                    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-    const platformUrl = `${origin}/referrals/${referral._id}`;
+    const platformUrl = `${origin}/referrals/${(referral._id as Types.ObjectId).toString()}`;
 
     // Generate email content
     const { html, text } = generateFeeBreakdownEmailHTML({
@@ -101,7 +114,7 @@ export async function POST(
         contractPriceCents: payment.contractPriceCents,
         commissionBasisPoints: payment.commissionBasisPoints,
         referralFeeBasisPoints: payment.referralFeeBasisPoints,
-        side: (payment.side as 'buy' | 'sell') || 'buy',
+        side: payment.side || 'buy',
         usedAfc: Boolean(payment.usedAfc),
       },
       platformUrl,
