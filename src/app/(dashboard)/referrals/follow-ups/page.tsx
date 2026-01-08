@@ -35,7 +35,7 @@ export default async function FollowUpTasksPage({
     if (role === 'agent') return 'agent';
     return 'admin';
   })();
-  const referrals = data.items.map((item) => ({
+  const referrals = (Array.isArray(data.items) ? data.items : []).map((item) => ({
     _id: item._id,
     borrowerName: item.borrowerName,
     status: item.status,

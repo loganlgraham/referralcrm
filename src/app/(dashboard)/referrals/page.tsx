@@ -45,7 +45,7 @@ export default async function ReferralsPage({
     timeline: searchParams.timeline?.toString() ?? null
   });
 
-  const items = data.items as ReferralRow[];
+  const items = Array.isArray(data.items) ? data.items : [];
   const hasReferrals = items.length > 0;
   const summary = data.summary ?? {
     total: data.total ?? items.length,
