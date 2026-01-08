@@ -143,18 +143,13 @@ export async function POST(
     // Log activity
     try {
       const auditActorId = isCronRequest ? null : await resolveAuditActorId(session?.user?.id);
+      const sentBy = isCronRequest ? 'automated system' : 'admin';
       await logReferralActivity({
         referralId: (referral._id as Types.ObjectId).toString(),
         actorId: auditActorId,
         actorRole: isCronRequest ? 'system' : (session?.user?.role || 'system'),
-        actorName: isCronRequest ? 'Automated System' : (session?.user?.name || 'System'),
-        action: 'fee_breakdown_email_sent',
-        details: {
-          paymentId: paymentId,
-          recipientEmail: agent.email,
-          closingDate: payment.closingDate.toISOString(),
-          sentBy: isCronRequest ? 'cron' : 'manual',
-        },
+        channel: 'email',
+        content: `Fee breakdown email sent to ${agent.email} (${sentBy}) for deal closing ${payment.closingDate.toISOString().split('T')[0]}`,
       });
     } catch (error) {
       // Log error but don't fail the request
