@@ -870,8 +870,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
   const closeRate = totalReferrals === 0 ? 0 : (dealsClosed.length / totalReferrals) * 100;
 
+  // Identify Glenn Beck referrals early to exclude from revenue
+  // Use referralsByNetwork (not filteredReferrals) to exclude all Glenn Beck referrals
+  // regardless of timeframe from revenue calculations
+  const glennBeckReferralIdsForExclusion = referralsByNetwork
+    .filter((referral) => {
+      const endorser = referral.endorser?.trim().toLowerCase();
+      return endorser === 'glenn beck';
+    })
+    .map((r) => r._id.toString());
+  const glennBeckReferralIdsSet = new Set(glennBeckReferralIdsForExclusion);
+
   const revenueEligiblePayments = filteredPaymentsByNetwork.filter(
-    (payment) => payment.agentAttribution !== 'OUTSIDE_AGENT'
+    (payment) => 
+      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+      !glennBeckReferralIdsSet.has(payment.referral._id.toString())
   );
 
   const closedOrPaidStatuses = new Set(['closed', 'paid']);

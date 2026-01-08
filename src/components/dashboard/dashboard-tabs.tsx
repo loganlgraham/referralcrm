@@ -1507,6 +1507,10 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
           value={formatNumber(data.glennBeckReferrals)} 
         />
         <SummaryCard 
+          title="Closed Deals" 
+          value={formatNumber(data.dealsClosed)} 
+        />
+        <SummaryCard 
           title="Used AFC (Attach Rate)" 
           value={`${data.usedAfcRate.toFixed(1)}%`}
           helper={`${formatNumber(data.usedAfcCount)} went to another lender`}
@@ -1518,7 +1522,6 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
         <SummaryCard 
           title="Close Rate" 
           value={`${data.closeRate.toFixed(1)}%`}
-          helper={`${formatNumber(data.dealsClosed)} deals closed`}
         />
       </div>
     </div>
