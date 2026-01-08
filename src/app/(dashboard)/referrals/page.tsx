@@ -45,10 +45,10 @@ export default async function ReferralsPage({
     timeline: searchParams.timeline?.toString() ?? null
   });
 
-  const items = data.items as ReferralRow[];
+  const items = (data && Array.isArray(data.items) ? data.items : []) as ReferralRow[];
   const hasReferrals = items.length > 0;
-  const summary = data.summary ?? {
-    total: data.total ?? items.length,
+  const summary = data?.summary ?? {
+    total: data?.total ?? items.length,
     closedDeals: 0,
     closeRate: 0,
     activeReferrals: 0
@@ -93,10 +93,11 @@ export default async function ReferralsPage({
             showAgentOriginIndicator={showAgentOriginIndicator}
           />
           <Pagination
-            currentPage={data.page}
-            totalItems={data.total}
-            pageSize={data.pageSize}
-            totalPages={Math.ceil(data.total / data.pageSize)}
+            currentPage={data?.page ?? 1}
+            totalItems={data?.total ?? 0}
+            pageSize={data?.pageSize ?? 25}
+            totalPages={Math.ceil((data?.total ?? 0) / (data?.pageSize ?? 25))}
+            itemLabel="referrals"
           />
         </div>
       ) : (

@@ -53,9 +53,45 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
+  
+  const { searchParams } = new URL(request.url);
+  const page = Number(searchParams.get('page') || 1);
+  const pageSizeParam = searchParams.get('pageSize');
+  const validPageSizes = [20, 25, 50, 100];
+  const pageSize = pageSizeParam && validPageSizes.includes(Number(pageSizeParam)) 
+    ? Number(pageSizeParam) 
+    : 25;
+  const search = searchParams.get('search')?.trim() || null;
+  const ahaFilter = searchParams.get('ahaFilter') || null;
+  
   const filter: Record<string, unknown> = {};
   if (session.user.role !== 'admin') {
     filter.active = true;
+  }
+  
+  // Add AHA filter if provided
+  if (ahaFilter && (ahaFilter === 'AHA' || ahaFilter === 'AHA_OOS')) {
+    filter.ahaDesignation = ahaFilter;
+  }
+  
+  // Add search filter if provided
+  if (search) {
+    const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const normalizedDigits = search.replace(/\D/g, '');
+    
+    const searchConditions: Record<string, unknown>[] = [
+      { name: new RegExp(escapedSearch, 'i') },
+      { email: new RegExp(escapedSearch, 'i') },
+      { phone: new RegExp(escapedSearch, 'i') },
+      { brokerage: new RegExp(escapedSearch, 'i') },
+      { licenseNumber: new RegExp(escapedSearch, 'i') }
+    ];
+    
+    if (normalizedDigits) {
+      searchConditions.push({ phone: new RegExp(normalizedDigits) });
+    }
+    
+    filter.$or = searchConditions;
   }
 
   await connectMongo();
@@ -85,7 +121,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
   };
 
-  const agents = await Agent.find(filter).lean<AgentLean[]>();
+  const [agents, total] = await Promise.all([
+    Agent.find(filter)
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
+      .lean<AgentLean[]>(),
+    Agent.countDocuments(filter)
+  ]);
 
   const agentIds = agents.map((agent) => agent._id);
   const npsScores = new Map<string, number | null>();
@@ -131,7 +173,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     };
   });
 
-  return NextResponse.json(payload);
+  return NextResponse.json({
+    items: payload,
+    total,
+    page,
+    pageSize
+  });
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {

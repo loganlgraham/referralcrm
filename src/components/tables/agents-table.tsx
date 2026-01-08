@@ -7,14 +7,18 @@ import {
   Dispatch,
   FormEvent,
   SetStateAction,
+  useCallback,
   useEffect,
   useMemo,
   useState,
+  useTransition,
 } from 'react';
 import { useSession } from 'next-auth/react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import { toast } from 'sonner';
 
+import { Pagination } from '@/components/tables/pagination';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatDecimal, formatPhoneInput, formatPhoneNumber } from '@/utils/formatters';
 import {
@@ -113,11 +117,39 @@ interface AgentsTableProps {
   setShowForm?: Dispatch<SetStateAction<boolean>>;
 }
 
+interface AgentsResponse {
+  items: AgentRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export function AgentsTable({ showForm: externalShowForm, setShowForm: externalSetShowForm }: AgentsTableProps) {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'admin';
-
-  const { data, mutate } = useSWR<AgentRow[]>('/api/agents', fetcher);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
+  const searchParamsString = useMemo(() => searchParams.toString(), [searchParams]);
+  
+  const page = Number(searchParams.get('page') || 1);
+  const pageSizeParam = searchParams.get('pageSize');
+  const validPageSizes = [20, 25, 50, 100];
+  const pageSize = pageSizeParam && validPageSizes.includes(Number(pageSizeParam)) 
+    ? Number(pageSizeParam) 
+    : 25;
+  const search = searchParams.get('search') || '';
+  const ahaFilter = (searchParams.get('ahaFilter') || 'all') as 'all' | 'AHA' | 'AHA_OOS';
+  
+  // Build API URL with filters
+  const apiParams = new URLSearchParams();
+  apiParams.set('page', page.toString());
+  apiParams.set('pageSize', pageSize.toString());
+  if (search) apiParams.set('search', search);
+  if (ahaFilter !== 'all') apiParams.set('ahaFilter', ahaFilter);
+  
+  const apiUrl = `/api/agents?${apiParams.toString()}`;
+  const { data, mutate } = useSWR<AgentsResponse>(apiUrl, fetcher);
   const [internalShowForm, setInternalShowForm] = useState(false);
   const showForm = externalShowForm ?? internalShowForm;
   const setShowForm = externalSetShowForm ?? setInternalShowForm;
@@ -126,13 +158,66 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
   const [form, setForm] = useState<AgentFormState>(() => createEmptyForm());
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
   const [coverageProgress, setCoverageProgress] = useState(0);
-  const [ahaFilter, setAhaFilter] = useState<'all' | 'AHA' | 'AHA_OOS'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(search);
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
     null
   );
   const [lastCreatedAgent, setLastCreatedAgent] = useState<CreatedAgentSummary | null>(null);
   const [sendingWelcome, setSendingWelcome] = useState(false);
+  
+  const updateParams = useCallback(
+    (updates: { search?: string; ahaFilter?: string; page?: number }) => {
+      const params = new URLSearchParams(searchParamsString);
+      
+      if (updates.search !== undefined) {
+        if (!updates.search.trim()) {
+          params.delete('search');
+        } else {
+          params.set('search', updates.search.trim());
+        }
+        params.delete('page');
+      }
+      
+      if (updates.ahaFilter !== undefined) {
+        if (updates.ahaFilter === 'all') {
+          params.delete('ahaFilter');
+        } else {
+          params.set('ahaFilter', updates.ahaFilter);
+        }
+        params.delete('page');
+      }
+      
+      if (updates.page !== undefined) {
+        if (updates.page <= 1) {
+          params.delete('page');
+        } else {
+          params.set('page', updates.page.toString());
+        }
+      }
+      
+      startTransition(() => {
+        const queryString = params.toString();
+        router.replace(queryString ? `/agents?${queryString}` : '/agents');
+      });
+    },
+    [router, searchParamsString, startTransition]
+  );
+  
+  // Debounce search input
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (searchQuery !== search) {
+        updateParams({ search: searchQuery });
+      }
+    }, 300);
+
+    return () => clearTimeout(timeout);
+  }, [searchQuery, search, updateParams]);
+
+  // Sync searchQuery with URL param
+  useEffect(() => {
+    setSearchQuery(search);
+  }, [search]);
 
   useEffect(() => {
     if (!isGeneratingCoverage) {
@@ -182,31 +267,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
   }, [coverageProgress, isGeneratingCoverage]);
   const formDisabled = saving;
 
-  const normalizedSearch = searchQuery.trim().toLowerCase();
-  const normalizedDigits = normalizedSearch.replace(/\D/g, '');
-
-  const agents = useMemo(() => {
-    if (!data) {
-      return [];
-    }
-
-    const ahaScoped = ahaFilter === 'all' ? data : data.filter((agent) => agent.ahaDesignation === ahaFilter);
-    if (!normalizedSearch) {
-      return ahaScoped;
-    }
-
-    return ahaScoped.filter((agent) => {
-      const haystack = [agent.name, agent.email, agent.phone, agent.brokerage, agent.licenseNumber]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      const phoneDigits = (agent.phone ?? '').replace(/\D/g, '');
-      const matchesText = haystack.includes(normalizedSearch);
-      const matchesDigits = normalizedDigits ? phoneDigits.includes(normalizedDigits) : false;
-
-      return matchesText || matchesDigits;
-    });
-  }, [ahaFilter, data, normalizedDigits, normalizedSearch]);
+  const agents = Array.isArray(data?.items) ? data.items : [];
 
   type SortKey =
     | 'name'
@@ -227,6 +288,9 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
   };
 
   const sortedAgents = useMemo(() => {
+    if (!Array.isArray(agents)) {
+      return [];
+    }
     const rows = [...agents];
     if (!sortConfig) {
       return rows;
@@ -863,7 +927,8 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
               type="text"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              className="mt-2 w-full max-w-2xl rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm"
+              disabled={isPending}
+              className="mt-2 w-full max-w-2xl rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
               placeholder="Name, email, phone, brokerage"
             />
           </label>
@@ -872,8 +937,9 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
           AHA filter
           <select
             value={ahaFilter}
-            onChange={(event) => setAhaFilter(event.target.value as typeof ahaFilter)}
-            className="mt-1 rounded border border-slate-200 px-3 py-2 text-sm"
+            onChange={(event) => updateParams({ ahaFilter: event.target.value })}
+            disabled={isPending}
+            className="mt-1 rounded border border-slate-200 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
           >
             <option value="all">All agents</option>
             <option value="AHA">AHA</option>
@@ -957,6 +1023,15 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
           </tbody>
         </table>
       </div>
+      {data && (
+        <Pagination
+          currentPage={data.page}
+          totalItems={data.total}
+          pageSize={data.pageSize}
+          totalPages={Math.ceil(data.total / data.pageSize)}
+          itemLabel="agents"
+        />
+      )}
     </div>
   );
 }

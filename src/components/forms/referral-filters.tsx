@@ -54,7 +54,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const { data: lenders } = useSWR<DirectoryOption[]>('/api/lenders', fetcher);
 
   const sortedAgents = useMemo(() => {
-    if (!agents) return undefined;
+    if (!agents || !Array.isArray(agents)) return undefined;
     return [...agents].sort((a, b) => {
       const nameA = a.name?.toLowerCase() ?? '';
       const nameB = b.name?.toLowerCase() ?? '';
@@ -180,7 +180,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
             disabled={isPending}
           >
             <option value="">All</option>
-            {lenders?.map((lender) => (
+            {Array.isArray(lenders) && lenders.map((lender) => (
               <option key={lender._id} value={lender._id}>
                 {lender.name}
                 {lender.email ? ` (${lender.email})` : ''}
@@ -198,7 +198,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
               disabled={isPending}
             >
               <option value="">All</option>
-              {sortedAgents?.map((agentOption) => (
+              {Array.isArray(sortedAgents) && sortedAgents.map((agentOption) => (
                 <option key={agentOption._id} value={agentOption._id}>
                   {agentOption.name}
                   {agentOption.email ? ` (${agentOption.email})` : ''}

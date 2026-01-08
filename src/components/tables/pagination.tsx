@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useCallback, useMemo, useTransition } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 
@@ -9,10 +9,12 @@ interface PaginationProps {
   totalItems: number;
   pageSize: number;
   totalPages: number;
+  itemLabel?: string;
 }
 
-export function Pagination({ currentPage, totalItems, pageSize, totalPages }: PaginationProps) {
+export function Pagination({ currentPage, totalItems, pageSize, totalPages, itemLabel = 'items' }: PaginationProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const searchParamsString = useMemo(() => searchParams.toString(), [searchParams]);
@@ -41,10 +43,10 @@ export function Pagination({ currentPage, totalItems, pageSize, totalPages }: Pa
       
       startTransition(() => {
         const queryString = params.toString();
-        router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
+        router.replace(queryString ? `${pathname}?${queryString}` : pathname);
       });
     },
-    [router, searchParamsString, startTransition]
+    [router, pathname, searchParamsString, startTransition]
   );
 
   const handlePrevious = () => {
@@ -77,7 +79,7 @@ export function Pagination({ currentPage, totalItems, pageSize, totalPages }: Pa
         <p className="text-sm text-slate-600">
           Showing <span className="font-medium text-slate-900">{startItem}</span> to{' '}
           <span className="font-medium text-slate-900">{endItem}</span> of{' '}
-          <span className="font-medium text-slate-900">{totalItems}</span> referrals
+          <span className="font-medium text-slate-900">{totalItems}</span> {itemLabel}
         </p>
       </div>
       <div className="flex items-center gap-3">
