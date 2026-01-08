@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { addDays, startOfDay, endOfDay } from 'date-fns';
+import { Types } from 'mongoose';
 
 import { connectMongo } from '@/lib/mongoose';
 import { Payment } from '@/models/payment';
@@ -11,6 +12,14 @@ interface ReminderResult {
   closingDate: string;
   success: boolean;
   error?: string;
+}
+
+interface PaymentLean {
+  _id: Types.ObjectId;
+  closingDate?: Date | null;
+  status?: string | null;
+  agentId?: Types.ObjectId | null;
+  contractPriceCents?: number | null;
 }
 
 /**
@@ -62,7 +71,7 @@ export async function GET(request: NextRequest) {
       referralFeeBasisPoints: { $ne: null, $gt: 0 },
     })
       .select('_id closingDate status agentId contractPriceCents')
-      .lean();
+      .lean<PaymentLean[]>();
 
     console.log(`[Closing Reminders] Found ${payments.length} deals requiring fee breakdown emails`);
 
@@ -81,7 +90,7 @@ export async function GET(request: NextRequest) {
 
     // Process each payment
     for (const payment of payments) {
-      const paymentId = payment._id.toString();
+      const paymentId = (payment._id as Types.ObjectId).toString();
       
       try {
         console.log(`[Closing Reminders] Sending fee breakdown for payment ${paymentId}`);
