@@ -43,7 +43,7 @@ export default async function ReferralsPage({
     agent: searchParams.agent?.toString(),
     zip: searchParams.zip?.toString(),
     search: searchParams.search?.toString() ?? null,
-    ahaBucket: ahaBucketParam === 'AHA' || ahaBucketParam === 'AHA_OOS' ? ahaBucketParam : null,
+    ahaBucket: ahaBucketParam === 'AHA' || ahaBucketParam === 'AHA_OOS' || ahaBucketParam === 'AGIT' ? ahaBucketParam : null,
     agentReferrals: role === 'admin' && agentReferrals !== 'all' ? agentReferrals : null,
     timeline: searchParams.timeline?.toString() ?? null,
     sortBy,

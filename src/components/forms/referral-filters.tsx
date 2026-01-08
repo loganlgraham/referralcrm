@@ -158,7 +158,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
         )}
         {showAhaBucket && (
           <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
-            AHA Bucket
+            Agent Designation
             <select
               value={ahaBucketValue}
               onChange={(event) => handleChange('ahaBucket', event.target.value)}
@@ -168,6 +168,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
               <option value="">All</option>
               <option value="AHA">AHA</option>
               <option value="AHA_OOS">AHA OOS</option>
+              <option value="AGIT">AGIT</option>
             </select>
           </label>
         )}

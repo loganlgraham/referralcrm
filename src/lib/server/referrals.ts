@@ -20,7 +20,7 @@ interface GetReferralsParams {
   mc?: string | null;
   agent?: string | null;
   zip?: string | null;
-  ahaBucket?: 'AHA' | 'AHA_OOS' | null;
+  ahaBucket?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   agentReferrals?: 'yes' | 'no' | null;
   search?: string | null;
   timeline?: string | null;
@@ -162,7 +162,7 @@ export async function getReferrals(params: GetReferralsParams) {
       ]);
     }
   }
-  if (ahaBucket === 'AHA' || ahaBucket === 'AHA_OOS') {
+  if (ahaBucket === 'AHA' || ahaBucket === 'AHA_OOS' || ahaBucket === 'AGIT') {
     const agentsWithDesignation = await Agent.find({
       ahaDesignation: ahaBucket
     }).select('_id').lean<{ _id: Types.ObjectId }[]>();
