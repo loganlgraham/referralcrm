@@ -148,7 +148,7 @@ export function DealsTable() {
   );
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const deals = data?.items ?? [];
+  const deals = Array.isArray(data?.items) ? data.items : [];
   const isLoading = !data;
   
   const updateParams = useCallback(

@@ -137,7 +137,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
   }, [search]);
 
   const sortedLenders = useMemo(() => {
-    const items = data?.items ?? [];
+    const items = Array.isArray(data?.items) ? data.items : [];
     if (!data) {
       return [];
     }

@@ -267,7 +267,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
   }, [coverageProgress, isGeneratingCoverage]);
   const formDisabled = saving;
 
-  const agents = data?.items ?? [];
+  const agents = Array.isArray(data?.items) ? data.items : [];
 
   type SortKey =
     | 'name'
