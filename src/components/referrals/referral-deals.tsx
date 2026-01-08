@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/constants/deals';
@@ -99,6 +100,7 @@ function DealCard({
   onStatusChange,
   onDelete,
   onUpdate,
+  viewerRole,
 }: {
   deal: ReferralPayment;
   agents: AgentOption[];
@@ -113,6 +115,7 @@ function DealCard({
   ) => void;
   onDelete: (deal: ReferralPayment) => void;
   onUpdate: (deal: ReferralPayment, payload: DealUpdatePayload) => Promise<boolean>;
+  viewerRole?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -142,6 +145,7 @@ function DealCard({
     (deal.terminatedReason as TerminatedReason | undefined) ?? null
   );
   const agentCreatedReferral = Boolean(isAgentOrigin);
+  const router = useRouter();
 
   const populateFromDeal = useCallback(() => {
     setStatus((deal.status as DealStatus | undefined) ?? 'under_contract');
@@ -166,6 +170,38 @@ function DealCard({
   useEffect(() => {
     populateFromDeal();
   }, [populateFromDeal]);
+
+  const handleSendFeeBreakdown = async () => {
+    const confirmed = window.confirm(
+      'Send fee breakdown email to agent now?\n\n' +
+      'Note: This email is automatically sent 7 days before closing.'
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const response = await fetch(`/api/payments/${deal._id}/send-fee-breakdown`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to send fee breakdown email');
+      }
+
+      toast.success('Fee breakdown email sent successfully');
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Failed to send fee breakdown email');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (expectedManuallyEdited || agentCreatedReferral) return;
@@ -398,6 +434,36 @@ function DealCard({
             >
               {deleting ? 'Deleting…' : 'Delete deal'}
             </button>
+            {viewerRole === 'admin' && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleSendFeeBreakdown}
+                  disabled={saving || !deal.closingDate || !deal.agentId}
+                  className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Send Fee Breakdown Email
+                </button>
+                {deal.closingDate && (
+                  <p className="text-xs text-slate-500">
+                    {deal.feeBreakdownEmailSentAt 
+                      ? `✓ Sent ${formatDate(deal.feeBreakdownEmailSentAt)}`
+                      : '⏰ Auto-sends 7 days before closing'
+                    }
+                  </p>
+                )}
+                {!deal.closingDate && (
+                  <p className="text-xs text-amber-600">
+                    Add closing date to enable
+                  </p>
+                )}
+                {!deal.agentId && deal.closingDate && (
+                  <p className="text-xs text-amber-600">
+                    Assign an agent to enable
+                  </p>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
@@ -1288,6 +1354,7 @@ export function ReferralDeals({
               onStatusChange={handleStatusChange}
               onDelete={handleDelete}
               onUpdate={handleDealEdit}
+              viewerRole={viewerRole}
             />
           ))
         )}

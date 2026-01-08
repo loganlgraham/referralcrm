@@ -22,4 +22,6 @@ export interface ReferralPayment {
   closingDate?: string | null;
   agent?: { id: string; name: string | null } | null;
   agentId?: string | null;
+  feeBreakdownEmailSentAt?: string | null;
+  feeBreakdownEmailSentBy?: string | null;
 }
