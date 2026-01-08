@@ -73,7 +73,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   
   // Add AHA filter if provided
-  if (ahaFilter && (ahaFilter === 'AHA' || ahaFilter === 'AHA_OOS')) {
+  if (ahaFilter && (ahaFilter === 'AHA' || ahaFilter === 'AHA_OOS' || ahaFilter === 'AGIT')) {
     filter.ahaDesignation = ahaFilter;
   }
   
