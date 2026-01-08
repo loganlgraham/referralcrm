@@ -60,7 +60,9 @@ const agentCoverageSet = (agent: AgentSuggestion) =>
   new Set(
     [
       ...(Array.isArray(agent.coverageAreas) ? agent.coverageAreas : []),
-      ...((agent.coverageLocations ?? []).flatMap((location) => location.zipCodes) ?? []),
+      ...((agent.coverageLocations ?? []).flatMap((location) => 
+        Array.isArray(location?.zipCodes) ? location.zipCodes : []
+      ) ?? []),
     ]
       .map((zip) => normalizeZipCode(zip))
       .filter((zip): zip is string => Boolean(zip))
@@ -266,7 +268,11 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
             </div>
           ) : matches.length > 0 ? (
             matches.map((agent) => {
-              const coverageLabels = agent.coverageLocations?.map((location) => location.label) ?? agent.coverageAreas ?? [];
+              const coverageLabels = Array.isArray(agent.coverageLocations) 
+                ? agent.coverageLocations.map((location) => location?.label).filter(Boolean)
+                : Array.isArray(agent.coverageAreas) 
+                  ? agent.coverageAreas 
+                  : [];
               return (
                 <div key={agent._id} className="rounded-lg border border-slate-200 p-4 shadow-sm">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
