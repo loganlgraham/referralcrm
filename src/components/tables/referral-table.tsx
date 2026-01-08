@@ -53,7 +53,7 @@ export interface ReferralRow {
 type TableMode = 'admin' | 'mc' | 'agent';
 
 type ReferralTableProps = {
-  data: ReferralRow[];
+  data: ReferralRow[] | undefined | null;
   mode: TableMode;
   showAgentOriginIndicator?: boolean;
 };
@@ -502,8 +502,24 @@ export function ReferralTable({ data, mode, showAgentOriginIndicator }: Referral
   );
   const [sorting, setSorting] = useState<SortingState>([]);
 
+  // Ensure data is always an array - handle all edge cases
+  // This is critical because useReactTable requires an iterable array
+  const safeData = useMemo(() => {
+    try {
+      if (!data) return [];
+      if (Array.isArray(data)) {
+        // Double-check each item is valid
+        return data.filter((item): item is ReferralRow => item != null && typeof item === 'object');
+      }
+      return [];
+    } catch (error) {
+      console.error('Error processing referral data:', error);
+      return [];
+    }
+  }, [data]);
+
   const table = useReactTable({
-    data,
+    data: safeData,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
