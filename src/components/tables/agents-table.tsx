@@ -140,6 +140,8 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
     : 25;
   const search = searchParams.get('search') || '';
   const ahaFilter = (searchParams.get('ahaFilter') || 'all') as 'all' | 'AHA' | 'AHA_OOS';
+  const sortBy = searchParams.get('sortBy') || null;
+  const sortDirection = (searchParams.get('sortDirection') as 'asc' | 'desc') || null;
   
   // Build API URL with filters
   const apiParams = new URLSearchParams();
@@ -147,6 +149,8 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
   apiParams.set('pageSize', pageSize.toString());
   if (search) apiParams.set('search', search);
   if (ahaFilter !== 'all') apiParams.set('ahaFilter', ahaFilter);
+  if (sortBy) apiParams.set('sortBy', sortBy);
+  if (sortDirection) apiParams.set('sortDirection', sortDirection);
   
   const apiUrl = `/api/agents?${apiParams.toString()}`;
   const { data, mutate } = useSWR<AgentsResponse>(apiUrl, fetcher);
@@ -159,14 +163,11 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
   const [coverageProgress, setCoverageProgress] = useState(0);
   const [searchQuery, setSearchQuery] = useState(search);
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
-    null
-  );
   const [lastCreatedAgent, setLastCreatedAgent] = useState<CreatedAgentSummary | null>(null);
   const [sendingWelcome, setSendingWelcome] = useState(false);
   
   const updateParams = useCallback(
-    (updates: { search?: string; ahaFilter?: string; page?: number }) => {
+    (updates: { search?: string; ahaFilter?: string; page?: number; sortBy?: string; sortDirection?: 'asc' | 'desc' }) => {
       const params = new URLSearchParams(searchParamsString);
       
       if (updates.search !== undefined) {
@@ -183,6 +184,24 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
           params.delete('ahaFilter');
         } else {
           params.set('ahaFilter', updates.ahaFilter);
+        }
+        params.delete('page');
+      }
+      
+      if (updates.sortBy !== undefined) {
+        if (!updates.sortBy) {
+          params.delete('sortBy');
+        } else {
+          params.set('sortBy', updates.sortBy);
+        }
+        params.delete('page');
+      }
+      
+      if (updates.sortDirection !== undefined) {
+        if (!updates.sortDirection) {
+          params.delete('sortDirection');
+        } else {
+          params.set('sortDirection', updates.sortDirection);
         }
         params.delete('page');
       }
@@ -279,59 +298,18 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
     | 'netIncome';
 
   const toggleSort = (key: SortKey) => {
-    setSortConfig((previous) => {
-      if (previous?.key === key) {
-        return { key, direction: previous.direction === 'asc' ? 'desc' : 'asc' };
-      }
-      return { key, direction: 'asc' };
-    });
+    if (sortBy === key) {
+      // Toggle direction if same key
+      const nextDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      updateParams({ sortBy: key, sortDirection: nextDirection });
+    } else {
+      // New key, default to desc
+      updateParams({ sortBy: key, sortDirection: 'desc' });
+    }
   };
 
-  const sortedAgents = useMemo(() => {
-    if (!Array.isArray(agents)) {
-      return [];
-    }
-    const rows = [...agents];
-    if (!sortConfig) {
-      return rows;
-    }
-
-    const getValue = (agent: AgentRow, key: SortKey): string | number => {
-      switch (key) {
-        case 'name':
-          return agent.name.toLowerCase();
-        case 'closings':
-          return agent.metrics.closingsLast12Months;
-        case 'closingRate':
-          return agent.metrics.closingRate;
-        case 'nps':
-          return agent.metrics.npsScore ?? -Infinity;
-        case 'avgResponse':
-          return agent.metrics.avgResponseHours ?? Infinity;
-        case 'referralFees':
-          return agent.metrics.totalReferralFeesPaidCents;
-        case 'netIncome':
-          return agent.metrics.totalNetIncomeCents;
-        default:
-          return 0;
-      }
-    };
-
-    return rows.sort((a, b) => {
-      const aValue = getValue(a, sortConfig.key);
-      const bValue = getValue(b, sortConfig.key);
-      const direction = sortConfig.direction === 'asc' ? 1 : -1;
-
-      if (typeof aValue === 'number' && typeof bValue === 'number') {
-        return (aValue - bValue) * direction;
-      }
-
-      return String(aValue).localeCompare(String(bValue)) * direction;
-    });
-  }, [agents, sortConfig]);
-
   const SortableHeader = ({ label, sortKey }: { label: string; sortKey: SortKey }) => {
-    const direction = sortConfig?.key === sortKey ? sortConfig.direction : null;
+    const direction = sortBy === sortKey ? sortDirection : null;
     const icon = direction === 'asc' ? '▲' : direction === 'desc' ? '▼' : '↕';
 
     return (
@@ -983,7 +961,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
                 </td>
               </tr>
             ) : (
-              sortedAgents.map((agent) => (
+              agents.map((agent) => (
                 <tr key={agent._id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 text-sm text-slate-700">
                     <div className="font-medium text-slate-900">

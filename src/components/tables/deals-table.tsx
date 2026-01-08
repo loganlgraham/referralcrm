@@ -129,6 +129,8 @@ export function DealsTable() {
   const search = searchParams.get('search') || '';
   const statusParam = searchParams.get('status') || '';
   const statusFilters = statusParam ? statusParam.split(',').filter(Boolean) as DealStatus[] : [];
+  const sortBy = searchParams.get('sortBy') || null;
+  const sortDirection = (searchParams.get('sortDirection') as 'asc' | 'desc') || null;
   
   // Build API URL with filters
   const apiParams = new URLSearchParams();
@@ -136,6 +138,8 @@ export function DealsTable() {
   apiParams.set('pageSize', pageSize.toString());
   if (search) apiParams.set('search', search);
   if (statusFilters.length > 0) apiParams.set('status', statusFilters.join(','));
+  if (sortBy) apiParams.set('sortBy', sortBy);
+  if (sortDirection) apiParams.set('sortDirection', sortDirection);
   
   const apiUrl = `/api/payments?${apiParams.toString()}`;
   const { data, mutate } = useSWR<PaymentsResponse>(apiUrl, fetcher);
@@ -143,16 +147,13 @@ export function DealsTable() {
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState(search);
   const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
-    null
-  );
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
 
   const deals = Array.isArray(data?.items) ? data.items : [];
   const isLoading = !data;
   
   const updateParams = useCallback(
-    (updates: { search?: string; status?: string; page?: number }) => {
+    (updates: { search?: string; status?: string; page?: number; sortBy?: string; sortDirection?: 'asc' | 'desc' }) => {
       const params = new URLSearchParams(searchParamsString);
       
       if (updates.search !== undefined) {
@@ -172,6 +173,26 @@ export function DealsTable() {
           params.set('status', updates.status);
         }
         // Reset to page 1 when status changes
+        params.delete('page');
+      }
+      
+      if (updates.sortBy !== undefined) {
+        if (!updates.sortBy) {
+          params.delete('sortBy');
+        } else {
+          params.set('sortBy', updates.sortBy);
+        }
+        // Reset to page 1 when sort changes
+        params.delete('page');
+      }
+      
+      if (updates.sortDirection !== undefined) {
+        if (!updates.sortDirection) {
+          params.delete('sortDirection');
+        } else {
+          params.set('sortDirection', updates.sortDirection);
+        }
+        // Reset to page 1 when sort changes
         params.delete('page');
       }
       
@@ -266,12 +287,14 @@ export function DealsTable() {
     | 'netCommission';
 
   const toggleSort = (key: SortKey) => {
-    setSortConfig((previous) => {
-      if (previous?.key === key) {
-        return { key, direction: previous.direction === 'asc' ? 'desc' : 'asc' };
-      }
-      return { key, direction: 'asc' };
-    });
+    if (sortBy === key) {
+      // Toggle direction if same key
+      const nextDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      updateParams({ sortBy: key, sortDirection: nextDirection });
+    } else {
+      // New key, default to desc
+      updateParams({ sortBy: key, sortDirection: 'desc' });
+    }
   };
 
   const normalizeStatusLabel = (status?: DealStatus | null) => {
@@ -282,90 +305,8 @@ export function DealsTable() {
     return (DEAL_STATUS_LABELS[status] ?? status).toString();
   };
 
-  const sortedDeals = useMemo(() => {
-    if (!Array.isArray(deals)) {
-      return [];
-    }
-    const rows = [...deals];
-    if (!sortConfig) {
-      return rows;
-    }
-
-    const getSortValue = (deal: DealRow, key: SortKey): string | number => {
-      const isTerminated = deal.status === 'terminated';
-      const referralFee = isTerminated
-        ? 0
-        : deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
-      const paidAmount = isTerminated
-        ? 0
-        : deal.status === 'paid'
-          ? deal.receivedAmountCents || deal.expectedAmountCents || 0
-          : deal.receivedAmountCents || 0;
-      const commission = calculateCommission(deal);
-      const netCommission = isTerminated ? 0 : commission - paidAmount;
-      const outcome = (() => {
-        if (isTerminated) {
-          return 'Lost';
-        }
-        const basis = isMcView ? deal.usedAfc : deal.usedAssignedAgent;
-        if (basis === null || basis === undefined) {
-          return 'Pending';
-        }
-        return basis ? 'Won' : 'Lost';
-      })();
-
-      switch (key) {
-        case 'referral':
-          return (deal.referral?.borrowerName || '').toLowerCase();
-        case 'agent':
-          return (deal.agent?.name || '').toLowerCase();
-        case 'dealSide':
-          return deal.side === 'sell' || deal.referral?.dealSide === 'sell' ? 'sell' : 'buy';
-        case 'status':
-          return normalizeStatusLabel(deal.status).toLowerCase();
-        case 'closingDate':
-          return deal.closingDate ? new Date(deal.closingDate).getTime() : 0;
-        case 'address':
-          return (getDealAddress(deal) || '').toLowerCase();
-        case 'referralFee':
-          return referralFee;
-        case 'receivedAmount':
-          return paidAmount;
-        case 'usedAfc':
-          return Number(Boolean(deal.usedAfc));
-        case 'usedAgent':
-          return Number(Boolean(deal.usedAssignedAgent));
-        case 'paid':
-          return Number(deal.status === 'paid');
-        case 'outcome':
-          return outcome.toLowerCase();
-        case 'commission':
-          return commission;
-        case 'netCommission':
-          return netCommission;
-        default:
-          return 0;
-      }
-    };
-
-    return rows.sort((a, b) => {
-      const aValue = getSortValue(a, sortConfig.key);
-      const bValue = getSortValue(b, sortConfig.key);
-
-      const direction = sortConfig.direction === 'asc' ? 1 : -1;
-
-      if (typeof aValue === 'number' && typeof bValue === 'number') {
-        return (aValue - bValue) * direction;
-      }
-
-      return (
-        String(aValue).localeCompare(String(bValue), undefined, { sensitivity: 'base' }) * direction
-      );
-    });
-  }, [deals, sortConfig, isMcView]);
-
   const SortableHeader = ({ label, sortKey }: { label: string; sortKey: SortKey }) => {
-    const direction = sortConfig?.key === sortKey ? sortConfig.direction : null;
+    const direction = sortBy === sortKey ? sortDirection : null;
     const icon = direction === 'asc' ? '▲' : direction === 'desc' ? '▼' : '↕';
 
     return (
@@ -777,7 +718,7 @@ export function DealsTable() {
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {sortedDeals.map((deal) => {
+          {deals.map((deal) => {
             const isTerminated = deal.status === 'terminated';
             const referralFee = isTerminated
               ? 0
@@ -939,7 +880,7 @@ export function DealsTable() {
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {sortedDeals.map((deal) => {
+          {deals.map((deal) => {
             const commission = calculateCommission(deal);
             const isTerminated = deal.status === 'terminated';
             const paidAmount = isTerminated
