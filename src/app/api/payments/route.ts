@@ -117,7 +117,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
    */
   const getSortObject = (sortBy: string | null, sortDirection: 'asc' | 'desc'): Record<string, 1 | -1> => {
     const direction = sortDirection === 'asc' ? 1 : -1;
-    const defaultSort = { createdAt: -1 };
+    const defaultSort: Record<string, 1 | -1> = { createdAt: -1 };
     
     if (!sortBy) {
       return defaultSort;
