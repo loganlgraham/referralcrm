@@ -180,7 +180,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     : [];
 
   const agentNameMap = new Map<string, string | null>();
-  const agentDesignationMap = new Map<string, 'AHA' | 'AHA_OOS' | null>();
+  const agentDesignationMap = new Map<string, 'AHA' | 'AHA_OOS' | 'AGIT' | null>();
 
   agents.forEach((agent) => {
     const id = agent._id.toString();

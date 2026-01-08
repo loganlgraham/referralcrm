@@ -743,23 +743,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     agentNameMap.set(agent._id.toString(), agent.name || 'Unnamed Agent');
   });
 
-  const agentDesignationMap = new Map<string, 'AHA' | 'AHA_OOS' | null>();
+  const agentDesignationMap = new Map<string, 'AHA' | 'AHA_OOS' | 'AGIT' | null>();
   agents.forEach((agent) => {
     agentDesignationMap.set(agent._id.toString(), agent.ahaDesignation ?? null);
   });
 
-  const getAgentDesignation = (payment: AggregatedPayment): 'AHA' | 'AHA_OOS' | null => {
+  const getAgentDesignation = (payment: AggregatedPayment): 'AHA' | 'AHA_OOS' | 'AGIT' | null => {
     const agentId = payment.agentId ?? payment.referral?.assignedAgent;
     if (!agentId) return null;
     return agentDesignationMap.get(agentId.toString()) ?? null;
   };
 
-  const getReferralDesignation = (referral: DashboardReferral): 'AHA' | 'AHA_OOS' | null => {
+  const getReferralDesignation = (referral: DashboardReferral): 'AHA' | 'AHA_OOS' | 'AGIT' | null => {
     if (!referral.assignedAgent) return null;
     return agentDesignationMap.get(referral.assignedAgent.toString()) ?? null;
   };
 
-  const matchesNetwork = (designation: 'AHA' | 'AHA_OOS' | null) => {
+  const matchesNetwork = (designation: 'AHA' | 'AHA_OOS' | 'AGIT' | null) => {
     if (context.networkFilter === 'ALL') return true;
     return designation === context.networkFilter;
   };
