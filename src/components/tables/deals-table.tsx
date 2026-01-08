@@ -478,7 +478,15 @@ export function DealsTable() {
     const optimistic = deals.map((row) => (row._id === deal._id ? optimisticRow : row));
 
     setUpdatingId(deal._id);
-    await mutate(optimistic, false);
+    await mutate(
+      {
+        items: optimistic,
+        total: data?.total ?? optimistic.length,
+        page: data?.page ?? 1,
+        pageSize: data?.pageSize ?? 25,
+      },
+      false
+    );
 
     try {
       const payload: Record<string, unknown> = { id: deal._id };
