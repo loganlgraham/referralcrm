@@ -6,7 +6,7 @@ import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/constants/deals';
-import { formatCurrency } from '@/utils/formatters';
+import { formatCurrency, formatDate } from '@/utils/formatters';
 import { useAgentOptions } from '@/hooks/use-agent-options';
 export type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
 export type AgentSelectValue = '' | 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT';
@@ -36,6 +36,9 @@ export interface DealRecord {
   contractPriceCents?: number | null;
   agent?: { id: string; name: string | null } | null;
   agentId?: string | null;
+  closingDate?: string | null;
+  feeBreakdownEmailSentAt?: string | null;
+  feeBreakdownEmailSentBy?: string | null;
 }
 
 export interface DealOverrides {
@@ -954,6 +957,42 @@ export function DealCard({
     }
   };
 
+  const handleSendFeeBreakdown = (deal: DealRecord) => async () => {
+    const confirmed = window.confirm(
+      'Send fee breakdown email to agent now?\n\n' +
+      'Note: This email is automatically sent 7 days before closing.'
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setSavingMap((prev) => ({ ...prev, [deal._id]: true }));
+
+    try {
+      const response = await fetch(`/api/payments/${deal._id}/send-fee-breakdown`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to send fee breakdown email');
+      }
+
+      toast.success('Fee breakdown email sent successfully');
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Failed to send fee breakdown email');
+    } finally {
+      setSavingMap((prev) => {
+        const next = { ...prev };
+        delete next[deal._id];
+        return next;
+      });
+    }
+  };
+
   const sortedDeals = useMemo(() => {
     return [...deals].sort((a, b) => {
       const statusA = getStatusForDeal(a);
@@ -1329,6 +1368,45 @@ export function DealCard({
                 )}
               </div>
             </div>
+            {viewerRole === 'admin' && (
+              <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs uppercase text-slate-400 mb-2">
+                  Referral Fee Notification
+                </p>
+                {deal.closingDate && (
+                  <p className="text-xs text-slate-600 mb-2">
+                    {deal.feeBreakdownEmailSentAt 
+                      ? `✓ Sent ${formatDate(deal.feeBreakdownEmailSentAt)}`
+                      : '⏰ Auto-sends 7 days before closing'
+                    }
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSendFeeBreakdown(deal)}
+                  disabled={isSaving || !deal.closingDate || !selectedAgentId}
+                  className="rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Send Fee Breakdown Email
+                </button>
+                {!deal.closingDate && (
+                  <p className="mt-2 text-xs text-amber-600">
+                    Add closing date to enable
+                  </p>
+                )}
+                {!selectedAgentId && deal.closingDate && (
+                  <p className="mt-2 text-xs text-amber-600">
+                    Assign an agent to enable
+                  </p>
+                )}
+                {deal.feeBreakdownEmailSentAt && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Note: This email is automatically sent 7 days before closing. 
+                    Use this button to resend if needed.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

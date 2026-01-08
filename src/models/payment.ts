@@ -48,7 +48,9 @@ const paymentSchema = new Schema(
     usedAssignedAgent: { type: Boolean, default: true },
     invoiceDate: Date,
     paidDate: Date,
-    notes: String
+    notes: String,
+    feeBreakdownEmailSentAt: { type: Date, default: null },
+    feeBreakdownEmailSentBy: { type: String, default: null }
   },
   { timestamps: true }
 );

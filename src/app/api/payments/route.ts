@@ -387,6 +387,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       commissionBasisPoints: payment.commissionBasisPoints ?? null,
       referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
       side: payment.side ?? 'buy',
+      feeBreakdownEmailSentAt: payment.feeBreakdownEmailSentAt ? payment.feeBreakdownEmailSentAt.toISOString() : null,
+      feeBreakdownEmailSentBy: payment.feeBreakdownEmailSentBy ?? null,
       agent: agentId
         ? {
             id: agentId,
