@@ -93,8 +93,8 @@ const PAGE_SIZE = 20;
  * Maps client-side sort keys to MongoDB sort objects
  */
 function getSortObject(sortBy: string | null | undefined, sortDirection: 'asc' | 'desc' | null | undefined): Record<string, 1 | -1> {
-  const direction = sortDirection === 'asc' ? 1 : -1;
-  const defaultSort = { createdAt: -1 };
+  const direction: 1 | -1 = sortDirection === 'asc' ? 1 : -1;
+  const defaultSort: Record<string, 1 | -1> = { createdAt: -1 };
   
   if (!sortBy) {
     return defaultSort;
