@@ -6,12 +6,34 @@ import { toast } from 'sonner';
 
 import { EmailActivityLink } from '@/components/common/email-activity-link';
 
-const fetcher = (url: string) => fetch(url).then((response) => {
+interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+const fetcher = async (url: string): Promise<AssignmentOption[]> => {
+  const response = await fetch(url);
   if (!response.ok) {
     throw new Error('Failed to load directory');
   }
-  return response.json();
-});
+  const data = (await response.json()) as PaginatedResponse<AssignmentOption> | AssignmentOption[];
+  
+  // Handle both paginated response and direct array (for backward compatibility)
+  if (Array.isArray(data)) {
+    return data;
+  }
+  
+  // Extract items from paginated response
+  if (data && typeof data === 'object' && 'items' in data && Array.isArray(data.items)) {
+    return data.items;
+  }
+  
+  // Fallback: return empty array if response structure is unexpected
+  console.warn('Unexpected response structure from directory endpoint:', data);
+  return [];
+};
 
 export interface Contact {
   id?: string | null;
