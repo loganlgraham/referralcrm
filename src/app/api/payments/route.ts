@@ -61,6 +61,8 @@ type PaymentWithReferral = {
   side?: 'buy' | 'sell' | null;
   agentId?: Types.ObjectId | AgentSummary | null;
   agentDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
+  feeBreakdownEmailSentAt?: Date | null;
+  feeBreakdownEmailSentBy?: string | null;
 };
 
 const toDate = (value?: Date | string | null): Date | null => {
