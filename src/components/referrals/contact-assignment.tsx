@@ -84,7 +84,8 @@ export function ContactAssignment({
   const [suggestionReason, setSuggestionReason] = useState<string | null>(null);
   const [suggestedAgentIds, setSuggestedAgentIds] = useState<string[]>([]);
 
-  const { data: response } = useSWR<PaginatedResponse<AssignmentOption>>(open && canAssign ? directoryForType[type] : null, fetcher);
+  const apiUrl = open && canAssign ? `${directoryForType[type]}?all=true` : null;
+  const { data: response } = useSWR<PaginatedResponse<AssignmentOption>>(apiUrl, fetcher);
   const { mutate } = useSWRConfig();
   
   const options = response?.items ?? [];
