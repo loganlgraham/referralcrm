@@ -27,6 +27,13 @@ interface AssignmentOption {
   phone?: string;
 }
 
+interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 type AssignmentType = 'agent' | 'mc';
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
@@ -77,8 +84,10 @@ export function ContactAssignment({
   const [suggestionReason, setSuggestionReason] = useState<string | null>(null);
   const [suggestedAgentIds, setSuggestedAgentIds] = useState<string[]>([]);
 
-  const { data: options } = useSWR<AssignmentOption[]>(open && canAssign ? directoryForType[type] : null, fetcher);
+  const { data: response } = useSWR<PaginatedResponse<AssignmentOption>>(open && canAssign ? directoryForType[type] : null, fetcher);
   const { mutate } = useSWRConfig();
+  
+  const options = response?.items ?? [];
 
   const title = useMemo(() => {
     if (type !== 'agent') return labelForType[type];
@@ -107,7 +116,7 @@ export function ContactAssignment({
   }, [currentContact]);
 
   const filteredOptions = useMemo(() => {
-    if (!options) return [];
+    if (!Array.isArray(options) || options.length === 0) return [];
     const query = searchTerm.trim().toLowerCase();
     let filtered = options;
     if (query) {
@@ -178,7 +187,7 @@ export function ContactAssignment({
         throw new Error('Unable to update assignment');
       }
       let nextContact: Contact | null = null;
-      if (options) {
+      if (Array.isArray(options) && options.length > 0) {
         const match = options.find((option) => option._id === selected);
         nextContact = {
           id: selected,
@@ -259,13 +268,13 @@ export function ContactAssignment({
                 onChange={(event) => setSearchTerm(event.target.value)}
                 className="mt-1 w-full rounded border border-slate-200 px-2 py-1 text-sm"
                 placeholder={`Type to filter ${title.toLowerCase()}s…`}
-                disabled={!options || submitting}
+                disabled={!Array.isArray(options) || options.length === 0 || submitting}
               />
               <select
                 value={selected}
                 onChange={(event) => setSelected(event.target.value)}
                 className="mt-2 w-full rounded border border-slate-200 px-2 py-1 text-sm"
-                disabled={!options || submitting}
+                disabled={!Array.isArray(options) || options.length === 0 || submitting}
               >
                 <option value="">Choose…</option>
                 {filteredOptions.map((option) => (
