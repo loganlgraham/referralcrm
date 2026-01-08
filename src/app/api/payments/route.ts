@@ -107,8 +107,42 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     : 25;
   const search = searchParams.get('search')?.trim() || null;
   const statusFilter = searchParams.get('status')?.trim() || null;
+  const sortBy = searchParams.get('sortBy')?.trim() || null;
+  const sortDirection = (searchParams.get('sortDirection')?.trim() as 'asc' | 'desc') || 'desc';
 
   await connectMongo();
+
+  /**
+   * Maps client-side sort keys to MongoDB sort objects for aggregation pipeline
+   */
+  const getSortObject = (sortBy: string | null, sortDirection: 'asc' | 'desc'): Record<string, 1 | -1> => {
+    const direction = sortDirection === 'asc' ? 1 : -1;
+    const defaultSort: Record<string, 1 | -1> = { createdAt: -1 };
+    
+    if (!sortBy) {
+      return defaultSort;
+    }
+
+    // Map client sort keys to MongoDB field paths
+    const sortMap: Record<string, Record<string, 1 | -1>> = {
+      referral: { 'referral.borrower.name': direction },
+      agent: { 'agent.name': direction, 'assignedAgent.name': direction },
+      status: { status: direction },
+      closingDate: { closingDate: direction },
+      address: { propertyAddress: direction, 'referral.propertyAddress': direction },
+      referralFee: { expectedAmountCents: direction },
+      receivedAmount: { receivedAmountCents: direction },
+      commission: { expectedAmountCents: direction }, // Simplified - commission is computed
+      netCommission: { expectedAmountCents: direction, receivedAmountCents: direction }, // Simplified
+      dealSide: { side: direction },
+      usedAfc: { usedAfc: direction },
+      usedAgent: { usedAssignedAgent: direction },
+      paid: { status: direction },
+      outcome: { usedAfc: direction, usedAssignedAgent: direction },
+    };
+
+    return sortMap[sortBy] || defaultSort;
+  };
 
   const filter: Record<string, unknown> = {};
   
@@ -232,7 +266,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           ]
         }
       },
-      { $sort: { createdAt: -1 } }
+      { $sort: getSortObject(sortBy, sortDirection) }
     ];
 
     // Count total
@@ -254,21 +288,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (paymentIds.length === 0) {
       payments = [];
     } else {
-      payments = await Payment.find({ _id: { $in: paymentIds } })
-      .populate<{ referralId: ReferralSummary }>({
-        path: 'referralId',
-        select:
-          'borrower propertyAddress lookingInZip lookingInZips assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents ahaBucket loanFileNumber',
-      })
-      .populate<{ agentId: AgentSummary | Types.ObjectId | null }>({ path: 'agentId', select: 'name' })
-      .sort({ createdAt: -1 })
-      .lean<PaymentWithReferral[]>();
+      // Create a map to preserve order from pipeline
+      const idOrderMap = new Map(paymentIds.map((id, index) => [id.toString(), index]));
+      
+      const fetchedPayments = await Payment.find({ _id: { $in: paymentIds } })
+        .populate<{ referralId: ReferralSummary }>({
+          path: 'referralId',
+          select:
+            'borrower propertyAddress lookingInZip lookingInZips assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents ahaBucket loanFileNumber',
+        })
+        .populate<{ agentId: AgentSummary | Types.ObjectId | null }>({ path: 'agentId', select: 'name' })
+        .lean<PaymentWithReferral[]>();
+      
+      // Sort fetched payments to match the order from pipeline
+      payments = fetchedPayments.sort((a, b) => {
+        const orderA = idOrderMap.get(a._id.toString()) ?? 0;
+        const orderB = idOrderMap.get(b._id.toString()) ?? 0;
+        return orderA - orderB;
+      });
     }
   } else {
     // No search - use simple find
+    const sortObject = getSortObject(sortBy, sortDirection);
     [payments, total] = await Promise.all([
       Payment.find(filter)
-        .sort({ createdAt: -1 })
+        .sort(sortObject)
         .skip((page - 1) * pageSize)
         .limit(pageSize)
         .populate<{ referralId: ReferralSummary }>({

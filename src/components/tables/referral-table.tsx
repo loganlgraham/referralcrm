@@ -1,15 +1,14 @@
 'use client';
 
-import { ReactNode, useMemo, useState } from 'react';
+import { ReactNode, useMemo, useState, useTransition, useCallback } from 'react';
 import {
   ColumnDef,
-  SortingState,
   flexRender,
   getCoreRowModel,
-  getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 
@@ -254,14 +253,35 @@ function NoteComposer({ referralId }: { referralId: string }) {
 }
 
 
-function SortButton({ column, label }: { column: any; label: string }) {
-  const direction = column.getIsSorted();
+function SortButton({ 
+  sortKey, 
+  label, 
+  currentSortBy, 
+  currentSortDirection,
+  onSortChange 
+}: { 
+  sortKey: string; 
+  label: string;
+  currentSortBy: string | null;
+  currentSortDirection: 'asc' | 'desc' | null;
+  onSortChange: (sortBy: string, sortDirection: 'asc' | 'desc') => void;
+}) {
+  const isActive = currentSortBy === sortKey;
+  const direction = isActive ? currentSortDirection : null;
   const icon = direction === 'asc' ? '▲' : direction === 'desc' ? '▼' : '↕';
+
+  const handleClick = () => {
+    if (isActive && direction === 'desc') {
+      onSortChange(sortKey, 'asc');
+    } else {
+      onSortChange(sortKey, 'desc');
+    }
+  };
 
   return (
     <button
       type="button"
-      onClick={column.getToggleSortingHandler()}
+      onClick={handleClick}
       className="flex items-center gap-1 text-left"
     >
       <span>{label}</span>
@@ -270,18 +290,40 @@ function SortButton({ column, label }: { column: any; label: string }) {
   );
 }
 
-const sortableHeader = (label: string): ((props: { column: any }) => ReactNode) => ({ column }) => (
-  <SortButton column={column} label={label} />
+const sortableHeader = (
+  label: string, 
+  sortKey: string,
+  currentSortBy: string | null,
+  currentSortDirection: 'asc' | 'desc' | null,
+  onSortChange: (sortBy: string, sortDirection: 'asc' | 'desc') => void
+): ((props: { column: any }) => ReactNode) => () => (
+  <SortButton 
+    sortKey={sortKey} 
+    label={label}
+    currentSortBy={currentSortBy}
+    currentSortDirection={currentSortDirection}
+    onSortChange={onSortChange}
+  />
 );
 
 function buildColumns(
   mode: TableMode,
-  options: { showAgentOriginIndicator?: boolean } = {}
+  options: { 
+    showAgentOriginIndicator?: boolean;
+    currentSortBy?: string | null;
+    currentSortDirection?: 'asc' | 'desc' | null;
+    onSortChange?: (sortBy: string, sortDirection: 'asc' | 'desc') => void;
+  } = {}
 ): ColumnDef<ReferralRow>[] {
-  const { showAgentOriginIndicator = false } = options;
+  const { 
+    showAgentOriginIndicator = false,
+    currentSortBy = null,
+    currentSortDirection = null,
+    onSortChange = () => {}
+  } = options;
 
   const borrowerColumn: ColumnDef<ReferralRow> = {
-    header: sortableHeader('Borrower'),
+    header: sortableHeader('Borrower', 'borrowerName', currentSortBy, currentSortDirection, onSortChange),
     accessorKey: 'borrowerName',
     cell: ({ row }) => {
       const { _id, borrowerName, borrowerPhone } = row.original;
@@ -310,24 +352,17 @@ function buildColumns(
   };
 
   const createdColumn: ColumnDef<ReferralRow> = {
-    header: sortableHeader('Created'),
+    header: sortableHeader('Created', 'createdAt', currentSortBy, currentSortDirection, onSortChange),
     accessorKey: 'createdAt',
     cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString(),
-    sortingFn: (a, b) =>
-      new Date(a.original.createdAt).getTime() - new Date(b.original.createdAt).getTime(),
   };
 
   const lastUpdatedColumn: ColumnDef<ReferralRow> = {
-    header: sortableHeader('Last Updated'),
+    header: sortableHeader('Last Updated', 'updatedAt', currentSortBy, currentSortDirection, onSortChange),
     accessorKey: 'updatedAt',
     cell: ({ row }) => {
       const updatedAt = row.original.updatedAt;
       return updatedAt ? new Date(updatedAt).toLocaleDateString() : '—';
-    },
-    sortingFn: (a, b) => {
-      const dateA = a.original.updatedAt ? new Date(a.original.updatedAt).getTime() : 0;
-      const dateB = b.original.updatedAt ? new Date(b.original.updatedAt).getTime() : 0;
-      return dateA - dateB;
     },
   };
 
@@ -337,33 +372,21 @@ function buildColumns(
   };
 
   const timelineColumn: ColumnDef<ReferralRow> = {
-    header: sortableHeader('Timeline'),
+    header: sortableHeader('Timeline', 'timeline', currentSortBy, currentSortDirection, onSortChange),
     accessorKey: 'timeline',
     cell: ({ row }) => renderTimelineCountdown(row.original),
-    sortingFn: (a, b) => {
-      const daysA = calculateTimelineDaysRemaining(a.original.timeline, a.original.createdAt);
-      const daysB = calculateTimelineDaysRemaining(b.original.timeline, b.original.createdAt);
-      
-      // Handle null values - expired/not specified go to end
-      if (daysA === null && daysB === null) return 0;
-      if (daysA === null) return 1; // null goes after
-      if (daysB === null) return -1; // null goes after
-      
-      // Sort: expired (negative) first, then by days remaining ascending
-      return daysA - daysB;
-    }
   };
 
   if (mode === 'agent') {
     return [
       borrowerColumn,
       {
-        header: sortableHeader('Loan File #'),
+        header: sortableHeader('Loan File #', 'loanFileNumber', currentSortBy, currentSortDirection, onSortChange),
         accessorKey: 'loanFileNumber'
       },
       timelineColumn,
       {
-        header: sortableHeader('Pre-approval'),
+        header: sortableHeader('Pre-approval', 'preApprovalAmountCents', currentSortBy, currentSortDirection, onSortChange),
         accessorKey: 'preApprovalAmountCents',
         cell: ({ row }) =>
           row.original.preApprovalAmountCents
@@ -371,7 +394,7 @@ function buildColumns(
             : '—'
       },
       {
-        header: sortableHeader('Status'),
+        header: sortableHeader('Status', 'status', currentSortBy, currentSortDirection, onSortChange),
         accessorKey: 'status',
         cell: ({ row }) => (
           <StatusSelect
@@ -380,12 +403,6 @@ function buildColumns(
             dealStatusLabel={row.original.dealStatusLabel ?? null}
           />
         ),
-        sortingFn: (a, b) =>
-          normalizeStatusForSort(a.original).localeCompare(
-            normalizeStatusForSort(b.original),
-            undefined,
-            { sensitivity: 'base' }
-          ),
       },
       {
         header: 'Notes',
@@ -401,7 +418,7 @@ function buildColumns(
     return [
       borrowerColumn,
       {
-        header: sortableHeader('Loan File #'),
+        header: sortableHeader('Loan File #', 'loanFileNumber', currentSortBy, currentSortDirection, onSortChange),
         accessorKey: 'loanFileNumber'
       },
       timelineColumn,
@@ -420,17 +437,11 @@ function buildColumns(
         )
       },
       {
-        header: sortableHeader('Status'),
+        header: sortableHeader('Status', 'status', currentSortBy, currentSortDirection, onSortChange),
         accessorKey: 'status',
         cell: ({ row }) => (
           <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />
         ),
-        sortingFn: (a, b) =>
-          normalizeStatusForSort(a.original).localeCompare(
-            normalizeStatusForSort(b.original),
-            undefined,
-            { sensitivity: 'base' }
-          ),
       },
       createdColumn
     ];
@@ -439,23 +450,17 @@ function buildColumns(
   return [
     borrowerColumn,
       {
-        header: sortableHeader('Loan File #'),
+        header: sortableHeader('Loan File #', 'loanFileNumber', currentSortBy, currentSortDirection, onSortChange),
         accessorKey: 'loanFileNumber'
       },
       timelineColumn,
     {
-      header: sortableHeader('Status'),
+      header: sortableHeader('Status', 'status', currentSortBy, currentSortDirection, onSortChange),
       accessorKey: 'status',
       cell: ({ row }) => <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />,
-      sortingFn: (a, b) =>
-        normalizeStatusForSort(a.original).localeCompare(
-          normalizeStatusForSort(b.original),
-          undefined,
-          { sensitivity: 'base' }
-        ),
     },
     {
-      header: sortableHeader('Agent'),
+      header: sortableHeader('Agent', 'assignedAgentName', currentSortBy, currentSortDirection, onSortChange),
       accessorKey: 'assignedAgentName',
       cell: ({ row }) => {
         const { assignedAgentName, assignedAgentPhone } = row.original;
@@ -473,7 +478,7 @@ function buildColumns(
       }
     },
     {
-      header: sortableHeader('Lender/MC'),
+      header: sortableHeader('Lender/MC', 'lenderName', currentSortBy, currentSortDirection, onSortChange),
       accessorKey: 'lenderName',
       cell: ({ row }) => {
         const { lenderName, lenderPhone } = row.original;
@@ -496,11 +501,38 @@ function buildColumns(
 }
 
 export function ReferralTable({ data, mode, showAgentOriginIndicator }: ReferralTableProps) {
-  const columns = useMemo<ColumnDef<ReferralRow>[]>(
-    () => buildColumns(mode, { showAgentOriginIndicator }),
-    [mode, showAgentOriginIndicator]
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isPending, startTransition] = useTransition();
+  const searchParamsString = useMemo(() => searchParams.toString(), [searchParams]);
+
+  const currentSortBy = searchParams.get('sortBy');
+  const currentSortDirection = (searchParams.get('sortDirection') as 'asc' | 'desc' | null) || null;
+
+  const handleSortChange = useCallback(
+    (sortBy: string, sortDirection: 'asc' | 'desc') => {
+      const params = new URLSearchParams(searchParamsString);
+      params.set('sortBy', sortBy);
+      params.set('sortDirection', sortDirection);
+      // Reset to page 1 when sort changes
+      params.delete('page');
+      startTransition(() => {
+        const queryString = params.toString();
+        router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
+      });
+    },
+    [router, searchParamsString, startTransition]
   );
-  const [sorting, setSorting] = useState<SortingState>([]);
+
+  const columns = useMemo<ColumnDef<ReferralRow>[]>(
+    () => buildColumns(mode, { 
+      showAgentOriginIndicator,
+      currentSortBy,
+      currentSortDirection,
+      onSortChange: handleSortChange
+    }),
+    [mode, showAgentOriginIndicator, currentSortBy, currentSortDirection, handleSortChange]
+  );
 
   // Ensure data is always an array - handle all edge cases
   // This is critical because useReactTable requires an iterable array
@@ -521,10 +553,7 @@ export function ReferralTable({ data, mode, showAgentOriginIndicator }: Referral
   const table = useReactTable({
     data: safeData,
     columns,
-    state: { sorting },
-    onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
   });
 
   return (

@@ -24,6 +24,8 @@ interface GetReferralsParams {
   agentReferrals?: 'yes' | 'no' | null;
   search?: string | null;
   timeline?: string | null;
+  sortBy?: string | null;
+  sortDirection?: 'asc' | 'desc' | null;
 }
 
 interface PopulatedAgent {
@@ -87,8 +89,34 @@ interface ReferralListItem {
 
 const PAGE_SIZE = 20;
 
+/**
+ * Maps client-side sort keys to MongoDB sort objects
+ */
+function getSortObject(sortBy: string | null | undefined, sortDirection: 'asc' | 'desc' | null | undefined): Record<string, 1 | -1> {
+  const direction: 1 | -1 = sortDirection === 'asc' ? 1 : -1;
+  const defaultSort: Record<string, 1 | -1> = { createdAt: -1 };
+  
+  if (!sortBy) {
+    return defaultSort;
+  }
+
+  // Map client sort keys to MongoDB field paths
+  const sortMap: Record<string, Record<string, 1 | -1>> = {
+    borrowerName: { 'borrower.name': direction },
+    createdAt: { createdAt: direction },
+    updatedAt: { updatedAt: direction },
+    status: { status: direction },
+    assignedAgentName: { 'assignedAgent.name': direction },
+    lenderName: { 'lender.name': direction },
+    loanFileNumber: { loanFileNumber: direction },
+    timeline: { timeline: direction, createdAt: direction }, // Secondary sort by createdAt for consistency
+  };
+
+  return sortMap[sortBy] || defaultSort;
+}
+
 export async function getReferrals(params: GetReferralsParams) {
-  const { session, page = 1, pageSize, status, mc, agent, zip, ahaBucket, agentReferrals, search, timeline } = params;
+  const { session, page = 1, pageSize, status, mc, agent, zip, ahaBucket, agentReferrals, search, timeline, sortBy, sortDirection } = params;
   await connectMongo();
   
   // Validate pageSize - must be one of: 20, 25, 50, 100 (default to 25)
@@ -280,13 +308,15 @@ export async function getReferrals(params: GetReferralsParams) {
     activeQuery.status = { $in: ACTIVE_REFERRAL_STATUS_VALUES };
   }
 
+  const sortObject = getSortObject(sortBy, sortDirection);
+
   const [items, total, closedDealAggregation, activeReferrals] = await Promise.all([
     Referral.find(query)
       .populate<{ assignedAgent: PopulatedAgent }>('assignedAgent', 'name email phone')
       .populate<{ buySideAgent: PopulatedAgent }>('buySideAgent', 'name email phone')
       .populate<{ sellSideAgent: PopulatedAgent }>('sellSideAgent', 'name email phone')
       .populate<{ lender: PopulatedLender }>('lender', 'name email phone')
-      .sort({ createdAt: -1 })
+      .sort(sortObject)
       .skip((page - 1) * effectivePageSize)
       .limit(effectivePageSize)
       .lean<PopulatedReferral[]>(),

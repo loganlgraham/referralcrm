@@ -31,6 +31,9 @@ export default async function ReferralsPage({
   const pageSizeParam = searchParams.pageSize ? Number(searchParams.pageSize) : 25;
   const pageSize = validPageSizes.includes(pageSizeParam) ? pageSizeParam : 25;
 
+  const sortBy = searchParams.sortBy?.toString() ?? null;
+  const sortDirection = (searchParams.sortDirection?.toString() as 'asc' | 'desc' | undefined) ?? null;
+
   const data = await getReferrals({
     session,
     page: Number(searchParams.page || 1),
@@ -42,7 +45,9 @@ export default async function ReferralsPage({
     search: searchParams.search?.toString() ?? null,
     ahaBucket: ahaBucketParam === 'AHA' || ahaBucketParam === 'AHA_OOS' ? ahaBucketParam : null,
     agentReferrals: role === 'admin' && agentReferrals !== 'all' ? agentReferrals : null,
-    timeline: searchParams.timeline?.toString() ?? null
+    timeline: searchParams.timeline?.toString() ?? null,
+    sortBy,
+    sortDirection
   });
 
   const items = (data && Array.isArray(data.items) ? data.items : []) as ReferralRow[];

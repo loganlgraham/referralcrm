@@ -64,6 +64,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     : 25;
   const search = searchParams.get('search')?.trim() || null;
   const ahaFilter = searchParams.get('ahaFilter') || null;
+  const sortBy = searchParams.get('sortBy')?.trim() || null;
+  const sortDirection = (searchParams.get('sortDirection')?.trim() as 'asc' | 'desc') || 'desc';
   
   const filter: Record<string, unknown> = {};
   if (session.user.role !== 'admin') {
@@ -97,6 +99,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   await connectMongo();
 
+  /**
+   * Maps client-side sort keys to MongoDB sort objects
+   * Note: Some fields (closings, closingRate, etc.) are computed from metrics
+   * and will need to be sorted after metrics computation
+   */
+  const getSortObject = (sortBy: string | null, sortDirection: 'asc' | 'desc'): Record<string, 1 | -1> | null => {
+    const direction = sortDirection === 'asc' ? 1 : -1;
+    
+    if (!sortBy) {
+      return null; // Use default (no explicit sort)
+    }
+
+    // Map client sort keys to MongoDB field paths (only for fields that exist in the database)
+    const sortMap: Record<string, Record<string, 1 | -1>> = {
+      name: { name: direction },
+      nps: { npsScore: direction },
+      // Note: closings, closingRate, avgResponse, referralFees, netIncome are computed from metrics
+      // and will be sorted after metrics computation
+    };
+
+    return sortMap[sortBy] || null;
+  };
+
   type AgentLean = {
     _id: Types.ObjectId;
     name?: string | null;
@@ -122,7 +147,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   };
 
+  const sortObject = getSortObject(sortBy, sortDirection);
   const query = Agent.find(filter);
+  if (sortObject) {
+    query.sort(sortObject);
+  }
+  
   const [agents, total] = await Promise.all([
     all
       ? query.lean<AgentLean[]>()
@@ -139,7 +169,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const metricsMap = await computeAgentMetrics(agentIds, npsScores);
 
-  const payload = agents.map((agent) => {
+  let payload = agents.map((agent) => {
     const id = agent._id.toString();
     const metrics = metricsMap.get(id) ?? {
       ...EMPTY_AGENT_METRICS,
@@ -173,6 +203,42 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       npsScore: metrics.npsScore,
     };
   });
+
+  // Sort by computed metrics fields if needed
+  if (sortBy && ['closings', 'closingRate', 'avgResponse', 'referralFees', 'netIncome'].includes(sortBy)) {
+    const direction = sortDirection === 'asc' ? 1 : -1;
+    payload.sort((a, b) => {
+      let aValue: number;
+      let bValue: number;
+      
+      switch (sortBy) {
+        case 'closings':
+          aValue = a.metrics.closingsLast12Months;
+          bValue = b.metrics.closingsLast12Months;
+          break;
+        case 'closingRate':
+          aValue = a.metrics.closingRate;
+          bValue = b.metrics.closingRate;
+          break;
+        case 'avgResponse':
+          aValue = a.metrics.avgResponseHours ?? Infinity;
+          bValue = b.metrics.avgResponseHours ?? Infinity;
+          break;
+        case 'referralFees':
+          aValue = a.metrics.totalReferralFeesPaidCents;
+          bValue = b.metrics.totalReferralFeesPaidCents;
+          break;
+        case 'netIncome':
+          aValue = a.metrics.totalNetIncomeCents;
+          bValue = b.metrics.totalNetIncomeCents;
+          break;
+        default:
+          return 0;
+      }
+      
+      return (aValue - bValue) * direction;
+    });
+  }
 
   return NextResponse.json({
     items: payload,
