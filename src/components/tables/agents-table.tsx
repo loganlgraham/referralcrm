@@ -139,7 +139,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
     ? Number(pageSizeParam) 
     : 25;
   const search = searchParams.get('search') || '';
-  const ahaFilter = (searchParams.get('ahaFilter') || 'all') as 'all' | 'AHA' | 'AHA_OOS';
+  const ahaFilter = (searchParams.get('ahaFilter') || 'all') as 'all' | 'AHA' | 'AHA_OOS' | 'AGIT';
   const sortBy = searchParams.get('sortBy') || null;
   const sortDirection = (searchParams.get('sortDirection') as 'asc' | 'desc') || null;
   
@@ -912,7 +912,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
           </label>
         )}
         <label className="text-xs font-semibold text-slate-600">
-          AHA filter
+          Agent Designation
           <select
             value={ahaFilter}
             onChange={(event) => updateParams({ ahaFilter: event.target.value })}
@@ -922,6 +922,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
             <option value="all">All agents</option>
             <option value="AHA">AHA</option>
             <option value="AHA_OOS">AHA OOS</option>
+            <option value="AGIT">AGIT</option>
           </select>
         </label>
       </div>

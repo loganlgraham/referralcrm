@@ -91,7 +91,8 @@ const sortMatches = (agents: AgentSuggestion[]) =>
   });
 
 export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' | 'admin' }) {
-  const { data: agents, isLoading } = useSWR<AgentSuggestion[]>('/api/agents', fetcher);
+  const { data: agentsResponse, isLoading } = useSWR<{ items: AgentSuggestion[] }>('/api/agents?all=true', fetcher);
+  const agents = agentsResponse?.items ?? [];
   const [description, setDescription] = useState('');
   const [zipCodes, setZipCodes] = useState<string[]>([]);
   const [locations, setLocations] = useState<CoverageLocation[]>([]);
