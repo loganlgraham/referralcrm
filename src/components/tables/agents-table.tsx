@@ -2,10 +2,7 @@
 
 import Link from 'next/link';
 import {
-  ChangeEvent,
-  CSSProperties,
   Dispatch,
-  FormEvent,
   SetStateAction,
   useCallback,
   useEffect,
@@ -16,16 +13,10 @@ import {
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
-import { toast } from 'sonner';
 
 import { Pagination } from '@/components/tables/pagination';
 import { fetcher } from '@/utils/fetcher';
-import { formatCurrency, formatDecimal, formatPhoneInput, formatPhoneNumber } from '@/utils/formatters';
-import {
-  AGENT_AHA_CLASSIFICATION_OPTIONS,
-  AGENT_LANGUAGE_OPTIONS,
-  AGENT_SPECIALTY_OPTIONS,
-} from '@/constants/agent-options';
+import { formatCurrency, formatDecimal, formatPhoneNumber } from '@/utils/formatters';
 
 interface CoverageLocation {
   label: string;
@@ -66,53 +57,8 @@ interface AgentRow {
   npsScore?: number | null;
 }
 
-type AgentFormState = {
-  name: string;
-  email: string;
-  phone: string;
-  licenseNumber: string;
-  brokerage: string;
-  officeAddress: {
-    street: string;
-    city: string;
-    state: string;
-    zipCode: string;
-  };
-  states: string;
-  coverageDescription: string;
-  coverageLocations: CoverageLocation[];
-  specialties: string[];
-  languages: string[];
-  ahaDesignation: '' | 'AHA' | 'AHA_OOS' | 'AGIT';
-};
-
-type CreatedAgentSummary = {
-  id: string;
-  name: string;
-  email: string;
-};
-
-const createEmptyForm = (): AgentFormState => ({
-  name: '',
-  email: '',
-  phone: '',
-  licenseNumber: '',
-  brokerage: '',
-  officeAddress: {
-    street: '',
-    city: '',
-    state: '',
-    zipCode: '',
-  },
-  states: '',
-  coverageDescription: '',
-  coverageLocations: [],
-  specialties: [],
-  languages: [],
-  ahaDesignation: '',
-});
-
 interface AgentsTableProps {
+  // Legacy props kept for backward compatibility but no longer used
   showForm?: boolean;
   setShowForm?: Dispatch<SetStateAction<boolean>>;
 }
@@ -154,17 +100,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
   
   const apiUrl = `/api/agents?${apiParams.toString()}`;
   const { data, mutate } = useSWR<AgentsResponse>(apiUrl, fetcher);
-  const [internalShowForm, setInternalShowForm] = useState(false);
-  const showForm = externalShowForm ?? internalShowForm;
-  const setShowForm = externalSetShowForm ?? setInternalShowForm;
-  const hasExternalControl = externalShowForm !== undefined && externalSetShowForm !== undefined;
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<AgentFormState>(() => createEmptyForm());
-  const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
-  const [coverageProgress, setCoverageProgress] = useState(0);
   const [searchQuery, setSearchQuery] = useState(search);
-  const [lastCreatedAgent, setLastCreatedAgent] = useState<CreatedAgentSummary | null>(null);
-  const [sendingWelcome, setSendingWelcome] = useState(false);
   
   const updateParams = useCallback(
     (updates: { search?: string; ahaFilter?: string; page?: number; sortBy?: string; sortDirection?: 'asc' | 'desc' }) => {
@@ -238,53 +174,10 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
     setSearchQuery(search);
   }, [search]);
 
+  // Refresh data when agents are added (via SWR mutate)
   useEffect(() => {
-    if (!isGeneratingCoverage) {
-      return;
-    }
-
-    setCoverageProgress((value) => (value < 12 ? 12 : value));
-    const interval = window.setInterval(() => {
-      setCoverageProgress((value) => {
-        if (value >= 88) {
-          return 88;
-        }
-        return value + 4;
-      });
-    }, 400);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [isGeneratingCoverage]);
-
-  useEffect(() => {
-    if (isGeneratingCoverage || coverageProgress === 0) {
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      setCoverageProgress(0);
-    }, 700);
-
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, [isGeneratingCoverage, coverageProgress]);
-
-  const coverageButtonStyles = useMemo<CSSProperties | undefined>(() => {
-    if (!isGeneratingCoverage && coverageProgress === 0) {
-      return undefined;
-    }
-
-    const progress = Math.min(Math.max(coverageProgress, 0), 100);
-
-    return {
-      backgroundImage: `linear-gradient(90deg, #0b365d 0%, #0b365d ${progress}%, #0f4c81 ${progress}%, #2f6aa3 100%)`,
-      transition: 'background-image 250ms linear',
-    };
-  }, [coverageProgress, isGeneratingCoverage]);
-  const formDisabled = saving;
+    mutate();
+  }, [mutate]);
 
   const agents = Array.isArray(data?.items) ? data.items : [];
 
@@ -327,38 +220,6 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
   if (!data) {
     return <div className="rounded-lg bg-white p-4 shadow-sm">Loading agents…</div>;
   }
-
-  type TextField = Exclude<keyof AgentFormState, 'coverageLocations' | 'specialties' | 'languages' | 'officeAddress'>;
-
-  const handleChange = (field: TextField) => (
-    event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const value = field === 'phone' ? formatPhoneInput(event.target.value) : event.target.value;
-    setForm((previous) => ({ ...previous, [field]: value }));
-  };
-
-  const handleOfficeAddressChange = (field: 'street' | 'city' | 'state' | 'zipCode') => (
-    event: ChangeEvent<HTMLInputElement>
-  ) => {
-    setForm((previous) => ({
-      ...previous,
-      officeAddress: {
-        ...previous.officeAddress,
-        [field]: event.target.value,
-      },
-    }));
-  };
-
-  const handleSelectChange = (field: 'specialties' | 'languages') => (
-    event: ChangeEvent<HTMLSelectElement>
-  ) => {
-    const selected = Array.from(event.target.selectedOptions).map((option) => option.value);
-    setForm((previous) => ({ ...previous, [field]: selected }));
-  };
-
-  const handleAhaChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    setForm((previous) => ({ ...previous, ahaDesignation: event.target.value as AgentFormState['ahaDesignation'] }));
-  };
 
   const normalizeZipCode = (value: string) => {
     const digits = value.replace(/\D/g, '');
@@ -608,295 +469,6 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
 
   return (
     <div className="space-y-4">
-      {isAdmin && lastCreatedAgent && (
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">
-                Send welcome email to {lastCreatedAgent.name}
-              </p>
-              <p className="text-xs text-slate-600">{lastCreatedAgent.email}</p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleSendWelcomeEmail}
-                disabled={sendingWelcome}
-                className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {sendingWelcome ? 'Sending…' : 'Send welcome email'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setLastCreatedAgent(null)}
-                className="rounded border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isAdmin && !hasExternalControl && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => setShowForm((previous) => !previous)}
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
-          >
-            {showForm ? 'Close form' : 'Add agent'}
-          </button>
-        </div>
-      )}
-      {isAdmin && showForm && (
-        <form onSubmit={handleCreate} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-3 md:grid-cols-2">
-              <label className="text-xs font-semibold text-slate-600">
-                Name
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={handleChange('name')}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                  required
-                  disabled={formDisabled}
-                />
-              </label>
-              <label className="text-xs font-semibold text-slate-600">
-                Email
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={handleChange('email')}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                  required
-                  disabled={formDisabled}
-                />
-              </label>
-              <label className="text-xs font-semibold text-slate-600">
-                Phone
-                <input
-                  type="tel"
-                  value={form.phone}
-                  onChange={handleChange('phone')}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                  disabled={formDisabled}
-                  onBlur={(event) =>
-                    setForm((previous) => ({
-                      ...previous,
-                      phone: formatPhoneInput(event.target.value),
-                    }))
-                  }
-                />
-              </label>
-              <label className="text-xs font-semibold text-slate-600">
-                License number
-                <input
-                  type="text"
-                  value={form.licenseNumber}
-                  onChange={handleChange('licenseNumber')}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                  disabled={formDisabled}
-                />
-              </label>
-              <label className="text-xs font-semibold text-slate-600">
-                Brokerage
-                <input
-                  type="text"
-                  value={form.brokerage}
-                  onChange={handleChange('brokerage')}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                  disabled={formDisabled}
-                />
-              </label>
-              <div className="md:col-span-2 space-y-2">
-                <p className="text-xs font-semibold text-slate-600">Office Address</p>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="text-xs font-semibold text-slate-600 md:col-span-2">
-                    Street
-                    <input
-                      type="text"
-                      value={form.officeAddress.street}
-                      onChange={handleOfficeAddressChange('street')}
-                      className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                      placeholder="123 Main St"
-                      disabled={formDisabled}
-                    />
-                  </label>
-                  <label className="text-xs font-semibold text-slate-600">
-                    City
-                    <input
-                      type="text"
-                      value={form.officeAddress.city}
-                      onChange={handleOfficeAddressChange('city')}
-                      className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                      placeholder="Denver"
-                      disabled={formDisabled}
-                    />
-                  </label>
-                  <label className="text-xs font-semibold text-slate-600">
-                    State
-                    <input
-                      type="text"
-                      value={form.officeAddress.state}
-                      onChange={handleOfficeAddressChange('state')}
-                      className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm uppercase"
-                      placeholder="CO"
-                      maxLength={2}
-                      disabled={formDisabled}
-                    />
-                  </label>
-                  <label className="text-xs font-semibold text-slate-600">
-                    ZIP Code
-                    <input
-                      type="text"
-                      value={form.officeAddress.zipCode}
-                      onChange={handleOfficeAddressChange('zipCode')}
-                      className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                      placeholder="80202"
-                      maxLength={5}
-                      disabled={formDisabled}
-                    />
-                  </label>
-                </div>
-              </div>
-              <label className="text-xs font-semibold text-slate-600">
-                AHA classification
-                <select
-                  value={form.ahaDesignation}
-                  onChange={handleAhaChange}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                  disabled={formDisabled}
-                >
-                  <option value="">Not set</option>
-                  {AGENT_AHA_CLASSIFICATION_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option === 'AHA_OOS' ? 'AHA OOS' : option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-xs font-semibold text-slate-600">
-                States (comma separated)
-                <input
-                  type="text"
-                  value={form.states}
-                  onChange={handleChange('states')}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                  placeholder="CO, UT"
-                  disabled={formDisabled}
-                />
-              </label>
-              <div className="md:col-span-2 space-y-2">
-                <label
-                  htmlFor="new-agent-coverage-description"
-                  className="text-xs font-semibold text-slate-600"
-                >
-                  Areas covered
-                </label>
-                <div className="flex flex-col gap-2 md:flex-row md:items-stretch md:gap-3">
-                  <textarea
-                    id="new-agent-coverage-description"
-                    value={form.coverageDescription}
-                    onChange={handleChange('coverageDescription')}
-                    className="w-full flex-1 rounded border border-slate-200 px-3 py-2 text-sm md:min-h-[5.5rem]"
-                    placeholder="Describe the neighborhoods, cities, and counties this agent serves"
-                    rows={3}
-                    disabled={formDisabled || isGeneratingCoverage}
-                  />
-                  <button
-                    type="button"
-                    onClick={generateCoverageLocations}
-                    className="flex shrink-0 items-center justify-center rounded bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 md:h-full md:min-h-[5.5rem] md:self-stretch"
-                    style={coverageButtonStyles}
-                    disabled={formDisabled || isGeneratingCoverage}
-                  >
-                    {isGeneratingCoverage ? 'Generating…' : 'Save Service Areas'}
-                  </button>
-                </div>
-              </div>
-              <div className="md:col-span-2 space-y-2">
-                <p className="text-xs font-semibold text-slate-600">Cities, towns & counties</p>
-                <div className="flex flex-wrap gap-2">
-                  {form.coverageLocations.length === 0 ? (
-                    <p className="text-xs text-slate-500">No coverage locations added yet.</p>
-                  ) : (
-                    form.coverageLocations.map((location) => (
-                      <span
-                        key={location.label}
-                        className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-700"
-                      >
-                        {location.label}
-                        <button
-                          type="button"
-                          onClick={() => removeCoverageLocation(location.label)}
-                          className="text-slate-400 transition hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
-                          aria-label={`Remove ${location.label}`}
-                          disabled={formDisabled}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))
-                  )}
-                </div>
-              </div>
-              <div className="md:col-span-2 grid gap-3">
-                <label className="text-xs font-semibold text-slate-600">
-                  Specialties
-                  <select
-                    multiple
-                    value={form.specialties}
-                    onChange={handleSelectChange('specialties')}
-                    className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                    size={6}
-                    disabled={formDisabled}
-                  >
-                    {AGENT_SPECIALTY_OPTIONS.map((specialty) => (
-                      <option key={specialty} value={specialty}>
-                        {specialty}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="mt-1 block text-[11px] font-normal text-slate-500">
-                    Hold Ctrl (Windows) or Command (Mac) to select multiple specialties.
-                  </span>
-                </label>
-                <label className="text-xs font-semibold text-slate-600">
-                  Languages spoken
-                  <select
-                    multiple
-                    value={form.languages}
-                    onChange={handleSelectChange('languages')}
-                    className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-                    size={5}
-                    disabled={formDisabled}
-                  >
-                    {AGENT_LANGUAGE_OPTIONS.map((language) => (
-                      <option key={language} value={language}>
-                        {language}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="mt-1 block text-[11px] font-normal text-slate-500">
-                    Hold Ctrl (Windows) or Command (Mac) to select multiple languages.
-                  </span>
-                </label>
-              </div>
-              <div className="md:col-span-2">
-                <button
-                  type="submit"
-                  disabled={formDisabled}
-                  className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {saving ? 'Saving…' : 'Save agent'}
-                </button>
-              </div>
-            </div>
-          </form>
-        )}
-
       <div className="flex flex-col gap-3">
         {isAdmin && (
           <label className="text-xs font-semibold text-slate-600">
