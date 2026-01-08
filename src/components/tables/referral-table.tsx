@@ -478,7 +478,7 @@ function buildColumns(
       }
     },
     {
-      header: sortableHeader('Lender/MC'),
+      header: sortableHeader('Lender/MC', 'lenderName', currentSortBy, currentSortDirection, onSortChange),
       accessorKey: 'lenderName',
       cell: ({ row }) => {
         const { lenderName, lenderPhone } = row.original;
