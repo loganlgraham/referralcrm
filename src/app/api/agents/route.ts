@@ -42,7 +42,7 @@ const createAgentSchema = z.object({
   specialties: z.array(z.string().trim().min(1)).optional().default([]),
   languages: z.array(z.string().trim().min(1)).optional().default([]),
   ahaDesignation: z
-    .enum(['AHA', 'AHA_OOS'])
+    .enum(['AHA', 'AHA_OOS', 'AGIT'])
     .optional()
     .nullable()
     .default(null),
@@ -118,7 +118,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     npsScore?: number | null;
     specialties?: string[] | null;
     languages?: string[] | null;
-    ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
+    ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   };
 
   const [agents, total] = await Promise.all([
@@ -165,7 +165,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       specialties: Array.isArray(agent.specialties) ? agent.specialties : [],
       languages: Array.isArray(agent.languages) ? agent.languages : [],
       ahaDesignation:
-        agent.ahaDesignation === 'AHA' || agent.ahaDesignation === 'AHA_OOS'
+        agent.ahaDesignation === 'AHA' || agent.ahaDesignation === 'AHA_OOS' || agent.ahaDesignation === 'AGIT'
           ? agent.ahaDesignation
           : null,
       metrics,

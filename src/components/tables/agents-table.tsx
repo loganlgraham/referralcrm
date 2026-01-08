@@ -50,7 +50,7 @@ interface AgentRow {
   coverageLocations?: CoverageLocation[];
   specialties?: string[];
   languages?: string[];
-  ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
+  ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   metrics: {
     closingsLast12Months: number;
     closingRate: number;
@@ -83,7 +83,7 @@ type AgentFormState = {
   coverageLocations: CoverageLocation[];
   specialties: string[];
   languages: string[];
-  ahaDesignation: '' | 'AHA' | 'AHA_OOS';
+  ahaDesignation: '' | 'AHA' | 'AHA_OOS' | 'AGIT';
 };
 
 type CreatedAgentSummary = {

@@ -34,7 +34,7 @@ type AgentProfile = {
   coverageLocations?: { label: string; zipCodes: string[] }[];
   specialties?: string[];
   languages?: string[];
-  ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
+  ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   metrics: AgentMetricsSummary;
   notes: NoteSummary[];
   deals: PersonDealSnapshot[];
@@ -103,7 +103,7 @@ type AgentLean = {
   notes?: NoteRecord[] | null;
   specialties?: string[] | null;
   languages?: string[] | null;
-  ahaDesignation?: 'AHA' | 'AHA_OOS' | null;
+  ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
 };
 
 type LenderLean = {
@@ -260,7 +260,7 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
     specialties: Array.isArray(agent.specialties) ? agent.specialties : undefined,
     languages: Array.isArray(agent.languages) ? agent.languages : undefined,
     ahaDesignation:
-      agent.ahaDesignation === 'AHA' || agent.ahaDesignation === 'AHA_OOS'
+      agent.ahaDesignation === 'AHA' || agent.ahaDesignation === 'AHA_OOS' || agent.ahaDesignation === 'AGIT'
         ? agent.ahaDesignation
         : null,
     metrics,

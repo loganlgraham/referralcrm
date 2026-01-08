@@ -188,13 +188,23 @@ interface DashboardResponse {
     firstContactWithin24HoursCount: number;
     firstContactSampleSize: number;
   };
+  agit: {
+    totalReferrals: number;
+    glennBeckReferrals: number;
+    usedAfcCount: number;
+    usedAfcRate: number;
+    lostReferrals: number;
+    closeRate: number;
+    dealsClosed: number;
+  };
 }
 
 const TAB_OPTIONS = [
   { label: 'Main', value: 'main' },
   { label: 'MC', value: 'mc' },
   { label: 'Agent', value: 'agent' },
-  { label: 'Admin', value: 'admin' }
+  { label: 'Admin', value: 'admin' },
+  { label: 'AGIT', value: 'agit' }
 ] as const;
 
 type TabValue = (typeof TAB_OPTIONS)[number]['value'];
@@ -209,7 +219,8 @@ const DEFAULT_NETWORK_FILTER: Record<TabValue, NetworkFilter> = {
   main: 'ALL',
   mc: 'ALL',
   agent: 'ALL',
-  admin: 'AHA_OOS'
+  admin: 'AHA_OOS',
+  agit: 'ALL'
 };
 
 function NetworkFilterButtons({
@@ -1483,6 +1494,40 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
   );
 }
 
+function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard 
+          title="Total Referrals" 
+          value={formatNumber(data.totalReferrals)} 
+        />
+        <SummaryCard 
+          title="Glenn Beck Referrals" 
+          value={formatNumber(data.glennBeckReferrals)} 
+        />
+        <SummaryCard 
+          title="Closed Deals" 
+          value={formatNumber(data.dealsClosed)} 
+        />
+        <SummaryCard 
+          title="Used AFC (Attach Rate)" 
+          value={`${data.usedAfcRate.toFixed(1)}%`}
+          helper={`${formatNumber(data.usedAfcCount)} went to another lender`}
+        />
+        <SummaryCard 
+          title="Lost Referrals" 
+          value={formatNumber(data.lostReferrals)} 
+        />
+        <SummaryCard 
+          title="Close Rate" 
+          value={`${data.closeRate.toFixed(1)}%`}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function DashboardTabs() {
   const [activeTab, setActiveTab] = useState<(typeof TAB_OPTIONS)[number]['value']>('main');
   const [timeframe, setTimeframe] = useState<TimeframeKey>('month');
@@ -1532,7 +1577,7 @@ export function DashboardTabs() {
 
   const visibleTabs = useMemo(() => {
     return TAB_OPTIONS.filter((tab) => {
-      if (tab.value === 'main' || tab.value === 'admin') {
+      if (tab.value === 'main' || tab.value === 'admin' || tab.value === 'agit') {
         return canViewGlobal;
       }
       if (tab.value === 'mc') {
@@ -1654,6 +1699,7 @@ export function DashboardTabs() {
           {activeTab === 'mc' ? <McDashboard data={data.mc} /> : null}
           {activeTab === 'agent' ? <AgentDashboard data={data.agent} /> : null}
           {activeTab === 'admin' ? <AdminDashboard data={data.admin} /> : null}
+          {activeTab === 'agit' ? <AgitDashboard data={data.agit} /> : null}
         </div>
       ) : null}
     </div>

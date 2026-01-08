@@ -47,6 +47,8 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
                 ? 'AHA'
                 : agent.ahaDesignation === 'AHA_OOS'
                 ? 'AHA OOS'
+                : agent.ahaDesignation === 'AGIT'
+                ? 'AGIT'
                 : '—'}
             </p>
           </div>

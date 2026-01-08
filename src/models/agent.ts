@@ -52,7 +52,7 @@ const agentSchema = new Schema(
     languages: { type: [String], default: [] },
     ahaDesignation: {
       type: String,
-      enum: ['AHA', 'AHA_OOS', null],
+      enum: ['AHA', 'AHA_OOS', 'AGIT', null],
       default: null,
     },
     experienceSince: { type: Date },
