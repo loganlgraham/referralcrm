@@ -55,6 +55,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   
   const { searchParams } = new URL(request.url);
+  const all = searchParams.get('all') === 'true';
   const page = Number(searchParams.get('page') || 1);
   const pageSizeParam = searchParams.get('pageSize');
   const validPageSizes = [20, 25, 50, 100];
@@ -121,11 +122,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   };
 
+  const query = Agent.find(filter);
   const [agents, total] = await Promise.all([
-    Agent.find(filter)
-      .skip((page - 1) * pageSize)
-      .limit(pageSize)
-      .lean<AgentLean[]>(),
+    all
+      ? query.lean<AgentLean[]>()
+      : query.skip((page - 1) * pageSize).limit(pageSize).lean<AgentLean[]>(),
     Agent.countDocuments(filter)
   ]);
 

@@ -140,6 +140,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   
   const { searchParams } = new URL(request.url);
+  const all = searchParams.get('all') === 'true';
   const page = Number(searchParams.get('page') || 1);
   const pageSizeParam = searchParams.get('pageSize');
   const validPageSizes = [20, 25, 50, 100];
@@ -173,24 +174,37 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   
   await connectMongo();
+  const query = LenderMC.find(filter);
   const [lenders, total] = await Promise.all([
-    LenderMC.find(filter)
-      .skip((page - 1) * pageSize)
-      .limit(pageSize)
-      .lean<{
-        _id: Types.ObjectId | string;
-        name?: string;
-        email?: string;
-        phone?: string;
-        nmlsId?: string;
-        licensedStates?: string[];
-        team?: string;
-        region?: string;
-        notes?: unknown[];
-        userId?: Types.ObjectId | string | null;
-        createdAt?: Date;
-        updatedAt?: Date;
-      }[]>(),
+    all
+      ? query.lean<{
+          _id: Types.ObjectId | string;
+          name?: string;
+          email?: string;
+          phone?: string;
+          nmlsId?: string;
+          licensedStates?: string[];
+          team?: string;
+          region?: string;
+          notes?: unknown[];
+          userId?: Types.ObjectId | string | null;
+          createdAt?: Date;
+          updatedAt?: Date;
+        }[]>()
+      : query.skip((page - 1) * pageSize).limit(pageSize).lean<{
+          _id: Types.ObjectId | string;
+          name?: string;
+          email?: string;
+          phone?: string;
+          nmlsId?: string;
+          licensedStates?: string[];
+          team?: string;
+          region?: string;
+          notes?: unknown[];
+          userId?: Types.ObjectId | string | null;
+          createdAt?: Date;
+          updatedAt?: Date;
+        }[]>(),
     LenderMC.countDocuments(filter)
   ]);
 
