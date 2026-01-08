@@ -201,7 +201,7 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
   const generateCoverageLocations = async () => {
     const description = form.coverageDescription.trim();
     if (!description) {
-      toast.error('Describe the agent's coverage areas first.');
+      toast.error("Describe the agent's coverage areas first.");
       return;
     }
 
