@@ -1,7 +1,7 @@
 import { differenceInDays } from 'date-fns';
 import { NextRequest, NextResponse } from 'next/server';
 import { connectMongo } from '@/lib/mongoose';
-import { Types } from 'mongoose';
+import { Types, PipelineStage } from 'mongoose';
 
 import { Payment } from '@/models/payment';
 import { paymentSchema } from '@/utils/validators';
@@ -194,7 +194,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const pipeline: unknown[] = [
+    const pipeline: PipelineStage[] = [
       { $match: filter },
       {
         $lookup: {
