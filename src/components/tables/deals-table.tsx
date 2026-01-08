@@ -283,6 +283,9 @@ export function DealsTable() {
   };
 
   const sortedDeals = useMemo(() => {
+    if (!Array.isArray(deals)) {
+      return [];
+    }
     const rows = [...deals];
     if (!sortConfig) {
       return rows;

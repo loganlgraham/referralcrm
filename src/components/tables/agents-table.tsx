@@ -288,6 +288,9 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
   };
 
   const sortedAgents = useMemo(() => {
+    if (!Array.isArray(agents)) {
+      return [];
+    }
     const rows = [...agents];
     if (!sortConfig) {
       return rows;

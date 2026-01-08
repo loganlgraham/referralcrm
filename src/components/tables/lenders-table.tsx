@@ -163,6 +163,9 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
       }
     };
 
+    if (!Array.isArray(items)) {
+      return [];
+    }
     return [...items].sort((a, b) => {
       const aValue = getValue(a, sortConfig.key);
       const bValue = getValue(b, sortConfig.key);
