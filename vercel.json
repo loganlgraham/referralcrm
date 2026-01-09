@@ -8,11 +8,11 @@
   "crons": [
     {
       "path": "/api/cron/follow-up-reminders",
-      "schedule": "0 15 * * *"
+      "schedule": "0 16 * * *"
     },
     {
       "path": "/api/cron/closing-reminders",
-      "schedule": "0 10 * * *"
+      "schedule": "0 16 * * *"
     }
   ]
 }
