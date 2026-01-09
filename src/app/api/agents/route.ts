@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { connectMongo } from '@/lib/mongoose';
 import { Agent, AgentDocument } from '@/models/agent';
 import { getCurrentSession } from '@/lib/auth';
-import { computeAgentMetrics, EMPTY_AGENT_METRICS } from '@/lib/server/agent-metrics';
+import { computeAgentMetrics, EMPTY_AGENT_METRICS, AgentMetricsSummary } from '@/lib/server/agent-metrics';
 import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
 import {
   mergeAndNormalizeZipCodes,
@@ -57,6 +57,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   
   const { searchParams } = new URL(request.url);
   const all = searchParams.get('all') === 'true';
+  const minimal = searchParams.get('minimal') === 'true';
   const page = Number(searchParams.get('page') || 1);
   const pageSizeParam = searchParams.get('pageSize');
   const validPageSizes = [20, 25, 50, 100];
@@ -168,7 +169,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     npsScores.set(id, agent.npsScore ?? null);
   });
 
-  const metricsMap = await computeAgentMetrics(agentIds, npsScores);
+  const metricsMap = minimal 
+    ? new Map<string, AgentMetricsSummary>() 
+    : await computeAgentMetrics(agentIds, npsScores);
 
   let payload = agents.map((agent) => {
     const id = agent._id.toString();
@@ -176,7 +179,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       ...EMPTY_AGENT_METRICS,
       npsScore: agent.npsScore ?? null
     };
-    return {
+    
+    const baseObj: any = {
       _id: id,
       name: agent.name ?? '',
       email: agent.email ?? '',
@@ -200,13 +204,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         agent.ahaDesignation === 'AHA' || agent.ahaDesignation === 'AHA_OOS' || agent.ahaDesignation === 'AGIT'
           ? agent.ahaDesignation
           : null,
-      metrics,
-      npsScore: metrics.npsScore,
     };
+
+    if (!minimal) {
+      baseObj.metrics = metrics;
+      baseObj.npsScore = metrics.npsScore;
+    }
+
+    return baseObj;
   });
 
   // Sort by computed metrics fields if needed
-  if (sortBy && ['closings', 'closingRate', 'avgResponse', 'referralFees', 'netIncome'].includes(sortBy)) {
+  if (!minimal && sortBy && ['closings', 'closingRate', 'avgResponse', 'referralFees', 'netIncome'].includes(sortBy)) {
     const direction = sortDirection === 'asc' ? 1 : -1;
     payload.sort((a, b) => {
       let aValue: number;

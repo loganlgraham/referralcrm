@@ -58,6 +58,7 @@ interface DealRow {
     loanFileNumber?: string | null;
     ahaBucket?: AgentAttribution;
     dealSide?: 'buy' | 'sell' | null;
+    endorser?: string | null;
   } | null;
 }
 
@@ -321,9 +322,21 @@ export function DealsTable() {
     );
   };
 
+  // Define expected revenue statuses to match dashboard calculation
+  const EXPECTED_REVENUE_STATUSES = new Set<DealStatus>([
+    'under_contract',
+    'past_inspection',
+    'past_appraisal',
+    'clear_to_close',
+    'closed',
+    'payment_sent'
+  ]);
+
   const aggregates = deals.reduce(
     (acc, row) => {
       const isTerminated = row.status === 'terminated';
+      const isOutsideAgent = row.agentAttribution === 'OUTSIDE_AGENT';
+      const isGlennBeck = row.referral?.endorser?.trim().toLowerCase() === 'glenn beck';
 
       if (
         row.status === 'under_contract' ||
@@ -347,7 +360,19 @@ export function DealsTable() {
           : 0;
       const commission = calculateCommission(row);
 
-      acc.expectedRevenue += outstanding;
+      // Calculate expected revenue matching dashboard logic:
+      // - Only count deals with statuses in EXPECTED_REVENUE_STATUSES
+      // - Or paid deals with outstanding > 0
+      // - Exclude OUTSIDE_AGENT deals
+      // - Exclude Glenn Beck referrals
+      if (!isOutsideAgent && !isGlennBeck) {
+        if (EXPECTED_REVENUE_STATUSES.has(row.status)) {
+          acc.expectedRevenue += outstanding;
+        } else if (row.status === 'paid' && outstanding > 0) {
+          acc.expectedRevenue += outstanding;
+        }
+      }
+
       acc.receivedRevenue += effectivePaid;
       acc.referralFeesPaid += effectivePaid;
       acc.commissionEarned += commission;

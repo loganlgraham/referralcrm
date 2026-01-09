@@ -93,6 +93,7 @@ const dateStringToLocalISO = (dateString: string): string => {
 function DealCard({
   deal,
   agents,
+  agentsLoading,
   canManage,
   statusUpdating,
   deleting,
@@ -104,6 +105,7 @@ function DealCard({
 }: {
   deal: ReferralPayment;
   agents: AgentOption[];
+  agentsLoading: boolean;
   canManage: boolean;
   statusUpdating?: boolean;
   deleting?: boolean;
@@ -650,17 +652,17 @@ function DealCard({
               value={agentId}
               onChange={(event) => setAgentId(event.target.value)}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-              disabled={saving || agents.length === 0}
+              disabled={saving || agentsLoading}
             >
               <option value="">Unassigned</option>
-              {agents.length > 0 ? (
+              {agentsLoading && agents.length === 0 ? (
+                <option value="" disabled>Loading agents...</option>
+              ) : (
                 agents.map((agent) => (
                   <option key={agent.id} value={agent.id}>
                     {agent.name}
                   </option>
                 ))
-              ) : (
-                <option value="" disabled>Loading agents...</option>
               )}
             </select>
           </label>
@@ -789,14 +791,15 @@ export function ReferralDeals({
     setAgentsLoading(true);
     setAgentsError(null);
     const controller = new AbortController();
-    fetch('/api/agents', { signal: controller.signal })
+    fetch('/api/agents?minimal=true&all=true', { signal: controller.signal })
       .then((response) => {
         if (!response.ok) {
           throw new Error('Unable to load agents');
         }
-        return response.json() as Promise<{ _id: string; name?: string | null }[]>;
+        return response.json() as Promise<{ items: { _id: string; name?: string | null }[] }>;
       })
-      .then((options) => {
+      .then((data) => {
+        const options = data.items || [];
         setAgents(
           options
             .filter((option) => option?._id)
@@ -1291,17 +1294,17 @@ export function ReferralDeals({
               value={agentId}
               onChange={(event) => setAgentId(event.target.value)}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-              disabled={submitting || agents.length === 0}
+              disabled={submitting || agentsLoading}
             >
               <option value="">Unassigned</option>
-              {agents.length > 0 ? (
+              {agentsLoading && agents.length === 0 ? (
+                <option value="" disabled>Loading agents...</option>
+              ) : (
                 agents.map((agent) => (
                   <option key={agent.id} value={agent.id}>
                     {agent.name}
                   </option>
                 ))
-              ) : (
-                <option value="" disabled>Loading agents...</option>
               )}
             </select>
           </label>
@@ -1379,6 +1382,7 @@ export function ReferralDeals({
               key={deal._id}
               deal={deal}
               agents={agents}
+              agentsLoading={agentsLoading}
               canManage={canManage}
               isAgentOrigin={isAgentOrigin}
               statusUpdating={statusUpdating[deal._id]}

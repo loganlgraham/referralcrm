@@ -106,7 +106,7 @@ export function ContactAssignment({
   const [suggestionReason, setSuggestionReason] = useState<string | null>(null);
   const [suggestedAgentIds, setSuggestedAgentIds] = useState<string[]>([]);
 
-  const apiUrl = open && canAssign ? `${directoryForType[type]}?all=true` : null;
+  const apiUrl = open && canAssign ? `${directoryForType[type]}?all=true&minimal=true` : null;
   const { data: response } = useSWR<PaginatedResponse<AssignmentOption>>(apiUrl, fetcher);
   const { mutate } = useSWRConfig();
   

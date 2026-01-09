@@ -142,6 +142,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   
   const { searchParams } = new URL(request.url);
   const all = searchParams.get('all') === 'true';
+  const minimal = searchParams.get('minimal') === 'true';
   const page = Number(searchParams.get('page') || 1);
   const pageSizeParam = searchParams.get('pageSize');
   const validPageSizes = [20, 25, 50, 100];
@@ -216,15 +217,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return typeof value === 'string' ? new Types.ObjectId(value) : value;
     })
     .filter((value): value is Types.ObjectId => value !== null);
-  const metrics = await computeLenderMetrics(lenderIds);
+  const metrics = minimal ? new Map() : await computeLenderMetrics(lenderIds);
 
   const response = lenders.map((lender) => {
     const id = lender._id?.toString?.() ?? '';
-    return {
+    const baseObj: any = {
       ...lender,
       _id: id,
-      metrics: metrics.get(id) ?? EMPTY_LENDER_METRICS,
     };
+    if (!minimal) {
+      baseObj.metrics = metrics.get(id) ?? EMPTY_LENDER_METRICS;
+    }
+    return baseObj;
   });
 
   return NextResponse.json({
