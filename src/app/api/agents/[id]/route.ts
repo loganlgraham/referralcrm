@@ -9,6 +9,7 @@ import { computeAgentMetrics, EMPTY_AGENT_METRICS } from '@/lib/server/agent-met
 import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
 import { mergeAndNormalizeZipCodes, syncAgentZipCoverage } from '@/lib/server/zip-coverage';
 import { Referral } from '@/models/referral';
+import { normalizePhoneNumber } from '@/utils/phone-utils';
 
 const coverageLocationSchema = z.object({
   label: z.string().trim().min(1),
@@ -68,6 +69,43 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
 
   if (!isOwner && !isAdmin) {
     return new NextResponse('Forbidden', { status: 403 });
+  }
+
+  // Check for duplicate email if email is being updated
+  if (parsed.data.email !== undefined && parsed.data.email !== agent.email) {
+    const existingAgentByEmail = await Agent.findOne({ 
+      email: parsed.data.email,
+      _id: { $ne: params.id }
+    });
+    if (existingAgentByEmail) {
+      return NextResponse.json(
+        { message: 'An agent with this email already exists.' },
+        { status: 409 }
+      );
+    }
+  }
+
+  // Check for duplicate phone if phone is being updated
+  if (parsed.data.phone !== undefined && parsed.data.phone !== agent.phone) {
+    const normalizedPhone = normalizePhoneNumber(parsed.data.phone);
+    if (normalizedPhone) {
+      // Find all agents with phone numbers (excluding current agent) and check for normalized match
+      const agentsWithPhones = await Agent.find({ 
+        phone: { $exists: true, $ne: '' },
+        _id: { $ne: params.id }
+      });
+      const duplicateByPhone = agentsWithPhones.find((otherAgent) => {
+        const otherNormalizedPhone = normalizePhoneNumber(otherAgent.phone);
+        return otherNormalizedPhone === normalizedPhone;
+      });
+      
+      if (duplicateByPhone) {
+        return NextResponse.json(
+          { message: 'An agent with this phone number already exists.' },
+          { status: 409 }
+        );
+      }
+    }
   }
 
   const update: Record<string, unknown> = {};

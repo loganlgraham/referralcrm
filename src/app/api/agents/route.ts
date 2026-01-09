@@ -12,6 +12,7 @@ import {
   normalizeCoverageLocations,
   syncAgentZipCoverage,
 } from '@/lib/server/zip-coverage';
+import { normalizePhoneNumber } from '@/utils/phone-utils';
 
 const coverageLocationSchema = z.object({
   label: z.string().trim().min(1),
@@ -261,6 +262,35 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   await connectMongo();
+
+  // Check for duplicate email
+  const existingAgentByEmail = await Agent.findOne({ email: parsed.data.email });
+  if (existingAgentByEmail) {
+    return NextResponse.json(
+      { message: 'An agent with this email already exists. Try updating their profile instead.' },
+      { status: 409 }
+    );
+  }
+
+  // Check for duplicate phone number (if provided)
+  if (parsed.data.phone) {
+    const normalizedPhone = normalizePhoneNumber(parsed.data.phone);
+    if (normalizedPhone) {
+      // Find all agents with phone numbers and check for normalized match
+      const agentsWithPhones = await Agent.find({ phone: { $exists: true, $ne: '' } });
+      const duplicateByPhone = agentsWithPhones.find((agent) => {
+        const agentNormalizedPhone = normalizePhoneNumber(agent.phone);
+        return agentNormalizedPhone === normalizedPhone;
+      });
+      
+      if (duplicateByPhone) {
+        return NextResponse.json(
+          { message: 'An agent with this phone number already exists. Try updating their profile instead.' },
+          { status: 409 }
+        );
+      }
+    }
+  }
 
   const normalizedCoverageLocations = normalizeCoverageLocations(
     parsed.data.coverageLocations

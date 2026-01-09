@@ -70,7 +70,8 @@ export function LenderAdminEditor({ lender, className, onSaved }: LenderAdminEdi
       });
 
       if (!response.ok) {
-        throw new Error('Unable to update mortgage consultant');
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.message ?? 'Unable to update mortgage consultant');
       }
 
       toast.success('Mortgage consultant updated');
