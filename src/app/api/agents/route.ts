@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { connectMongo } from '@/lib/mongoose';
 import { Agent, AgentDocument } from '@/models/agent';
 import { getCurrentSession } from '@/lib/auth';
-import { computeAgentMetrics, EMPTY_AGENT_METRICS } from '@/lib/server/agent-metrics';
+import { computeAgentMetrics, EMPTY_AGENT_METRICS, AgentMetricsSummary } from '@/lib/server/agent-metrics';
 import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
 import {
   mergeAndNormalizeZipCodes,
@@ -215,7 +215,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   // Sort by computed metrics fields if needed
-  if (sortBy && ['closings', 'closingRate', 'avgResponse', 'referralFees', 'netIncome'].includes(sortBy)) {
+  if (!minimal && sortBy && ['closings', 'closingRate', 'avgResponse', 'referralFees', 'netIncome'].includes(sortBy)) {
     const direction = sortDirection === 'asc' ? 1 : -1;
     payload.sort((a, b) => {
       let aValue: number;
