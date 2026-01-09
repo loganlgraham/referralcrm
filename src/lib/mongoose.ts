@@ -64,7 +64,12 @@ export async function connectMongo(): Promise<typeof mongoose> {
   if (!cached?.promise) {
     const connectionOptions: Parameters<typeof mongoose.connect>[1] = {
       bufferCommands: false,
-      serverSelectionTimeoutMS: 15000,
+      serverSelectionTimeoutMS: 30000, // Increased from 15000 for serverless cold starts
+      socketTimeoutMS: 45000, // Add socket timeout
+      connectTimeoutMS: 30000, // Add connection timeout
+      maxPoolSize: 1, // Reduce pool size for serverless (single connection per function)
+      minPoolSize: 1,
+      maxIdleTimeMS: 30000,
     };
     if (ALLOW_INSECURE_TLS) {
       connectionOptions.tlsAllowInvalidCertificates = true;

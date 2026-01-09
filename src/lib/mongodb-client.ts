@@ -1,4 +1,5 @@
 import { MongoClient } from 'mongodb';
+import { attachDatabasePool } from '@vercel/functions';
 
 let client: MongoClient | null = null;
 
@@ -8,7 +9,16 @@ export function getMongoClient(): MongoClient {
     throw new Error('Missing MONGODB_URI environment variable');
   }
   if (!client) {
-    client = new MongoClient(uri, {});
+    const options = {
+      serverSelectionTimeoutMS: 30000,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 30000,
+    };
+    client = new MongoClient(uri, options);
+    // Attach Vercel's database pool for serverless optimization
+    if (process.env.VERCEL) {
+      attachDatabasePool(client);
+    }
   }
   return client;
 }
