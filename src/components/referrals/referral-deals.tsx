@@ -159,7 +159,9 @@ function DealCard({
     setPropertyCity(deal.propertyCity ?? '');
     setPropertyState(deal.propertyState ?? '');
     setClosingDate(deal.closingDate ? deal.closingDate.slice(0, 10) : '');
-    setAgentId(deal.agentId ?? deal.agent?.id ?? '');
+    // Properly handle agentId from either deal.agentId or deal.agent?.id
+    const dealAgentId = deal.agentId ?? deal.agent?.id ?? null;
+    setAgentId(dealAgentId ?? '');
     setSide(deal.side ?? 'buy');
     setUsedAfc(Boolean(deal.usedAfc));
     setUsedAssignedAgent(deal.usedAssignedAgent ?? true);
@@ -168,8 +170,11 @@ function DealCard({
   }, [deal]);
 
   useEffect(() => {
-    populateFromDeal();
-  }, [populateFromDeal]);
+    // Don't reset form state if user is currently editing
+    if (!editing) {
+      populateFromDeal();
+    }
+  }, [populateFromDeal, editing]);
 
   const handleSendFeeBreakdown = async () => {
     const confirmed = window.confirm(
@@ -281,7 +286,8 @@ function DealCard({
       propertyCity: propertyCity.trim() || null,
       propertyState: propertyState.trim().toUpperCase() || null,
       closingDate: closingDateToSend,
-      agentId: agentId || null,
+      // Always include agentId, even if empty (will be converted to null)
+      agentId: agentId.trim() || null,
       side,
       usedAfc,
       usedAssignedAgent,
@@ -644,14 +650,18 @@ function DealCard({
               value={agentId}
               onChange={(event) => setAgentId(event.target.value)}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-              disabled={saving}
+              disabled={saving || agents.length === 0}
             >
               <option value="">Unassigned</option>
-              {agents.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name}
-                </option>
-              ))}
+              {agents.length > 0 ? (
+                agents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </option>
+                ))
+              ) : (
+                <option value="" disabled>Loading agents...</option>
+              )}
             </select>
           </label>
           <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -762,6 +772,8 @@ export function ReferralDeals({
   const [submitting, setSubmitting] = useState(false);
   const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | null>(null);
   const [agents, setAgents] = useState<AgentOption[]>([]);
+  const [agentsLoading, setAgentsLoading] = useState(true);
+  const [agentsError, setAgentsError] = useState<string | null>(null);
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
   const [deleting, setDeleting] = useState<Record<string, boolean>>({});
   const [showForm, setShowForm] = useState(false);
@@ -770,7 +782,12 @@ export function ReferralDeals({
   const canManage = viewerRole !== 'viewer';
 
   useEffect(() => {
-    if (!canManage) return;
+    if (!canManage) {
+      setAgentsLoading(false);
+      return;
+    }
+    setAgentsLoading(true);
+    setAgentsError(null);
     const controller = new AbortController();
     fetch('/api/agents', { signal: controller.signal })
       .then((response) => {
@@ -785,10 +802,16 @@ export function ReferralDeals({
             .filter((option) => option?._id)
             .map((option) => ({ id: option._id, name: option.name ?? 'Unnamed agent' }))
         );
+        setAgentsError(null);
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
         console.error(error);
+        setAgentsError(error instanceof Error ? error.message : 'Failed to load agents');
+        toast.error('Unable to load agents list');
+      })
+      .finally(() => {
+        setAgentsLoading(false);
       });
 
     return () => {
@@ -1032,8 +1055,10 @@ export function ReferralDeals({
         return false;
       }
 
-      const agentName = payload.agentId
-        ? agents.find((option) => option.id === payload.agentId)?.name ?? null
+      // Preserve agentId - payload always includes it (even if null to unassign)
+      const updatedAgentId = payload.agentId ?? null;
+      const agentName = updatedAgentId
+        ? agents.find((option) => option.id === updatedAgentId)?.name ?? null
         : null;
       onDealUpdated?.({
         ...deal,
@@ -1048,9 +1073,9 @@ export function ReferralDeals({
         propertyCity: payload.propertyCity ?? null,
         propertyState: payload.propertyState ?? null,
         closingDate: payload.closingDate ?? null,
-        agentId: payload.agentId ?? null,
-        agent: payload.agentId
-          ? { id: payload.agentId, name: agentName }
+        agentId: updatedAgentId,
+        agent: updatedAgentId
+          ? { id: updatedAgentId, name: agentName }
           : null,
         side: payload.side ?? deal.side,
         usedAfc: payload.usedAfc,
@@ -1266,14 +1291,18 @@ export function ReferralDeals({
               value={agentId}
               onChange={(event) => setAgentId(event.target.value)}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-              disabled={submitting}
+              disabled={submitting || agents.length === 0}
             >
               <option value="">Unassigned</option>
-              {agents.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name}
-                </option>
-              ))}
+              {agents.length > 0 ? (
+                agents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </option>
+                ))
+              ) : (
+                <option value="" disabled>Loading agents...</option>
+              )}
             </select>
           </label>
           <label className="space-y-1 text-sm font-medium text-slate-700">
