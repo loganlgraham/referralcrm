@@ -463,6 +463,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             ahaBucket: (referral as any).ahaBucket ?? null,
             dealSide: (referral as any).dealSide ?? null,
             loanFileNumber: (referral as any).loanFileNumber ?? null,
+            endorser: (referral as any).endorser ?? null,
           }
         : null,
     };
