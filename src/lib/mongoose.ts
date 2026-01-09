@@ -75,10 +75,24 @@ export async function connectMongo(): Promise<typeof mongoose> {
       connectionOptions.tlsAllowInvalidCertificates = true;
       connectionOptions.tlsAllowInvalidHostnames = true;
     }
-    cached!.promise = mongoose.connect(MONGODB_URI, connectionOptions);
+    cached!.promise = mongoose.connect(MONGODB_URI, connectionOptions).catch((error) => {
+      // Clear the cached promise on failure so we can retry
+      cached!.promise = null;
+      cached!.conn = null;
+      console.error('MongoDB connection error:', error);
+      throw error;
+    });
   }
 
-  cached!.conn = await cached!.promise;
-  await registerModels();
-  return cached!.conn;
+  try {
+    cached!.conn = await cached!.promise;
+    await registerModels();
+    return cached!.conn;
+  } catch (error) {
+    // Clear cache on error to allow retry
+    cached!.promise = null;
+    cached!.conn = null;
+    console.error('MongoDB connection failed:', error);
+    throw error;
+  }
 }

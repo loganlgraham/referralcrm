@@ -24,7 +24,10 @@ export function getMongoClient(): MongoClient {
 }
 
 export function getClientPromise(): Promise<MongoClient> {
-  return getMongoClient().connect();
+  return getMongoClient().connect().catch((error) => {
+    console.error('MongoDB client connection error:', error);
+    throw error;
+  });
 }
 
 export default getMongoClient;
