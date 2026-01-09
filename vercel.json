@@ -7,12 +7,12 @@
   "outputDirectory": ".next",
   "crons": [
     {
-      "path": "/api/cron/follow-up-reminders",
+      "path": "/api/cron/closing-reminders",
       "schedule": "0 16 * * *"
     },
     {
-      "path": "/api/cron/closing-reminders",
-      "schedule": "0 16 * * *"
+      "path": "/api/cron/follow-up-reminders",
+      "schedule": "5 16 * * *"
     }
   ]
 }
