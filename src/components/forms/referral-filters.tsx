@@ -50,8 +50,17 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
     [router, searchParamsString, startTransition]
   );
 
-  const { data: agents } = useSWR<DirectoryOption[]>(isAgentMode ? null : '/api/agents', fetcher);
-  const { data: lenders } = useSWR<DirectoryOption[]>('/api/lenders', fetcher);
+  const { data: agentsResponse } = useSWR<{ items: DirectoryOption[] }>(
+    isAgentMode ? null : '/api/agents?minimal=true&all=true',
+    fetcher
+  );
+  const { data: lendersResponse } = useSWR<{ items: DirectoryOption[] }>(
+    '/api/lenders?minimal=true&all=true',
+    fetcher
+  );
+
+  const agents = agentsResponse?.items;
+  const lenders = lendersResponse?.items;
 
   const sortedAgents = useMemo(() => {
     if (!agents || !Array.isArray(agents)) return undefined;

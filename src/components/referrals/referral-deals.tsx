@@ -791,14 +791,15 @@ export function ReferralDeals({
     setAgentsLoading(true);
     setAgentsError(null);
     const controller = new AbortController();
-    fetch('/api/agents', { signal: controller.signal })
+    fetch('/api/agents?minimal=true&all=true', { signal: controller.signal })
       .then((response) => {
         if (!response.ok) {
           throw new Error('Unable to load agents');
         }
-        return response.json() as Promise<{ _id: string; name?: string | null }[]>;
+        return response.json() as Promise<{ items: { _id: string; name?: string | null }[] }>;
       })
-      .then((options) => {
+      .then((data) => {
+        const options = data.items || [];
         setAgents(
           options
             .filter((option) => option?._id)

@@ -67,8 +67,8 @@ export async function connectMongo(): Promise<typeof mongoose> {
       serverSelectionTimeoutMS: 30000, // Increased from 15000 for serverless cold starts
       socketTimeoutMS: 45000, // Add socket timeout
       connectTimeoutMS: 30000, // Add connection timeout
-      maxPoolSize: 1, // Reduce pool size for serverless (single connection per function)
-      minPoolSize: 1,
+      maxPoolSize: 10, // Increased from 1 to allow parallel queries within a single request
+      minPoolSize: 0, // Reduced from 1 to avoid keeping unnecessary connections open
       maxIdleTimeMS: 30000,
     };
     if (ALLOW_INSECURE_TLS) {

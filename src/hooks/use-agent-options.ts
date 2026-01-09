@@ -15,15 +15,23 @@ export interface AgentOption {
   name: string;
 }
 
+interface AgentsResponse {
+  items: AgentDirectoryEntry[];
+}
+
 export function useAgentOptions(enabled: boolean) {
-  const { data, error, isLoading } = useSWR<AgentDirectoryEntry[]>(enabled ? '/api/agents' : null, fetcher);
+  const { data, error, isLoading } = useSWR<AgentsResponse>(
+    enabled ? '/api/agents?minimal=true&all=true' : null,
+    fetcher
+  );
 
   const options = useMemo<AgentOption[]>(() => {
-    if (!data) {
+    const agents = data?.items;
+    if (!agents) {
       return [];
     }
 
-    return data
+    return agents
       .map((agent) => ({
         id: agent._id,
         name: agent.name?.trim() ? agent.name.trim() : 'Unnamed Agent',
