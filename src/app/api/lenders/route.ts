@@ -7,6 +7,7 @@ import { Payment } from '@/models/payment';
 import { Referral } from '@/models/referral';
 import { Types } from 'mongoose';
 import { subYears } from 'date-fns';
+import { normalizePhoneNumber } from '@/utils/phone-utils';
 
 const createLenderSchema = z.object({
   name: z.string().trim().min(1),
@@ -247,6 +248,35 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   await connectMongo();
+
+  // Check for duplicate email
+  const existingLenderByEmail = await LenderMC.findOne({ email: parsed.data.email });
+  if (existingLenderByEmail) {
+    return NextResponse.json(
+      { message: 'A mortgage consultant with this email already exists. Try updating their profile instead.' },
+      { status: 409 }
+    );
+  }
+
+  // Check for duplicate phone number (if provided)
+  if (parsed.data.phone) {
+    const normalizedPhone = normalizePhoneNumber(parsed.data.phone);
+    if (normalizedPhone) {
+      // Find all lenders with phone numbers and check for normalized match
+      const lendersWithPhones = await LenderMC.find({ phone: { $exists: true, $ne: '' } });
+      const duplicateByPhone = lendersWithPhones.find((lender) => {
+        const lenderNormalizedPhone = normalizePhoneNumber(lender.phone);
+        return lenderNormalizedPhone === normalizedPhone;
+      });
+      
+      if (duplicateByPhone) {
+        return NextResponse.json(
+          { message: 'A mortgage consultant with this phone number already exists. Try updating their profile instead.' },
+          { status: 409 }
+        );
+      }
+    }
+  }
 
   const lender = await LenderMC.create({
     name: parsed.data.name,

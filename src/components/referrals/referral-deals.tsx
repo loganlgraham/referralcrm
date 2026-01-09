@@ -261,12 +261,15 @@ function DealCard({
       setSaving(false);
       return;
     }
-    const closingDateToSend =
-      statusToSend === 'closed'
-        ? new Date().toISOString()
-        : closingDate
-          ? dateStringToLocalISO(closingDate)
-          : null;
+    // Only auto-set closing date when status is CHANGING to 'closed' (not already closed)
+    const isChangingToClosed = statusToSend === 'closed' && deal.status !== 'closed';
+    const closingDateToSend = isChangingToClosed
+      ? closingDate
+        ? dateStringToLocalISO(closingDate)
+        : new Date().toISOString()
+      : closingDate
+        ? dateStringToLocalISO(closingDate)
+        : null;
     const success = await onUpdate(deal, {
       status: statusToSend,
       expectedAmountCents: finalExpectedAmountCents,

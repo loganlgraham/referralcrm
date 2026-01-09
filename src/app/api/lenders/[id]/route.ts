@@ -6,6 +6,7 @@ import { LenderMC } from '@/models/lender';
 import { User } from '@/models/user';
 import { getCurrentSession } from '@/lib/auth';
 import { Referral } from '@/models/referral';
+import { normalizePhoneNumber } from '@/utils/phone-utils';
 
 const updateLenderSchema = z.object({
   name: z.string().trim().min(1).optional(),
@@ -42,6 +43,43 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
 
   if (!isOwner && !isAdmin) {
     return new NextResponse('Forbidden', { status: 403 });
+  }
+
+  // Check for duplicate email if email is being updated
+  if (parsed.data.email !== undefined && parsed.data.email !== lender.email) {
+    const existingLenderByEmail = await LenderMC.findOne({ 
+      email: parsed.data.email,
+      _id: { $ne: params.id }
+    });
+    if (existingLenderByEmail) {
+      return NextResponse.json(
+        { message: 'A mortgage consultant with this email already exists.' },
+        { status: 409 }
+      );
+    }
+  }
+
+  // Check for duplicate phone if phone is being updated
+  if (parsed.data.phone !== undefined && parsed.data.phone !== lender.phone) {
+    const normalizedPhone = normalizePhoneNumber(parsed.data.phone);
+    if (normalizedPhone) {
+      // Find all lenders with phone numbers (excluding current lender) and check for normalized match
+      const lendersWithPhones = await LenderMC.find({ 
+        phone: { $exists: true, $ne: '' },
+        _id: { $ne: params.id }
+      });
+      const duplicateByPhone = lendersWithPhones.find((otherLender) => {
+        const otherNormalizedPhone = normalizePhoneNumber(otherLender.phone);
+        return otherNormalizedPhone === normalizedPhone;
+      });
+      
+      if (duplicateByPhone) {
+        return NextResponse.json(
+          { message: 'A mortgage consultant with this phone number already exists.' },
+          { status: 409 }
+        );
+      }
+    }
   }
 
   const update: Record<string, unknown> = {};

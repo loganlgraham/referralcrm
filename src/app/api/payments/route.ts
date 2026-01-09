@@ -708,7 +708,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     updatePayload.propertyState = parsed.data.propertyState ?? null;
   }
 
-  if (isClosingNow && !isAgentOrigin) {
+  // Only auto-set closing date when status is changing TO closed AND no closing date is provided
+  if (isClosingNow && !isAgentOrigin && !Object.prototype.hasOwnProperty.call(parsed.data, 'closingDate')) {
     updatePayload.closingDate = new Date();
   }
 
