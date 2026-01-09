@@ -43,7 +43,17 @@ export async function POST(
   const authHeader = request.headers.get('authorization');
   const isCronRequest = cronSecret && authHeader === `Bearer ${cronSecret}`;
 
+  // TEMP DEBUG LOGGING - Remove after fixing
+  console.log('[DEBUG Fee Breakdown API] Request received for payment:', paymentId);
+  console.log('[DEBUG Fee Breakdown API] CRON_SECRET exists:', Boolean(cronSecret));
+  console.log('[DEBUG Fee Breakdown API] Auth header exists:', Boolean(authHeader));
+  console.log('[DEBUG Fee Breakdown API] Auth header matches:', authHeader === `Bearer ${cronSecret}`);
+  console.log('[DEBUG Fee Breakdown API] isCronRequest:', isCronRequest);
+  console.log('[DEBUG Fee Breakdown API] hasSession:', Boolean(session));
+  // END DEBUG LOGGING
+
   if (!session && !isCronRequest) {
+    console.log('[DEBUG Fee Breakdown API] Returning 401 - no session and not a valid cron request');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

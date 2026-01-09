@@ -39,12 +39,25 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   const automationSecret = process.env.TASK_REMINDER_SECRET;
+  const headerValue = request.headers.get('x-task-reminder-secret');
   const isAutomationRequest = Boolean(
-    automationSecret && request.headers.get('x-task-reminder-secret') === automationSecret
+    automationSecret && headerValue === automationSecret
   );
+
+  // TEMP DEBUG LOGGING - Remove after fixing
+  console.log('[DEBUG Reminders API] Request received');
+  console.log('[DEBUG Reminders API] TASK_REMINDER_SECRET exists:', Boolean(automationSecret));
+  console.log('[DEBUG Reminders API] TASK_REMINDER_SECRET length:', automationSecret?.length);
+  console.log('[DEBUG Reminders API] Header x-task-reminder-secret exists:', Boolean(headerValue));
+  console.log('[DEBUG Reminders API] Header value length:', headerValue?.length);
+  console.log('[DEBUG Reminders API] Values match:', headerValue === automationSecret);
+  console.log('[DEBUG Reminders API] isAutomationRequest:', isAutomationRequest);
+  console.log('[DEBUG Reminders API] Email configured:', isTransactionalEmailConfigured());
+  // END DEBUG LOGGING
 
   const session = await getCurrentSession();
   if (!isAutomationRequest && !session?.user?.id) {
+    console.log('[DEBUG Reminders API] Returning 401 - isAutomationRequest:', isAutomationRequest, 'hasSession:', Boolean(session?.user?.id));
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
