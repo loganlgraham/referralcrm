@@ -285,6 +285,14 @@ export async function GET(request: NextRequest) {
           : new URL(request.url).origin;
       const remindersUrl = `${baseUrl}/api/follow-up/reminders`;
 
+      // TEMP DEBUG LOGGING - Remove after fixing
+      console.log('[DEBUG Cron] Calling reminders API');
+      console.log('[DEBUG Cron] URL:', remindersUrl);
+      console.log('[DEBUG Cron] TASK_REMINDER_SECRET exists:', Boolean(taskReminderSecret));
+      console.log('[DEBUG Cron] TASK_REMINDER_SECRET length:', taskReminderSecret?.length);
+      console.log('[DEBUG Cron] Sending header x-task-reminder-secret with length:', taskReminderSecret?.length);
+      // END DEBUG LOGGING
+
       const response = await fetch(remindersUrl, {
         method: 'POST',
         headers: {
