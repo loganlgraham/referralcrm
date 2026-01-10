@@ -62,6 +62,7 @@ interface DashboardSummary {
   ahaOosAttachRate: number;
   activePipeline: number;
   expectedRevenueCents: number;
+  totalExpectedRevenueCents: number;
   realizedRevenueCents: number;
   closedNotPaidCents: number;
   averageDaysNewLeadToContract: number;
@@ -1310,7 +1311,11 @@ function MainDashboard({
   ];
 
   const revenueMetrics = [
-    { label: 'Expected revenue', value: formatCurrency(summary.expectedRevenueCents) },
+    { 
+      label: 'Expected revenue', 
+      value: formatCurrency(summary.expectedRevenueCents),
+      helper: `Total expected: ${formatCurrency(summary.totalExpectedRevenueCents)}`
+    },
     { label: 'Closed, not paid', value: formatCurrency(summary.closedNotPaidCents) },
     { label: 'Total volume closed', value: formatCurrency(summary.totalVolumeClosedCents) },
     { label: 'Avg. referral fee paid', value: formatCurrency(summary.averageReferralFeePaidCents) },
