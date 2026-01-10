@@ -889,53 +889,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const closedOrPaidStatuses = new Set(['closed', 'paid']);
 
-  // Expected revenue: under contract deals with used agent and closing date within timeframe
-  const expectedRevenuePayments = paymentsByNetwork.filter((payment) => {
-    // Must be under contract status
-    if (!UNDER_CONTRACT_STATUSES.has(payment.status)) return false;
-    
-    // Must have used assigned agent
-    if (payment.usedAssignedAgent !== true) return false;
-    
-    // Exclude Glenn Beck referrals
-    if (glennBeckReferralIdsSet.has(payment.referral._id.toString())) return false;
-    
-    // Exclude outside agent deals
-    if (payment.agentAttribution === 'OUTSIDE_AGENT') return false;
-    
-    // Must have closing date within timeframe
-    const closingDate = payment.closingDate ? new Date(payment.closingDate) : null;
-    if (!closingDate) return false;
-    
-    if (timeframeStart && closingDate < timeframeStart) return false;
-    if (timeframeEnd && closingDate > timeframeEnd) return false;
-    
-    return true;
-  });
-
-  const expectedRevenueCents = expectedRevenuePayments.reduce(
+  // Expected revenue: deals closing this month (uses existing pendingClosingsThisMonth)
+  const expectedRevenueCents = pendingClosingsThisMonth.reduce(
     (sum, payment) => sum + calculateOutstandingExpected(payment),
     0
   );
 
-  // Total expected revenue: ALL under contract deals with used agent (no timeframe filter)
-  const totalExpectedRevenuePayments = paymentsByNetwork.filter((payment) => {
-    // Must be under contract status
-    if (!UNDER_CONTRACT_STATUSES.has(payment.status)) return false;
-    
-    // Must have used assigned agent
-    if (payment.usedAssignedAgent !== true) return false;
-    
-    // Exclude Glenn Beck referrals
-    if (glennBeckReferralIdsSet.has(payment.referral._id.toString())) return false;
-    
-    // Exclude outside agent deals
-    if (payment.agentAttribution === 'OUTSIDE_AGENT') return false;
-    
-    return true;
-  });
-
-  const totalExpectedRevenueCents = totalExpectedRevenuePayments.reduce(
+  // Next month expected revenue: deals closing next month (uses existing pendingClosingsNextMonth)
+  const nextMonthExpectedRevenueCents = pendingClosingsNextMonth.reduce(
     (sum, payment) => sum + calculateOutstandingExpected(payment),
     0
   );
@@ -1770,7 +1731,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         ahaOosAttachRate,
     activePipeline,
     expectedRevenueCents,
-    totalExpectedRevenueCents,
+    nextMonthExpectedRevenueCents,
     realizedRevenueCents,
     closedNotPaidCents,
     averageDaysNewLeadToContract,

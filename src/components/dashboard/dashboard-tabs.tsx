@@ -62,7 +62,7 @@ interface DashboardSummary {
   ahaOosAttachRate: number;
   activePipeline: number;
   expectedRevenueCents: number;
-  totalExpectedRevenueCents: number;
+  nextMonthExpectedRevenueCents: number;
   realizedRevenueCents: number;
   closedNotPaidCents: number;
   averageDaysNewLeadToContract: number;
@@ -1314,7 +1314,7 @@ function MainDashboard({
     { 
       label: 'Expected revenue', 
       value: formatCurrency(summary.expectedRevenueCents),
-      helper: `Total expected: ${formatCurrency(summary.totalExpectedRevenueCents)}`
+      helper: `Next month: ${formatCurrency(summary.nextMonthExpectedRevenueCents)}`
     },
     { label: 'Closed, not paid', value: formatCurrency(summary.closedNotPaidCents) },
     { label: 'Total volume closed', value: formatCurrency(summary.totalVolumeClosedCents) },
