@@ -38,18 +38,33 @@ const formatDueDate = (value?: string | null): string | null => {
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
-  const automationSecret = process.env.TASK_REMINDER_SECRET;
-  const headerValue = request.headers.get('x-task-reminder-secret');
+  const automationSecret = process.env.TASK_REMINDER_SECRET?.trim();
+  const rawHeaderValue = request.headers.get('x-task-reminder-secret');
+  const headerValue = rawHeaderValue?.trim() ?? null;
+  
+  // Compare trimmed values for better reliability
   const isAutomationRequest = Boolean(
-    automationSecret && headerValue === automationSecret
+    automationSecret && headerValue && headerValue === automationSecret
   );
 
   // TEMP DEBUG LOGGING - Remove after fixing
   console.log('[DEBUG Reminders API] Request received');
   console.log('[DEBUG Reminders API] TASK_REMINDER_SECRET exists:', Boolean(automationSecret));
   console.log('[DEBUG Reminders API] TASK_REMINDER_SECRET length:', automationSecret?.length);
+  if (automationSecret) {
+    const secretPreview = automationSecret.length > 8 
+      ? `${automationSecret.substring(0, 4)}...${automationSecret.substring(automationSecret.length - 4)}`
+      : '***';
+    console.log('[DEBUG Reminders API] TASK_REMINDER_SECRET preview:', secretPreview);
+  }
   console.log('[DEBUG Reminders API] Header x-task-reminder-secret exists:', Boolean(headerValue));
   console.log('[DEBUG Reminders API] Header value length:', headerValue?.length);
+  if (headerValue) {
+    const headerPreview = headerValue.length > 8
+      ? `${headerValue.substring(0, 4)}...${headerValue.substring(headerValue.length - 4)}`
+      : '***';
+    console.log('[DEBUG Reminders API] Header value preview:', headerPreview);
+  }
   console.log('[DEBUG Reminders API] Values match:', headerValue === automationSecret);
   console.log('[DEBUG Reminders API] isAutomationRequest:', isAutomationRequest);
   console.log('[DEBUG Reminders API] Email configured:', isTransactionalEmailConfigured());
@@ -57,8 +72,18 @@ export async function POST(request: NextRequest) {
 
   const session = await getCurrentSession();
   if (!isAutomationRequest && !session?.user?.id) {
-    console.log('[DEBUG Reminders API] Returning 401 - isAutomationRequest:', isAutomationRequest, 'hasSession:', Boolean(session?.user?.id));
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Return specific error messages to help diagnose the issue
+    let errorMessage = 'Unauthorized';
+    if (!automationSecret) {
+      errorMessage = 'Automation secret not configured';
+    } else if (!headerValue) {
+      errorMessage = 'Missing authentication header';
+    } else if (headerValue !== automationSecret) {
+      errorMessage = 'Invalid authentication secret';
+    }
+    
+    console.log('[DEBUG Reminders API] Returning 401 - isAutomationRequest:', isAutomationRequest, 'hasSession:', Boolean(session?.user?.id), 'error:', errorMessage);
+    return NextResponse.json({ error: errorMessage }, { status: 401 });
   }
 
   const json = await request.json().catch(() => null);
