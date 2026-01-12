@@ -435,6 +435,33 @@ function computeAverage(values: number[]): number {
   return total / values.length;
 }
 
+function calculateDaysClosedToPaid(payment: AggregatedPayment): number | null {
+  const end = payment.paidDate ? new Date(payment.paidDate) : null;
+  const closingDate = payment.closingDate
+    ? new Date(payment.closingDate)
+    : payment.referral?.sla?.lastClosedAt
+    ? new Date(payment.referral.sla.lastClosedAt)
+    : null;
+
+  if (end && closingDate) {
+    return differenceInCalendarDays(end, closingDate);
+  }
+
+  const storedMinutes =
+    payment.referral?.sla?.closedToPaidMinutes ?? payment.referral?.sla?.previousClosedToPaidMinutes ?? null;
+  if (storedMinutes != null && storedMinutes >= 0) {
+    return storedMinutes / (60 * 24);
+  }
+
+  if (end) {
+    const fallbackStart =
+      closingDate ?? (payment.invoiceDate ? new Date(payment.invoiceDate) : new Date(payment.updatedAt));
+    return differenceInCalendarDays(end, fallbackStart);
+  }
+
+  return null;
+}
+
 function isWithinTimeframe(date: Date | null | undefined, timeframe: TimeframeInfo): boolean {
   if (!date) return false;
   const value = new Date(date);
@@ -913,32 +940,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const paidPayments = revenueEligiblePayments.filter((payment) => payment.status === 'paid');
   const averageDaysClosedToPaid = computeAverage(
     paidPayments
-      .map((payment) => {
-        const end = payment.paidDate ? new Date(payment.paidDate) : null;
-        const closingDate = payment.closingDate
-          ? new Date(payment.closingDate)
-          : payment.referral?.sla?.lastClosedAt
-          ? new Date(payment.referral.sla.lastClosedAt)
-          : null;
-
-        if (end && closingDate) {
-          return differenceInCalendarDays(end, closingDate);
-        }
-
-        const storedMinutes =
-          payment.referral?.sla?.closedToPaidMinutes ?? payment.referral?.sla?.previousClosedToPaidMinutes ?? null;
-        if (storedMinutes != null && storedMinutes >= 0) {
-          return storedMinutes / (60 * 24);
-        }
-
-        if (end) {
-          const fallbackStart =
-            closingDate ?? (payment.invoiceDate ? new Date(payment.invoiceDate) : new Date(payment.updatedAt));
-          return differenceInCalendarDays(end, fallbackStart);
-        }
-
-        return null;
-      })
+      .map((payment) => calculateDaysClosedToPaid(payment))
       .filter((value): value is number => value != null)
   );
 
@@ -1093,6 +1095,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     string,
     { total: number; transfers: number; ahaReferrals: number; ahaOosReferrals: number }
   >();
+  // Build map of referral ID to creation month for matching deals to their referral's creation month
+  const referralCreationMonthMap = new Map<string, string>();
   referralsByNetwork.forEach((referral) => {
     if (!referral.createdAt) return;
     const createdAt = new Date(referral.createdAt);
@@ -1110,20 +1114,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       current.ahaOosReferrals += 1;
     }
     referralMonthlyMap.set(key, current);
+    // Store referral creation month for matching deals
+    referralCreationMonthMap.set(referral._id.toString(), key);
   });
 
+  // Group closed deals by their referral's creation month (not the deal's closing date)
+  // This ensures close rate calculation matches: "of referrals created in month X, how many closed?"
   const dealMonthlyMap = new Map<string, { dealsClosed: number; revenueReceivedCents: number }>();
   paymentsByNetwork.forEach((payment) => {
-    const metricDate = payment.metricDate ?? resolveMetricDate(payment);
-    if (!metricDate) return;
     if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
     if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return;
 
-    const key = `${metricDate.getFullYear()}-${String(metricDate.getMonth() + 1).padStart(2, '0')}`;
-    const current = dealMonthlyMap.get(key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
+    // Get the month when this deal's referral was created (not when the deal closed)
+    const referralMonthKey = referralCreationMonthMap.get(payment.referral._id.toString());
+    if (!referralMonthKey) return; // Skip if referral not in our network
+
+    const current = dealMonthlyMap.get(referralMonthKey) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
     current.dealsClosed += 1;
     current.revenueReceivedCents += payment.receivedAmountCents ?? 0;
-    dealMonthlyMap.set(key, current);
+    dealMonthlyMap.set(referralMonthKey, current);
   });
 
   const preApprovalMap = new Map<
@@ -1327,6 +1336,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // - referralFeePercentages: For calculating average referral fee
   // - netCommissionCents: Agent's net earnings (commission - referral fee paid)
   // - closedVolumeCents: Total contract value of closed deals
+  // - daysClosedToPaid: Array of days between closed and paid for each paid deal
   const agentRevenueMap = new Map<
     string,
     {
@@ -1339,6 +1349,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       referralFeePercentages: number[];
       netCommissionCents: number;
       closedVolumeCents: number;
+      daysClosedToPaid: number[];
     }
   >();
   // Track deals lost to outside agents per agent
@@ -1360,7 +1371,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       commissionPercentages: [],
       referralFeePercentages: [],
       netCommissionCents: 0,
-      closedVolumeCents: 0
+      closedVolumeCents: 0,
+      daysClosedToPaid: []
     };
     const isOutsideAgentDeal = payment.agentAttribution === 'OUTSIDE_AGENT';
     const contractPriceCents =
@@ -1406,6 +1418,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         if (payment.status === 'paid' && commissionBasisPoints > 0) {
           const paidReferralFeeCents = payment.receivedAmountCents ?? referralFeeCents;
           current.netCommissionCents += commissionCents - paidReferralFeeCents;
+        }
+        
+        // Track days closed to paid for paid deals
+        if (payment.status === 'paid') {
+          const days = calculateDaysClosedToPaid(payment);
+          if (days != null) {
+            current.daysClosedToPaid.push(days);
+          }
         }
       } else {
         // Track deals lost to outside agents
@@ -1476,6 +1496,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .flatMap((value) => value.referralFeePercentages);
   const averageReferralFeePercent = computeAverage(agentReferralFeePercentages);
   const referralFeeSampleSize = agentReferralFeePercentages.length;
+
+  const agentAverageDaysClosedToPaid = Array.from(agentRevenueMap.entries())
+    .map(([key, value]) => ({
+      id: key,
+      name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
+      averageDays: value.daysClosedToPaid.length > 0 ? computeAverage(value.daysClosedToPaid) : 0,
+      sampleSize: value.daysClosedToPaid.length
+    }))
+    .filter((entry) => entry.sampleSize > 0) // Only include agents with paid deals
+    .sort((a, b) => a.averageDays - b.averageDays) // Sort ascending (lower is better)
+    .slice(0, 10);
 
   const agentNetRevenue = Array.from(agentRevenueMap.entries())
     .map(([key, value]) => ({
@@ -1785,7 +1816,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       averageClosedDealAmount: agentAverageClosedDeal,
       netRevenue: agentNetRevenue,
       lostDeals: agentLostDeals,
-      agentCreatedMcAssignments: agentCreatedMcLeaderboard
+      agentCreatedMcAssignments: agentCreatedMcLeaderboard,
+      averageDaysClosedToPaidLeaderboard: agentAverageDaysClosedToPaid
     },
     admin: {
       slaAverages: {

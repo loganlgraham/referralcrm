@@ -348,3 +348,174 @@ describe('Dashboard Metrics - Pre-Approval Conversion', () => {
   });
 });
 
+describe('Dashboard Metrics - Monthly Trend Close Rate', () => {
+  it('groups deals by referral creation month, not closing month', () => {
+    // Scenario: Referrals created in January, deals close in June
+    // The monthly close rate should attribute these deals to January, not June
+    
+    // Referrals created in January 2024
+    const januaryReferrals = [
+      { id: 'ref1', createdAt: new Date('2024-01-15') },
+      { id: 'ref2', createdAt: new Date('2024-01-20') },
+      { id: 'ref3', createdAt: new Date('2024-01-25') },
+    ];
+    
+    // Deals that closed in June 2024, but from January referrals
+    const payments = [
+      { 
+        referralId: 'ref1', 
+        status: 'closed',
+        metricDate: new Date('2024-06-10'), // Closed in June
+        agentAttribution: 'AHA'
+      },
+      { 
+        referralId: 'ref2', 
+        status: 'paid',
+        metricDate: new Date('2024-06-15'), // Closed in June
+        agentAttribution: 'AHA'
+      },
+    ];
+    
+    // Build referral creation month map
+    const referralCreationMonthMap = new Map<string, string>();
+    januaryReferrals.forEach((referral) => {
+      const createdAt = new Date(referral.createdAt);
+      const monthKey = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
+      referralCreationMonthMap.set(referral.id, monthKey);
+    });
+    
+    // Group deals by referral creation month (not closing month)
+    const dealMonthlyMap = new Map<string, { dealsClosed: number }>();
+    payments.forEach((payment) => {
+      if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
+      if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return;
+      
+      const referralMonthKey = referralCreationMonthMap.get(payment.referralId);
+      if (!referralMonthKey) return;
+      
+      const current = dealMonthlyMap.get(referralMonthKey) ?? { dealsClosed: 0 };
+      current.dealsClosed += 1;
+      dealMonthlyMap.set(referralMonthKey, current);
+    });
+    
+    // January should have 2 deals closed (even though they closed in June)
+    const januaryDeals = dealMonthlyMap.get('2024-01') ?? { dealsClosed: 0 };
+    expect(januaryDeals.dealsClosed).toBe(2);
+    
+    // June should have 0 deals (no referrals created in June)
+    const juneDeals = dealMonthlyMap.get('2024-06') ?? { dealsClosed: 0 };
+    expect(juneDeals.dealsClosed).toBe(0);
+    
+    // January close rate: 2 deals / 3 referrals = 66.7%
+    const januaryReferralsCount = januaryReferrals.length;
+    const januaryCloseRate = januaryReferralsCount === 0 
+      ? 0 
+      : (januaryDeals.dealsClosed / januaryReferralsCount) * 100;
+    
+    expect(januaryCloseRate).toBeCloseTo(66.67, 1);
+  });
+
+  it('matches summary close rate logic for single month', () => {
+    // When viewing a single month, the summary close rate should match the monthly trend
+    const referrals = [
+      { id: 'ref1', createdAt: new Date('2024-03-10') },
+      { id: 'ref2', createdAt: new Date('2024-03-15') },
+      { id: 'ref3', createdAt: new Date('2024-03-20') },
+      { id: 'ref4', createdAt: new Date('2024-03-25') },
+    ];
+    
+    const payments = [
+      { referralId: 'ref1', status: 'closed', agentAttribution: 'AHA' },
+      { referralId: 'ref2', status: 'paid', agentAttribution: 'AHA' },
+      { referralId: 'ref3', status: 'closed', agentAttribution: 'AHA' },
+    ];
+    
+    // Summary close rate calculation
+    const filteredReferralIds = new Set(referrals.map(r => r.id));
+    const dealsClosed = payments.filter(
+      (payment) =>
+        payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+        (payment.status === 'closed' || payment.status === 'paid') &&
+        filteredReferralIds.has(payment.referralId)
+    );
+    const summaryCloseRate = referrals.length === 0 
+      ? 0 
+      : (dealsClosed.length / referrals.length) * 100;
+    
+    // Monthly trend close rate calculation
+    const referralCreationMonthMap = new Map<string, string>();
+    referrals.forEach((referral) => {
+      const createdAt = new Date(referral.createdAt);
+      const monthKey = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
+      referralCreationMonthMap.set(referral.id, monthKey);
+    });
+    
+    const dealMonthlyMap = new Map<string, { dealsClosed: number }>();
+    payments.forEach((payment) => {
+      if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
+      if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return;
+      
+      const referralMonthKey = referralCreationMonthMap.get(payment.referralId);
+      if (!referralMonthKey) return;
+      
+      const current = dealMonthlyMap.get(referralMonthKey) ?? { dealsClosed: 0 };
+      current.dealsClosed += 1;
+      dealMonthlyMap.set(referralMonthKey, current);
+    });
+    
+    const marchDeals = dealMonthlyMap.get('2024-03') ?? { dealsClosed: 0 };
+    const monthlyCloseRate = referrals.length === 0
+      ? 0
+      : (marchDeals.dealsClosed / referrals.length) * 100;
+    
+    // Both should calculate the same close rate
+    expect(summaryCloseRate).toBe(75); // 3 deals / 4 referrals
+    expect(monthlyCloseRate).toBe(75); // 3 deals / 4 referrals
+    expect(summaryCloseRate).toBe(monthlyCloseRate);
+  });
+
+  it('excludes deals from referrals not in the network', () => {
+    // Referrals created in March
+    const referrals = [
+      { id: 'ref1', createdAt: new Date('2024-03-10') },
+      { id: 'ref2', createdAt: new Date('2024-03-15') },
+    ];
+    
+    // Payments: one from a referral in our list, one from outside
+    const payments = [
+      { referralId: 'ref1', status: 'closed', agentAttribution: 'AHA' },
+      { referralId: 'ref999', status: 'closed', agentAttribution: 'AHA' }, // Not in referrals list
+    ];
+    
+    const referralCreationMonthMap = new Map<string, string>();
+    referrals.forEach((referral) => {
+      const createdAt = new Date(referral.createdAt);
+      const monthKey = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
+      referralCreationMonthMap.set(referral.id, monthKey);
+    });
+    
+    const dealMonthlyMap = new Map<string, { dealsClosed: number }>();
+    payments.forEach((payment) => {
+      if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
+      if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return;
+      
+      const referralMonthKey = referralCreationMonthMap.get(payment.referralId);
+      if (!referralMonthKey) return; // Skip if referral not in our network
+      
+      const current = dealMonthlyMap.get(referralMonthKey) ?? { dealsClosed: 0 };
+      current.dealsClosed += 1;
+      dealMonthlyMap.set(referralMonthKey, current);
+    });
+    
+    const marchDeals = dealMonthlyMap.get('2024-03') ?? { dealsClosed: 0 };
+    // Should only count ref1, not ref999
+    expect(marchDeals.dealsClosed).toBe(1);
+    
+    const monthlyCloseRate = referrals.length === 0
+      ? 0
+      : (marchDeals.dealsClosed / referrals.length) * 100;
+    
+    expect(monthlyCloseRate).toBe(50); // 1 deal / 2 referrals
+  });
+});
+

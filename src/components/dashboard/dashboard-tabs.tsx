@@ -44,6 +44,8 @@ interface LeaderboardEntry {
   dealsClosed?: number;
   totalReferrals?: number;
   referrals?: number;
+  averageDays?: number;
+  sampleSize?: number;
 }
 
 const LIST_PREVIEW_LIMIT = 5;
@@ -171,6 +173,7 @@ interface DashboardResponse {
     netRevenue: LeaderboardEntry[];
     lostDeals: LeaderboardEntry[];
     agentCreatedMcAssignments: LeaderboardEntry[];
+    averageDaysClosedToPaidLeaderboard: LeaderboardEntry[];
   };
   admin: {
     slaAverages: {
@@ -950,11 +953,13 @@ function LeaderboardTable({
                       ? formatCurrency(entry.expectedRevenueCents)
                       : entry.closeRate != null
                         ? `${entry.closeRate.toFixed(1)}%`
-                        : entry.referrals != null
-                          ? formatNumber(entry.referrals)
-                          : entry.dealsClosed != null
-                            ? `${formatNumber(entry.dealsClosed)} / ${formatNumber(entry.totalReferrals ?? 0)}`
-                            : '—'}
+                        : entry.averageDays != null
+                          ? `${entry.averageDays.toFixed(1)} days`
+                          : entry.referrals != null
+                            ? formatNumber(entry.referrals)
+                            : entry.dealsClosed != null
+                              ? `${formatNumber(entry.dealsClosed)} / ${formatNumber(entry.totalReferrals ?? 0)}`
+                              : '—'}
                 </td>
               </tr>
             ))
@@ -1436,6 +1441,11 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
         />
         <LeaderboardTable title="Revenue paid by agent" entries={data.revenuePaid} valueLabel="Revenue" />
         <LeaderboardTable title="Revenue expected by agent" entries={data.revenueExpected} valueLabel="Expected" />
+        <LeaderboardTable
+          title="Avg. days closed → paid by agent"
+          entries={data.averageDaysClosedToPaidLeaderboard}
+          valueLabel="Avg. days"
+        />
       </div>
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
         <LeaderboardTable title="Agent net earnings" entries={data.netRevenue} valueLabel="Net revenue" />
