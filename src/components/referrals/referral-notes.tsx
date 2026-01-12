@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSWRConfig } from 'swr';
 import { toast } from 'sonner';
+import { Trash2, Pencil } from 'lucide-react';
 
 interface ReferralNote {
   id: string;
@@ -100,6 +101,12 @@ export function ReferralNotes({
   const [emailAdmin, setEmailAdmin] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showNotesDropdown, setShowNotesDropdown] = useState(false);
+  const [deletingNotes, setDeletingNotes] = useState<Set<string>>(new Set());
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [editHiddenFromAgent, setEditHiddenFromAgent] = useState(false);
+  const [editHiddenFromMc, setEditHiddenFromMc] = useState(false);
+  const [editingNotes, setEditingNotes] = useState<Set<string>>(new Set());
   const { mutate } = useSWRConfig();
 
   const activityFeedKey = `/api/referrals/${referralId}/activities`;
@@ -151,6 +158,95 @@ export function ReferralNotes({
 
   const handleDropdownToggle = () => {
     setShowNotesDropdown((previous) => !previous);
+  };
+
+  const handleDelete = async (noteId: string) => {
+    setDeletingNotes((previous) => new Set(previous).add(noteId));
+    try {
+      const response = await fetch(`/api/referrals/${referralId}/notes/${noteId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        throw new Error('Unable to delete note');
+      }
+      setNotes((previous) => previous.filter((note) => note.id !== noteId));
+      void mutate(activityFeedKey);
+      toast.success('Note deleted');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Unable to delete note');
+    } finally {
+      setDeletingNotes((previous) => {
+        const next = new Set(previous);
+        next.delete(noteId);
+        return next;
+      });
+    }
+  };
+
+  const handleEditStart = (note: ReferralNote) => {
+    setEditingNoteId(note.id);
+    setEditContent(note.content);
+    setEditHiddenFromAgent(note.hiddenFromAgent || false);
+    setEditHiddenFromMc(note.hiddenFromMc || false);
+  };
+
+  const handleEditCancel = () => {
+    setEditingNoteId(null);
+    setEditContent('');
+    setEditHiddenFromAgent(false);
+    setEditHiddenFromMc(false);
+  };
+
+  const handleEditSave = async (noteId: string) => {
+    if (!editContent.trim()) {
+      toast.error('Note content cannot be empty');
+      return;
+    }
+
+    setEditingNotes((previous) => new Set(previous).add(noteId));
+    try {
+      const response = await fetch(`/api/referrals/${referralId}/notes/${noteId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          content: editContent.trim(),
+          hiddenFromAgent: canControlVisibility ? editHiddenFromAgent : undefined,
+          hiddenFromMc: canControlVisibility ? editHiddenFromMc : undefined
+        })
+      });
+      if (!response.ok) {
+        throw new Error('Unable to update note');
+      }
+      const updated = (await response.json()) as ReferralNote;
+      setNotes((previous) =>
+        previous.map((note) =>
+          note.id === noteId
+            ? {
+                ...updated,
+                createdAt:
+                  typeof updated.createdAt === 'string'
+                    ? updated.createdAt
+                    : new Date(updated.createdAt).toISOString()
+              }
+            : note
+        )
+      );
+      handleEditCancel();
+      void mutate(activityFeedKey);
+      toast.success('Note updated');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Unable to update note');
+    } finally {
+      setEditingNotes((previous) => {
+        const next = new Set(previous);
+        next.delete(noteId);
+        return next;
+      });
+    }
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -243,6 +339,10 @@ export function ReferralNotes({
     const showVisibilityBadge = viewerRole === 'admin' && (note.hiddenFromAgent || note.hiddenFromMc);
     const showEmailBadge = Array.isArray(note.emailedTargets) && note.emailedTargets.length > 0;
     const showBadges = showVisibilityBadge || showEmailBadge;
+    const canDelete = canControlVisibility;
+    const isDeleting = deletingNotes.has(note.id);
+    const isEditing = editingNoteId === note.id;
+    const isEditingNote = editingNotes.has(note.id);
 
     return (
       <div key={note.id} className="rounded border border-slate-200 bg-white px-3 py-3">
@@ -250,34 +350,108 @@ export function ReferralNotes({
           <span className="truncate">
             {note.authorName} · {note.authorRole}
           </span>
-          <span className="text-slate-400">{formatTimestamp(note.createdAt)}</span>
-        </div>
-        <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{note.content}</p>
-        {showBadges && (
-          <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide">
-            {showVisibilityBadge && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">
-                {[note.hiddenFromAgent ? 'Hidden from agent' : null, note.hiddenFromMc ? 'Hidden from MC' : null]
-                  .filter(Boolean)
-                  .join(' • ')}
-              </span>
-            )}
-            {showEmailBadge && (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700">
-                {`Emailed: ${note.emailedTargets
-                  ?.map((target) => {
-                    if (target === 'agent') {
-                      return 'Agent';
-                    }
-                    if (target === 'mc') {
-                      return 'MC';
-                    }
-                    return 'Admin';
-                  })
-                  .join(' & ')}`}
-              </span>
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400">{formatTimestamp(note.createdAt)}</span>
+            {!isEditing && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleEditStart(note)}
+                  className="inline-flex items-center rounded p-1 text-slate-400 transition hover:text-brand hover:bg-brand/10"
+                  aria-label="Edit note"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(note.id)}
+                    disabled={isDeleting}
+                    className="inline-flex items-center rounded p-1 text-slate-400 transition hover:text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label="Delete note"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </>
             )}
           </div>
+        </div>
+        {isEditing ? (
+          <div className="mt-2 space-y-3">
+            <textarea
+              value={editContent}
+              onChange={(event) => setEditContent(event.target.value)}
+              rows={3}
+              className="w-full rounded border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-brand focus:outline-none"
+              placeholder="Edit note content"
+              disabled={isEditingNote}
+            />
+            {canControlVisibility && (
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                <ToggleControl
+                  label="Hide from agent"
+                  checked={editHiddenFromAgent}
+                  onChange={(value) => setEditHiddenFromAgent(value)}
+                  disabled={isEditingNote}
+                />
+                <ToggleControl
+                  label="Hide from MC"
+                  checked={editHiddenFromMc}
+                  onChange={(value) => setEditHiddenFromMc(value)}
+                  disabled={isEditingNote}
+                />
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => handleEditSave(note.id)}
+                disabled={isEditingNote || !editContent.trim()}
+                className="inline-flex items-center rounded bg-brand px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isEditingNote ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                type="button"
+                onClick={handleEditCancel}
+                disabled={isEditingNote}
+                className="inline-flex items-center rounded border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{note.content}</p>
+            {showBadges && (
+              <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide">
+                {showVisibilityBadge && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">
+                    {[note.hiddenFromAgent ? 'Hidden from agent' : null, note.hiddenFromMc ? 'Hidden from MC' : null]
+                      .filter(Boolean)
+                      .join(' • ')}
+                  </span>
+                )}
+                {showEmailBadge && (
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700">
+                    {`Emailed: ${note.emailedTargets
+                      ?.map((target) => {
+                        if (target === 'agent') {
+                          return 'Agent';
+                        }
+                        if (target === 'mc') {
+                          return 'MC';
+                        }
+                        return 'Admin';
+                      })
+                      .join(' & ')}`}
+                  </span>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
     );
