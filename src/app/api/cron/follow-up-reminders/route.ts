@@ -172,7 +172,7 @@ export async function GET(request: NextRequest) {
   console.log(`Found ${users.length} users with reminders enabled`);
 
   const results: ReminderResult[] = [];
-  const taskReminderSecret = process.env.TASK_REMINDER_SECRET;
+  const taskReminderSecret = process.env.TASK_REMINDER_SECRET?.trim();
 
   if (!taskReminderSecret) {
     console.error('TASK_REMINDER_SECRET environment variable is not set');
@@ -314,6 +314,7 @@ export async function GET(request: NextRequest) {
           response.status,
           responseData.error || 'Unknown error'
         );
+        console.error('[DEBUG Cron] Response body:', JSON.stringify(responseData));
         results.push({
           userId,
           email: user.email || '',
