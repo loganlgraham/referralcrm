@@ -56,7 +56,9 @@ const agentSchema = new Schema(
       default: null,
     },
     experienceSince: { type: Date },
-    notes: { type: [agentNoteSchema], default: [] }
+    notes: { type: [agentNoteSchema], default: [] },
+    source: { type: String, trim: true, default: '' },
+    welcomeEmailSentAt: { type: Date, default: null }
   },
   { timestamps: true }
 );

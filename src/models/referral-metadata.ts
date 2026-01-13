@@ -2,7 +2,7 @@ import { Schema, model, models } from 'mongoose';
 
 const referralMetadataSchema = new Schema(
   {
-    type: { type: String, required: true, enum: ['source', 'endorser'], index: true },
+    type: { type: String, required: true, enum: ['source', 'endorser', 'agent_source'], index: true },
     value: { type: String, required: true, trim: true },
     usageCount: { type: Number, default: 1, min: 0 },
     lastUsedAt: { type: Date, default: Date.now }
@@ -18,7 +18,7 @@ referralMetadataSchema.index({ type: 1, lastUsedAt: -1 });
 
 export interface ReferralMetadataDocument {
   _id: string;
-  type: 'source' | 'endorser';
+  type: 'source' | 'endorser' | 'agent_source';
   value: string;
   usageCount: number;
   lastUsedAt: Date;

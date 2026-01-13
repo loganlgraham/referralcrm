@@ -2,6 +2,7 @@
 
 import { ChangeEvent, CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 
 import {
@@ -36,6 +37,7 @@ export interface AgentAdminEditorProps {
     languages?: string[];
     ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
     npsScore?: number | null;
+    source?: string;
   };
   variant?: 'standalone' | 'embedded';
   className?: string;
@@ -81,6 +83,7 @@ type FormState = {
   specialties: string[];
   languages: string[];
   ahaDesignation: '' | 'AHA' | 'AHA_OOS' | 'AGIT';
+  source: string;
 };
 
 const normalizeZipCode = (value: string) => {
@@ -181,19 +184,41 @@ const buildInitialFormState = (agent: AgentAdminEditorProps['agent']): FormState
     specialties: Array.isArray(agent.specialties) ? agent.specialties : [],
     languages: Array.isArray(agent.languages) ? agent.languages : [],
     ahaDesignation: agent.ahaDesignation ?? '',
+    source: agent.source ?? '',
   };
 };
 
 export function AgentAdminEditor({ agent, variant = 'standalone', className, onSaved }: AgentAdminEditorProps) {
   const router = useRouter();
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === 'admin';
   const [form, setForm] = useState<FormState>(() => buildInitialFormState(agent));
   const [saving, setSaving] = useState(false);
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
   const [coverageProgress, setCoverageProgress] = useState(0);
+  const [sourceHistory, setSourceHistory] = useState<string[]>([]);
 
   useEffect(() => {
     setForm(buildInitialFormState(agent));
   }, [agent]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const fetchMetadata = async () => {
+      try {
+        const response = await fetch('/api/referrals/metadata');
+        if (response.ok) {
+          const data = (await response.json()) as { agentSources?: string[] };
+          setSourceHistory(data.agentSources ?? []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch agent source metadata', error);
+      }
+    };
+
+    fetchMetadata();
+  }, [isAdmin]);
 
   useEffect(() => {
     if (!isGeneratingCoverage) {
@@ -401,6 +426,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
           specialties: form.specialties,
           languages: form.languages,
           ahaDesignation: form.ahaDesignation || null,
+          source: isAdmin && form.source.trim() ? form.source.trim() : undefined,
         }),
       });
 
@@ -503,6 +529,27 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
             disabled={formDisabled}
           />
         </label>
+        {isAdmin && (
+          <label className="text-xs font-semibold text-slate-600">
+            Source
+            <input
+              type="text"
+              value={form.source}
+              onChange={handleChange('source')}
+              className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Where did we recruit this agent from?"
+              disabled={formDisabled}
+              list={sourceHistory.length > 0 ? 'agent-source-history' : undefined}
+            />
+            {sourceHistory.length > 0 && (
+              <datalist id="agent-source-history">
+                {sourceHistory.map((entry) => (
+                  <option key={entry} value={entry} />
+                ))}
+              </datalist>
+            )}
+          </label>
+        )}
         <div className="md:col-span-2 space-y-2">
           <p className="text-xs font-semibold text-slate-600">Office Address</p>
           <div className="grid gap-4 md:grid-cols-2">

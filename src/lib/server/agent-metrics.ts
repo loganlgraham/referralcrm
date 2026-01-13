@@ -1,3 +1,4 @@
+import { differenceInCalendarDays } from 'date-fns';
 import { subDays, subYears } from 'date-fns';
 import { Types } from 'mongoose';
 
@@ -30,6 +31,7 @@ export interface AgentMetricsSummary {
   referralsLast30Days: number;
   firstContactWithin24HoursRate: number | null;
   dealsClosedAllTime: number;
+  averageDaysClosedToPaid: number | null;
 }
 
 type ReferralLean = {
@@ -40,6 +42,9 @@ type ReferralLean = {
   sla?: {
     timeToFirstAgentContactHours?: number | null;
     daysToClose?: number | null;
+    closedToPaidMinutes?: number | null;
+    previousClosedToPaidMinutes?: number | null;
+    lastClosedAt?: Date | string | null;
   } | null;
   commissionBasisPoints?: number | null;
   referralFeeDueCents?: number | null;
@@ -55,8 +60,10 @@ type PaymentWithReferral = {
   receivedAmountCents?: number | null;
   paidDate?: Date | null;
   invoiceDate?: Date | null;
+  closingDate?: Date | null;
   updatedAt?: Date | null;
   createdAt?: Date | null;
+  usedAssignedAgent?: boolean | null;
   referral: ReferralLean;
 };
 
@@ -73,7 +80,8 @@ export const EMPTY_AGENT_METRICS: AgentMetricsSummary = {
   averageCommissionPercent: null,
   referralsLast30Days: 0,
   firstContactWithin24HoursRate: null,
-  dealsClosedAllTime: 0
+  dealsClosedAllTime: 0,
+  averageDaysClosedToPaid: null
 };
 
 export async function computeAgentMetrics(
@@ -121,6 +129,32 @@ export async function computeAgentMetrics(
       {
         $match: {
           'referral.assignedAgent': { $in: agentIds }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          status: 1,
+          expectedAmountCents: 1,
+          receivedAmountCents: 1,
+          paidDate: 1,
+          invoiceDate: 1,
+          closingDate: 1,
+          updatedAt: 1,
+          createdAt: 1,
+          usedAssignedAgent: 1,
+          referral: {
+            _id: '$referral._id',
+            assignedAgent: '$referral.assignedAgent',
+            status: '$referral.status',
+            statusLastUpdated: '$referral.statusLastUpdated',
+            sla: '$referral.sla',
+            commissionBasisPoints: '$referral.commissionBasisPoints',
+            referralFeeDueCents: '$referral.referralFeeDueCents',
+            closedPriceCents: '$referral.closedPriceCents',
+            estPurchasePriceCents: '$referral.estPurchasePriceCents',
+            createdAt: '$referral.createdAt'
+          }
         }
       }
     ])
@@ -233,6 +267,43 @@ export async function computeAgentMetrics(
     const averageCommissionPercent =
       commissionPercentSamples > 0 ? commissionPercentSum / commissionPercentSamples : null;
 
+    // Calculate average days closed to paid (only for paid deals where usedAssignedAgent is true)
+    const paidPaymentsWithAgent = agentPayments.filter(
+      (payment) => payment.status === 'paid' && payment.usedAssignedAgent === true
+    );
+    const closedToPaidDays = paidPaymentsWithAgent
+      .map((payment) => {
+        const end = payment.paidDate ? new Date(payment.paidDate) : null;
+        const closingDate = payment.closingDate
+          ? new Date(payment.closingDate)
+          : payment.referral?.sla?.lastClosedAt
+          ? new Date(payment.referral.sla.lastClosedAt)
+          : null;
+
+        if (end && closingDate) {
+          return differenceInCalendarDays(end, closingDate);
+        }
+
+        const storedMinutes =
+          payment.referral?.sla?.closedToPaidMinutes ?? payment.referral?.sla?.previousClosedToPaidMinutes ?? null;
+        if (storedMinutes != null && storedMinutes >= 0) {
+          return storedMinutes / (60 * 24);
+        }
+
+        if (end) {
+          const fallbackStart =
+            closingDate ?? (payment.invoiceDate ? new Date(payment.invoiceDate) : new Date(payment.updatedAt ?? payment.createdAt ?? new Date()));
+          return differenceInCalendarDays(end, fallbackStart);
+        }
+
+        return null;
+      })
+      .filter((value): value is number => value != null);
+    const averageDaysClosedToPaid =
+      closedToPaidDays.length > 0
+        ? closedToPaidDays.reduce((sum, value) => sum + value, 0) / closedToPaidDays.length
+        : null;
+
     const npsScore = agentNpsScores?.get(id) ?? null;
 
     metricsByAgent.set(id, {
@@ -248,7 +319,8 @@ export async function computeAgentMetrics(
       averageCommissionPercent,
       referralsLast30Days,
       firstContactWithin24HoursRate,
-      dealsClosedAllTime
+      dealsClosedAllTime,
+      averageDaysClosedToPaid
     });
   });
 

@@ -41,6 +41,9 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
             <p>Phone: {formatPhoneNumber(agent.phone) || '—'}</p>
             <p>License: {agent.licenseNumber || '—'}</p>
             <p>Brokerage: {agent.brokerage || '—'}</p>
+            {isAdmin && agent.source && (
+              <p>Source: {agent.source}</p>
+            )}
             <p>
               AHA Classification:{' '}
               {agent.ahaDesignation === 'AHA'

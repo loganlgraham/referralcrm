@@ -13,7 +13,7 @@ export async function GET() {
   await connectMongo();
 
   try {
-    const [sources, endorsers] = await Promise.all([
+    const [sources, endorsers, agentSources] = await Promise.all([
       ReferralMetadata.find({ type: 'source' })
         .sort({ lastUsedAt: -1, usageCount: -1 })
         .limit(50)
@@ -23,12 +23,18 @@ export async function GET() {
         .sort({ lastUsedAt: -1, usageCount: -1 })
         .limit(50)
         .select('value')
+        .lean(),
+      ReferralMetadata.find({ type: 'agent_source' })
+        .sort({ lastUsedAt: -1, usageCount: -1 })
+        .limit(50)
+        .select('value')
         .lean()
     ]);
 
     return NextResponse.json({
       sources: sources.map((item) => item.value),
-      endorsers: endorsers.map((item) => item.value)
+      endorsers: endorsers.map((item) => item.value),
+      agentSources: agentSources.map((item) => item.value)
     });
   } catch (error) {
     console.error('Failed to fetch referral metadata', error);

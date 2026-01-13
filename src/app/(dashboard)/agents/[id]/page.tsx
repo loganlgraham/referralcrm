@@ -84,12 +84,43 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
         const rate = formatDecimal(agent.metrics.firstContactWithin24HoursRate);
         return rate === '—' ? '—' : `${rate}%`;
       })()
+    },
+    {
+      label: 'Avg. days closed → paid',
+      value:
+        agent.metrics.averageDaysClosedToPaid == null
+          ? '—'
+          : `${formatDecimal(agent.metrics.averageDaysClosedToPaid)} days`
     }
   ];
+
+  const signupStatusDisplay = (() => {
+    if (!isAdmin || !agent.signupStatus) return null;
+    const { hasSignedUp, signedUpAfterWelcomeEmail, welcomeEmailSentAt } = agent.signupStatus;
+    if (hasSignedUp) {
+      if (signedUpAfterWelcomeEmail === true) {
+        return 'Signed up after welcome email';
+      } else if (signedUpAfterWelcomeEmail === false) {
+        return 'Signed up before welcome email';
+      } else {
+        return 'Signed up';
+      }
+    } else if (welcomeEmailSentAt) {
+      return 'Welcome email sent, not signed up';
+    } else {
+      return 'No welcome email sent';
+    }
+  })();
 
   return (
     <div className="space-y-6">
       <AgentOverviewCard agent={agent} isAdmin={isAdmin} />
+      {isAdmin && signupStatusDisplay && (
+        <div className="rounded-lg bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Signup Status</h2>
+          <p className="mt-2 text-sm text-slate-600">{signupStatusDisplay}</p>
+        </div>
+      )}
       <div className="rounded-lg bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Performance snapshot</h2>
         <div className="mt-4 grid gap-4 text-sm text-slate-600 md:grid-cols-3">

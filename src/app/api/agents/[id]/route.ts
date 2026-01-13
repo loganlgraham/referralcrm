@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { connectMongo } from '@/lib/mongoose';
 import { Agent } from '@/models/agent';
 import { User } from '@/models/user';
+import { ReferralMetadata } from '@/models/referral-metadata';
 import { getCurrentSession } from '@/lib/auth';
 import { computeAgentMetrics, EMPTY_AGENT_METRICS } from '@/lib/server/agent-metrics';
 import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
@@ -40,6 +41,7 @@ const updateAgentSchema = z.object({
   specialties: z.array(z.string().trim().min(1)).optional(),
   languages: z.array(z.string().trim().min(1)).optional(),
   ahaDesignation: z.enum(['AHA', 'AHA_OOS', 'AGIT']).nullable().optional(),
+  source: z.string().trim().optional(),
 });
 
 interface Params {
@@ -121,6 +123,14 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     }
   }
 
+  // Handle source (admin only)
+  if (parsed.data.source !== undefined) {
+    if (!isAdmin) {
+      return new NextResponse('Forbidden', { status: 403 });
+    }
+    update.source = parsed.data.source.trim() || '';
+  }
+
   // Handle office address
   if (parsed.data.officeAddress !== undefined) {
     const officeAddress = {
@@ -184,6 +194,40 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     explicitZipCodes: Array.isArray(updated.zipCoverage) ? updated.zipCoverage : [],
   });
 
+  // Save source to metadata collection (admin only)
+  if (isAdmin && parsed.data.source !== undefined) {
+    const providedSource = parsed.data.source?.trim() ?? '';
+    if (providedSource) {
+      try {
+        // Find existing entry case-insensitively
+        const existing = await ReferralMetadata.findOne({
+          type: 'agent_source',
+          value: { $regex: new RegExp(`^${providedSource.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+        });
+
+        if (existing) {
+          // Update existing entry (preserve original casing, update usage)
+          existing.usageCount += 1;
+          existing.lastUsedAt = new Date();
+          await existing.save();
+        } else {
+          // Create new entry
+          await ReferralMetadata.create({
+            type: 'agent_source',
+            value: providedSource,
+            usageCount: 1,
+            lastUsedAt: new Date()
+          });
+        }
+      } catch (error) {
+        // Ignore duplicate key errors (race condition)
+        if ((error as any)?.code !== 11000) {
+          console.error('Failed to save agent source metadata', error);
+        }
+      }
+    }
+  }
+
   const metricsMap = await computeAgentMetrics([updated._id], new Map([[updated._id.toString(), updated.npsScore ?? null]]));
   const metrics = metricsMap.get(updated._id.toString()) ?? {
     ...EMPTY_AGENT_METRICS,
@@ -216,6 +260,7 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
       updatedAgent.ahaDesignation === 'AHA' || updatedAgent.ahaDesignation === 'AHA_OOS' || updatedAgent.ahaDesignation === 'AGIT'
         ? updatedAgent.ahaDesignation
         : null,
+    source: isAdmin ? (updatedAgent.source ?? '') : undefined,
     metrics,
     npsScore: metrics.npsScore,
   });

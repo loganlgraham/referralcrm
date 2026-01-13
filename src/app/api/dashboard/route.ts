@@ -910,7 +910,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return sum;
   }, 0);
 
-  const paidPayments = revenueEligiblePayments.filter((payment) => payment.status === 'paid');
+  const paidPayments = revenueEligiblePayments.filter(
+    (payment) => payment.status === 'paid' && payment.usedAssignedAgent === true
+  );
   const averageDaysClosedToPaid = computeAverage(
     paidPayments
       .map((payment) => {
