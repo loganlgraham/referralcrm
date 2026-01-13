@@ -417,13 +417,13 @@ const findFirstDealClosedTimestamp = (deals: DealLike[]): Date | null => {
     .filter((deal) => deal.status && closedLikeStatuses.has(deal.status))
     .map((deal) => {
       // For paid deals, closingDate is the "closed" timestamp if present.
-      return (
-        parseTimestamp(deal.closingDate) ??
-        // Fallbacks if closingDate isn't available in the payload
-        (deal.status === 'paid' ? null : null) ??
-        parseTimestamp(deal.updatedAt) ??
-        parseTimestamp(deal.createdAt)
-      );
+      // Avoid using updatedAt for paid deals because it typically represents the paid event.
+      if (deal.status === 'paid') {
+        return parseTimestamp(deal.closingDate) ?? null;
+      }
+
+      // For closed/payment_sent deals, prefer closingDate, then fall back to updatedAt/createdAt.
+      return parseTimestamp(deal.closingDate) ?? parseTimestamp(deal.updatedAt) ?? parseTimestamp(deal.createdAt);
     })
     .filter((value): value is Date => Boolean(value))
     .sort((a, b) => a.getTime() - b.getTime());
