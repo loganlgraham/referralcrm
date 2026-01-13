@@ -26,6 +26,24 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
     return [];
   }, [agent.coverageAreas, agent.coverageLocations]);
 
+  const signupStatusDisplay = useMemo(() => {
+    if (!isAdmin || !agent.signupStatus) return null;
+    const { hasSignedUp, signedUpAfterWelcomeEmail, welcomeEmailSentAt } = agent.signupStatus;
+    if (hasSignedUp) {
+      if (signedUpAfterWelcomeEmail === true) {
+        return 'Signed up after welcome email';
+      } else if (signedUpAfterWelcomeEmail === false) {
+        return 'Signed up before welcome email';
+      } else {
+        return 'Signed up';
+      }
+    } else if (welcomeEmailSentAt) {
+      return 'Welcome email sent, not signed up';
+    } else {
+      return 'No welcome email sent';
+    }
+  }, [isAdmin, agent.signupStatus]);
+
   return (
     <div className="rounded-lg bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -57,19 +75,24 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
           </div>
         </div>
         {isAdmin && (
-          <div className="flex flex-wrap justify-end gap-2">
-            <SendWelcomeEmailButton
-              endpoint={`/api/agents/${agent._id}/welcome-email`}
-              recipientEmail={agent.email}
-              recipientName={agent.name}
-            />
-            <button
-              type="button"
-              className="inline-flex items-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90"
-              onClick={() => setShowEditor((previous) => !previous)}
-            >
-              {showEditor ? 'Close edit' : 'Edit details'}
-            </button>
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
+              <SendWelcomeEmailButton
+                endpoint={`/api/agents/${agent._id}/welcome-email`}
+                recipientEmail={agent.email}
+                recipientName={agent.name}
+              />
+              <button
+                type="button"
+                className="inline-flex items-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90"
+                onClick={() => setShowEditor((previous) => !previous)}
+              >
+                {showEditor ? 'Close edit' : 'Edit details'}
+              </button>
+            </div>
+            {signupStatusDisplay && (
+              <p className="text-xs text-slate-500">{signupStatusDisplay}</p>
+            )}
           </div>
         )}
       </div>
