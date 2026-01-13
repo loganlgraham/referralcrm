@@ -7,7 +7,13 @@ import { SendWelcomeEmailButton } from '@/components/people/send-welcome-email-b
 import { formatPhoneNumber } from '@/utils/formatters';
 
 interface AgentOverviewCardProps {
-  agent: AgentAdminEditorProps['agent'];
+  agent: AgentAdminEditorProps['agent'] & {
+    signupStatus?: {
+      hasSignedUp: boolean;
+      signedUpAfterWelcomeEmail: boolean | null;
+      welcomeEmailSentAt: Date | null;
+    } | null;
+  };
   isAdmin: boolean;
 }
 
