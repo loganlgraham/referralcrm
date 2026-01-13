@@ -25,6 +25,7 @@ interface DealLike {
   status?: string | null;
   createdAt?: string | Date | null;
   updatedAt?: string | Date | null;
+  closingDate?: string | Date | null;
   paidDate?: string | Date | null;
 }
 
@@ -400,10 +401,40 @@ const findFirstDealTimestamp = (deals: DealLike[], statuses: string | string[]):
         return parseTimestamp(deal.paidDate) ?? parseTimestamp(deal.updatedAt) ?? parseTimestamp(deal.createdAt);
       }
       if (status === 'closed' || status === 'payment_sent') {
-        return parseTimestamp(deal.updatedAt) ?? parseTimestamp(deal.createdAt);
+        return parseTimestamp(deal.closingDate) ?? parseTimestamp(deal.updatedAt) ?? parseTimestamp(deal.createdAt);
       }
       return parseTimestamp(deal.createdAt) ?? parseTimestamp(deal.updatedAt);
     })
+    .filter((value): value is Date => Boolean(value))
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  return matches.length > 0 ? matches[0] : null;
+};
+
+const findFirstDealClosedTimestamp = (deals: DealLike[]): Date | null => {
+  const closedLikeStatuses = new Set(['closed', 'payment_sent', 'paid']);
+  const matches = deals
+    .filter((deal) => deal.status && closedLikeStatuses.has(deal.status))
+    .map((deal) => {
+      // For paid deals, closingDate is the "closed" timestamp if present.
+      return (
+        parseTimestamp(deal.closingDate) ??
+        // Fallbacks if closingDate isn't available in the payload
+        (deal.status === 'paid' ? null : null) ??
+        parseTimestamp(deal.updatedAt) ??
+        parseTimestamp(deal.createdAt)
+      );
+    })
+    .filter((value): value is Date => Boolean(value))
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  return matches.length > 0 ? matches[0] : null;
+};
+
+const findFirstDealPaidTimestamp = (deals: DealLike[]): Date | null => {
+  const matches = deals
+    .filter((deal) => deal.status === 'paid')
+    .map((deal) => parseTimestamp(deal.paidDate) ?? parseTimestamp(deal.updatedAt) ?? parseTimestamp(deal.createdAt))
     .filter((value): value is Date => Boolean(value))
     .sort((a, b) => a.getTime() - b.getTime());
 
@@ -486,8 +517,8 @@ export const computeSlaDurations = (referral: ReferralLike): SlaDuration[] => {
   const dealUnderContractAt = hasDealProgress || isCurrentlyContracting
     ? findFirstDealTimestamp(deals, 'under_contract') ?? underContractAt ?? pairedAt ?? createdAt
     : null;
-  const dealClosedAt = findFirstDealTimestamp(deals, ['closed', 'payment_sent', 'paid']) ?? getFirstStatusTimestamp('Closed');
-  const dealPaidAt = findFirstDealTimestamp(deals, 'paid');
+  const dealClosedAt = findFirstDealClosedTimestamp(deals) ?? getFirstStatusTimestamp('Closed');
+  const dealPaidAt = findFirstDealPaidTimestamp(deals);
 
   const communicationStart = resolveCommunicationStart(getFirstStatusTimestamp, createdAt, pairedAt);
   const newLeadToPaired = minutesBetween(createdAt, pairedAt, { businessHoursOnly: true });

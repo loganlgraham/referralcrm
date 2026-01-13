@@ -954,8 +954,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return sum;
   }, 0);
 
-  // Filter paid payments where usedAssignedAgent is true
-  const paidPayments = revenueEligiblePayments.filter(
+  // Avg. days closed → paid should consider all paid deals where usedAssignedAgent is true
+  // (not just revenue-eligible payments)
+  const paidPayments = filteredPaymentsByNetwork.filter(
     (payment) => payment.status === 'paid' && payment.usedAssignedAgent === true
   );
   

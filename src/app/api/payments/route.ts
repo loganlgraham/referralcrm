@@ -605,6 +605,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
   const previousStatus = existingPayment.status;
   const isClosingNow = parsed.data.status === 'closed' && previousStatus !== 'closed';
+  const isPayingNow = parsed.data.status === 'paid' && previousStatus !== 'paid';
 
   let nextContractPriceCents =
     parsed.data.contractPriceCents !== undefined
@@ -714,6 +715,11 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     updatePayload.closingDate = new Date();
   }
 
+  // Auto-set paid date when status is changing TO paid AND no paid date is provided
+  if (isPayingNow && !isAgentOrigin && !Object.prototype.hasOwnProperty.call(parsed.data, 'paidDate')) {
+    updatePayload.paidDate = new Date();
+  }
+
   const nextStatusValue = parsed.data.status ?? existingPayment.status;
   const hasTerminatedReasonUpdate = Object.prototype.hasOwnProperty.call(parsed.data, 'terminatedReason');
   if (hasTerminatedReasonUpdate && nextStatusValue !== 'terminated') {
@@ -801,25 +807,33 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
           toDate(existingPayment.createdAt) ??
           toDate(payment.createdAt) ??
           now;
-        const closedMinutes = minutesBetweenDates(underContractAt, now);
+        const closedAt =
+          toDate(payment.closingDate) ??
+          toDate(existingPayment.closingDate) ??
+          now;
+        const closedMinutes = minutesBetweenDates(underContractAt, closedAt);
         if (closedMinutes != null) {
           sla.contractToCloseMinutes = closedMinutes;
-          sla.daysToClose = Math.max(differenceInDays(now, underContractAt), 0);
-          sla.lastClosedAt = now;
+          sla.daysToClose = Math.max(differenceInDays(closedAt, underContractAt), 0);
+          sla.lastClosedAt = closedAt;
           slaChanged = true;
         }
       }
 
       if (nextStatus === 'paid') {
         const closedAt =
+          toDate(payment.closingDate) ??
           toDate(sla.lastClosedAt) ??
+          toDate(existingPayment.closingDate) ??
           toDate(existingPayment.updatedAt) ??
-          toDate(payment.updatedAt) ??
           now;
-        const paidMinutes = minutesBetweenDates(closedAt, now);
+        const paidAt =
+          toDate(payment.paidDate) ??
+          now;
+        const paidMinutes = minutesBetweenDates(closedAt, paidAt);
         if (paidMinutes != null) {
           sla.closedToPaidMinutes = paidMinutes;
-          sla.lastPaidAt = now;
+          sla.lastPaidAt = paidAt;
           slaChanged = true;
         }
       }
