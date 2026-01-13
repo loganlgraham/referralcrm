@@ -37,16 +37,16 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
     const { hasSignedUp, signedUpAfterWelcomeEmail, welcomeEmailSentAt } = agent.signupStatus;
     if (hasSignedUp) {
       if (signedUpAfterWelcomeEmail === true) {
-        return 'Signed up after welcome email';
+        return { text: 'Signed up after welcome email', color: 'bg-emerald-50 text-emerald-700' };
       } else if (signedUpAfterWelcomeEmail === false) {
-        return 'Signed up before welcome email';
+        return { text: 'Signed up before welcome email', color: 'bg-amber-50 text-amber-700' };
       } else {
-        return 'Signed up';
+        return { text: 'Signed up', color: 'bg-blue-50 text-blue-700' };
       }
     } else if (welcomeEmailSentAt) {
-      return 'Welcome email sent, not signed up';
+      return { text: 'Welcome email sent, not signed up', color: 'bg-amber-50 text-amber-700' };
     } else {
-      return 'No welcome email sent';
+      return { text: 'No welcome email sent', color: 'bg-slate-50 text-slate-600' };
     }
   }, [isAdmin, agent.signupStatus]);
 
@@ -83,11 +83,18 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
         {isAdmin && (
           <div className="flex flex-col items-end gap-2">
             <div className="flex flex-wrap justify-end gap-2">
-              <SendWelcomeEmailButton
-                endpoint={`/api/agents/${agent._id}/welcome-email`}
-                recipientEmail={agent.email}
-                recipientName={agent.name}
-              />
+              <div className="flex flex-col items-end gap-1.5">
+                <SendWelcomeEmailButton
+                  endpoint={`/api/agents/${agent._id}/welcome-email`}
+                  recipientEmail={agent.email}
+                  recipientName={agent.name}
+                />
+                {signupStatusDisplay && (
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${signupStatusDisplay.color}`}>
+                    {signupStatusDisplay.text}
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 className="inline-flex items-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90"
@@ -96,9 +103,6 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
                 {showEditor ? 'Close edit' : 'Edit details'}
               </button>
             </div>
-            {signupStatusDisplay && (
-              <p className="text-xs text-slate-500">{signupStatusDisplay}</p>
-            )}
           </div>
         )}
       </div>
