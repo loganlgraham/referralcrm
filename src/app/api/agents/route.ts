@@ -312,6 +312,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ...normalizedCoverageLocations.flatMap((location) => location.zipCodes),
   ]);
 
+  const providedSource = parsed.data.source?.trim() ?? '';
+
   let agent: AgentDocument;
   try {
     const officeAddress = parsed.data.officeAddress
@@ -323,8 +325,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         }
       : undefined;
     const hasOfficeAddress = officeAddress && Object.values(officeAddress).some((value) => value !== undefined);
-
-    const providedSource = parsed.data.source?.trim() ?? '';
 
     agent = await Agent.create<AgentDocument>({
       name: parsed.data.name,
