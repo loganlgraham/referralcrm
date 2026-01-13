@@ -648,6 +648,50 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           ]
         }
       }
+    },
+    {
+      $project: {
+        _id: 1,
+        agentId: 1,
+        status: 1,
+        expectedAmountCents: 1,
+        receivedAmountCents: 1,
+        contractPriceCents: 1,
+        closingDate: 1,
+        terminatedReason: 1,
+        paidDate: 1,
+        invoiceDate: 1,
+        updatedAt: 1,
+        usedAfc: 1,
+        usedAssignedAgent: 1,
+        agentAttribution: 1,
+        referral: {
+          _id: '$referral._id',
+          createdAt: '$referral.createdAt',
+          source: '$referral.source',
+          endorser: '$referral.endorser',
+          origin: '$referral.origin',
+          org: '$referral.org',
+          lookingInZip: '$referral.lookingInZip',
+          lookingInZips: '$referral.lookingInZips',
+          propertyAddress: '$referral.propertyAddress',
+          propertyCity: '$referral.propertyCity',
+          propertyState: '$referral.propertyState',
+          propertyPostalCode: '$referral.propertyPostalCode',
+          borrowerCurrentAddress: '$referral.borrowerCurrentAddress',
+          closedPriceCents: '$referral.closedPriceCents',
+          estPurchasePriceCents: '$referral.estPurchasePriceCents',
+          referralFeeDueCents: '$referral.referralFeeDueCents',
+          referralFeeBasisPoints: '$referral.referralFeeBasisPoints',
+          commissionBasisPoints: '$referral.commissionBasisPoints',
+          ahaBucket: '$referral.ahaBucket',
+          assignedAgent: '$referral.assignedAgent',
+          lender: '$referral.lender',
+          status: '$referral.status',
+          preApprovalAmountCents: '$referral.preApprovalAmountCents',
+          sla: '$referral.sla'
+        }
+      }
     }
   ]).exec();
 
@@ -910,38 +954,51 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return sum;
   }, 0);
 
+  // Filter paid payments where usedAssignedAgent is true
   const paidPayments = revenueEligiblePayments.filter(
     (payment) => payment.status === 'paid' && payment.usedAssignedAgent === true
   );
+  
+  // Calculate average days from closing date to paid date
   const averageDaysClosedToPaid = computeAverage(
     paidPayments
       .map((payment) => {
+        // Use paidDate as the end date
         const end = payment.paidDate ? new Date(payment.paidDate) : null;
+        if (!end) {
+          return null;
+        }
+
+        // Try to get closing date from payment first, then from referral SLA
         const closingDate = payment.closingDate
           ? new Date(payment.closingDate)
           : payment.referral?.sla?.lastClosedAt
           ? new Date(payment.referral.sla.lastClosedAt)
           : null;
 
+        // If we have both dates, calculate the difference
         if (end && closingDate) {
-          return differenceInCalendarDays(end, closingDate);
+          const days = differenceInCalendarDays(end, closingDate);
+          return days >= 0 ? days : null; // Only return positive values
         }
 
+        // Fallback to stored minutes from SLA if available
         const storedMinutes =
           payment.referral?.sla?.closedToPaidMinutes ?? payment.referral?.sla?.previousClosedToPaidMinutes ?? null;
         if (storedMinutes != null && storedMinutes >= 0) {
           return storedMinutes / (60 * 24);
         }
 
+        // Last resort: use invoiceDate or updatedAt as fallback start date
         if (end) {
-          const fallbackStart =
-            closingDate ?? (payment.invoiceDate ? new Date(payment.invoiceDate) : new Date(payment.updatedAt));
-          return differenceInCalendarDays(end, fallbackStart);
+          const fallbackStart = closingDate ?? (payment.invoiceDate ? new Date(payment.invoiceDate) : new Date(payment.updatedAt));
+          const days = differenceInCalendarDays(end, fallbackStart);
+          return days >= 0 ? days : null;
         }
 
         return null;
       })
-      .filter((value): value is number => value != null)
+      .filter((value): value is number => value != null && !Number.isNaN(value))
   );
 
   const underContractOrLaterStatuses = new Set<AggregatedPayment['status']>([
