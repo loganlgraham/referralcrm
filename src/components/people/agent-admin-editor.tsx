@@ -62,7 +62,8 @@ interface PatchResponse {
   coverageLocations: CoverageLocation[];
   specialties: string[];
   languages: string[];
-    ahaDesignation: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
+  ahaDesignation: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
+  source?: string;
 }
 
 type FormState = {
@@ -454,6 +455,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
         specialties: payload.specialties,
         languages: payload.languages,
         ahaDesignation: payload.ahaDesignation ?? '',
+        source: payload.source ?? '',
       });
 
       toast.success('Agent details updated');
