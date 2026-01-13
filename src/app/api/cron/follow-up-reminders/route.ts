@@ -8,6 +8,7 @@ import { LenderMC } from '@/models/lender';
 import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
 import { computeFollowUpTasksForReferral } from '@/lib/server/follow-up-tasks';
+import { getAppOrigin } from '@/lib/server/app-origin';
 import { Types } from 'mongoose';
 
 export const runtime = 'nodejs';
@@ -278,11 +279,8 @@ export async function GET(request: NextRequest) {
       }
 
       // Call the reminders API
-      // Use VERCEL_URL if available (for serverless), otherwise construct from request
-      const baseUrl =
-        process.env.VERCEL_URL
-          ? `https://${process.env.VERCEL_URL}`
-          : new URL(request.url).origin;
+      // Use APP_URL/NEXTAUTH_URL if set (production: https://referrio.app), otherwise fallback to VERCEL_URL or request origin
+      const baseUrl = getAppOrigin(request);
       const remindersUrl = `${baseUrl}/api/follow-up/reminders`;
 
       // TEMP DEBUG LOGGING - Remove after fixing
@@ -306,7 +304,17 @@ export async function GET(request: NextRequest) {
         }),
       });
 
-      const responseData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      // Parse response body safely - handle both JSON and HTML/text responses
+      let responseData: { error?: string; [key: string]: unknown } = { error: 'Unknown error' };
+      const responseText = await response.text().catch(() => '');
+      if (responseText) {
+        try {
+          responseData = JSON.parse(responseText);
+        } catch {
+          // Not JSON - likely HTML error page or plain text
+          responseData = { error: `Non-JSON response (${response.status})`, rawBody: responseText.substring(0, 200) };
+        }
+      }
 
       if (!response.ok) {
         console.error(
