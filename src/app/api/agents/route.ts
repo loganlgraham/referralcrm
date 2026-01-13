@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { connectMongo } from '@/lib/mongoose';
 import { Agent, AgentDocument } from '@/models/agent';
+import { ReferralMetadata } from '@/models/referral-metadata';
 import { getCurrentSession } from '@/lib/auth';
 import { computeAgentMetrics, EMPTY_AGENT_METRICS, AgentMetricsSummary } from '@/lib/server/agent-metrics';
 import { rememberCoverageSuggestions } from '@/lib/server/coverage-suggestions';
@@ -47,6 +48,7 @@ const createAgentSchema = z.object({
     .optional()
     .nullable()
     .default(null),
+  source: z.string().trim().optional(),
 });
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -310,6 +312,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ...normalizedCoverageLocations.flatMap((location) => location.zipCodes),
   ]);
 
+  const providedSource = parsed.data.source?.trim() ?? '';
+
   let agent: AgentDocument;
   try {
     const officeAddress = parsed.data.officeAddress
@@ -335,6 +339,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       specialties: parsed.data.specialties,
       languages: parsed.data.languages,
       ahaDesignation: parsed.data.ahaDesignation,
+      source: providedSource,
       active: true,
     });
   } catch (error) {
@@ -362,6 +367,38 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await rememberCoverageSuggestions(coverageSuggestionLabels);
   } else if (combinedZipCoverage.length > 0) {
     await rememberCoverageSuggestions(combinedZipCoverage);
+  }
+
+  // Save source to metadata collection (admin only)
+  if (session.user.role === 'admin' && providedSource) {
+    const trimmedSource = providedSource.trim();
+    try {
+      // Find existing entry case-insensitively
+      const existing = await ReferralMetadata.findOne({
+        type: 'agent_source',
+        value: { $regex: new RegExp(`^${trimmedSource.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+      });
+
+      if (existing) {
+        // Update existing entry (preserve original casing, update usage)
+        existing.usageCount += 1;
+        existing.lastUsedAt = new Date();
+        await existing.save();
+      } else {
+        // Create new entry
+        await ReferralMetadata.create({
+          type: 'agent_source',
+          value: trimmedSource,
+          usageCount: 1,
+          lastUsedAt: new Date()
+        });
+      }
+    } catch (error) {
+      // Ignore duplicate key errors (race condition)
+      if ((error as any)?.code !== 11000) {
+        console.error('Failed to save agent source metadata', error);
+      }
+    }
   }
 
   return NextResponse.json({ id: agent._id.toString() }, { status: 201 });

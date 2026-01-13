@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { connectMongo } from '@/lib/mongoose';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
+import { User } from '@/models/user';
 import { getCurrentSession } from '@/lib/auth';
 import { Payment } from '@/models/payment';
 import { Referral } from '@/models/referral';
@@ -35,9 +36,15 @@ type AgentProfile = {
   specialties?: string[];
   languages?: string[];
   ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
+  source?: string;
   metrics: AgentMetricsSummary;
   notes: NoteSummary[];
   deals: PersonDealSnapshot[];
+  signupStatus?: {
+    hasSignedUp: boolean;
+    signedUpAfterWelcomeEmail: boolean | null;
+    welcomeEmailSentAt: Date | null;
+  } | null;
 };
 
 type LenderProfile = {
@@ -104,6 +111,9 @@ type AgentLean = {
   specialties?: string[] | null;
   languages?: string[] | null;
   ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
+  userId?: Types.ObjectId | null;
+  welcomeEmailSentAt?: Date | null;
+  source?: string | null;
 };
 
 type LenderLean = {
@@ -124,7 +134,9 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
   }
 
   await connectMongo();
-  const agent = await Agent.findById(id).lean<AgentLean>();
+  const agent = await Agent.findById(id)
+    .select('name email phone licenseNumber brokerage statesLicensed zipCoverage coverageLocations npsScore notes specialties languages ahaDesignation userId welcomeEmailSentAt source')
+    .lean<AgentLean>();
   if (!agent) {
     return null;
   }
@@ -247,6 +259,28 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
     });
   }
 
+  // Calculate signup status
+  let signupStatus: AgentProfile['signupStatus'] | null = null;
+  if (session.user.role === 'admin') {
+    const hasSignedUp = Boolean(agent.userId);
+    let signedUpAfterWelcomeEmail: boolean | null = null;
+
+    if (hasSignedUp && agent.userId && agent.welcomeEmailSentAt) {
+      const user = await User.findById(agent.userId).select('createdAt').lean<{ createdAt?: Date } | null>();
+      if (user?.createdAt) {
+        const userCreatedAt = user.createdAt instanceof Date ? user.createdAt : new Date(user.createdAt);
+        const welcomeEmailSentAt = agent.welcomeEmailSentAt instanceof Date ? agent.welcomeEmailSentAt : new Date(agent.welcomeEmailSentAt);
+        signedUpAfterWelcomeEmail = userCreatedAt >= welcomeEmailSentAt;
+      }
+    }
+
+    signupStatus = {
+      hasSignedUp,
+      signedUpAfterWelcomeEmail,
+      welcomeEmailSentAt: agent.welcomeEmailSentAt instanceof Date ? agent.welcomeEmailSentAt : agent.welcomeEmailSentAt ? new Date(agent.welcomeEmailSentAt) : null
+    };
+  }
+
   return {
     _id: agent._id.toString(),
     name: agent.name ?? '',
@@ -263,9 +297,11 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
       agent.ahaDesignation === 'AHA' || agent.ahaDesignation === 'AHA_OOS' || agent.ahaDesignation === 'AGIT'
         ? agent.ahaDesignation
         : null,
+    source: session.user.role === 'admin' ? (agent.source ?? undefined) : undefined,
     metrics,
     notes: serializeNotes(agent.notes),
     deals,
+    signupStatus
   };
 }
 

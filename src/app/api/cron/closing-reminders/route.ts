@@ -4,6 +4,7 @@ import { Types } from 'mongoose';
 
 import { connectMongo } from '@/lib/mongoose';
 import { Payment } from '@/models/payment';
+import { getAppOrigin } from '@/lib/server/app-origin';
 
 export const runtime = 'nodejs';
 
@@ -96,10 +97,8 @@ export async function GET(request: NextRequest) {
         console.log(`[Closing Reminders] Sending fee breakdown for payment ${paymentId}`);
         
         // Call the fee breakdown API
-        const baseUrl =
-          process.env.VERCEL_URL
-            ? `https://${process.env.VERCEL_URL}`
-            : new URL(request.url).origin;
+        // Use APP_URL/NEXTAUTH_URL if set (production: https://referrio.app), otherwise fallback to VERCEL_URL or request origin
+        const baseUrl = getAppOrigin(request);
         const apiUrl = `${baseUrl}/api/payments/${paymentId}/send-fee-breakdown`;
 
         const response = await fetch(apiUrl, {
@@ -110,7 +109,17 @@ export async function GET(request: NextRequest) {
           },
         });
 
-        const responseData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        // Parse response body safely - handle both JSON and HTML/text responses
+        let responseData: { error?: string; [key: string]: unknown } = { error: 'Unknown error' };
+        const responseText = await response.text().catch(() => '');
+        if (responseText) {
+          try {
+            responseData = JSON.parse(responseText);
+          } catch {
+            // Not JSON - likely HTML error page or plain text
+            responseData = { error: `Non-JSON response (${response.status})`, rawBody: responseText.substring(0, 200) };
+          }
+        }
 
         if (!response.ok) {
           console.error(

@@ -79,6 +79,10 @@ Complete your profile and create your password: ${inviteLink}`;
     if (!delivered) {
       return NextResponse.json({ error: 'Unable to send welcome email.' }, { status: 502 });
     }
+
+    // Save timestamp when welcome email is successfully sent
+    agent.welcomeEmailSentAt = new Date();
+    await agent.save();
   } catch (error) {
     console.error('Failed to deliver agent invite email', error);
     return NextResponse.json({ error: 'Unable to send welcome email.' }, { status: 500 });

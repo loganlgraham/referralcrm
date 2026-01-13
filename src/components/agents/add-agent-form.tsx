@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from 'react';
+import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 
 import { formatPhoneInput } from '@/utils/formatters';
@@ -40,6 +41,7 @@ type AgentFormState = {
   specialties: string[];
   languages: string[];
   ahaDesignation: '' | 'AHA' | 'AHA_OOS' | 'AGIT';
+  source: string;
 };
 
 type CreatedAgentSummary = {
@@ -66,6 +68,7 @@ const createEmptyForm = (): AgentFormState => ({
   specialties: [],
   languages: [],
   ahaDesignation: '',
+  source: '',
 });
 
 interface AddAgentFormProps {
@@ -74,12 +77,15 @@ interface AddAgentFormProps {
 }
 
 export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === 'admin';
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<AgentFormState>(() => createEmptyForm());
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
   const [coverageProgress, setCoverageProgress] = useState(0);
   const [lastCreatedAgent, setLastCreatedAgent] = useState<CreatedAgentSummary | null>(null);
   const [sendingWelcome, setSendingWelcome] = useState(false);
+  const [sourceHistory, setSourceHistory] = useState<string[]>([]);
 
   const formDisabled = saving;
 
@@ -315,6 +321,24 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
     };
   }, [isGeneratingCoverage, coverageProgress]);
 
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const fetchMetadata = async () => {
+      try {
+        const response = await fetch('/api/referrals/metadata');
+        if (response.ok) {
+          const data = (await response.json()) as { agentSources?: string[] };
+          setSourceHistory(data.agentSources ?? []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch agent source metadata', error);
+      }
+    };
+
+    fetchMetadata();
+  }, [isAdmin]);
+
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
@@ -334,23 +358,29 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
       };
       const hasOfficeAddress = Object.values(officeAddress).some((value) => value !== undefined);
 
+      const body: Record<string, unknown> = {
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        licenseNumber: form.licenseNumber,
+        brokerage: form.brokerage,
+        officeAddress: hasOfficeAddress ? officeAddress : undefined,
+        statesLicensed,
+        coverageAreas: coverageZipCodes,
+        coverageLocations: normalizedCoverageLocations,
+        specialties: form.specialties,
+        languages: form.languages,
+        ahaDesignation: form.ahaDesignation || null,
+      };
+
+      if (isAdmin && form.source.trim()) {
+        body.source = form.source.trim();
+      }
+
       const response = await fetch('/api/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name,
-          email: form.email,
-          phone: form.phone,
-          licenseNumber: form.licenseNumber,
-          brokerage: form.brokerage,
-          officeAddress: hasOfficeAddress ? officeAddress : undefined,
-          statesLicensed,
-          coverageAreas: coverageZipCodes,
-          coverageLocations: normalizedCoverageLocations,
-          specialties: form.specialties,
-          languages: form.languages,
-          ahaDesignation: form.ahaDesignation || null,
-        }),
+        body: JSON.stringify(body),
       });
 
       const payload = await response.json().catch(() => ({}));
@@ -505,6 +535,27 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
               disabled={formDisabled}
             />
           </label>
+          {isAdmin && (
+            <label className="text-xs font-semibold text-slate-600">
+              Source
+              <input
+                type="text"
+                value={form.source}
+                onChange={handleChange('source')}
+                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                placeholder="Where did we recruit this agent from?"
+                disabled={formDisabled}
+                list={sourceHistory.length > 0 ? 'agent-source-history' : undefined}
+              />
+              {sourceHistory.length > 0 && (
+                <datalist id="agent-source-history">
+                  {sourceHistory.map((entry) => (
+                    <option key={entry} value={entry} />
+                  ))}
+                </datalist>
+              )}
+            </label>
+          )}
           <div className="md:col-span-2 space-y-2">
             <p className="text-xs font-semibold text-slate-600">Office Address</p>
             <div className="grid gap-3 md:grid-cols-2">
