@@ -879,6 +879,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     // Send NPS surveys when deal is closed
     if (isClosingNow && isTransactionalEmailConfigured()) {
       const usedAfc = payment.usedAfc ?? existingPayment.usedAfc ?? false;
+      const usedAssignedAgent = payment.usedAssignedAgent ?? existingPayment.usedAssignedAgent ?? false;
       const origin = process.env.VERCEL_URL
         ? `https://${process.env.VERCEL_URL}`
         : request.headers.get('origin') || new URL(request.url).origin;
@@ -888,6 +889,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
           existingPayment._id.toString(),
           referral._id.toString(),
           Boolean(usedAfc),
+          Boolean(usedAssignedAgent),
           origin
         );
       } catch (error) {

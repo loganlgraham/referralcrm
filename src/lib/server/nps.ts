@@ -166,6 +166,7 @@ export async function sendNPSSurveysForClosedDeal(
   paymentId: string,
   referralId: string,
   usedAfc: boolean,
+  usedAssignedAgent: boolean,
   origin: string
 ): Promise<void> {
   await connectMongo();
@@ -188,8 +189,8 @@ export async function sendNPSSurveysForClosedDeal(
   const payment = await Payment.findById(paymentId).lean();
   if (!payment) return;
 
-  // 1. Send lender survey to agent if usedAfc is true
-  if (usedAfc && referral.assignedAgent && referral.lender) {
+  // 1. Send lender survey to agent if BOTH usedAfc AND usedAssignedAgent are true
+  if (usedAfc && usedAssignedAgent && referral.assignedAgent && referral.lender) {
     const agent = referral.assignedAgent as any;
     const lender = referral.lender as any;
 
@@ -218,8 +219,8 @@ export async function sendNPSSurveysForClosedDeal(
     }
   }
 
-  // 2. Send agent survey to borrower
-  if (referral.assignedAgent && referral.borrower?.email) {
+  // 2. Send agent survey to borrower (only if usedAssignedAgent is true)
+  if (usedAssignedAgent && referral.assignedAgent && referral.borrower?.email) {
     const agent = referral.assignedAgent as any;
     const borrowerEmail = referral.borrower.email;
     const borrowerName = referral.borrower.name || referral.borrower.firstName || 'Client';
