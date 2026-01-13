@@ -1314,7 +1314,6 @@ function MainDashboard({
     { label: 'Closed, not paid', value: formatCurrency(summary.closedNotPaidCents) },
     { label: 'Total volume closed', value: formatCurrency(summary.totalVolumeClosedCents) },
     { label: 'Avg. referral fee paid', value: formatCurrency(summary.averageReferralFeePaidCents) },
-    { label: 'Avg. revenue per deal', value: formatCurrency(summary.averageRevenuePerDealCents) },
     { label: 'Avg. days new lead → under contract', value: `${summary.averageDaysNewLeadToContract.toFixed(1)} days` },
     { label: 'Avg. days closed → paid', value: `${summary.averageDaysClosedToPaid.toFixed(1)} days` },
     { label: 'Avg. closed deal amount', value: formatCurrency(summary.averageClosedDealAmountCents) }
