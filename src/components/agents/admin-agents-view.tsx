@@ -27,19 +27,19 @@ export function AdminAgentsView() {
         <button
           type="button"
           onClick={() => setShowAddAgentModal(true)}
-          className="flex items-center justify-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand"
+          className="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           aria-label="Add agent"
         >
-          <Plus className="h-5 w-5" />
+          <Plus className="h-4 w-4" />
           <span>Add Agent</span>
         </button>
         <button
           type="button"
           onClick={() => setShowAISearchModal(true)}
-          className="flex items-center justify-center rounded-md bg-slate-900 p-2 text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand"
+          className="inline-flex items-center justify-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           aria-label="Find agent by area"
         >
-          <MapPin className="h-5 w-5" />
+          <MapPin className="h-4 w-4" />
         </button>
       </div>
 
