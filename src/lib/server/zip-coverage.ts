@@ -103,26 +103,23 @@ export const syncAgentZipCoverage = async ({
     const operations = zipCodes.map((code) => {
       const locationMetadata = metadata.get(code);
       const update: {
-        $setOnInsert: { code: string; city: string; state: string };
+        $setOnInsert: { code: string };
         $addToSet: { agents: Types.ObjectId };
         $set?: { city?: string; state?: string };
       } = {
         $setOnInsert: {
           code,
-          city: locationMetadata?.city ?? '',
-          state: locationMetadata?.state ?? '',
         },
         $addToSet: { agents: normalizedAgentId },
       };
 
+      // Always set city/state via $set if metadata exists
+      // This avoids conflict with $setOnInsert and allows updates to existing documents
       if (locationMetadata?.city || locationMetadata?.state) {
-        update.$set = {};
-        if (locationMetadata.city) {
-          update.$set.city = locationMetadata.city;
-        }
-        if (locationMetadata.state) {
-          update.$set.state = locationMetadata.state;
-        }
+        update.$set = {
+          ...(locationMetadata.city && { city: locationMetadata.city }),
+          ...(locationMetadata.state && { state: locationMetadata.state }),
+        };
       }
 
       return Zip.updateOne({ code }, update, { upsert: true });
