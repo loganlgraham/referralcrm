@@ -9,6 +9,7 @@ import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
 import { computeFollowUpTasksForReferral } from '@/lib/server/follow-up-tasks';
 import { getAppOrigin } from '@/lib/server/app-origin';
+import { sendTaskReminders, type ReminderTask } from '@/lib/server/send-task-reminders';
 import { Types } from 'mongoose';
 
 export const runtime = 'nodejs';
@@ -278,58 +279,51 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
-      // Call the reminders API
-      // Use APP_URL/NEXTAUTH_URL if set (production: https://referrio.app), otherwise fallback to VERCEL_URL or request origin
-      const baseUrl = getAppOrigin(request);
-      const remindersUrl = `${baseUrl}/api/follow-up/reminders`;
+      // Enrich tasks with referral names
+      const referralIds = Array.from(new Set(allTasks.map((task) => task.referralId)));
+      const referrals = await Referral.find({ _id: { $in: referralIds } })
+        .select('borrower')
+        .lean<{ _id: string; borrower?: { name?: string } }[]>();
 
-      // TEMP DEBUG LOGGING - Remove after fixing
-      console.log('[DEBUG Cron] Calling reminders API');
-      console.log('[DEBUG Cron] URL:', remindersUrl);
-      console.log('[DEBUG Cron] TASK_REMINDER_SECRET exists:', Boolean(taskReminderSecret));
-      console.log('[DEBUG Cron] TASK_REMINDER_SECRET length:', taskReminderSecret?.length);
-      console.log('[DEBUG Cron] Sending header x-task-reminder-secret with length:', taskReminderSecret?.length);
-      // END DEBUG LOGGING
+      const referralMap = new Map(referrals.map((item) => [item._id.toString(), item]));
 
-      const response = await fetch(remindersUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-task-reminder-secret': taskReminderSecret,
-        },
-        body: JSON.stringify({
-          frequency,
-          tasks: allTasks,
-          recipient: user.email,
-        }),
+      const enrichedTasks: ReminderTask[] = allTasks.map((task) => {
+        const referral = referralMap.get(task.referralId);
+        return {
+          taskId: task.taskId,
+          referralId: task.referralId,
+          title: task.title,
+          message: task.message ?? null,
+          dueAt: task.dueAt ?? null,
+          referralName: task.referralName ?? referral?.borrower?.name ?? null,
+          priority: task.priority ?? null,
+          category: task.category ?? null,
+        };
       });
 
-      // Parse response body safely - handle both JSON and HTML/text responses
-      let responseData: { error?: string; [key: string]: unknown } = { error: 'Unknown error' };
-      const responseText = await response.text().catch(() => '');
-      if (responseText) {
-        try {
-          responseData = JSON.parse(responseText);
-        } catch {
-          // Not JSON - likely HTML error page or plain text
-          responseData = { error: `Non-JSON response (${response.status})`, rawBody: responseText.substring(0, 200) };
-        }
-      }
+      // Call the shared reminder function directly (no HTTP round-trip)
+      const origin = getAppOrigin(request);
+      const result = await sendTaskReminders({
+        tasks: enrichedTasks,
+        recipient: user.email || '',
+        frequency,
+        origin,
+        isAutomationRequest: true,
+        session: null,
+      });
 
-      if (!response.ok) {
+      if (!result.success) {
         console.error(
           `Failed to send reminders for ${user.email}:`,
-          response.status,
-          responseData.error || 'Unknown error'
+          result.error || 'Unknown error'
         );
-        console.error('[DEBUG Cron] Response body:', JSON.stringify(responseData));
         results.push({
           userId,
           email: user.email || '',
           frequency,
           success: false,
           taskCount: allTasks.length,
-          error: responseData.error || `HTTP ${response.status}`,
+          error: result.error || 'Failed to send reminders',
         });
       } else {
         console.log(`Successfully sent ${allTasks.length} task reminders to ${user.email}`);
