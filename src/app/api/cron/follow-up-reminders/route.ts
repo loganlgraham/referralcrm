@@ -280,12 +280,12 @@ export async function GET(request: NextRequest) {
       }
 
       // Enrich tasks with referral names
-      const referralIds = Array.from(new Set(allTasks.map((task) => task.referralId)));
-      const referrals = await Referral.find({ _id: { $in: referralIds } })
+      const taskReferralIds = Array.from(new Set(allTasks.map((task) => task.referralId)));
+      const referralData = await Referral.find({ _id: { $in: taskReferralIds } })
         .select('borrower')
         .lean<{ _id: string; borrower?: { name?: string } }[]>();
 
-      const referralMap = new Map(referrals.map((item) => [item._id.toString(), item]));
+      const referralMap = new Map(referralData.map((item) => [item._id.toString(), item]));
 
       const enrichedTasks: ReminderTask[] = allTasks.map((task) => {
         const referral = referralMap.get(task.referralId);
