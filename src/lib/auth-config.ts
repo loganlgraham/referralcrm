@@ -106,8 +106,11 @@ if (process.env.RESEND_API_KEY && process.env.EMAIL_FROM) {
 
 const authSecret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
 
+// Lazy initialization: MongoDBAdapter will call this function when it needs the connection
+const getAdapterClientPromise = () => getClientPromise();
+
 export const authOptions: NextAuthOptions = {
-  adapter: MongoDBAdapter(getClientPromise() as any),
+  adapter: MongoDBAdapter(getAdapterClientPromise() as any),
   session: { strategy: 'jwt' },
   pages: {
     signIn: '/login',
