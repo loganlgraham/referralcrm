@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Search } from 'lucide-react';
+import { Plus, MapPin } from 'lucide-react';
 
 import { FindAgentExperience } from '@/components/find-agent/find-agent-experience';
 import { AgentsTable } from '@/components/tables/agents-table';
@@ -27,18 +27,19 @@ export function AdminAgentsView() {
         <button
           type="button"
           onClick={() => setShowAddAgentModal(true)}
-          className="flex items-center justify-center rounded-md bg-slate-900 p-2 text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand"
+          className="flex items-center justify-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand"
           aria-label="Add agent"
         >
           <Plus className="h-5 w-5" />
+          <span>Add Agent</span>
         </button>
         <button
           type="button"
           onClick={() => setShowAISearchModal(true)}
           className="flex items-center justify-center rounded-md bg-slate-900 p-2 text-white shadow-sm transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-brand"
-          aria-label="AI search for agents"
+          aria-label="Find agent by area"
         >
-          <Search className="h-5 w-5" />
+          <MapPin className="h-5 w-5" />
         </button>
       </div>
 
