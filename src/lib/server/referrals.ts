@@ -88,6 +88,7 @@ interface ReferralListItem {
   timeline?: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified';
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   hasAhaOosAgentAttached?: boolean;
+  hasAhaDesignatedAgentAttached?: boolean;
 }
 
 const PAGE_SIZE = 20;
@@ -422,6 +423,13 @@ export async function getReferrals(params: GetReferralsParams) {
         item.sellSideAgent?.ahaDesignation === 'AHA_OOS'
       );
 
+      // Compute hasAhaDesignatedAgentAttached: check if any attached agent has ahaDesignation in ['AHA', 'AHA_OOS', 'AGIT']
+      const hasAhaDesignatedAgentAttached = Boolean(
+        (item.assignedAgent?.ahaDesignation === 'AHA' || item.assignedAgent?.ahaDesignation === 'AHA_OOS' || item.assignedAgent?.ahaDesignation === 'AGIT') ||
+        (item.buySideAgent?.ahaDesignation === 'AHA' || item.buySideAgent?.ahaDesignation === 'AHA_OOS' || item.buySideAgent?.ahaDesignation === 'AGIT') ||
+        (item.sellSideAgent?.ahaDesignation === 'AHA' || item.sellSideAgent?.ahaDesignation === 'AHA_OOS' || item.sellSideAgent?.ahaDesignation === 'AGIT')
+      );
+
       return {
         _id: item._id.toString(),
         createdAt: item.createdAt.toISOString(),
@@ -464,7 +472,8 @@ export async function getReferrals(params: GetReferralsParams) {
             : undefined,
         timeline: item.timeline,
         ahaBucket: item.ahaBucket ?? null,
-        hasAhaOosAgentAttached
+        hasAhaOosAgentAttached,
+        hasAhaDesignatedAgentAttached
       } as ReferralListItem;
     }),
     total,
@@ -545,6 +554,13 @@ export async function getReferralById(id: string) {
     (referral.sellSideAgent as any)?.ahaDesignation === 'AHA_OOS'
   );
 
+  // Compute hasAhaDesignatedAgentAttached: check if any attached agent has ahaDesignation in ['AHA', 'AHA_OOS', 'AGIT']
+  const hasAhaDesignatedAgentAttached = Boolean(
+    ((referral.assignedAgent as any)?.ahaDesignation === 'AHA' || (referral.assignedAgent as any)?.ahaDesignation === 'AHA_OOS' || (referral.assignedAgent as any)?.ahaDesignation === 'AGIT') ||
+    ((referral.buySideAgent as any)?.ahaDesignation === 'AHA' || (referral.buySideAgent as any)?.ahaDesignation === 'AHA_OOS' || (referral.buySideAgent as any)?.ahaDesignation === 'AGIT') ||
+    ((referral.sellSideAgent as any)?.ahaDesignation === 'AHA' || (referral.sellSideAgent as any)?.ahaDesignation === 'AHA_OOS' || (referral.sellSideAgent as any)?.ahaDesignation === 'AGIT')
+  );
+
   return {
     ...referral,
     _id: referral._id.toString(),
@@ -560,6 +576,7 @@ export async function getReferralById(id: string) {
       : null,
     lender: referral.lender ? { ...referral.lender, _id: referral.lender._id.toString() } : null,
     hasAhaOosAgentAttached,
+    hasAhaDesignatedAgentAttached,
     payments: payments.map((payment: any) => ({
       _id: payment._id.toString(),
       status: payment.status,

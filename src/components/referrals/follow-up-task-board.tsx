@@ -33,6 +33,7 @@ interface BoardReferral {
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   timeline?: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified' | null;
   hasAhaOosAgentAttached?: boolean;
+  hasAhaDesignatedAgentAttached?: boolean;
 }
 
 interface FollowUpTasksBoardProps {
@@ -61,6 +62,7 @@ const toReferralLike = (referral: BoardReferral): ReferralLike & { borrower: { n
   ahaBucket: referral.ahaBucket ?? null,
   timeline: referral.timeline ?? undefined,
   hasAhaOosAgentAttached: referral.hasAhaOosAgentAttached ?? false,
+  hasAhaDesignatedAgentAttached: referral.hasAhaDesignatedAgentAttached ?? false,
 });
 
 const UNDER_CONTRACT_INDEX = REFERRAL_STATUSES.indexOf('Under Contract');
@@ -121,6 +123,14 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
     );
   }, [tasksByReferral]);
 
+  // Filter referrals to only show those with incomplete tasks
+  const referralsWithIncompleteTasks = useMemo(() => {
+    return referrals.filter((referral) => {
+      const tasks = tasksByReferral[referral._id] ?? [];
+      return tasks.filter((task) => !task.completed).length > 0;
+    });
+  }, [referrals, tasksByReferral]);
+
   return (
     <div className="space-y-6">
       <header className="space-y-2">
@@ -138,14 +148,20 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
         </div>
       </header>
       <div className="space-y-5">
-        {referrals.map((referral) => (
-          <FollowUpTaskGroup
-            key={referral._id}
-            referral={referral}
-            tasks={tasksByReferral[referral._id] ?? []}
-            viewerRole={viewerRole}
-          />
-        ))}
+        {referralsWithIncompleteTasks.length > 0 ? (
+          referralsWithIncompleteTasks.map((referral) => (
+            <FollowUpTaskGroup
+              key={referral._id}
+              referral={referral}
+              tasks={tasksByReferral[referral._id] ?? []}
+              viewerRole={viewerRole}
+            />
+          ))
+        ) : (
+          <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
+            No referrals with incomplete tasks at this time.
+          </div>
+        )}
       </div>
     </div>
   );

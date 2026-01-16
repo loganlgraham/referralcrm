@@ -20,7 +20,7 @@ export const STATIC_FOLLOW_UP_TASKS: Record<string, StaticTaskDefinition[]> = {
   'New Lead': [
     {
       id: 'assign-agent-status',
-      title: 'Assign Agent - Change Status to Paired',
+      title: 'Assign Agent and MC - Change Status to Paired',
       type: 'Task',
       dueOffset: { days: 0 },
       messageTemplate: 'Ensure agent is assigned and status is set to Paired.',

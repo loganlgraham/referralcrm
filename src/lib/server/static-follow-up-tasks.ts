@@ -111,15 +111,11 @@ function meetsConditions(
  * Get static follow-up tasks for a referral based on its status
  * Only applies tasks to referrals with AHA OOS agents attached
  * NOTE: These tasks are ADMIN-ONLY and will be filtered by role in the calling functions
+ * EXCEPTION: The 'assign-agent-status' task shows for AHA/AHA_OOS bucket or any AHA-designated agent
  */
 export function getStaticFollowUpTasksForReferral(
   referral: ReferralLike & { borrower?: { name?: string } }
 ): StaticFollowUpTask[] {
-  // Only apply tasks to referrals where any attached agent has ahaDesignation === 'AHA_OOS'
-  if (!referral.hasAhaOosAgentAttached) {
-    return [];
-  }
-
   const normalizedStatus = normalizeReferralStatus(referral.status);
   if (!normalizedStatus) {
     return [];
@@ -127,6 +123,18 @@ export function getStaticFollowUpTasksForReferral(
 
   // Get tasks for this status
   const statusTasks = STATIC_FOLLOW_UP_TASKS[normalizedStatus] || [];
+
+  // Special case: The 'assign-agent-status' task is an exception - it shows for AHA/AHA_OOS bucket or any AHA-designated agent
+  // For all other tasks, require AHA_OOS attached agent
+  const hasAhaBucketForAssignment = referral.ahaBucket === 'AHA' || referral.ahaBucket === 'AHA_OOS';
+  const shouldShowAssignmentTask = statusTasks.some((task) => task.id === 'assign-agent-status') &&
+    (hasAhaBucketForAssignment || referral.hasAhaDesignatedAgentAttached === true);
+
+  // If this status has the assignment task and we should show it, allow tasks
+  // Otherwise, check if referral has AHA_OOS agent attached
+  if (!shouldShowAssignmentTask && !referral.hasAhaOosAgentAttached) {
+    return [];
+  }
 
   // Also check "Active Lead" tasks if status is "Showing Homes" (normalized to "Active Lead")
   const additionalTasks =
@@ -140,6 +148,20 @@ export function getStaticFollowUpTasksForReferral(
   const tasks: StaticFollowUpTask[] = [];
 
   for (const taskDef of allTasks) {
+    // Special gating for 'assign-agent-status' task
+    if (taskDef.id === 'assign-agent-status') {
+      // Only show if AHA bucket or has AHA-designated agent attached
+      const hasAhaBucketForAssignment = referral.ahaBucket === 'AHA' || referral.ahaBucket === 'AHA_OOS';
+      if (!hasAhaBucketForAssignment && !referral.hasAhaDesignatedAgentAttached) {
+        continue; // Skip this task if conditions not met
+      }
+    } else {
+      // For all other tasks, require AHA_OOS attached agent
+      if (!referral.hasAhaOosAgentAttached) {
+        continue; // Skip this task if no AHA_OOS agent attached
+      }
+    }
+
     // Check conditions
     if (!meetsConditions(taskDef, referral)) {
       continue;
