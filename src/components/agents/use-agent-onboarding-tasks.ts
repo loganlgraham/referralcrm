@@ -12,7 +12,7 @@ export interface AgentOnboardingTask {
   title: string;
   message: string;
   priority: RecommendationPriority;
-  category: 'ops';
+  category: 'assignment' | 'communication' | 'pipeline' | 'finance' | 'ops';
   dueAt?: string | null;
   completed: boolean;
   toggle: () => void;
