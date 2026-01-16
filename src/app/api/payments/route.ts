@@ -923,8 +923,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
           }
         }
 
-        // Email to agent (only if usedAfc is true)
-        if (usedAfc) {
+        // Email to agent (only if BOTH usedAfc AND usedAssignedAgent are true)
+        if (usedAfc && usedAssignedAgent) {
           const agent = referral.assignedAgent as { name?: string; email?: string } | null;
           const agentEmail = agent?.email;
           const agentFirstName = agent?.name ? agent.name.split(' ')[0] : 'there';
