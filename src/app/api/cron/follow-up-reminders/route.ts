@@ -49,6 +49,13 @@ function toReferralLike(referral: any, payments: any[] = []) {
     ((referral.sellSideAgent as any)?.ahaDesignation === 'AHA' || (referral.sellSideAgent as any)?.ahaDesignation === 'AHA_OOS' || (referral.sellSideAgent as any)?.ahaDesignation === 'AGIT')
   );
 
+  // Compute hasAhaAgentAttached: check if any attached agent has ahaDesignation === 'AHA' (not OOS, not AGIT)
+  const hasAhaAgentAttached = Boolean(
+    (referral.assignedAgent as any)?.ahaDesignation === 'AHA' ||
+    (referral.buySideAgent as any)?.ahaDesignation === 'AHA' ||
+    (referral.sellSideAgent as any)?.ahaDesignation === 'AHA'
+  );
+
   return {
     _id: referral._id.toString(),
     createdAt: referral.createdAt,
@@ -93,6 +100,7 @@ function toReferralLike(referral: any, payments: any[] = []) {
     ahaBucket: referral.ahaBucket || null,
     hasAhaOosAgentAttached,
     hasAhaDesignatedAgentAttached,
+    hasAhaAgentAttached,
   };
 }
 

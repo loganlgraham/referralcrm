@@ -87,6 +87,7 @@ export interface ReferralLike {
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   hasAhaOosAgentAttached?: boolean;
   hasAhaDesignatedAgentAttached?: boolean;
+  hasAhaAgentAttached?: boolean;
   sla?: {
     contractToCloseMinutes?: number | null;
     closedToPaidMinutes?: number | null;

@@ -1292,6 +1292,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       audit: auditEntries,
       hasAhaOosAgentAttached: (referral as any).hasAhaOosAgentAttached ?? false,
       hasAhaDesignatedAgentAttached: (referral as any).hasAhaDesignatedAgentAttached ?? false,
+      hasAhaAgentAttached: (referral as any).hasAhaAgentAttached ?? false,
       timeline: referral.timeline ?? undefined,
     };
   }, [

@@ -89,6 +89,7 @@ interface ReferralListItem {
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   hasAhaOosAgentAttached?: boolean;
   hasAhaDesignatedAgentAttached?: boolean;
+  hasAhaAgentAttached?: boolean;
 }
 
 const PAGE_SIZE = 20;
@@ -430,6 +431,13 @@ export async function getReferrals(params: GetReferralsParams) {
         (item.sellSideAgent?.ahaDesignation === 'AHA' || item.sellSideAgent?.ahaDesignation === 'AHA_OOS' || item.sellSideAgent?.ahaDesignation === 'AGIT')
       );
 
+      // Compute hasAhaAgentAttached: check if any attached agent has ahaDesignation === 'AHA' (not OOS, not AGIT)
+      const hasAhaAgentAttached = Boolean(
+        item.assignedAgent?.ahaDesignation === 'AHA' ||
+        item.buySideAgent?.ahaDesignation === 'AHA' ||
+        item.sellSideAgent?.ahaDesignation === 'AHA'
+      );
+
       return {
         _id: item._id.toString(),
         createdAt: item.createdAt.toISOString(),
@@ -473,7 +481,8 @@ export async function getReferrals(params: GetReferralsParams) {
         timeline: item.timeline,
         ahaBucket: item.ahaBucket ?? null,
         hasAhaOosAgentAttached,
-        hasAhaDesignatedAgentAttached
+        hasAhaDesignatedAgentAttached,
+        hasAhaAgentAttached
       } as ReferralListItem;
     }),
     total,
@@ -561,6 +570,13 @@ export async function getReferralById(id: string) {
     ((referral.sellSideAgent as any)?.ahaDesignation === 'AHA' || (referral.sellSideAgent as any)?.ahaDesignation === 'AHA_OOS' || (referral.sellSideAgent as any)?.ahaDesignation === 'AGIT')
   );
 
+  // Compute hasAhaAgentAttached: check if any attached agent has ahaDesignation === 'AHA' (not OOS, not AGIT)
+  const hasAhaAgentAttached = Boolean(
+    (referral.assignedAgent as any)?.ahaDesignation === 'AHA' ||
+    (referral.buySideAgent as any)?.ahaDesignation === 'AHA' ||
+    (referral.sellSideAgent as any)?.ahaDesignation === 'AHA'
+  );
+
   return {
     ...referral,
     _id: referral._id.toString(),
@@ -577,6 +593,7 @@ export async function getReferralById(id: string) {
     lender: referral.lender ? { ...referral.lender, _id: referral.lender._id.toString() } : null,
     hasAhaOosAgentAttached,
     hasAhaDesignatedAgentAttached,
+    hasAhaAgentAttached,
     payments: payments.map((payment: any) => ({
       _id: payment._id.toString(),
       status: payment.status,

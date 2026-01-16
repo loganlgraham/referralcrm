@@ -87,34 +87,48 @@ export function buildFollowUpTasksForReferral(
   const staticTasks = getStaticFollowUpTasksForReferral(referral);
   const manual = manualTasks[referral._id] ?? [];
 
-  const manualFollowUps = manual.map<FollowUpTask>((task) => {
-    const taskId = `${referral._id}::manual::${task.id}`;
-    const completion = completions[taskId]?.completed ?? false;
-    const handleToggle = () => {
-      toggleTask(taskId, !completion);
-    };
-    const handleRemove = () => {
-      removeManualTask(referral._id, task.id);
-    };
+  const manualFollowUps = manual
+    .map<FollowUpTask>((task) => {
+      const taskId = `${referral._id}::manual::${task.id}`;
+      const completion = completions[taskId]?.completed ?? false;
+      const handleToggle = () => {
+        toggleTask(taskId, !completion);
+      };
+      const handleRemove = () => {
+        removeManualTask(referral._id, task.id);
+      };
 
-    return {
-      id: task.id,
-      taskId,
-      referralId: referral._id,
-      referralName: referral.borrower?.name,
-      title: task.title,
-      message: task.message,
-      priority: task.priority,
-      category: task.category,
-      dueAt: task.dueAt ?? undefined,
-      completed: completion,
-      toggle: handleToggle,
-      isManual: true,
-      remove: handleRemove,
-      supportingMetric: undefined,
-      role: viewerRole,
-    };
-  });
+      return {
+        id: task.id,
+        taskId,
+        referralId: referral._id,
+        referralName: referral.borrower?.name,
+        title: task.title,
+        message: task.message,
+        priority: task.priority,
+        category: task.category,
+        dueAt: task.dueAt ?? undefined,
+        completed: completion,
+        toggle: handleToggle,
+        isManual: true,
+        remove: handleRemove,
+        supportingMetric: undefined,
+        role: viewerRole,
+      };
+    })
+    .filter((task) => {
+      // Always show tasks without due dates
+      if (!task.dueAt) {
+        return true;
+      }
+
+      // Only show tasks due within 3 days or overdue
+      const now = new Date();
+      const dueDate = new Date(task.dueAt);
+      const daysUntilDue = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+      return daysUntilDue <= 3;
+    });
 
   // All static tasks are marked as 'admin' role, so they will only be visible to admin users
   const automated = staticTasks

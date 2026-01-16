@@ -56,6 +56,7 @@ export interface ReferralRow {
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   hasAhaOosAgentAttached?: boolean;
   hasAhaDesignatedAgentAttached?: boolean;
+  hasAhaAgentAttached?: boolean;
 }
 
 type TableMode = 'admin' | 'mc' | 'agent';
@@ -92,6 +93,7 @@ function toReferralLike(row: ReferralRow): ReferralLike & { borrower: { name: st
     timeline: row.timeline ?? undefined,
     hasAhaOosAgentAttached: row.hasAhaOosAgentAttached ?? false,
     hasAhaDesignatedAgentAttached: row.hasAhaDesignatedAgentAttached ?? false,
+    hasAhaAgentAttached: row.hasAhaAgentAttached ?? false,
   };
 }
 

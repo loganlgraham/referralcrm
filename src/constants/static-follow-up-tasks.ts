@@ -14,6 +14,7 @@ export interface StaticTaskDefinition {
     timeline?: ReferralTimeline[];
     minStatusAgeDays?: number;
   };
+  ahaDesignation?: 'AHA' | 'AHA_OOS';
 }
 
 export const STATIC_FOLLOW_UP_TASKS: Record<string, StaticTaskDefinition[]> = {
@@ -33,6 +34,7 @@ export const STATIC_FOLLOW_UP_TASKS: Record<string, StaticTaskDefinition[]> = {
       dueOffset: { days: 0 },
       messageTemplate: 'Add the real estate agent to Homebot for this new lead.',
       category: 'ops',
+      ahaDesignation: 'AHA',
     },
     {
       id: 'customer-care-intro',
@@ -41,6 +43,16 @@ export const STATIC_FOLLOW_UP_TASKS: Record<string, StaticTaskDefinition[]> = {
       dueOffset: { days: 3 },
       messageTemplate: 'Make initial introduction call to the customer.',
       category: 'communication',
+      ahaDesignation: 'AHA',
+    },
+    {
+      id: 'customer-care-followup',
+      title: 'Customer Care: Follow-up Check In',
+      type: 'Call',
+      dueOffset: { days: 14 },
+      messageTemplate: 'Follow-up check-in call with the customer.',
+      category: 'communication',
+      ahaDesignation: 'AHA',
     },
   ],
   'Paired': [
@@ -63,12 +75,42 @@ export const STATIC_FOLLOW_UP_TASKS: Record<string, StaticTaskDefinition[]> = {
   ],
   'In Communication': [
     {
+      id: 'add-agent-homebot-comm',
+      title: 'Add Real Estate Agent in Homebot',
+      type: 'Task',
+      dueOffset: { days: 0 },
+      messageTemplate: 'Add the real estate agent to Homebot for this new lead.',
+      category: 'ops',
+      ahaDesignation: 'AHA',
+    },
+    {
+      id: 'customer-care-intro-comm',
+      title: 'Customer Care: Initial Introduction',
+      type: 'Call',
+      dueOffset: { days: 3 },
+      messageTemplate: 'Make initial introduction call to the customer.',
+      category: 'communication',
+      ahaDesignation: 'AHA',
+    },
+    {
+      id: 'customer-care-followup-comm',
+      title: 'Customer Care: Follow-up Check In',
+      type: 'Call',
+      dueOffset: { days: 14 },
+      messageTemplate: 'Follow-up check-in call with the customer.',
+      category: 'communication',
+      ahaDesignation: 'AHA',
+    },
+    {
       id: 'check-in-week-1',
       title: 'Check in - Week 1',
       type: 'Call',
       dueOffset: { days: 4 },
       messageTemplate: 'Week 1 check-in with the client.',
       category: 'communication',
+      conditions: {
+        timeline: ['asap', '1-3_months', '3-6_months'],
+      },
     },
     {
       id: 'check-in-week-2',
@@ -77,6 +119,9 @@ export const STATIC_FOLLOW_UP_TASKS: Record<string, StaticTaskDefinition[]> = {
       dueOffset: { days: 10 },
       messageTemplate: 'Week 2 check-in with the client.',
       category: 'communication',
+      conditions: {
+        timeline: ['asap', '1-3_months', '3-6_months'],
+      },
     },
     {
       id: 'check-in-week-4',
@@ -85,6 +130,9 @@ export const STATIC_FOLLOW_UP_TASKS: Record<string, StaticTaskDefinition[]> = {
       dueOffset: { days: 21 },
       messageTemplate: 'One month check-in with the client.',
       category: 'communication',
+      conditions: {
+        timeline: ['asap', '1-3_months', '3-6_months'],
+      },
     },
     {
       id: 'check-in-week-8',
@@ -93,6 +141,9 @@ export const STATIC_FOLLOW_UP_TASKS: Record<string, StaticTaskDefinition[]> = {
       dueOffset: { months: 2 },
       messageTemplate: 'Two month check-in with the client.',
       category: 'communication',
+      conditions: {
+        timeline: ['asap', '1-3_months', '3-6_months'],
+      },
     },
     // Timeline-specific tasks for 6-12 months or 12+ months
     {
@@ -131,12 +182,42 @@ export const STATIC_FOLLOW_UP_TASKS: Record<string, StaticTaskDefinition[]> = {
   ],
   'Active Lead': [
     {
+      id: 'add-agent-homebot-active',
+      title: 'Add Real Estate Agent in Homebot',
+      type: 'Task',
+      dueOffset: { days: 0 },
+      messageTemplate: 'Add the real estate agent to Homebot for this new lead.',
+      category: 'ops',
+      ahaDesignation: 'AHA',
+    },
+    {
+      id: 'customer-care-intro-active',
+      title: 'Customer Care: Initial Introduction',
+      type: 'Call',
+      dueOffset: { days: 3 },
+      messageTemplate: 'Make initial introduction call to the customer.',
+      category: 'communication',
+      ahaDesignation: 'AHA',
+    },
+    {
+      id: 'customer-care-followup-active',
+      title: 'Customer Care: Follow-up Check In',
+      type: 'Call',
+      dueOffset: { days: 14 },
+      messageTemplate: 'Follow-up check-in call with the customer.',
+      category: 'communication',
+      ahaDesignation: 'AHA',
+    },
+    {
       id: 'check-in-week-1-active',
       title: 'Check in - Week 1',
       type: 'Call',
       dueOffset: { days: 4 },
       messageTemplate: 'Week 1 check-in with the active lead.',
       category: 'communication',
+      conditions: {
+        timeline: ['asap', '1-3_months', '3-6_months'],
+      },
     },
     {
       id: 'check-in-week-2-active',
@@ -145,6 +226,9 @@ export const STATIC_FOLLOW_UP_TASKS: Record<string, StaticTaskDefinition[]> = {
       dueOffset: { days: 10 },
       messageTemplate: 'Week 2 check-in with the active lead.',
       category: 'communication',
+      conditions: {
+        timeline: ['asap', '1-3_months', '3-6_months'],
+      },
     },
     {
       id: 'check-in-week-4-active',
@@ -153,6 +237,9 @@ export const STATIC_FOLLOW_UP_TASKS: Record<string, StaticTaskDefinition[]> = {
       dueOffset: { days: 21 },
       messageTemplate: 'One month check-in with the active lead.',
       category: 'communication',
+      conditions: {
+        timeline: ['asap', '1-3_months', '3-6_months'],
+      },
     },
     {
       id: 'check-in-week-8-active',
@@ -161,6 +248,9 @@ export const STATIC_FOLLOW_UP_TASKS: Record<string, StaticTaskDefinition[]> = {
       dueOffset: { months: 2 },
       messageTemplate: 'Two month check-in with the active lead.',
       category: 'communication',
+      conditions: {
+        timeline: ['asap', '1-3_months', '3-6_months'],
+      },
     },
   ],
   'Under Contract': [

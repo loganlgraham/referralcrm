@@ -54,6 +54,7 @@ export default async function FollowUpTasksPage({
     timeline: item.timeline ?? null,
     hasAhaOosAgentAttached: item.hasAhaOosAgentAttached ?? false,
     hasAhaDesignatedAgentAttached: item.hasAhaDesignatedAgentAttached ?? false,
+    hasAhaAgentAttached: item.hasAhaAgentAttached ?? false,
   }));
 
   return (

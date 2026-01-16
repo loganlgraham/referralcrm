@@ -1,5 +1,5 @@
-import { addDays, addMonths, isAfter, isBefore } from 'date-fns';
-import { formatInTimeZone } from 'date-fns-tz';
+import { addDays, addMonths, isAfter, isBefore, startOfDay } from 'date-fns';
+import { formatInTimeZone, zonedTimeToUtc } from 'date-fns-tz';
 
 import { STATIC_FOLLOW_UP_TASKS, type StaticTaskDefinition } from '@/constants/static-follow-up-tasks';
 import { normalizeReferralStatus, type ReferralTimeline } from '@/constants/referrals';
@@ -64,7 +64,11 @@ function calculatePriority(dueAt: Date | null, now: Date = new Date()): Recommen
     return 'medium';
   }
 
-  const daysUntilDue = Math.floor((dueAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  // Normalize both dates to start of day in MT timezone
+  const nowMT = zonedTimeToUtc(startOfDay(now), SLA_TIME_ZONE);
+  const dueMT = zonedTimeToUtc(startOfDay(dueAt), SLA_TIME_ZONE);
+
+  const daysUntilDue = Math.floor((dueMT.getTime() - nowMT.getTime()) / (1000 * 60 * 60 * 24));
 
   if (daysUntilDue < 0) {
     return 'urgent'; // Overdue
@@ -155,8 +159,18 @@ export function getStaticFollowUpTasksForReferral(
       if (!hasAhaBucketForAssignment && !referral.hasAhaDesignatedAgentAttached) {
         continue; // Skip this task if conditions not met
       }
+    } else if (taskDef.ahaDesignation === 'AHA') {
+      // For AHA-only tasks, require AHA designation (not AHA_OOS, not AGIT)
+      if (!referral.hasAhaAgentAttached) {
+        continue; // Skip this task if no AHA agent attached
+      }
+    } else if (taskDef.ahaDesignation === 'AHA_OOS') {
+      // For AHA_OOS tasks, require AHA_OOS designation
+      if (!referral.hasAhaOosAgentAttached) {
+        continue; // Skip this task if no AHA_OOS agent attached
+      }
     } else {
-      // For all other tasks, require AHA_OOS attached agent
+      // For tasks without designation, require AHA_OOS (existing default behavior)
       if (!referral.hasAhaOosAgentAttached) {
         continue; // Skip this task if no AHA_OOS agent attached
       }
@@ -177,13 +191,27 @@ export function getStaticFollowUpTasksForReferral(
     // Calculate priority
     const priority = calculatePriority(dueDate, now);
 
+    // Only include tasks due within 3 days or overdue
+    if (dueDate) {
+      const nowMT = zonedTimeToUtc(startOfDay(now), SLA_TIME_ZONE);
+      const dueMT = zonedTimeToUtc(startOfDay(dueDate), SLA_TIME_ZONE);
+      const daysUntilDue = Math.floor((dueMT.getTime() - nowMT.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Skip tasks that are more than 3 days away
+      if (daysUntilDue > 3) {
+        continue;
+      }
+    }
+
     // Format due date string
     const dueAt = dueDate ? formatDueDate(dueDate) : null;
 
-    // Build supporting metric
+    // Build supporting metric (using same timezone normalization)
     let supportingMetric: string | undefined;
     if (dueDate) {
-      const daysUntilDue = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      const nowMT = zonedTimeToUtc(startOfDay(now), SLA_TIME_ZONE);
+      const dueMT = zonedTimeToUtc(startOfDay(dueDate), SLA_TIME_ZONE);
+      const daysUntilDue = Math.floor((dueMT.getTime() - nowMT.getTime()) / (1000 * 60 * 60 * 24));
       if (daysUntilDue < 0) {
         supportingMetric = `Overdue by ${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) === 1 ? '' : 's'}`;
       } else if (daysUntilDue === 0) {
