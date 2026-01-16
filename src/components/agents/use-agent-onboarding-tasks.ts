@@ -72,17 +72,18 @@ export function generateAgentOnboardingTasks(agentId: string): ManualTask[] {
 
 export function buildAgentOnboardingTasks(
   agentId: string,
-  agentName?: string,
   {
     completions,
     agentTasks,
     toggleTask,
     removeAgentTask,
+    agentName,
   }: {
     completions: Record<string, { completed: boolean; completedAt?: string | null }>;
     agentTasks: Record<string, ManualTask[]>;
     toggleTask: (taskId: string, completed: boolean) => void;
     removeAgentTask: (agentId: string, taskId: string) => void;
+    agentName?: string;
   }
 ): AgentOnboardingTask[] {
   const tasks = agentTasks[agentId] ?? [];
@@ -119,11 +120,12 @@ export function useAgentOnboardingTasks(agentId: string, agentName?: string) {
 
   return useMemo(
     () =>
-      buildAgentOnboardingTasks(agentId, agentName, {
+      buildAgentOnboardingTasks(agentId, {
         completions,
         agentTasks,
         toggleTask,
         removeAgentTask,
+        agentName,
       }),
     [agentId, agentName, completions, agentTasks, toggleTask, removeAgentTask]
   );

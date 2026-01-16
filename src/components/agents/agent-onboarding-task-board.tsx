@@ -36,11 +36,12 @@ export function AgentOnboardingTaskBoard({ agents }: AgentOnboardingTaskBoardPro
 
   const tasksByAgent = useMemo(() => {
     return agents.reduce<Record<string, AgentOnboardingTask[]>>((acc, agent) => {
-      const tasks = buildAgentOnboardingTasks(agent._id, agent.name, {
+      const tasks = buildAgentOnboardingTasks(agent._id, {
         completions,
         agentTasks,
         toggleTask,
         removeAgentTask,
+        agentName: agent.name,
       });
       acc[agent._id] = tasks;
       return acc;
