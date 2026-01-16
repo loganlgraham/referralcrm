@@ -966,6 +966,22 @@ export function ReferralDeals({
       toast.error('Select a termination reason before marking the deal terminated');
       return;
     }
+    
+    // Check survey email readiness when closing deal
+    if (nextStatus === 'closed') {
+      const usedAfc = deal.usedAfc ?? false;
+      const usedAssignedAgent = deal.usedAssignedAgent ?? false;
+      
+      if (usedAfc && usedAssignedAgent) {
+        toast.success('Ready to send survey emails! The assigned agent and AFC have been marked as used.');
+      } else {
+        const missing: string[] = [];
+        if (!usedAssignedAgent) missing.push('assigned agent');
+        if (!usedAfc) missing.push('AFC');
+        toast.warning(`Survey emails will not be sent. Please ensure the ${missing.join(' and ')} ${missing.length === 1 ? 'is' : 'are'} marked as used.`);
+      }
+    }
+    
     setStatusUpdating((previous) => ({ ...previous, [deal._id]: true }));
     try {
       const closingDate = nextStatus === 'closed' ? new Date().toISOString() : undefined;
