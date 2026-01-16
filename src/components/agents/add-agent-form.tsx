@@ -17,6 +17,8 @@ import {
   AGENT_LANGUAGE_OPTIONS,
   AGENT_SPECIALTY_OPTIONS,
 } from '@/constants/agent-options';
+import { useFollowUpTaskContext } from '@/components/referrals/follow-up-task-provider';
+import { generateAgentOnboardingTasks } from '@/components/agents/use-agent-onboarding-tasks';
 
 interface CoverageLocation {
   label: string;
@@ -79,6 +81,7 @@ interface AddAgentFormProps {
 export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'admin';
+  const { addAgentTasks } = useFollowUpTaskContext();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<AgentFormState>(() => createEmptyForm());
   const [isGeneratingCoverage, setIsGeneratingCoverage] = useState(false);
@@ -400,6 +403,11 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
         : null;
 
       if (createdAgent) {
+        // Generate onboarding tasks for admin users
+        if (isAdmin && createdId) {
+          const onboardingTasks = generateAgentOnboardingTasks(createdId);
+          addAgentTasks(createdId, onboardingTasks);
+        }
         setLastCreatedAgent(createdAgent);
         onSuccess?.(createdAgent);
       }

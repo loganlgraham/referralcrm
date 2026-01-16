@@ -76,6 +76,7 @@ function toReferralLike(referral: any, payments: any[] = []) {
     payments: paymentsFormatted,
     audit: referral.audit || [],
     sla: referral.sla || null,
+    ahaBucket: referral.ahaBucket || null,
   };
 }
 
@@ -249,7 +250,7 @@ export async function GET(request: NextRequest) {
         const referralId = (referral._id as Types.ObjectId).toString();
         const referralPayments = paymentsByReferralId.get(referralId) || [];
         const referralLike = toReferralLike(referral, referralPayments);
-        const tasks = computeFollowUpTasksForReferral(referralLike, viewerRole);
+        const tasks = await computeFollowUpTasksForReferral(referralLike, viewerRole);
 
         // Tasks are already filtered by role in computeFollowUpTasksForReferral
         // and referrals are already filtered by role in getReferralsForUser

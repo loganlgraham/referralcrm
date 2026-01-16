@@ -1,7 +1,6 @@
 import { Metadata } from 'next';
 
-import { FollowUpTasksBoard } from '@/components/referrals/follow-up-task-board';
-import { Pagination } from '@/components/tables/pagination';
+import { AgentTasksWrapper } from '@/components/agents/agent-tasks-wrapper';
 import { getCurrentSession } from '@/lib/auth';
 import { getReferrals } from '@/lib/server/referrals';
 
@@ -51,18 +50,16 @@ export default async function FollowUpTasksPage({
     dealStatus: item.dealStatus ?? null,
     dealStatusLabel: item.dealStatusLabel ?? null,
     origin: item.origin ?? null,
+    ahaBucket: item.ahaBucket ?? null,
   }));
 
   return (
-    <div className="space-y-4">
-      <FollowUpTasksBoard referrals={referrals} viewerRole={viewerRole} />
-      <Pagination
-        currentPage={data.page}
-        totalItems={data.total}
-        pageSize={data.pageSize}
-        totalPages={Math.ceil(data.total / data.pageSize)}
-        itemLabel="referrals"
-      />
-    </div>
+    <AgentTasksWrapper
+      referrals={referrals}
+      referralsTotal={data.total}
+      referralsPage={data.page}
+      referralsPageSize={data.pageSize}
+      viewerRole={viewerRole}
+    />
   );
 }

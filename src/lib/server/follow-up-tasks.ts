@@ -1,45 +1,12 @@
-import {
-  computeSlaInsights,
-  sortRecommendations,
-  type SlaRecommendation,
-  type ReferralLike,
-} from '@/utils/sla-insights';
+import type { ReferralLike } from '@/utils/sla-insights';
+import { getStaticFollowUpTasksForReferral } from './static-follow-up-tasks';
+import { enhanceTaskMessage } from './enhance-task-messages';
 
 export type FollowUpTaskRole = 'admin' | 'mc' | 'agent';
 
-const AGENT_OWNED_TASK_IDS = new Set<string>([
-  'schedule-first-showings',
-  'buyers-agency-agreement',
-  'schedule-listing-consult',
-  'listing-paperwork',
-  'prep-listing',
-  'prep-photos',
-  'target-list-date',
-  'review-conversion-plan',
-  'review-conversion-plan-agent',
-  'schedule-inspection',
-  'schedule-inspection-agent',
-  'order-appraisal',
-  'order-appraisal-agent',
-  'share-closing-timeline',
-  'share-closing-timeline-agent',
-  'check-escrow-milestones',
-  'check-escrow-milestones-agent',
-  'confirm-referral-fee',
-  'confirm-referral-fee-agent',
-  'capture-termination-reason',
-  'capture-termination-reason-agent',
-]);
-
-function resolveTaskRole(recommendationId: string): FollowUpTaskRole {
-  if (recommendationId.startsWith('mc-')) {
-    return 'mc';
-  }
-
-  if (recommendationId.endsWith('-agent') || AGENT_OWNED_TASK_IDS.has(recommendationId)) {
-    return 'agent';
-  }
-
+// All static tasks are admin-only tasks (for AHA OOS referrals)
+// This ensures only admin users see these tasks, not agents or MCs
+function resolveTaskRole(_recommendationId: string): FollowUpTaskRole {
   return 'admin';
 }
 
@@ -60,18 +27,31 @@ export interface ServerFollowUpTask {
  * Server-side function to compute follow-up tasks for a referral.
  * This version doesn't require completion state or manual tasks,
  * as those are stored client-side in localStorage.
+ * Uses static task definitions instead of dynamic AI-generated tasks.
  */
-export function computeFollowUpTasksForReferral(
+export async function computeFollowUpTasksForReferral(
   referral: ReferralLike & { borrower?: { name?: string } },
   viewerRole: FollowUpTaskRole
-): ServerFollowUpTask[] {
-  // Compute tasks fresh - no completion state needed since we're computing from scratch
-  const insights = computeSlaInsights(referral);
-  const ordered = sortRecommendations(insights.recommendations);
+): Promise<ServerFollowUpTask[]> {
+  // Get static tasks for this referral
+  const staticTasks = getStaticFollowUpTasksForReferral(referral);
 
-  const tasks = ordered
-    .map<ServerFollowUpTask>((item) => {
-      const role = resolveTaskRole(item.id);
+  // Enhance messages with OpenAI (in parallel)
+  const enhancedMessages = await Promise.all(
+    staticTasks.map((task) =>
+      enhanceTaskMessage({
+        taskTitle: task.title,
+        taskMessageTemplate: task.message,
+        referral,
+      })
+    )
+  );
+
+  // Map to ServerFollowUpTask format
+  // All static tasks are marked as 'admin' role, so they will only be visible to admin users
+  const tasks = staticTasks
+    .map<ServerFollowUpTask>((item, index) => {
+      const role = resolveTaskRole(item.id); // Always returns 'admin'
       const taskId = `${referral._id}::${item.id}`;
 
       return {
@@ -79,7 +59,7 @@ export function computeFollowUpTasksForReferral(
         referralId: referral._id,
         referralName: referral.borrower?.name,
         title: item.title,
-        message: item.message,
+        message: enhancedMessages[index] || item.message, // Use enhanced message or fallback
         priority: item.priority,
         category: item.category,
         dueAt: item.dueAt ?? null,
@@ -87,7 +67,7 @@ export function computeFollowUpTasksForReferral(
         role,
       };
     })
-    .filter((task) => task.role === viewerRole);
+    .filter((task) => task.role === viewerRole); // Filter: only show tasks matching viewerRole (admin only)
 
   return tasks;
 }

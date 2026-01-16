@@ -2,12 +2,9 @@
 
 import { useMemo } from 'react';
 
-import {
-  computeSlaInsights,
-  sortRecommendations,
-  type SlaRecommendation,
-  type ReferralLike,
-} from '@/utils/sla-insights';
+import type { ReferralLike } from '@/utils/sla-insights';
+import { getStaticFollowUpTasksForReferral } from '@/lib/server/static-follow-up-tasks';
+import type { SlaRecommendation } from '@/utils/sla-insights';
 
 import { useFollowUpTaskContext, type ManualTask } from './follow-up-task-provider';
 
@@ -64,15 +61,9 @@ const AGENT_OWNED_TASK_IDS = new Set<string>([
   'capture-termination-reason-agent',
 ]);
 
-const resolveTaskRole = (recommendationId: string): FollowUpTaskRole => {
-  if (recommendationId.startsWith('mc-')) {
-    return 'mc';
-  }
-
-  if (recommendationId.endsWith('-agent') || AGENT_OWNED_TASK_IDS.has(recommendationId)) {
-    return 'agent';
-  }
-
+// All static tasks are admin-only tasks (for AHA OOS referrals)
+// This ensures only admin users see these tasks, not agents or MCs
+const resolveTaskRole = (_recommendationId: string): FollowUpTaskRole => {
   return 'admin';
 };
 
@@ -92,9 +83,8 @@ export function buildFollowUpTasksForReferral(
     viewerRole: FollowUpTaskRole;
   }
 ) {
-  const lastCompletedAt = getLatestCompletionForReferral(referral._id, completions);
-  const insights = computeSlaInsights(referral, { lastCompletedAt });
-  const ordered = sortRecommendations(insights.recommendations);
+  // Get static tasks for this referral
+  const staticTasks = getStaticFollowUpTasksForReferral(referral);
   const manual = manualTasks[referral._id] ?? [];
 
   const manualFollowUps = manual.map<FollowUpTask>((task) => {
@@ -126,9 +116,10 @@ export function buildFollowUpTasksForReferral(
     };
   });
 
-  const automated = ordered
+  // All static tasks are marked as 'admin' role, so they will only be visible to admin users
+  const automated = staticTasks
     .map<FollowUpTask>((item) => {
-      const role = resolveTaskRole(item.id);
+      const role = resolveTaskRole(item.id); // Always returns 'admin'
       const taskId = `${referral._id}::${item.id}`;
       const completion = completions[taskId]?.completed ?? false;
       const handleToggle = () => {
@@ -136,7 +127,13 @@ export function buildFollowUpTasksForReferral(
       };
 
       return {
-        ...item,
+        id: item.id,
+        title: item.title,
+        message: item.message,
+        priority: item.priority,
+        category: item.category,
+        dueAt: item.dueAt ?? undefined,
+        supportingMetric: item.supportingMetric,
         taskId,
         referralId: referral._id,
         referralName: referral.borrower?.name,
@@ -145,7 +142,7 @@ export function buildFollowUpTasksForReferral(
         role,
       };
     })
-    .filter((task) => task.role === viewerRole);
+    .filter((task) => task.role === viewerRole); // Filter: only show tasks matching viewerRole (admin only)
 
   const visibleManualTasks = manualFollowUps.filter((task) => task.role === viewerRole);
 

@@ -85,6 +85,7 @@ interface ReferralListItem {
   dealStatusLabel?: string | null;
   origin?: 'agent' | 'mc' | 'admin';
   timeline?: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified';
+  ahaBucket?: 'AHA' | 'AHA_OOS' | null;
 }
 
 const PAGE_SIZE = 20;
@@ -452,7 +453,8 @@ export async function getReferrals(params: GetReferralsParams) {
           item.origin === 'agent' || item.origin === 'mc' || item.origin === 'admin'
             ? item.origin
             : undefined,
-        timeline: item.timeline
+        timeline: item.timeline,
+        ahaBucket: item.ahaBucket ?? null
       } as ReferralListItem;
     }),
     total,
