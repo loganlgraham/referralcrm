@@ -64,3 +64,39 @@ export const verifyContactActionToken = (
     return false;
   }
 };
+
+export const buildPaymentActionToken = (paymentId: string): string | null => {
+  if (!CONTACT_ACTION_SECRET) return null; // Reuse same secret
+
+  const hmac = createHmac('sha256', CONTACT_ACTION_SECRET);
+  hmac.update(paymentId);
+  return hmac.digest('hex');
+};
+
+export const buildPaymentActionLink = (paymentId: string): string => {
+  const baseUrl = getReferralAppBaseUrl();
+  const token = buildPaymentActionToken(paymentId);
+  const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+  return `${baseUrl}/api/payments/${paymentId}/mark-payment-sent${tokenQuery}`;
+};
+
+export const verifyPaymentActionToken = (
+  paymentId: string,
+  token: string | null
+): boolean => {
+  const expected = buildPaymentActionToken(paymentId);
+  if (!expected || !token) return false;
+
+  try {
+    const encoder = new TextEncoder();
+    const expectedBytes = encoder.encode(expected);
+    const tokenBytes = encoder.encode(token);
+
+    if (expectedBytes.length !== tokenBytes.length) return false;
+
+    return timingSafeEqual(expectedBytes, tokenBytes);
+  } catch (error) {
+    console.error('Failed to verify payment action token', error);
+    return false;
+  }
+};

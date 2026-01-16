@@ -930,6 +930,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
           const agentFirstName = agent?.name ? agent.name.split(' ')[0] : 'there';
           
           if (agentEmail) {
+            const { buildPaymentActionLink } = await import('@/lib/referral-links');
+            const paymentSentLink = buildPaymentActionLink(existingPayment._id.toString());
+            
             await sendTransactionalEmail({
               to: [agentEmail],
               subject: 'Congrats on your closing!',
@@ -937,9 +940,18 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
                 <p>Hi ${agentFirstName},</p>
                 <p>Congrats on the recent closing! 🎉 It was great working together.</p>
                 <p>If you have a quick moment, we'd really appreciate you leaving a short rating or review for American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships.</p>
-                <p>Thanks again, and looking forward to the next one!</p>
+                <p style="margin: 20px 0 0 0;">
+                  <strong>Once the check is in the mail:</strong><br/>
+                  <a href="${paymentSentLink}" style="display: inline-block; margin-top: 8px; padding: 10px 16px; border-radius: 8px; background: #0f172a; color: #fff; font-weight: 600; text-decoration: none;">
+                    Mark Payment as Sent
+                  </a>
+                </p>
+                <p style="margin: 16px 0 0 0; font-size: 14px; color: #64748b;">
+                  Click the button above when you've mailed the referral fee check. This helps us track payment timing.
+                </p>
+                <p style="margin: 20px 0 0 0;">Thanks again, and looking forward to the next one!</p>
               `,
-              text: `Hi ${agentFirstName},\n\nCongrats on the recent closing! 🎉 It was great working together.\n\nIf you have a quick moment, we'd really appreciate you leaving a short rating or review for American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships.\n\nThanks again, and looking forward to the next one!`,
+              text: `Hi ${agentFirstName},\n\nCongrats on the recent closing! 🎉 It was great working together.\n\nIf you have a quick moment, we'd really appreciate you leaving a short rating or review for American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships.\n\nOnce the check is in the mail, click here to mark payment as sent: ${paymentSentLink}\n\nThanks again, and looking forward to the next one!`,
             });
           }
         }
