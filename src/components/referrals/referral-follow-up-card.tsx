@@ -6,7 +6,6 @@ import { CheckCircle2, Circle } from 'lucide-react';
 import { formatInTimeZone } from 'date-fns-tz';
 
 import { useFollowUpTasks, type FollowUpTaskRole } from '@/components/referrals/use-follow-up-tasks';
-import { ReminderSettingsToggle } from '@/components/referrals/reminder-settings-toggle';
 import { useFollowUpTaskContext, type ManualTaskCategory } from '@/components/referrals/follow-up-task-provider';
 import { SLA_TIME_ZONE, type RecommendationPriority, type ReferralLike } from '@/utils/sla-insights';
 import { toast } from 'sonner';
@@ -98,7 +97,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
             ? incompleteTasks.length > 0
               ? `${incompleteTasks.length} of ${tasks.length} tasks outstanding`
               : 'All tasks completed'
-            : 'No AI tasks yet — add your own to get started.'}
+            : null}
         </div>
         <button
           type="button"
@@ -108,10 +107,6 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
           {showManualForm ? 'Cancel manual task' : 'Add manual task'}
         </button>
       </div>
-      <ReminderSettingsToggle
-        referralId={referral._id}
-        helperText="Inherited from your global setting unless you override it here for this referral."
-      />
       {showManualForm && (
         <form onSubmit={handleManualSubmit} className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
           <div className="grid gap-3 sm:grid-cols-2">

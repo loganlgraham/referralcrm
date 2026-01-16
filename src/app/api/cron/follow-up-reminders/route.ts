@@ -35,6 +35,27 @@ function toReferralLike(referral: any, payments: any[] = []) {
     paidDate: payment.paidDate || (payment.status === 'paid' ? payment.closingDate : null),
   }));
 
+  // Compute hasAhaOosAgentAttached: check if any attached agent has ahaDesignation === 'AHA_OOS'
+  const hasAhaOosAgentAttached = Boolean(
+    (referral.assignedAgent as any)?.ahaDesignation === 'AHA_OOS' ||
+    (referral.buySideAgent as any)?.ahaDesignation === 'AHA_OOS' ||
+    (referral.sellSideAgent as any)?.ahaDesignation === 'AHA_OOS'
+  );
+
+  // Compute hasAhaDesignatedAgentAttached: check if any attached agent has ahaDesignation in ['AHA', 'AHA_OOS', 'AGIT']
+  const hasAhaDesignatedAgentAttached = Boolean(
+    ((referral.assignedAgent as any)?.ahaDesignation === 'AHA' || (referral.assignedAgent as any)?.ahaDesignation === 'AHA_OOS' || (referral.assignedAgent as any)?.ahaDesignation === 'AGIT') ||
+    ((referral.buySideAgent as any)?.ahaDesignation === 'AHA' || (referral.buySideAgent as any)?.ahaDesignation === 'AHA_OOS' || (referral.buySideAgent as any)?.ahaDesignation === 'AGIT') ||
+    ((referral.sellSideAgent as any)?.ahaDesignation === 'AHA' || (referral.sellSideAgent as any)?.ahaDesignation === 'AHA_OOS' || (referral.sellSideAgent as any)?.ahaDesignation === 'AGIT')
+  );
+
+  // Compute hasAhaAgentAttached: check if any attached agent has ahaDesignation === 'AHA' (not OOS, not AGIT)
+  const hasAhaAgentAttached = Boolean(
+    (referral.assignedAgent as any)?.ahaDesignation === 'AHA' ||
+    (referral.buySideAgent as any)?.ahaDesignation === 'AHA' ||
+    (referral.sellSideAgent as any)?.ahaDesignation === 'AHA'
+  );
+
   return {
     _id: referral._id.toString(),
     createdAt: referral.createdAt,
@@ -76,6 +97,10 @@ function toReferralLike(referral: any, payments: any[] = []) {
     payments: paymentsFormatted,
     audit: referral.audit || [],
     sla: referral.sla || null,
+    ahaBucket: referral.ahaBucket || null,
+    hasAhaOosAgentAttached,
+    hasAhaDesignatedAgentAttached,
+    hasAhaAgentAttached,
   };
 }
 
@@ -88,9 +113,9 @@ async function getReferralsForUser(userId: string, role: string | null) {
   if (role === 'admin') {
     // Admin users see all referrals
     return Referral.find(query)
-      .populate('assignedAgent', 'name')
-      .populate('buySideAgent', 'name')
-      .populate('sellSideAgent', 'name')
+      .populate('assignedAgent', 'name ahaDesignation')
+      .populate('buySideAgent', 'name ahaDesignation')
+      .populate('sellSideAgent', 'name ahaDesignation')
       .populate('lender', 'name')
       .lean();
   }
@@ -102,9 +127,9 @@ async function getReferralsForUser(userId: string, role: string | null) {
     }
     query.lender = (lender as { _id: Types.ObjectId })._id;
     return Referral.find(query)
-      .populate('assignedAgent', 'name')
-      .populate('buySideAgent', 'name')
-      .populate('sellSideAgent', 'name')
+      .populate('assignedAgent', 'name ahaDesignation')
+      .populate('buySideAgent', 'name ahaDesignation')
+      .populate('sellSideAgent', 'name ahaDesignation')
       .populate('lender', 'name')
       .lean();
   }
@@ -124,9 +149,9 @@ async function getReferralsForUser(userId: string, role: string | null) {
         { sellSideAgent: agentId },
       ],
     })
-      .populate('assignedAgent', 'name')
-      .populate('buySideAgent', 'name')
-      .populate('sellSideAgent', 'name')
+      .populate('assignedAgent', 'name ahaDesignation')
+      .populate('buySideAgent', 'name ahaDesignation')
+      .populate('sellSideAgent', 'name ahaDesignation')
       .populate('lender', 'name')
       .lean();
   }
@@ -249,7 +274,7 @@ export async function GET(request: NextRequest) {
         const referralId = (referral._id as Types.ObjectId).toString();
         const referralPayments = paymentsByReferralId.get(referralId) || [];
         const referralLike = toReferralLike(referral, referralPayments);
-        const tasks = computeFollowUpTasksForReferral(referralLike, viewerRole);
+        const tasks = await computeFollowUpTasksForReferral(referralLike, viewerRole);
 
         // Tasks are already filtered by role in computeFollowUpTasksForReferral
         // and referrals are already filtered by role in getReferralsForUser

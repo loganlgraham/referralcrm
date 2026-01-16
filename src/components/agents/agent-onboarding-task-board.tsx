@@ -7,84 +7,21 @@ import { formatInTimeZone } from 'date-fns-tz';
 
 import { useFollowUpTaskContext } from '@/components/referrals/follow-up-task-provider';
 import {
-  buildFollowUpTasksForReferral,
-  type FollowUpTask,
-  type FollowUpTaskRole,
-} from '@/components/referrals/use-follow-up-tasks';
-import { type ReferralLike, resolvePrimaryAgentName, SLA_TIME_ZONE } from '@/utils/sla-insights';
-import { normalizeReferralStatus, REFERRAL_STATUSES } from '@/constants/referrals';
+  buildAgentOnboardingTasks,
+  type AgentOnboardingTask,
+} from '@/components/agents/use-agent-onboarding-tasks';
+import { SLA_TIME_ZONE } from '@/utils/sla-insights';
 
-interface BoardReferral {
+interface BoardAgent {
   _id: string;
-  borrowerName: string;
-  status: string;
-  dealStatus?: string | null;
-  dealStatusLabel?: string | null;
+  name: string;
+  email: string;
   createdAt: string;
-  statusLastUpdated?: string | null;
-  daysInStatus?: number;
-  assignedAgentName?: string;
-  buySideAgentName?: string | null;
-  sellSideAgentName?: string | null;
-  clientType?: 'Buyer' | 'Seller' | 'Both' | null;
-  dealSide?: 'buy' | 'sell' | null;
-  lenderName?: string | null;
-  origin?: 'agent' | 'mc' | 'admin' | null;
-  ahaBucket?: 'AHA' | 'AHA_OOS' | null;
-  timeline?: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified' | null;
-  hasAhaOosAgentAttached?: boolean;
-  hasAhaDesignatedAgentAttached?: boolean;
-  hasAhaAgentAttached?: boolean;
 }
 
-interface FollowUpTasksBoardProps {
-  referrals: BoardReferral[];
-  viewerRole: FollowUpTaskRole;
+interface AgentOnboardingTaskBoardProps {
+  agents: BoardAgent[];
 }
-
-const toReferralLike = (referral: BoardReferral): ReferralLike & { borrower: { name: string } } => ({
-  _id: referral._id,
-  createdAt: referral.createdAt,
-  status: referral.status,
-  statusLastUpdated: referral.statusLastUpdated ?? null,
-  daysInStatus: referral.daysInStatus,
-  clientType: referral.clientType ?? undefined,
-  dealSide: referral.dealSide ?? undefined,
-  assignedAgent: referral.assignedAgentName ? { name: referral.assignedAgentName } : null,
-  assignedAgentName: referral.assignedAgentName,
-  buySideAgentName: referral.buySideAgentName ?? undefined,
-  sellSideAgentName: referral.sellSideAgentName ?? undefined,
-  lender: referral.lenderName ? { name: referral.lenderName } : null,
-  origin: referral.origin ?? undefined,
-  borrower: { name: referral.borrowerName },
-  notes: [],
-  payments: [],
-  audit: [],
-  ahaBucket: referral.ahaBucket ?? null,
-  timeline: referral.timeline ?? undefined,
-  hasAhaOosAgentAttached: referral.hasAhaOosAgentAttached ?? false,
-  hasAhaDesignatedAgentAttached: referral.hasAhaDesignatedAgentAttached ?? false,
-  hasAhaAgentAttached: referral.hasAhaAgentAttached ?? false,
-});
-
-const UNDER_CONTRACT_INDEX = REFERRAL_STATUSES.indexOf('Under Contract');
-
-const isUnderContractOrLater = (status?: string | null) => {
-  if (!status) return false;
-  const normalized = normalizeReferralStatus(status);
-  if (!normalized) return false;
-
-  const statusIndex = REFERRAL_STATUSES.indexOf(normalized);
-  return statusIndex >= UNDER_CONTRACT_INDEX && statusIndex !== -1;
-};
-
-const getStatusLabel = (referral: BoardReferral) => {
-  if (isUnderContractOrLater(referral.status) && referral.dealStatusLabel) {
-    return referral.dealStatusLabel;
-  }
-
-  return referral.status;
-};
 
 const formatDueDate = (value: string): string => {
   try {
@@ -94,26 +31,30 @@ const formatDueDate = (value: string): string => {
   }
 };
 
-export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoardProps) {
-  const { completions, manualTasks, toggleTask, removeManualTask } = useFollowUpTaskContext();
+export function AgentOnboardingTaskBoard({ agents }: AgentOnboardingTaskBoardProps) {
+  const { completions, agentTasks, toggleTask, removeAgentTask } = useFollowUpTaskContext();
 
-  const tasksByReferral = useMemo(() => {
-    return referrals.reduce<Record<string, FollowUpTask[]>>((acc, referral) => {
-      const referralLike = toReferralLike(referral);
-      const tasks = buildFollowUpTasksForReferral(referralLike, {
+  const tasksByAgent = useMemo(() => {
+    return agents.reduce<Record<string, AgentOnboardingTask[]>>((acc, agent) => {
+      const tasks = buildAgentOnboardingTasks(agent._id, {
         completions,
-        manualTasks,
+        agentTasks,
         toggleTask,
-        removeManualTask,
-        viewerRole,
+        removeAgentTask,
+        agentName: agent.name,
       });
-      acc[referral._id] = tasks;
+      acc[agent._id] = tasks;
       return acc;
     }, {});
-  }, [completions, manualTasks, referrals, removeManualTask, toggleTask, viewerRole]);
+  }, [completions, agentTasks, agents, toggleTask, removeAgentTask]);
+
+  const outstandingTasks = useMemo(
+    () => Object.values(tasksByAgent).flat().filter((task) => !task.completed),
+    [tasksByAgent]
+  );
 
   const summary = useMemo(() => {
-    return Object.values(tasksByReferral).reduce(
+    return Object.values(tasksByAgent).reduce(
       (acc, tasks) => {
         const outstanding = tasks.filter((task) => !task.completed).length;
         return {
@@ -123,45 +64,42 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
       },
       { total: 0, outstanding: 0 }
     );
-  }, [tasksByReferral]);
+  }, [tasksByAgent]);
 
-  // Filter referrals to only show those with incomplete tasks
-  const referralsWithIncompleteTasks = useMemo(() => {
-    return referrals.filter((referral) => {
-      const tasks = tasksByReferral[referral._id] ?? [];
-      return tasks.filter((task) => !task.completed).length > 0;
-    });
-  }, [referrals, tasksByReferral]);
+  // Filter agents that have tasks
+  const agentsWithTasks = useMemo(
+    () => agents.filter((agent) => (tasksByAgent[agent._id] ?? []).length > 0),
+    [agents, tasksByAgent]
+  );
 
   return (
     <div className="space-y-6">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold text-slate-900">Follow-up tasks</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Agent onboarding tasks</h1>
         <p className="text-sm text-slate-500">
-          AI-generated reminders consolidate here so you can coach agents across every active referral.
+          Track onboarding tasks for newly added agents. Complete tasks as you finish each step.
         </p>
         <div className="flex flex-wrap gap-3 text-xs">
           <span className="rounded-full bg-slate-900/10 px-3 py-1 font-semibold text-slate-800">
             {summary.outstanding} outstanding
           </span>
           <span className="rounded-full bg-slate-200 px-3 py-1 font-medium text-slate-600">
-            {summary.total} total suggestions
+            {summary.total} total tasks
           </span>
         </div>
       </header>
       <div className="space-y-5">
-        {referralsWithIncompleteTasks.length > 0 ? (
-          referralsWithIncompleteTasks.map((referral) => (
-            <FollowUpTaskGroup
-              key={referral._id}
-              referral={referral}
-              tasks={tasksByReferral[referral._id] ?? []}
-              viewerRole={viewerRole}
+        {agentsWithTasks.length > 0 ? (
+          agentsWithTasks.map((agent) => (
+            <AgentOnboardingTaskGroup
+              key={agent._id}
+              agent={agent}
+              tasks={tasksByAgent[agent._id] ?? []}
             />
           ))
         ) : (
           <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
-            No referrals with incomplete tasks at this time.
+            No agent onboarding tasks at this time. Tasks will appear here when new agents are added.
           </div>
         )}
       </div>
@@ -169,48 +107,36 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
   );
 }
 
-function FollowUpTaskGroup({
-  referral,
+function AgentOnboardingTaskGroup({
+  agent,
   tasks,
-  viewerRole,
 }: {
-  referral: BoardReferral;
-  tasks: FollowUpTask[];
-  viewerRole: FollowUpTaskRole;
+  agent: BoardAgent;
+  tasks: AgentOnboardingTask[];
 }) {
-  const referralLike = toReferralLike(referral);
-  const roleFilteredTasks = useMemo(
-    () => tasks.filter((task) => task.role === viewerRole),
-    [tasks, viewerRole]
-  );
   const incompleteTasks = useMemo(
-    () => roleFilteredTasks.filter((task) => !task.completed),
-    [roleFilteredTasks]
+    () => tasks.filter((task) => !task.completed),
+    [tasks]
   );
   const completedTasks = useMemo(
-    () => roleFilteredTasks.filter((task) => task.completed),
-    [roleFilteredTasks]
+    () => tasks.filter((task) => task.completed),
+    [tasks]
   );
   const [showCompleted, setShowCompleted] = useState(false);
   const outstanding = incompleteTasks.length;
-  const assignmentName = resolvePrimaryAgentName(referralLike);
-  const roleLabel: Record<FollowUpTaskRole, string> = {
-    admin: 'Admin/Manager tasks',
-    mc: 'MC tasks',
-    agent: 'Agent tasks',
-  };
 
   return (
     <section className="space-y-3 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{getStatusLabel(referral)}</p>
-          <Link href={`/referrals/${referral._id}`} className="text-lg font-semibold text-slate-900 underline-offset-2 hover:underline">
-            {referral.borrowerName}
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">New Agent</p>
+          <Link
+            href={`/agents/${agent._id}`}
+            className="text-lg font-semibold text-slate-900 underline-offset-2 hover:underline"
+          >
+            {agent.name}
           </Link>
-          <p className="text-xs text-slate-500">
-            {assignmentName ? `Assigned to ${assignmentName}` : 'Agent assignment pending'}
-          </p>
+          <p className="text-xs text-slate-500">{agent.email}</p>
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className="rounded-full bg-slate-900/5 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -218,10 +144,8 @@ function FollowUpTaskGroup({
           </div>
         </div>
       </div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {roleLabel[viewerRole]}
-      </p>
-      {roleFilteredTasks.length > 0 ? (
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Admin onboarding tasks</p>
+      {tasks.length > 0 ? (
         <>
           {incompleteTasks.length > 0 ? (
             <ul className="space-y-3">
@@ -236,23 +160,19 @@ function FollowUpTaskGroup({
                   >
                     {task.completed ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
                   </button>
-                  <div className="space-y-1">
+                  <div className="space-y-1 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-medium text-slate-900">{task.title}</p>
                       <span className="text-xs uppercase tracking-wide text-slate-400">{task.category}</span>
-                      {task.isManual && (
-                        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
-                          Manual
-                        </span>
-                      )}
                       <span className="text-xs font-semibold uppercase text-slate-400">{task.priority}</span>
                     </div>
                     <p className="text-sm text-slate-600">{task.message}</p>
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                      {task.supportingMetric && <span>{task.supportingMetric}</span>}
-                      {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
-                    </div>
-                    {task.isManual && task.remove && (
+                    {task.dueAt && (
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                        <span>Due {formatDueDate(task.dueAt)}</span>
+                      </div>
+                    )}
+                    {task.remove && (
                       <div className="pt-2">
                         <button
                           type="button"
@@ -269,7 +189,7 @@ function FollowUpTaskGroup({
             </ul>
           ) : (
             <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
-              Nothing on deck—this referral is on track.
+              All onboarding tasks completed for this agent.
             </div>
           )}
           {completedTasks.length > 0 && (
@@ -296,23 +216,17 @@ function FollowUpTaskGroup({
                       >
                         <CheckCircle2 className="h-5 w-5" />
                       </button>
-                      <div className="space-y-1">
+                      <div className="space-y-1 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-medium text-slate-900 line-through">{task.title}</p>
                           <span className="text-xs uppercase tracking-wide text-slate-400">{task.category}</span>
-                          {task.isManual && (
-                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
-                              Manual
-                            </span>
-                          )}
                         </div>
                         <p className="text-sm text-slate-600">{task.message}</p>
                         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                           <span className="font-medium uppercase text-slate-400">{task.priority}</span>
-                          {task.supportingMetric && <span>{task.supportingMetric}</span>}
                           {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
                         </div>
-                        {task.isManual && task.remove && (
+                        {task.remove && (
                           <div className="pt-2">
                             <button
                               type="button"
@@ -333,7 +247,7 @@ function FollowUpTaskGroup({
         </>
       ) : (
         <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
-          No {roleLabel[viewerRole].toLowerCase()} for this referral right now.
+          No onboarding tasks for this agent.
         </div>
       )}
     </section>

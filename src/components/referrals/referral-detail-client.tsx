@@ -1290,6 +1290,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       notes: referral.notes ?? [],
       payments: referral.payments ?? [],
       audit: auditEntries,
+      hasAhaOosAgentAttached: (referral as any).hasAhaOosAgentAttached ?? false,
+      hasAhaDesignatedAgentAttached: (referral as any).hasAhaDesignatedAgentAttached ?? false,
+      hasAhaAgentAttached: (referral as any).hasAhaAgentAttached ?? false,
+      timeline: referral.timeline ?? undefined,
     };
   }, [
     primaryAgentContact?.name,

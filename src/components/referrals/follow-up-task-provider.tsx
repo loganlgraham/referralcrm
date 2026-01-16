@@ -54,6 +54,7 @@ export interface ManualTaskInput {
 export interface StoredTaskState {
   completions: CompletionMap;
   manualTasks: Record<string, ManualTask[]>;
+  agentTasks: Record<string, ManualTask[]>;
   reminders: ReminderState;
 }
 
@@ -62,15 +63,20 @@ type Action =
   | { type: 'hydrate'; payload: StoredTaskState }
   | { type: 'add-manual'; referralId: string; task: ManualTask }
   | { type: 'remove-manual'; referralId: string; taskId: string }
+  | { type: 'add-agent-tasks'; agentId: string; tasks: ManualTask[] }
+  | { type: 'remove-agent-task'; agentId: string; taskId: string }
   | { type: 'set-global-reminders'; settings: ReminderSettings }
   | { type: 'set-referral-reminders'; referralId: string; settings: ReminderSettings | null };
 
 interface FollowUpTaskContextValue {
   completions: CompletionMap;
   manualTasks: Record<string, ManualTask[]>;
+  agentTasks: Record<string, ManualTask[]>;
   toggleTask: (taskId: string, completed: boolean) => void;
   addManualTask: (referralId: string, task: ManualTaskInput) => void;
   removeManualTask: (referralId: string, taskId: string) => void;
+  addAgentTasks: (agentId: string, tasks: ManualTask[]) => void;
+  removeAgentTask: (agentId: string, taskId: string) => void;
   reminderSettings: ReminderSettings;
   globalReminderSettings: ReminderSettings;
   reminderOverrides: Record<string, ReminderSettings>;
@@ -94,6 +100,7 @@ export const defaultReminderState: ReminderState = {
 export const createDefaultTaskState = (): StoredTaskState => ({
   completions: {},
   manualTasks: {},
+  agentTasks: {},
   reminders: { global: { ...defaultReminderSettings }, overrides: {} },
 });
 
@@ -133,6 +140,30 @@ const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
         completions: nextCompletions,
       };
     }
+    case 'add-agent-tasks': {
+      const existing = state.agentTasks[action.agentId] ?? [];
+      return {
+        ...state,
+        agentTasks: {
+          ...state.agentTasks,
+          [action.agentId]: [...existing, ...action.tasks],
+        },
+      };
+    }
+    case 'remove-agent-task': {
+      const current = state.agentTasks[action.agentId] ?? [];
+      const agentCompletionKey = `agent-${action.agentId}::onboarding::${action.taskId}`;
+      const nextCompletions: CompletionMap = { ...state.completions };
+      delete nextCompletions[agentCompletionKey];
+      return {
+        ...state,
+        agentTasks: {
+          ...state.agentTasks,
+          [action.agentId]: current.filter((task) => task.id !== action.taskId),
+        },
+        completions: nextCompletions,
+      };
+    }
     case 'set-global-reminders': {
       return { ...state, reminders: { ...state.reminders, global: action.settings } };
     }
@@ -156,7 +187,7 @@ export const parseFollowUpTaskState = (value: string | null): StoredTaskState =>
     const parsed = JSON.parse(value) as unknown;
     if (parsed && typeof parsed === 'object') {
       const record = parsed as Record<string, unknown>;
-      if ('completions' in record || 'manualTasks' in record || 'reminders' in record) {
+      if ('completions' in record || 'manualTasks' in record || 'agentTasks' in record || 'reminders' in record) {
         const completions =
           record.completions && typeof record.completions === 'object' ? (record.completions as CompletionMap) : {};
         const manualTasksEntries =
@@ -209,6 +240,56 @@ export const parseFollowUpTaskState = (value: string | null): StoredTaskState =>
             manualTasks[key] = sanitized;
           }
         });
+        const agentTasksEntries =
+          record.agentTasks && typeof record.agentTasks === 'object'
+            ? (record.agentTasks as Record<string, unknown>)
+            : {};
+        const agentTasks: Record<string, ManualTask[]> = {};
+        Object.entries(agentTasksEntries).forEach(([key, value]) => {
+          if (!Array.isArray(value)) {
+            return;
+          }
+          const sanitized = value
+            .map((task) => {
+              if (!task || typeof task !== 'object') {
+                return null;
+              }
+              const payload = task as Partial<ManualTask>;
+              const id = typeof payload.id === 'string' ? payload.id : null;
+              const title = typeof payload.title === 'string' ? payload.title : null;
+              const message = typeof payload.message === 'string' ? payload.message : null;
+              const category = payload.category;
+              const priority = payload.priority;
+              if (!id || !title || !message) {
+                return null;
+              }
+              if (
+                category !== 'assignment' &&
+                category !== 'communication' &&
+                category !== 'pipeline' &&
+                category !== 'finance' &&
+                category !== 'ops'
+              ) {
+                return null;
+              }
+              if (priority !== 'urgent' && priority !== 'high' && priority !== 'medium' && priority !== 'low') {
+                return null;
+              }
+              return {
+                id,
+                title,
+                message,
+                dueAt: typeof payload.dueAt === 'string' ? payload.dueAt : null,
+                priority,
+                category,
+                createdAt: typeof payload.createdAt === 'string' ? payload.createdAt : new Date().toISOString(),
+              } as ManualTask;
+            })
+            .filter((task): task is ManualTask => Boolean(task));
+          if (sanitized.length > 0) {
+            agentTasks[key] = sanitized;
+          }
+        });
         const reminders = (() => {
           const parseSettings = (candidate: unknown): ReminderSettings | null => {
             if (!candidate || typeof candidate !== 'object') return null;
@@ -245,14 +326,14 @@ export const parseFollowUpTaskState = (value: string | null): StoredTaskState =>
 
           return { ...defaultReminderState, overrides: {} } satisfies ReminderState;
         })();
-        return { completions: { ...completions }, manualTasks: { ...manualTasks }, reminders };
+        return { completions: { ...completions }, manualTasks: { ...manualTasks }, agentTasks: { ...agentTasks }, reminders };
       }
       const entries = Object.values(record);
       const resemblesCompletionMap = entries.every((value) => {
         return value != null && typeof value === 'object' && 'completed' in (value as Record<string, unknown>);
       });
       if (resemblesCompletionMap) {
-        return { completions: record as CompletionMap, manualTasks: {}, reminders: defaultReminderState };
+        return { completions: record as CompletionMap, manualTasks: {}, agentTasks: {}, reminders: defaultReminderState };
       }
     }
   } catch (error) {
@@ -340,6 +421,14 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'remove-manual', referralId, taskId });
   }, []);
 
+  const addAgentTasks = useCallback((agentId: string, tasks: ManualTask[]) => {
+    dispatch({ type: 'add-agent-tasks', agentId, tasks });
+  }, []);
+
+  const removeAgentTask = useCallback((agentId: string, taskId: string) => {
+    dispatch({ type: 'remove-agent-task', agentId, taskId });
+  }, []);
+
   const updateReminderSettings = useCallback((settings: ReminderSettings, referralId?: string) => {
     if (referralId) {
       dispatch({ type: 'set-referral-reminders', referralId, settings });
@@ -380,9 +469,12 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     () => ({
       completions: state.completions,
       manualTasks: state.manualTasks,
+      agentTasks: state.agentTasks,
       toggleTask,
       addManualTask,
       removeManualTask,
+      addAgentTasks,
+      removeAgentTask,
       reminderSettings: state.reminders.global,
       globalReminderSettings: state.reminders.global,
       reminderOverrides: state.reminders.overrides,
@@ -396,6 +488,8 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       toggleTask,
       addManualTask,
       removeManualTask,
+      addAgentTasks,
+      removeAgentTask,
       updateReminderSettings,
       getReminderSettings,
       clearReminderOverride,
