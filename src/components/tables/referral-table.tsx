@@ -30,6 +30,7 @@ export interface ReferralRow {
   borrowerPhone: string;
   endorser?: string;
   clientType: 'Seller' | 'Buyer' | 'Both';
+  dealSide?: 'buy' | 'sell' | null;
   lookingInZip: string;
   lookingInZips?: string[];
   borrowerCurrentAddress?: string;
