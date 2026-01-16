@@ -33,6 +33,7 @@ interface PopulatedAgent {
   name: string;
   email?: string;
   phone?: string;
+  ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
 }
 
 interface PopulatedLender {
@@ -86,6 +87,7 @@ interface ReferralListItem {
   origin?: 'agent' | 'mc' | 'admin';
   timeline?: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified';
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
+  hasAhaOosAgentAttached?: boolean;
 }
 
 const PAGE_SIZE = 20;
@@ -313,9 +315,9 @@ export async function getReferrals(params: GetReferralsParams) {
 
   const [items, total, closedDealAggregation, activeReferrals] = await Promise.all([
     Referral.find(query)
-      .populate<{ assignedAgent: PopulatedAgent }>('assignedAgent', 'name email phone')
-      .populate<{ buySideAgent: PopulatedAgent }>('buySideAgent', 'name email phone')
-      .populate<{ sellSideAgent: PopulatedAgent }>('sellSideAgent', 'name email phone')
+      .populate<{ assignedAgent: PopulatedAgent }>('assignedAgent', 'name email phone ahaDesignation')
+      .populate<{ buySideAgent: PopulatedAgent }>('buySideAgent', 'name email phone ahaDesignation')
+      .populate<{ sellSideAgent: PopulatedAgent }>('sellSideAgent', 'name email phone ahaDesignation')
       .populate<{ lender: PopulatedLender }>('lender', 'name email phone')
       .sort(sortObject)
       .skip((page - 1) * effectivePageSize)
@@ -413,6 +415,13 @@ export async function getReferrals(params: GetReferralsParams) {
 
       const normalizedStatus = normalizeReferralStatus(item.status) ?? item.status;
 
+      // Compute hasAhaOosAgentAttached: check if any attached agent has ahaDesignation === 'AHA_OOS'
+      const hasAhaOosAgentAttached = Boolean(
+        item.assignedAgent?.ahaDesignation === 'AHA_OOS' ||
+        item.buySideAgent?.ahaDesignation === 'AHA_OOS' ||
+        item.sellSideAgent?.ahaDesignation === 'AHA_OOS'
+      );
+
       return {
         _id: item._id.toString(),
         createdAt: item.createdAt.toISOString(),
@@ -454,7 +463,8 @@ export async function getReferrals(params: GetReferralsParams) {
             ? item.origin
             : undefined,
         timeline: item.timeline,
-        ahaBucket: item.ahaBucket ?? null
+        ahaBucket: item.ahaBucket ?? null,
+        hasAhaOosAgentAttached
       } as ReferralListItem;
     }),
     total,
@@ -473,17 +483,17 @@ export async function getReferralById(id: string) {
   const session = await getCurrentSession();
   await connectMongo();
   const referral = await Referral.findOne({ _id: id, deletedAt: null })
-    .populate<{ assignedAgent: { _id: Types.ObjectId; name: string; email?: string; phone?: string } }>(
+    .populate<{ assignedAgent: { _id: Types.ObjectId; name: string; email?: string; phone?: string; ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null } }>(
       'assignedAgent',
-      'name email phone'
+      'name email phone ahaDesignation'
     )
-    .populate<{ buySideAgent: { _id: Types.ObjectId; name: string; email?: string; phone?: string } }>(
+    .populate<{ buySideAgent: { _id: Types.ObjectId; name: string; email?: string; phone?: string; ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null } }>(
       'buySideAgent',
-      'name email phone'
+      'name email phone ahaDesignation'
     )
-    .populate<{ sellSideAgent: { _id: Types.ObjectId; name: string; email?: string; phone?: string } }>(
+    .populate<{ sellSideAgent: { _id: Types.ObjectId; name: string; email?: string; phone?: string; ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null } }>(
       'sellSideAgent',
-      'name email phone'
+      'name email phone ahaDesignation'
     )
     .populate<{ lender: { _id: Types.ObjectId; name: string; email?: string; phone?: string } }>(
       'lender',
@@ -528,6 +538,13 @@ export async function getReferralById(id: string) {
     return true;
   });
 
+  // Compute hasAhaOosAgentAttached: check if any attached agent has ahaDesignation === 'AHA_OOS'
+  const hasAhaOosAgentAttached = Boolean(
+    (referral.assignedAgent as any)?.ahaDesignation === 'AHA_OOS' ||
+    (referral.buySideAgent as any)?.ahaDesignation === 'AHA_OOS' ||
+    (referral.sellSideAgent as any)?.ahaDesignation === 'AHA_OOS'
+  );
+
   return {
     ...referral,
     _id: referral._id.toString(),
@@ -542,6 +559,7 @@ export async function getReferralById(id: string) {
       ? { ...referral.sellSideAgent, _id: referral.sellSideAgent._id.toString() }
       : null,
     lender: referral.lender ? { ...referral.lender, _id: referral.lender._id.toString() } : null,
+    hasAhaOosAgentAttached,
     payments: payments.map((payment: any) => ({
       _id: payment._id.toString(),
       status: payment.status,

@@ -35,6 +35,13 @@ function toReferralLike(referral: any, payments: any[] = []) {
     paidDate: payment.paidDate || (payment.status === 'paid' ? payment.closingDate : null),
   }));
 
+  // Compute hasAhaOosAgentAttached: check if any attached agent has ahaDesignation === 'AHA_OOS'
+  const hasAhaOosAgentAttached = Boolean(
+    (referral.assignedAgent as any)?.ahaDesignation === 'AHA_OOS' ||
+    (referral.buySideAgent as any)?.ahaDesignation === 'AHA_OOS' ||
+    (referral.sellSideAgent as any)?.ahaDesignation === 'AHA_OOS'
+  );
+
   return {
     _id: referral._id.toString(),
     createdAt: referral.createdAt,
@@ -77,6 +84,7 @@ function toReferralLike(referral: any, payments: any[] = []) {
     audit: referral.audit || [],
     sla: referral.sla || null,
     ahaBucket: referral.ahaBucket || null,
+    hasAhaOosAgentAttached,
   };
 }
 
@@ -89,9 +97,9 @@ async function getReferralsForUser(userId: string, role: string | null) {
   if (role === 'admin') {
     // Admin users see all referrals
     return Referral.find(query)
-      .populate('assignedAgent', 'name')
-      .populate('buySideAgent', 'name')
-      .populate('sellSideAgent', 'name')
+      .populate('assignedAgent', 'name ahaDesignation')
+      .populate('buySideAgent', 'name ahaDesignation')
+      .populate('sellSideAgent', 'name ahaDesignation')
       .populate('lender', 'name')
       .lean();
   }
@@ -103,9 +111,9 @@ async function getReferralsForUser(userId: string, role: string | null) {
     }
     query.lender = (lender as { _id: Types.ObjectId })._id;
     return Referral.find(query)
-      .populate('assignedAgent', 'name')
-      .populate('buySideAgent', 'name')
-      .populate('sellSideAgent', 'name')
+      .populate('assignedAgent', 'name ahaDesignation')
+      .populate('buySideAgent', 'name ahaDesignation')
+      .populate('sellSideAgent', 'name ahaDesignation')
       .populate('lender', 'name')
       .lean();
   }
@@ -125,9 +133,9 @@ async function getReferralsForUser(userId: string, role: string | null) {
         { sellSideAgent: agentId },
       ],
     })
-      .populate('assignedAgent', 'name')
-      .populate('buySideAgent', 'name')
-      .populate('sellSideAgent', 'name')
+      .populate('assignedAgent', 'name ahaDesignation')
+      .populate('buySideAgent', 'name ahaDesignation')
+      .populate('sellSideAgent', 'name ahaDesignation')
       .populate('lender', 'name')
       .lean();
   }

@@ -115,8 +115,8 @@ function meetsConditions(
 export function getStaticFollowUpTasksForReferral(
   referral: ReferralLike & { borrower?: { name?: string } }
 ): StaticFollowUpTask[] {
-  // Only apply tasks to referrals with AHA OOS agents
-  if (referral.ahaBucket !== 'AHA_OOS') {
+  // Only apply tasks to referrals where any attached agent has ahaDesignation === 'AHA_OOS'
+  if (!referral.hasAhaOosAgentAttached) {
     return [];
   }
 

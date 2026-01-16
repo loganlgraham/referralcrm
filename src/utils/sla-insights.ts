@@ -85,6 +85,7 @@ export interface ReferralLike {
   audit?: AuditEntryLike[];
   timeline?: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified';
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
+  hasAhaOosAgentAttached?: boolean;
   sla?: {
     contractToCloseMinutes?: number | null;
     closedToPaidMinutes?: number | null;

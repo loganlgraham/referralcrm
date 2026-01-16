@@ -52,6 +52,7 @@ export default async function FollowUpTasksPage({
     origin: item.origin ?? null,
     ahaBucket: item.ahaBucket ?? null,
     timeline: item.timeline ?? null,
+    hasAhaOosAgentAttached: item.hasAhaOosAgentAttached ?? false,
   }));
 
   return (
