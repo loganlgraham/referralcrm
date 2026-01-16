@@ -130,11 +130,12 @@ function TaskIndicator({ referral }: { referral: ReferralRow }) {
   }
 
   return (
-    <AlertCircle 
-      className="h-4 w-4 text-amber-600" 
-      aria-label="Has incomplete tasks"
-      title="This referral has incomplete follow-up tasks"
-    />
+    <span title="This referral has incomplete follow-up tasks">
+      <AlertCircle 
+        className="h-4 w-4 text-amber-600" 
+        aria-label="Has incomplete tasks"
+      />
+    </span>
   );
 }
 
