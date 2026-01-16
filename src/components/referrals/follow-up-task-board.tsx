@@ -31,6 +31,7 @@ interface BoardReferral {
   lenderName?: string | null;
   origin?: 'agent' | 'mc' | 'admin' | null;
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
+  timeline?: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified' | null;
 }
 
 interface FollowUpTasksBoardProps {
@@ -57,6 +58,7 @@ const toReferralLike = (referral: BoardReferral): ReferralLike & { borrower: { n
   payments: [],
   audit: [],
   ahaBucket: referral.ahaBucket ?? null,
+  timeline: referral.timeline ?? undefined,
 });
 
 const UNDER_CONTRACT_INDEX = REFERRAL_STATUSES.indexOf('Under Contract');

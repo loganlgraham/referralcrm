@@ -51,6 +51,7 @@ export default async function FollowUpTasksPage({
     dealStatusLabel: item.dealStatusLabel ?? null,
     origin: item.origin ?? null,
     ahaBucket: item.ahaBucket ?? null,
+    timeline: item.timeline ?? null,
   }));
 
   return (
