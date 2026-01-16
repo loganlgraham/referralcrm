@@ -870,6 +870,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const dealsClosed = filteredPaymentsByNetwork.filter(
     (payment) =>
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+      payment.usedAssignedAgent === true &&
       (payment.status === 'closed' || payment.status === 'paid') &&
       filteredReferralIds.has(payment.referral._id.toString())
   );
@@ -1177,6 +1178,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const metricDate = payment.metricDate ?? resolveMetricDate(payment);
     if (!metricDate) return;
     if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
+    if (payment.usedAssignedAgent !== true) return;
     if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return;
 
     const key = `${metricDate.getFullYear()}-${String(metricDate.getMonth() + 1).padStart(2, '0')}`;
