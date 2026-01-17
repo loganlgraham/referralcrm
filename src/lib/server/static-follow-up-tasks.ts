@@ -128,15 +128,13 @@ export function getStaticFollowUpTasksForReferral(
   // Get tasks for this status
   const statusTasks = STATIC_FOLLOW_UP_TASKS[normalizedStatus] || [];
 
-  // Special case: The 'assign-agent-status' task is an exception - it shows for AHA/AHA_OOS bucket or any AHA-designated agent
-  // For all other tasks, require AHA_OOS attached agent
-  const hasAhaBucketForAssignment = referral.ahaBucket === 'AHA' || referral.ahaBucket === 'AHA_OOS';
-  const shouldShowAssignmentTask = statusTasks.some((task) => task.id === 'assign-agent-status') &&
-    (hasAhaBucketForAssignment || referral.hasAhaDesignatedAgentAttached === true);
+  // Special case: 'New Lead' status has the 'assign-agent-status' task that applies to ALL referrals
+  // For other statuses, require AHA_OOS attached agent (unless task has specific ahaDesignation)
+  const hasAssignmentTask = statusTasks.some((task) => task.id === 'assign-agent-status');
+  const isNewLeadStatus = normalizedStatus === 'New Lead';
 
-  // If this status has the assignment task and we should show it, allow tasks
-  // Otherwise, check if referral has AHA_OOS agent attached
-  if (!shouldShowAssignmentTask && !referral.hasAhaOosAgentAttached) {
+  // If this is not New Lead status and doesn't have assignment task, require AHA_OOS agent
+  if (!isNewLeadStatus && !hasAssignmentTask && !referral.hasAhaOosAgentAttached) {
     return [];
   }
 
@@ -154,10 +152,11 @@ export function getStaticFollowUpTasksForReferral(
   for (const taskDef of allTasks) {
     // Special gating for 'assign-agent-status' task
     if (taskDef.id === 'assign-agent-status') {
-      // Only show if AHA bucket or has AHA-designated agent attached
-      const hasAhaBucketForAssignment = referral.ahaBucket === 'AHA' || referral.ahaBucket === 'AHA_OOS';
-      if (!hasAhaBucketForAssignment && !referral.hasAhaDesignatedAgentAttached) {
-        continue; // Skip this task if conditions not met
+      // Show for all referrals in New Lead status if agent or lender is missing
+      const hasAgent = Boolean(referral.assignedAgent || referral.buySideAgent || referral.sellSideAgent);
+      const hasLender = Boolean(referral.lender);
+      if (hasAgent && hasLender) {
+        continue; // Skip if both agent and lender are assigned
       }
     } else if (taskDef.ahaDesignation === 'AHA') {
       // For AHA-only tasks, require AHA designation (not AHA_OOS, not AGIT)
