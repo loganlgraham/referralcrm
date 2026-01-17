@@ -115,7 +115,7 @@ function meetsConditions(
  * Get static follow-up tasks for a referral based on its status
  * Only applies tasks to referrals with AHA OOS agents attached
  * NOTE: These tasks are ADMIN-ONLY and will be filtered by role in the calling functions
- * EXCEPTION: The 'assign-agent-status' task shows for AHA/AHA_OOS bucket or any AHA-designated agent
+ * EXCEPTION: The 'assign-agent-status' task shows for ALL referrals (regardless of AHA designation)
  */
 export function getStaticFollowUpTasksForReferral(
   referral: ReferralLike & { borrower?: { name?: string } }
@@ -129,7 +129,7 @@ export function getStaticFollowUpTasksForReferral(
   const statusTasks = STATIC_FOLLOW_UP_TASKS[normalizedStatus] || [];
 
   // Special case: 'New Lead' status has the 'assign-agent-status' task that applies to ALL referrals
-  // For other statuses, require AHA_OOS attached agent (unless task has specific ahaDesignation)
+  // regardless of AHA designation. For other statuses, require AHA_OOS attached agent.
   const hasAssignmentTask = statusTasks.some((task) => task.id === 'assign-agent-status');
   const isNewLeadStatus = normalizedStatus === 'New Lead';
 
@@ -152,26 +152,31 @@ export function getStaticFollowUpTasksForReferral(
   for (const taskDef of allTasks) {
     // Special gating for 'assign-agent-status' task
     if (taskDef.id === 'assign-agent-status') {
-      // Show for all referrals in New Lead status if agent or lender is missing
+      // Show for ALL referrals (regardless of AHA designation) if agent or lender is missing
       const hasAgent = Boolean(referral.assignedAgent || referral.buySideAgent || referral.sellSideAgent);
       const hasLender = Boolean(referral.lender);
       if (hasAgent && hasLender) {
         continue; // Skip if both agent and lender are assigned
       }
-    } else if (taskDef.ahaDesignation === 'AHA') {
-      // For AHA-only tasks, require AHA designation (not AHA_OOS, not AGIT)
-      if (!referral.hasAhaAgentAttached) {
-        continue; // Skip this task if no AHA agent attached
-      }
-    } else if (taskDef.ahaDesignation === 'AHA_OOS') {
-      // For AHA_OOS tasks, require AHA_OOS designation
-      if (!referral.hasAhaOosAgentAttached) {
-        continue; // Skip this task if no AHA_OOS agent attached
-      }
+      // If we reach here, agent or lender is missing - proceed to show the task
+      // Skip all AHA designation checks below for this task
     } else {
-      // For tasks without designation, require AHA_OOS (existing default behavior)
-      if (!referral.hasAhaOosAgentAttached) {
-        continue; // Skip this task if no AHA_OOS agent attached
+      // For all other tasks, check AHA designation requirements
+      if (taskDef.ahaDesignation === 'AHA') {
+        // For AHA-only tasks, require AHA designation (not AHA_OOS, not AGIT)
+        if (!referral.hasAhaAgentAttached) {
+          continue; // Skip this task if no AHA agent attached
+        }
+      } else if (taskDef.ahaDesignation === 'AHA_OOS') {
+        // For AHA_OOS tasks, require AHA_OOS designation
+        if (!referral.hasAhaOosAgentAttached) {
+          continue; // Skip this task if no AHA_OOS agent attached
+        }
+      } else {
+        // For tasks without designation, require AHA_OOS (existing default behavior)
+        if (!referral.hasAhaOosAgentAttached) {
+          continue; // Skip this task if no AHA_OOS agent attached
+        }
       }
     }
 
