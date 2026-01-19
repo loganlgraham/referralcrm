@@ -154,7 +154,7 @@ function AgentOnboardingTaskGroup({
                   <button
                     type="button"
                     onClick={task.toggle}
-                    className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-slate-500 transition hover:bg-slate-100"
+                    className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-slate-500 transition hover:bg-slate-100 [will-change:opacity]"
                     aria-pressed={task.completed}
                     aria-label={task.completed ? 'Mark task incomplete' : 'Mark task complete'}
                   >
@@ -210,7 +210,7 @@ function AgentOnboardingTaskGroup({
                       <button
                         type="button"
                         onClick={task.toggle}
-                        className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-500 text-slate-700 transition hover:bg-slate-100"
+                        className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-500 text-slate-700 transition hover:bg-slate-100 [will-change:opacity]"
                         aria-pressed={task.completed}
                         aria-label="Mark task incomplete"
                       >

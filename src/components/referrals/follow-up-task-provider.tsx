@@ -8,6 +8,8 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
+  useTransition,
 } from 'react';
 
 import type { RecommendationPriority } from '@/utils/sla-insights';
@@ -350,6 +352,9 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     return parseFollowUpTaskState(window.localStorage.getItem(FOLLOW_UP_TASK_STORAGE_KEY));
   });
 
+  const [isPending, startTransition] = useTransition();
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // Fetch reminder settings from the server on mount (source of truth for cron job)
   useEffect(() => {
     fetch('/api/me/reminders')
@@ -383,16 +388,39 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
+  // Debounced localStorage write to prevent blocking the UI
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
-    window.localStorage.setItem(FOLLOW_UP_TASK_STORAGE_KEY, JSON.stringify(state));
+
+    // Clear any pending save
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Schedule a debounced save
+    saveTimeoutRef.current = setTimeout(() => {
+      window.localStorage.setItem(FOLLOW_UP_TASK_STORAGE_KEY, JSON.stringify(state));
+      saveTimeoutRef.current = null;
+    }, 250);
+
+    // Cleanup: ensure we save immediately on unmount
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        // Save immediately on unmount to prevent data loss
+        window.localStorage.setItem(FOLLOW_UP_TASK_STORAGE_KEY, JSON.stringify(state));
+        saveTimeoutRef.current = null;
+      }
+    };
   }, [state]);
 
   const toggleTask = useCallback((taskId: string, completed: boolean) => {
-    dispatch({ type: 'toggle', taskId, completed });
-  }, []);
+    startTransition(() => {
+      dispatch({ type: 'toggle', taskId, completed });
+    });
+  }, [startTransition]);
 
   const generateManualId = () => {
     if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
