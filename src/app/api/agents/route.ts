@@ -43,11 +43,7 @@ const createAgentSchema = z.object({
   coverageLocations: z.array(coverageLocationSchema).optional().default([]),
   specialties: z.array(z.string().trim().min(1)).optional().default([]),
   languages: z.array(z.string().trim().min(1)).optional().default([]),
-  ahaDesignation: z
-    .enum(['AHA', 'AHA_OOS', 'AGIT'])
-    .optional()
-    .nullable()
-    .default(null),
+  ahaDesignation: z.enum(['AHA', 'AHA_OOS', 'AGIT']),
   source: z.string().trim().optional(),
 });
 

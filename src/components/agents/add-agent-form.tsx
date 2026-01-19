@@ -344,6 +344,13 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    
+    // Validate AHA designation (HTML5 required should prevent this, but add runtime check for type safety)
+    if (form.ahaDesignation !== 'AHA' && form.ahaDesignation !== 'AHA_OOS' && form.ahaDesignation !== 'AGIT') {
+      toast.error('AHA classification is required');
+      return;
+    }
+    
     setSaving(true);
 
     try {
@@ -373,7 +380,7 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
         coverageLocations: normalizedCoverageLocations,
         specialties: form.specialties,
         languages: form.languages,
-        ahaDesignation: form.ahaDesignation || null,
+        ahaDesignation: form.ahaDesignation as 'AHA' | 'AHA_OOS' | 'AGIT',
       };
 
       if (isAdmin && form.source.trim()) {
@@ -626,9 +633,9 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
               value={form.ahaDesignation}
               onChange={handleAhaChange}
               className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+              required
               disabled={formDisabled}
             >
-              <option value="">Not set</option>
               {AGENT_AHA_CLASSIFICATION_OPTIONS.map((option) => (
                 <option key={option} value={option}>
                   {option === 'AHA_OOS' ? 'AHA OOS' : option}
