@@ -21,8 +21,62 @@ if (!cached) {
   cached = globalWithMongoClient.mongoClientGlobal = { client: null, promise: null };
 }
 
+const MAX_RETRY_ATTEMPTS = 3;
+const INITIAL_RETRY_DELAY = 1000; // 1 second
+
+/**
+ * Sleep utility for retry delays
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Retry a connection attempt with exponential backoff
+ */
+async function retryConnection<T>(
+  fn: () => Promise<T>,
+  attempt = 1,
+  maxAttempts = MAX_RETRY_ATTEMPTS
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (attempt >= maxAttempts) {
+      throw error;
+    }
+
+    // Exponential backoff: 1s, 2s, 4s
+    const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt - 1);
+    console.warn(
+      `MongoDB connection attempt ${attempt} failed, retrying in ${delay}ms...`,
+      error instanceof Error ? error.message : String(error)
+    );
+
+    await sleep(delay);
+    return retryConnection(fn, attempt + 1, maxAttempts);
+  }
+}
+
+/**
+ * Check if a MongoDB client is connected and healthy
+ */
+async function isClientConnected(client: MongoClient): Promise<boolean> {
+  try {
+    // Use admin ping as a lightweight health check
+    await client.db().admin().ping();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function getMongoClient(): MongoClient {
-  const uri = process.env.MONGODB_URI ?? (process.env.NODE_ENV === 'development' ? 'mongodb://localhost:27017/referralcrm' : undefined);
+  const uri =
+    process.env.MONGODB_URI ??
+    (process.env.NODE_ENV === 'development'
+      ? 'mongodb://localhost:27017/referralcrm'
+      : undefined);
   if (!uri) {
     throw new Error('Missing MONGODB_URI environment variable');
   }
@@ -37,6 +91,8 @@ export function getMongoClient(): MongoClient {
       retryWrites: true,
       retryReads: true,
       heartbeatFrequencyMS: 10000,
+      // Add direct connection option for better serverless handling
+      directConnection: false, // Keep false for replica sets
     };
     cached!.client = new MongoClient(uri, options);
     // Attach Vercel's database pool for serverless optimization
@@ -47,16 +103,56 @@ export function getMongoClient(): MongoClient {
   return cached!.client;
 }
 
-export function getClientPromise(): Promise<MongoClient> {
+/**
+ * Get a connected MongoDB client with retry logic and health checks
+ * This function ensures the client is actually connected before returning it
+ */
+export async function getClientPromise(): Promise<MongoClient> {
+  // If we have a cached promise, check if it's still valid
   if (cached!.promise) {
-    return cached!.promise;
+    try {
+      const client = await cached!.promise;
+      // Verify the connection is still healthy
+      const isConnected = await isClientConnected(client).catch(() => false);
+      if (isConnected) {
+        return client;
+      }
+      // Connection is stale, clear it and reconnect
+      console.warn('MongoDB client connection is stale, reconnecting...');
+      cached!.promise = null;
+      cached!.client = null;
+    } catch (error) {
+      // Previous promise failed, clear it
+      console.warn('Previous MongoDB connection promise failed, clearing cache...');
+      cached!.promise = null;
+    }
   }
 
+  // Create new connection with retry logic
   const client = getMongoClient();
-  cached!.promise = client.connect().catch((error) => {
-    // Clear the cached promise on failure so we can retry
+
+  cached!.promise = retryConnection(async () => {
+    try {
+      await client.connect();
+      // Verify connection after connect
+      const isConnected = await isClientConnected(client);
+      if (!isConnected) {
+        throw new Error('Connection established but health check failed');
+      }
+      return client;
+    } catch (error) {
+      // Clear the promise on failure so we can retry
+      cached!.promise = null;
+      console.error('MongoDB client connection error:', error);
+      throw error;
+    }
+  }).catch((error) => {
+    // Clear cache on final failure
     cached!.promise = null;
-    console.error('MongoDB client connection error:', error);
+    cached!.client = null;
+    console.error('MongoDB client connection failed after retries:', error);
+    // Don't throw unhandled rejection - let the caller handle it
+    // But we need to throw so the promise chain knows it failed
     throw error;
   });
 
