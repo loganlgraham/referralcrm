@@ -14,6 +14,7 @@ import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
 import { sendTransactionalEmail, isTransactionalEmailConfigured } from '@/lib/email';
 import { buildReferralLink } from '@/lib/referral-links';
+import { normalizePhoneNumber } from '@/utils/phone-utils';
 import {
   addWeeks,
   format,
@@ -1021,6 +1022,40 @@ export async function POST(request: Request) {
         createdAt: new Date(),
       },
     ];
+  }
+
+  // Check for duplicate referrals by email (case-insensitive)
+  const normalizedEmail = parsed.data.borrowerEmail.trim();
+  const escapedEmail = normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const existingByEmail = await Referral.findOne({
+    'borrower.email': { $regex: new RegExp(`^${escapedEmail}$`, 'i') }
+  });
+
+  // Check for duplicate referrals by phone (normalized)
+  let duplicateByPhone = null;
+  const normalizedInputPhone = normalizePhoneNumber(parsed.data.borrowerPhone);
+  if (normalizedInputPhone) {
+    const allReferralsWithPhones = await Referral.find({
+      'borrower.phone': { $exists: true, $ne: '' }
+    });
+    duplicateByPhone = allReferralsWithPhones.find((ref) => {
+      const refNormalizedPhone = normalizePhoneNumber(ref.borrower.phone);
+      return refNormalizedPhone === normalizedInputPhone;
+    }) || null;
+  }
+
+  // Return error if duplicate found
+  if (existingByEmail || duplicateByPhone) {
+    const existing = existingByEmail || duplicateByPhone;
+    const matchField = existingByEmail ? 'email' : 'phone number';
+    return NextResponse.json(
+      {
+        message: `A referral with this ${matchField} already exists.`,
+        existingReferralId: existing._id.toString(),
+        existingBorrowerName: existing.borrower.name
+      },
+      { status: 409 }
+    );
   }
 
   const referral = await Referral.create(referralData);

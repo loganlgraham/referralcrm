@@ -243,7 +243,22 @@ export function ReferralForm() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create referral');
+        if (response.status === 409) {
+          const data = (await response.json()) as {
+            message: string;
+            existingReferralId: string;
+            existingBorrowerName: string;
+          };
+          toast.error(
+            `${data.message} (${data.existingBorrowerName})`,
+            { duration: 5000 }
+          );
+          // Navigate to existing referral
+          router.push(`/referrals/${data.existingReferralId}`);
+        } else {
+          toast.error('Unable to create referral');
+        }
+        return;
       }
 
       const { id } = (await response.json()) as { id: string };
