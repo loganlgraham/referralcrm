@@ -30,9 +30,20 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
 
   const tasks = useFollowUpTasks(referral, viewerRole);
   const hasTasks = tasks.length > 0;
-  const incompleteTasks = useMemo(() => tasks.filter((task) => !task.completed), [tasks]);
-  const completedTasks = useMemo(() => tasks.filter((task) => task.completed), [tasks]);
+  const incompleteTasks = useMemo(() => {
+    const incomplete = tasks.filter((task) => !task.completed);
+    console.log('Incomplete tasks:', incomplete.length, incomplete);
+    return incomplete;
+  }, [tasks]);
+  const completedTasks = useMemo(() => {
+    const completed = tasks.filter((task) => task.completed);
+    console.log('Completed tasks:', completed.length, completed);
+    return completed;
+  }, [tasks]);
   const { addManualTask } = useFollowUpTaskContext();
+  
+  console.log('All tasks:', tasks.length, tasks);
+  console.log('Should show completed link?', completedTasks.length > 0);
 
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualTitle, setManualTitle] = useState('');
@@ -204,6 +215,11 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
                           Manual
                         </span>
                       )}
+                      {task.isHistorical && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
+                          {task.statusWhenCreated ? `From: ${task.statusWhenCreated}` : 'Previous Status'}
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-slate-600">{task.message}</p>
                     <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
@@ -262,6 +278,11 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
                           {task.isManual && (
                             <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
                               Manual
+                            </span>
+                          )}
+                          {task.isHistorical && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
+                              {task.statusWhenCreated ? `From: ${task.statusWhenCreated}` : 'Previous Status'}
                             </span>
                           )}
                         </div>

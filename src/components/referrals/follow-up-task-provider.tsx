@@ -53,11 +53,25 @@ export interface ManualTaskInput {
   category: ManualTaskCategory;
 }
 
+export interface TaskMetadata {
+  title: string;
+  message: string;
+  priority: RecommendationPriority;
+  category: ManualTaskCategory;
+  dueAt?: string | null;
+  supportingMetric?: string;
+  isManual?: boolean;
+  createdAt: string;
+  statusWhenCreated?: string;
+}
+
 export interface StoredTaskState {
   completions: CompletionMap;
   manualTasks: Record<string, ManualTask[]>;
   agentTasks: Record<string, ManualTask[]>;
   reminders: ReminderState;
+  shownTasks: Record<string, string[]>; // referralId -> taskId[]
+  taskMetadata: Record<string, TaskMetadata>; // full taskId -> metadata
 }
 
 type Action =
@@ -68,17 +82,23 @@ type Action =
   | { type: 'add-agent-tasks'; agentId: string; tasks: ManualTask[] }
   | { type: 'remove-agent-task'; agentId: string; taskId: string }
   | { type: 'set-global-reminders'; settings: ReminderSettings }
-  | { type: 'set-referral-reminders'; referralId: string; settings: ReminderSettings | null };
+  | { type: 'set-referral-reminders'; referralId: string; settings: ReminderSettings | null }
+  | { type: 'mark-tasks-shown'; referralId: string; taskIds: string[] }
+  | { type: 'store-task-metadata'; tasks: Array<{ taskId: string; metadata: TaskMetadata }> };
 
 interface FollowUpTaskContextValue {
   completions: CompletionMap;
   manualTasks: Record<string, ManualTask[]>;
   agentTasks: Record<string, ManualTask[]>;
+  shownTasks: Record<string, string[]>;
+  taskMetadata: Record<string, TaskMetadata>;
   toggleTask: (taskId: string, completed: boolean) => void;
   addManualTask: (referralId: string, task: ManualTaskInput) => void;
   removeManualTask: (referralId: string, taskId: string) => void;
   addAgentTasks: (agentId: string, tasks: ManualTask[]) => void;
   removeAgentTask: (agentId: string, taskId: string) => void;
+  markTasksAsShown: (referralId: string, taskIds: string[]) => void;
+  storeTaskMetadata: (tasks: Array<{ taskId: string; metadata: TaskMetadata }>) => void;
   reminderSettings: ReminderSettings;
   globalReminderSettings: ReminderSettings;
   reminderOverrides: Record<string, ReminderSettings>;
@@ -104,6 +124,8 @@ export const createDefaultTaskState = (): StoredTaskState => ({
   manualTasks: {},
   agentTasks: {},
   reminders: { global: { ...defaultReminderSettings }, overrides: {} },
+  shownTasks: {},
+  taskMetadata: {},
 });
 
 const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
@@ -133,6 +155,18 @@ const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
       const manualCompletionKey = `${action.referralId}::manual::${action.taskId}`;
       const nextCompletions: CompletionMap = { ...state.completions };
       delete nextCompletions[manualCompletionKey];
+      
+      // Remove from shownTasks
+      const currentShown = state.shownTasks[action.referralId] ?? [];
+      const nextShownTasks = {
+        ...state.shownTasks,
+        [action.referralId]: currentShown.filter((id) => id !== action.taskId),
+      };
+      
+      // Remove from taskMetadata
+      const nextMetadata = { ...state.taskMetadata };
+      delete nextMetadata[manualCompletionKey];
+      
       return {
         ...state,
         manualTasks: {
@@ -140,6 +174,8 @@ const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
           [action.referralId]: current.filter((task) => task.id !== action.taskId),
         },
         completions: nextCompletions,
+        shownTasks: nextShownTasks,
+        taskMetadata: nextMetadata,
       };
     }
     case 'add-agent-tasks': {
@@ -177,6 +213,27 @@ const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
         overrides[action.referralId] = action.settings;
       }
       return { ...state, reminders: { ...state.reminders, overrides } };
+    }
+    case 'mark-tasks-shown': {
+      const currentShown = state.shownTasks[action.referralId] ?? [];
+      const uniqueTaskIds = Array.from(new Set([...currentShown, ...action.taskIds]));
+      return {
+        ...state,
+        shownTasks: {
+          ...state.shownTasks,
+          [action.referralId]: uniqueTaskIds,
+        },
+      };
+    }
+    case 'store-task-metadata': {
+      const nextMetadata = { ...state.taskMetadata };
+      for (const { taskId, metadata } of action.tasks) {
+        // Only store if not already present (preserve original metadata)
+        if (!nextMetadata[taskId]) {
+          nextMetadata[taskId] = metadata;
+        }
+      }
+      return { ...state, taskMetadata: nextMetadata };
     }
     default:
       return state;
@@ -328,14 +385,53 @@ export const parseFollowUpTaskState = (value: string | null): StoredTaskState =>
 
           return { ...defaultReminderState, overrides: {} } satisfies ReminderState;
         })();
-        return { completions: { ...completions }, manualTasks: { ...manualTasks }, agentTasks: { ...agentTasks }, reminders };
+        
+        // Parse shownTasks
+        const shownTasks: Record<string, string[]> = {};
+        if (record.shownTasks && typeof record.shownTasks === 'object') {
+          Object.entries(record.shownTasks as Record<string, unknown>).forEach(([referralId, value]) => {
+            if (Array.isArray(value)) {
+              shownTasks[referralId] = value.filter((id): id is string => typeof id === 'string');
+            }
+          });
+        }
+        
+        // Parse taskMetadata
+        const taskMetadata: Record<string, TaskMetadata> = {};
+        if (record.taskMetadata && typeof record.taskMetadata === 'object') {
+          Object.entries(record.taskMetadata as Record<string, unknown>).forEach(([taskId, value]) => {
+            if (value && typeof value === 'object') {
+              const meta = value as Partial<TaskMetadata>;
+              if (
+                typeof meta.title === 'string' &&
+                typeof meta.message === 'string' &&
+                (meta.priority === 'urgent' || meta.priority === 'high' || meta.priority === 'medium' || meta.priority === 'low') &&
+                (meta.category === 'assignment' || meta.category === 'communication' || meta.category === 'pipeline' || meta.category === 'finance' || meta.category === 'ops')
+              ) {
+                taskMetadata[taskId] = {
+                  title: meta.title,
+                  message: meta.message,
+                  priority: meta.priority,
+                  category: meta.category,
+                  dueAt: typeof meta.dueAt === 'string' ? meta.dueAt : undefined,
+                  supportingMetric: typeof meta.supportingMetric === 'string' ? meta.supportingMetric : undefined,
+                  isManual: Boolean(meta.isManual),
+                  createdAt: typeof meta.createdAt === 'string' ? meta.createdAt : new Date().toISOString(),
+                  statusWhenCreated: typeof meta.statusWhenCreated === 'string' ? meta.statusWhenCreated : undefined,
+                };
+              }
+            }
+          });
+        }
+        
+        return { completions: { ...completions }, manualTasks: { ...manualTasks }, agentTasks: { ...agentTasks }, reminders, shownTasks, taskMetadata };
       }
       const entries = Object.values(record);
       const resemblesCompletionMap = entries.every((value) => {
         return value != null && typeof value === 'object' && 'completed' in (value as Record<string, unknown>);
       });
       if (resemblesCompletionMap) {
-        return { completions: record as CompletionMap, manualTasks: {}, agentTasks: {}, reminders: defaultReminderState };
+        return { completions: record as CompletionMap, manualTasks: {}, agentTasks: {}, reminders: defaultReminderState, shownTasks: {}, taskMetadata: {} };
       }
     }
   } catch (error) {
@@ -493,16 +589,28 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     [state.reminders.overrides]
   );
 
+  const markTasksAsShown = useCallback((referralId: string, taskIds: string[]) => {
+    dispatch({ type: 'mark-tasks-shown', referralId, taskIds });
+  }, []);
+
+  const storeTaskMetadata = useCallback((tasks: Array<{ taskId: string; metadata: TaskMetadata }>) => {
+    dispatch({ type: 'store-task-metadata', tasks });
+  }, []);
+
   const value = useMemo<FollowUpTaskContextValue>(
     () => ({
       completions: state.completions,
       manualTasks: state.manualTasks,
       agentTasks: state.agentTasks,
+      shownTasks: state.shownTasks,
+      taskMetadata: state.taskMetadata,
       toggleTask,
       addManualTask,
       removeManualTask,
       addAgentTasks,
       removeAgentTask,
+      markTasksAsShown,
+      storeTaskMetadata,
       reminderSettings: state.reminders.global,
       globalReminderSettings: state.reminders.global,
       reminderOverrides: state.reminders.overrides,
@@ -518,6 +626,8 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       removeManualTask,
       addAgentTasks,
       removeAgentTask,
+      markTasksAsShown,
+      storeTaskMetadata,
       updateReminderSettings,
       getReminderSettings,
       clearReminderOverride,
