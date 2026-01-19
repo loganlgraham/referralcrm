@@ -276,7 +276,13 @@ export function useFollowUpTasks(
     
     // Mark all task IDs as shown
     const allTaskIds = tasks.map((t) => t.id);
-    markTasksAsShown(referralId, allTaskIds);
+    const existingShownTasks = shownTasks[referralId] || [];
+    
+    // Only update if there are new task IDs
+    const hasNewTasks = allTaskIds.some(id => !existingShownTasks.includes(id));
+    if (hasNewTasks) {
+      markTasksAsShown(referralId, allTaskIds);
+    }
 
     // Store metadata for new tasks (only those not already in metadata)
     const metadataToStore = currentTasks
@@ -302,7 +308,8 @@ export function useFollowUpTasks(
     if (metadataToStore.length > 0) {
       storeTaskMetadata(metadataToStore);
     }
-  }, [result, markTasksAsShown, storeTaskMetadata, taskMetadata]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [referral._id, referral.status, completions, manualTasks, shownTasks, taskMetadata]);
 
   return result.tasks;
 }

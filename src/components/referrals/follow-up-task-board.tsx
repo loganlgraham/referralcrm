@@ -130,7 +130,13 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
     Object.values(taskResults).forEach(({ tasks, currentTasks, referralId, referralStatus }) => {
       // Mark all task IDs as shown
       const allTaskIds = tasks.map((t) => t.id);
-      markTasksAsShown(referralId, allTaskIds);
+      const existingShownTasks = shownTasks[referralId] || [];
+      
+      // Only update if there are new task IDs
+      const hasNewTasks = allTaskIds.some(id => !existingShownTasks.includes(id));
+      if (hasNewTasks) {
+        markTasksAsShown(referralId, allTaskIds);
+      }
 
       // Store metadata for new tasks (only those not already in metadata)
       const metadataToStore = currentTasks
@@ -157,7 +163,8 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
         storeTaskMetadata(metadataToStore);
       }
     });
-  }, [taskResults, markTasksAsShown, storeTaskMetadata, taskMetadata]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [referrals, completions, manualTasks, shownTasks, taskMetadata, viewerRole]);
 
   const tasksByReferral = useMemo(() => {
     return Object.entries(taskResults).reduce<Record<string, FollowUpTask[]>>((acc, [id, result]) => {
