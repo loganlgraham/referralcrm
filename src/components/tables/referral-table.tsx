@@ -102,7 +102,16 @@ function toReferralLike(row: ReferralRow): ReferralLike & { borrower: { name: st
  */
 function TaskIndicator({ referral }: { referral: ReferralRow }) {
   const { data: session } = useSession();
-  const { completions, manualTasks, toggleTask, removeManualTask } = useFollowUpTaskContext();
+  const { 
+    completions, 
+    manualTasks, 
+    shownTasks, 
+    taskMetadata, 
+    toggleTask, 
+    removeManualTask, 
+    markTasksAsShown, 
+    storeTaskMetadata 
+  } = useFollowUpTaskContext();
   
   const viewerRole: FollowUpTaskRole = useMemo(() => {
     const role = session?.user?.role;
@@ -117,11 +126,15 @@ function TaskIndicator({ referral }: { referral: ReferralRow }) {
     return buildFollowUpTasksForReferral(referralLike, {
       completions,
       manualTasks,
+      shownTasks,
+      taskMetadata,
       toggleTask,
       removeManualTask,
+      markTasksAsShown,
+      storeTaskMetadata,
       viewerRole,
     });
-  }, [referralLike, completions, manualTasks, toggleTask, removeManualTask, viewerRole]);
+  }, [referralLike, completions, manualTasks, shownTasks, taskMetadata, toggleTask, removeManualTask, markTasksAsShown, storeTaskMetadata, viewerRole]);
 
   const hasIncompleteTasks = useMemo(() => {
     return tasks.filter((task) => !task.completed).length > 0;
