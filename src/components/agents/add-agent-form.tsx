@@ -345,10 +345,9 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     
-    // Validate AHA designation is required
-    if (!form.ahaDesignation || form.ahaDesignation === '') {
+    // Validate AHA designation (HTML5 required should prevent this, but add runtime check for type safety)
+    if (form.ahaDesignation !== 'AHA' && form.ahaDesignation !== 'AHA_OOS' && form.ahaDesignation !== 'AGIT') {
       toast.error('AHA classification is required');
-      setSaving(false);
       return;
     }
     
