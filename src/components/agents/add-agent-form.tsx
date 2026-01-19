@@ -388,6 +388,11 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
 
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
+        if (response.status === 409 && payload?.existingAgentName) {
+          throw new Error(
+            `${payload.message} Existing agent: ${payload.existingAgentName}`
+          );
+        }
         throw new Error(payload?.message ?? 'Unable to create agent');
       }
 

@@ -278,7 +278,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const existingAgentByEmail = await Agent.findOne({ email: parsed.data.email });
   if (existingAgentByEmail) {
     return NextResponse.json(
-      { message: 'An agent with this email already exists. Try updating their profile instead.' },
+      {
+        message: 'An agent with this email already exists. Try updating their profile instead.',
+        existingAgentId: existingAgentByEmail._id.toString(),
+        existingAgentName: existingAgentByEmail.name
+      },
       { status: 409 }
     );
   }
@@ -296,7 +300,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       
       if (duplicateByPhone) {
         return NextResponse.json(
-          { message: 'An agent with this phone number already exists. Try updating their profile instead.' },
+          {
+            message: 'An agent with this phone number already exists. Try updating their profile instead.',
+            existingAgentId: duplicateByPhone._id.toString(),
+            existingAgentName: duplicateByPhone.name
+          },
           { status: 409 }
         );
       }
