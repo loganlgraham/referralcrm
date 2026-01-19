@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { CheckCircle2, Circle } from 'lucide-react';
 import { formatInTimeZone } from 'date-fns-tz';
 
@@ -106,10 +106,10 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
     storeTaskMetadata 
   } = useFollowUpTaskContext();
 
-  const tasksByReferral = useMemo(() => {
-    return referrals.reduce<Record<string, FollowUpTask[]>>((acc, referral) => {
+  const taskResults = useMemo(() => {
+    return referrals.reduce<Record<string, ReturnType<typeof buildFollowUpTasksForReferral>>>((acc, referral) => {
       const referralLike = toReferralLike(referral);
-      const tasks = buildFollowUpTasksForReferral(referralLike, {
+      const result = buildFollowUpTasksForReferral(referralLike, {
         completions,
         manualTasks,
         shownTasks,
@@ -120,10 +120,51 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
         storeTaskMetadata,
         viewerRole,
       });
-      acc[referral._id] = tasks;
+      acc[referral._id] = result;
       return acc;
     }, {});
   }, [completions, manualTasks, shownTasks, taskMetadata, referrals, removeManualTask, toggleTask, markTasksAsShown, storeTaskMetadata, viewerRole]);
+
+  // Handle side effects for marking tasks as shown and storing metadata
+  useEffect(() => {
+    Object.values(taskResults).forEach(({ tasks, currentTasks, referralId, referralStatus }) => {
+      // Mark all task IDs as shown
+      const allTaskIds = tasks.map((t) => t.id);
+      markTasksAsShown(referralId, allTaskIds);
+
+      // Store metadata for new tasks (only those not already in metadata)
+      const metadataToStore = currentTasks
+        .filter((task) => {
+          const fullTaskId = task.taskId;
+          return !taskMetadata[fullTaskId];
+        })
+        .map((task) => ({
+          taskId: task.taskId,
+          metadata: {
+            title: task.title,
+            message: task.message,
+            priority: task.priority,
+            category: task.category,
+            dueAt: task.dueAt,
+            supportingMetric: task.supportingMetric,
+            isManual: task.isManual,
+            createdAt: new Date().toISOString(),
+            statusWhenCreated: referralStatus,
+          },
+        }));
+
+      if (metadataToStore.length > 0) {
+        storeTaskMetadata(metadataToStore);
+      }
+    });
+  }, [taskResults, markTasksAsShown, storeTaskMetadata, taskMetadata]);
+
+  const tasksByReferral = useMemo(() => {
+    return Object.entries(taskResults).reduce<Record<string, FollowUpTask[]>>((acc, [id, result]) => {
+      acc[id] = result.tasks;
+      return acc;
+    }, {});
+  }, [taskResults]);
 
   const summary = useMemo(() => {
     return Object.values(tasksByReferral).reduce(

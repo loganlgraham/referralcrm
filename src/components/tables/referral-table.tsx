@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useMemo, useState, useTransition, useCallback } from 'react';
+import { ReactNode, useMemo, useState, useTransition, useCallback, useEffect } from 'react';
 import {
   ColumnDef,
   flexRender,
@@ -122,7 +122,7 @@ function TaskIndicator({ referral }: { referral: ReferralRow }) {
 
   const referralLike = useMemo(() => toReferralLike(referral), [referral]);
   
-  const tasks = useMemo(() => {
+  const result = useMemo(() => {
     return buildFollowUpTasksForReferral(referralLike, {
       completions,
       manualTasks,
@@ -136,9 +136,43 @@ function TaskIndicator({ referral }: { referral: ReferralRow }) {
     });
   }, [referralLike, completions, manualTasks, shownTasks, taskMetadata, toggleTask, removeManualTask, markTasksAsShown, storeTaskMetadata, viewerRole]);
 
+  // Handle side effects for marking tasks as shown and storing metadata
+  useEffect(() => {
+    const { tasks, currentTasks, referralId, referralStatus } = result;
+    
+    // Mark all task IDs as shown
+    const allTaskIds = tasks.map((t) => t.id);
+    markTasksAsShown(referralId, allTaskIds);
+
+    // Store metadata for new tasks (only those not already in metadata)
+    const metadataToStore = currentTasks
+      .filter((task) => {
+        const fullTaskId = task.taskId;
+        return !taskMetadata[fullTaskId];
+      })
+      .map((task) => ({
+        taskId: task.taskId,
+        metadata: {
+          title: task.title,
+          message: task.message,
+          priority: task.priority,
+          category: task.category,
+          dueAt: task.dueAt,
+          supportingMetric: task.supportingMetric,
+          isManual: task.isManual,
+          createdAt: new Date().toISOString(),
+          statusWhenCreated: referralStatus,
+        },
+      }));
+
+    if (metadataToStore.length > 0) {
+      storeTaskMetadata(metadataToStore);
+    }
+  }, [result, markTasksAsShown, storeTaskMetadata, taskMetadata]);
+
   const hasIncompleteTasks = useMemo(() => {
-    return tasks.filter((task) => !task.completed).length > 0;
-  }, [tasks]);
+    return result.tasks.filter((task) => !task.completed).length > 0;
+  }, [result.tasks]);
 
   if (!hasIncompleteTasks) {
     return null;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 
 import type { ReferralLike } from '@/utils/sla-insights';
 import { getStaticFollowUpTasksForReferral } from '@/lib/server/static-follow-up-tasks';
@@ -231,36 +231,12 @@ export function buildFollowUpTasksForReferral(
   // Combine current and historical tasks
   const allTasks = [...currentTasks, ...historicalTasks];
 
-  // Mark all current task IDs as shown
-  const allTaskIds = allTasks.map((t) => t.id);
-  markTasksAsShown(referral._id, allTaskIds);
-
-  // Store metadata for new tasks (only those not already in metadata)
-  const metadataToStore = currentTasks
-    .filter((task) => {
-      const fullTaskId = task.taskId;
-      return !taskMetadata[fullTaskId];
-    })
-    .map((task) => ({
-      taskId: task.taskId,
-      metadata: {
-        title: task.title,
-        message: task.message,
-        priority: task.priority,
-        category: task.category,
-        dueAt: task.dueAt,
-        supportingMetric: task.supportingMetric,
-        isManual: task.isManual,
-        createdAt: new Date().toISOString(),
-        statusWhenCreated: referral.status,
-      },
-    }));
-
-  if (metadataToStore.length > 0) {
-    storeTaskMetadata(metadataToStore);
-  }
-
-  return allTasks;
+  return {
+    tasks: allTasks,
+    currentTasks,
+    referralId: referral._id,
+    referralStatus: referral.status,
+  };
 }
 
 export function useFollowUpTasks(
@@ -278,7 +254,7 @@ export function useFollowUpTasks(
     storeTaskMetadata,
   } = useFollowUpTaskContext();
 
-  return useMemo(
+  const result = useMemo(
     () =>
       buildFollowUpTasksForReferral(referral, {
         completions,
@@ -293,4 +269,40 @@ export function useFollowUpTasks(
       }),
     [completions, manualTasks, shownTasks, taskMetadata, referral, removeManualTask, toggleTask, markTasksAsShown, storeTaskMetadata, viewerRole]
   );
+
+  // Side effects: Mark tasks as shown and store metadata
+  useEffect(() => {
+    const { tasks, currentTasks, referralId, referralStatus } = result;
+    
+    // Mark all task IDs as shown
+    const allTaskIds = tasks.map((t) => t.id);
+    markTasksAsShown(referralId, allTaskIds);
+
+    // Store metadata for new tasks (only those not already in metadata)
+    const metadataToStore = currentTasks
+      .filter((task) => {
+        const fullTaskId = task.taskId;
+        return !taskMetadata[fullTaskId];
+      })
+      .map((task) => ({
+        taskId: task.taskId,
+        metadata: {
+          title: task.title,
+          message: task.message,
+          priority: task.priority,
+          category: task.category,
+          dueAt: task.dueAt,
+          supportingMetric: task.supportingMetric,
+          isManual: task.isManual,
+          createdAt: new Date().toISOString(),
+          statusWhenCreated: referralStatus,
+        },
+      }));
+
+    if (metadataToStore.length > 0) {
+      storeTaskMetadata(metadataToStore);
+    }
+  }, [result, markTasksAsShown, storeTaskMetadata, taskMetadata]);
+
+  return result.tasks;
 }
