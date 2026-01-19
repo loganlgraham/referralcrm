@@ -95,7 +95,16 @@ const formatDueDate = (value: string): string => {
 };
 
 export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoardProps) {
-  const { completions, manualTasks, toggleTask, removeManualTask } = useFollowUpTaskContext();
+  const { 
+    completions, 
+    manualTasks, 
+    shownTasks, 
+    taskMetadata, 
+    toggleTask, 
+    removeManualTask, 
+    markTasksAsShown, 
+    storeTaskMetadata 
+  } = useFollowUpTaskContext();
 
   const tasksByReferral = useMemo(() => {
     return referrals.reduce<Record<string, FollowUpTask[]>>((acc, referral) => {
@@ -103,14 +112,18 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
       const tasks = buildFollowUpTasksForReferral(referralLike, {
         completions,
         manualTasks,
+        shownTasks,
+        taskMetadata,
         toggleTask,
         removeManualTask,
+        markTasksAsShown,
+        storeTaskMetadata,
         viewerRole,
       });
       acc[referral._id] = tasks;
       return acc;
     }, {});
-  }, [completions, manualTasks, referrals, removeManualTask, toggleTask, viewerRole]);
+  }, [completions, manualTasks, shownTasks, taskMetadata, referrals, removeManualTask, toggleTask, markTasksAsShown, storeTaskMetadata, viewerRole]);
 
   const summary = useMemo(() => {
     return Object.values(tasksByReferral).reduce(
@@ -245,6 +258,11 @@ function FollowUpTaskGroup({
                           Manual
                         </span>
                       )}
+                      {task.isHistorical && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
+                          {task.statusWhenCreated ? `From: ${task.statusWhenCreated}` : 'Previous Status'}
+                        </span>
+                      )}
                       <span className="text-xs font-semibold uppercase text-slate-400">{task.priority}</span>
                     </div>
                     <p className="text-sm text-slate-600">{task.message}</p>
@@ -303,6 +321,11 @@ function FollowUpTaskGroup({
                           {task.isManual && (
                             <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
                               Manual
+                            </span>
+                          )}
+                          {task.isHistorical && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
+                              {task.statusWhenCreated ? `From: ${task.statusWhenCreated}` : 'Previous Status'}
                             </span>
                           )}
                         </div>

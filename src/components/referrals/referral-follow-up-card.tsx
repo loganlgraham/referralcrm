@@ -204,6 +204,11 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
                           Manual
                         </span>
                       )}
+                      {task.isHistorical && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
+                          {task.statusWhenCreated ? `From: ${task.statusWhenCreated}` : 'Previous Status'}
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-slate-600">{task.message}</p>
                     <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
@@ -262,6 +267,11 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
                           {task.isManual && (
                             <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
                               Manual
+                            </span>
+                          )}
+                          {task.isHistorical && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
+                              {task.statusWhenCreated ? `From: ${task.statusWhenCreated}` : 'Previous Status'}
                             </span>
                           )}
                         </div>
