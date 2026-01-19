@@ -14,8 +14,12 @@ jest.mock('@/components/referrals/follow-up-task-provider', () => ({
   useFollowUpTaskContext: () => ({
     completions: {},
     manualTasks: {},
+    shownTasks: {},
+    taskMetadata: {},
     toggleTask: jest.fn(),
     removeManualTask: jest.fn(),
+    markTasksAsShown: jest.fn(),
+    storeTaskMetadata: jest.fn(),
   }),
 }));
 

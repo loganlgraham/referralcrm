@@ -1,12 +1,12 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 
 import type { ReferralLike } from '@/utils/sla-insights';
 import { getStaticFollowUpTasksForReferral } from '@/lib/server/static-follow-up-tasks';
 import type { SlaRecommendation } from '@/utils/sla-insights';
 
-import { useFollowUpTaskContext, type ManualTask } from './follow-up-task-provider';
+import { useFollowUpTaskContext, type ManualTask, type TaskMetadata } from './follow-up-task-provider';
 
 export const getLatestCompletionForReferral = (
   referralId: string,
@@ -31,6 +31,8 @@ export interface FollowUpTask extends SlaRecommendation {
   completed: boolean;
   toggle: () => void;
   isManual?: boolean;
+  isHistorical?: boolean;
+  statusWhenCreated?: string;
   remove?: () => void;
   role: FollowUpTaskRole;
 }
@@ -72,14 +74,22 @@ export function buildFollowUpTasksForReferral(
   {
     completions,
     manualTasks,
+    shownTasks,
+    taskMetadata,
     toggleTask,
     removeManualTask,
+    markTasksAsShown,
+    storeTaskMetadata,
     viewerRole,
   }: {
     completions: Record<string, { completed: boolean; completedAt?: string | null }>;
     manualTasks: Record<string, ManualTask[]>;
+    shownTasks: Record<string, string[]>;
+    taskMetadata: Record<string, TaskMetadata>;
     toggleTask: (taskId: string, completed: boolean) => void;
     removeManualTask: (referralId: string, taskId: string) => void;
+    markTasksAsShown: (referralId: string, taskIds: string[]) => void;
+    storeTaskMetadata: (tasks: Array<{ taskId: string; metadata: TaskMetadata }>) => void;
     viewerRole: FollowUpTaskRole;
   }
 ) {
@@ -160,24 +170,146 @@ export function buildFollowUpTasksForReferral(
 
   const visibleManualTasks = manualFollowUps.filter((task) => task.role === viewerRole);
 
-  return [...visibleManualTasks, ...automated];
+  // Combine current tasks
+  const currentTasks = [...visibleManualTasks, ...automated];
+  const currentTaskIds = new Set(currentTasks.map((t) => t.id));
+
+  // Find historical tasks that should still be shown
+  const previouslyShownTaskIds = shownTasks[referral._id] ?? [];
+  const historicalTasks: FollowUpTask[] = [];
+
+  for (const taskId of previouslyShownTaskIds) {
+    // Skip if task is in current task list
+    if (currentTaskIds.has(taskId)) {
+      continue;
+    }
+
+    // Get full task ID for lookup
+    const fullTaskId = `${referral._id}::${taskId}`;
+    const manualFullTaskId = `${referral._id}::manual::${taskId}`;
+    
+    // Check if task is completed
+    const isCompleted = completions[fullTaskId]?.completed || completions[manualFullTaskId]?.completed || false;
+    
+    // Only include incomplete historical tasks
+    if (isCompleted) {
+      continue;
+    }
+
+    // Get task metadata
+    const metadata = taskMetadata[fullTaskId] || taskMetadata[manualFullTaskId];
+    if (!metadata) {
+      continue; // Skip if no metadata found
+    }
+
+    // Create historical task
+    const historicalTaskId = fullTaskId.includes('::manual::') ? manualFullTaskId : fullTaskId;
+    const handleToggle = () => {
+      toggleTask(historicalTaskId, !isCompleted);
+    };
+
+    historicalTasks.push({
+      id: taskId,
+      taskId: historicalTaskId,
+      referralId: referral._id,
+      referralName: referral.borrower?.name,
+      title: metadata.title,
+      message: metadata.message,
+      priority: metadata.priority,
+      category: metadata.category,
+      dueAt: metadata.dueAt,
+      supportingMetric: metadata.supportingMetric,
+      completed: isCompleted,
+      toggle: handleToggle,
+      isManual: metadata.isManual,
+      isHistorical: true,
+      statusWhenCreated: metadata.statusWhenCreated,
+      role: viewerRole, // Use viewer role for historical tasks
+    });
+  }
+
+  // Combine current and historical tasks
+  const allTasks = [...currentTasks, ...historicalTasks];
+
+  return {
+    tasks: allTasks,
+    currentTasks,
+    referralId: referral._id,
+    referralStatus: referral.status,
+  };
 }
 
 export function useFollowUpTasks(
   referral: ReferralLike & { borrower?: { name?: string } },
   viewerRole: FollowUpTaskRole = 'admin'
 ) {
-  const { completions, toggleTask, manualTasks, removeManualTask } = useFollowUpTaskContext();
+  const { 
+    completions, 
+    toggleTask, 
+    manualTasks, 
+    removeManualTask,
+    shownTasks,
+    taskMetadata,
+    markTasksAsShown,
+    storeTaskMetadata,
+  } = useFollowUpTaskContext();
 
-  return useMemo(
+  const result = useMemo(
     () =>
       buildFollowUpTasksForReferral(referral, {
         completions,
         manualTasks,
+        shownTasks,
+        taskMetadata,
         toggleTask,
         removeManualTask,
+        markTasksAsShown,
+        storeTaskMetadata,
         viewerRole,
       }),
-    [completions, manualTasks, referral, removeManualTask, toggleTask, viewerRole]
+    [completions, manualTasks, shownTasks, taskMetadata, referral, removeManualTask, toggleTask, markTasksAsShown, storeTaskMetadata, viewerRole]
   );
+
+  // Side effects: Mark tasks as shown and store metadata
+  useEffect(() => {
+    const { tasks, currentTasks, referralId, referralStatus } = result;
+    
+    // Mark all task IDs as shown
+    const allTaskIds = tasks.map((t) => t.id);
+    const existingShownTasks = shownTasks[referralId] || [];
+    
+    // Only update if there are new task IDs
+    const hasNewTasks = allTaskIds.some(id => !existingShownTasks.includes(id));
+    if (hasNewTasks) {
+      markTasksAsShown(referralId, allTaskIds);
+    }
+
+    // Store metadata for new tasks (only those not already in metadata)
+    const metadataToStore = currentTasks
+      .filter((task) => {
+        const fullTaskId = task.taskId;
+        return !taskMetadata[fullTaskId];
+      })
+      .map((task) => ({
+        taskId: task.taskId,
+        metadata: {
+          title: task.title,
+          message: task.message,
+          priority: task.priority,
+          category: task.category,
+          dueAt: task.dueAt,
+          supportingMetric: task.supportingMetric,
+          isManual: task.isManual,
+          createdAt: new Date().toISOString(),
+          statusWhenCreated: referralStatus,
+        },
+      }));
+
+    if (metadataToStore.length > 0) {
+      storeTaskMetadata(metadataToStore);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [referral._id, referral.status, completions, manualTasks, shownTasks, taskMetadata]);
+
+  return result.tasks;
 }

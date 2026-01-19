@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { CheckCircle2, Circle } from 'lucide-react';
 import { formatInTimeZone } from 'date-fns-tz';
 
@@ -95,22 +95,83 @@ const formatDueDate = (value: string): string => {
 };
 
 export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoardProps) {
-  const { completions, manualTasks, toggleTask, removeManualTask } = useFollowUpTaskContext();
+  const { 
+    completions, 
+    manualTasks, 
+    shownTasks, 
+    taskMetadata, 
+    toggleTask, 
+    removeManualTask, 
+    markTasksAsShown, 
+    storeTaskMetadata 
+  } = useFollowUpTaskContext();
 
-  const tasksByReferral = useMemo(() => {
-    return referrals.reduce<Record<string, FollowUpTask[]>>((acc, referral) => {
+  const taskResults = useMemo(() => {
+    return referrals.reduce<Record<string, ReturnType<typeof buildFollowUpTasksForReferral>>>((acc, referral) => {
       const referralLike = toReferralLike(referral);
-      const tasks = buildFollowUpTasksForReferral(referralLike, {
+      const result = buildFollowUpTasksForReferral(referralLike, {
         completions,
         manualTasks,
+        shownTasks,
+        taskMetadata,
         toggleTask,
         removeManualTask,
+        markTasksAsShown,
+        storeTaskMetadata,
         viewerRole,
       });
-      acc[referral._id] = tasks;
+      acc[referral._id] = result;
       return acc;
     }, {});
-  }, [completions, manualTasks, referrals, removeManualTask, toggleTask, viewerRole]);
+  }, [completions, manualTasks, shownTasks, taskMetadata, referrals, removeManualTask, toggleTask, markTasksAsShown, storeTaskMetadata, viewerRole]);
+
+  // Handle side effects for marking tasks as shown and storing metadata
+  useEffect(() => {
+    Object.values(taskResults).forEach(({ tasks, currentTasks, referralId, referralStatus }) => {
+      // Mark all task IDs as shown
+      const allTaskIds = tasks.map((t) => t.id);
+      const existingShownTasks = shownTasks[referralId] || [];
+      
+      // Only update if there are new task IDs
+      const hasNewTasks = allTaskIds.some(id => !existingShownTasks.includes(id));
+      if (hasNewTasks) {
+        markTasksAsShown(referralId, allTaskIds);
+      }
+
+      // Store metadata for new tasks (only those not already in metadata)
+      const metadataToStore = currentTasks
+        .filter((task) => {
+          const fullTaskId = task.taskId;
+          return !taskMetadata[fullTaskId];
+        })
+        .map((task) => ({
+          taskId: task.taskId,
+          metadata: {
+            title: task.title,
+            message: task.message,
+            priority: task.priority,
+            category: task.category,
+            dueAt: task.dueAt,
+            supportingMetric: task.supportingMetric,
+            isManual: task.isManual,
+            createdAt: new Date().toISOString(),
+            statusWhenCreated: referralStatus,
+          },
+        }));
+
+      if (metadataToStore.length > 0) {
+        storeTaskMetadata(metadataToStore);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [referrals, completions, manualTasks, shownTasks, taskMetadata, viewerRole]);
+
+  const tasksByReferral = useMemo(() => {
+    return Object.entries(taskResults).reduce<Record<string, FollowUpTask[]>>((acc, [id, result]) => {
+      acc[id] = result.tasks;
+      return acc;
+    }, {});
+  }, [taskResults]);
 
   const summary = useMemo(() => {
     return Object.values(tasksByReferral).reduce(
@@ -245,6 +306,11 @@ function FollowUpTaskGroup({
                           Manual
                         </span>
                       )}
+                      {task.isHistorical && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
+                          {task.statusWhenCreated ? `From: ${task.statusWhenCreated}` : 'Previous Status'}
+                        </span>
+                      )}
                       <span className="text-xs font-semibold uppercase text-slate-400">{task.priority}</span>
                     </div>
                     <p className="text-sm text-slate-600">{task.message}</p>
@@ -303,6 +369,11 @@ function FollowUpTaskGroup({
                           {task.isManual && (
                             <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
                               Manual
+                            </span>
+                          )}
+                          {task.isHistorical && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
+                              {task.statusWhenCreated ? `From: ${task.statusWhenCreated}` : 'Previous Status'}
                             </span>
                           )}
                         </div>

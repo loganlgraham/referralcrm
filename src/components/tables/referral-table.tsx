@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useMemo, useState, useTransition, useCallback } from 'react';
+import { ReactNode, useMemo, useState, useTransition, useCallback, useEffect } from 'react';
 import {
   ColumnDef,
   flexRender,
@@ -102,7 +102,16 @@ function toReferralLike(row: ReferralRow): ReferralLike & { borrower: { name: st
  */
 function TaskIndicator({ referral }: { referral: ReferralRow }) {
   const { data: session } = useSession();
-  const { completions, manualTasks, toggleTask, removeManualTask } = useFollowUpTaskContext();
+  const { 
+    completions, 
+    manualTasks, 
+    shownTasks, 
+    taskMetadata, 
+    toggleTask, 
+    removeManualTask, 
+    markTasksAsShown, 
+    storeTaskMetadata 
+  } = useFollowUpTaskContext();
   
   const viewerRole: FollowUpTaskRole = useMemo(() => {
     const role = session?.user?.role;
@@ -113,19 +122,64 @@ function TaskIndicator({ referral }: { referral: ReferralRow }) {
 
   const referralLike = useMemo(() => toReferralLike(referral), [referral]);
   
-  const tasks = useMemo(() => {
+  const result = useMemo(() => {
     return buildFollowUpTasksForReferral(referralLike, {
       completions,
       manualTasks,
+      shownTasks,
+      taskMetadata,
       toggleTask,
       removeManualTask,
+      markTasksAsShown,
+      storeTaskMetadata,
       viewerRole,
     });
-  }, [referralLike, completions, manualTasks, toggleTask, removeManualTask, viewerRole]);
+  }, [referralLike, completions, manualTasks, shownTasks, taskMetadata, toggleTask, removeManualTask, markTasksAsShown, storeTaskMetadata, viewerRole]);
+
+  // Handle side effects for marking tasks as shown and storing metadata
+  useEffect(() => {
+    const { tasks, currentTasks, referralId, referralStatus } = result;
+    
+    // Mark all task IDs as shown
+    const allTaskIds = tasks.map((t) => t.id);
+    const existingShownTasks = shownTasks[referralId] || [];
+    
+    // Only update if there are new task IDs
+    const hasNewTasks = allTaskIds.some(id => !existingShownTasks.includes(id));
+    if (hasNewTasks) {
+      markTasksAsShown(referralId, allTaskIds);
+    }
+
+    // Store metadata for new tasks (only those not already in metadata)
+    const metadataToStore = currentTasks
+      .filter((task) => {
+        const fullTaskId = task.taskId;
+        return !taskMetadata[fullTaskId];
+      })
+      .map((task) => ({
+        taskId: task.taskId,
+        metadata: {
+          title: task.title,
+          message: task.message,
+          priority: task.priority,
+          category: task.category,
+          dueAt: task.dueAt,
+          supportingMetric: task.supportingMetric,
+          isManual: task.isManual,
+          createdAt: new Date().toISOString(),
+          statusWhenCreated: referralStatus,
+        },
+      }));
+
+    if (metadataToStore.length > 0) {
+      storeTaskMetadata(metadataToStore);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [referral._id, referral.status, completions, manualTasks, shownTasks, taskMetadata]);
 
   const hasIncompleteTasks = useMemo(() => {
-    return tasks.filter((task) => !task.completed).length > 0;
-  }, [tasks]);
+    return result.tasks.filter((task) => !task.completed).length > 0;
+  }, [result.tasks]);
 
   if (!hasIncompleteTasks) {
     return null;
