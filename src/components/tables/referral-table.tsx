@@ -178,7 +178,31 @@ function TaskIndicator({ referral }: { referral: ReferralRow }) {
   }, [referral._id, referral.status, completions, manualTasks, shownTasks, taskMetadata]);
 
   const hasIncompleteTasks = useMemo(() => {
-    return result.tasks.filter((task) => !task.completed).length > 0;
+    const incompleteTasks = result.tasks.filter((task) => !task.completed);
+    
+    // Only show icon for tasks that are due today
+    if (incompleteTasks.length === 0) {
+      return false;
+    }
+    
+    // Get today's date normalized to midnight
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Check if any incomplete task is due today
+    return incompleteTasks.some((task) => {
+      // Skip tasks without a due date
+      if (!task.dueAt) {
+        return false;
+      }
+      
+      // Parse and normalize the due date
+      const dueDate = new Date(task.dueAt);
+      dueDate.setHours(0, 0, 0, 0);
+      
+      // Check if due date equals today
+      return dueDate.getTime() === today.getTime();
+    });
   }, [result.tasks]);
 
   if (!hasIncompleteTasks) {
@@ -186,10 +210,10 @@ function TaskIndicator({ referral }: { referral: ReferralRow }) {
   }
 
   return (
-    <span title="This referral has incomplete follow-up tasks">
+    <span title="This referral has incomplete follow-up tasks due today">
       <AlertCircle 
         className="h-4 w-4 text-amber-600" 
-        aria-label="Has incomplete tasks"
+        aria-label="Has incomplete tasks due today"
       />
     </span>
   );
