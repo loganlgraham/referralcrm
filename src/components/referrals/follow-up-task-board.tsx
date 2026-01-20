@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useMemo, useState, useEffect } from 'react';
 import { CheckCircle2, Circle } from 'lucide-react';
 import { addDays, startOfDay } from 'date-fns';
-import { formatInTimeZone, utcToZonedTime, zonedTimeToUtc } from 'date-fns-tz';
+import { formatInTimeZone, zonedTimeToUtc } from 'date-fns-tz';
 
 import { useFollowUpTaskContext } from '@/components/referrals/follow-up-task-provider';
 import {
@@ -296,6 +296,49 @@ function FollowUpTaskGroup({
     () => roleFilteredTasks.filter((task) => task.completed),
     [roleFilteredTasks]
   );
+  const { dueTodayTasks, upcomingTasks, noDueTasks } = useMemo(() => {
+    const now = new Date();
+    const startOfToday = zonedTimeToUtc(startOfDay(now), SLA_TIME_ZONE);
+    const startOfTomorrow = zonedTimeToUtc(startOfDay(addDays(now, 1)), SLA_TIME_ZONE);
+    const overdue: FollowUpTask[] = [];
+    const dueToday: FollowUpTask[] = [];
+    const upcoming: FollowUpTask[] = [];
+    const noDue: FollowUpTask[] = [];
+    const sortByDueAt = (a: FollowUpTask, b: FollowUpTask) => {
+      const aDue = a.dueAt ? new Date(a.dueAt).getTime() : 0;
+      const bDue = b.dueAt ? new Date(b.dueAt).getTime() : 0;
+      return aDue - bDue;
+    };
+
+    incompleteTasks.forEach((task) => {
+      if (!task.dueAt) {
+        noDue.push(task);
+        return;
+      }
+      const dueDate = new Date(task.dueAt);
+      if (Number.isNaN(dueDate.getTime())) {
+        noDue.push(task);
+        return;
+      }
+      if (dueDate < startOfToday) {
+        overdue.push(task);
+      } else if (dueDate < startOfTomorrow) {
+        dueToday.push(task);
+      } else {
+        upcoming.push(task);
+      }
+    });
+
+    overdue.sort(sortByDueAt);
+    dueToday.sort(sortByDueAt);
+    upcoming.sort(sortByDueAt);
+
+    return {
+      dueTodayTasks: [...overdue, ...dueToday],
+      upcomingTasks: upcoming,
+      noDueTasks: noDue,
+    };
+  }, [incompleteTasks]);
   const [showCompleted, setShowCompleted] = useState(false);
   const outstanding = incompleteTasks.length;
   const assignmentName = resolvePrimaryAgentName(referralLike);
@@ -329,54 +372,167 @@ function FollowUpTaskGroup({
       {roleFilteredTasks.length > 0 ? (
         <>
           {incompleteTasks.length > 0 ? (
-            <ul className="space-y-3">
-              {orderedIncompleteTasks.map((task) => (
-                <li key={task.taskId} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3">
-                  <button
-                    type="button"
-                    onClick={task.toggle}
-                    className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-slate-500 transition hover:bg-slate-100 [will-change:opacity]"
-                    aria-pressed={task.completed}
-                    aria-label={task.completed ? 'Mark task incomplete' : 'Mark task complete'}
-                  >
-                    {task.completed ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
-                  </button>
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium text-slate-900">{task.title}</p>
-                      <span className="text-xs uppercase tracking-wide text-slate-400">{task.category}</span>
-                      {task.isManual && (
-                        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
-                          Manual
-                        </span>
-                      )}
-                      {task.isHistorical && (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
-                          {task.statusWhenCreated ? `From: ${task.statusWhenCreated}` : 'Previous Status'}
-                        </span>
-                      )}
-                      <span className="text-xs font-semibold uppercase text-slate-400">{task.priority}</span>
-                    </div>
-                    <p className="text-sm text-slate-600">{task.message}</p>
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                      {task.supportingMetric && <span>{task.supportingMetric}</span>}
-                      {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
-                    </div>
-                    {task.isManual && task.remove && (
-                      <div className="pt-2">
+            <div className="space-y-4">
+              {dueTodayTasks.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Due today</p>
+                  <ul className="space-y-3">
+                    {dueTodayTasks.map((task) => (
+                      <li key={task.taskId} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3">
                         <button
                           type="button"
-                          onClick={task.remove}
-                          className="inline-flex items-center rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+                          onClick={task.toggle}
+                          className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-slate-500 transition hover:bg-slate-100 [will-change:opacity]"
+                          aria-pressed={task.completed}
+                          aria-label={task.completed ? 'Mark task incomplete' : 'Mark task complete'}
                         >
-                          Remove task
+                          {task.completed ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
                         </button>
-                      </div>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-slate-900">{task.title}</p>
+                            <span className="text-xs uppercase tracking-wide text-slate-400">{task.category}</span>
+                            {task.isManual && (
+                              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
+                                Manual
+                              </span>
+                            )}
+                            {task.isHistorical && (
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
+                                {task.statusWhenCreated ? `From: ${task.statusWhenCreated}` : 'Previous Status'}
+                              </span>
+                            )}
+                            <span className="text-xs font-semibold uppercase text-slate-400">{task.priority}</span>
+                          </div>
+                          <p className="text-sm text-slate-600">{task.message}</p>
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                            {task.supportingMetric && <span>{task.supportingMetric}</span>}
+                            {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
+                          </div>
+                          {task.isManual && task.remove && (
+                            <div className="pt-2">
+                              <button
+                                type="button"
+                                onClick={task.remove}
+                                className="inline-flex items-center rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+                              >
+                                Remove task
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {upcomingTasks.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Upcoming</p>
+                  <ul className="space-y-3">
+                    {upcomingTasks.map((task) => (
+                      <li key={task.taskId} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                        <button
+                          type="button"
+                          onClick={task.toggle}
+                          className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-slate-500 transition hover:bg-slate-100 [will-change:opacity]"
+                          aria-pressed={task.completed}
+                          aria-label={task.completed ? 'Mark task incomplete' : 'Mark task complete'}
+                        >
+                          {task.completed ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
+                        </button>
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-slate-900">{task.title}</p>
+                            <span className="text-xs uppercase tracking-wide text-slate-400">{task.category}</span>
+                            {task.isManual && (
+                              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
+                                Manual
+                              </span>
+                            )}
+                            {task.isHistorical && (
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
+                                {task.statusWhenCreated ? `From: ${task.statusWhenCreated}` : 'Previous Status'}
+                              </span>
+                            )}
+                            <span className="text-xs font-semibold uppercase text-slate-400">{task.priority}</span>
+                          </div>
+                          <p className="text-sm text-slate-600">{task.message}</p>
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                            {task.supportingMetric && <span>{task.supportingMetric}</span>}
+                            {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
+                          </div>
+                          {task.isManual && task.remove && (
+                            <div className="pt-2">
+                              <button
+                                type="button"
+                                onClick={task.remove}
+                                className="inline-flex items-center rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+                              >
+                                Remove task
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {noDueTasks.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">No due date</p>
+                  <ul className="space-y-3">
+                    {noDueTasks.map((task) => (
+                      <li key={task.taskId} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                        <button
+                          type="button"
+                          onClick={task.toggle}
+                          className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-slate-500 transition hover:bg-slate-100 [will-change:opacity]"
+                          aria-pressed={task.completed}
+                          aria-label={task.completed ? 'Mark task incomplete' : 'Mark task complete'}
+                        >
+                          {task.completed ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
+                        </button>
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-slate-900">{task.title}</p>
+                            <span className="text-xs uppercase tracking-wide text-slate-400">{task.category}</span>
+                            {task.isManual && (
+                              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
+                                Manual
+                              </span>
+                            )}
+                            {task.isHistorical && (
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
+                                {task.statusWhenCreated ? `From: ${task.statusWhenCreated}` : 'Previous Status'}
+                              </span>
+                            )}
+                            <span className="text-xs font-semibold uppercase text-slate-400">{task.priority}</span>
+                          </div>
+                          <p className="text-sm text-slate-600">{task.message}</p>
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                            {task.supportingMetric && <span>{task.supportingMetric}</span>}
+                            {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
+                          </div>
+                          {task.isManual && task.remove && (
+                            <div className="pt-2">
+                              <button
+                                type="button"
+                                onClick={task.remove}
+                                className="inline-flex items-center rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+                              >
+                                Remove task
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           ) : (
             <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
               Nothing on deck—this referral is on track.
