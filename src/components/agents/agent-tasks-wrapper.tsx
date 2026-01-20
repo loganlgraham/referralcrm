@@ -1,12 +1,11 @@
 'use client';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import useSWR from 'swr';
 
 import { FollowUpTasksBoard } from '@/components/referrals/follow-up-task-board';
 import { AgentOnboardingTaskBoard } from '@/components/agents/agent-onboarding-task-board';
-import { Pagination } from '@/components/tables/pagination';
 import { fetcher } from '@/utils/fetcher';
 import type { FollowUpTaskRole } from '@/components/referrals/use-follow-up-tasks';
 
@@ -51,17 +50,11 @@ interface AgentsResponse {
 
 interface AgentTasksWrapperProps {
   referrals: BoardReferral[];
-  referralsTotal: number;
-  referralsPage: number;
-  referralsPageSize: number;
   viewerRole: FollowUpTaskRole;
 }
 
 export function AgentTasksWrapper({
   referrals,
-  referralsTotal,
-  referralsPage,
-  referralsPageSize,
   viewerRole,
 }: AgentTasksWrapperProps) {
   const searchParams = useSearchParams();
@@ -141,13 +134,6 @@ export function AgentTasksWrapper({
       {activeTab === 'clients' ? (
         <>
           <FollowUpTasksBoard referrals={referrals} viewerRole={viewerRole} />
-          <Pagination
-            currentPage={referralsPage}
-            totalItems={referralsTotal}
-            pageSize={referralsPageSize}
-            totalPages={Math.ceil(referralsTotal / referralsPageSize)}
-            itemLabel="referrals"
-          />
         </>
       ) : (
         <>

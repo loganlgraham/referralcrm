@@ -16,7 +16,7 @@ export default async function FollowUpTasksPage({
   searchParams: Record<string, string | string[] | undefined>;
 }) {
   const session = await getCurrentSession();
-  
+  const isClientTasksTab = searchParams.tab !== 'agents';
   // Validate pageSize - must be one of: 20, 25, 50, 100 (default to 25)
   const validPageSizes = [20, 25, 50, 100];
   const pageSizeParam = searchParams.pageSize ? Number(searchParams.pageSize) : 25;
@@ -25,7 +25,8 @@ export default async function FollowUpTasksPage({
   const data = await getReferrals({ 
     session, 
     page: Number(searchParams.page || 1),
-    pageSize
+    pageSize,
+    fetchAll: isClientTasksTab
   });
   
   const viewerRole: 'admin' | 'mc' | 'agent' = (() => {
@@ -60,9 +61,6 @@ export default async function FollowUpTasksPage({
   return (
     <AgentTasksWrapper
       referrals={referrals}
-      referralsTotal={data.total}
-      referralsPage={data.page}
-      referralsPageSize={data.pageSize}
       viewerRole={viewerRole}
     />
   );
