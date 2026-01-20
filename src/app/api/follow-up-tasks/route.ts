@@ -1,0 +1,93 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+import { requireAdmin } from '@/lib/auth';
+import { connectMongo } from '@/lib/mongoose';
+import { FollowUpTaskState } from '@/models/follow-up-task-state';
+import {
+  buildCompletionEntries,
+  buildManualTaskEntries,
+  buildShownTasks,
+  buildStateFromDocument,
+  buildTaskMetadataEntries,
+} from '@/lib/server/follow-up-task-state';
+
+const parseReferralIds = (request: NextRequest): string[] => {
+  const ids = request.nextUrl.searchParams.get('referralIds');
+  if (!ids) return [];
+  return ids
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+};
+
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  try {
+    await requireAdmin();
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Unauthorized' }, { status: error.status || 401 });
+  }
+
+  const referralIds = parseReferralIds(request);
+  if (referralIds.length === 0) {
+    return NextResponse.json({ error: 'referralIds query param required' }, { status: 400 });
+  }
+
+  await connectMongo();
+
+  const docs = await FollowUpTaskState.find({ referralId: { $in: referralIds } }).lean();
+  const docMap = new Map(docs.map((doc) => [doc.referralId, doc]));
+
+  const referrals = referralIds.reduce<Record<string, ReturnType<typeof buildStateFromDocument>>>((acc, id) => {
+    acc[id] = buildStateFromDocument(docMap.get(id) ?? null);
+    return acc;
+  }, {});
+
+  return NextResponse.json({ referrals });
+}
+
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  try {
+    await requireAdmin();
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Unauthorized' }, { status: error.status || 401 });
+  }
+
+  const payload = await request.json().catch(() => null);
+  const referralId = typeof payload?.referralId === 'string' ? payload.referralId : null;
+
+  if (!referralId) {
+    return NextResponse.json({ error: 'referralId is required' }, { status: 400 });
+  }
+
+  const update: Record<string, unknown> = {};
+
+  if ('completions' in payload) {
+    update.completions = buildCompletionEntries(payload.completions, referralId);
+  }
+
+  if ('manualTasks' in payload) {
+    update.manualTasks = buildManualTaskEntries(payload.manualTasks);
+  }
+
+  if ('shownTasks' in payload) {
+    update.shownTasks = buildShownTasks(payload.shownTasks);
+  }
+
+  if ('taskMetadata' in payload) {
+    update.taskMetadata = buildTaskMetadataEntries(payload.taskMetadata, referralId);
+  }
+
+  if (Object.keys(update).length === 0) {
+    return NextResponse.json({ error: 'No updates provided' }, { status: 400 });
+  }
+
+  await connectMongo();
+
+  const doc = await FollowUpTaskState.findOneAndUpdate(
+    { referralId },
+    { $set: update },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  ).lean();
+
+  return NextResponse.json({ referralId, state: buildStateFromDocument(doc) });
+}
