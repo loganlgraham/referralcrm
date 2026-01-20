@@ -138,9 +138,9 @@ export const buildTaskMetadataEntries = (
     return [];
   }
 
-  return Object.entries(value as Record<string, unknown>)
+  const mapped = Object.entries(value as Record<string, unknown>)
     .filter(([taskId]) => taskId.startsWith(`${referralId}::`))
-    .map(([taskId, payload]) => {
+    .map(([taskId, payload]): FollowUpTaskMetadata | null => {
       if (!payload || typeof payload !== 'object') {
         return null;
       }
@@ -163,6 +163,7 @@ export const buildTaskMetadataEntries = (
         createdAt: typeof record.createdAt === 'string' ? record.createdAt : new Date().toISOString(),
         statusWhenCreated: typeof record.statusWhenCreated === 'string' ? record.statusWhenCreated : undefined,
       } satisfies FollowUpTaskMetadata;
-    })
-    .filter((item): item is FollowUpTaskMetadata => Boolean(item));
+    });
+
+  return mapped.filter((item): item is FollowUpTaskMetadata => item !== null);
 };
