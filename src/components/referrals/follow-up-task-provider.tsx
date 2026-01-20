@@ -13,6 +13,21 @@ import {
 } from 'react';
 
 import type { RecommendationPriority } from '@/utils/sla-insights';
+import type {
+  ManualTask,
+  ManualTaskInput,
+  ManualTaskListResponse,
+} from '@/types/follow-up-tasks';
+
+export type { ManualTask, ManualTaskInput } from '@/types/follow-up-tasks';
+
+const generateManualId = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback for older browsers
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+};
 
 interface TaskCompletionState {
   completed: boolean;
@@ -20,8 +35,6 @@ interface TaskCompletionState {
 }
 
 type CompletionMap = Record<string, TaskCompletionState>;
-
-export type ManualTaskCategory = 'assignment' | 'communication' | 'pipeline' | 'finance' | 'ops';
 
 export type ReminderFrequency = 'daily' | 'weekly';
 
@@ -35,23 +48,7 @@ interface ReminderState {
   overrides: Record<string, ReminderSettings>;
 }
 
-export interface ManualTask {
-  id: string;
-  title: string;
-  message: string;
-  dueAt?: string | null;
-  priority: RecommendationPriority;
-  category: ManualTaskCategory;
-  createdAt: string;
-}
-
-export interface ManualTaskInput {
-  title: string;
-  message: string;
-  dueAt?: string | null;
-  priority: RecommendationPriority;
-  category: ManualTaskCategory;
-}
+export type ManualTaskCategory = ManualTask['category'];
 
 export interface TaskMetadata {
   title: string;
@@ -84,6 +81,7 @@ type Action =
     }
   | { type: 'add-manual'; referralId: string; task: ManualTask }
   | { type: 'remove-manual'; referralId: string; taskId: string }
+  | { type: 'set-manual-tasks'; referralId: string; tasks: ManualTask[] }
   | { type: 'add-agent-tasks'; agentId: string; tasks: ManualTask[] }
   | { type: 'remove-agent-task'; agentId: string; taskId: string }
   | { type: 'set-global-reminders'; settings: ReminderSettings }
@@ -102,6 +100,7 @@ interface FollowUpTaskContextValue {
   removeManualTask: (referralId: string, taskId: string) => void;
   addAgentTasks: (agentId: string, tasks: ManualTask[]) => void;
   removeAgentTask: (agentId: string, taskId: string) => void;
+  ensureManualTasksLoaded: (referralIds: string[]) => void;
   markTasksAsShown: (referralId: string, taskIds: string[]) => void;
   storeTaskMetadata: (tasks: Array<{ taskId: string; metadata: TaskMetadata }>) => void;
   loadReferralStates: (referralIds: string[]) => void;
@@ -212,6 +211,15 @@ const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
         completions: nextCompletions,
         shownTasks: nextShownTasks,
         taskMetadata: nextMetadata,
+      };
+    }
+    case 'set-manual-tasks': {
+      return {
+        ...state,
+        manualTasks: {
+          ...state.manualTasks,
+          [action.referralId]: action.tasks,
+        },
       };
     }
     case 'add-agent-tasks': {
@@ -488,6 +496,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state);
   const syncTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const loadedReferralsRef = useRef<Set<string>>(new Set());
+  const manualTasksFetchedRef = useRef<Set<string>>(new Set());
   const allowLocalCacheRef = useRef(false);
 
   useEffect(() => {
@@ -672,13 +681,6 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     }
   }, [getReferralIdFromTaskId, scheduleReferralSync, startTransition]);
 
-  const generateManualId = () => {
-    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-      return (crypto as Crypto).randomUUID();
-    }
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  };
-
   const addManualTask = useCallback(
     (referralId: string, input: ManualTaskInput) => {
       const task: ManualTask = {
@@ -700,6 +702,32 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'remove-manual', referralId, taskId });
     scheduleReferralSync(referralId);
   }, [scheduleReferralSync]);
+
+  const ensureManualTasksLoaded = useCallback(
+    (referralIds: string[]) => {
+      const idsToFetch = referralIds.filter((id) => !manualTasksFetchedRef.current.has(id));
+      if (idsToFetch.length === 0) {
+        return;
+      }
+      idsToFetch.forEach((id) => manualTasksFetchedRef.current.add(id));
+      Promise.all(
+        idsToFetch.map((referralId) =>
+          fetch(`/api/referrals/${referralId}/manual-tasks`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data: ManualTaskListResponse | null) => {
+              if (!data || !Array.isArray(data.tasks)) return;
+              dispatch({ type: 'set-manual-tasks', referralId, tasks: data.tasks });
+            })
+            .catch(() => {
+              // Ignore errors; fall back to existing state.
+            })
+        )
+      ).catch(() => {
+        // Ignore errors; fall back to existing state.
+      });
+    },
+    []
+  );
 
   const addAgentTasks = useCallback((agentId: string, tasks: ManualTask[]) => {
     dispatch({ type: 'add-agent-tasks', agentId, tasks });
@@ -776,6 +804,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       removeManualTask,
       addAgentTasks,
       removeAgentTask,
+      ensureManualTasksLoaded,
       markTasksAsShown,
       storeTaskMetadata,
       loadReferralStates,
@@ -794,6 +823,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       removeManualTask,
       addAgentTasks,
       removeAgentTask,
+      ensureManualTasksLoaded,
       markTasksAsShown,
       storeTaskMetadata,
       loadReferralStates,

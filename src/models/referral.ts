@@ -69,6 +69,19 @@ const inboundEmailSchema = new Schema(
   { _id: false }
 );
 
+const manualTaskSchema = new Schema(
+  {
+    id: { type: String, required: true },
+    title: { type: String, required: true },
+    message: { type: String, required: true },
+    dueAt: { type: String, default: null },
+    priority: { type: String, required: true },
+    category: { type: String, required: true },
+    createdAt: { type: String, required: true },
+  },
+  { _id: false }
+);
+
 const DealSchema = new Schema({
   loanAmount: Number,
   loanType: String,
@@ -145,6 +158,7 @@ const referralSchema = new Schema(
     notes: { type: [referralNoteSchema], default: [] },
     attachments: [attachmentSchema],
     inboundEmail: inboundEmailSchema,
+    manualTasks: { type: [manualTaskSchema], default: [] },
     audit: [auditSchema],
     lostAssignments: [
       {
@@ -275,6 +289,15 @@ export interface ReferralDocument {
     agent?: Types.ObjectId;
     lostAt: Date;
     reason?: string;
+  }[];
+  manualTasks?: {
+    id: string;
+    title: string;
+    message: string;
+    dueAt?: string | null;
+    priority: string;
+    category: string;
+    createdAt: string;
   }[];
   inboundEmail?: {
     messageId: string;
