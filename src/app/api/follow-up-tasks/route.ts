@@ -34,13 +34,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   await connectMongo();
 
-  const docs = await FollowUpTaskState.find({ referralId: { $in: referralIds } }).lean<{
+  const docs = await FollowUpTaskState.find({ referralId: { $in: referralIds } }).lean<Array<{
     referralId: string;
     completions?: unknown;
     manualTasks?: unknown;
     shownTasks?: unknown;
     taskMetadata?: unknown;
-  }>();
+  }>>();
   const docMap = new Map(docs.map((doc) => [doc.referralId, doc]));
 
   const referrals = referralIds.reduce<Record<string, ReturnType<typeof buildStateFromDocument>>>((acc, id) => {
