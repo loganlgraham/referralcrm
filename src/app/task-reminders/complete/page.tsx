@@ -25,22 +25,45 @@ function CompleteFollowUpTasksContent() {
       return;
     }
 
-    const raw = window.localStorage.getItem(FOLLOW_UP_TASK_STORAGE_KEY);
-    const state = parseFollowUpTaskState(raw) ?? createDefaultTaskState();
-    let updated = false;
+    const markTasksComplete = async () => {
+      try {
+        const response = await fetch('/api/follow-up/tasks/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskIds }),
+        });
 
-    taskIds.forEach((taskId) => {
-      if (!taskId) return;
-      const existing = state.completions[taskId];
-      if (!existing?.completed) {
-        state.completions[taskId] = { completed: true, completedAt: new Date().toISOString() };
-        updated = true;
+        if (!response.ok) {
+          throw new Error('Failed to update follow-up tasks');
+        }
+
+        const data = (await response.json()) as { updated?: number };
+
+        const raw = window.localStorage.getItem(FOLLOW_UP_TASK_STORAGE_KEY);
+        const state = parseFollowUpTaskState(raw) ?? createDefaultTaskState();
+        let locallyUpdated = false;
+
+        taskIds.forEach((taskId) => {
+          if (!taskId) return;
+          const existing = state.completions[taskId];
+          if (!existing?.completed) {
+            state.completions[taskId] = { completed: true, completedAt: new Date().toISOString() };
+            locallyUpdated = true;
+          }
+        });
+
+        if (locallyUpdated) {
+          const serialized = JSON.stringify(state);
+          window.localStorage.setItem(FOLLOW_UP_TASK_STORAGE_KEY, serialized);
+        }
+
+        setStatus(data.updated || locallyUpdated ? 'updated' : 'noop');
+      } catch (error) {
+        setStatus('noop');
       }
-    });
+    };
 
-    const serialized = JSON.stringify(state);
-    window.localStorage.setItem(FOLLOW_UP_TASK_STORAGE_KEY, serialized);
-    setStatus(updated ? 'updated' : 'noop');
+    void markTasksComplete();
   }, [taskIds]);
 
   const headline = (() => {
