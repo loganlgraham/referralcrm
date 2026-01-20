@@ -16,6 +16,7 @@ interface GetReferralsParams {
   session: Session | null;
   page?: number;
   pageSize?: number;
+  fetchAll?: boolean;
   status?: string | null;
   mc?: string | null;
   agent?: string | null;
@@ -92,8 +93,6 @@ interface ReferralListItem {
   hasAhaAgentAttached?: boolean;
 }
 
-const PAGE_SIZE = 20;
-
 /**
  * Maps client-side sort keys to MongoDB sort objects
  */
@@ -121,12 +120,14 @@ function getSortObject(sortBy: string | null | undefined, sortDirection: 'asc' |
 }
 
 export async function getReferrals(params: GetReferralsParams) {
-  const { session, page = 1, pageSize, status, mc, agent, zip, ahaBucket, agentReferrals, search, timeline, sortBy, sortDirection } = params;
+  const { session, page = 1, pageSize, fetchAll = false, status, mc, agent, zip, ahaBucket, agentReferrals, search, timeline, sortBy, sortDirection } = params;
   await connectMongo();
   
   // Validate pageSize - must be one of: 20, 25, 50, 100 (default to 25)
   const validPageSizes = [20, 25, 50, 100];
   const effectivePageSize = pageSize && validPageSizes.includes(pageSize) ? pageSize : 25;
+  const shouldPaginate = !fetchAll;
+  const effectivePage = shouldPaginate ? page : 1;
 
   const query: Record<string, unknown> = { deletedAt: null };
   const appendOrConditions = (conditions: Record<string, unknown>[]) => {
@@ -215,8 +216,8 @@ export async function getReferrals(params: GetReferralsParams) {
       return {
         items: [],
         total: 0,
-        page,
-        pageSize: PAGE_SIZE
+        page: effectivePage,
+        pageSize: shouldPaginate ? effectivePageSize : 0
       };
     }
     query.lender = lender._id;
@@ -227,8 +228,8 @@ export async function getReferrals(params: GetReferralsParams) {
       return {
         items: [],
         total: 0,
-        page,
-        pageSize: PAGE_SIZE
+        page: effectivePage,
+        pageSize: shouldPaginate ? effectivePageSize : 0
       };
     }
     appendOrConditions([
@@ -315,16 +316,19 @@ export async function getReferrals(params: GetReferralsParams) {
 
   const sortObject = getSortObject(sortBy, sortDirection);
 
-  const [items, total, closedDealAggregation, activeReferrals] = await Promise.all([
-    Referral.find(query)
+  const referralQuery = Referral.find(query)
       .populate<{ assignedAgent: PopulatedAgent }>('assignedAgent', 'name email phone ahaDesignation')
       .populate<{ buySideAgent: PopulatedAgent }>('buySideAgent', 'name email phone ahaDesignation')
       .populate<{ sellSideAgent: PopulatedAgent }>('sellSideAgent', 'name email phone ahaDesignation')
       .populate<{ lender: PopulatedLender }>('lender', 'name email phone')
-      .sort(sortObject)
-      .skip((page - 1) * effectivePageSize)
-      .limit(effectivePageSize)
-      .lean<PopulatedReferral[]>(),
+      .sort(sortObject);
+
+  if (shouldPaginate) {
+    referralQuery.skip((page - 1) * effectivePageSize).limit(effectivePageSize);
+  }
+
+  const [items, total, closedDealAggregation, activeReferrals] = await Promise.all([
+    referralQuery.lean<PopulatedReferral[]>(),
     Referral.countDocuments(query),
     Payment.aggregate([
       {
@@ -486,8 +490,8 @@ export async function getReferrals(params: GetReferralsParams) {
       } as ReferralListItem;
     }),
     total,
-    page,
-    pageSize: effectivePageSize,
+    page: effectivePage,
+    pageSize: shouldPaginate ? effectivePageSize : total,
     summary: {
       total,
       closedDeals,
