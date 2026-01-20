@@ -93,7 +93,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     { referralId },
     { $set: update },
     { new: true, upsert: true, setDefaultsOnInsert: true }
-  ).lean();
+  ).lean<{
+    completions?: unknown;
+    manualTasks?: unknown;
+    shownTasks?: unknown;
+    taskMetadata?: unknown;
+  }>();
 
   return NextResponse.json({ referralId, state: buildStateFromDocument(doc) });
 }
