@@ -249,6 +249,49 @@ function FollowUpTaskGroup({
     () => roleFilteredTasks.filter((task) => !task.completed),
     [roleFilteredTasks]
   );
+  const orderedIncompleteTasks = useMemo(() => {
+    if (incompleteTasks.length === 0) {
+      return [];
+    }
+
+    const nowSla = utcToZonedTime(new Date(), SLA_TIME_ZONE);
+    const startOfToday = zonedTimeToUtc(startOfDay(nowSla), SLA_TIME_ZONE);
+    const startOfTomorrow = zonedTimeToUtc(startOfDay(addDays(nowSla, 1)), SLA_TIME_ZONE);
+
+    const overdueTasks: FollowUpTask[] = [];
+    const dueTodayTasks: FollowUpTask[] = [];
+    const upcomingTasks: FollowUpTask[] = [];
+    const unscheduledTasks: FollowUpTask[] = [];
+
+    const sortByDueAt = (left: FollowUpTask, right: FollowUpTask) => {
+      if (!left.dueAt && !right.dueAt) return 0;
+      if (!left.dueAt) return 1;
+      if (!right.dueAt) return -1;
+      return new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime();
+    };
+
+    incompleteTasks.forEach((task) => {
+      if (!task.dueAt) {
+        unscheduledTasks.push(task);
+        return;
+      }
+
+      const dueAt = new Date(task.dueAt);
+      if (dueAt < startOfToday) {
+        overdueTasks.push(task);
+      } else if (dueAt < startOfTomorrow) {
+        dueTodayTasks.push(task);
+      } else {
+        upcomingTasks.push(task);
+      }
+    });
+
+    overdueTasks.sort(sortByDueAt);
+    dueTodayTasks.sort(sortByDueAt);
+    upcomingTasks.sort(sortByDueAt);
+
+    return [...overdueTasks, ...dueTodayTasks, ...upcomingTasks, ...unscheduledTasks];
+  }, [incompleteTasks]);
   const completedTasks = useMemo(
     () => roleFilteredTasks.filter((task) => task.completed),
     [roleFilteredTasks]
