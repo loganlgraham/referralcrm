@@ -202,8 +202,7 @@ export function buildFollowUpTasksForReferral(
       continue; // Skip if no metadata found
     }
 
-    // Create historical task
-    const historicalTaskId = fullTaskId.includes('::manual::') ? manualFullTaskId : fullTaskId;
+    const historicalTaskId = metadata.isManual ? manualFullTaskId : fullTaskId;
     const handleToggle = () => {
       toggleTask(historicalTaskId, !isCompleted);
     };
