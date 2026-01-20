@@ -66,6 +66,11 @@ export interface StoredTaskState {
 type Action =
   | { type: 'toggle'; taskId: string; completed: boolean }
   | { type: 'hydrate'; payload: StoredTaskState }
+  | {
+      type: 'merge-referrals';
+      referralIds: string[];
+      payload: Pick<StoredTaskState, 'completions' | 'manualTasks' | 'shownTasks' | 'taskMetadata'>;
+    }
   | { type: 'add-manual'; referralId: string; task: ManualTask }
   | { type: 'remove-manual'; referralId: string; taskId: string }
   | { type: 'set-manual-tasks'; referralId: string; tasks: ManualTask[] }
@@ -90,6 +95,7 @@ interface FollowUpTaskContextValue {
   ensureManualTasksLoaded: (referralIds: string[]) => void;
   markTasksAsShown: (referralId: string, taskIds: string[]) => void;
   storeTaskMetadata: (tasks: Array<{ taskId: string; metadata: TaskMetadata }>) => void;
+  loadReferralStates: (referralIds: string[]) => void;
   reminderSettings: ReminderSettings;
   globalReminderSettings: ReminderSettings;
   reminderOverrides: Record<string, ReminderSettings>;
@@ -123,6 +129,36 @@ const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
   switch (action.type) {
     case 'hydrate':
       return { ...createDefaultTaskState(), ...action.payload };
+    case 'merge-referrals': {
+      const nextCompletions = { ...state.completions };
+      const nextManualTasks = { ...state.manualTasks };
+      const nextShownTasks = { ...state.shownTasks };
+      const nextMetadata = { ...state.taskMetadata };
+
+      for (const referralId of action.referralIds) {
+        const prefix = `${referralId}::`;
+        Object.keys(nextCompletions).forEach((taskId) => {
+          if (taskId.startsWith(prefix)) {
+            delete nextCompletions[taskId];
+          }
+        });
+        Object.keys(nextMetadata).forEach((taskId) => {
+          if (taskId.startsWith(prefix)) {
+            delete nextMetadata[taskId];
+          }
+        });
+        nextManualTasks[referralId] = action.payload.manualTasks[referralId] ?? [];
+        nextShownTasks[referralId] = action.payload.shownTasks[referralId] ?? [];
+      }
+
+      return {
+        ...state,
+        completions: { ...nextCompletions, ...action.payload.completions },
+        manualTasks: { ...nextManualTasks },
+        shownTasks: { ...nextShownTasks },
+        taskMetadata: { ...nextMetadata, ...action.payload.taskMetadata },
+      };
+    }
     case 'toggle': {
       const nextCompletions: CompletionMap = { ...state.completions };
       nextCompletions[action.taskId] = {
@@ -448,9 +484,15 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     return parseFollowUpTaskState(window.localStorage.getItem(FOLLOW_UP_TASK_STORAGE_KEY));
   });
 
-  const [isPending, startTransition] = useTransition();
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const manualTasksFetchedRef = useRef<Set<string>>(new Set());
+  const [, startTransition] = useTransition();
+  const stateRef = useRef(state);
+  const syncTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const loadedReferralsRef = useRef<Set<string>>(new Set());
+  const allowLocalCacheRef = useRef(false);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   // Fetch reminder settings from the server on mount (source of truth for cron job)
   useEffect(() => {
@@ -476,81 +518,181 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     if (typeof window === 'undefined') {
       return;
     }
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === FOLLOW_UP_TASK_STORAGE_KEY) {
-        dispatch({ type: 'hydrate', payload: parseFollowUpTaskState(event.newValue) });
-      }
+    const updateCachePreference = () => {
+      allowLocalCacheRef.current = !navigator.onLine;
     };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    updateCachePreference();
+    window.addEventListener('online', updateCachePreference);
+    window.addEventListener('offline', updateCachePreference);
+    return () => {
+      window.removeEventListener('online', updateCachePreference);
+      window.removeEventListener('offline', updateCachePreference);
+    };
   }, []);
 
-  // Debounced localStorage write to prevent blocking the UI
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
-
-    // Clear any pending save
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
+    if (!allowLocalCacheRef.current) {
+      return;
     }
-
-    // Schedule a debounced save
-    saveTimeoutRef.current = setTimeout(() => {
-      window.localStorage.setItem(FOLLOW_UP_TASK_STORAGE_KEY, JSON.stringify(state));
-      saveTimeoutRef.current = null;
-    }, 250);
-
-    // Cleanup: ensure we save immediately on unmount
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-        // Save immediately on unmount to prevent data loss
-        window.localStorage.setItem(FOLLOW_UP_TASK_STORAGE_KEY, JSON.stringify(state));
-        saveTimeoutRef.current = null;
-      }
-    };
+    window.localStorage.setItem(FOLLOW_UP_TASK_STORAGE_KEY, JSON.stringify(state));
   }, [state]);
 
+  const getReferralIdFromTaskId = useCallback((taskId: string): string | null => {
+    const [referralId] = taskId.split('::');
+    return referralId || null;
+  }, []);
+
+  const buildReferralPayload = useCallback((referralId: string, currentState: StoredTaskState) => {
+    const prefix = `${referralId}::`;
+    const completions = Object.fromEntries(
+      Object.entries(currentState.completions).filter(([taskId]) => taskId.startsWith(prefix))
+    );
+    const taskMetadata = Object.fromEntries(
+      Object.entries(currentState.taskMetadata).filter(([taskId]) => taskId.startsWith(prefix))
+    );
+
+    return {
+      completions,
+      manualTasks: currentState.manualTasks[referralId] ?? [],
+      shownTasks: currentState.shownTasks[referralId] ?? [],
+      taskMetadata,
+    };
+  }, []);
+
+  const syncReferralState = useCallback(async (referralId: string) => {
+    const payload = buildReferralPayload(referralId, stateRef.current);
+
+    try {
+      const response = await fetch(`/api/follow-up-tasks/${referralId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to sync follow-up tasks');
+      }
+      const data = await response.json();
+      if (data?.state) {
+        dispatch({
+          type: 'merge-referrals',
+          referralIds: [referralId],
+          payload: {
+            completions: data.state.completions ?? {},
+            manualTasks: { [referralId]: data.state.manualTasks ?? [] },
+            shownTasks: { [referralId]: data.state.shownTasks ?? [] },
+            taskMetadata: data.state.taskMetadata ?? {},
+          },
+        });
+      }
+      allowLocalCacheRef.current = false;
+    } catch (error) {
+      allowLocalCacheRef.current = true;
+    }
+  }, [buildReferralPayload]);
+
+  const scheduleReferralSync = useCallback(
+    (referralId: string) => {
+      if (typeof window === 'undefined') {
+        return;
+      }
+      const existing = syncTimeoutsRef.current.get(referralId);
+      if (existing) {
+        clearTimeout(existing);
+      }
+      const timeout = setTimeout(() => {
+        syncTimeoutsRef.current.delete(referralId);
+        void syncReferralState(referralId);
+      }, 250);
+      syncTimeoutsRef.current.set(referralId, timeout);
+    },
+    [syncReferralState]
+  );
+
+  const loadReferralStates = useCallback(async (referralIds: string[]) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const idsToLoad = referralIds.filter((id) => id && !loadedReferralsRef.current.has(id));
+    if (idsToLoad.length === 0) {
+      return;
+    }
+    const params = new URLSearchParams({ referralIds: idsToLoad.join(',') });
+    try {
+      const response = await fetch(`/api/follow-up-tasks?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error('Failed to load follow-up task state');
+      }
+      const data = await response.json();
+      if (data?.referrals && typeof data.referrals === 'object') {
+        const completions: CompletionMap = {};
+        const manualTasks: Record<string, ManualTask[]> = {};
+        const shownTasks: Record<string, string[]> = {};
+        const taskMetadata: Record<string, TaskMetadata> = {};
+
+        const referrals = data.referrals as Record<
+          string,
+          {
+            completions?: CompletionMap;
+            manualTasks?: ManualTask[];
+            shownTasks?: string[];
+            taskMetadata?: Record<string, TaskMetadata>;
+          }
+        >;
+
+        Object.entries(referrals).forEach(([referralId, state]) => {
+          Object.assign(completions, state?.completions ?? {});
+          manualTasks[referralId] = Array.isArray(state?.manualTasks) ? state.manualTasks : [];
+          shownTasks[referralId] = Array.isArray(state?.shownTasks) ? state.shownTasks : [];
+          Object.assign(taskMetadata, state?.taskMetadata ?? {});
+          loadedReferralsRef.current.add(referralId);
+        });
+
+        dispatch({
+          type: 'merge-referrals',
+          referralIds: idsToLoad,
+          payload: { completions, manualTasks, shownTasks, taskMetadata },
+        });
+        allowLocalCacheRef.current = false;
+      }
+    } catch (error) {
+      allowLocalCacheRef.current = true;
+    }
+  }, []);
+
   const toggleTask = useCallback((taskId: string, completed: boolean) => {
+    const referralId = getReferralIdFromTaskId(taskId);
     startTransition(() => {
       dispatch({ type: 'toggle', taskId, completed });
     });
-  }, [startTransition]);
+    if (referralId) {
+      scheduleReferralSync(referralId);
+    }
+  }, [getReferralIdFromTaskId, scheduleReferralSync, startTransition]);
 
   const addManualTask = useCallback(
     (referralId: string, input: ManualTaskInput) => {
-      fetch(`/api/referrals/${referralId}/manual-tasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-      })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data: ManualTaskListResponse | null) => {
-          if (!data || !Array.isArray(data.tasks)) return;
-          dispatch({ type: 'set-manual-tasks', referralId, tasks: data.tasks });
-        })
-        .catch(() => {
-          // Ignore errors to keep UX responsive.
-        });
+      const task: ManualTask = {
+        id: generateManualId(),
+        title: input.title,
+        message: input.message,
+        dueAt: input.dueAt ?? null,
+        priority: input.priority,
+        category: input.category,
+        createdAt: new Date().toISOString(),
+      };
+      dispatch({ type: 'add-manual', referralId, task });
+      scheduleReferralSync(referralId);
     },
-    []
+    [scheduleReferralSync]
   );
 
   const removeManualTask = useCallback((referralId: string, taskId: string) => {
-    fetch(`/api/referrals/${referralId}/manual-tasks?taskId=${encodeURIComponent(taskId)}`, {
-      method: 'DELETE',
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: ManualTaskListResponse | null) => {
-        if (!data || !Array.isArray(data.tasks)) return;
-        dispatch({ type: 'set-manual-tasks', referralId, tasks: data.tasks });
-      })
-      .catch(() => {
-        // Ignore errors to keep UX responsive.
-      });
-  }, []);
+    dispatch({ type: 'remove-manual', referralId, taskId });
+    scheduleReferralSync(referralId);
+  }, [scheduleReferralSync]);
 
   const ensureManualTasksLoaded = useCallback(
     (referralIds: string[]) => {
@@ -624,11 +766,22 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
 
   const markTasksAsShown = useCallback((referralId: string, taskIds: string[]) => {
     dispatch({ type: 'mark-tasks-shown', referralId, taskIds });
-  }, []);
+    scheduleReferralSync(referralId);
+  }, [scheduleReferralSync]);
 
   const storeTaskMetadata = useCallback((tasks: Array<{ taskId: string; metadata: TaskMetadata }>) => {
     dispatch({ type: 'store-task-metadata', tasks });
-  }, []);
+    const referralIds = new Set<string>();
+    tasks.forEach((task) => {
+      const referralId = getReferralIdFromTaskId(task.taskId);
+      if (referralId) {
+        referralIds.add(referralId);
+      }
+    });
+    referralIds.forEach((referralId) => {
+      scheduleReferralSync(referralId);
+    });
+  }, [getReferralIdFromTaskId, scheduleReferralSync]);
 
   const value = useMemo<FollowUpTaskContextValue>(
     () => ({
@@ -645,6 +798,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       ensureManualTasksLoaded,
       markTasksAsShown,
       storeTaskMetadata,
+      loadReferralStates,
       reminderSettings: state.reminders.global,
       globalReminderSettings: state.reminders.global,
       reminderOverrides: state.reminders.overrides,
@@ -663,6 +817,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       ensureManualTasksLoaded,
       markTasksAsShown,
       storeTaskMetadata,
+      loadReferralStates,
       updateReminderSettings,
       getReminderSettings,
       clearReminderOverride,

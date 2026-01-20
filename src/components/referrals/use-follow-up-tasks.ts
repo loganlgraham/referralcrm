@@ -251,6 +251,7 @@ export function useFollowUpTasks(
     taskMetadata,
     markTasksAsShown,
     storeTaskMetadata,
+    loadReferralStates,
   } = useFollowUpTaskContext();
 
   const result = useMemo(
@@ -270,6 +271,10 @@ export function useFollowUpTasks(
   );
 
   const taskIdsKey = useMemo(() => result.tasks.map((task) => task.id).join('|'), [result.tasks]);
+
+  useEffect(() => {
+    loadReferralStates([referral._id]);
+  }, [loadReferralStates, referral._id]);
 
   // Side effects: Mark tasks as shown and store metadata
   useEffect(() => {

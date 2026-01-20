@@ -111,7 +111,7 @@ function TaskIndicator({ referral }: { referral: ReferralRow }) {
     removeManualTask, 
     markTasksAsShown, 
     storeTaskMetadata,
-    ensureManualTasksLoaded,
+    loadReferralStates,
   } = useFollowUpTaskContext();
   
   const viewerRole: FollowUpTaskRole = useMemo(() => {
@@ -124,8 +124,8 @@ function TaskIndicator({ referral }: { referral: ReferralRow }) {
   const referralLike = useMemo(() => toReferralLike(referral), [referral]);
 
   useEffect(() => {
-    ensureManualTasksLoaded([referral._id]);
-  }, [ensureManualTasksLoaded, referral._id]);
+    loadReferralStates([referral._id]);
+  }, [loadReferralStates, referral._id]);
   
   const result = useMemo(() => {
     return buildFollowUpTasksForReferral(referralLike, {
