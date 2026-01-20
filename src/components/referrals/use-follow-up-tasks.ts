@@ -269,6 +269,8 @@ export function useFollowUpTasks(
     [completions, manualTasks, shownTasks, taskMetadata, referral, removeManualTask, toggleTask, markTasksAsShown, storeTaskMetadata, viewerRole]
   );
 
+  const taskIdsKey = useMemo(() => result.tasks.map((task) => task.id).join('|'), [result.tasks]);
+
   // Side effects: Mark tasks as shown and store metadata
   useEffect(() => {
     const { tasks, currentTasks, referralId, referralStatus } = result;
@@ -307,8 +309,7 @@ export function useFollowUpTasks(
     if (metadataToStore.length > 0) {
       storeTaskMetadata(metadataToStore);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [referral._id, referral.status, completions, manualTasks, shownTasks, taskMetadata]);
+  }, [result, shownTasks, taskMetadata, markTasksAsShown, storeTaskMetadata, viewerRole, taskIdsKey]);
 
   return result.tasks;
 }
