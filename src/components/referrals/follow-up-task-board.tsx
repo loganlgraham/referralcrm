@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useMemo, useState, useEffect } from 'react';
 import { CheckCircle2, Circle } from 'lucide-react';
-import { formatInTimeZone } from 'date-fns-tz';
+import { addDays, startOfDay } from 'date-fns';
+import { formatInTimeZone, utcToZonedTime, zonedTimeToUtc } from 'date-fns-tz';
 
 import { useFollowUpTaskContext } from '@/components/referrals/follow-up-task-provider';
 import {
@@ -248,6 +249,49 @@ function FollowUpTaskGroup({
     () => roleFilteredTasks.filter((task) => !task.completed),
     [roleFilteredTasks]
   );
+  const orderedIncompleteTasks = useMemo(() => {
+    if (incompleteTasks.length === 0) {
+      return [];
+    }
+
+    const nowSla = utcToZonedTime(new Date(), SLA_TIME_ZONE);
+    const startOfToday = zonedTimeToUtc(startOfDay(nowSla), SLA_TIME_ZONE);
+    const startOfTomorrow = zonedTimeToUtc(startOfDay(addDays(nowSla, 1)), SLA_TIME_ZONE);
+
+    const overdueTasks: FollowUpTask[] = [];
+    const dueTodayTasks: FollowUpTask[] = [];
+    const upcomingTasks: FollowUpTask[] = [];
+    const unscheduledTasks: FollowUpTask[] = [];
+
+    const sortByDueAt = (left: FollowUpTask, right: FollowUpTask) => {
+      if (!left.dueAt && !right.dueAt) return 0;
+      if (!left.dueAt) return 1;
+      if (!right.dueAt) return -1;
+      return new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime();
+    };
+
+    incompleteTasks.forEach((task) => {
+      if (!task.dueAt) {
+        unscheduledTasks.push(task);
+        return;
+      }
+
+      const dueAt = new Date(task.dueAt);
+      if (dueAt < startOfToday) {
+        overdueTasks.push(task);
+      } else if (dueAt < startOfTomorrow) {
+        dueTodayTasks.push(task);
+      } else {
+        upcomingTasks.push(task);
+      }
+    });
+
+    overdueTasks.sort(sortByDueAt);
+    dueTodayTasks.sort(sortByDueAt);
+    upcomingTasks.sort(sortByDueAt);
+
+    return [...overdueTasks, ...dueTodayTasks, ...upcomingTasks, ...unscheduledTasks];
+  }, [incompleteTasks]);
   const completedTasks = useMemo(
     () => roleFilteredTasks.filter((task) => task.completed),
     [roleFilteredTasks]
@@ -286,7 +330,7 @@ function FollowUpTaskGroup({
         <>
           {incompleteTasks.length > 0 ? (
             <ul className="space-y-3">
-              {incompleteTasks.map((task) => (
+              {orderedIncompleteTasks.map((task) => (
                 <li key={task.taskId} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3">
                   <button
                     type="button"
