@@ -103,8 +103,13 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
     toggleTask, 
     removeManualTask, 
     markTasksAsShown, 
-    storeTaskMetadata 
+    storeTaskMetadata,
+    ensureManualTasksLoaded,
   } = useFollowUpTaskContext();
+
+  useEffect(() => {
+    ensureManualTasksLoaded(referrals.map((referral) => referral._id));
+  }, [ensureManualTasksLoaded, referrals]);
 
   const taskResults = useMemo(() => {
     return referrals.reduce<Record<string, ReturnType<typeof buildFollowUpTasksForReferral>>>((acc, referral) => {
