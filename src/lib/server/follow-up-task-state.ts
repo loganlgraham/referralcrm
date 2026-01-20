@@ -15,38 +15,64 @@ export interface FollowUpTaskStatePayload {
 const PRIORITIES = new Set(['urgent', 'high', 'medium', 'low']);
 const CATEGORIES = new Set(['assignment', 'communication', 'pipeline', 'finance', 'ops']);
 
-type FollowUpTaskStateLike = Pick<
-  FollowUpTaskStateDocument,
-  'completions' | 'manualTasks' | 'shownTasks' | 'taskMetadata'
->;
+type FollowUpTaskStateLike = Partial<
+  Pick<FollowUpTaskStateDocument, 'completions' | 'manualTasks' | 'shownTasks' | 'taskMetadata'>
+> & {
+  completions?: unknown;
+  manualTasks?: unknown;
+  shownTasks?: unknown;
+  taskMetadata?: unknown;
+};
 
 export const buildStateFromDocument = (doc: FollowUpTaskStateLike | null): FollowUpTaskStatePayload => {
-  if (!doc) {
+  if (!doc || typeof doc !== 'object') {
     return { completions: {}, manualTasks: [], shownTasks: [], taskMetadata: {} };
   }
 
   const completions: FollowUpTaskStatePayload['completions'] = {};
-  for (const completion of doc.completions ?? []) {
-    completions[completion.taskId] = {
-      completed: completion.completed,
-      completedAt: completion.completedAt ?? null,
+  const completionEntries = Array.isArray(doc.completions) ? doc.completions : [];
+  for (const completion of completionEntries) {
+    if (!completion || typeof completion !== 'object') {
+      continue;
+    }
+    const record = completion as Partial<FollowUpTaskCompletion>;
+    if (typeof record.taskId !== 'string') {
+      continue;
+    }
+    completions[record.taskId] = {
+      completed: Boolean(record.completed),
+      completedAt: typeof record.completedAt === 'string' ? record.completedAt : null,
     };
   }
 
   const taskMetadata: FollowUpTaskStatePayload['taskMetadata'] = {};
-  for (const metadata of doc.taskMetadata ?? []) {
-    taskMetadata[metadata.taskId] = {
-      ...metadata,
-      dueAt: metadata.dueAt ?? null,
-      supportingMetric: metadata.supportingMetric ?? undefined,
-      statusWhenCreated: metadata.statusWhenCreated ?? undefined,
+  const metadataEntries = Array.isArray(doc.taskMetadata) ? doc.taskMetadata : [];
+  for (const metadata of metadataEntries) {
+    if (!metadata || typeof metadata !== 'object') {
+      continue;
+    }
+    const record = metadata as Partial<FollowUpTaskMetadata>;
+    if (typeof record.taskId !== 'string') {
+      continue;
+    }
+    taskMetadata[record.taskId] = {
+      taskId: record.taskId,
+      title: record.title ?? '',
+      message: record.message ?? '',
+      priority: record.priority as FollowUpTaskMetadata['priority'],
+      category: record.category as FollowUpTaskMetadata['category'],
+      dueAt: record.dueAt ?? null,
+      supportingMetric: record.supportingMetric ?? undefined,
+      isManual: Boolean(record.isManual),
+      createdAt: record.createdAt ?? new Date().toISOString(),
+      statusWhenCreated: record.statusWhenCreated ?? undefined,
     };
   }
 
   return {
     completions,
-    manualTasks: doc.manualTasks ?? [],
-    shownTasks: doc.shownTasks ?? [],
+    manualTasks: Array.isArray(doc.manualTasks) ? doc.manualTasks : [],
+    shownTasks: Array.isArray(doc.shownTasks) ? doc.shownTasks : [],
     taskMetadata,
   };
 };
