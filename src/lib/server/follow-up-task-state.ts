@@ -15,9 +15,7 @@ export interface FollowUpTaskStatePayload {
 const PRIORITIES = new Set(['urgent', 'high', 'medium', 'low']);
 const CATEGORIES = new Set(['assignment', 'communication', 'pipeline', 'finance', 'ops']);
 
-type FollowUpTaskStateLike = Partial<
-  Pick<FollowUpTaskStateDocument, 'completions' | 'manualTasks' | 'shownTasks' | 'taskMetadata'>
-> & {
+type FollowUpTaskStateLike = {
   completions?: unknown;
   manualTasks?: unknown;
   shownTasks?: unknown;
