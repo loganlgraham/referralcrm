@@ -98,29 +98,29 @@ export const buildManualTaskEntries = (value: unknown): FollowUpManualTask[] => 
   if (!Array.isArray(value)) {
     return [];
   }
-  return value
-    .map((item) => {
-      if (!item || typeof item !== 'object') {
-        return null;
-      }
-      const record = item as Partial<FollowUpManualTask> & Record<string, unknown>;
-      if (typeof record.id !== 'string' || typeof record.title !== 'string' || typeof record.message !== 'string') {
-        return null;
-      }
-      if (!PRIORITIES.has(String(record.priority)) || !CATEGORIES.has(String(record.category))) {
-        return null;
-      }
-      return {
-        id: record.id,
-        title: record.title,
-        message: record.message,
-        dueAt: typeof record.dueAt === 'string' ? record.dueAt : null,
-        priority: record.priority as FollowUpManualTask['priority'],
-        category: record.category as FollowUpManualTask['category'],
-        createdAt: typeof record.createdAt === 'string' ? record.createdAt : new Date().toISOString(),
-      } satisfies FollowUpManualTask;
-    })
-    .filter((item): item is FollowUpManualTask => Boolean(item));
+  const tasks: FollowUpManualTask[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+    const record = item as Partial<FollowUpManualTask> & Record<string, unknown>;
+    if (typeof record.id !== 'string' || typeof record.title !== 'string' || typeof record.message !== 'string') {
+      continue;
+    }
+    if (!PRIORITIES.has(String(record.priority)) || !CATEGORIES.has(String(record.category))) {
+      continue;
+    }
+    tasks.push({
+      id: record.id,
+      title: record.title,
+      message: record.message,
+      dueAt: typeof record.dueAt === 'string' ? record.dueAt : null,
+      priority: record.priority as FollowUpManualTask['priority'],
+      category: record.category as FollowUpManualTask['category'],
+      createdAt: typeof record.createdAt === 'string' ? record.createdAt : new Date().toISOString(),
+    });
+  }
+  return tasks;
 };
 
 export const buildShownTasks = (value: unknown): string[] => {
