@@ -21,6 +21,14 @@ import type {
 
 export type { ManualTask, ManualTaskInput } from '@/types/follow-up-tasks';
 
+const generateManualId = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback for older browsers
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+};
+
 interface TaskCompletionState {
   completed: boolean;
   completedAt?: string | null;
@@ -488,6 +496,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state);
   const syncTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const loadedReferralsRef = useRef<Set<string>>(new Set());
+  const manualTasksFetchedRef = useRef<Set<string>>(new Set());
   const allowLocalCacheRef = useRef(false);
 
   useEffect(() => {
