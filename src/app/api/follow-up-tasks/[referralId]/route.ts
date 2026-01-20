@@ -24,12 +24,12 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
 
   await connectMongo();
 
-  const doc = (await FollowUpTaskState.findOne({ referralId: params.referralId }).lean()) as {
+  const doc = await FollowUpTaskState.findOne({ referralId: params.referralId }).lean<{
     completions?: unknown;
     manualTasks?: unknown;
     shownTasks?: unknown;
     taskMetadata?: unknown;
-  } | null;
+  }>();
 
   return NextResponse.json({ referralId: params.referralId, state: buildStateFromDocument(doc) });
 }
@@ -68,16 +68,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
 
   await connectMongo();
 
-  const doc = (await FollowUpTaskState.findOneAndUpdate(
+  const doc = await FollowUpTaskState.findOneAndUpdate(
     { referralId },
     { $set: update },
     { new: true, upsert: true, setDefaultsOnInsert: true }
-  ).lean()) as {
+  ).lean<{
     completions?: unknown;
     manualTasks?: unknown;
     shownTasks?: unknown;
     taskMetadata?: unknown;
-  } | null;
+  }>();
 
   return NextResponse.json({ referralId, state: buildStateFromDocument(doc) });
 }
