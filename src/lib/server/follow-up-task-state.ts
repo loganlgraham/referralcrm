@@ -15,7 +15,12 @@ export interface FollowUpTaskStatePayload {
 const PRIORITIES = new Set(['urgent', 'high', 'medium', 'low']);
 const CATEGORIES = new Set(['assignment', 'communication', 'pipeline', 'finance', 'ops']);
 
-export const buildStateFromDocument = (doc: FollowUpTaskStateDocument | null): FollowUpTaskStatePayload => {
+type FollowUpTaskStateLike = Pick<
+  FollowUpTaskStateDocument,
+  'completions' | 'manualTasks' | 'shownTasks' | 'taskMetadata'
+>;
+
+export const buildStateFromDocument = (doc: FollowUpTaskStateLike | null): FollowUpTaskStatePayload => {
   if (!doc) {
     return { completions: {}, manualTasks: [], shownTasks: [], taskMetadata: {} };
   }
