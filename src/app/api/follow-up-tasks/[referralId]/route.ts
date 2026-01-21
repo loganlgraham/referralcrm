@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { requireAdmin } from '@/lib/auth';
+import { getCurrentSession } from '@/lib/auth';
+import { canManageReferral, canViewReferral } from '@/lib/rbac';
 import { connectMongo } from '@/lib/mongoose';
 import { FollowUpTaskState } from '@/models/follow-up-task-state';
+import { Referral } from '@/models/referral';
 import {
   buildCompletionEntries,
   buildManualTaskEntries,
@@ -16,13 +18,33 @@ interface RouteParams {
 }
 
 export async function GET(_request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
-  try {
-    await requireAdmin();
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Unauthorized' }, { status: error.status || 401 });
+  const session = await getCurrentSession();
+  if (!session) {
+    return new NextResponse('Unauthorized', { status: 401 });
   }
 
   await connectMongo();
+
+  const referral = await Referral.findById(params.referralId)
+    .populate('assignedAgent', 'userId')
+    .populate('buySideAgent', 'userId')
+    .populate('sellSideAgent', 'userId')
+    .populate('lender', 'userId');
+  if (!referral || referral.deletedAt) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
+  if (
+    !canViewReferral(session, {
+      assignedAgent: referral.assignedAgent,
+      buySideAgent: referral.buySideAgent,
+      sellSideAgent: referral.sellSideAgent,
+      lender: referral.lender,
+      org: referral.org,
+    })
+  ) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
 
   const doc = await FollowUpTaskState.findOne({ referralId: params.referralId }).lean<{
     completions?: unknown;
@@ -35,10 +57,32 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
-  try {
-    await requireAdmin();
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Unauthorized' }, { status: error.status || 401 });
+  const session = await getCurrentSession();
+  if (!session) {
+    return new NextResponse('Unauthorized', { status: 401 });
+  }
+
+  await connectMongo();
+
+  const referral = await Referral.findById(params.referralId)
+    .populate('assignedAgent', 'userId')
+    .populate('buySideAgent', 'userId')
+    .populate('sellSideAgent', 'userId')
+    .populate('lender', 'userId');
+  if (!referral || referral.deletedAt) {
+    return new NextResponse('Not found', { status: 404 });
+  }
+
+  if (
+    !canManageReferral(session, {
+      assignedAgent: referral.assignedAgent,
+      buySideAgent: referral.buySideAgent,
+      sellSideAgent: referral.sellSideAgent,
+      lender: referral.lender,
+      org: referral.org,
+    })
+  ) {
+    return new NextResponse('Forbidden', { status: 403 });
   }
 
   const payload = await request.json().catch(() => null);
@@ -65,8 +109,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'No updates provided' }, { status: 400 });
   }
-
-  await connectMongo();
 
   const doc = await FollowUpTaskState.findOneAndUpdate(
     { referralId },
