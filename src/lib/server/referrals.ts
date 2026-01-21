@@ -188,17 +188,53 @@ export async function getReferrals(params: GetReferralsParams) {
 
   const searchTerm = search?.trim();
   if (searchTerm) {
-    const escapedSearch = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Normalize phone number digits for better matching
     const normalizedDigits = searchTerm.replace(/\D/g, '');
-    const searchConditions: Record<string, unknown>[] = [
-      { 'borrower.name': new RegExp(escapedSearch, 'i') },
-      { 'borrower.email': new RegExp(escapedSearch, 'i') },
-      { 'borrower.phone': new RegExp(escapedSearch, 'i') },
-      { loanFileNumber: new RegExp(escapedSearch, 'i') },
-    ];
-    if (normalizedDigits) {
-      searchConditions.push({ 'borrower.phone': new RegExp(normalizedDigits) });
+    const isLikelyPhoneNumber = normalizedDigits.length >= 7 && normalizedDigits.length <= 15;
+    const isLikelyEmail = searchTerm.includes('@');
+    const isMultiWord = searchTerm.split(/\s+/).length > 1;
+    
+    // Optimize regex patterns to leverage indexes better
+    // Use anchored patterns (^) for fields where we have compound indexes - this helps MongoDB use indexes
+    const escapedSearch = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const searchConditions: Record<string, unknown>[] = [];
+    
+    // For name searches: use non-anchored regex for partial name matching
+    // MongoDB can still use indexes efficiently for case-insensitive searches on indexed fields
+    searchConditions.push({ 'borrower.name': new RegExp(escapedSearch, 'i') });
+    
+    // For email: prefer anchored match (better index usage) if it looks like a complete email prefix
+    // Otherwise use non-anchored for partial matching
+    if (isLikelyEmail) {
+      // If it contains @, try exact prefix match first (uses index better)
+      searchConditions.push({ 'borrower.email': new RegExp(`^${escapedSearch}`, 'i') });
+    } else {
+      searchConditions.push({ 'borrower.email': new RegExp(escapedSearch, 'i') });
     }
+    
+    // For loan file number: use anchored regex (leverages index on loanFileNumber)
+    // Loan numbers typically match from the start
+    searchConditions.push({ loanFileNumber: new RegExp(`^${escapedSearch}`, 'i') });
+    
+    // For phone numbers: prioritize normalized matching for better performance
+    // Normalize phone numbers by removing non-digit characters for exact matching
+    if (isLikelyPhoneNumber && normalizedDigits) {
+      // Normalized phone number search with anchored pattern - best for index usage
+      // This allows matching phone numbers regardless of formatting (e.g., (555) 123-4567 vs 5551234567)
+      const escapedDigits = normalizedDigits.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      searchConditions.push({ 'borrower.phone': new RegExp(`^${escapedDigits}`) });
+      // Also include original format matching for flexibility (in case the stored format matches)
+      searchConditions.push({ 'borrower.phone': new RegExp(escapedSearch, 'i') });
+    } else {
+      // General phone search - try both original format and normalized
+      searchConditions.push({ 'borrower.phone': new RegExp(escapedSearch, 'i') });
+      // If we extracted digits, also try normalized search for better matching
+      if (normalizedDigits && normalizedDigits.length >= 7) {
+        const escapedDigits = normalizedDigits.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        searchConditions.push({ 'borrower.phone': new RegExp(`^${escapedDigits}`) });
+      }
+    }
+    
     appendOrConditions(searchConditions);
   }
 
