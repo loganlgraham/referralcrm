@@ -3,8 +3,7 @@
 import Link from 'next/link';
 import { useMemo, useEffect } from 'react';
 import { CheckCircle2, Circle } from 'lucide-react';
-import { addDays, startOfDay } from 'date-fns';
-import { formatInTimeZone, utcToZonedTime, zonedTimeToUtc } from 'date-fns-tz';
+import { formatInTimeZone } from 'date-fns-tz';
 
 import { useFollowUpTaskContext } from '@/components/referrals/follow-up-task-provider';
 import {
@@ -183,58 +182,74 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
     );
   }, [taskResults]);
 
-  const flatIncompleteTasks = useMemo(() => {
-    return referrals.flatMap((referral) => {
+  // Calculate task urgency: negative = overdue, 0 = today, positive = upcoming
+  const getTaskUrgency = (dueAt: string | null | undefined): number => {
+    if (!dueAt) return Number.POSITIVE_INFINITY; // No due date = lowest priority
+    const now = new Date();
+    const due = new Date(dueAt);
+    if (Number.isNaN(due.getTime())) return Number.POSITIVE_INFINITY;
+    const daysUntilDue = Math.floor((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    return daysUntilDue;
+  };
+
+  interface ReferralTaskGroup {
+    referral: BoardReferral;
+    tasks: Array<{
+      task: ReturnType<typeof buildFollowUpTasksForReferral>['tasks'][number];
+      assignmentName: string | undefined;
+      statusLabel: string;
+    }>;
+    mostUrgentDueDate: number; // For sorting groups
+  }
+
+  const groupedTasksByReferral = useMemo(() => {
+    const groups = new Map<string, ReferralTaskGroup>();
+
+    referrals.forEach((referral) => {
       const tasks = tasksByReferral[referral._id] ?? [];
-      return tasks
+      const incompleteTasks = tasks
         .filter((task) => !task.completed)
         .map((task) => ({
           task,
-          referral,
           assignmentName: resolvePrimaryAgentName(toReferralLike(referral)),
           statusLabel: getStatusLabel(referral),
         }));
+
+      if (incompleteTasks.length === 0) {
+        return; // Skip referrals with no incomplete tasks
+      }
+
+      // Sort tasks within referral by urgency
+      incompleteTasks.sort((a, b) => {
+        const urgencyA = getTaskUrgency(a.task.dueAt);
+        const urgencyB = getTaskUrgency(b.task.dueAt);
+        if (urgencyA !== urgencyB) {
+          return urgencyA - urgencyB; // Lower urgency value = more urgent
+        }
+        // If same urgency, sort by due date
+        const dueA = a.task.dueAt ? new Date(a.task.dueAt).getTime() : Number.POSITIVE_INFINITY;
+        const dueB = b.task.dueAt ? new Date(b.task.dueAt).getTime() : Number.POSITIVE_INFINITY;
+        return dueA - dueB;
+      });
+
+      // Find most urgent task's urgency for group sorting
+      const mostUrgentDueDate = incompleteTasks.reduce((min, item) => {
+        const urgency = getTaskUrgency(item.task.dueAt);
+        return urgency < min ? urgency : min;
+      }, Number.POSITIVE_INFINITY);
+
+      groups.set(referral._id, {
+        referral,
+        tasks: incompleteTasks,
+        mostUrgentDueDate,
+      });
+    });
+
+    // Convert to array and sort groups by most urgent task
+    return Array.from(groups.values()).sort((a, b) => {
+      return a.mostUrgentDueDate - b.mostUrgentDueDate;
     });
   }, [referrals, tasksByReferral]);
-
-  const { dueTodayTasks, everythingElseTasks } = useMemo(() => {
-    const nowSla = utcToZonedTime(new Date(), SLA_TIME_ZONE);
-    const startOfToday = zonedTimeToUtc(startOfDay(nowSla), SLA_TIME_ZONE);
-    const startOfTomorrow = zonedTimeToUtc(startOfDay(addDays(nowSla, 1)), SLA_TIME_ZONE);
-
-    const dueToday: typeof flatIncompleteTasks = [];
-    const everythingElse: typeof flatIncompleteTasks = [];
-
-    const sortByDueAt = (left: (typeof flatIncompleteTasks)[number], right: (typeof flatIncompleteTasks)[number]) => {
-      const leftDue = left.task.dueAt ? new Date(left.task.dueAt).getTime() : Number.POSITIVE_INFINITY;
-      const rightDue = right.task.dueAt ? new Date(right.task.dueAt).getTime() : Number.POSITIVE_INFINITY;
-      return leftDue - rightDue;
-    };
-
-    flatIncompleteTasks.forEach((item) => {
-      if (!item.task.dueAt) {
-        everythingElse.push(item);
-        return;
-      }
-
-      const dueAt = new Date(item.task.dueAt);
-      if (Number.isNaN(dueAt.getTime())) {
-        everythingElse.push(item);
-        return;
-      }
-
-      if (dueAt < startOfTomorrow) {
-        dueToday.push(item);
-      } else {
-        everythingElse.push(item);
-      }
-    });
-
-    dueToday.sort(sortByDueAt);
-    everythingElse.sort(sortByDueAt);
-
-    return { dueTodayTasks: dueToday, everythingElseTasks: everythingElse };
-  }, [flatIncompleteTasks]);
 
   const summary = useMemo(() => {
     return Object.values(tasksByReferral).reduce(
@@ -271,165 +286,82 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
         </div>
       </header>
       <div className="space-y-5">
-        {flatIncompleteTasks.length > 0 ? (
-          <>
-            <section className="space-y-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Due today</h2>
-              {dueTodayTasks.length > 0 ? (
-                <ul className="space-y-3">
-                  {dueTodayTasks.map(({ task, referral, assignmentName, statusLabel }) => (
-                    <li key={task.taskId} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{statusLabel}</p>
-                            <Link
-                              href={`/referrals/${referral._id}`}
-                              className="text-base font-semibold text-slate-900 underline-offset-2 hover:underline"
-                            >
-                              {referral.borrowerName}
-                            </Link>
-                            <p className="text-xs text-slate-500">
-                              {assignmentName ? `Assigned to ${assignmentName}` : 'Agent assignment pending'}
-                            </p>
-                          </div>
-                          <span className="rounded-full bg-slate-900/5 px-3 py-1 text-xs font-semibold text-slate-600">
-                            {roleLabel[viewerRole]} tasks
-                          </span>
-                        </div>
-                        <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3">
-                          <button
-                            type="button"
-                            onClick={task.toggle}
-                            className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-slate-500 transition hover:bg-slate-100 [will-change:opacity]"
-                            aria-pressed={task.completed}
-                            aria-label={task.completed ? 'Mark task incomplete' : 'Mark task complete'}
-                          >
-                            {task.completed ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
-                          </button>
-                          <div className="space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-medium text-slate-900">{task.title}</p>
-                              <span className="text-xs uppercase tracking-wide text-slate-400">{task.category}</span>
-                              {task.isManual && (
-                                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
-                                  Manual
-                                </span>
-                              )}
-                              {task.isHistorical && (
-                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
-                                  {task.statusWhenCreated ? `From: ${task.statusWhenCreated}` : 'Previous Status'}
-                                </span>
-                              )}
-                              <span className="text-xs font-semibold uppercase text-slate-400">{task.priority}</span>
-                            </div>
-                            <p className="text-sm text-slate-600">{task.message}</p>
-                            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                              {task.supportingMetric && <span>{task.supportingMetric}</span>}
-                              {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
-                            </div>
-                            {task.isManual && task.remove && (
-                              <div className="pt-2">
-                                <button
-                                  type="button"
-                                  onClick={task.remove}
-                                  className="inline-flex items-center rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
-                                >
-                                  Remove task
-                                </button>
-                              </div>
+        {groupedTasksByReferral.length > 0 ? (
+          <ul className="space-y-5">
+            {groupedTasksByReferral.map((group) => (
+              <li key={group.referral._id} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
+                <div className="space-y-4">
+                  {/* Referral header - shown once per referral */}
+                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{group.tasks[0].statusLabel}</p>
+                      <Link
+                        href={`/referrals/${group.referral._id}`}
+                        className="text-base font-semibold text-slate-900 underline-offset-2 hover:underline"
+                      >
+                        {group.referral.borrowerName}
+                      </Link>
+                      <p className="text-xs text-slate-500">
+                        {group.tasks[0].assignmentName ? `Assigned to ${group.tasks[0].assignmentName}` : 'Agent assignment pending'}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-slate-900/5 px-3 py-1 text-xs font-semibold text-slate-600">
+                      {roleLabel[viewerRole]} tasks
+                    </span>
+                  </div>
+                  {/* All tasks for this referral */}
+                  <ul className="space-y-3">
+                    {group.tasks.map(({ task, assignmentName, statusLabel }) => (
+                      <li key={task.taskId} className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                        <button
+                          type="button"
+                          onClick={task.toggle}
+                          className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-slate-500 transition hover:bg-slate-100 [will-change:opacity]"
+                          aria-pressed={task.completed}
+                          aria-label={task.completed ? 'Mark task incomplete' : 'Mark task complete'}
+                        >
+                          {task.completed ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
+                        </button>
+                        <div className="flex-1 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-slate-900">{task.title}</p>
+                            <span className="text-xs uppercase tracking-wide text-slate-400">{task.category}</span>
+                            {task.isManual && (
+                              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
+                                Manual
+                              </span>
                             )}
-                          </div>
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
-                  No tasks due today.
-                </div>
-              )}
-            </section>
-            <section className="space-y-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Everything else</h2>
-              {everythingElseTasks.length > 0 ? (
-                <ul className="space-y-3">
-                  {everythingElseTasks.map(({ task, referral, assignmentName, statusLabel }) => (
-                    <li key={task.taskId} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
-                      <div className="space-y-3">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{statusLabel}</p>
-                            <Link
-                              href={`/referrals/${referral._id}`}
-                              className="text-base font-semibold text-slate-900 underline-offset-2 hover:underline"
-                            >
-                              {referral.borrowerName}
-                            </Link>
-                            <p className="text-xs text-slate-500">
-                              {assignmentName ? `Assigned to ${assignmentName}` : 'Agent assignment pending'}
-                            </p>
-                          </div>
-                          <span className="rounded-full bg-slate-900/5 px-3 py-1 text-xs font-semibold text-slate-600">
-                            {roleLabel[viewerRole]} tasks
-                          </span>
-                        </div>
-                        <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3">
-                          <button
-                            type="button"
-                            onClick={task.toggle}
-                            className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 text-slate-500 transition hover:bg-slate-100 [will-change:opacity]"
-                            aria-pressed={task.completed}
-                            aria-label={task.completed ? 'Mark task incomplete' : 'Mark task complete'}
-                          >
-                            {task.completed ? <CheckCircle2 className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
-                          </button>
-                          <div className="space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-medium text-slate-900">{task.title}</p>
-                              <span className="text-xs uppercase tracking-wide text-slate-400">{task.category}</span>
-                              {task.isManual && (
-                                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
-                                  Manual
-                                </span>
-                              )}
-                              {task.isHistorical && (
-                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
-                                  {task.statusWhenCreated ? `From: ${task.statusWhenCreated}` : 'Previous Status'}
-                                </span>
-                              )}
-                              <span className="text-xs font-semibold uppercase text-slate-400">{task.priority}</span>
-                            </div>
-                            <p className="text-sm text-slate-600">{task.message}</p>
-                            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                              {task.supportingMetric && <span>{task.supportingMetric}</span>}
-                              {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
-                            </div>
-                            {task.isManual && task.remove && (
-                              <div className="pt-2">
-                                <button
-                                  type="button"
-                                  onClick={task.remove}
-                                  className="inline-flex items-center rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
-                                >
-                                  Remove task
-                                </button>
-                              </div>
+                            {task.isHistorical && (
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
+                                {task.statusWhenCreated ? `From: ${task.statusWhenCreated}` : 'Previous Status'}
+                              </span>
                             )}
+                            <span className="text-xs font-semibold uppercase text-slate-400">{task.priority}</span>
                           </div>
+                          <p className="text-sm text-slate-600">{task.message}</p>
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                            {task.supportingMetric && <span>{task.supportingMetric}</span>}
+                            {task.dueAt && <span>Due {formatDueDate(task.dueAt)}</span>}
+                          </div>
+                          {task.isManual && task.remove && (
+                            <div className="pt-2">
+                              <button
+                                type="button"
+                                onClick={task.remove}
+                                className="inline-flex items-center rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+                              >
+                                Remove task
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
-                  No other tasks coming up.
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              )}
-            </section>
-          </>
+              </li>
+            ))}
+          </ul>
         ) : (
           <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-700">
             No referrals with incomplete tasks at this time.
