@@ -13,7 +13,7 @@ import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/em
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { buildReferralLink } from '@/lib/referral-links';
-import { sendNPSSurveysForClosedDeal } from '@/lib/server/nps';
+import { createNPSToken } from '@/lib/server/nps';
 
 type ReferralSummary = {
   _id: Types.ObjectId;
@@ -600,7 +600,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     return new NextResponse('Not found', { status: 404 });
   }
 
-  const referral = await Referral.findById(existingPayment.referralId).populate('assignedAgent', 'name email');
+  const referral = await Referral.findById(existingPayment.referralId)
+    .populate('assignedAgent', 'name email')
+    .populate('lender', 'name email');
   const isAgentOrigin = referral?.origin === 'agent';
 
   const previousStatus = existingPayment.status;
@@ -876,7 +878,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    // Send NPS surveys when deal is closed
+    // Send congratulatory emails with NPS survey links when deal is closed
     if (isClosingNow && isTransactionalEmailConfigured()) {
       const usedAfc = payment.usedAfc ?? existingPayment.usedAfc ?? false;
       const usedAssignedAgent = payment.usedAssignedAgent ?? existingPayment.usedAssignedAgent ?? false;
@@ -885,73 +887,105 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         : request.headers.get('origin') || new URL(request.url).origin;
 
       try {
-        await sendNPSSurveysForClosedDeal(
-          existingPayment._id.toString(),
-          referral._id.toString(),
-          Boolean(usedAfc),
-          Boolean(usedAssignedAgent),
-          origin
-        );
-      } catch (error) {
-        console.error('Failed to send NPS surveys:', error);
-        // Don't fail the request if NPS emails fail
-      }
-
-      // Send congratulatory emails to referral and agent when deal is closed
-      try {
-        const usedAssignedAgent = payment.usedAssignedAgent ?? existingPayment.usedAssignedAgent ?? false;
-        
         // Email to referral (borrower) - only if usedAssignedAgent is true
-        if (usedAssignedAgent) {
-          const borrowerEmail = referral.borrower?.email;
-          const borrowerFirstName = referral.borrower?.firstName || 
-            (referral.borrower?.name ? referral.borrower.name.split(' ')[0] : null) ||
+        if (usedAssignedAgent && referral.assignedAgent && referral.borrower?.email) {
+          const borrowerEmail = referral.borrower.email;
+          const borrowerFirstName = referral.borrower.firstName || 
+            (referral.borrower.name ? referral.borrower.name.split(' ')[0] : null) ||
             'there';
           
-          if (borrowerEmail) {
+          const agent = referral.assignedAgent as { _id?: any; name?: string } | null;
+          const agentId = agent?._id?.toString();
+          
+          if (agentId) {
+            // Get full agent name from database if needed
+            const { Agent } = await import('@/models/agent');
+            const agentDoc = await Agent.findById(agentId)
+              .select('name')
+              .lean<{ name?: string } | null>();
+            const agentFullName = agentDoc?.name || agent?.name || 'this agent';
+            const borrowerName = referral.borrower.name || referral.borrower.firstName || 'Client';
+
+            // Generate NPS token for agent survey
+            const agentSurveyToken = await createNPSToken({
+              paymentId: existingPayment._id.toString(),
+              referralId: referral._id.toString(),
+              type: 'agent',
+              targetId: agentId,
+              recipientEmail: borrowerEmail,
+              recipientName: borrowerName,
+              agentName: agentFullName,
+            });
+
+            const agentSurveyUrl = `${origin}/nps/agent?token=${agentSurveyToken}`;
+
             await sendTransactionalEmail({
               to: [borrowerEmail],
               subject: 'Congrats on Your New Home!',
               html: `
-                <p>Hi ${borrowerFirstName},</p>
-                <p>Congratulations on closing on your new home! 🎉</p>
-                <p>If you have a quick moment, we'd really appreciate you leaving a rating or short review for your agent—your feedback means a lot and helps others tremendously.</p>
-                <p>Wishing you all the best in your new place!</p>
+                <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
+                  <p>Hi ${borrowerFirstName},</p>
+                  <p>Congratulations on closing on your new home! 🎉</p>
+                  <p>If you have a quick moment, we'd really appreciate you leaving a rating or short review for your agent—your feedback means a lot and helps others tremendously.</p>
+                  <p>Wishing you all the best in your new place!</p>
+                  <p style="margin: 20px 0 0 0;">
+                    <a href="${agentSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
+                      Rate Your Agent
+                    </a>
+                  </p>
+                </div>
               `,
-              text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your new home! 🎉\n\nIf you have a quick moment, we'd really appreciate you leaving a rating or short review for your agent—your feedback means a lot and helps others tremendously.\n\nWishing you all the best in your new place!`,
+              text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your new home! 🎉\n\nIf you have a quick moment, we'd really appreciate you leaving a rating or short review for your agent—your feedback means a lot and helps others tremendously.\n\nWishing you all the best in your new place!\n\nRate your agent: ${agentSurveyUrl}`,
             });
           }
         }
 
         // Email to agent (only if BOTH usedAfc AND usedAssignedAgent are true)
-        if (usedAfc && usedAssignedAgent) {
-          const agent = referral.assignedAgent as { name?: string; email?: string } | null;
+        if (usedAfc && usedAssignedAgent && referral.assignedAgent && referral.lender) {
+          const agent = referral.assignedAgent as { _id?: any; name?: string; email?: string } | null;
+          const lender = referral.lender as { _id?: any } | null;
           const agentEmail = agent?.email;
           const agentFirstName = agent?.name ? agent.name.split(' ')[0] : 'there';
+          const lenderId = lender?._id?.toString();
           
-          if (agentEmail) {
+          if (agentEmail && lenderId) {
             const { buildPaymentActionLink } = await import('@/lib/referral-links');
             const paymentSentLink = buildPaymentActionLink(existingPayment._id.toString());
+
+            // Generate NPS token for lender survey
+            const lenderSurveyToken = await createNPSToken({
+              paymentId: existingPayment._id.toString(),
+              referralId: referral._id.toString(),
+              type: 'lender',
+              targetId: lenderId,
+              recipientEmail: agentEmail,
+              recipientName: agent.name || 'Agent',
+            });
+
+            const lenderSurveyUrl = `${origin}/nps/lender?token=${lenderSurveyToken}`;
             
             await sendTransactionalEmail({
               to: [agentEmail],
               subject: 'Congrats on your closing!',
               html: `
-                <p>Hi ${agentFirstName},</p>
-                <p>Congrats on the recent closing! 🎉 It was great working together.</p>
-                <p>If you have a quick moment, we'd really appreciate you leaving a short rating or review for American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships.</p>
-                <p style="margin: 20px 0 0 0;">
-                  <strong>Once the check is in the mail:</strong><br/>
-                  <a href="${paymentSentLink}" style="display: inline-block; margin-top: 8px; padding: 10px 16px; border-radius: 8px; background: #0f172a; color: #fff; font-weight: 600; text-decoration: none;">
-                    Mark Payment as Sent
-                  </a>
-                </p>
-                <p style="margin: 16px 0 0 0; font-size: 14px; color: #64748b;">
-                  Click the button above when you've mailed the referral fee check. This helps us track payment timing.
-                </p>
-                <p style="margin: 20px 0 0 0;">Thanks again, and looking forward to the next one!</p>
+                <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
+                  <p>Hi ${agentFirstName},</p>
+                  <p>Congrats on the recent closing! 🎉 It was great working together.</p>
+                  <p>If you have a quick moment, we'd really appreciate you leaving a short rating or review for our partners at American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships.</p>
+                  <p style="margin: 20px 0 0 0;">
+                    <a href="${lenderSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
+                      Rate American Financing
+                    </a>
+                  </p>
+                  <p style="margin: 24px 0 0 0;">Also, please click the button below when the check is placed in the mail so we can anticipate its arrival.</p>
+                  <p style="margin: 20px 0 0 0;">
+                    <a href="${paymentSentLink}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
+                      Mark Payment as Sent
+                    </a>
+                  </p>
+                </div>
               `,
-              text: `Hi ${agentFirstName},\n\nCongrats on the recent closing! 🎉 It was great working together.\n\nIf you have a quick moment, we'd really appreciate you leaving a short rating or review for American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships.\n\nOnce the check is in the mail, click here to mark payment as sent: ${paymentSentLink}\n\nThanks again, and looking forward to the next one!`,
+              text: `Hi ${agentFirstName},\n\nCongrats on the recent closing! 🎉 It was great working together.\n\nIf you have a quick moment, we'd really appreciate you leaving a short rating or review for our partners at American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships.\n\nRate American Financing: ${lenderSurveyUrl}\n\nAlso, please click the link below when the check is placed in the mail so we can anticipate its arrival.\n\nMark payment as sent: ${paymentSentLink}`,
             });
           }
         }

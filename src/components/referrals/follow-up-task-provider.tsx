@@ -11,6 +11,7 @@ import {
   useRef,
   useTransition,
 } from 'react';
+import { useSession } from 'next-auth/react';
 
 import type { RecommendationPriority } from '@/utils/sla-insights';
 import type {
@@ -485,11 +486,17 @@ export const parseFollowUpTaskState = (value: string | null): StoredTaskState =>
 };
 
 export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === 'admin';
+
+  // Always start with empty state - we'll load from localStorage in an effect for non-admin users
+  // Admin users skip localStorage entirely and rely on server state
   const [state, dispatch] = useReducer(reducer, createDefaultTaskState(), () => {
     if (typeof window === 'undefined') {
       return createDefaultTaskState();
     }
-    return parseFollowUpTaskState(window.localStorage.getItem(FOLLOW_UP_TASK_STORAGE_KEY));
+    // Always start empty - localStorage will be loaded in effect if user is not admin
+    return createDefaultTaskState();
   });
 
   const [, startTransition] = useTransition();
@@ -523,6 +530,30 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
+  // For non-admin users, load from localStorage after session is available
+  // Admin users skip localStorage entirely and rely on server state
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    // Wait for session to be determined
+    if (session === undefined) {
+      return;
+    }
+    // Admin users should never use localStorage
+    if (isAdmin) {
+      return;
+    }
+    // For non-admin users, load from localStorage if available
+    const stored = window.localStorage.getItem(FOLLOW_UP_TASK_STORAGE_KEY);
+    if (stored) {
+      const parsed = parseFollowUpTaskState(stored);
+      if (parsed && (Object.keys(parsed.completions).length > 0 || Object.keys(parsed.manualTasks).length > 0)) {
+        dispatch({ type: 'hydrate', payload: parsed });
+      }
+    }
+  }, [session, isAdmin]);
+
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
@@ -539,15 +570,20 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Prevent localStorage writes for admin users to avoid conflicts
   useEffect(() => {
     if (typeof window === 'undefined') {
+      return;
+    }
+    // Skip localStorage writes for admin users - server is authoritative
+    if (isAdmin) {
       return;
     }
     if (!allowLocalCacheRef.current) {
       return;
     }
     window.localStorage.setItem(FOLLOW_UP_TASK_STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
+  }, [state, isAdmin]);
 
   const getReferralIdFromTaskId = useCallback((taskId: string): string | null => {
     const [referralId] = taskId.split('::');
@@ -659,6 +695,8 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
           loadedReferralsRef.current.add(referralId);
         });
 
+        // For admin users, merge-referrals already clears old state for these referrals first,
+        // ensuring server state is authoritative. For non-admin users, merge combines with localStorage.
         dispatch({
           type: 'merge-referrals',
           referralIds: idsToLoad,
@@ -669,7 +707,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       allowLocalCacheRef.current = true;
     }
-  }, []);
+  }, [isAdmin]);
 
   const toggleTask = useCallback((taskId: string, completed: boolean) => {
     const referralId = getReferralIdFromTaskId(taskId);
