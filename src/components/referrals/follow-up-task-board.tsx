@@ -196,7 +196,7 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
     referral: BoardReferral;
     tasks: Array<{
       task: ReturnType<typeof buildFollowUpTasksForReferral>['tasks'][number];
-      assignmentName: string;
+      assignmentName: string | undefined;
       statusLabel: string;
     }>;
     mostUrgentDueDate: number; // For sorting groups
