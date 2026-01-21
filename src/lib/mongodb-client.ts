@@ -132,8 +132,18 @@ export function getMongoClient(): MongoClient {
     };
 
     // Add TLS configuration for secure connections
+    // Note: For mongodb+srv://, TLS is already required by the protocol and handled automatically
+    // We only need to set certificate validation options if explicitly needed
+    const isSRV = uri.startsWith('mongodb+srv://');
     if (needsTLS) {
-      options.tls = true;
+      // Only set tls: true for non-SRV connections that need TLS
+      // For mongodb+srv://, TLS is implicit and MongoDB handles it automatically
+      if (!isSRV) {
+        options.tls = true;
+      }
+      // Set certificate validation options only if explicitly needed
+      // For mongodb+srv://, only set these if ALLOW_INSECURE_TLS is true
+      // Otherwise, let MongoDB handle TLS with default secure settings
       if (ALLOW_INSECURE_TLS) {
         options.tlsAllowInvalidCertificates = true;
         options.tlsAllowInvalidHostnames = true;

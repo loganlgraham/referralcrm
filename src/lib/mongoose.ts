@@ -152,9 +152,19 @@ export async function connectMongo(): Promise<typeof mongoose> {
       retryReads: true,
     };
     
-    // Always configure TLS options for secure connections
+    // Configure TLS options for secure connections
+    // Note: For mongodb+srv://, TLS is already required by the protocol and handled automatically
+    // We only need to set certificate validation options if explicitly needed
+    const isSRV = MONGODB_URI.startsWith('mongodb+srv://');
     if (needsTLS) {
-      connectionOptions.tls = true;
+      // Only set tls: true for non-SRV connections that need TLS
+      // For mongodb+srv://, TLS is implicit and MongoDB handles it automatically
+      if (!isSRV) {
+        connectionOptions.tls = true;
+      }
+      // Set certificate validation options only if explicitly needed
+      // For mongodb+srv://, only set these if ALLOW_INSECURE_TLS is true
+      // Otherwise, let MongoDB handle TLS with default secure settings
       if (ALLOW_INSECURE_TLS) {
         connectionOptions.tlsAllowInvalidCertificates = true;
         connectionOptions.tlsAllowInvalidHostnames = true;
@@ -165,9 +175,17 @@ export async function connectMongo(): Promise<typeof mongoose> {
       try {
         const conn = await mongoose.connect(MONGODB_URI, connectionOptions);
         
+        // Wait for connection to be ready (mongoose.connect should already wait, but verify)
+        // State 2 is "connecting", so we wait a bit if it's still connecting
+        let attempts = 0;
+        while (conn.connection.readyState === mongoose.ConnectionStates.connecting && attempts < 10) {
+          await sleep(100);
+          attempts++;
+        }
+        
         // Verify connection is actually ready
         if (conn.connection.readyState !== mongoose.ConnectionStates.connected) {
-          throw new Error(`Connection not ready, state: ${conn.connection.readyState}`);
+          throw new Error(`Connection not ready, state: ${conn.connection.readyState} (expected: ${mongoose.ConnectionStates.connected})`);
         }
         
         return conn;
