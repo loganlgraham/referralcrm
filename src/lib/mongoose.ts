@@ -11,6 +11,25 @@ if (!resolvedMongoUri) {
 const MONGODB_URI = resolvedMongoUri;
 const ALLOW_INSECURE_TLS = process.env.MONGODB_ALLOW_INVALID_CERTS === 'true';
 
+/**
+ * Determine if TLS is required based on the connection URI
+ */
+function requiresTLS(uri: string): boolean {
+  // mongodb+srv:// always requires TLS
+  if (uri.startsWith('mongodb+srv://')) {
+    return true;
+  }
+  // Check if URI explicitly specifies TLS
+  if (uri.includes('tls=true') || uri.includes('ssl=true')) {
+    return true;
+  }
+  // For production environments, assume TLS is required unless explicitly disabled
+  if (process.env.NODE_ENV === 'production' && !uri.includes('tls=false') && !uri.includes('ssl=false')) {
+    return true;
+  }
+  return false;
+}
+
 const MAX_RETRY_ATTEMPTS = 3;
 const INITIAL_RETRY_DELAY = 1000; // 1 second
 
@@ -119,6 +138,8 @@ export async function connectMongo(): Promise<typeof mongoose> {
 
   // Create new connection with retry logic
   if (!cached?.promise) {
+    const needsTLS = requiresTLS(MONGODB_URI);
+    
     const connectionOptions: Parameters<typeof mongoose.connect>[1] = {
       bufferCommands: false,
       serverSelectionTimeoutMS: 30000, // Increased from 15000 for serverless cold starts
@@ -130,9 +151,14 @@ export async function connectMongo(): Promise<typeof mongoose> {
       retryWrites: true,
       retryReads: true,
     };
-    if (ALLOW_INSECURE_TLS) {
-      connectionOptions.tlsAllowInvalidCertificates = true;
-      connectionOptions.tlsAllowInvalidHostnames = true;
+    
+    // Always configure TLS options for secure connections
+    if (needsTLS) {
+      connectionOptions.tls = true;
+      if (ALLOW_INSECURE_TLS) {
+        connectionOptions.tlsAllowInvalidCertificates = true;
+        connectionOptions.tlsAllowInvalidHostnames = true;
+      }
     }
 
     cached!.promise = retryConnection(async () => {
