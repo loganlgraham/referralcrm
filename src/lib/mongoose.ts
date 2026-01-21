@@ -230,7 +230,8 @@ export async function connectMongo(): Promise<typeof mongoose> {
       const isSSLError = errorMessage.includes('SSL') || 
                         errorMessage.includes('TLS') || 
                         errorMessage.includes('tlsv1') ||
-                        errorMessage.includes('certificate');
+                        errorMessage.includes('certificate') ||
+                        errorMessage.includes('alert number');
       
       if (isSSLError) {
         console.error('MongoDB SSL/TLS connection failed after retries:', {
@@ -258,7 +259,8 @@ export async function connectMongo(): Promise<typeof mongoose> {
     const isSSLError = errorMessage.includes('SSL') || 
                       errorMessage.includes('TLS') || 
                       errorMessage.includes('tlsv1') ||
-                      errorMessage.includes('certificate');
+                      errorMessage.includes('certificate') ||
+                      errorMessage.includes('alert number');
     
     if (isSSLError) {
       console.error('MongoDB SSL/TLS connection failed:', {
