@@ -149,6 +149,31 @@ export async function connectMongo(): Promise<typeof mongoose> {
         // Clear the cached promise on failure so we can retry
         cached!.promise = null;
         cached!.conn = null;
+        
+        // Enhance error messages for SSL/TLS issues
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isSSLError = errorMessage.includes('SSL') || 
+                          errorMessage.includes('TLS') || 
+                          errorMessage.includes('tlsv1') ||
+                          errorMessage.includes('certificate') ||
+                          errorMessage.includes('alert number');
+        
+        if (isSSLError) {
+          const enhancedError = new Error(
+            `MongoDB SSL/TLS connection error: ${errorMessage}. ` +
+            (ALLOW_INSECURE_TLS 
+              ? 'Invalid certificates are allowed but connection still failed.' 
+              : 'Consider setting MONGODB_ALLOW_INVALID_CERTS=true if using self-signed certificates.')
+          );
+          enhancedError.cause = error;
+          console.error('MongoDB SSL/TLS connection error:', {
+            message: errorMessage,
+            allowInsecureTLS: ALLOW_INSECURE_TLS,
+            originalError: error,
+          });
+          throw enhancedError;
+        }
+        
         console.error('MongoDB connection error:', error);
         throw error;
       }
@@ -156,7 +181,22 @@ export async function connectMongo(): Promise<typeof mongoose> {
       // Clear cache on final failure after all retries
       cached!.promise = null;
       cached!.conn = null;
-      console.error('MongoDB connection failed after retries:', error);
+      
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isSSLError = errorMessage.includes('SSL') || 
+                        errorMessage.includes('TLS') || 
+                        errorMessage.includes('tlsv1') ||
+                        errorMessage.includes('certificate');
+      
+      if (isSSLError) {
+        console.error('MongoDB SSL/TLS connection failed after retries:', {
+          message: errorMessage,
+          allowInsecureTLS: ALLOW_INSECURE_TLS,
+          originalError: error,
+        });
+      } else {
+        console.error('MongoDB connection failed after retries:', error);
+      }
       throw error;
     });
   }
@@ -169,7 +209,22 @@ export async function connectMongo(): Promise<typeof mongoose> {
     // Clear cache on error to allow retry
     cached!.promise = null;
     cached!.conn = null;
-    console.error('MongoDB connection failed:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const isSSLError = errorMessage.includes('SSL') || 
+                      errorMessage.includes('TLS') || 
+                      errorMessage.includes('tlsv1') ||
+                      errorMessage.includes('certificate');
+    
+    if (isSSLError) {
+      console.error('MongoDB SSL/TLS connection failed:', {
+        message: errorMessage,
+        allowInsecureTLS: ALLOW_INSECURE_TLS,
+        originalError: error,
+      });
+    } else {
+      console.error('MongoDB connection failed:', error);
+    }
     throw error;
   }
 }

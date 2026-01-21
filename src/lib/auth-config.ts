@@ -27,52 +27,108 @@ providers.push(
       password: { label: 'Password', type: 'password' },
     },
     async authorize(credentials) {
-      const parsed = credentialsSchema.safeParse(credentials);
+      try {
+        const parsed = credentialsSchema.safeParse(credentials);
 
-      if (!parsed.success) {
-        throw new Error('Invalid credentials submitted. Please check the form fields and try again.');
+        if (!parsed.success) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('[Auth] Invalid credentials format:', parsed.error);
+          }
+          throw new Error('Invalid credentials submitted. Please check the form fields and try again.');
+        }
+
+        const { identifier, password } = parsed.data;
+
+        // Attempt MongoDB connection with specific error handling
+        try {
+          await connectMongo();
+        } catch (connectionError) {
+          const errorMessage = connectionError instanceof Error ? connectionError.message : String(connectionError);
+          const isSSLError = errorMessage.includes('SSL') || 
+                            errorMessage.includes('TLS') || 
+                            errorMessage.includes('tlsv1') ||
+                            errorMessage.includes('certificate');
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.error('[Auth] MongoDB connection error:', {
+              message: errorMessage,
+              isSSLError,
+              stack: connectionError instanceof Error ? connectionError.stack : undefined,
+            });
+          }
+
+          // Return null for connection errors - NextAuth will handle this as a failed auth
+          // This prevents unhandled errors from causing 401 responses
+          if (isSSLError) {
+            throw new Error('Database connection failed due to SSL/TLS error. Please contact support if this persists.');
+          } else {
+            throw new Error('Unable to connect to the database. Please try again or contact support if the problem persists.');
+          }
+        }
+
+        const normalizedIdentifier = identifier.toLowerCase();
+        const isEmail = /@/.test(normalizedIdentifier);
+
+        const query = isEmail
+          ? { email: normalizedIdentifier }
+          : { username: normalizedIdentifier };
+
+        let user;
+        try {
+          user = await User.findOne(query).select('+passwordHash role name email username');
+        } catch (dbError) {
+          const errorMessage = dbError instanceof Error ? dbError.message : String(dbError);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('[Auth] Database query error:', errorMessage);
+          }
+          throw new Error('Database query failed. Please try again or contact support if the problem persists.');
+        }
+
+        if (!user) {
+          throw new Error('No account found for this username or email. Please sign up first.');
+        }
+
+        if (!user.passwordHash) {
+          throw new Error('This account has not been configured with a password. Please reset your password or contact support.');
+        }
+
+        const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+
+        if (!isValidPassword) {
+          throw new Error('Incorrect password. Please try again.');
+        }
+
+        const storedRole = (user.role as Role | null) ?? null;
+
+        if (!storedRole) {
+          throw new Error('This account does not have a role assigned. Please contact an administrator.');
+        }
+
+        return {
+          id: user._id.toString(),
+          email: user.email,
+          name: user.name ?? undefined,
+          username: user.username,
+          role: storedRole,
+        } as any;
+      } catch (error) {
+        // Log all errors in development for debugging
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[Auth] Authorization error:', {
+            message: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          });
+        }
+
+        // Re-throw authentication errors (NextAuth will convert these to error messages)
+        // This includes connection errors that we've wrapped with user-friendly messages
+        if (error instanceof Error) {
+          throw error;
+        }
+
+        // For unknown error types, throw a generic error
+        throw new Error('An unexpected error occurred during authentication. Please try again.');
       }
-
-      const { identifier, password } = parsed.data;
-
-      await connectMongo();
-
-      const normalizedIdentifier = identifier.toLowerCase();
-      const isEmail = /@/.test(normalizedIdentifier);
-
-      const query = isEmail
-        ? { email: normalizedIdentifier }
-        : { username: normalizedIdentifier };
-
-      const user = await User.findOne(query).select('+passwordHash role name email username');
-
-      if (!user) {
-        throw new Error('No account found for this username or email. Please sign up first.');
-      }
-
-      if (!user.passwordHash) {
-        throw new Error('This account has not been configured with a password. Please reset your password or contact support.');
-      }
-
-      const isValidPassword = await bcrypt.compare(password, user.passwordHash);
-
-      if (!isValidPassword) {
-        throw new Error('Incorrect password. Please try again.');
-      }
-
-      const storedRole = (user.role as Role | null) ?? null;
-
-      if (!storedRole) {
-        throw new Error('This account does not have a role assigned. Please contact an administrator.');
-      }
-
-      return {
-        id: user._id.toString(),
-        email: user.email,
-        name: user.name ?? undefined,
-        username: user.username,
-        role: storedRole,
-      } as any;
     },
   })
 );
@@ -105,6 +161,10 @@ if (process.env.RESEND_API_KEY && process.env.EMAIL_FROM) {
 }
 
 const authSecret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
+
+if (!authSecret) {
+  console.error('[Auth] WARNING: NEXTAUTH_SECRET or AUTH_SECRET environment variable is not set. Authentication may fail.');
+}
 
 // Lazy initialization: MongoDBAdapter will call this function when it needs the connection
 const getAdapterClientPromise = () => getClientPromise();
