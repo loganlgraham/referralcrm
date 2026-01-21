@@ -23,27 +23,33 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
+  // Admins have full access to all task states - no need to check referral permissions
+  const isAdmin = session.user?.role === 'admin';
+  
   await connectMongo();
 
-  const referral = await Referral.findById(params.referralId)
-    .populate('assignedAgent', 'userId')
-    .populate('buySideAgent', 'userId')
-    .populate('sellSideAgent', 'userId')
-    .populate('lender', 'userId');
-  if (!referral || referral.deletedAt) {
-    return new NextResponse('Not found', { status: 404 });
-  }
+  // For non-admins, verify they can view the referral
+  if (!isAdmin) {
+    const referral = await Referral.findById(params.referralId)
+      .populate('assignedAgent', 'userId')
+      .populate('buySideAgent', 'userId')
+      .populate('sellSideAgent', 'userId')
+      .populate('lender', 'userId');
+    if (!referral || referral.deletedAt) {
+      return new NextResponse('Not found', { status: 404 });
+    }
 
-  if (
-    !canViewReferral(session, {
-      assignedAgent: referral.assignedAgent,
-      buySideAgent: referral.buySideAgent,
-      sellSideAgent: referral.sellSideAgent,
-      lender: referral.lender,
-      org: referral.org,
-    })
-  ) {
-    return new NextResponse('Forbidden', { status: 403 });
+    if (
+      !canViewReferral(session, {
+        assignedAgent: referral.assignedAgent,
+        buySideAgent: referral.buySideAgent,
+        sellSideAgent: referral.sellSideAgent,
+        lender: referral.lender,
+        org: referral.org,
+      })
+    ) {
+      return new NextResponse('Forbidden', { status: 403 });
+    }
   }
 
   const doc = await FollowUpTaskState.findOne({ referralId: params.referralId }).lean<{
@@ -62,27 +68,33 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
+  // Admins have full access to manage all task states - no need to check referral permissions
+  const isAdmin = session.user?.role === 'admin';
+  
   await connectMongo();
 
-  const referral = await Referral.findById(params.referralId)
-    .populate('assignedAgent', 'userId')
-    .populate('buySideAgent', 'userId')
-    .populate('sellSideAgent', 'userId')
-    .populate('lender', 'userId');
-  if (!referral || referral.deletedAt) {
-    return new NextResponse('Not found', { status: 404 });
-  }
+  // For non-admins, verify they can manage the referral
+  if (!isAdmin) {
+    const referral = await Referral.findById(params.referralId)
+      .populate('assignedAgent', 'userId')
+      .populate('buySideAgent', 'userId')
+      .populate('sellSideAgent', 'userId')
+      .populate('lender', 'userId');
+    if (!referral || referral.deletedAt) {
+      return new NextResponse('Not found', { status: 404 });
+    }
 
-  if (
-    !canManageReferral(session, {
-      assignedAgent: referral.assignedAgent,
-      buySideAgent: referral.buySideAgent,
-      sellSideAgent: referral.sellSideAgent,
-      lender: referral.lender,
-      org: referral.org,
-    })
-  ) {
-    return new NextResponse('Forbidden', { status: 403 });
+    if (
+      !canManageReferral(session, {
+        assignedAgent: referral.assignedAgent,
+        buySideAgent: referral.buySideAgent,
+        sellSideAgent: referral.sellSideAgent,
+        lender: referral.lender,
+        org: referral.org,
+      })
+    ) {
+      return new NextResponse('Forbidden', { status: 403 });
+    }
   }
 
   const payload = await request.json().catch(() => null);
