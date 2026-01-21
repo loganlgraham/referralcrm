@@ -125,19 +125,6 @@ export function buildFollowUpTasksForReferral(
         supportingMetric: undefined,
         role: viewerRole,
       };
-    })
-    .filter((task) => {
-      // Always show tasks without due dates
-      if (!task.dueAt) {
-        return true;
-      }
-
-      // Only show tasks due within 3 days or overdue
-      const now = new Date();
-      const dueDate = new Date(task.dueAt);
-      const daysUntilDue = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-      return daysUntilDue <= 3;
     });
 
   // All static tasks are marked as 'admin' role, so they will only be visible to admin users
