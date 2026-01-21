@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { CheckCircle2, Circle } from 'lucide-react';
 import { formatInTimeZone } from 'date-fns-tz';
@@ -40,14 +40,10 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
     console.log('Completed tasks:', completed.length, completed);
     return completed;
   }, [tasks]);
-  const { addManualTask, ensureManualTasksLoaded } = useFollowUpTaskContext();
+  const { addManualTask } = useFollowUpTaskContext();
   
   console.log('All tasks:', tasks.length, tasks);
   console.log('Should show completed link?', completedTasks.length > 0);
-
-  useEffect(() => {
-    ensureManualTasksLoaded([referral._id]);
-  }, [ensureManualTasksLoaded, referral._id]);
 
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualTitle, setManualTitle] = useState('');
