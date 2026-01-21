@@ -218,6 +218,31 @@ referralSchema.index(
   }
 );
 
+// Text index for fast full-text search on searchable fields
+referralSchema.index(
+  {
+    'borrower.name': 'text',
+    'borrower.email': 'text',
+    'borrower.phone': 'text',
+    loanFileNumber: 'text'
+  },
+  {
+    name: 'search_text_index',
+    weights: {
+      'borrower.name': 10,
+      'borrower.email': 5,
+      loanFileNumber: 5,
+      'borrower.phone': 3
+    }
+  }
+);
+
+// Compound indexes for optimized search queries
+referralSchema.index({ deletedAt: 1, 'borrower.name': 1 });
+referralSchema.index({ deletedAt: 1, 'borrower.email': 1 });
+referralSchema.index({ deletedAt: 1, loanFileNumber: 1 });
+referralSchema.index({ deletedAt: 1, status: 1, createdAt: -1 });
+
 export interface ReferralDocument {
   _id: Types.ObjectId;
   createdAt: Date;
