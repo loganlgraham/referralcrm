@@ -183,7 +183,7 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
   }, [taskResults]);
 
   // Calculate task urgency: negative = overdue, 0 = today, positive = upcoming
-  const getTaskUrgency = (dueAt: string | undefined): number => {
+  const getTaskUrgency = (dueAt: string | null | undefined): number => {
     if (!dueAt) return Number.POSITIVE_INFINITY; // No due date = lowest priority
     const now = new Date();
     const due = new Date(dueAt);
