@@ -925,9 +925,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
               html: `
                 <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
                   <p>Hi ${borrowerFirstName},</p>
-                  <p>Congratulations on closing on your new home! 🎉</p>
-                  <p>If you have a quick moment, we'd really appreciate you leaving a rating or short review for your agent—your feedback means a lot and helps others tremendously.</p>
-                  <p>Wishing you all the best in your new place!</p>
+                  <p>Congratulations on closing on your new home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating or short review for your agent—your feedback means a lot and helps others tremendously. Wishing you all the best in your new place!</p>
                   <p style="margin: 20px 0 0 0;">
                     <a href="${agentSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
                       Rate Your Agent
@@ -935,7 +933,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
                   </p>
                 </div>
               `,
-              text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your new home! 🎉\n\nIf you have a quick moment, we'd really appreciate you leaving a rating or short review for your agent—your feedback means a lot and helps others tremendously.\n\nWishing you all the best in your new place!\n\nRate your agent: ${agentSurveyUrl}`,
+              text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your new home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating or short review for your agent—your feedback means a lot and helps others tremendously. Wishing you all the best in your new place!\n\nRate your agent: ${agentSurveyUrl}`,
             });
           }
         }
@@ -970,14 +968,12 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
               html: `
                 <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
                   <p>Hi ${agentFirstName},</p>
-                  <p>Congrats on the recent closing! 🎉 It was great working together.</p>
-                  <p>If you have a quick moment, we'd really appreciate you leaving a short rating or review for our partners at American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships.</p>
+                  <p>Congrats on the recent closing! 🎉 It was great working together. If you have a quick moment, we'd really appreciate you leaving a short rating or review for our partners at American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships. Also, please click the button below when the check is placed in the mail so we can anticipate its arrival.</p>
                   <p style="margin: 20px 0 0 0;">
                     <a href="${lenderSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
                       Rate American Financing
                     </a>
                   </p>
-                  <p style="margin: 24px 0 0 0;">Also, please click the button below when the check is placed in the mail so we can anticipate its arrival.</p>
                   <p style="margin: 20px 0 0 0;">
                     <a href="${paymentSentLink}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
                       Mark Payment as Sent
@@ -985,7 +981,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
                   </p>
                 </div>
               `,
-              text: `Hi ${agentFirstName},\n\nCongrats on the recent closing! 🎉 It was great working together.\n\nIf you have a quick moment, we'd really appreciate you leaving a short rating or review for our partners at American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships.\n\nRate American Financing: ${lenderSurveyUrl}\n\nAlso, please click the link below when the check is placed in the mail so we can anticipate its arrival.\n\nMark payment as sent: ${paymentSentLink}`,
+              text: `Hi ${agentFirstName},\n\nCongrats on the recent closing! 🎉 It was great working together. If you have a quick moment, we'd really appreciate you leaving a short rating or review for our partners at American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships. Also, please click the button below when the check is placed in the mail so we can anticipate its arrival.\n\nRate American Financing: ${lenderSurveyUrl}\n\nMark payment as sent: ${paymentSentLink}`,
             });
           }
         }
