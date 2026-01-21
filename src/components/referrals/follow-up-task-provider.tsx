@@ -17,7 +17,6 @@ import type { RecommendationPriority } from '@/utils/sla-insights';
 import type {
   ManualTask,
   ManualTaskInput,
-  ManualTaskListResponse,
 } from '@/types/follow-up-tasks';
 
 export type { ManualTask, ManualTaskInput } from '@/types/follow-up-tasks';
@@ -101,7 +100,6 @@ interface FollowUpTaskContextValue {
   removeManualTask: (referralId: string, taskId: string) => void;
   addAgentTasks: (agentId: string, tasks: ManualTask[]) => void;
   removeAgentTask: (agentId: string, taskId: string) => void;
-  ensureManualTasksLoaded: (referralIds: string[]) => void;
   markTasksAsShown: (referralId: string, taskIds: string[]) => void;
   storeTaskMetadata: (tasks: Array<{ taskId: string; metadata: TaskMetadata }>) => void;
   loadReferralStates: (referralIds: string[]) => void;
@@ -503,7 +501,6 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state);
   const syncTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const loadedReferralsRef = useRef<Set<string>>(new Set());
-  const manualTasksFetchedRef = useRef<Set<string>>(new Set());
   const allowLocalCacheRef = useRef(false);
 
   useEffect(() => {
@@ -609,6 +606,10 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
 
   const syncReferralState = useCallback(async (referralId: string) => {
     const payload = buildReferralPayload(referralId, stateRef.current);
+    const manualTasksCount = payload.manualTasks?.length ?? 0;
+    const completionsCount = Object.keys(payload.completions ?? {}).length;
+
+    console.log(`[Task Sync] Syncing referral ${referralId}: ${manualTasksCount} manual tasks, ${completionsCount} completions`);
 
     try {
       const response = await fetch(`/api/follow-up-tasks/${referralId}`, {
@@ -621,6 +622,8 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       }
       const data = await response.json();
       if (data?.state) {
+        const serverManualTasksCount = data.state.manualTasks?.length ?? 0;
+        console.log(`[Task Sync] Successfully synced referral ${referralId}: ${serverManualTasksCount} manual tasks on server`);
         dispatch({
           type: 'merge-referrals',
           referralIds: [referralId],
@@ -634,6 +637,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       }
       allowLocalCacheRef.current = false;
     } catch (error) {
+      console.error(`[Task Sync] Failed to sync referral ${referralId}:`, error);
       allowLocalCacheRef.current = true;
     }
   }, [buildReferralPayload]);
@@ -664,6 +668,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     if (idsToLoad.length === 0) {
       return;
     }
+    console.log(`[Task Load] Loading task states for referrals: ${idsToLoad.join(', ')}`);
     const params = new URLSearchParams({ referralIds: idsToLoad.join(',') });
     try {
       const response = await fetch(`/api/follow-up-tasks?${params.toString()}`);
@@ -693,6 +698,8 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
           shownTasks[referralId] = Array.isArray(state?.shownTasks) ? state.shownTasks : [];
           Object.assign(taskMetadata, state?.taskMetadata ?? {});
           loadedReferralsRef.current.add(referralId);
+          const taskCount = manualTasks[referralId]?.length ?? 0;
+          console.log(`[Task Load] Loaded ${taskCount} manual tasks for referral ${referralId}`);
         });
 
         // For admin users, merge-referrals already clears old state for these referrals first,
@@ -705,12 +712,14 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
         allowLocalCacheRef.current = false;
       }
     } catch (error) {
+      console.error(`[Task Load] Failed to load task states:`, error);
       allowLocalCacheRef.current = true;
     }
   }, [isAdmin]);
 
   const toggleTask = useCallback((taskId: string, completed: boolean) => {
     const referralId = getReferralIdFromTaskId(taskId);
+    console.log(`[Task CRUD] Toggling task ${taskId} to ${completed ? 'completed' : 'incomplete'}`);
     startTransition(() => {
       dispatch({ type: 'toggle', taskId, completed });
     });
@@ -730,6 +739,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
         category: input.category,
         createdAt: new Date().toISOString(),
       };
+      console.log(`[Task CRUD] Creating manual task "${task.title}" (${task.id}) for referral ${referralId}`);
       dispatch({ type: 'add-manual', referralId, task });
       scheduleReferralSync(referralId);
     },
@@ -737,35 +747,11 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
   );
 
   const removeManualTask = useCallback((referralId: string, taskId: string) => {
+    console.log(`[Task CRUD] Deleting manual task ${taskId} from referral ${referralId}`);
     dispatch({ type: 'remove-manual', referralId, taskId });
     scheduleReferralSync(referralId);
   }, [scheduleReferralSync]);
 
-  const ensureManualTasksLoaded = useCallback(
-    (referralIds: string[]) => {
-      const idsToFetch = referralIds.filter((id) => !manualTasksFetchedRef.current.has(id));
-      if (idsToFetch.length === 0) {
-        return;
-      }
-      idsToFetch.forEach((id) => manualTasksFetchedRef.current.add(id));
-      Promise.all(
-        idsToFetch.map((referralId) =>
-          fetch(`/api/referrals/${referralId}/manual-tasks`)
-            .then((res) => (res.ok ? res.json() : null))
-            .then((data: ManualTaskListResponse | null) => {
-              if (!data || !Array.isArray(data.tasks)) return;
-              dispatch({ type: 'set-manual-tasks', referralId, tasks: data.tasks });
-            })
-            .catch(() => {
-              // Ignore errors; fall back to existing state.
-            })
-        )
-      ).catch(() => {
-        // Ignore errors; fall back to existing state.
-      });
-    },
-    []
-  );
 
   const addAgentTasks = useCallback((agentId: string, tasks: ManualTask[]) => {
     dispatch({ type: 'add-agent-tasks', agentId, tasks });
@@ -842,7 +828,6 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       removeManualTask,
       addAgentTasks,
       removeAgentTask,
-      ensureManualTasksLoaded,
       markTasksAsShown,
       storeTaskMetadata,
       loadReferralStates,
@@ -861,7 +846,6 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       removeManualTask,
       addAgentTasks,
       removeAgentTask,
-      ensureManualTasksLoaded,
       markTasksAsShown,
       storeTaskMetadata,
       loadReferralStates,

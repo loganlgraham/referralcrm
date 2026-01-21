@@ -59,7 +59,11 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
     taskMetadata?: unknown;
   }>();
 
-  return NextResponse.json({ referralId: params.referralId, state: buildStateFromDocument(doc) });
+  const state = buildStateFromDocument(doc);
+  const manualTasksCount = state.manualTasks?.length ?? 0;
+  console.log(`[Task API] GET /api/follow-up-tasks/${params.referralId} - User: ${session.user?.id} (${session.user?.role}), Found ${manualTasksCount} manual tasks`);
+
+  return NextResponse.json({ referralId: params.referralId, state });
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
@@ -122,6 +126,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
     return NextResponse.json({ error: 'No updates provided' }, { status: 400 });
   }
 
+  const manualTasksCount = Array.isArray(update.manualTasks) ? update.manualTasks.length : 0;
+  const completionsCount = Array.isArray(update.completions) ? update.completions.length : 0;
+  console.log(`[Task API] PUT /api/follow-up-tasks/${referralId} - User: ${session.user?.id} (${session.user?.role}), Manual tasks: ${manualTasksCount}, Completions: ${completionsCount}`);
+
   const doc = await FollowUpTaskState.findOneAndUpdate(
     { referralId },
     { $set: update },
@@ -132,6 +140,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
     shownTasks?: unknown;
     taskMetadata?: unknown;
   }>();
+
+  const savedManualTasksCount = Array.isArray(doc?.manualTasks) ? doc.manualTasks.length : 0;
+  console.log(`[Task API] Successfully saved task state for referral ${referralId}: ${savedManualTasksCount} manual tasks persisted`);
 
   return NextResponse.json({ referralId, state: buildStateFromDocument(doc) });
 }

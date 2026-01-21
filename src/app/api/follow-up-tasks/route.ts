@@ -48,6 +48,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return acc;
   }, {});
 
+  const totalManualTasks = Object.values(referrals).reduce((sum, state) => sum + (state.manualTasks?.length ?? 0), 0);
+  console.log(`[Task API] GET /api/follow-up-tasks - User: admin, Requested ${referralIds.length} referrals, Found ${docs.length} documents, Total ${totalManualTasks} manual tasks`);
+
   return NextResponse.json({ referrals });
 }
 
