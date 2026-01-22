@@ -95,7 +95,7 @@ interface FollowUpTaskContextValue {
   agentTasks: Record<string, ManualTask[]>;
   shownTasks: Record<string, string[]>;
   taskMetadata: Record<string, TaskMetadata>;
-  toggleTask: (taskId: string, completed: boolean) => void;
+  toggleTask: (taskId: string, completed: boolean) => Promise<void>;
   addManualTask: (referralId: string, task: ManualTaskInput) => void;
   removeManualTask: (referralId: string, taskId: string) => void;
   addAgentTasks: (agentId: string, tasks: ManualTask[]) => void;
@@ -636,9 +636,11 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
         });
       }
       allowLocalCacheRef.current = false;
+      return true;
     } catch (error) {
       console.error(`[Task Sync] Failed to sync referral ${referralId}:`, error);
       allowLocalCacheRef.current = true;
+      return false;
     }
   }, [buildReferralPayload]);
 
@@ -656,6 +658,24 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
         void syncReferralState(referralId);
       }, 250);
       syncTimeoutsRef.current.set(referralId, timeout);
+    },
+    [syncReferralState]
+  );
+
+  // Immediate sync for critical operations like toggles
+  const syncReferralStateImmediate = useCallback(
+    async (referralId: string): Promise<boolean> => {
+      if (typeof window === 'undefined') {
+        return false;
+      }
+      // Cancel any pending debounced sync for this referral
+      const existing = syncTimeoutsRef.current.get(referralId);
+      if (existing) {
+        clearTimeout(existing);
+        syncTimeoutsRef.current.delete(referralId);
+      }
+      // Perform immediate sync
+      return await syncReferralState(referralId);
     },
     [syncReferralState]
   );
@@ -717,16 +737,20 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     }
   }, [isAdmin]);
 
-  const toggleTask = useCallback((taskId: string, completed: boolean) => {
-    const referralId = getReferralIdFromTaskId(taskId);
-    console.log(`[Task CRUD] Toggling task ${taskId} to ${completed ? 'completed' : 'incomplete'}`);
-    startTransition(() => {
-      dispatch({ type: 'toggle', taskId, completed });
-    });
-    if (referralId) {
-      scheduleReferralSync(referralId);
-    }
-  }, [getReferralIdFromTaskId, scheduleReferralSync, startTransition]);
+  const toggleTask = useCallback(
+    async (taskId: string, completed: boolean) => {
+      const referralId = getReferralIdFromTaskId(taskId);
+      console.log(`[Task CRUD] Toggling task ${taskId} to ${completed ? 'completed' : 'incomplete'}`);
+      startTransition(() => {
+        dispatch({ type: 'toggle', taskId, completed });
+      });
+      if (referralId) {
+        // Use immediate sync for toggles to ensure persistence before page refresh
+        await syncReferralStateImmediate(referralId);
+      }
+    },
+    [getReferralIdFromTaskId, syncReferralStateImmediate, startTransition]
+  );
 
   const addManualTask = useCallback(
     (referralId: string, input: ManualTaskInput) => {
