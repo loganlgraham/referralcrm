@@ -502,7 +502,8 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
 
   const [, startTransition] = useTransition();
   const stateRef = useRef(state);
-  const syncTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  type DebouncedSyncEntry = { timeoutId: NodeJS.Timeout; controller: AbortController };
+  const debouncedSyncRef = useRef<Map<string, DebouncedSyncEntry>>(new Map());
   const inFlightSyncsRef = useRef<Map<string, AbortController>>(new Map());
   const pendingCompletionUpdatesRef = useRef<Map<string, Record<string, { completed: boolean; completedAt: string | null }>>>(new Map());
   const loadedReferralsRef = useRef<Set<string>>(new Set());
@@ -706,15 +707,24 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       if (typeof window === 'undefined') {
         return;
       }
-      const existing = syncTimeoutsRef.current.get(referralId);
+      const existing = debouncedSyncRef.current.get(referralId);
       if (existing) {
-        clearTimeout(existing);
+        clearTimeout(existing.timeoutId);
+        existing.controller.abort();
+        debouncedSyncRef.current.delete(referralId);
       }
-      const timeout = setTimeout(() => {
-        syncTimeoutsRef.current.delete(referralId);
-        void syncReferralState(referralId);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        const entry = debouncedSyncRef.current.get(referralId);
+        if (!entry) return;
+        const ctrl = entry.controller;
+        void syncReferralState(referralId, false, undefined, ctrl.signal).finally(() => {
+          if (debouncedSyncRef.current.get(referralId)?.controller === ctrl) {
+            debouncedSyncRef.current.delete(referralId);
+          }
+        });
       }, 250);
-      syncTimeoutsRef.current.set(referralId, timeout);
+      debouncedSyncRef.current.set(referralId, { timeoutId, controller });
     },
     [syncReferralState]
   );
@@ -729,11 +739,13 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       if (typeof window === 'undefined') {
         return false;
       }
-      // Cancel any pending debounced sync for this referral
-      const existing = syncTimeoutsRef.current.get(referralId);
-      if (existing) {
-        clearTimeout(existing);
-        syncTimeoutsRef.current.delete(referralId);
+      // Cancel any pending or in-flight debounced sync for this referral so it cannot
+      // complete later and overwrite our optimistic toggle with stale server completions.
+      const debounced = debouncedSyncRef.current.get(referralId);
+      if (debounced) {
+        clearTimeout(debounced.timeoutId);
+        debounced.controller.abort();
+        debouncedSyncRef.current.delete(referralId);
       }
       
       // Cancel any in-flight immediate sync for this referral to prevent race conditions
