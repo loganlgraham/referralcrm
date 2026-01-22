@@ -108,9 +108,13 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
 
   const referralIds = useMemo(() => referrals.map((referral) => referral._id), [referrals]);
 
+  // Always force a fresh load from server on mount and when referralIds change
+  // This ensures manual tasks are always visible after page refresh
   useEffect(() => {
-    loadReferralStates(referralIds);
-  }, [loadReferralStates, referralIds]);
+    if (referralIds.length > 0) {
+      loadReferralStates(referralIds, true);
+    }
+  }, [loadReferralStates, referralIds.join(',')]);
 
   const taskResults = useMemo(() => {
     return referrals.reduce<Record<string, ReturnType<typeof buildFollowUpTasksForReferral>>>((acc, referral) => {

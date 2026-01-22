@@ -102,7 +102,7 @@ interface FollowUpTaskContextValue {
   removeAgentTask: (agentId: string, taskId: string) => void;
   markTasksAsShown: (referralId: string, taskIds: string[]) => void;
   storeTaskMetadata: (tasks: Array<{ taskId: string; metadata: TaskMetadata }>) => void;
-  loadReferralStates: (referralIds: string[]) => void;
+  loadReferralStates: (referralIds: string[], forceRefresh?: boolean) => void;
   reminderSettings: ReminderSettings;
   globalReminderSettings: ReminderSettings;
   reminderOverrides: Record<string, ReminderSettings>;
@@ -508,10 +508,20 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
   const pendingCompletionUpdatesRef = useRef<Map<string, Record<string, { completed: boolean; completedAt: string | null }>>>(new Map());
   const loadedReferralsRef = useRef<Set<string>>(new Set());
   const allowLocalCacheRef = useRef(false);
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  // Clear loaded referrals on mount to ensure fresh data on page load/refresh
+  useEffect(() => {
+    if (!isMountedRef.current) {
+      isMountedRef.current = true;
+      loadedReferralsRef.current.clear();
+      console.log('[Task Load] Cleared loaded referrals cache on mount - will fetch fresh data');
+    }
+  }, []);
 
   // Fetch reminder settings from the server on mount (source of truth for cron job)
   useEffect(() => {
@@ -827,29 +837,38 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     [syncReferralState]
   );
 
-  const loadReferralStates = useCallback(async (referralIds: string[]) => {
+  const loadReferralStates = useCallback(async (referralIds: string[], forceRefresh = false) => {
     if (typeof window === 'undefined') {
       return;
     }
     
-    // Clear loaded ref if referralIds have changed significantly (e.g., page navigation)
-    // This ensures we reload on refresh even if ref persisted somehow
-    const hasNewReferrals = referralIds.some((id) => !loadedReferralsRef.current.has(id));
-    if (hasNewReferrals && referralIds.length > 0) {
-      // Only keep loaded refs that are still in the current referral list
-      const currentSet = new Set(referralIds);
-      const toRemove = Array.from(loadedReferralsRef.current).filter((id) => !currentSet.has(id));
-      toRemove.forEach((id) => loadedReferralsRef.current.delete(id));
-    }
-    
-    const idsToLoad = referralIds.filter((id) => id && !loadedReferralsRef.current.has(id));
+    // Always fetch fresh data from server - don't rely on cached refs
+    // This ensures manual tasks are always visible after refresh
+    const idsToLoad = referralIds.filter((id) => id);
     if (idsToLoad.length === 0) {
       return;
     }
-    console.log(`[Task Load] Loading task states for referrals: ${idsToLoad.join(', ')}`);
-    const params = new URLSearchParams({ referralIds: idsToLoad.join(',') });
+    
+    // If forcing refresh, clear the loaded refs for these referrals
+    if (forceRefresh) {
+      idsToLoad.forEach((id) => loadedReferralsRef.current.delete(id));
+    }
+    
+    // Filter out only referrals that haven't been loaded yet (unless forcing refresh)
+    const idsToFetch = forceRefresh 
+      ? idsToLoad 
+      : idsToLoad.filter((id) => !loadedReferralsRef.current.has(id));
+    
+    if (idsToFetch.length === 0) {
+      return;
+    }
+    
+    console.log(`[Task Load] Loading task states for referrals: ${idsToFetch.join(', ')}${forceRefresh ? ' (forced refresh)' : ''}`);
+    const params = new URLSearchParams({ referralIds: idsToFetch.join(',') });
     try {
-      const response = await fetch(`/api/follow-up-tasks?${params.toString()}`);
+      // Add cache-busting parameter to ensure fresh data
+      const cacheBuster = forceRefresh ? `&_t=${Date.now()}` : '';
+      const response = await fetch(`/api/follow-up-tasks?${params.toString()}${cacheBuster}`);
       if (!response.ok) {
         throw new Error('Failed to load follow-up task state');
       }
@@ -880,11 +899,10 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
           console.log(`[Task Load] Loaded ${taskCount} manual tasks for referral ${referralId}`);
         });
 
-        // For admin users, merge-referrals already clears old state for these referrals first,
-        // ensuring server state is authoritative. For non-admin users, merge combines with localStorage.
+        // Always use server state as authoritative - merge-referrals clears old state first
         dispatch({
           type: 'merge-referrals',
-          referralIds: idsToLoad,
+          referralIds: idsToFetch,
           payload: { completions, manualTasks, shownTasks, taskMetadata },
         });
         allowLocalCacheRef.current = false;
