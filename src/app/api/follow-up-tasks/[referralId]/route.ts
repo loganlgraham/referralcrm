@@ -165,26 +165,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
     updatedAt?: Date;
   }>();
 
-  // TEMPORARY LOGGING: Re-fetch immediately after save to verify persistence
-  const verificationDoc = await FollowUpTaskState.findOne({ referralId }).lean<{
-    completions?: Array<{ taskId?: string; completed?: boolean; completedAt?: string | null }>;
-    updatedAt?: Date;
-  }>();
-  
-  if (verificationDoc) {
-    console.log(`[Task API DEBUG] After save, re-fetched document - updatedAt: ${verificationDoc.updatedAt?.toISOString() ?? 'null'}`);
-    if (Array.isArray(verificationDoc.completions)) {
-      console.log(`[Task API DEBUG] Persisted completions (${verificationDoc.completions.length} entries):`);
-      verificationDoc.completions.forEach((entry) => {
-        console.log(`[Task API DEBUG]   - taskId: ${entry.taskId}, completed: ${entry.completed}, completedAt: ${entry.completedAt ?? 'null'}`);
-      });
-    } else {
-      console.log(`[Task API DEBUG] No completions found in persisted document`);
-    }
-  } else {
-    console.log(`[Task API DEBUG] WARNING: Could not re-fetch document after save`);
-  }
-
   const savedManualTasksCount = Array.isArray(doc?.manualTasks) ? doc.manualTasks.length : 0;
   console.log(`[Task API] Successfully saved task state for referral ${referralId}: ${savedManualTasksCount} manual tasks persisted`);
 
