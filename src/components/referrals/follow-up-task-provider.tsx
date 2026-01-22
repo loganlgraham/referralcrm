@@ -521,6 +521,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
   const [, startTransition] = useTransition();
   const stateRef = useRef(state);
   const syncTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const inFlightSyncsRef = useRef<Map<string, AbortController>>(new Map());
   const loadedReferralsRef = useRef<Set<string>>(new Set());
   const allowLocalCacheRef = useRef(false);
 
@@ -642,7 +643,8 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     async (
       referralId: string,
       skipMerge = false,
-      completionUpdates?: Record<string, { completed: boolean; completedAt?: string | null }>
+      completionUpdates?: Record<string, { completed: boolean; completedAt?: string | null }>,
+      abortSignal?: AbortSignal
     ) => {
       // TEMPORARY LOGGING: Log what stateRef.current contains
       const prefix = `${referralId}::`;
@@ -692,11 +694,26 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal: abortSignal,
       });
+      
+      // Check if request was aborted
+      if (abortSignal?.aborted) {
+        console.log(`[Task Sync] Request for referral ${referralId} was aborted`);
+        return false;
+      }
+      
       if (!response.ok) {
         throw new Error('Failed to sync follow-up tasks');
       }
       const data = await response.json();
+      
+      // Check again after async operation (abort may have happened during fetch)
+      if (abortSignal?.aborted) {
+        console.log(`[Task Sync] Request for referral ${referralId} was aborted after response`);
+        return false;
+      }
+      
       if (data?.state && !skipMerge) {
         const serverManualTasksCount = data.state.manualTasks?.length ?? 0;
         console.log(`[Task Sync] Successfully synced referral ${referralId}: ${serverManualTasksCount} manual tasks on server`);
@@ -716,6 +733,11 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       allowLocalCacheRef.current = false;
       return true;
     } catch (error) {
+      // Ignore AbortError - it's expected when canceling previous requests
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log(`[Task Sync] Request for referral ${referralId} was aborted`);
+        return false;
+      }
       console.error(`[Task Sync] Failed to sync referral ${referralId}:`, error);
       allowLocalCacheRef.current = true;
       return false;
@@ -756,8 +778,36 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
         clearTimeout(existing);
         syncTimeoutsRef.current.delete(referralId);
       }
-      // Perform immediate sync
-      return await syncReferralState(referralId, skipMerge, completionUpdates);
+      
+      // Cancel any in-flight immediate sync for this referral to prevent race conditions
+      const inFlightController = inFlightSyncsRef.current.get(referralId);
+      if (inFlightController) {
+        console.log(`[Task Sync] Canceling previous in-flight sync for referral ${referralId}`);
+        inFlightController.abort();
+        inFlightSyncsRef.current.delete(referralId);
+      }
+      
+      // Create new AbortController for this sync
+      const abortController = new AbortController();
+      inFlightSyncsRef.current.set(referralId, abortController);
+      
+      try {
+        // Perform immediate sync with abort signal
+        const result = await syncReferralState(referralId, skipMerge, completionUpdates, abortController.signal);
+        
+        // Clean up on success (only if this controller is still the active one)
+        if (inFlightSyncsRef.current.get(referralId) === abortController) {
+          inFlightSyncsRef.current.delete(referralId);
+        }
+        
+        return result;
+      } catch (error) {
+        // Clean up on error (only if this controller is still the active one)
+        if (inFlightSyncsRef.current.get(referralId) === abortController) {
+          inFlightSyncsRef.current.delete(referralId);
+        }
+        throw error;
+      }
     },
     [syncReferralState]
   );
