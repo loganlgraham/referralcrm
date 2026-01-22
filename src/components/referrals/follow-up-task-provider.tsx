@@ -72,7 +72,7 @@ export interface StoredTaskState {
 }
 
 type Action =
-  | { type: 'toggle'; taskId: string; completed: boolean }
+  | { type: 'toggle'; taskId: string; completed: boolean; completedAt: string | null }
   | { type: 'hydrate'; payload: StoredTaskState }
   | {
       type: 'merge-referrals';
@@ -191,7 +191,7 @@ const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
       const nextCompletions: CompletionMap = { ...state.completions };
       nextCompletions[action.taskId] = {
         completed: action.completed,
-        completedAt: action.completed ? new Date().toISOString() : null,
+        completedAt: action.completedAt,
       };
       return { ...state, completions: nextCompletions };
     }
@@ -913,14 +913,15 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       const referralId = getReferralIdFromTaskId(taskId);
       console.log(`[Task CRUD] Toggling task ${taskId} to ${completed ? 'completed' : 'incomplete'}`);
       
-      // Build the completion update directly to avoid race condition with stateRef
+      // Generate completedAt once and use it for both local state and server payload
+      // This ensures client and server have the same timestamp when skipMerge=true
       const completedAt = completed ? new Date().toISOString() : null;
       const completionUpdates: Record<string, { completed: boolean; completedAt: string | null }> = {
         [taskId]: { completed, completedAt },
       };
       
       startTransition(() => {
-        dispatch({ type: 'toggle', taskId, completed });
+        dispatch({ type: 'toggle', taskId, completed, completedAt });
       });
       if (referralId) {
         // Use immediate sync for toggles to ensure persistence before page refresh
