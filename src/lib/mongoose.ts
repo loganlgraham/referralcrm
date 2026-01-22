@@ -11,6 +11,25 @@ if (!resolvedMongoUri) {
 const MONGODB_URI = resolvedMongoUri;
 const ALLOW_INSECURE_TLS = process.env.MONGODB_ALLOW_INVALID_CERTS === 'true';
 
+/**
+ * Determine if TLS is required based on the connection URI
+ */
+function requiresTLS(uri: string): boolean {
+  // mongodb+srv:// always requires TLS
+  if (uri.startsWith('mongodb+srv://')) {
+    return true;
+  }
+  // Check if URI explicitly specifies TLS
+  if (uri.includes('tls=true') || uri.includes('ssl=true')) {
+    return true;
+  }
+  // For production environments, assume TLS is required unless explicitly disabled
+  if (process.env.NODE_ENV === 'production' && !uri.includes('tls=false') && !uri.includes('ssl=false')) {
+    return true;
+  }
+  return false;
+}
+
 const MAX_RETRY_ATTEMPTS = 3;
 const INITIAL_RETRY_DELAY = 1000; // 1 second
 
@@ -119,6 +138,8 @@ export async function connectMongo(): Promise<typeof mongoose> {
 
   // Create new connection with retry logic
   if (!cached?.promise) {
+    const needsTLS = requiresTLS(MONGODB_URI);
+    
     const connectionOptions: Parameters<typeof mongoose.connect>[1] = {
       bufferCommands: false,
       serverSelectionTimeoutMS: 30000, // Increased from 15000 for serverless cold starts
@@ -130,18 +151,41 @@ export async function connectMongo(): Promise<typeof mongoose> {
       retryWrites: true,
       retryReads: true,
     };
-    if (ALLOW_INSECURE_TLS) {
-      connectionOptions.tlsAllowInvalidCertificates = true;
-      connectionOptions.tlsAllowInvalidHostnames = true;
+    
+    // Configure TLS options for secure connections
+    // Note: For mongodb+srv://, TLS is already required by the protocol and handled automatically
+    // We only need to set certificate validation options if explicitly needed
+    const isSRV = MONGODB_URI.startsWith('mongodb+srv://');
+    if (needsTLS) {
+      // Only set tls: true for non-SRV connections that need TLS
+      // For mongodb+srv://, TLS is implicit and MongoDB handles it automatically
+      if (!isSRV) {
+        connectionOptions.tls = true;
+      }
+      // Set certificate validation options only if explicitly needed
+      // For mongodb+srv://, only set these if ALLOW_INSECURE_TLS is true
+      // Otherwise, let MongoDB handle TLS with default secure settings
+      if (ALLOW_INSECURE_TLS) {
+        connectionOptions.tlsAllowInvalidCertificates = true;
+        connectionOptions.tlsAllowInvalidHostnames = true;
+      }
     }
 
     cached!.promise = retryConnection(async () => {
       try {
         const conn = await mongoose.connect(MONGODB_URI, connectionOptions);
         
+        // Wait for connection to be ready (mongoose.connect should already wait, but verify)
+        // State 2 is "connecting", so we wait a bit if it's still connecting
+        let attempts = 0;
+        while (conn.connection.readyState === mongoose.ConnectionStates.connecting && attempts < 10) {
+          await sleep(100);
+          attempts++;
+        }
+        
         // Verify connection is actually ready
         if (conn.connection.readyState !== mongoose.ConnectionStates.connected) {
-          throw new Error(`Connection not ready, state: ${conn.connection.readyState}`);
+          throw new Error(`Connection not ready, state: ${conn.connection.readyState} (expected: ${mongoose.ConnectionStates.connected})`);
         }
         
         return conn;
@@ -186,7 +230,8 @@ export async function connectMongo(): Promise<typeof mongoose> {
       const isSSLError = errorMessage.includes('SSL') || 
                         errorMessage.includes('TLS') || 
                         errorMessage.includes('tlsv1') ||
-                        errorMessage.includes('certificate');
+                        errorMessage.includes('certificate') ||
+                        errorMessage.includes('alert number');
       
       if (isSSLError) {
         console.error('MongoDB SSL/TLS connection failed after retries:', {
@@ -214,7 +259,8 @@ export async function connectMongo(): Promise<typeof mongoose> {
     const isSSLError = errorMessage.includes('SSL') || 
                       errorMessage.includes('TLS') || 
                       errorMessage.includes('tlsv1') ||
-                      errorMessage.includes('certificate');
+                      errorMessage.includes('certificate') ||
+                      errorMessage.includes('alert number');
     
     if (isSSLError) {
       console.error('MongoDB SSL/TLS connection failed:', {

@@ -71,6 +71,25 @@ async function isClientConnected(client: MongoClient): Promise<boolean> {
   }
 }
 
+/**
+ * Determine if TLS is required based on the connection URI
+ */
+function requiresTLS(uri: string): boolean {
+  // mongodb+srv:// always requires TLS
+  if (uri.startsWith('mongodb+srv://')) {
+    return true;
+  }
+  // Check if URI explicitly specifies TLS
+  if (uri.includes('tls=true') || uri.includes('ssl=true')) {
+    return true;
+  }
+  // For production environments, assume TLS is required unless explicitly disabled
+  if (process.env.NODE_ENV === 'production' && !uri.includes('tls=false') && !uri.includes('ssl=false')) {
+    return true;
+  }
+  return false;
+}
+
 export function getMongoClient(): MongoClient {
   const uri =
     process.env.MONGODB_URI ??
@@ -81,7 +100,24 @@ export function getMongoClient(): MongoClient {
     throw new Error('Missing MONGODB_URI environment variable');
   }
   if (!cached!.client) {
-    const options = {
+    const ALLOW_INSECURE_TLS = process.env.MONGODB_ALLOW_INVALID_CERTS === 'true';
+    const needsTLS = requiresTLS(uri);
+    
+    const options: {
+      serverSelectionTimeoutMS: number;
+      socketTimeoutMS: number;
+      connectTimeoutMS: number;
+      maxPoolSize: number;
+      minPoolSize: number;
+      maxIdleTimeMS: number;
+      retryWrites: boolean;
+      retryReads: boolean;
+      heartbeatFrequencyMS: number;
+      directConnection: boolean;
+      tls?: boolean;
+      tlsAllowInvalidCertificates?: boolean;
+      tlsAllowInvalidHostnames?: boolean;
+    } = {
       serverSelectionTimeoutMS: 30000,
       socketTimeoutMS: 45000,
       connectTimeoutMS: 30000,
@@ -94,6 +130,26 @@ export function getMongoClient(): MongoClient {
       // Add direct connection option for better serverless handling
       directConnection: false, // Keep false for replica sets
     };
+
+    // Add TLS configuration for secure connections
+    // Note: For mongodb+srv://, TLS is already required by the protocol and handled automatically
+    // We only need to set certificate validation options if explicitly needed
+    const isSRV = uri.startsWith('mongodb+srv://');
+    if (needsTLS) {
+      // Only set tls: true for non-SRV connections that need TLS
+      // For mongodb+srv://, TLS is implicit and MongoDB handles it automatically
+      if (!isSRV) {
+        options.tls = true;
+      }
+      // Set certificate validation options only if explicitly needed
+      // For mongodb+srv://, only set these if ALLOW_INSECURE_TLS is true
+      // Otherwise, let MongoDB handle TLS with default secure settings
+      if (ALLOW_INSECURE_TLS) {
+        options.tlsAllowInvalidCertificates = true;
+        options.tlsAllowInvalidHostnames = true;
+      }
+    }
+
     cached!.client = new MongoClient(uri, options);
     // Attach Vercel's database pool for serverless optimization
     if (process.env.VERCEL) {
@@ -143,14 +199,49 @@ export async function getClientPromise(): Promise<MongoClient> {
     } catch (error) {
       // Clear the promise on failure so we can retry
       cached!.promise = null;
-      console.error('MongoDB client connection error:', error);
+      
+      // Enhance error messages for SSL/TLS issues
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isSSLError = errorMessage.includes('SSL') || 
+                        errorMessage.includes('TLS') || 
+                        errorMessage.includes('tlsv1') ||
+                        errorMessage.includes('certificate') ||
+                        errorMessage.includes('alert number');
+      
+      if (isSSLError) {
+        const ALLOW_INSECURE_TLS = process.env.MONGODB_ALLOW_INVALID_CERTS === 'true';
+        console.error('MongoDB client SSL/TLS connection error:', {
+          message: errorMessage,
+          allowInsecureTLS: ALLOW_INSECURE_TLS,
+          originalError: error,
+        });
+      } else {
+        console.error('MongoDB client connection error:', error);
+      }
       throw error;
     }
   }).catch((error) => {
     // Clear cache on final failure
     cached!.promise = null;
     cached!.client = null;
-    console.error('MongoDB client connection failed after retries:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const isSSLError = errorMessage.includes('SSL') || 
+                      errorMessage.includes('TLS') || 
+                      errorMessage.includes('tlsv1') ||
+                      errorMessage.includes('certificate') ||
+                      errorMessage.includes('alert number');
+    
+    if (isSSLError) {
+      const ALLOW_INSECURE_TLS = process.env.MONGODB_ALLOW_INVALID_CERTS === 'true';
+      console.error('MongoDB client SSL/TLS connection failed after retries:', {
+        message: errorMessage,
+        allowInsecureTLS: ALLOW_INSECURE_TLS,
+        originalError: error,
+      });
+    } else {
+      console.error('MongoDB client connection failed after retries:', error);
+    }
     // Don't throw unhandled rejection - let the caller handle it
     // But we need to throw so the promise chain knows it failed
     throw error;
