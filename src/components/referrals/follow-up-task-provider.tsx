@@ -96,8 +96,8 @@ interface FollowUpTaskContextValue {
   shownTasks: Record<string, string[]>;
   taskMetadata: Record<string, TaskMetadata>;
   toggleTask: (taskId: string, completed: boolean) => Promise<void>;
-  addManualTask: (referralId: string, task: ManualTaskInput) => void;
-  removeManualTask: (referralId: string, taskId: string) => void;
+  addManualTask: (referralId: string, task: ManualTaskInput) => Promise<void>;
+  removeManualTask: (referralId: string, taskId: string) => Promise<void>;
   addAgentTasks: (agentId: string, tasks: ManualTask[]) => void;
   removeAgentTask: (agentId: string, taskId: string) => void;
   markTasksAsShown: (referralId: string, taskIds: string[]) => void;
@@ -921,7 +921,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
   );
 
   const addManualTask = useCallback(
-    (referralId: string, input: ManualTaskInput) => {
+    async (referralId: string, input: ManualTaskInput) => {
       const task: ManualTask = {
         id: generateManualId(),
         title: input.title,
@@ -932,17 +932,34 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
         createdAt: new Date().toISOString(),
       };
       console.log(`[Task CRUD] Creating manual task "${task.title}" (${task.id}) for referral ${referralId}`);
-      dispatch({ type: 'add-manual', referralId, task });
-      scheduleReferralSync(referralId);
+      
+      // Update local state optimistically
+      startTransition(() => {
+        dispatch({ type: 'add-manual', referralId, task });
+      });
+      
+      // Use immediate sync to ensure persistence and prevent "flash and disappear" issue
+      // Skip merge to preserve optimistic update
+      await syncReferralStateImmediate(referralId, true);
     },
-    [scheduleReferralSync]
+    [syncReferralStateImmediate, startTransition]
   );
 
-  const removeManualTask = useCallback((referralId: string, taskId: string) => {
-    console.log(`[Task CRUD] Deleting manual task ${taskId} from referral ${referralId}`);
-    dispatch({ type: 'remove-manual', referralId, taskId });
-    scheduleReferralSync(referralId);
-  }, [scheduleReferralSync]);
+  const removeManualTask = useCallback(
+    async (referralId: string, taskId: string) => {
+      console.log(`[Task CRUD] Deleting manual task ${taskId} from referral ${referralId}`);
+      
+      // Update local state optimistically
+      startTransition(() => {
+        dispatch({ type: 'remove-manual', referralId, taskId });
+      });
+      
+      // Use immediate sync to ensure persistence and prevent "flash and disappear" issue
+      // Skip merge to preserve optimistic update
+      await syncReferralStateImmediate(referralId, true);
+    },
+    [syncReferralStateImmediate, startTransition]
+  );
 
 
   const addAgentTasks = useCallback((agentId: string, tasks: ManualTask[]) => {
