@@ -604,7 +604,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const syncReferralState = useCallback(async (referralId: string) => {
+  const syncReferralState = useCallback(async (referralId: string, skipMerge = false) => {
     const payload = buildReferralPayload(referralId, stateRef.current);
     const manualTasksCount = payload.manualTasks?.length ?? 0;
     const completionsCount = Object.keys(payload.completions ?? {}).length;
@@ -621,7 +621,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
         throw new Error('Failed to sync follow-up tasks');
       }
       const data = await response.json();
-      if (data?.state) {
+      if (data?.state && !skipMerge) {
         const serverManualTasksCount = data.state.manualTasks?.length ?? 0;
         console.log(`[Task Sync] Successfully synced referral ${referralId}: ${serverManualTasksCount} manual tasks on server`);
         dispatch({
@@ -634,6 +634,8 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
             taskMetadata: data.state.taskMetadata ?? {},
           },
         });
+      } else if (skipMerge) {
+        console.log(`[Task Sync] Successfully synced referral ${referralId} (skipping merge to preserve optimistic update)`);
       }
       allowLocalCacheRef.current = false;
       return true;
@@ -664,7 +666,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
 
   // Immediate sync for critical operations like toggles
   const syncReferralStateImmediate = useCallback(
-    async (referralId: string): Promise<boolean> => {
+    async (referralId: string, skipMerge = false): Promise<boolean> => {
       if (typeof window === 'undefined') {
         return false;
       }
@@ -675,7 +677,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
         syncTimeoutsRef.current.delete(referralId);
       }
       // Perform immediate sync
-      return await syncReferralState(referralId);
+      return await syncReferralState(referralId, skipMerge);
     },
     [syncReferralState]
   );
@@ -746,7 +748,8 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       });
       if (referralId) {
         // Use immediate sync for toggles to ensure persistence before page refresh
-        await syncReferralStateImmediate(referralId);
+        // Skip merge to preserve optimistic update and prevent flickering
+        await syncReferralStateImmediate(referralId, true);
       }
     },
     [getReferralIdFromTaskId, syncReferralStateImmediate, startTransition]
