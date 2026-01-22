@@ -46,10 +46,6 @@ export const buildStateFromDocument = (doc: FollowUpTaskStateLike | null): Follo
       continue;
     }
     const key = normalizeTaskId(record.taskId, referralId);
-    // TEMPORARY LOGGING: Log when we normalize a legacy taskId
-    if (key !== record.taskId && referralId) {
-      console.log(`[Task State DEBUG] Normalized completion taskId: "${record.taskId}" -> "${key}" (referralId: ${referralId})`);
-    }
     completions[key] = {
       completed: Boolean(record.completed),
       completedAt: typeof record.completedAt === 'string' ? record.completedAt : null,
@@ -67,10 +63,6 @@ export const buildStateFromDocument = (doc: FollowUpTaskStateLike | null): Follo
       continue;
     }
     const key = normalizeTaskId(record.taskId, referralId);
-    // TEMPORARY LOGGING: Log when we normalize a legacy taskId
-    if (key !== record.taskId && referralId) {
-      console.log(`[Task State DEBUG] Normalized taskMetadata taskId: "${record.taskId}" -> "${key}" (referralId: ${referralId})`);
-    }
     taskMetadata[key] = {
       taskId: key,
       title: record.title ?? '',

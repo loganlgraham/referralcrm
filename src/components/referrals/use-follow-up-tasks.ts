@@ -102,13 +102,6 @@ export function buildFollowUpTasksForReferral(
       const taskId = `${referral._id}::manual::${task.id}`;
       const completionEntry = completions[taskId];
       const completion = completionEntry?.completed ?? false;
-      const completionSource = completionEntry ? 'completions map' : 'default false';
-      
-      // TEMPORARY LOGGING: Log manual task completion lookup
-      console.log(`[Task Build DEBUG] Manual task referralId: ${referral._id}, taskId: ${taskId}, baseId: ${task.id}, completed: ${completion}, source: ${completionSource}`);
-      if (completionEntry) {
-        console.log(`[Task Build DEBUG]   - completionEntry: { completed: ${completionEntry.completed}, completedAt: ${completionEntry.completedAt ?? 'null'} }`);
-      }
       
       const handleToggle = () => {
         toggleTask(taskId, !completion);
@@ -143,13 +136,6 @@ export function buildFollowUpTasksForReferral(
       const taskId = `${referral._id}::${item.id}`;
       const completionEntry = completions[taskId];
       const completion = completionEntry?.completed ?? false;
-      const completionSource = completionEntry ? 'completions map' : 'default false';
-      
-      // TEMPORARY LOGGING: Log task completion lookup
-      console.log(`[Task Build DEBUG] Task referralId: ${referral._id}, taskId: ${taskId}, baseId: ${item.id}, completed: ${completion}, source: ${completionSource}`);
-      if (completionEntry) {
-        console.log(`[Task Build DEBUG]   - completionEntry: { completed: ${completionEntry.completed}, completedAt: ${completionEntry.completedAt ?? 'null'} }`);
-      }
       
       const handleToggle = () => {
         toggleTask(taskId, !completion);

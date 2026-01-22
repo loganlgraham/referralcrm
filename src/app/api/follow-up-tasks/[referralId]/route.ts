@@ -104,19 +104,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
   const payload = await request.json().catch(() => null);
   const referralId = params.referralId;
 
-  // TEMPORARY LOGGING: Log incoming request
-  console.log(`[Task API DEBUG] PUT /api/follow-up-tasks/${referralId} - User: ${session.user?.id} (${session.user?.role})`);
-  if (payload && typeof payload === 'object') {
-    if ('completions' in payload && payload.completions && typeof payload.completions === 'object') {
-      const completions = payload.completions as Record<string, { completed?: boolean; completedAt?: string | null }>;
-      const completionEntries = Object.entries(completions);
-      console.log(`[Task API DEBUG] Incoming completions payload: ${completionEntries.length} entries`);
-      completionEntries.forEach(([taskId, state]) => {
-        console.log(`[Task API DEBUG]   - taskId: ${taskId}, completed: ${state.completed}, completedAt: ${state.completedAt ?? 'null'}`);
-      });
-    }
-  }
-
   const update: Record<string, unknown> = {};
 
   // Only $set completions when explicitly provided. When omitted (e.g. debounced sync with
@@ -144,14 +131,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
   const manualTasksCount = Array.isArray(update.manualTasks) ? update.manualTasks.length : 0;
   const completionsCount = Array.isArray(update.completions) ? update.completions.length : 0;
   console.log(`[Task API] PUT /api/follow-up-tasks/${referralId} - User: ${session.user?.id} (${session.user?.role}), Manual tasks: ${manualTasksCount}, Completions: ${completionsCount}`);
-
-  // TEMPORARY LOGGING: Log what we're about to save
-  if (Array.isArray(update.completions)) {
-    console.log(`[Task API DEBUG] Saving ${update.completions.length} completion entries:`);
-    update.completions.forEach((entry: { taskId?: string; completed?: boolean; completedAt?: string | null }) => {
-      console.log(`[Task API DEBUG]   - taskId: ${entry.taskId}, completed: ${entry.completed}, completedAt: ${entry.completedAt ?? 'null'}`);
-    });
-  }
 
   const doc = await FollowUpTaskState.findOneAndUpdate(
     { referralId },
