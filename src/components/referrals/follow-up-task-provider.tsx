@@ -504,6 +504,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state);
   const syncTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const inFlightSyncsRef = useRef<Map<string, AbortController>>(new Map());
+  const pendingCompletionUpdatesRef = useRef<Map<string, Record<string, { completed: boolean; completedAt: string | null }>>>(new Map());
   const loadedReferralsRef = useRef<Set<string>>(new Set());
   const allowLocalCacheRef = useRef(false);
 
@@ -737,10 +738,35 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       
       // Cancel any in-flight immediate sync for this referral to prevent race conditions
       const inFlightController = inFlightSyncsRef.current.get(referralId);
+      let mergedCompletionUpdates: Record<string, { completed: boolean; completedAt: string | null }> = {};
+      
+      // Normalize completionUpdates to ensure completedAt is always string | null (not undefined)
+      if (completionUpdates) {
+        for (const [taskId, update] of Object.entries(completionUpdates)) {
+          mergedCompletionUpdates[taskId] = {
+            completed: update.completed,
+            completedAt: update.completedAt ?? null,
+          };
+        }
+      }
+      
       if (inFlightController) {
         console.log(`[Task Sync] Canceling previous in-flight sync for referral ${referralId}`);
+        
+        // Merge pending completion updates from the aborted sync to prevent data loss
+        const pendingUpdates = pendingCompletionUpdatesRef.current.get(referralId);
+        if (pendingUpdates) {
+          mergedCompletionUpdates = { ...pendingUpdates, ...mergedCompletionUpdates };
+          console.log(`[Task Sync] Merging ${Object.keys(pendingUpdates).length} pending completion updates from aborted sync`);
+        }
+        
         inFlightController.abort();
         inFlightSyncsRef.current.delete(referralId);
+      }
+      
+      // Store the merged completion updates as pending (will be cleared on successful sync)
+      if (Object.keys(mergedCompletionUpdates).length > 0) {
+        pendingCompletionUpdatesRef.current.set(referralId, mergedCompletionUpdates);
       }
       
       // Create new AbortController for this sync
@@ -748,12 +774,14 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       inFlightSyncsRef.current.set(referralId, abortController);
       
       try {
-        // Perform immediate sync with abort signal
-        const result = await syncReferralState(referralId, skipMerge, completionUpdates, abortController.signal);
+        // Perform immediate sync with merged completion updates
+        const result = await syncReferralState(referralId, skipMerge, mergedCompletionUpdates, abortController.signal);
         
         // Clean up on success (only if this controller is still the active one)
         if (inFlightSyncsRef.current.get(referralId) === abortController) {
           inFlightSyncsRef.current.delete(referralId);
+          // Clear pending updates after successful sync
+          pendingCompletionUpdatesRef.current.delete(referralId);
         }
         
         return result;
@@ -761,6 +789,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
         // Clean up on error (only if this controller is still the active one)
         if (inFlightSyncsRef.current.get(referralId) === abortController) {
           inFlightSyncsRef.current.delete(referralId);
+          // Don't clear pending updates on error - they'll be retried in the next sync
         }
         throw error;
       }
