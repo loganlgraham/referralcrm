@@ -137,6 +137,11 @@ const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
     case 'hydrate':
       return { ...createDefaultTaskState(), ...action.payload };
     case 'merge-referrals': {
+      // TEMPORARY LOGGING: Log merge operation
+      console.log(`[Merge DEBUG] merge-referrals for referralIds: ${action.referralIds.join(', ')}`);
+      const beforeCompletionsCount = Object.keys(state.completions).length;
+      console.log(`[Merge DEBUG] Before merge: ${beforeCompletionsCount} total completions in state`);
+      
       const nextCompletions = { ...state.completions };
       const nextManualTasks = { ...state.manualTasks };
       const nextShownTasks = { ...state.shownTasks };
@@ -144,6 +149,12 @@ const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
 
       for (const referralId of action.referralIds) {
         const prefix = `${referralId}::`;
+        const beforeDelete = Object.keys(nextCompletions).filter((taskId) => taskId.startsWith(prefix));
+        console.log(`[Merge DEBUG] Referral ${referralId}: Deleting ${beforeDelete.length} existing completions`);
+        beforeDelete.forEach((taskId) => {
+          console.log(`[Merge DEBUG]   - Deleting: ${taskId}, completed: ${nextCompletions[taskId]?.completed}`);
+        });
+        
         Object.keys(nextCompletions).forEach((taskId) => {
           if (taskId.startsWith(prefix)) {
             delete nextCompletions[taskId];
@@ -158,9 +169,19 @@ const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
         nextShownTasks[referralId] = action.payload.shownTasks[referralId] ?? [];
       }
 
+      const payloadCompletionsCount = Object.keys(action.payload.completions ?? {}).length;
+      console.log(`[Merge DEBUG] Payload contains ${payloadCompletionsCount} completions to merge`);
+      Object.entries(action.payload.completions ?? {}).forEach(([taskId, completionState]) => {
+        console.log(`[Merge DEBUG]   - Merging: ${taskId}, completed: ${completionState?.completed}, completedAt: ${completionState?.completedAt ?? 'null'}`);
+      });
+
+      const mergedCompletions = { ...nextCompletions, ...action.payload.completions };
+      const afterCompletionsCount = Object.keys(mergedCompletions).length;
+      console.log(`[Merge DEBUG] After merge: ${afterCompletionsCount} total completions in state`);
+
       return {
         ...state,
-        completions: { ...nextCompletions, ...action.payload.completions },
+        completions: mergedCompletions,
         manualTasks: { ...nextManualTasks },
         shownTasks: { ...nextShownTasks },
         taskMetadata: { ...nextMetadata, ...action.payload.taskMetadata },
@@ -587,29 +608,70 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     return referralId || null;
   }, []);
 
-  const buildReferralPayload = useCallback((referralId: string, currentState: StoredTaskState) => {
-    const prefix = `${referralId}::`;
-    const completions = Object.fromEntries(
-      Object.entries(currentState.completions).filter(([taskId]) => taskId.startsWith(prefix))
-    );
-    const taskMetadata = Object.fromEntries(
-      Object.entries(currentState.taskMetadata).filter(([taskId]) => taskId.startsWith(prefix))
-    );
+  const buildReferralPayload = useCallback(
+    (
+      referralId: string,
+      currentState: StoredTaskState,
+      completionUpdates?: Record<string, { completed: boolean; completedAt?: string | null }>
+    ) => {
+      const prefix = `${referralId}::`;
+      let completions = Object.fromEntries(
+        Object.entries(currentState.completions).filter(([taskId]) => taskId.startsWith(prefix))
+      );
+      
+      // Merge in any direct completion updates (to fix race condition)
+      if (completionUpdates) {
+        completions = { ...completions, ...completionUpdates };
+      }
+      
+      const taskMetadata = Object.fromEntries(
+        Object.entries(currentState.taskMetadata).filter(([taskId]) => taskId.startsWith(prefix))
+      );
 
-    return {
-      completions,
-      manualTasks: currentState.manualTasks[referralId] ?? [],
-      shownTasks: currentState.shownTasks[referralId] ?? [],
-      taskMetadata,
-    };
-  }, []);
+      return {
+        completions,
+        manualTasks: currentState.manualTasks[referralId] ?? [],
+        shownTasks: currentState.shownTasks[referralId] ?? [],
+        taskMetadata,
+      };
+    },
+    []
+  );
 
-  const syncReferralState = useCallback(async (referralId: string, skipMerge = false) => {
-    const payload = buildReferralPayload(referralId, stateRef.current);
+  const syncReferralState = useCallback(
+    async (
+      referralId: string,
+      skipMerge = false,
+      completionUpdates?: Record<string, { completed: boolean; completedAt?: string | null }>
+    ) => {
+      // TEMPORARY LOGGING: Log what stateRef.current contains
+      const prefix = `${referralId}::`;
+      const currentCompletionsForReferral = Object.entries(stateRef.current.completions)
+        .filter(([taskId]) => taskId.startsWith(prefix));
+      console.log(`[Task Sync DEBUG] stateRef.current.completions for referral ${referralId}: ${currentCompletionsForReferral.length} entries`);
+      currentCompletionsForReferral.forEach(([taskId, completionState]) => {
+        console.log(`[Task Sync DEBUG]   - taskId: ${taskId}, completed: ${completionState?.completed}, completedAt: ${completionState?.completedAt ?? 'null'}`);
+      });
+      if (completionUpdates) {
+        console.log(`[Task Sync DEBUG] Direct completion updates provided: ${Object.keys(completionUpdates).length} entries`);
+        Object.entries(completionUpdates).forEach(([taskId, completionState]) => {
+          console.log(`[Task Sync DEBUG]   - taskId: ${taskId}, completed: ${completionState?.completed}, completedAt: ${completionState?.completedAt ?? 'null'}`);
+        });
+      }
+      console.log(`[Task Sync DEBUG] skipMerge: ${skipMerge}`);
+      
+      const payload = buildReferralPayload(referralId, stateRef.current, completionUpdates);
     const manualTasksCount = payload.manualTasks?.length ?? 0;
     const completionsCount = Object.keys(payload.completions ?? {}).length;
 
     console.log(`[Task Sync] Syncing referral ${referralId}: ${manualTasksCount} manual tasks, ${completionsCount} completions`);
+    
+    // TEMPORARY LOGGING: Log what payload we're sending
+    const payloadCompletions = Object.entries(payload.completions ?? {});
+    console.log(`[Task Sync DEBUG] Payload being sent - ${payloadCompletions.length} completions:`);
+    payloadCompletions.forEach(([taskId, completionState]) => {
+      console.log(`[Task Sync DEBUG]   - taskId: ${taskId}, completed: ${completionState?.completed}, completedAt: ${completionState?.completedAt ?? 'null'}`);
+    });
 
     try {
       const response = await fetch(`/api/follow-up-tasks/${referralId}`, {
@@ -666,7 +728,11 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
 
   // Immediate sync for critical operations like toggles
   const syncReferralStateImmediate = useCallback(
-    async (referralId: string, skipMerge = false): Promise<boolean> => {
+    async (
+      referralId: string,
+      skipMerge = false,
+      completionUpdates?: Record<string, { completed: boolean; completedAt?: string | null }>
+    ): Promise<boolean> => {
       if (typeof window === 'undefined') {
         return false;
       }
@@ -677,7 +743,7 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
         syncTimeoutsRef.current.delete(referralId);
       }
       // Perform immediate sync
-      return await syncReferralState(referralId, skipMerge);
+      return await syncReferralState(referralId, skipMerge, completionUpdates);
     },
     [syncReferralState]
   );
@@ -686,8 +752,29 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     if (typeof window === 'undefined') {
       return;
     }
+    // TEMPORARY LOGGING: Log what we're checking
+    const allReferralIds = new Set(referralIds);
+    const previouslyLoaded = Array.from(loadedReferralsRef.current);
+    console.log(`[Task Load DEBUG] Requested referralIds: ${referralIds.join(', ')}`);
+    console.log(`[Task Load DEBUG] Previously loaded: ${previouslyLoaded.join(', ')}`);
+    
+    // Clear loaded ref if referralIds have changed significantly (e.g., page navigation)
+    // This ensures we reload on refresh even if ref persisted somehow
+    const hasNewReferrals = referralIds.some((id) => !loadedReferralsRef.current.has(id));
+    if (hasNewReferrals && referralIds.length > 0) {
+      // Only keep loaded refs that are still in the current referral list
+      const currentSet = new Set(referralIds);
+      const toRemove = Array.from(loadedReferralsRef.current).filter((id) => !currentSet.has(id));
+      toRemove.forEach((id) => loadedReferralsRef.current.delete(id));
+      if (toRemove.length > 0) {
+        console.log(`[Task Load DEBUG] Cleared ${toRemove.length} stale loaded referrals: ${toRemove.join(', ')}`);
+      }
+    }
+    
     const idsToLoad = referralIds.filter((id) => id && !loadedReferralsRef.current.has(id));
+    console.log(`[Task Load DEBUG] IDs to load (after filtering): ${idsToLoad.join(', ')}`);
     if (idsToLoad.length === 0) {
+      console.log(`[Task Load DEBUG] All referrals already loaded, skipping fetch`);
       return;
     }
     console.log(`[Task Load] Loading task states for referrals: ${idsToLoad.join(', ')}`);
@@ -715,6 +802,17 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
         >;
 
         Object.entries(referrals).forEach(([referralId, state]) => {
+          // TEMPORARY LOGGING: Log what we received from API
+          if (state?.completions && typeof state.completions === 'object') {
+            const completionEntries = Object.entries(state.completions);
+            console.log(`[Task Load DEBUG] Referral ${referralId} - Received ${completionEntries.length} completions from API:`);
+            completionEntries.forEach(([taskId, completionState]) => {
+              console.log(`[Task Load DEBUG]   - taskId: ${taskId}, completed: ${completionState?.completed}, completedAt: ${completionState?.completedAt ?? 'null'}`);
+            });
+          } else {
+            console.log(`[Task Load DEBUG] Referral ${referralId} - No completions received from API`);
+          }
+          
           Object.assign(completions, state?.completions ?? {});
           manualTasks[referralId] = Array.isArray(state?.manualTasks) ? state.manualTasks : [];
           shownTasks[referralId] = Array.isArray(state?.shownTasks) ? state.shownTasks : [];
@@ -722,6 +820,13 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
           loadedReferralsRef.current.add(referralId);
           const taskCount = manualTasks[referralId]?.length ?? 0;
           console.log(`[Task Load] Loaded ${taskCount} manual tasks for referral ${referralId}`);
+        });
+
+        // TEMPORARY LOGGING: Log what we're about to merge
+        const allCompletionEntries = Object.entries(completions);
+        console.log(`[Task Load DEBUG] About to merge ${allCompletionEntries.length} total completions into state`);
+        allCompletionEntries.forEach(([taskId, completionState]) => {
+          console.log(`[Task Load DEBUG]   - taskId: ${taskId}, completed: ${completionState?.completed}, completedAt: ${completionState?.completedAt ?? 'null'}`);
         });
 
         // For admin users, merge-referrals already clears old state for these referrals first,
@@ -743,13 +848,21 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     async (taskId: string, completed: boolean) => {
       const referralId = getReferralIdFromTaskId(taskId);
       console.log(`[Task CRUD] Toggling task ${taskId} to ${completed ? 'completed' : 'incomplete'}`);
+      
+      // Build the completion update directly to avoid race condition with stateRef
+      const completedAt = completed ? new Date().toISOString() : null;
+      const completionUpdates: Record<string, { completed: boolean; completedAt: string | null }> = {
+        [taskId]: { completed, completedAt },
+      };
+      
       startTransition(() => {
         dispatch({ type: 'toggle', taskId, completed });
       });
       if (referralId) {
         // Use immediate sync for toggles to ensure persistence before page refresh
+        // Pass completion state directly to avoid race condition with stateRef
         // Skip merge to preserve optimistic update and prevent flickering
-        await syncReferralStateImmediate(referralId, true);
+        await syncReferralStateImmediate(referralId, true, completionUpdates);
       }
     },
     [getReferralIdFromTaskId, syncReferralStateImmediate, startTransition]

@@ -104,6 +104,19 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
   const payload = await request.json().catch(() => null);
   const referralId = params.referralId;
 
+  // TEMPORARY LOGGING: Log incoming request
+  console.log(`[Task API DEBUG] PUT /api/follow-up-tasks/${referralId} - User: ${session.user?.id} (${session.user?.role})`);
+  if (payload && typeof payload === 'object') {
+    if ('completions' in payload && payload.completions && typeof payload.completions === 'object') {
+      const completions = payload.completions as Record<string, { completed?: boolean; completedAt?: string | null }>;
+      const completionEntries = Object.entries(completions);
+      console.log(`[Task API DEBUG] Incoming completions payload: ${completionEntries.length} entries`);
+      completionEntries.forEach(([taskId, state]) => {
+        console.log(`[Task API DEBUG]   - taskId: ${taskId}, completed: ${state.completed}, completedAt: ${state.completedAt ?? 'null'}`);
+      });
+    }
+  }
+
   const update: Record<string, unknown> = {};
 
   if (payload && 'completions' in payload) {
@@ -130,6 +143,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
   const completionsCount = Array.isArray(update.completions) ? update.completions.length : 0;
   console.log(`[Task API] PUT /api/follow-up-tasks/${referralId} - User: ${session.user?.id} (${session.user?.role}), Manual tasks: ${manualTasksCount}, Completions: ${completionsCount}`);
 
+  // TEMPORARY LOGGING: Log what we're about to save
+  if (Array.isArray(update.completions)) {
+    console.log(`[Task API DEBUG] Saving ${update.completions.length} completion entries:`);
+    update.completions.forEach((entry: { taskId?: string; completed?: boolean; completedAt?: string | null }) => {
+      console.log(`[Task API DEBUG]   - taskId: ${entry.taskId}, completed: ${entry.completed}, completedAt: ${entry.completedAt ?? 'null'}`);
+    });
+  }
+
   const doc = await FollowUpTaskState.findOneAndUpdate(
     { referralId },
     { $set: update },
@@ -139,7 +160,28 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
     manualTasks?: unknown;
     shownTasks?: unknown;
     taskMetadata?: unknown;
+    updatedAt?: Date;
   }>();
+
+  // TEMPORARY LOGGING: Re-fetch immediately after save to verify persistence
+  const verificationDoc = await FollowUpTaskState.findOne({ referralId }).lean<{
+    completions?: Array<{ taskId?: string; completed?: boolean; completedAt?: string | null }>;
+    updatedAt?: Date;
+  }>();
+  
+  if (verificationDoc) {
+    console.log(`[Task API DEBUG] After save, re-fetched document - updatedAt: ${verificationDoc.updatedAt?.toISOString() ?? 'null'}`);
+    if (Array.isArray(verificationDoc.completions)) {
+      console.log(`[Task API DEBUG] Persisted completions (${verificationDoc.completions.length} entries):`);
+      verificationDoc.completions.forEach((entry) => {
+        console.log(`[Task API DEBUG]   - taskId: ${entry.taskId}, completed: ${entry.completed}, completedAt: ${entry.completedAt ?? 'null'}`);
+      });
+    } else {
+      console.log(`[Task API DEBUG] No completions found in persisted document`);
+    }
+  } else {
+    console.log(`[Task API DEBUG] WARNING: Could not re-fetch document after save`);
+  }
 
   const savedManualTasksCount = Array.isArray(doc?.manualTasks) ? doc.manualTasks.length : 0;
   console.log(`[Task API] Successfully saved task state for referral ${referralId}: ${savedManualTasksCount} manual tasks persisted`);
