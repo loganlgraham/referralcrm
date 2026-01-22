@@ -588,6 +588,24 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem(FOLLOW_UP_TASK_STORAGE_KEY, JSON.stringify(state));
   }, [state, isAdmin]);
 
+  // Cleanup: abort all in-flight syncs and clear debounced syncs on unmount
+  useEffect(() => {
+    return () => {
+      // Abort all in-flight immediate syncs
+      for (const controller of inFlightSyncsRef.current.values()) {
+        controller.abort();
+      }
+      inFlightSyncsRef.current.clear();
+
+      // Clear all debounced syncs (clear timeouts and abort controllers)
+      for (const entry of debouncedSyncRef.current.values()) {
+        clearTimeout(entry.timeoutId);
+        entry.controller.abort();
+      }
+      debouncedSyncRef.current.clear();
+    };
+  }, []);
+
   const getReferralIdFromTaskId = useCallback((taskId: string): string | null => {
     const [referralId] = taskId.split('::');
     return referralId || null;
