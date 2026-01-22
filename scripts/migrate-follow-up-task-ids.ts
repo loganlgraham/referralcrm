@@ -10,7 +10,8 @@ import { connectMongo } from '../src/lib/mongoose';
 import { FollowUpTaskState } from '../src/models/follow-up-task-state';
 import type { FollowUpTaskCompletion, FollowUpTaskMetadata } from '../src/models/follow-up-task-state';
 
-function normalizeTaskId(taskId: string, referralId: string): string {
+function normalizeTaskId(taskId: string, referralId: string | undefined): string {
+  if (!referralId) return taskId;
   const prefix = `${referralId}::`;
   return taskId.startsWith(prefix) ? taskId : `${prefix}${taskId}`;
 }
@@ -23,7 +24,7 @@ async function main() {
   const docs = await FollowUpTaskState.find({}).lean<
     Array<{
       _id: unknown;
-      referralId: string;
+      referralId?: string;
       completions?: FollowUpTaskCompletion[];
       manualTasks?: unknown[];
       shownTasks?: string[];
@@ -32,8 +33,16 @@ async function main() {
   >();
 
   let updated = 0;
+  let skipped = 0;
   for (const doc of docs) {
-    const referralId = doc.referralId;
+    const referralId = typeof doc.referralId === 'string' ? doc.referralId : undefined;
+    
+    // Skip documents with missing or invalid referralId to prevent corrupting data
+    if (!referralId) {
+      skipped++;
+      console.log(`  ⚠ Skipping document ${doc._id}: missing or invalid referralId`);
+      continue;
+    }
     let completionsChanged = false;
     let metadataChanged = false;
 
@@ -75,6 +84,9 @@ async function main() {
   }
 
   console.log(`\nDone. Updated ${updated} / ${docs.length} document(s).`);
+  if (skipped > 0) {
+    console.log(`  ⚠ Skipped ${skipped} document(s) with missing or invalid referralId.`);
+  }
   process.exit(0);
 }
 
