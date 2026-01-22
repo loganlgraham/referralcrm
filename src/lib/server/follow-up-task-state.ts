@@ -16,17 +16,25 @@ const PRIORITIES = new Set(['urgent', 'high', 'medium', 'low']);
 const CATEGORIES = new Set(['assignment', 'communication', 'pipeline', 'finance', 'ops']);
 
 type FollowUpTaskStateLike = {
+  referralId?: string;
   completions?: unknown;
   manualTasks?: unknown;
   shownTasks?: unknown;
   taskMetadata?: unknown;
 };
 
+function normalizeTaskId(taskId: string, referralId: string | undefined): string {
+  if (!referralId) return taskId;
+  const prefix = `${referralId}::`;
+  return taskId.startsWith(prefix) ? taskId : `${prefix}${taskId}`;
+}
+
 export const buildStateFromDocument = (doc: FollowUpTaskStateLike | null): FollowUpTaskStatePayload => {
   if (!doc || typeof doc !== 'object') {
     return { completions: {}, manualTasks: [], shownTasks: [], taskMetadata: {} };
   }
 
+  const referralId = typeof doc.referralId === 'string' ? doc.referralId : undefined;
   const completions: FollowUpTaskStatePayload['completions'] = {};
   const completionEntries = Array.isArray(doc.completions) ? doc.completions : [];
   for (const completion of completionEntries) {
@@ -37,7 +45,12 @@ export const buildStateFromDocument = (doc: FollowUpTaskStateLike | null): Follo
     if (typeof record.taskId !== 'string') {
       continue;
     }
-    completions[record.taskId] = {
+    const key = normalizeTaskId(record.taskId, referralId);
+    // TEMPORARY LOGGING: Log when we normalize a legacy taskId
+    if (key !== record.taskId && referralId) {
+      console.log(`[Task State DEBUG] Normalized completion taskId: "${record.taskId}" -> "${key}" (referralId: ${referralId})`);
+    }
+    completions[key] = {
       completed: Boolean(record.completed),
       completedAt: typeof record.completedAt === 'string' ? record.completedAt : null,
     };
@@ -53,8 +66,13 @@ export const buildStateFromDocument = (doc: FollowUpTaskStateLike | null): Follo
     if (typeof record.taskId !== 'string') {
       continue;
     }
-    taskMetadata[record.taskId] = {
-      taskId: record.taskId,
+    const key = normalizeTaskId(record.taskId, referralId);
+    // TEMPORARY LOGGING: Log when we normalize a legacy taskId
+    if (key !== record.taskId && referralId) {
+      console.log(`[Task State DEBUG] Normalized taskMetadata taskId: "${record.taskId}" -> "${key}" (referralId: ${referralId})`);
+    }
+    taskMetadata[key] = {
+      taskId: key,
       title: record.title ?? '',
       message: record.message ?? '',
       priority: record.priority as FollowUpTaskMetadata['priority'],

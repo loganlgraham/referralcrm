@@ -673,11 +673,25 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       console.log(`[Task Sync DEBUG]   - taskId: ${taskId}, completed: ${completionState?.completed}, completedAt: ${completionState?.completedAt ?? 'null'}`);
     });
 
+    // Debounced sync (no completionUpdates): omit completions when empty so we never overwrite
+    // server completions with an empty array (e.g. legacy state keys filtered out by prefix).
+    const omitCompletions =
+      !completionUpdates && Object.keys(payload.completions ?? {}).length === 0;
+    const body = omitCompletions
+      ? (() => {
+          const { completions: _c, ...rest } = payload;
+          return rest;
+        })()
+      : payload;
+    if (omitCompletions) {
+      console.log(`[Task Sync DEBUG] Omitting completions from payload (debounced sync, empty)`);
+    }
+
     try {
       const response = await fetch(`/api/follow-up-tasks/${referralId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       });
       if (!response.ok) {
         throw new Error('Failed to sync follow-up tasks');

@@ -119,6 +119,8 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
 
   const update: Record<string, unknown> = {};
 
+  // Only $set completions when explicitly provided. When omitted (e.g. debounced sync with
+  // empty local completions), we never overwrite server completions.
   if (payload && 'completions' in payload) {
     update.completions = buildCompletionEntries(payload.completions, referralId);
   }
