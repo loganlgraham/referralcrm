@@ -135,7 +135,9 @@ async function migrateManualTasks(stats: MigrationStats) {
 
         const category = categoryMap[manualTask.category] || 'ops';
 
-        // Create the task
+        // Create the task with explicit createdAt to preserve original timestamp
+        // This is critical for idempotency: the check above queries by createdAt,
+        // so we must store the original createdAt, not the migration run time.
         await FollowUpTask.create({
           referralId: new Types.ObjectId(referralId),
           agentId: null,
@@ -151,6 +153,7 @@ async function migrateManualTasks(stats: MigrationStats) {
           source: 'manual',
           ruleId: null,
           statusWhenCreated: null,
+          createdAt: new Date(manualTask.createdAt),
         });
 
         stats.manualTasksCreated++;
