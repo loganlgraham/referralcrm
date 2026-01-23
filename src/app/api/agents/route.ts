@@ -14,6 +14,7 @@ import {
   syncAgentZipCoverage,
 } from '@/lib/server/zip-coverage';
 import { normalizePhoneNumber } from '@/utils/phone-utils';
+import { syncAgentOnboardingTasks } from '@/lib/server/task-sync';
 
 const coverageLocationSchema = z.object({
   label: z.string().trim().min(1),
@@ -372,6 +373,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } else if (combinedZipCoverage.length > 0) {
     await rememberCoverageSuggestions(combinedZipCoverage);
   }
+
+  // Sync onboarding tasks for the new agent (runs in background)
+  syncAgentOnboardingTasks(agent._id).catch((error) => {
+    console.error('[Task Sync] Failed to sync onboarding tasks for new agent:', error);
+  });
 
   // Save source to metadata collection (admin only)
   if (session.user.role === 'admin' && providedSource) {

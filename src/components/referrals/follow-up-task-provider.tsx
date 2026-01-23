@@ -72,7 +72,7 @@ export interface StoredTaskState {
 }
 
 type Action =
-  | { type: 'toggle'; taskId: string; completed: boolean }
+  | { type: 'toggle'; taskId: string; completed: boolean; completedAt: string | null }
   | { type: 'hydrate'; payload: StoredTaskState }
   | {
       type: 'merge-referrals';
@@ -95,14 +95,14 @@ interface FollowUpTaskContextValue {
   agentTasks: Record<string, ManualTask[]>;
   shownTasks: Record<string, string[]>;
   taskMetadata: Record<string, TaskMetadata>;
-  toggleTask: (taskId: string, completed: boolean) => void;
-  addManualTask: (referralId: string, task: ManualTaskInput) => void;
-  removeManualTask: (referralId: string, taskId: string) => void;
+  toggleTask: (taskId: string, completed: boolean) => Promise<void>;
+  addManualTask: (referralId: string, task: ManualTaskInput) => Promise<void>;
+  removeManualTask: (referralId: string, taskId: string) => Promise<void>;
   addAgentTasks: (agentId: string, tasks: ManualTask[]) => void;
   removeAgentTask: (agentId: string, taskId: string) => void;
   markTasksAsShown: (referralId: string, taskIds: string[]) => void;
   storeTaskMetadata: (tasks: Array<{ taskId: string; metadata: TaskMetadata }>) => void;
-  loadReferralStates: (referralIds: string[]) => void;
+  loadReferralStates: (referralIds: string[], forceRefresh?: boolean) => Promise<void>;
   reminderSettings: ReminderSettings;
   globalReminderSettings: ReminderSettings;
   reminderOverrides: Record<string, ReminderSettings>;
@@ -137,40 +137,57 @@ const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
     case 'hydrate':
       return { ...createDefaultTaskState(), ...action.payload };
     case 'merge-referrals': {
-      const nextCompletions = { ...state.completions };
       const nextManualTasks = { ...state.manualTasks };
       const nextShownTasks = { ...state.shownTasks };
       const nextMetadata = { ...state.taskMetadata };
 
+      // Build prefixes for all referral IDs being merged
+      const prefixesToRemove = action.referralIds.map((referralId) => `${referralId}::`);
+
+      // Build merged completions atomically: keep non-matching, replace matching
+      // This prevents the flash where completions are temporarily missing
+      const mergedCompletions: CompletionMap = {};
+      
+      // First, copy all completions that don't match any of the referral prefixes
+      Object.entries(state.completions).forEach(([taskId, completion]) => {
+        const shouldRemove = prefixesToRemove.some((prefix) => taskId.startsWith(prefix));
+        if (!shouldRemove) {
+          mergedCompletions[taskId] = completion;
+        }
+      });
+      
+      // Then merge in the new completions from the payload (this overwrites any matching keys)
+      Object.assign(mergedCompletions, action.payload.completions);
+
+      // Update metadata atomically in the same way
+      const mergedMetadata: Record<string, TaskMetadata> = {};
+      Object.entries(state.taskMetadata).forEach(([taskId, metadata]) => {
+        const shouldRemove = prefixesToRemove.some((prefix) => taskId.startsWith(prefix));
+        if (!shouldRemove) {
+          mergedMetadata[taskId] = metadata;
+        }
+      });
+      Object.assign(mergedMetadata, action.payload.taskMetadata);
+
+      // Update manual tasks and shown tasks
       for (const referralId of action.referralIds) {
-        const prefix = `${referralId}::`;
-        Object.keys(nextCompletions).forEach((taskId) => {
-          if (taskId.startsWith(prefix)) {
-            delete nextCompletions[taskId];
-          }
-        });
-        Object.keys(nextMetadata).forEach((taskId) => {
-          if (taskId.startsWith(prefix)) {
-            delete nextMetadata[taskId];
-          }
-        });
         nextManualTasks[referralId] = action.payload.manualTasks[referralId] ?? [];
         nextShownTasks[referralId] = action.payload.shownTasks[referralId] ?? [];
       }
 
       return {
         ...state,
-        completions: { ...nextCompletions, ...action.payload.completions },
+        completions: mergedCompletions,
         manualTasks: { ...nextManualTasks },
         shownTasks: { ...nextShownTasks },
-        taskMetadata: { ...nextMetadata, ...action.payload.taskMetadata },
+        taskMetadata: mergedMetadata,
       };
     }
     case 'toggle': {
       const nextCompletions: CompletionMap = { ...state.completions };
       nextCompletions[action.taskId] = {
         completed: action.completed,
-        completedAt: action.completed ? new Date().toISOString() : null,
+        completedAt: action.completedAt,
       };
       return { ...state, completions: nextCompletions };
     }
@@ -499,13 +516,26 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
 
   const [, startTransition] = useTransition();
   const stateRef = useRef(state);
-  const syncTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  type DebouncedSyncEntry = { timeoutId: NodeJS.Timeout; controller: AbortController };
+  const debouncedSyncRef = useRef<Map<string, DebouncedSyncEntry>>(new Map());
+  const inFlightSyncsRef = useRef<Map<string, AbortController>>(new Map());
+  const pendingCompletionUpdatesRef = useRef<Map<string, Record<string, { completed: boolean; completedAt: string | null }>>>(new Map());
   const loadedReferralsRef = useRef<Set<string>>(new Set());
   const allowLocalCacheRef = useRef(false);
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  // Clear loaded referrals on mount to ensure fresh data on page load/refresh
+  useEffect(() => {
+    if (!isMountedRef.current) {
+      isMountedRef.current = true;
+      loadedReferralsRef.current.clear();
+      console.log('[Task Load] Cleared loaded referrals cache on mount - will fetch fresh data');
+    }
+  }, []);
 
   // Fetch reminder settings from the server on mount (source of truth for cron job)
   useEffect(() => {
@@ -582,46 +612,111 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem(FOLLOW_UP_TASK_STORAGE_KEY, JSON.stringify(state));
   }, [state, isAdmin]);
 
+  // Cleanup: abort all in-flight syncs and clear debounced syncs on unmount
+  useEffect(() => {
+    return () => {
+      // Abort all in-flight immediate syncs
+      for (const controller of inFlightSyncsRef.current.values()) {
+        controller.abort();
+      }
+      inFlightSyncsRef.current.clear();
+
+      // Clear all debounced syncs (clear timeouts and abort controllers)
+      for (const entry of debouncedSyncRef.current.values()) {
+        clearTimeout(entry.timeoutId);
+        entry.controller.abort();
+      }
+      debouncedSyncRef.current.clear();
+    };
+  }, []);
+
   const getReferralIdFromTaskId = useCallback((taskId: string): string | null => {
     const [referralId] = taskId.split('::');
     return referralId || null;
   }, []);
 
-  const buildReferralPayload = useCallback((referralId: string, currentState: StoredTaskState) => {
-    const prefix = `${referralId}::`;
-    const completions = Object.fromEntries(
-      Object.entries(currentState.completions).filter(([taskId]) => taskId.startsWith(prefix))
-    );
-    const taskMetadata = Object.fromEntries(
-      Object.entries(currentState.taskMetadata).filter(([taskId]) => taskId.startsWith(prefix))
-    );
+  const buildReferralPayload = useCallback(
+    (
+      referralId: string,
+      currentState: StoredTaskState,
+      completionUpdates?: Record<string, { completed: boolean; completedAt?: string | null }>
+    ) => {
+      const prefix = `${referralId}::`;
+      let completions = Object.fromEntries(
+        Object.entries(currentState.completions).filter(([taskId]) => taskId.startsWith(prefix))
+      );
+      
+      // Merge in any direct completion updates (to fix race condition)
+      if (completionUpdates) {
+        completions = { ...completions, ...completionUpdates };
+      }
+      
+      const taskMetadata = Object.fromEntries(
+        Object.entries(currentState.taskMetadata).filter(([taskId]) => taskId.startsWith(prefix))
+      );
 
-    return {
-      completions,
-      manualTasks: currentState.manualTasks[referralId] ?? [],
-      shownTasks: currentState.shownTasks[referralId] ?? [],
-      taskMetadata,
-    };
-  }, []);
+      return {
+        completions,
+        manualTasks: currentState.manualTasks[referralId] ?? [],
+        shownTasks: currentState.shownTasks[referralId] ?? [],
+        taskMetadata,
+      };
+    },
+    []
+  );
 
-  const syncReferralState = useCallback(async (referralId: string) => {
-    const payload = buildReferralPayload(referralId, stateRef.current);
+  const syncReferralState = useCallback(
+    async (
+      referralId: string,
+      skipMerge = false,
+      completionUpdates?: Record<string, { completed: boolean; completedAt?: string | null }>,
+      abortSignal?: AbortSignal
+    ) => {
+      const payload = buildReferralPayload(referralId, stateRef.current, completionUpdates);
     const manualTasksCount = payload.manualTasks?.length ?? 0;
     const completionsCount = Object.keys(payload.completions ?? {}).length;
 
     console.log(`[Task Sync] Syncing referral ${referralId}: ${manualTasksCount} manual tasks, ${completionsCount} completions`);
 
+    // Debounced sync (no completionUpdates): omit completions when empty so we never overwrite
+    // server completions with an empty array (e.g. legacy state keys filtered out by prefix).
+    // Check if completionUpdates has actual entries, not just if it's truthy (empty objects are truthy)
+    const hasCompletionUpdates = completionUpdates && Object.keys(completionUpdates).length > 0;
+    const omitCompletions =
+      !hasCompletionUpdates && Object.keys(payload.completions ?? {}).length === 0;
+    const body = omitCompletions
+      ? (() => {
+          const { completions: _c, ...rest } = payload;
+          return rest;
+        })()
+      : payload;
+
     try {
       const response = await fetch(`/api/follow-up-tasks/${referralId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
+        signal: abortSignal,
       });
+      
+      // Check if request was aborted
+      if (abortSignal?.aborted) {
+        console.log(`[Task Sync] Request for referral ${referralId} was aborted`);
+        return false;
+      }
+      
       if (!response.ok) {
         throw new Error('Failed to sync follow-up tasks');
       }
       const data = await response.json();
-      if (data?.state) {
+      
+      // Check again after async operation (abort may have happened during fetch)
+      if (abortSignal?.aborted) {
+        console.log(`[Task Sync] Request for referral ${referralId} was aborted after response`);
+        return false;
+      }
+      
+      if (data?.state && !skipMerge) {
         const serverManualTasksCount = data.state.manualTasks?.length ?? 0;
         console.log(`[Task Sync] Successfully synced referral ${referralId}: ${serverManualTasksCount} manual tasks on server`);
         dispatch({
@@ -634,11 +729,20 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
             taskMetadata: data.state.taskMetadata ?? {},
           },
         });
+      } else if (skipMerge) {
+        console.log(`[Task Sync] Successfully synced referral ${referralId} (skipping merge to preserve optimistic update)`);
       }
       allowLocalCacheRef.current = false;
+      return true;
     } catch (error) {
+      // Ignore AbortError - it's expected when canceling previous requests
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log(`[Task Sync] Request for referral ${referralId} was aborted`);
+        return false;
+      }
       console.error(`[Task Sync] Failed to sync referral ${referralId}:`, error);
       allowLocalCacheRef.current = true;
+      return false;
     }
   }, [buildReferralPayload]);
 
@@ -647,31 +751,142 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       if (typeof window === 'undefined') {
         return;
       }
-      const existing = syncTimeoutsRef.current.get(referralId);
+      const existing = debouncedSyncRef.current.get(referralId);
       if (existing) {
-        clearTimeout(existing);
+        clearTimeout(existing.timeoutId);
+        existing.controller.abort();
+        debouncedSyncRef.current.delete(referralId);
       }
-      const timeout = setTimeout(() => {
-        syncTimeoutsRef.current.delete(referralId);
-        void syncReferralState(referralId);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        const entry = debouncedSyncRef.current.get(referralId);
+        if (!entry) return;
+        const ctrl = entry.controller;
+        void syncReferralState(referralId, false, undefined, ctrl.signal).finally(() => {
+          if (debouncedSyncRef.current.get(referralId)?.controller === ctrl) {
+            debouncedSyncRef.current.delete(referralId);
+          }
+        });
       }, 250);
-      syncTimeoutsRef.current.set(referralId, timeout);
+      debouncedSyncRef.current.set(referralId, { timeoutId, controller });
     },
     [syncReferralState]
   );
 
-  const loadReferralStates = useCallback(async (referralIds: string[]) => {
+  // Immediate sync for critical operations like toggles
+  const syncReferralStateImmediate = useCallback(
+    async (
+      referralId: string,
+      skipMerge = false,
+      completionUpdates?: Record<string, { completed: boolean; completedAt?: string | null }>
+    ): Promise<boolean> => {
+      if (typeof window === 'undefined') {
+        return false;
+      }
+      // Cancel any pending or in-flight debounced sync for this referral so it cannot
+      // complete later and overwrite our optimistic toggle with stale server completions.
+      const debounced = debouncedSyncRef.current.get(referralId);
+      if (debounced) {
+        clearTimeout(debounced.timeoutId);
+        debounced.controller.abort();
+        debouncedSyncRef.current.delete(referralId);
+      }
+      
+      // Cancel any in-flight immediate sync for this referral to prevent race conditions
+      const inFlightController = inFlightSyncsRef.current.get(referralId);
+      let mergedCompletionUpdates: Record<string, { completed: boolean; completedAt: string | null }> = {};
+      
+      // Normalize completionUpdates to ensure completedAt is always string | null (not undefined)
+      if (completionUpdates) {
+        for (const [taskId, update] of Object.entries(completionUpdates)) {
+          mergedCompletionUpdates[taskId] = {
+            completed: update.completed,
+            completedAt: update.completedAt ?? null,
+          };
+        }
+      }
+      
+      if (inFlightController) {
+        console.log(`[Task Sync] Canceling previous in-flight sync for referral ${referralId}`);
+        
+        // Merge pending completion updates from the aborted sync to prevent data loss
+        const pendingUpdates = pendingCompletionUpdatesRef.current.get(referralId);
+        if (pendingUpdates) {
+          mergedCompletionUpdates = { ...pendingUpdates, ...mergedCompletionUpdates };
+          console.log(`[Task Sync] Merging ${Object.keys(pendingUpdates).length} pending completion updates from aborted sync`);
+        }
+        
+        inFlightController.abort();
+        inFlightSyncsRef.current.delete(referralId);
+      }
+      
+      // Store the merged completion updates as pending (will be cleared on successful sync)
+      if (Object.keys(mergedCompletionUpdates).length > 0) {
+        pendingCompletionUpdatesRef.current.set(referralId, mergedCompletionUpdates);
+      }
+      
+      // Create new AbortController for this sync
+      const abortController = new AbortController();
+      inFlightSyncsRef.current.set(referralId, abortController);
+      
+      try {
+        // Perform immediate sync with merged completion updates
+        const result = await syncReferralState(referralId, skipMerge, mergedCompletionUpdates, abortController.signal);
+        
+        // Clean up on success (only if this controller is still the active one)
+        if (inFlightSyncsRef.current.get(referralId) === abortController) {
+          inFlightSyncsRef.current.delete(referralId);
+          // Clear pending updates after successful sync
+          pendingCompletionUpdatesRef.current.delete(referralId);
+        }
+        
+        return result;
+      } catch (error) {
+        // Clean up on error (only if this controller is still the active one)
+        if (inFlightSyncsRef.current.get(referralId) === abortController) {
+          inFlightSyncsRef.current.delete(referralId);
+          // Don't clear pending updates on error - they'll be retried in the next sync
+        }
+        throw error;
+      }
+    },
+    [syncReferralState]
+  );
+
+  const loadReferralStates = useCallback(async (referralIds: string[], forceRefresh = false) => {
     if (typeof window === 'undefined') {
       return;
     }
-    const idsToLoad = referralIds.filter((id) => id && !loadedReferralsRef.current.has(id));
+    
+    // Always fetch fresh data from server - don't rely on cached refs
+    // This ensures manual tasks are always visible after refresh
+    const idsToLoad = referralIds.filter((id) => id);
     if (idsToLoad.length === 0) {
       return;
     }
-    console.log(`[Task Load] Loading task states for referrals: ${idsToLoad.join(', ')}`);
-    const params = new URLSearchParams({ referralIds: idsToLoad.join(',') });
+    
+    // If forcing refresh, clear the loaded refs for these referrals
+    if (forceRefresh) {
+      idsToLoad.forEach((id) => loadedReferralsRef.current.delete(id));
+    }
+    
+    // Filter out only referrals that haven't been loaded yet (unless forcing refresh)
+    const idsToFetch = forceRefresh 
+      ? idsToLoad 
+      : idsToLoad.filter((id) => !loadedReferralsRef.current.has(id));
+    
+    if (idsToFetch.length === 0) {
+      return;
+    }
+    
+    console.log(`[Task Load] Loading task states for referrals: ${idsToFetch.join(', ')}${forceRefresh ? ' (forced refresh)' : ''}`);
+    const params = new URLSearchParams({ referralIds: idsToFetch.join(',') });
     try {
-      const response = await fetch(`/api/follow-up-tasks?${params.toString()}`);
+      // Always add cache-busting parameter to ensure fresh data across different users/sessions
+      const cacheBuster = `&_t=${Date.now()}`;
+      const response = await fetch(`/api/follow-up-tasks?${params.toString()}${cacheBuster}`, {
+        cache: 'no-store',
+      });
       if (!response.ok) {
         throw new Error('Failed to load follow-up task state');
       }
@@ -700,13 +915,26 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
           loadedReferralsRef.current.add(referralId);
           const taskCount = manualTasks[referralId]?.length ?? 0;
           console.log(`[Task Load] Loaded ${taskCount} manual tasks for referral ${referralId}`);
+          
+          // Log completion entries for manual tasks to verify persistence
+          if (process.env.NODE_ENV === 'development' && taskCount > 0) {
+            const manualTaskIds = manualTasks[referralId].map((task) => `${referralId}::manual::${task.id}`);
+            const manualCompletions = Object.entries(state?.completions ?? {})
+              .filter(([taskId]) => manualTaskIds.includes(taskId))
+              .map(([taskId, completion]) => ({ 
+                taskId, 
+                completion: completion as TaskCompletionState 
+              }));
+            console.log(`[Task Load] Manual task completions for referral ${referralId}:`, manualCompletions);
+            const completedManualCount = manualCompletions.filter((entry) => entry.completion?.completed).length;
+            console.log(`[Task Load] ${completedManualCount} of ${taskCount} manual tasks are completed for referral ${referralId}`);
+          }
         });
 
-        // For admin users, merge-referrals already clears old state for these referrals first,
-        // ensuring server state is authoritative. For non-admin users, merge combines with localStorage.
+        // Always use server state as authoritative - merge-referrals clears old state first
         dispatch({
           type: 'merge-referrals',
-          referralIds: idsToLoad,
+          referralIds: idsToFetch,
           payload: { completions, manualTasks, shownTasks, taskMetadata },
         });
         allowLocalCacheRef.current = false;
@@ -717,19 +945,44 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     }
   }, [isAdmin]);
 
-  const toggleTask = useCallback((taskId: string, completed: boolean) => {
-    const referralId = getReferralIdFromTaskId(taskId);
-    console.log(`[Task CRUD] Toggling task ${taskId} to ${completed ? 'completed' : 'incomplete'}`);
-    startTransition(() => {
-      dispatch({ type: 'toggle', taskId, completed });
-    });
-    if (referralId) {
-      scheduleReferralSync(referralId);
-    }
-  }, [getReferralIdFromTaskId, scheduleReferralSync, startTransition]);
+  const toggleTask = useCallback(
+    async (taskId: string, completed: boolean) => {
+      const referralId = getReferralIdFromTaskId(taskId);
+      const isManualTask = taskId.includes('::manual::');
+      console.log(`[Task CRUD] Toggling task ${taskId} to ${completed ? 'completed' : 'incomplete'}${isManualTask ? ' (manual task)' : ''}`);
+      
+      // Generate completedAt once and use it for both local state and server payload
+      // This ensures client and server have the same timestamp when skipMerge=true
+      const completedAt = completed ? new Date().toISOString() : null;
+      const completionUpdates: Record<string, { completed: boolean; completedAt: string | null }> = {
+        [taskId]: { completed, completedAt },
+      };
+      
+      if (process.env.NODE_ENV === 'development' && isManualTask) {
+        console.log(`[Task CRUD] Manual task completion update:`, { taskId, completed, completedAt });
+      }
+      
+      startTransition(() => {
+        dispatch({ type: 'toggle', taskId, completed, completedAt });
+      });
+      if (referralId) {
+        // Use immediate sync for toggles to ensure persistence before page refresh
+        // Pass completion state directly to avoid race condition with stateRef
+        // Skip merge to preserve optimistic update and prevent flickering
+        try {
+          await syncReferralStateImmediate(referralId, true, completionUpdates);
+        } catch (error) {
+          console.error(`[Task CRUD] Failed to sync task toggle ${taskId}:`, error);
+          // The optimistic update has already been applied to the UI.
+          // The error will be retried in the next scheduled sync.
+        }
+      }
+    },
+    [getReferralIdFromTaskId, syncReferralStateImmediate, startTransition]
+  );
 
   const addManualTask = useCallback(
-    (referralId: string, input: ManualTaskInput) => {
+    async (referralId: string, input: ManualTaskInput) => {
       const task: ManualTask = {
         id: generateManualId(),
         title: input.title,
@@ -740,17 +993,34 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
         createdAt: new Date().toISOString(),
       };
       console.log(`[Task CRUD] Creating manual task "${task.title}" (${task.id}) for referral ${referralId}`);
-      dispatch({ type: 'add-manual', referralId, task });
-      scheduleReferralSync(referralId);
+      
+      // Update local state optimistically
+      startTransition(() => {
+        dispatch({ type: 'add-manual', referralId, task });
+      });
+      
+      // Use immediate sync to ensure persistence and prevent "flash and disappear" issue
+      // Skip merge to preserve optimistic update
+      await syncReferralStateImmediate(referralId, true);
     },
-    [scheduleReferralSync]
+    [syncReferralStateImmediate, startTransition]
   );
 
-  const removeManualTask = useCallback((referralId: string, taskId: string) => {
-    console.log(`[Task CRUD] Deleting manual task ${taskId} from referral ${referralId}`);
-    dispatch({ type: 'remove-manual', referralId, taskId });
-    scheduleReferralSync(referralId);
-  }, [scheduleReferralSync]);
+  const removeManualTask = useCallback(
+    async (referralId: string, taskId: string) => {
+      console.log(`[Task CRUD] Deleting manual task ${taskId} from referral ${referralId}`);
+      
+      // Update local state optimistically
+      startTransition(() => {
+        dispatch({ type: 'remove-manual', referralId, taskId });
+      });
+      
+      // Use immediate sync to ensure persistence and prevent "flash and disappear" issue
+      // Skip merge to preserve optimistic update
+      await syncReferralStateImmediate(referralId, true);
+    },
+    [syncReferralStateImmediate, startTransition]
+  );
 
 
   const addAgentTasks = useCallback((agentId: string, tasks: ManualTask[]) => {

@@ -11,6 +11,13 @@ import {
   buildTaskMetadataEntries,
 } from '@/lib/server/follow-up-task-state';
 
+// Disable caching for this route - task state must always be fresh across users
+export const dynamic = 'force-dynamic';
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate',
+};
+
 const parseReferralIds = (request: NextRequest): string[] => {
   const ids = request.nextUrl.searchParams.get('referralIds');
   if (!ids) return [];
@@ -51,7 +58,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const totalManualTasks = Object.values(referrals).reduce((sum, state) => sum + (state.manualTasks?.length ?? 0), 0);
   console.log(`[Task API] GET /api/follow-up-tasks - User: admin, Requested ${referralIds.length} referrals, Found ${docs.length} documents, Total ${totalManualTasks} manual tasks`);
 
-  return NextResponse.json({ referrals });
+  return NextResponse.json({ referrals }, { headers: NO_CACHE_HEADERS });
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -103,5 +110,5 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     taskMetadata?: unknown;
   }>();
 
-  return NextResponse.json({ referralId, state: buildStateFromDocument(doc) });
+  return NextResponse.json({ referralId, state: buildStateFromDocument(doc) }, { headers: NO_CACHE_HEADERS });
 }

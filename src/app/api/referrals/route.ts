@@ -15,6 +15,7 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { sendTransactionalEmail, isTransactionalEmailConfigured } from '@/lib/email';
 import { buildReferralLink } from '@/lib/referral-links';
 import { normalizePhoneNumber } from '@/utils/phone-utils';
+import { syncReferralTasks } from '@/lib/server/task-sync';
 import {
   addWeeks,
   format,
@@ -1146,6 +1147,11 @@ export async function POST(request: Request) {
     actorId: auditActorId ?? session.user.id,
     channel: 'update',
     content: `Created referral for ${borrowerName || 'a new client'}`,
+  });
+
+  // Sync follow-up tasks for the new referral (runs in background)
+  syncReferralTasks(referral._id).catch((error) => {
+    console.error('[Task Sync] Failed to sync tasks for new referral:', error);
   });
 
   // Send email notification to kristen.truong@americanhomeagents.com
