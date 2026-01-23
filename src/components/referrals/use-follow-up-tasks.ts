@@ -103,6 +103,11 @@ export function buildFollowUpTasksForReferral(
       const completionEntry = completions[taskId];
       const completion = completionEntry?.completed ?? false;
       
+      // Log completion lookup for debugging
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Manual Task] ${task.title}: taskId=${taskId}, completionEntry=`, completionEntry, `completed=${completion}`);
+      }
+      
       const handleToggle = () => {
         toggleTask(taskId, !completion);
       };
@@ -159,10 +164,26 @@ export function buildFollowUpTasksForReferral(
     })
     .filter((task) => task.role === viewerRole); // Filter: only show tasks matching viewerRole (admin only)
 
+  // All manual tasks are already assigned viewerRole, so this filter is redundant
+  // but kept for safety. It should never filter out any tasks since role is always viewerRole.
   const visibleManualTasks = manualFollowUps.filter((task) => task.role === viewerRole);
+  
+  // Log if any manual tasks were filtered out (should never happen)
+  if (process.env.NODE_ENV === 'development' && visibleManualTasks.length !== manualFollowUps.length) {
+    console.warn(`[Manual Task Filter] Filtered out ${manualFollowUps.length - visibleManualTasks.length} manual tasks by role. viewerRole=${viewerRole}`);
+    const filtered = manualFollowUps.filter((task) => task.role !== viewerRole);
+    console.warn('[Manual Task Filter] Filtered tasks:', filtered);
+  }
 
   // Combine current tasks
   const currentTasks = [...visibleManualTasks, ...automated];
+  
+  // Log task counts for debugging
+  if (process.env.NODE_ENV === 'development') {
+    const completedManualCount = visibleManualTasks.filter((t) => t.completed).length;
+    const incompleteManualCount = visibleManualTasks.filter((t) => !t.completed).length;
+    console.log(`[Task Build] Referral ${referral._id}: ${visibleManualTasks.length} manual tasks (${completedManualCount} completed, ${incompleteManualCount} incomplete), ${automated.length} automated tasks`);
+  }
   const currentTaskIds = new Set(currentTasks.map((t) => t.id));
 
   // Find historical tasks that should still be shown
@@ -220,6 +241,13 @@ export function buildFollowUpTasksForReferral(
 
   // Combine current and historical tasks
   const allTasks = [...currentTasks, ...historicalTasks];
+  
+  // Log final task counts for debugging
+  if (process.env.NODE_ENV === 'development') {
+    const completedCount = allTasks.filter((t) => t.completed).length;
+    const manualCompletedCount = allTasks.filter((t) => t.completed && t.isManual).length;
+    console.log(`[Task Build] Final: ${allTasks.length} total tasks (${completedCount} completed, ${manualCompletedCount} completed manual)`);
+  }
 
   return {
     tasks: allTasks,

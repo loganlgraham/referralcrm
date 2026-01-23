@@ -897,6 +897,20 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
           loadedReferralsRef.current.add(referralId);
           const taskCount = manualTasks[referralId]?.length ?? 0;
           console.log(`[Task Load] Loaded ${taskCount} manual tasks for referral ${referralId}`);
+          
+          // Log completion entries for manual tasks to verify persistence
+          if (process.env.NODE_ENV === 'development' && taskCount > 0) {
+            const manualTaskIds = manualTasks[referralId].map((task) => `${referralId}::manual::${task.id}`);
+            const manualCompletions = Object.entries(state?.completions ?? {})
+              .filter(([taskId]) => manualTaskIds.includes(taskId))
+              .map(([taskId, completion]) => ({ 
+                taskId, 
+                completion: completion as TaskCompletionState 
+              }));
+            console.log(`[Task Load] Manual task completions for referral ${referralId}:`, manualCompletions);
+            const completedManualCount = manualCompletions.filter((entry) => entry.completion?.completed).length;
+            console.log(`[Task Load] ${completedManualCount} of ${taskCount} manual tasks are completed for referral ${referralId}`);
+          }
         });
 
         // Always use server state as authoritative - merge-referrals clears old state first
@@ -916,7 +930,8 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
   const toggleTask = useCallback(
     async (taskId: string, completed: boolean) => {
       const referralId = getReferralIdFromTaskId(taskId);
-      console.log(`[Task CRUD] Toggling task ${taskId} to ${completed ? 'completed' : 'incomplete'}`);
+      const isManualTask = taskId.includes('::manual::');
+      console.log(`[Task CRUD] Toggling task ${taskId} to ${completed ? 'completed' : 'incomplete'}${isManualTask ? ' (manual task)' : ''}`);
       
       // Generate completedAt once and use it for both local state and server payload
       // This ensures client and server have the same timestamp when skipMerge=true
@@ -924,6 +939,10 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       const completionUpdates: Record<string, { completed: boolean; completedAt: string | null }> = {
         [taskId]: { completed, completedAt },
       };
+      
+      if (process.env.NODE_ENV === 'development' && isManualTask) {
+        console.log(`[Task CRUD] Manual task completion update:`, { taskId, completed, completedAt });
+      }
       
       startTransition(() => {
         dispatch({ type: 'toggle', taskId, completed, completedAt });
