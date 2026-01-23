@@ -189,6 +189,16 @@ export function usePersistedTasks(options: UsePersistedTasksOptions): UsePersist
   const toggleTask = useCallback(async (taskId: string, completed: boolean) => {
     const completedAt = completed ? new Date().toISOString() : null;
 
+    // Capture original task before optimistic update
+    let originalTask: FollowUpTaskResponse | undefined;
+    setTasks((prev) => {
+      const task = prev.find((t) => t._id === taskId);
+      if (task) {
+        originalTask = { ...task };
+      }
+      return prev;
+    });
+
     // Optimistic update
     setTasks((prev) =>
       prev.map((task) =>
@@ -223,14 +233,12 @@ export function usePersistedTasks(options: UsePersistedTasksOptions): UsePersist
         prev.map((task) => (task._id === taskId ? updatedTask : task))
       );
     } catch (err) {
-      // Revert optimistic update on error
-      setTasks((prev) =>
-        prev.map((task) =>
-          task._id === taskId
-            ? { ...task, status: completed ? 'open' : 'completed', completedAt: null } as FollowUpTaskResponse
-            : task
-        )
-      );
+      // Revert optimistic update on error - restore original task
+      if (originalTask) {
+        setTasks((prev) =>
+          prev.map((task) => (task._id === taskId ? originalTask : task))
+        );
+      }
       console.error('[usePersistedTasks] Failed to toggle task:', err);
       throw err;
     }
