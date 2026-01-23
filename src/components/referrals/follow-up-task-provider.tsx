@@ -880,9 +880,11 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     console.log(`[Task Load] Loading task states for referrals: ${idsToFetch.join(', ')}${forceRefresh ? ' (forced refresh)' : ''}`);
     const params = new URLSearchParams({ referralIds: idsToFetch.join(',') });
     try {
-      // Add cache-busting parameter to ensure fresh data
-      const cacheBuster = forceRefresh ? `&_t=${Date.now()}` : '';
-      const response = await fetch(`/api/follow-up-tasks?${params.toString()}${cacheBuster}`);
+      // Always add cache-busting parameter to ensure fresh data across different users/sessions
+      const cacheBuster = `&_t=${Date.now()}`;
+      const response = await fetch(`/api/follow-up-tasks?${params.toString()}${cacheBuster}`, {
+        cache: 'no-store',
+      });
       if (!response.ok) {
         throw new Error('Failed to load follow-up task state');
       }

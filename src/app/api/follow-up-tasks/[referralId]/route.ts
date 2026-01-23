@@ -13,6 +13,13 @@ import {
   buildTaskMetadataEntries,
 } from '@/lib/server/follow-up-task-state';
 
+// Disable caching for this route - task state must always be fresh across users
+export const dynamic = 'force-dynamic';
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate',
+};
+
 interface RouteParams {
   params: { referralId: string };
 }
@@ -63,7 +70,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams): Promi
   const manualTasksCount = state.manualTasks?.length ?? 0;
   console.log(`[Task API] GET /api/follow-up-tasks/${params.referralId} - User: ${session.user?.id} (${session.user?.role}), Found ${manualTasksCount} manual tasks`);
 
-  return NextResponse.json({ referralId: params.referralId, state });
+  return NextResponse.json({ referralId: params.referralId, state }, { headers: NO_CACHE_HEADERS });
 }
 
 export async function PUT(request: NextRequest, { params }: RouteParams): Promise<NextResponse> {
@@ -147,5 +154,5 @@ export async function PUT(request: NextRequest, { params }: RouteParams): Promis
   const savedManualTasksCount = Array.isArray(doc?.manualTasks) ? doc.manualTasks.length : 0;
   console.log(`[Task API] Successfully saved task state for referral ${referralId}: ${savedManualTasksCount} manual tasks persisted`);
 
-  return NextResponse.json({ referralId, state: buildStateFromDocument(doc) });
+  return NextResponse.json({ referralId, state: buildStateFromDocument(doc) }, { headers: NO_CACHE_HEADERS });
 }
