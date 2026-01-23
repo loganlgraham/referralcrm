@@ -680,8 +680,10 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
 
     // Debounced sync (no completionUpdates): omit completions when empty so we never overwrite
     // server completions with an empty array (e.g. legacy state keys filtered out by prefix).
+    // Check if completionUpdates has actual entries, not just if it's truthy (empty objects are truthy)
+    const hasCompletionUpdates = completionUpdates && Object.keys(completionUpdates).length > 0;
     const omitCompletions =
-      !completionUpdates && Object.keys(payload.completions ?? {}).length === 0;
+      !hasCompletionUpdates && Object.keys(payload.completions ?? {}).length === 0;
     const body = omitCompletions
       ? (() => {
           const { completions: _c, ...rest } = payload;
