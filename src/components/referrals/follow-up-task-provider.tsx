@@ -967,7 +967,13 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
         // Use immediate sync for toggles to ensure persistence before page refresh
         // Pass completion state directly to avoid race condition with stateRef
         // Skip merge to preserve optimistic update and prevent flickering
-        await syncReferralStateImmediate(referralId, true, completionUpdates);
+        try {
+          await syncReferralStateImmediate(referralId, true, completionUpdates);
+        } catch (error) {
+          console.error(`[Task CRUD] Failed to sync task toggle ${taskId}:`, error);
+          // The optimistic update has already been applied to the UI.
+          // The error will be retried in the next scheduled sync.
+        }
       }
     },
     [getReferralIdFromTaskId, syncReferralStateImmediate, startTransition]
