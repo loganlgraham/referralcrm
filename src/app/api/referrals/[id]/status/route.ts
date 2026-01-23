@@ -14,6 +14,7 @@ import { resolveAuditActorId } from '@/lib/server/audit';
 import { inferStateFromPostalCode } from '@/utils/location';
 import { calculateBusinessMinutesBetween } from '@/utils/sla-insights';
 import { createAdminNotifications } from '@/lib/server/notifications';
+import { syncReferralTasks } from '@/lib/server/task-sync';
 
 interface Params {
   params: { id: string };
@@ -344,6 +345,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         content: `${actorName} changed status from ${previousStatus} to ${referral.status} for ${borrowerName}`,
       });
     }
+
+    // Sync follow-up tasks for the updated status (runs in background)
+    syncReferralTasks(referral._id).catch((error) => {
+      console.error('[Task Sync] Failed to sync tasks after status change:', error);
+    });
   }
 
   const statusLastUpdated = referral.statusLastUpdated ?? new Date();
