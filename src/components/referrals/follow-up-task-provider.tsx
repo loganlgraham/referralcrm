@@ -102,7 +102,7 @@ interface FollowUpTaskContextValue {
   removeAgentTask: (agentId: string, taskId: string) => void;
   markTasksAsShown: (referralId: string, taskIds: string[]) => void;
   storeTaskMetadata: (tasks: Array<{ taskId: string; metadata: TaskMetadata }>) => void;
-  loadReferralStates: (referralIds: string[], forceRefresh?: boolean) => void;
+  loadReferralStates: (referralIds: string[], forceRefresh?: boolean) => Promise<void>;
   reminderSettings: ReminderSettings;
   globalReminderSettings: ReminderSettings;
   reminderOverrides: Record<string, ReminderSettings>;
