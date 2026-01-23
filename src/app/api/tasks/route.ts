@@ -57,15 +57,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   if (referralId) {
+    if (!Types.ObjectId.isValid(referralId)) {
+      return NextResponse.json({ error: 'Invalid referralId' }, { status: 400, headers: NO_CACHE_HEADERS });
+    }
     filter.referralId = new Types.ObjectId(referralId);
   }
 
   if (referralIds) {
-    const ids = referralIds.split(',').map((id) => new Types.ObjectId(id.trim()));
-    filter.referralId = { $in: ids };
+    const idList = referralIds.split(',').map((id) => id.trim());
+    const invalidIds = idList.filter((id) => !Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return NextResponse.json(
+        { error: `Invalid referralIds: ${invalidIds.join(', ')}` },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      );
+    }
+    filter.referralId = { $in: idList.map((id) => new Types.ObjectId(id)) };
   }
 
   if (agentId) {
+    if (!Types.ObjectId.isValid(agentId)) {
+      return NextResponse.json({ error: 'Invalid agentId' }, { status: 400, headers: NO_CACHE_HEADERS });
+    }
     filter.agentId = new Types.ObjectId(agentId);
   }
 
@@ -155,6 +168,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { error: 'agentId is required for agent tasks' },
       { status: 400, headers: NO_CACHE_HEADERS }
     );
+  }
+
+  // Validate ObjectIds before creating
+  if (referralId && !Types.ObjectId.isValid(referralId)) {
+    return NextResponse.json({ error: 'Invalid referralId' }, { status: 400, headers: NO_CACHE_HEADERS });
+  }
+
+  if (agentId && !Types.ObjectId.isValid(agentId)) {
+    return NextResponse.json({ error: 'Invalid agentId' }, { status: 400, headers: NO_CACHE_HEADERS });
   }
 
   const task = await FollowUpTask.create({
