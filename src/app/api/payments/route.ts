@@ -601,8 +601,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   }
 
   const referral = await Referral.findById(existingPayment.referralId)
-    .populate('assignedAgent', 'name email')
-    .populate('lender', 'name email');
+    .populate('assignedAgent', 'name email _id')
+    .populate('lender', 'name email _id');
   const isAgentOrigin = referral?.origin === 'agent';
 
   const previousStatus = existingPayment.status;
@@ -940,48 +940,109 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
         // Email to agent (only if BOTH usedAfc AND usedAssignedAgent are true)
         if (usedAfc && usedAssignedAgent && referral.assignedAgent && referral.lender) {
-          const agent = referral.assignedAgent as { _id?: any; name?: string; email?: string } | null;
-          const lender = referral.lender as { _id?: any } | null;
-          const agentEmail = agent?.email;
-          const agentFirstName = agent?.name ? agent.name.split(' ')[0] : 'there';
-          const lenderId = lender?._id?.toString();
+          // Handle both populated and ObjectId cases
+          const agentId = referral.assignedAgent instanceof Types.ObjectId 
+            ? referral.assignedAgent 
+            : (referral.assignedAgent as any)?._id;
+          const lenderId = referral.lender instanceof Types.ObjectId 
+            ? referral.lender 
+            : (referral.lender as any)?._id;
           
-          if (agentEmail && lenderId) {
-            const { buildPaymentActionLink } = await import('@/lib/referral-links');
-            const paymentSentLink = buildPaymentActionLink(existingPayment._id.toString());
-
-            // Generate NPS token for lender survey
-            const lenderSurveyToken = await createNPSToken({
+          if (!agentId || !lenderId) {
+            console.warn('Missing agentId or lenderId for closed deal email', {
               paymentId: existingPayment._id.toString(),
               referralId: referral._id.toString(),
-              type: 'lender',
-              targetId: lenderId,
-              recipientEmail: agentEmail,
-              recipientName: agent.name || 'Agent',
+              hasAgentId: !!agentId,
+              hasLenderId: !!lenderId,
             });
-
-            const lenderSurveyUrl = `${origin}/nps/lender?token=${lenderSurveyToken}`;
+          } else {
+            // Fetch agent data if not populated or if email is missing
+            let agentEmail: string | null = null;
+            let agentName: string | null = null;
             
-            await sendTransactionalEmail({
-              to: [agentEmail],
-              subject: 'Congrats on your closing!',
-              html: `
-                <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
-                  <p>Hi ${agentFirstName},</p>
-                  <p>Congrats on the recent closing! 🎉 It was great working together. If you have a quick moment, we'd really appreciate you leaving a short rating or review for our partners at American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships. Also, please click the button below when the check is placed in the mail so we can anticipate its arrival.</p>
-                  <p style="margin: 20px 0 0 0;">
-                    <a href="${lenderSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
-                      Rate American Financing
-                    </a>
-                  </p>
-                  <p style="margin: 20px 0 0 0;">
-                    <a href="${paymentSentLink}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
-                      Mark Payment as Sent
-                    </a>
-                  </p>
-                </div>
-              `,
-              text: `Hi ${agentFirstName},\n\nCongrats on the recent closing! 🎉 It was great working together. If you have a quick moment, we'd really appreciate you leaving a short rating or review for our partners at American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships. Also, please click the button below when the check is placed in the mail so we can anticipate its arrival.\n\nRate American Financing: ${lenderSurveyUrl}\n\nMark payment as sent: ${paymentSentLink}`,
+            if (referral.assignedAgent && typeof referral.assignedAgent === 'object' && 'email' in referral.assignedAgent) {
+              // Agent is populated
+              agentEmail = (referral.assignedAgent as any).email || null;
+              agentName = (referral.assignedAgent as any).name || null;
+            }
+            
+            // Fallback: fetch agent if email is missing
+            if (!agentEmail && agentId) {
+              const agentDoc = await Agent.findById(agentId).select('name email').lean<{ name?: string; email?: string } | null>();
+              if (agentDoc) {
+                agentEmail = agentDoc.email || null;
+                agentName = agentDoc.name || null;
+              }
+            }
+            
+            const lenderIdStr = lenderId.toString();
+            
+            if (agentEmail && lenderIdStr) {
+              const agentFirstName = agentName ? agentName.split(' ')[0] : 'there';
+              const { buildPaymentActionLink } = await import('@/lib/referral-links');
+              const paymentSentLink = buildPaymentActionLink(existingPayment._id.toString());
+
+              // Generate NPS token for lender survey
+              const lenderSurveyToken = await createNPSToken({
+                paymentId: existingPayment._id.toString(),
+                referralId: referral._id.toString(),
+                type: 'lender',
+                targetId: lenderIdStr,
+                recipientEmail: agentEmail,
+                recipientName: agentName || 'Agent',
+              });
+
+              const lenderSurveyUrl = `${origin}/nps/lender?token=${lenderSurveyToken}`;
+              
+              const emailSent = await sendTransactionalEmail({
+                to: [agentEmail],
+                subject: 'Congrats on your closing!',
+                html: `
+                  <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
+                    <p>Hi ${agentFirstName},</p>
+                    <p>Congrats on the recent closing! 🎉 It was great working together. If you have a quick moment, we'd really appreciate you leaving a short rating or review for our partners at American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships. Also, please click the button below when the check is placed in the mail so we can anticipate its arrival.</p>
+                    <p style="margin: 20px 0 0 0;">
+                      <a href="${lenderSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
+                        Rate American Financing
+                      </a>
+                    </p>
+                    <p style="margin: 20px 0 0 0;">
+                      <a href="${paymentSentLink}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
+                        Mark Payment as Sent
+                      </a>
+                    </p>
+                  </div>
+                `,
+                text: `Hi ${agentFirstName},\n\nCongrats on the recent closing! 🎉 It was great working together. If you have a quick moment, we'd really appreciate you leaving a short rating or review for our partners at American Financing (AFC). Your feedback helps us continue improving and supporting great partnerships. Also, please click the button below when the check is placed in the mail so we can anticipate its arrival.\n\nRate American Financing: ${lenderSurveyUrl}\n\nMark payment as sent: ${paymentSentLink}`,
+              });
+              
+              if (!emailSent) {
+                console.error('Failed to send agent email for closed deal', {
+                  paymentId: existingPayment._id.toString(),
+                  referralId: referral._id.toString(),
+                  agentEmail,
+                });
+              }
+            } else {
+              console.warn('Cannot send agent email for closed deal - missing data', {
+                paymentId: existingPayment._id.toString(),
+                referralId: referral._id.toString(),
+                hasAgentEmail: !!agentEmail,
+                hasLenderId: !!lenderIdStr,
+                agentId: agentId?.toString(),
+              });
+            }
+          }
+        } else {
+          // Log why email wasn't sent for debugging
+          if (isClosingNow) {
+            console.log('Agent email not sent for closed deal - conditions not met', {
+              paymentId: existingPayment._id.toString(),
+              referralId: referral._id.toString(),
+              usedAfc,
+              usedAssignedAgent,
+              hasAssignedAgent: !!referral.assignedAgent,
+              hasLender: !!referral.lender,
             });
           }
         }
