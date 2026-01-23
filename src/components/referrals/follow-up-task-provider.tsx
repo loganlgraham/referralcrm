@@ -137,36 +137,50 @@ const reducer = (state: StoredTaskState, action: Action): StoredTaskState => {
     case 'hydrate':
       return { ...createDefaultTaskState(), ...action.payload };
     case 'merge-referrals': {
-      const nextCompletions = { ...state.completions };
       const nextManualTasks = { ...state.manualTasks };
       const nextShownTasks = { ...state.shownTasks };
       const nextMetadata = { ...state.taskMetadata };
 
+      // Build prefixes for all referral IDs being merged
+      const prefixesToRemove = action.referralIds.map((referralId) => `${referralId}::`);
+
+      // Build merged completions atomically: keep non-matching, replace matching
+      // This prevents the flash where completions are temporarily missing
+      const mergedCompletions: CompletionMap = {};
+      
+      // First, copy all completions that don't match any of the referral prefixes
+      Object.entries(state.completions).forEach(([taskId, completion]) => {
+        const shouldRemove = prefixesToRemove.some((prefix) => taskId.startsWith(prefix));
+        if (!shouldRemove) {
+          mergedCompletions[taskId] = completion;
+        }
+      });
+      
+      // Then merge in the new completions from the payload (this overwrites any matching keys)
+      Object.assign(mergedCompletions, action.payload.completions);
+
+      // Update metadata atomically in the same way
+      const mergedMetadata: Record<string, TaskMetadata> = {};
+      Object.entries(state.taskMetadata).forEach(([taskId, metadata]) => {
+        const shouldRemove = prefixesToRemove.some((prefix) => taskId.startsWith(prefix));
+        if (!shouldRemove) {
+          mergedMetadata[taskId] = metadata;
+        }
+      });
+      Object.assign(mergedMetadata, action.payload.taskMetadata);
+
+      // Update manual tasks and shown tasks
       for (const referralId of action.referralIds) {
-        const prefix = `${referralId}::`;
-        
-        Object.keys(nextCompletions).forEach((taskId) => {
-          if (taskId.startsWith(prefix)) {
-            delete nextCompletions[taskId];
-          }
-        });
-        Object.keys(nextMetadata).forEach((taskId) => {
-          if (taskId.startsWith(prefix)) {
-            delete nextMetadata[taskId];
-          }
-        });
         nextManualTasks[referralId] = action.payload.manualTasks[referralId] ?? [];
         nextShownTasks[referralId] = action.payload.shownTasks[referralId] ?? [];
       }
-
-      const mergedCompletions = { ...nextCompletions, ...action.payload.completions };
 
       return {
         ...state,
         completions: mergedCompletions,
         manualTasks: { ...nextManualTasks },
         shownTasks: { ...nextShownTasks },
-        taskMetadata: { ...nextMetadata, ...action.payload.taskMetadata },
+        taskMetadata: mergedMetadata,
       };
     }
     case 'toggle': {
