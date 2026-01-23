@@ -235,8 +235,9 @@ export function usePersistedTasks(options: UsePersistedTasksOptions): UsePersist
     } catch (err) {
       // Revert optimistic update on error - restore original task
       if (originalTask) {
+        const taskToRestore = originalTask;
         setTasks((prev) =>
-          prev.map((task) => (task._id === taskId ? originalTask : task))
+          prev.map((task) => (task._id === taskId ? taskToRestore : task))
         );
       }
       console.error('[usePersistedTasks] Failed to toggle task:', err);
