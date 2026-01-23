@@ -680,12 +680,19 @@ export function DealCard({
     }
     
     // Check survey email readiness when closing deal
+    let sendClosedEmails = false;
     if (nextStatus === 'closed') {
       const usedAfc = deal.usedAfc ?? false;
       const usedAssignedAgent = deal.usedAssignedAgent ?? false;
       
       if (usedAfc && usedAssignedAgent) {
-        toast.success('Ready to send survey emails! The assigned agent and AFC have been marked as used.');
+        const confirmed = window.confirm(
+          'Send congratulations emails to the agent and borrower?'
+        );
+        sendClosedEmails = confirmed;
+        if (confirmed) {
+          toast.success('Survey emails will be sent to the agent and borrower.');
+        }
       } else {
         const missing: string[] = [];
         if (!usedAssignedAgent) missing.push('assigned agent');
@@ -698,7 +705,7 @@ export function DealCard({
     setSavingMap((prev) => ({ ...prev, [deal._id]: true }));
 
     try {
-      const payload: Record<string, unknown> = { id: deal._id, status: nextStatus };
+      const payload: Record<string, unknown> = { id: deal._id, status: nextStatus, sendClosedEmails };
 
       if (nextStatus === 'terminated') {
         payload.expectedAmountCents = 0;
