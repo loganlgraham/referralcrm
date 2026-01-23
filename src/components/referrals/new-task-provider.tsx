@@ -170,6 +170,8 @@ export function NewTaskProvider({ children }: { children: ReactNode }) {
    * Uses optimistic update for instant UI feedback.
    */
   const toggleTask = useCallback(async (taskId: string, completed: boolean) => {
+    // Capture the original task state before optimistic update for proper reversion
+    const originalTask = tasks.find((t) => t._id === taskId);
     const completedAt = completed ? new Date().toISOString() : null;
 
     // Optimistic update
@@ -210,20 +212,22 @@ export function NewTaskProvider({ children }: { children: ReactNode }) {
         );
       });
     } catch (err) {
-      // Revert optimistic update on error
-      startTransition(() => {
-        setTasks((prevTasks) =>
-          prevTasks.map((task) =>
-            task._id === taskId
-              ? { ...task, status: completed ? 'open' : 'completed', completedAt: null }
-              : task
-          )
-        );
-      });
+      // Revert optimistic update on error, restoring the original task state
+      if (originalTask) {
+        startTransition(() => {
+          setTasks((prevTasks) =>
+            prevTasks.map((task) =>
+              task._id === taskId
+                ? { ...task, status: originalTask.status, completedAt: originalTask.completedAt }
+                : task
+            )
+          );
+        });
+      }
       console.error('[Task Provider] Failed to toggle task:', err);
       throw err;
     }
-  }, []);
+  }, [tasks]);
 
   /**
    * Create a new manual task.
