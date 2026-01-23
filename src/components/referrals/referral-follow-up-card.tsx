@@ -73,7 +73,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
     }
   };
 
-  const handleManualSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleManualSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const title = manualTitle.trim();
     if (!title) {
@@ -89,7 +89,7 @@ export function ReferralFollowUpCard({ referral }: ReferralFollowUpCardProps) {
       }
     }
 
-    addManualTask(referral._id, {
+    await addManualTask(referral._id, {
       title,
       message: manualMessage.trim() || title,
       dueAt,
