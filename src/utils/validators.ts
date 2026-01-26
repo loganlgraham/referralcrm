@@ -146,5 +146,6 @@ export const paymentSchema = z.object({
         .transform((value) => value.toUpperCase()),
       z.null()
     ])
-    .optional()
+    .optional(),
+  sendClosedEmails: z.boolean().optional()
 });
