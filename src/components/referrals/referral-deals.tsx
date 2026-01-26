@@ -804,6 +804,7 @@ export function ReferralDeals({
           options
             .filter((option) => option?._id)
             .map((option) => ({ id: option._id, name: option.name ?? 'Unnamed agent' }))
+            .sort((a, b) => a.name.localeCompare(b.name))
         );
         setAgentsError(null);
       })

@@ -651,9 +651,32 @@ export function DealsTable() {
     );
   };
 
+  const getStatusColor = (status: string): { bg: string; text: string } => {
+    switch (status) {
+      case 'under_contract':
+        return { bg: 'bg-blue-100', text: 'text-blue-700' };
+      case 'past_inspection':
+      case 'past_appraisal':
+        return { bg: 'bg-indigo-100', text: 'text-indigo-700' };
+      case 'clear_to_close':
+        return { bg: 'bg-purple-100', text: 'text-purple-700' };
+      case 'closed':
+        return { bg: 'bg-green-100', text: 'text-green-700' };
+      case 'payment_sent':
+        return { bg: 'bg-teal-100', text: 'text-teal-700' };
+      case 'paid':
+        return { bg: 'bg-emerald-100', text: 'text-emerald-700' };
+      case 'terminated':
+        return { bg: 'bg-red-100', text: 'text-red-700' };
+      default:
+        return { bg: 'bg-slate-100', text: 'text-slate-700' };
+    }
+  };
+
   const renderStatusControl = (deal: DealRow) => {
     const isTerminated = deal.status === 'terminated';
     const statusLabel = normalizeStatusLabel(deal.status) || '—';
+    const colors = getStatusColor(deal.status);
     const terminatedLabel = deal.terminatedReason
       ? TERMINATED_REASON_OPTIONS.find((option) => option.value === deal.terminatedReason)?.label ??
         deal.terminatedReason
@@ -661,7 +684,7 @@ export function DealsTable() {
 
     return (
       <div className="space-y-1">
-        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+        <span className={`inline-flex items-center rounded-full ${colors.bg} px-2.5 py-0.5 text-xs font-medium ${colors.text}`}>
           {statusLabel}
         </span>
         {isTerminated && terminatedLabel && (
@@ -747,7 +770,7 @@ export function DealsTable() {
             const isTerminated = deal.status === 'terminated';
             const referralFee = isTerminated
               ? 0
-              : deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
+              : deal.expectedAmountCents ?? deal.referral?.referralFeeDueCents ?? 0;
             const receivedDraft = amountDrafts[deal._id];
             const receivedInputValue =
               receivedDraft !== undefined
@@ -915,7 +938,7 @@ export function DealsTable() {
                 : deal.receivedAmountCents || 0;
             const referralFee = isTerminated
               ? 0
-              : deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents;
+              : deal.expectedAmountCents ?? deal.referral?.referralFeeDueCents ?? 0;
             const netCommission = isTerminated ? 0 : commission - paidAmount;
             const outcome = (() => {
               if (isTerminated) {
