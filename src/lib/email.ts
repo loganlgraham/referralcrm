@@ -7,6 +7,10 @@ type EmailPayload = {
   text: string;
   scheduledAt?: Date;
   cc?: string[];
+  attachments?: Array<{
+    filename: string;
+    content: Buffer | string; // base64 string or Buffer
+  }>;
 };
 
 let resendClient: Resend | null = null;
@@ -71,6 +75,15 @@ export async function sendTransactionalEmail(payload: EmailPayload): Promise<boo
 
     if (payload.scheduledAt) {
       emailOptions.scheduled_at = payload.scheduledAt.toISOString();
+    }
+
+    if (payload.attachments && payload.attachments.length > 0) {
+      emailOptions.attachments = payload.attachments.map((attachment) => ({
+        filename: attachment.filename,
+        content: typeof attachment.content === 'string' 
+          ? attachment.content 
+          : attachment.content.toString('base64'),
+      }));
     }
 
     await enqueueRateLimited(() => client.emails.send(emailOptions));

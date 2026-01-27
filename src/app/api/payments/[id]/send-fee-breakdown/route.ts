@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Types } from 'mongoose';
+import fs from 'fs';
+import path from 'path';
 
 import { connectMongo } from '@/lib/mongoose';
 import { Payment } from '@/models/payment';
@@ -7,7 +9,7 @@ import { Referral } from '@/models/referral';
 import { Agent } from '@/models/agent';
 import { getCurrentSession } from '@/lib/auth';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
-import { generateFeeBreakdownEmailHTML } from '@/lib/email-templates/fee-breakdown';
+import { generateFeeBreakdownEmailHTML, generateFeeBreakdownSubject } from '@/lib/email-templates/fee-breakdown';
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 
@@ -108,6 +110,9 @@ export async function POST(
                    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
     const platformUrl = `${origin}/referrals/${(referral._id as Types.ObjectId).toString()}`;
 
+    // Get borrower name for subject line
+    const borrowerName = referral.borrower?.name || 'Unknown';
+
     // Generate email content
     const { html, text } = generateFeeBreakdownEmailHTML({
       agent: {
@@ -115,7 +120,7 @@ export async function POST(
         email: agent.email,
       },
       referral: {
-        borrowerName: referral.borrower?.name || 'Unknown',
+        borrowerName,
         propertyAddress: payment.propertyAddress || referral.propertyAddress || 'Address not available',
         loanFileNumber: referral.loanFileNumber || null,
       },
@@ -130,13 +135,43 @@ export async function POST(
       platformUrl,
     });
 
+    // Generate subject line with borrower's last name
+    const subject = generateFeeBreakdownSubject(borrowerName);
+
+    // Read and prepare PDF attachments
+    const attachments = [];
+    try {
+      const wiringInstructionsPath = path.join(process.cwd(), 'AHA Commission Wiring Instructions.pdf');
+      const w9Path = path.join(process.cwd(), 'AHA W9 2026.pdf');
+
+      if (fs.existsSync(wiringInstructionsPath)) {
+        const wiringInstructionsPdf = fs.readFileSync(wiringInstructionsPath);
+        attachments.push({
+          filename: 'AHA Commission Wiring Instructions.pdf',
+          content: wiringInstructionsPdf,
+        });
+      }
+
+      if (fs.existsSync(w9Path)) {
+        const w9Pdf = fs.readFileSync(w9Path);
+        attachments.push({
+          filename: 'AHA W9 2026.pdf',
+          content: w9Pdf,
+        });
+      }
+    } catch (error) {
+      console.error('Error reading PDF attachments:', error);
+      // Continue without attachments rather than failing the entire email
+    }
+
     // Send email
     const emailSent = await sendTransactionalEmail({
       to: [agent.email],
       cc: ['kristen.truong@americanhomeagents.com'],
-      subject: 'Referral Fee Breakdown - Closing in 7 Days',
+      subject,
       html,
       text,
+      attachments: attachments.length > 0 ? attachments : undefined,
     });
 
     if (!emailSent) {
