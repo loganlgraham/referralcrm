@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectMongo } from '@/lib/mongoose';
-import { FollowUpTask, toFollowUpTaskResponse } from '@/models/follow-up-task';
+import { FollowUpTask, toFollowUpTaskResponse, type FollowUpTaskLean } from '@/models/follow-up-task';
 import { Referral } from '@/models/referral';
 import { getCurrentSession } from '@/lib/auth';
 import { canViewReferral } from '@/lib/rbac';
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
     status: { $in: statusFilter },
   })
     .sort({ dueAt: 1, createdAt: 1 })
-    .lean();
+    .lean<FollowUpTaskLean[]>();
 
   const response = tasks.map(toFollowUpTaskResponse);
 
