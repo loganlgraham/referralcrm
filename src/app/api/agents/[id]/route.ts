@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { Types } from 'mongoose';
 
 import { connectMongo } from '@/lib/mongoose';
 import { Agent } from '@/models/agent';
@@ -92,10 +93,13 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     const normalizedPhone = normalizePhoneNumber(parsed.data.phone);
     if (normalizedPhone) {
       // Find all agents with phone numbers (excluding current agent) and check for normalized match
+      // Optimize: Only fetch minimal fields needed for duplicate check
       const agentsWithPhones = await Agent.find({ 
         phone: { $exists: true, $ne: '' },
         _id: { $ne: params.id }
-      });
+      })
+        .select('phone _id name')
+        .lean<{ _id: Types.ObjectId; phone: string; name?: string }[]>();
       const duplicateByPhone = agentsWithPhones.find((otherAgent) => {
         const otherNormalizedPhone = normalizePhoneNumber(otherAgent.phone);
         return otherNormalizedPhone === normalizedPhone;

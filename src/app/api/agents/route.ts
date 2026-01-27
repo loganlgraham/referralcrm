@@ -289,7 +289,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const normalizedPhone = normalizePhoneNumber(parsed.data.phone);
     if (normalizedPhone) {
       // Find all agents with phone numbers and check for normalized match
-      const agentsWithPhones = await Agent.find({ phone: { $exists: true, $ne: '' } });
+      // Optimize: Only fetch minimal fields needed for duplicate check
+      const agentsWithPhones = await Agent.find({ phone: { $exists: true, $ne: '' } })
+        .select('phone _id name')
+        .lean<{ _id: Types.ObjectId; phone: string; name?: string }[]>();
       const duplicateByPhone = agentsWithPhones.find((agent) => {
         const agentNormalizedPhone = normalizePhoneNumber(agent.phone);
         return agentNormalizedPhone === normalizedPhone;

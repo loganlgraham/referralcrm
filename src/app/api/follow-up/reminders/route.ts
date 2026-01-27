@@ -38,29 +38,6 @@ export async function POST(request: NextRequest) {
     automationSecret && headerValue && headerValue === automationSecret
   );
 
-  // TEMP DEBUG LOGGING - Remove after fixing
-  console.log('[DEBUG Reminders API] Request received');
-  console.log('[DEBUG Reminders API] TASK_REMINDER_SECRET exists:', Boolean(automationSecret));
-  console.log('[DEBUG Reminders API] TASK_REMINDER_SECRET length:', automationSecret?.length);
-  if (automationSecret) {
-    const secretPreview = automationSecret.length > 8 
-      ? `${automationSecret.substring(0, 4)}...${automationSecret.substring(automationSecret.length - 4)}`
-      : '***';
-    console.log('[DEBUG Reminders API] TASK_REMINDER_SECRET preview:', secretPreview);
-  }
-  console.log('[DEBUG Reminders API] Header x-task-reminder-secret exists:', Boolean(headerValue));
-  console.log('[DEBUG Reminders API] Header value length:', headerValue?.length);
-  if (headerValue) {
-    const headerPreview = headerValue.length > 8
-      ? `${headerValue.substring(0, 4)}...${headerValue.substring(headerValue.length - 4)}`
-      : '***';
-    console.log('[DEBUG Reminders API] Header value preview:', headerPreview);
-  }
-  console.log('[DEBUG Reminders API] Values match:', headerValue === automationSecret);
-  console.log('[DEBUG Reminders API] isAutomationRequest:', isAutomationRequest);
-  console.log('[DEBUG Reminders API] Email configured:', isTransactionalEmailConfigured());
-  // END DEBUG LOGGING
-
   const session = await getCurrentSession();
   if (!isAutomationRequest && !session?.user?.id) {
     // Return specific error messages to help diagnose the issue
@@ -73,7 +50,6 @@ export async function POST(request: NextRequest) {
       errorMessage = 'Invalid authentication secret';
     }
     
-    console.log('[DEBUG Reminders API] Returning 401 - isAutomationRequest:', isAutomationRequest, 'hasSession:', Boolean(session?.user?.id), 'error:', errorMessage);
     return NextResponse.json({ error: errorMessage }, { status: 401 });
   }
 
