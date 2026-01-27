@@ -162,12 +162,25 @@ export async function connectMongo(): Promise<typeof mongoose> {
       if (!isSRV) {
         connectionOptions.tls = true;
       }
-      // Set certificate validation options only if explicitly needed
-      // For mongodb+srv://, only set these if ALLOW_INSECURE_TLS is true
-      // Otherwise, let MongoDB handle TLS with default secure settings
+      
+      // Set certificate validation options based on environment variable
+      // This allows bypassing certificate validation for self-signed certificates
+      // or when troubleshooting certificate issues
       if (ALLOW_INSECURE_TLS) {
+        // For SRV connections, we need to explicitly set these options
+        // as they're not automatically applied
         connectionOptions.tlsAllowInvalidCertificates = true;
         connectionOptions.tlsAllowInvalidHostnames = true;
+        
+        // Log that insecure TLS is enabled (for debugging)
+        if (process.env.NODE_ENV === 'production') {
+          console.warn('[MongoDB] WARNING: MONGODB_ALLOW_INVALID_CERTS is enabled. Certificate validation is disabled.');
+        }
+      } else {
+        // Ensure secure defaults - explicitly reject invalid certificates
+        // This is the default, but being explicit helps with debugging
+        connectionOptions.tlsAllowInvalidCertificates = false;
+        connectionOptions.tlsAllowInvalidHostnames = false;
       }
     }
 
@@ -206,13 +219,17 @@ export async function connectMongo(): Promise<typeof mongoose> {
           const enhancedError = new Error(
             `MongoDB SSL/TLS connection error: ${errorMessage}. ` +
             (ALLOW_INSECURE_TLS 
-              ? 'Invalid certificates are allowed but connection still failed.' 
-              : 'Consider setting MONGODB_ALLOW_INVALID_CERTS=true if using self-signed certificates.')
+              ? 'Invalid certificates are allowed but connection still failed. This may indicate a server-side issue or network problem.' 
+              : 'This error typically indicates certificate validation failure. ' +
+                'If using self-signed certificates or troubleshooting, set MONGODB_ALLOW_INVALID_CERTS=true. ' +
+                'Otherwise, check your MongoDB server certificate status and network connectivity.')
           );
           enhancedError.cause = error;
           console.error('MongoDB SSL/TLS connection error:', {
             message: errorMessage,
             allowInsecureTLS: ALLOW_INSECURE_TLS,
+            connectionString: MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'), // Mask credentials
+            isSRV: MONGODB_URI.startsWith('mongodb+srv://'),
             originalError: error,
           });
           throw enhancedError;
@@ -237,6 +254,11 @@ export async function connectMongo(): Promise<typeof mongoose> {
         console.error('MongoDB SSL/TLS connection failed after retries:', {
           message: errorMessage,
           allowInsecureTLS: ALLOW_INSECURE_TLS,
+          connectionString: MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'), // Mask credentials
+          isSRV: MONGODB_URI.startsWith('mongodb+srv://'),
+          suggestion: ALLOW_INSECURE_TLS 
+            ? 'Connection failed even with certificate validation disabled. Check MongoDB server status and network connectivity.'
+            : 'Consider setting MONGODB_ALLOW_INVALID_CERTS=true as a temporary workaround, then investigate certificate issues.',
           originalError: error,
         });
       } else {
@@ -266,6 +288,11 @@ export async function connectMongo(): Promise<typeof mongoose> {
       console.error('MongoDB SSL/TLS connection failed:', {
         message: errorMessage,
         allowInsecureTLS: ALLOW_INSECURE_TLS,
+        connectionString: MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'), // Mask credentials
+        isSRV: MONGODB_URI.startsWith('mongodb+srv://'),
+        suggestion: ALLOW_INSECURE_TLS 
+          ? 'Connection failed even with certificate validation disabled. Check MongoDB server status.'
+          : 'Set MONGODB_ALLOW_INVALID_CERTS=true if using self-signed certificates.',
         originalError: error,
       });
     } else {

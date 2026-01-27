@@ -45,8 +45,16 @@ export async function syncReferralTasks(referralId: string | Types.ObjectId): Pr
   // Convert string to ObjectId if needed
   const refId = typeof referralId === 'string' ? new Types.ObjectId(referralId) : referralId;
 
-  // Fetch the referral to get status, ahaBucket, timeline, and statusLastUpdated
-  const referral = await Referral.findById(refId).lean<ReferralDocument>();
+  // Fetch the referral with populated agent references to check for OOS agents
+  const referral = await Referral.findById(refId)
+    .populate<{ assignedAgent?: { ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null } }>('assignedAgent', 'ahaDesignation')
+    .populate<{ buySideAgent?: { ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null } }>('buySideAgent', 'ahaDesignation')
+    .populate<{ sellSideAgent?: { ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null } }>('sellSideAgent', 'ahaDesignation')
+    .lean<ReferralDocument & {
+      assignedAgent?: { ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null };
+      buySideAgent?: { ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null };
+      sellSideAgent?: { ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null };
+    }>();
 
   if (!referral) {
     result.errors.push(`Referral not found: ${referralId}`);
@@ -57,11 +65,18 @@ export async function syncReferralTasks(referralId: string | Types.ObjectId): Pr
   const ahaBucket = referral.ahaBucket ?? null;
   const timeline = (referral.timeline as ReferralTimeline) ?? null;
 
+  // Compute hasAhaOosAgentAttached: check if any attached agent has ahaDesignation === 'AHA_OOS'
+  const hasAhaOosAgentAttached = Boolean(
+    (referral.assignedAgent as any)?.ahaDesignation === 'AHA_OOS' ||
+    (referral.buySideAgent as any)?.ahaDesignation === 'AHA_OOS' ||
+    (referral.sellSideAgent as any)?.ahaDesignation === 'AHA_OOS'
+  );
+
   // Get status change date (use statusLastUpdated or createdAt as fallback)
   const statusBaseDate = referral.statusLastUpdated ?? referral.createdAt ?? new Date();
 
   // Get applicable task rules for this status and conditions
-  const rules = getTaskRulesForStatus(status, { ahaBucket, timeline });
+  const rules = getTaskRulesForStatus(status, { ahaBucket, timeline, hasAhaOosAgentAttached });
 
   // Upsert each task
   for (const rule of rules) {

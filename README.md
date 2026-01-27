@@ -2291,6 +2291,50 @@ test('user flow', async ({ page }) => {
 4. **Verify** network connectivity
 5. **Check** SSL/TLS settings in connection string
 
+#### MongoDB SSL/TLS Certificate Errors
+
+**Symptoms**: `ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR`, `tlsv1 alert internal error`, or certificate validation failures
+
+**Error Messages**:
+- `SSL routines:ssl3_read_bytes:tlsv1 alert internal error`
+- `MongoDB SSL/TLS connection error`
+- `alert number 80`
+
+**Immediate Fix (Temporary)**:
+1. **Add** environment variable in Vercel:
+   - Go to Project Settings → Environment Variables
+   - Add: `MONGODB_ALLOW_INVALID_CERTS=true`
+   - Redeploy the application
+2. **Warning**: This bypasses certificate validation. Only use temporarily or in development.
+
+**Permanent Solutions**:
+
+**For MongoDB Atlas**:
+1. **Check** cluster status in Atlas dashboard
+2. **Verify** connection string uses `mongodb+srv://` format
+3. **Contact** MongoDB Atlas support if certificates are failing
+4. **Check** if cluster needs upgrade or reconfiguration
+
+**For Self-Hosted MongoDB**:
+1. **Renew** expired SSL certificates
+2. **Ensure** certificate chain is complete
+3. **Update** MongoDB server configuration with valid certificates
+4. **Restart** MongoDB service after certificate update
+5. **Verify** certificate hostname matches connection string
+
+**Diagnostic Steps**:
+1. **Check** MongoDB provider dashboard for alerts
+2. **Review** certificate expiration dates
+3. **Test** connection from local environment with same URI
+4. **Review** Vercel function logs for detailed error messages
+5. **Verify** connection string format and credentials
+
+**After Fix**:
+1. **Remove** `MONGODB_ALLOW_INVALID_CERTS` environment variable
+2. **Verify** connections work with proper certificate validation
+3. **Monitor** logs to ensure no SSL/TLS errors
+4. **Set up** alerts for certificate expiration dates
+
 #### Authentication Issues
 
 **Symptoms**: 401 Unauthorized, session not persisting

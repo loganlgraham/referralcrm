@@ -195,18 +195,6 @@ export function getStaticFollowUpTasksForReferral(
     // Calculate priority
     const priority = calculatePriority(dueDate, now);
 
-    // Only include tasks due within 3 days or overdue
-    if (dueDate) {
-      const nowMT = zonedTimeToUtc(startOfDay(now), SLA_TIME_ZONE);
-      const dueMT = zonedTimeToUtc(startOfDay(dueDate), SLA_TIME_ZONE);
-      const daysUntilDue = Math.floor((dueMT.getTime() - nowMT.getTime()) / (1000 * 60 * 60 * 24));
-      
-      // Skip tasks that are more than 3 days away
-      if (daysUntilDue > 3) {
-        continue;
-      }
-    }
-
     // Format due date string
     const dueAt = dueDate ? formatDueDate(dueDate) : null;
 

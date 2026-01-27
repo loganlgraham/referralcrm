@@ -16,10 +16,13 @@ export const LONG_TIMELINE_VALUES: ReferralTimeline[] = ['6-12_months', '12+_mon
 
 /**
  * Check if referral has OOS agent assigned.
- * OOS = ahaBucket is 'AHA_OOS'
+ * OOS = ahaBucket is 'AHA_OOS' OR has an attached agent with ahaDesignation === 'AHA_OOS'
  */
-export function isOOSReferral(ahaBucket: string | null | undefined): boolean {
-  return ahaBucket === 'AHA_OOS';
+export function isOOSReferral(
+  ahaBucket: string | null | undefined,
+  hasAhaOosAgentAttached?: boolean
+): boolean {
+  return ahaBucket === 'AHA_OOS' || hasAhaOosAgentAttached === true;
 }
 
 /**
@@ -333,10 +336,11 @@ export function getTaskRulesForStatus(
   options: {
     ahaBucket?: string | null;
     timeline?: ReferralTimeline | null;
+    hasAhaOosAgentAttached?: boolean;
   } = {}
 ): TaskRuleDefinition[] {
-  const { ahaBucket, timeline } = options;
-  const isOOS = isOOSReferral(ahaBucket);
+  const { ahaBucket, timeline, hasAhaOosAgentAttached } = options;
+  const isOOS = isOOSReferral(ahaBucket, hasAhaOosAgentAttached);
   const shortTimeline = isShortTimeline(timeline);
 
   let rules: TaskRuleDefinition[] = [];
