@@ -54,6 +54,25 @@ function calculateAmounts(data: FeeBreakdownEmailData): CalculatedAmounts {
   };
 }
 
+/**
+ * Extracts the last name from a borrower's full name
+ */
+function extractLastName(borrowerName: string): string {
+  if (!borrowerName || borrowerName.trim().length === 0) {
+    return 'Unknown';
+  }
+  const nameParts = borrowerName.trim().split(/\s+/);
+  return nameParts[nameParts.length - 1] || borrowerName;
+}
+
+/**
+ * Generates the subject line for the fee breakdown email
+ */
+export function generateFeeBreakdownSubject(borrowerName: string): string {
+  const lastName = extractLastName(borrowerName);
+  return `American Home Agents Referral Fee - ${lastName}`;
+}
+
 export function generateFeeBreakdownEmailHTML(data: FeeBreakdownEmailData): { html: string; text: string } {
   const amounts = calculateAmounts(data);
   const closingDateFormatted = formatDate(data.deal.closingDate);
@@ -272,6 +291,34 @@ export function generateFeeBreakdownEmailHTML(data: FeeBreakdownEmailData): { ht
         </div>
       </div>
 
+      <div class="section" style="background: #f9fafb;">
+        <h2>Payment Instructions</h2>
+        
+        <div class="info-row">
+          <div class="label">Mailing Address</div>
+          <div class="value" style="white-space: pre-line; line-height: 1.8;">
+American Home Agents
+3045 S Parker Rd #200
+Aurora, CO 80014
+          </div>
+        </div>
+        
+        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+          <p style="margin: 0 0 12px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+            Please include a copy of the settlement statement with the check, or email it to 
+            <a href="mailto:kristen.truong@americanhomeagents.com" style="color: #0066cc; text-decoration: none;">kristen.truong@americanhomeagents.com</a> 
+            if wiring the referral fee (wiring instructions attached).
+          </p>
+          <p style="margin: 12px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+            Please also find our W9 attached for tax purposes.
+          </p>
+          <p style="margin: 12px 0 0 0; font-size: 15px; color: #374151; line-height: 1.6;">
+            Please don't hesitate to reach out to Kristen if you have any questions or need further details. 
+            Congratulations again on the upcoming closing, and thank you for your partnership!
+          </p>
+        </div>
+      </div>
+
       <div class="instruction-box">
         <p>
           <strong>Please review these numbers for accuracy.</strong> If anything appears incorrect, 
@@ -315,6 +362,22 @@ Agent Commission (${amounts.commissionPercent}):           ${amounts.commissionA
 Referral Fee (${amounts.referralFeePercent}):              -${amounts.referralFeeAmount}
 ─────────────────────────────────────────────
 Net Commission to Agent:            ${amounts.netCommission}
+
+PAYMENT INSTRUCTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Mailing Address:
+American Home Agents
+3045 S Parker Rd #200
+Aurora, CO 80014
+
+Please include a copy of the settlement statement with the check, or email it to 
+kristen.truong@americanhomeagents.com if wiring the referral fee (wiring instructions attached).
+
+Please also find our W9 attached for tax purposes.
+
+Please don't hesitate to reach out to Kristen if you have any questions or need further details. 
+Congratulations again on the upcoming closing, and thank you for your partnership!
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
