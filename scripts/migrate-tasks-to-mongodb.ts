@@ -184,7 +184,9 @@ async function migrateTasks() {
 
   // 3. Reconcile system tasks for all referrals
   console.log('Step 3: Reconciling system tasks for all referrals...');
-  const allReferrals = await Referral.find({ deletedAt: null }).select('_id').lean();
+  const allReferrals = await Referral.find({ deletedAt: null })
+    .select('_id')
+    .lean<{ _id: Types.ObjectId }[]>();
   console.log(`Found ${allReferrals.length} active referrals`);
 
   let processed = 0;
