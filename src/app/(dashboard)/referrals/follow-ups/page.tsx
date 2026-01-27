@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 
 import { AgentTasksWrapper } from '@/components/agents/agent-tasks-wrapper';
+import { NewTaskProvider } from '@/components/referrals/new-task-provider';
 import { getCurrentSession } from '@/lib/auth';
 import { getReferrals } from '@/lib/server/referrals';
 
@@ -59,9 +60,11 @@ export default async function FollowUpTasksPage({
   }));
 
   return (
-    <AgentTasksWrapper
-      referrals={referrals}
-      viewerRole={viewerRole}
-    />
+    <NewTaskProvider>
+      <AgentTasksWrapper
+        referrals={referrals}
+        viewerRole={viewerRole}
+      />
+    </NewTaskProvider>
   );
 }

@@ -5,13 +5,12 @@ import { useMemo, useEffect } from 'react';
 import { CheckCircle2, Circle } from 'lucide-react';
 import { formatInTimeZone } from 'date-fns-tz';
 
-import { useFollowUpTaskContext } from '@/components/referrals/follow-up-task-provider';
-import {
-  buildFollowUpTasksForReferral,
-  type FollowUpTaskRole,
-} from '@/components/referrals/use-follow-up-tasks';
+import { useTaskBoardTasks } from '@/components/referrals/use-persisted-tasks';
+import type { PersistedTask } from '@/components/referrals/use-persisted-tasks';
 import { type ReferralLike, resolvePrimaryAgentName, SLA_TIME_ZONE } from '@/utils/sla-insights';
 import { normalizeReferralStatus, REFERRAL_STATUSES } from '@/constants/referrals';
+
+export type FollowUpTaskRole = 'admin' | 'mc' | 'agent';
 
 interface BoardReferral {
   _id: string;
@@ -94,97 +93,39 @@ const formatDueDate = (value: string): string => {
 };
 
 export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoardProps) {
-  const { 
-    completions, 
-    manualTasks, 
-    shownTasks, 
-    taskMetadata, 
-    toggleTask, 
-    removeManualTask, 
-    markTasksAsShown, 
-    storeTaskMetadata,
-    loadReferralStates,
-  } = useFollowUpTaskContext();
-
   const referralIds = useMemo(() => referrals.map((referral) => referral._id), [referrals]);
 
-  // Always force a fresh load from server on mount and when referralIds change
-  // This ensures manual tasks are always visible after page refresh
+  // Use the new persisted task system
+  const { tasks: allTasks, reload, isLoading } = useTaskBoardTasks(referralIds, {
+    includeCompleted: false, // Only show open tasks
+  });
+
+  // Create a dependency string that includes referral IDs and their statuses
+  // This ensures we reload when status changes (even if IDs don't change)
+  const referralStatusKey = useMemo(() => {
+    return referrals.map((r) => `${r._id}:${r.status}:${r.statusLastUpdated || ''}`).join(',');
+  }, [referrals]);
+
+  // Reload tasks when referralIds or their statuses change (e.g., after status change)
   useEffect(() => {
     if (referralIds.length > 0) {
-      loadReferralStates(referralIds, true);
+      reload();
     }
-  }, [loadReferralStates, referralIds.join(',')]);
+  }, [referralIds.join(','), referralStatusKey, reload]);
 
-  const taskResults = useMemo(() => {
-    return referrals.reduce<Record<string, ReturnType<typeof buildFollowUpTasksForReferral>>>((acc, referral) => {
-      const referralLike = toReferralLike(referral);
-      const result = buildFollowUpTasksForReferral(referralLike, {
-        completions,
-        manualTasks,
-        shownTasks,
-        taskMetadata,
-        toggleTask,
-        removeManualTask,
-        markTasksAsShown,
-        storeTaskMetadata,
-        viewerRole,
-      });
-      acc[referral._id] = result;
-      return acc;
-    }, {});
-  }, [completions, manualTasks, shownTasks, taskMetadata, referrals, removeManualTask, toggleTask, markTasksAsShown, storeTaskMetadata, viewerRole]);
-
-  // Handle side effects for marking tasks as shown and storing metadata
-  useEffect(() => {
-    Object.values(taskResults).forEach(({ tasks, currentTasks, referralId, referralStatus }) => {
-      // Mark all task IDs as shown
-      const allTaskIds = tasks.map((t) => t.id);
-      const existingShownTasks = shownTasks[referralId] || [];
-      
-      // Only update if there are new task IDs
-      const hasNewTasks = allTaskIds.some(id => !existingShownTasks.includes(id));
-      if (hasNewTasks) {
-        markTasksAsShown(referralId, allTaskIds);
-      }
-
-      // Store metadata for new tasks (only those not already in metadata)
-      const metadataToStore = currentTasks
-        .filter((task) => {
-          const fullTaskId = task.taskId;
-          return !taskMetadata[fullTaskId];
-        })
-        .map((task) => ({
-          taskId: task.taskId,
-          metadata: {
-            title: task.title,
-            message: task.message,
-            priority: task.priority,
-            category: task.category,
-            dueAt: task.dueAt,
-            supportingMetric: task.supportingMetric,
-            isManual: task.isManual,
-            createdAt: new Date().toISOString(),
-            statusWhenCreated: referralStatus,
-          },
-        }));
-
-      if (metadataToStore.length > 0) {
-        storeTaskMetadata(metadataToStore);
+  // Group tasks by referral ID
+  const tasksByReferral = useMemo(() => {
+    const grouped: Record<string, PersistedTask[]> = {};
+    allTasks.forEach((task) => {
+      if (task.referralId) {
+        if (!grouped[task.referralId]) {
+          grouped[task.referralId] = [];
+        }
+        grouped[task.referralId].push(task);
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [referrals, completions, manualTasks, shownTasks, taskMetadata, viewerRole]);
-
-  const tasksByReferral = useMemo(() => {
-    return Object.entries(taskResults).reduce<Record<string, ReturnType<typeof buildFollowUpTasksForReferral>['tasks']>>(
-      (acc, [id, result]) => {
-      acc[id] = result.tasks;
-      return acc;
-      },
-      {}
-    );
-  }, [taskResults]);
+    return grouped;
+  }, [allTasks]);
 
   // Calculate task urgency: negative = overdue, 0 = today, positive = upcoming
   const getTaskUrgency = (dueAt: string | null | undefined): number => {
@@ -199,7 +140,7 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
   interface ReferralTaskGroup {
     referral: BoardReferral;
     tasks: Array<{
-      task: ReturnType<typeof buildFollowUpTasksForReferral>['tasks'][number];
+      task: PersistedTask;
       assignmentName: string | undefined;
       statusLabel: string;
     }>;
@@ -211,6 +152,7 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
 
     referrals.forEach((referral) => {
       const tasks = tasksByReferral[referral._id] ?? [];
+      // The API already filters by role (admin-only endpoint), so all tasks returned are admin tasks
       const incompleteTasks = tasks
         .filter((task) => !task.completed)
         .map((task) => ({
@@ -253,19 +195,15 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
     return Array.from(groups.values()).sort((a, b) => {
       return a.mostUrgentDueDate - b.mostUrgentDueDate;
     });
-  }, [referrals, tasksByReferral]);
+  }, [referrals, tasksByReferral, viewerRole]);
 
   const summary = useMemo(() => {
-    return Object.values(tasksByReferral).reduce(
-      (acc, tasks) => {
-        const outstanding = tasks.filter((task) => !task.completed).length;
-        return {
-          total: acc.total + tasks.length,
-          outstanding: acc.outstanding + outstanding,
-        };
-      },
-      { total: 0, outstanding: 0 }
-    );
+    const allTasksList = Object.values(tasksByReferral).flat();
+    const outstanding = allTasksList.filter((task) => !task.completed).length;
+    return {
+      total: allTasksList.length,
+      outstanding,
+    };
   }, [tasksByReferral]);
   const roleLabel: Record<FollowUpTaskRole, string> = {
     admin: 'Admin/Manager',
@@ -335,9 +273,9 @@ export function FollowUpTasksBoard({ referrals, viewerRole }: FollowUpTasksBoard
                                 Manual
                               </span>
                             )}
-                            {task.isHistorical && (
+                            {task.statusWhenCreated && task.statusWhenCreated !== group.referral.status && (
                               <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
-                                {task.statusWhenCreated ? `From: ${task.statusWhenCreated}` : 'Previous Status'}
+                                From: {task.statusWhenCreated}
                               </span>
                             )}
                             <span className="text-xs font-semibold uppercase text-slate-400">{task.priority}</span>
