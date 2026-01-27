@@ -9,8 +9,8 @@ import type { ReferralTimeline } from '@/constants/referrals';
 import type { FollowUpTaskType, FollowUpTaskCategory } from '@/models/follow-up-task';
 
 // Timeline classifications
-// < 6 months: asap, 1-3_months, 3-6_months → ALTERNATE cadence
-// >= 6 months: 6-12_months, 12+_months, not_specified → DEFAULT cadence
+// < 6 months: asap, 1-3_months, 3-6_months → SHORT cadence (Week 1/2/4/8)
+// >= 6 months: 6-12_months, 12+_months, not_specified → LONG cadence (30/60/90 day)
 export const SHORT_TIMELINE_VALUES: ReferralTimeline[] = ['asap', '1-3_months', '3-6_months'];
 export const LONG_TIMELINE_VALUES: ReferralTimeline[] = ['6-12_months', '12+_months', 'not_specified'];
 
@@ -27,7 +27,7 @@ export function isOOSReferral(
 
 /**
  * Check if timeline is "short" (< 6 months)
- * Short timeline uses ALTERNATE cadence for In Communication tasks
+ * Short timeline uses WEEK cadence for In Communication tasks (Week 1/2/4/8)
  */
 export function isShortTimeline(timeline: ReferralTimeline | null | undefined): boolean {
   if (!timeline) return false;
@@ -36,7 +36,7 @@ export function isShortTimeline(timeline: ReferralTimeline | null | undefined): 
 
 /**
  * Check if timeline is "long" (>= 6 months or not specified)
- * Long timeline uses DEFAULT cadence for In Communication tasks
+ * Long timeline uses MONTHLY cadence for In Communication tasks (30/60/90 day)
  */
 export function isLongTimeline(timeline: ReferralTimeline | null | undefined): boolean {
   if (!timeline) return true; // Default to long timeline if not specified
@@ -57,45 +57,33 @@ export interface TaskRuleDefinition {
 }
 
 // =============================================================================
-// REFERRAL TASK RULES BY STATUS
+// REFERRAL TASK RULES
 // =============================================================================
 
-export const NEW_LEAD_TASKS: TaskRuleDefinition[] = [
+/**
+ * CREATED_TASKS - Always created on referral creation (regardless of OOS status)
+ */
+export const CREATED_TASKS: TaskRuleDefinition[] = [
   {
-    ruleId: 'new-lead::add-agent-homebot',
-    title: 'Add Real Estate Agent in Homebot',
+    ruleId: 'created::assign-agent',
+    title: 'Assign Agent - Change Status to Paired',
     type: 'Task',
-    message: 'Add the real estate agent to Homebot for this new lead.',
+    message: 'Assign an agent to this referral and change status to Paired.',
     category: 'ops',
     dueOffset: { days: 0 },
-    oosOnly: true,
-  },
-  {
-    ruleId: 'new-lead::customer-care-intro',
-    title: 'Customer Care: Initial Introduction',
-    type: 'Call',
-    message: 'Make initial introduction call to the customer.',
-    category: 'communication',
-    dueOffset: { days: 3 },
-    oosOnly: true,
+    oosOnly: false, // Always created, regardless of OOS
   },
 ];
 
+/**
+ * PAIRED_TASKS - When moved to Paired status (OOS only)
+ */
 export const PAIRED_TASKS: TaskRuleDefinition[] = [
   {
-    ruleId: 'paired::assign-agent-paired',
-    title: 'Assign Agent - Change Status to Paired',
-    type: 'Task',
-    message: 'Ensure agent is assigned and status is set to Paired.',
-    category: 'ops',
-    dueOffset: { days: 0 },
-    oosOnly: true,
-  },
-  {
-    ruleId: 'paired::add-agent-homebot-client',
+    ruleId: 'paired::homebot-add',
     title: 'Add Real Estate Agent In Home Bot to Client Page',
     type: 'Task',
-    message: 'Attach the assigned agent to the client in Homebot.',
+    message: 'Add the real estate agent to the client page in Homebot.',
     category: 'ops',
     dueOffset: { days: 0 },
     oosOnly: true,
@@ -111,84 +99,93 @@ export const PAIRED_TASKS: TaskRuleDefinition[] = [
   },
 ];
 
-// Default cadence for In Communication (timeline >= 6 months or not specified)
-export const IN_COMMUNICATION_DEFAULT_TASKS: TaskRuleDefinition[] = [
+/**
+ * IN_COMMUNICATION_SHORT_TASKS - Timeline < 6 months (asap, 1-3, 3-6)
+ * Uses WEEK cadence: Week 1, Week 2, Week 4, Week 8
+ */
+export const IN_COMMUNICATION_SHORT_TASKS: TaskRuleDefinition[] = [
   {
-    ruleId: 'in-communication::check-in-week-1',
+    ruleId: 'in-comm::week-1',
     title: 'Check in - Week 1',
     type: 'Call',
     message: 'Week 1 check-in with the client.',
     category: 'communication',
     dueOffset: { days: 7 },
     oosOnly: true,
-    timelineCondition: 'long',
+    timelineCondition: 'short',
   },
   {
-    ruleId: 'in-communication::check-in-week-2',
+    ruleId: 'in-comm::week-2',
     title: 'Check in - Week 2',
     type: 'Email',
     message: 'Week 2 check-in with the client.',
     category: 'communication',
     dueOffset: { days: 14 },
     oosOnly: true,
-    timelineCondition: 'long',
+    timelineCondition: 'short',
   },
   {
-    ruleId: 'in-communication::check-in-week-4',
+    ruleId: 'in-comm::week-4',
     title: 'Check in - Week 4 (1 month)',
     type: 'Call',
     message: 'One month check-in with the client.',
     category: 'communication',
     dueOffset: { days: 28 },
     oosOnly: true,
-    timelineCondition: 'long',
+    timelineCondition: 'short',
   },
   {
-    ruleId: 'in-communication::check-in-week-8',
+    ruleId: 'in-comm::week-8',
     title: 'Check in - Week 8 (2 Months)',
     type: 'Email',
     message: 'Two month check-in with the client.',
     category: 'communication',
     dueOffset: { months: 2 },
     oosOnly: true,
-    timelineCondition: 'long',
+    timelineCondition: 'short',
   },
 ];
 
-// Alternate cadence for In Communication (timeline < 6 months)
-export const IN_COMMUNICATION_SHORT_TASKS: TaskRuleDefinition[] = [
+/**
+ * IN_COMMUNICATION_LONG_TASKS - Timeline >= 6 months (6-12, 12+, not_specified)
+ * Uses MONTHLY cadence: 30 day, 60 day, 90 day
+ */
+export const IN_COMMUNICATION_LONG_TASKS: TaskRuleDefinition[] = [
   {
-    ruleId: 'in-communication::check-in-30-day',
+    ruleId: 'in-comm::30-day',
     title: 'Check in - 30 day',
-    type: 'Email',
+    type: 'Call',
     message: '30 day check-in with the client.',
     category: 'communication',
     dueOffset: { months: 1 },
     oosOnly: true,
-    timelineCondition: 'short',
+    timelineCondition: 'long',
   },
   {
-    ruleId: 'in-communication::check-in-60-day',
+    ruleId: 'in-comm::60-day',
     title: 'Check in - 60 day',
-    type: 'Email',
+    type: 'Call',
     message: '60 day check-in with the client.',
     category: 'communication',
     dueOffset: { months: 2 },
     oosOnly: true,
-    timelineCondition: 'short',
+    timelineCondition: 'long',
   },
   {
-    ruleId: 'in-communication::check-in-90-day',
+    ruleId: 'in-comm::90-day',
     title: 'Check in - 90 day',
-    type: 'Email',
+    type: 'Call',
     message: '90 day check-in with the client.',
     category: 'communication',
     dueOffset: { months: 3 },
     oosOnly: true,
-    timelineCondition: 'short',
+    timelineCondition: 'long',
   },
 ];
 
+/**
+ * UNDER_CONTRACT_TASKS - When status changes to Under Contract (OOS only)
+ */
 export const UNDER_CONTRACT_TASKS: TaskRuleDefinition[] = [
   {
     ruleId: 'under-contract::update-realtor-audit',
@@ -227,15 +224,6 @@ export const UNDER_CONTRACT_TASKS: TaskRuleDefinition[] = [
     oosOnly: true,
   },
   {
-    ruleId: 'under-contract::send-w9-cda-instructions',
-    title: 'Send W-9/CDA and Check Instructions Email',
-    type: 'Email',
-    message: 'Send W-9 form and CDA/check payment instructions to the agent.',
-    category: 'finance',
-    dueOffset: { days: 21 },
-    oosOnly: true,
-  },
-  {
     ruleId: 'under-contract::confirm-closing-on-track',
     title: 'Call and Confirm Closing is still on (Deal 1)',
     type: 'Call',
@@ -244,21 +232,24 @@ export const UNDER_CONTRACT_TASKS: TaskRuleDefinition[] = [
     dueOffset: { days: 29 },
     oosOnly: true,
   },
-];
-
-// Deal Status = Closed tasks (created when deal closes)
-export const CLOSED_TASKS: TaskRuleDefinition[] = [
   {
-    ruleId: 'closed::deal-status-closed',
-    title: 'Deal Status - "Closed"',
+    ruleId: 'under-contract::change-deal-closed',
+    title: 'Change Deal to Closed (Deal 1)',
     type: 'Task',
     message: 'Change deal status to Closed and verify the closing date is correct.',
     category: 'ops',
     dueOffset: { days: 31 },
     oosOnly: true,
   },
+];
+
+/**
+ * DEAL_CLOSED_TASKS - When DEAL status changes to 'closed' (OOS only)
+ * These are triggered by deal status change, not referral status change
+ */
+export const DEAL_CLOSED_TASKS: TaskRuleDefinition[] = [
   {
-    ruleId: 'closed::update-49-agents-yellow',
+    ruleId: 'deal-closed::update-49-agents-yellow',
     title: 'Update 49 Agents map - yellow',
     type: 'Task',
     message: 'Update the 49 Agents map to mark this deal as closed (yellow).',
@@ -267,7 +258,7 @@ export const CLOSED_TASKS: TaskRuleDefinition[] = [
     oosOnly: true,
   },
   {
-    ruleId: 'closed::post-closing-card',
+    ruleId: 'deal-closed::post-closing-card',
     title: 'Post Closing card - Agent/Buyer',
     type: 'Task',
     message: 'Send post-closing card to both the agent and buyer.',
@@ -346,25 +337,19 @@ export function getTaskRulesForStatus(
   let rules: TaskRuleDefinition[] = [];
 
   switch (status) {
-    case 'New Lead':
-      rules = NEW_LEAD_TASKS;
-      break;
     case 'Paired':
       rules = PAIRED_TASKS;
       break;
     case 'In Communication':
-      // Choose either default or short cadence based on timeline
+      // Choose either short (week) or long (monthly) cadence based on timeline
       if (shortTimeline) {
         rules = IN_COMMUNICATION_SHORT_TASKS;
       } else {
-        rules = IN_COMMUNICATION_DEFAULT_TASKS;
+        rules = IN_COMMUNICATION_LONG_TASKS;
       }
       break;
     case 'Under Contract':
       rules = UNDER_CONTRACT_TASKS;
-      break;
-    case 'Closed':
-      rules = CLOSED_TASKS;
       break;
     default:
       rules = [];

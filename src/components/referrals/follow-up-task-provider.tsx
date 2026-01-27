@@ -597,19 +597,10 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Prevent localStorage writes for admin users to avoid conflicts
+  // localStorage writes removed - MongoDB is now the source of truth
+  // Keeping this effect empty for now to maintain structure
   useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    // Skip localStorage writes for admin users - server is authoritative
-    if (isAdmin) {
-      return;
-    }
-    if (!allowLocalCacheRef.current) {
-      return;
-    }
-    window.localStorage.setItem(FOLLOW_UP_TASK_STORAGE_KEY, JSON.stringify(state));
+    // No longer writing to localStorage - MongoDB is authoritative
   }, [state, isAdmin]);
 
   // Cleanup: abort all in-flight syncs and clear debounced syncs on unmount
@@ -952,29 +943,63 @@ export function FollowUpTaskProvider({ children }: { children: ReactNode }) {
       console.log(`[Task CRUD] Toggling task ${taskId} to ${completed ? 'completed' : 'incomplete'}${isManualTask ? ' (manual task)' : ''}`);
       
       // Generate completedAt once and use it for both local state and server payload
-      // This ensures client and server have the same timestamp when skipMerge=true
       const completedAt = completed ? new Date().toISOString() : null;
-      const completionUpdates: Record<string, { completed: boolean; completedAt: string | null }> = {
-        [taskId]: { completed, completedAt },
-      };
       
-      if (process.env.NODE_ENV === 'development' && isManualTask) {
-        console.log(`[Task CRUD] Manual task completion update:`, { taskId, completed, completedAt });
-      }
-      
+      // Optimistic update
       startTransition(() => {
         dispatch({ type: 'toggle', taskId, completed, completedAt });
       });
+      
       if (referralId) {
-        // Use immediate sync for toggles to ensure persistence before page refresh
-        // Pass completion state directly to avoid race condition with stateRef
-        // Skip merge to preserve optimistic update and prevent flickering
         try {
-          await syncReferralStateImmediate(referralId, true, completionUpdates);
+          // Fetch tasks to get MongoDB _id mapping
+          const tasksResponse = await fetch(`/api/referrals/${referralId}/tasks?includeCompleted=true`);
+          if (!tasksResponse.ok) {
+            throw new Error('Failed to fetch tasks');
+          }
+          const tasks = await tasksResponse.json();
+          
+          // Find the task by matching ruleId or manual task
+          let taskMongoId: string | null = null;
+          if (isManualTask) {
+            // For manual tasks, match by extracting the manual task ID
+            const manualTaskId = taskId.split('::manual::')[1];
+            const task = tasks.find((t: any) => 
+              t.source === 'manual' && 
+              (t.ruleId === manualTaskId || t._id === manualTaskId)
+            );
+            taskMongoId = task?._id;
+          } else {
+            // For system tasks, match by ruleId
+            const ruleId = taskId.split('::')[1];
+            const task = tasks.find((t: any) => t.ruleId === ruleId && t.source === 'static');
+            taskMongoId = task?._id;
+          }
+          
+          if (taskMongoId) {
+            // Call the new API endpoint
+            const response = await fetch(`/api/tasks/${taskMongoId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                status: completed ? 'completed' : 'open',
+                completedAt: completedAt 
+              }),
+            });
+            
+            if (!response.ok) {
+              throw new Error('Failed to update task');
+            }
+          } else {
+            // Fallback to old sync method if task not found
+            const completionUpdates: Record<string, { completed: boolean; completedAt: string | null }> = {
+              [taskId]: { completed, completedAt },
+            };
+            await syncReferralStateImmediate(referralId, true, completionUpdates);
+          }
         } catch (error) {
           console.error(`[Task CRUD] Failed to sync task toggle ${taskId}:`, error);
           // The optimistic update has already been applied to the UI.
-          // The error will be retried in the next scheduled sync.
         }
       }
     },

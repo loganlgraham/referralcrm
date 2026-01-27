@@ -4,8 +4,35 @@ import { Schema, model, models, Types } from 'mongoose';
 export type FollowUpTaskType = 'Task' | 'Call' | 'Email' | 'Text' | 'Auto-Email';
 export type FollowUpTaskCategory = 'ops' | 'communication' | 'pipeline' | 'finance';
 export type FollowUpTaskScope = 'referral' | 'agent';
-export type FollowUpTaskStatus = 'open' | 'completed';
+export type FollowUpTaskStatus = 'open' | 'completed' | 'archived';
 export type FollowUpTaskSource = 'static' | 'manual';
+export type AnchorType = 'referral_created' | 'referral_status' | 'deal_status';
+
+export interface TaskAnchor {
+  type: AnchorType;
+  value: string; // e.g., 'Paired', 'In Communication', 'closed'
+  at: Date; // when the triggering event occurred
+}
+
+// Anchor schema for tracking trigger context
+const taskAnchorSchema = new Schema<TaskAnchor>(
+  {
+    type: {
+      type: String,
+      enum: ['referral_created', 'referral_status', 'deal_status'],
+      required: true,
+    },
+    value: {
+      type: String,
+      required: true,
+    },
+    at: {
+      type: Date,
+      required: true,
+    },
+  },
+  { _id: false }
+);
 
 export interface FollowUpTaskDocument {
   _id: Types.ObjectId;
@@ -23,6 +50,7 @@ export interface FollowUpTaskDocument {
   source: FollowUpTaskSource;
   ruleId: string | null;
   statusWhenCreated: string | null;
+  anchor: TaskAnchor | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,6 +72,7 @@ export interface FollowUpTaskLean {
   source: FollowUpTaskSource;
   ruleId: string | null;
   statusWhenCreated: string | null;
+  anchor: TaskAnchor | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -65,6 +94,7 @@ export interface FollowUpTaskResponse {
   source: FollowUpTaskSource;
   ruleId: string | null;
   statusWhenCreated: string | null;
+  anchor: TaskAnchor | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -114,7 +144,7 @@ const followUpTaskSchema = new Schema<FollowUpTaskDocument>(
     },
     status: {
       type: String,
-      enum: ['open', 'completed'],
+      enum: ['open', 'completed', 'archived'],
       default: 'open',
       index: true,
     },
@@ -139,6 +169,10 @@ const followUpTaskSchema = new Schema<FollowUpTaskDocument>(
     },
     statusWhenCreated: {
       type: String,
+      default: null,
+    },
+    anchor: {
+      type: taskAnchorSchema,
       default: null,
     },
   },
@@ -202,6 +236,7 @@ export function toFollowUpTaskResponse(task: FollowUpTaskLean): FollowUpTaskResp
     source: task.source,
     ruleId: task.ruleId,
     statusWhenCreated: task.statusWhenCreated,
+    anchor: task.anchor,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
   };

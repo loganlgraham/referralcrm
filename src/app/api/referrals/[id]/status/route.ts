@@ -14,7 +14,7 @@ import { resolveAuditActorId } from '@/lib/server/audit';
 import { inferStateFromPostalCode } from '@/utils/location';
 import { calculateBusinessMinutesBetween } from '@/utils/sla-insights';
 import { createAdminNotifications } from '@/lib/server/notifications';
-import { syncReferralTasks } from '@/lib/server/task-sync';
+import { reconcileSystemTasks } from '@/lib/server/task-sync';
 
 interface Params {
   params: { id: string };
@@ -346,9 +346,12 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       });
     }
 
-    // Sync follow-up tasks for the updated status (runs in background)
-    syncReferralTasks(referral._id).catch((error) => {
-      console.error('[Task Sync] Failed to sync tasks after status change:', error);
+    // Reconcile tasks for the updated status (runs in background)
+    reconcileSystemTasks(referral._id, {
+      statusChangedTo: referral.status,
+      statusChangedAt: now,
+    }).catch((error) => {
+      console.error('[Task Sync] Failed to reconcile tasks after status change:', error);
     });
   }
 

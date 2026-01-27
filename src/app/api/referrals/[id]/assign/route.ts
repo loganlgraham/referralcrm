@@ -9,6 +9,7 @@ import { canManageReferral } from '@/lib/rbac';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
 import { Agent } from '@/models/agent';
+import { reconcileSystemTasks } from '@/lib/server/task-sync';
 
 interface Params {
   params: { id: string };
@@ -152,6 +153,19 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     channel: 'update',
     content: activityContent,
   });
+
+  // If an OOS agent was assigned, reconcile tasks (runs in background)
+  if (nextAgentDoc) {
+    const agent = await Agent.findById(parsed.data.agentId)
+      .select('ahaDesignation')
+      .lean<{ ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null } | null>();
+    
+    if (agent?.ahaDesignation === 'AHA_OOS') {
+      reconcileSystemTasks(referral._id).catch((error) => {
+        console.error('[Task Sync] Failed to reconcile tasks after OOS agent assignment:', error);
+      });
+    }
+  }
 
   return NextResponse.json({ id: referral._id.toString() });
 }

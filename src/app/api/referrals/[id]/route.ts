@@ -9,7 +9,7 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
 import { calculateReferralFeeDue } from '@/utils/referral';
-import { syncReferralTasks } from '@/lib/server/task-sync';
+import { reconcileSystemTasks } from '@/lib/server/task-sync';
 
 interface RouteContext {
   params: { id: string };
@@ -276,10 +276,10 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
       content: `Updated referral details (${updatedFieldsLabel})`,
     });
 
-    // Sync follow-up tasks if timeline changed (affects task generation)
+    // Reconcile tasks if timeline changed (affects task generation)
     if (changedDetailFields.includes('timeline')) {
-      syncReferralTasks(existing._id).catch((error) => {
-        console.error('[Task Sync] Failed to sync tasks after timeline change:', error);
+      reconcileSystemTasks(existing._id, { timelineChanged: true }).catch((error) => {
+        console.error('[Task Sync] Failed to reconcile tasks after timeline change:', error);
       });
     }
   }

@@ -15,7 +15,7 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { sendTransactionalEmail, isTransactionalEmailConfigured } from '@/lib/email';
 import { buildReferralLink } from '@/lib/referral-links';
 import { normalizePhoneNumber } from '@/utils/phone-utils';
-import { syncReferralTasks } from '@/lib/server/task-sync';
+import { reconcileSystemTasks } from '@/lib/server/task-sync';
 import {
   addWeeks,
   format,
@@ -1154,8 +1154,9 @@ export async function POST(request: Request) {
     content: `Created referral for ${borrowerName || 'a new client'}`,
   });
 
-  // Sync follow-up tasks for the new referral (runs in background)
-  syncReferralTasks(referral._id).catch((error) => {
+  // Create the ALWAYS task on referral creation (runs in background)
+  // This creates "Assign Agent - Change Status to Paired" task regardless of OOS status
+  reconcileSystemTasks(referral._id).catch((error) => {
     console.error('[Task Sync] Failed to sync tasks for new referral:', error);
   });
 

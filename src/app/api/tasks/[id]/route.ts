@@ -67,14 +67,39 @@ export async function PATCH(request: NextRequest, { params }: RouteParams): Prom
 
   // Handle completion toggle
   if ('status' in body) {
-    update.status = body.status;
+    const newStatus = body.status;
+    
+    // Validate status
+    if (!['open', 'completed', 'archived'].includes(newStatus)) {
+      return NextResponse.json({ error: 'Invalid status' }, { status: 400, headers: NO_CACHE_HEADERS });
+    }
 
-    if (body.status === 'completed') {
+    // Don't allow changing archived tasks (except to unarchive manually if needed)
+    if (existingTask.status === 'archived' && newStatus !== 'archived') {
+      // Allow unarchiving only for admins
+      update.status = newStatus;
+      if (newStatus === 'open') {
+        update.completedAt = null;
+        update.completedByUserId = null;
+      }
+    } else if (newStatus === 'completed') {
+      update.status = 'completed';
       update.completedAt = body.completedAt ? new Date(body.completedAt) : new Date();
       update.completedByUserId = session.user?.id ? new Types.ObjectId(session.user.id) : null;
-    } else if (body.status === 'open') {
+    } else if (newStatus === 'open') {
+      update.status = 'open';
       update.completedAt = null;
       update.completedByUserId = null;
+    } else if (newStatus === 'archived') {
+      // Only allow archiving open tasks (not completed ones)
+      if (existingTask.status === 'open') {
+        update.status = 'archived';
+      } else {
+        return NextResponse.json(
+          { error: 'Cannot archive completed tasks' },
+          { status: 400, headers: NO_CACHE_HEADERS }
+        );
+      }
     }
   }
 
