@@ -14,6 +14,7 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
 import { createNPSToken } from '@/lib/server/nps';
+import { createDealClosedTasks } from '@/lib/server/task-sync';
 
 type ReferralSummary = {
   _id: Types.ObjectId;
@@ -1049,6 +1050,16 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         console.error('Failed to send congratulatory emails:', error);
         // Don't fail the request if congratulatory emails fail
       }
+    }
+
+    // Create deal-closed tasks when deal status changes to 'closed'
+    if (isClosingNow && referral) {
+      const closedAt = payment.closingDate 
+        ? (payment.closingDate instanceof Date ? payment.closingDate : new Date(payment.closingDate))
+        : now;
+      createDealClosedTasks(referral._id, existingPayment._id, closedAt).catch((error) => {
+        console.error('[Task Sync] Failed to create deal-closed tasks:', error);
+      });
     }
   }
 
