@@ -78,12 +78,29 @@ export async function sendTransactionalEmail(payload: EmailPayload): Promise<boo
     }
 
     if (payload.attachments && payload.attachments.length > 0) {
-      emailOptions.attachments = payload.attachments.map((attachment) => ({
-        filename: attachment.filename,
-        content: typeof attachment.content === 'string' 
+      console.log('[Email] Processing attachments:', payload.attachments.length);
+      
+      emailOptions.attachments = payload.attachments.map((attachment) => {
+        // Resend SDK accepts Buffer directly, so pass it as-is
+        // If it's already a string (base64), use it directly
+        const content = typeof attachment.content === 'string' 
           ? attachment.content 
-          : attachment.content.toString('base64'),
-      }));
+          : attachment.content; // Pass Buffer directly
+        
+        console.log('[Email] Attachment:', {
+          filename: attachment.filename,
+          contentType: typeof content,
+          contentLength: typeof content === 'string' ? content.length : content.length,
+          isBuffer: Buffer.isBuffer(content),
+        });
+        
+        return {
+          filename: attachment.filename,
+          content,
+        };
+      });
+      
+      console.log('[Email] Attachments configured for Resend');
     }
 
     await enqueueRateLimited(() => client.emails.send(emailOptions));

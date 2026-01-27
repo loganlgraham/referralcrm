@@ -144,23 +144,41 @@ export async function POST(
       const wiringInstructionsPath = path.join(process.cwd(), 'AHA Commission Wiring Instructions.pdf');
       const w9Path = path.join(process.cwd(), 'AHA W9 2026.pdf');
 
-      if (fs.existsSync(wiringInstructionsPath)) {
+      console.log('[Fee Breakdown] Current working directory:', process.cwd());
+      console.log('[Fee Breakdown] Looking for PDFs at:', {
+        wiring: wiringInstructionsPath,
+        w9: w9Path,
+      });
+
+      const wiringExists = fs.existsSync(wiringInstructionsPath);
+      const w9Exists = fs.existsSync(w9Path);
+
+      console.log('[Fee Breakdown] PDF files found:', {
+        wiring: wiringExists,
+        w9: w9Exists,
+      });
+
+      if (wiringExists) {
         const wiringInstructionsPdf = fs.readFileSync(wiringInstructionsPath);
+        console.log('[Fee Breakdown] Read wiring instructions PDF, size:', wiringInstructionsPdf.length, 'bytes');
         attachments.push({
           filename: 'AHA Commission Wiring Instructions.pdf',
           content: wiringInstructionsPdf,
         });
       }
 
-      if (fs.existsSync(w9Path)) {
+      if (w9Exists) {
         const w9Pdf = fs.readFileSync(w9Path);
+        console.log('[Fee Breakdown] Read W9 PDF, size:', w9Pdf.length, 'bytes');
         attachments.push({
           filename: 'AHA W9 2026.pdf',
           content: w9Pdf,
         });
       }
+
+      console.log('[Fee Breakdown] Attachments prepared:', attachments.length);
     } catch (error) {
-      console.error('Error reading PDF attachments:', error);
+      console.error('[Fee Breakdown] Error reading PDF attachments:', error);
       // Continue without attachments rather than failing the entire email
     }
 
