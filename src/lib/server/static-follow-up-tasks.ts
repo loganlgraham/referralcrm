@@ -111,30 +111,52 @@ function meetsConditions(
   return true;
 }
 
+// Deal statuses that should trigger "Closed" tasks
+const CLOSED_DEAL_STATUSES = ['closed', 'payment_sent', 'paid'];
+
 /**
  * Get static follow-up tasks for a referral based on its status
  * Only applies tasks to referrals with AHA OOS agents attached
  * NOTE: These tasks are ADMIN-ONLY and will be filtered by role in the calling functions
  * EXCEPTION: The 'assign-agent-status' task shows for ALL referrals (regardless of AHA designation)
+ * EXCEPTION: "Closed" tasks are triggered by deal status (not referral status) and show for ALL referrals
  */
 export function getStaticFollowUpTasksForReferral(
   referral: ReferralLike & { borrower?: { name?: string } }
 ): StaticFollowUpTask[] {
   const normalizedStatus = normalizeReferralStatus(referral.status);
-  if (!normalizedStatus) {
+  
+  // Check if deal status indicates the deal is closed
+  const isDealClosed = CLOSED_DEAL_STATUSES.includes(referral.dealStatus ?? '');
+  
+  // Determine the effective status for task lookup:
+  // - If deal is closed, we want to include "Closed" tasks
+  // - Otherwise, use the normalized referral status
+  const effectiveStatusForTasks = isDealClosed ? 'Closed' : normalizedStatus;
+  
+  if (!effectiveStatusForTasks) {
     return [];
   }
 
-  // Get tasks for this status
-  const statusTasks = STATIC_FOLLOW_UP_TASKS[normalizedStatus] || [];
+  // Get tasks for the referral status (if any)
+  const statusTasks = normalizedStatus ? (STATIC_FOLLOW_UP_TASKS[normalizedStatus] || []) : [];
+  
+  // Get "Closed" tasks if deal is closed (these are deal-status-driven, not referral-status-driven)
+  const closedTasks = isDealClosed ? (STATIC_FOLLOW_UP_TASKS['Closed'] || []) : [];
+  
+  // Combine tasks, avoiding duplicates if referral status somehow equals 'Closed'
+  const allStatusTasks = normalizedStatus === 'Closed' 
+    ? statusTasks 
+    : [...statusTasks, ...closedTasks];
 
   // Special case: 'New Lead' status has the 'assign-agent-status' task that applies to ALL referrals
   // regardless of AHA designation. For other statuses, require AHA_OOS attached agent.
-  const hasAssignmentTask = statusTasks.some((task) => task.id === 'assign-agent-status');
+  const hasAssignmentTask = allStatusTasks.some((task) => task.id === 'assign-agent-status');
   const isNewLeadStatus = normalizedStatus === 'New Lead';
 
-  // If this is not New Lead status and doesn't have assignment task, require AHA_OOS agent
-  if (!isNewLeadStatus && !hasAssignmentTask && !referral.hasAhaOosAgentAttached) {
+  // If this is not New Lead status and doesn't have assignment task, and deal isn't closed,
+  // require AHA_OOS agent
+  if (!isNewLeadStatus && !hasAssignmentTask && !isDealClosed && !referral.hasAhaOosAgentAttached) {
     return [];
   }
 
@@ -144,12 +166,15 @@ export function getStaticFollowUpTasksForReferral(
       ? []
       : [];
 
-  const allTasks = [...statusTasks, ...additionalTasks];
+  const allTasks = [...allStatusTasks, ...additionalTasks];
 
   const now = new Date();
   const tasks: StaticFollowUpTask[] = [];
 
   for (const taskDef of allTasks) {
+    // Check if this is a "Closed" task (triggered by deal status)
+    const isClosedTask = closedTasks.some((t) => t.id === taskDef.id);
+    
     // Special gating for 'assign-agent-status' task
     if (taskDef.id === 'assign-agent-status') {
       // Show for ALL referrals (regardless of AHA designation) if agent or lender is missing
@@ -160,6 +185,9 @@ export function getStaticFollowUpTasksForReferral(
       }
       // If we reach here, agent or lender is missing - proceed to show the task
       // Skip all AHA designation checks below for this task
+    } else if (isClosedTask) {
+      // "Closed" tasks (from deal status) show for ALL referrals - no AHA requirement
+      // Skip AHA designation checks for these tasks
     } else {
       // For all other tasks, check AHA designation requirements
       if (taskDef.ahaDesignation === 'AHA') {

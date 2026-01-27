@@ -617,6 +617,22 @@ export async function getReferralById(id: string) {
     (referral.sellSideAgent as any)?.ahaDesignation === 'AHA'
   );
 
+  // Compute dealStatus from payments (same logic as getReferrals)
+  let dealStatus: string | null = null;
+  for (const payment of payments) {
+    const status = typeof payment.status === 'string' ? payment.status : null;
+    if (!status) continue;
+    // Set fallback to first status found
+    if (!dealStatus) {
+      dealStatus = status;
+    }
+    // Prefer non-terminated status as primary
+    if (status !== 'terminated') {
+      dealStatus = status;
+      break;
+    }
+  }
+
   return {
     ...referral,
     _id: referral._id.toString(),
@@ -634,6 +650,7 @@ export async function getReferralById(id: string) {
     hasAhaOosAgentAttached,
     hasAhaDesignatedAgentAttached,
     hasAhaAgentAttached,
+    dealStatus,
     payments: payments.map((payment: any) => ({
       _id: payment._id.toString(),
       status: payment.status,

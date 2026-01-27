@@ -56,6 +56,20 @@ function toReferralLike(referral: any, payments: any[] = []) {
     (referral.sellSideAgent as any)?.ahaDesignation === 'AHA'
   );
 
+  // Compute dealStatus from payments (prefer non-terminated status)
+  let dealStatus: string | null = null;
+  for (const payment of payments) {
+    const status = typeof payment.status === 'string' ? payment.status : null;
+    if (!status) continue;
+    if (!dealStatus) {
+      dealStatus = status;
+    }
+    if (status !== 'terminated') {
+      dealStatus = status;
+      break;
+    }
+  }
+
   return {
     _id: referral._id.toString(),
     createdAt: referral.createdAt,
@@ -101,6 +115,7 @@ function toReferralLike(referral: any, payments: any[] = []) {
     hasAhaOosAgentAttached,
     hasAhaDesignatedAgentAttached,
     hasAhaAgentAttached,
+    dealStatus,
   };
 }
 
