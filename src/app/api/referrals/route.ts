@@ -1036,9 +1036,14 @@ export async function POST(request: Request) {
   let duplicateByPhone = null;
   const normalizedInputPhone = normalizePhoneNumber(parsed.data.borrowerPhone);
   if (normalizedInputPhone) {
+    // Optimize: Only fetch minimal fields needed for duplicate check
+    // Use lean() for faster queries and reduced memory usage
     const allReferralsWithPhones = await Referral.find({
       'borrower.phone': { $exists: true, $ne: '' }
-    });
+    })
+      .select('borrower.phone _id borrower.name')
+      .lean<{ _id: Types.ObjectId; borrower: { phone: string; name: string } }[]>();
+    
     duplicateByPhone = allReferralsWithPhones.find((ref) => {
       const refNormalizedPhone = normalizePhoneNumber(ref.borrower.phone);
       return refNormalizedPhone === normalizedInputPhone;

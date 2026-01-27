@@ -267,7 +267,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const normalizedPhone = normalizePhoneNumber(parsed.data.phone);
     if (normalizedPhone) {
       // Find all lenders with phone numbers and check for normalized match
-      const lendersWithPhones = await LenderMC.find({ phone: { $exists: true, $ne: '' } });
+      // Optimize: Only fetch minimal fields needed for duplicate check
+      const lendersWithPhones = await LenderMC.find({ phone: { $exists: true, $ne: '' } })
+        .select('phone _id name')
+        .lean<{ _id: Types.ObjectId; phone: string; name?: string }[]>();
       const duplicateByPhone = lendersWithPhones.find((lender) => {
         const lenderNormalizedPhone = normalizePhoneNumber(lender.phone);
         return lenderNormalizedPhone === normalizedPhone;

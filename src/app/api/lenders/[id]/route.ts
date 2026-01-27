@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { Types } from 'mongoose';
 
 import { connectMongo } from '@/lib/mongoose';
 import { LenderMC } from '@/models/lender';
@@ -64,10 +65,13 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     const normalizedPhone = normalizePhoneNumber(parsed.data.phone);
     if (normalizedPhone) {
       // Find all lenders with phone numbers (excluding current lender) and check for normalized match
+      // Optimize: Only fetch minimal fields needed for duplicate check
       const lendersWithPhones = await LenderMC.find({ 
         phone: { $exists: true, $ne: '' },
         _id: { $ne: params.id }
-      });
+      })
+        .select('phone _id name')
+        .lean<{ _id: Types.ObjectId; phone: string; name?: string }[]>();
       const duplicateByPhone = lendersWithPhones.find((otherLender) => {
         const otherNormalizedPhone = normalizePhoneNumber(otherLender.phone);
         return otherNormalizedPhone === normalizedPhone;
