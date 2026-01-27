@@ -43,7 +43,6 @@ const registerModels = async () => {
   await Promise.all([
     import('@/models/activity'),
     import('@/models/agent'),
-    import('@/models/buyer'),
     import('@/models/coverage-suggestion'),
     import('@/models/lender'),
     import('@/models/payment'),
