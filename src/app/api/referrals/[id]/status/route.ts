@@ -16,6 +16,7 @@ import { calculateBusinessMinutesBetween } from '@/utils/sla-insights';
 import { createAdminNotifications } from '@/lib/server/notifications';
 import { syncReferralTasks } from '@/lib/server/task-sync';
 import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
+import { hasAhaOosAgentAttached } from '@/lib/server/auto-update-reminders';
 
 interface Params {
   params: { id: string };
@@ -44,9 +45,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   await connectMongo();
   const referral = await Referral.findById(params.id)
-    .populate('assignedAgent', 'userId')
-    .populate('buySideAgent', 'userId')
-    .populate('sellSideAgent', 'userId')
+    .populate('assignedAgent', 'userId ahaDesignation')
+    .populate('buySideAgent', 'userId ahaDesignation')
+    .populate('sellSideAgent', 'userId ahaDesignation')
     .populate('lender', 'userId');
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
@@ -122,9 +123,10 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       slaModified = true;
     } else if (PRE_CONTRACT_STATUSES.has(nextStatus)) {
       if (nextStatus === 'Paired') {
-        // Default automated update reminders to enabled when a referral is paired.
+        // Default automated update reminders to enabled when a referral is paired
+        // ONLY if the attached agent has AHA_OOS designation.
         // Admins can explicitly disable per referral via the toggle.
-        if (!referral.autoUpdateRemindersEnabled) {
+        if (!referral.autoUpdateRemindersEnabled && hasAhaOosAgentAttached(referral)) {
           referral.autoUpdateRemindersEnabled = true;
           referral.audit.push({
             actorRole: session.user.role,
