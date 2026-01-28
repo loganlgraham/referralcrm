@@ -12,6 +12,8 @@ import { ContactAssignment, type Contact } from '@/components/referrals/contact-
 import { EmailActivityLink } from '@/components/common/email-activity-link';
 import type { ReferralLike } from '@/utils/sla-insights';
 import { ReferralFollowUpCard } from '@/components/referrals/referral-follow-up-card';
+import { RequestUpdateButton } from '@/components/referrals/request-update-button';
+import { AutoReminderToggle } from '@/components/referrals/auto-reminder-toggle';
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
 type AhaBucketValue = '' | 'AHA' | 'AHA_OOS';
@@ -1096,6 +1098,31 @@ export function ReferralHeader({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+          
+          {/* Agent Update Request Section */}
+          {viewerRole === 'admin' && (
+            <div className="space-y-3 border-t border-slate-200 pt-4">
+              <RequestUpdateButton
+                referralId={referral._id}
+                assignedAgent={effectiveAgentContact}
+                buySideAgent={effectiveBuySideContact}
+                sellSideAgent={effectiveSellSideContact}
+                lastAutoReminderSentAt={referral.lastAutoReminderSentAt}
+                lastManualReminderSentAt={referral.lastManualReminderSentAt}
+                autoRemindersEnabled={referral.autoUpdateRemindersEnabled || false}
+                status={referral.status}
+                lastPairedAt={referral.sla?.lastPairedAt}
+                audit={referral.audit || []}
+                notes={referral.notes || []}
+                viewerRole={viewerRole}
+              />
+              <AutoReminderToggle
+                referralId={referral._id}
+                autoRemindersEnabled={referral.autoUpdateRemindersEnabled || false}
+                viewerRole={viewerRole}
+              />
             </div>
           )}
         </section>

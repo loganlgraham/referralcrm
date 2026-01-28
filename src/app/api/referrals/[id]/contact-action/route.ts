@@ -9,6 +9,7 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { getReferralAppBaseUrl, verifyContactActionToken } from '@/lib/referral-links';
 import { calculateBusinessMinutesBetween } from '@/utils/sla-insights';
 import { createAdminAndMcNotifications } from '@/lib/server/notifications';
+import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
 
 interface Params {
   params: { id: string };
@@ -166,6 +167,24 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
     actorName,
     content: activityContent,
   });
+
+  // Check if this agent action should trigger an update request response notification
+  const actorRole = session?.user.role ?? 'agent';
+  if (actorRole === 'agent') {
+    await maybeNotifyAdminsOnUpdateRequestResponse({
+      referral: {
+        _id: referral._id,
+        lastAutoReminderSentAt: referral.lastAutoReminderSentAt,
+        lastManualReminderSentAt: referral.lastManualReminderSentAt,
+        lastUpdateRequestResponseNotifiedAt: referral.lastUpdateRequestResponseNotifiedAt,
+        borrower: referral.borrower,
+      },
+      actorRole,
+      actorName,
+      actionAt: now,
+      actionSummary: activityContent.toLowerCase(),
+    });
+  }
 
   const baseUrl = getReferralAppBaseUrl();
   const redirectUrl = baseUrl ? `${baseUrl}/referrals/${referral._id.toString()}?action=${action}` : null;

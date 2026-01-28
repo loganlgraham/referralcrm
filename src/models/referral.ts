@@ -200,6 +200,10 @@ const referralSchema = new Schema(
       default: 'not_specified',
       index: true,
     },
+    autoUpdateRemindersEnabled: { type: Boolean, default: false },
+    lastAutoReminderSentAt: { type: Date, default: null },
+    lastManualReminderSentAt: { type: Date, default: null },
+    lastUpdateRequestResponseNotifiedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
     deals: [DealSchema], // Ensure this is an array
   },
@@ -308,6 +312,10 @@ export interface ReferralDocument {
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   origin?: 'agent' | 'mc' | 'admin';
   timeline?: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified';
+  autoUpdateRemindersEnabled?: boolean;
+  lastAutoReminderSentAt?: Date | null;
+  lastManualReminderSentAt?: Date | null;
+  lastUpdateRequestResponseNotifiedAt?: Date | null;
   deletedAt?: Date;
   audit?: AuditEntry[];
   lostAssignments?: {

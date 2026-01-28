@@ -10,6 +10,7 @@ import { resolveAuditActorId } from '@/lib/server/audit';
 import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
 import { calculateReferralFeeDue } from '@/utils/referral';
 import { syncReferralTasks } from '@/lib/server/task-sync';
+import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
 
 interface RouteContext {
   params: { id: string };
@@ -281,6 +282,31 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
       syncReferralTasks(existing._id).catch((error) => {
         console.error('[Task Sync] Failed to sync tasks after timeline change:', error);
       });
+    }
+
+    // Check if this agent action should trigger an update request response notification
+    if (session.user.role === 'agent') {
+      // Reload referral to get updated fields including lastUpdateRequestResponseNotifiedAt
+      const updatedReferral = await Referral.findById(existing._id);
+      if (updatedReferral) {
+        const actorName = session.user.name || session.user.email || 'Agent';
+        const updatedFieldsLabel = changedDetailFields
+          .map((field) => DETAIL_FIELD_LABELS[field])
+          .join(', ');
+        await maybeNotifyAdminsOnUpdateRequestResponse({
+          referral: {
+            _id: updatedReferral._id,
+            lastAutoReminderSentAt: updatedReferral.lastAutoReminderSentAt,
+            lastManualReminderSentAt: updatedReferral.lastManualReminderSentAt,
+            lastUpdateRequestResponseNotifiedAt: updatedReferral.lastUpdateRequestResponseNotifiedAt,
+            borrower: updatedReferral.borrower,
+          },
+          actorRole: session.user.role,
+          actorName,
+          actionAt: new Date(),
+          actionSummary: `updated referral details (${updatedFieldsLabel})`,
+        });
+      }
     }
   }
 
