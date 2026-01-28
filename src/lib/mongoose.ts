@@ -88,10 +88,50 @@ function sleep(ms: number): Promise<void> {
  * Check if mongoose connection is healthy
  */
 function isConnectionHealthy(): boolean {
-  return (
-    cached?.conn?.connection?.readyState === mongoose.ConnectionStates.connected ||
-    cached?.conn?.connection?.readyState === mongoose.ConnectionStates.connecting
-  );
+  // Treat only "connected" as healthy. "connecting" should be awaited via cached.promise.
+  return cached?.conn?.connection?.readyState === mongoose.ConnectionStates.connected;
+}
+
+/**
+ * Wait until the connection reaches "connected".
+ *
+ * In serverless cold starts / concurrent route execution, `mongoose.connect()` can
+ * return while the connection is still negotiating (readyState === connecting).
+ * In that case, we must await the underlying connection rather than throwing.
+ */
+async function waitForConnected(connection: mongoose.Connection, timeoutMs: number): Promise<void> {
+  if (connection.readyState === mongoose.ConnectionStates.connected) return;
+
+  const timeout = sleep(timeoutMs).then(() => {
+    throw new Error(
+      `MongoDB connection timed out, state: ${connection.readyState} (expected: ${mongoose.ConnectionStates.connected})`
+    );
+  });
+
+  const asPromise = (connection as any).asPromise?.bind(connection) as (() => Promise<any>) | undefined;
+  if (asPromise) {
+    await Promise.race([asPromise(), timeout]);
+  } else {
+    await Promise.race([
+      new Promise<void>((resolve, reject) => {
+        const onConnected = () => {
+          cleanup();
+          resolve();
+        };
+        const onError = (err: unknown) => {
+          cleanup();
+          reject(err);
+        };
+        const cleanup = () => {
+          connection.off('connected', onConnected);
+          connection.off('error', onError);
+        };
+        connection.on('connected', onConnected);
+        connection.on('error', onError);
+      }),
+      timeout,
+    ]);
+  }
 }
 
 /**
@@ -186,19 +226,9 @@ export async function connectMongo(): Promise<typeof mongoose> {
     cached!.promise = retryConnection(async () => {
       try {
         const conn = await mongoose.connect(MONGODB_URI, connectionOptions);
-        
-        // Wait for connection to be ready (mongoose.connect should already wait, but verify)
-        // State 2 is "connecting", so we wait a bit if it's still connecting
-        let attempts = 0;
-        while (conn.connection.readyState === mongoose.ConnectionStates.connecting && attempts < 10) {
-          await sleep(100);
-          attempts++;
-        }
-        
-        // Verify connection is actually ready
-        if (conn.connection.readyState !== mongoose.ConnectionStates.connected) {
-          throw new Error(`Connection not ready, state: ${conn.connection.readyState} (expected: ${mongoose.ConnectionStates.connected})`);
-        }
+
+        // Ensure the underlying connection is actually ready.
+        await waitForConnected(conn.connection, connectionOptions.serverSelectionTimeoutMS ?? 30000);
         
         return conn;
       } catch (error) {
