@@ -125,11 +125,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
       const emailHtml = `
 <div style="font-family:Inter,system-ui,-apple-system,sans-serif;max-width:640px;color:#0f172a;line-height:1.6;">
-  <h2 style="font-size:20px;margin-bottom:16px;color:#0f172a;">Action Needed: Update requested for ${buyerName}</h2>
-  
   <p style="margin:0 0 8px 0;">Hi ${agentFirstName},</p>
-  
-  <p style="margin:0 0 16px 0;"><strong>Current Status:</strong> ${referral.status}</p>
   
   <p style="margin:0 0 16px 0;">An update has been requested for one of your referrals:</p>
   
@@ -138,7 +134,8 @@ export async function POST(request: NextRequest, { params }: Params) {
     <h3 style="margin:0 0 12px 0;font-size:16px;font-weight:600;color:#0f172a;">Buyer Info</h3>
     <div style="margin-bottom:8px;"><strong style="color:#64748b;">Buyer:</strong> ${buyerName}</div>
     <div style="margin-bottom:8px;"><strong style="color:#64748b;">Email:</strong> ${referral.borrower.email}</div>
-    <div><strong style="color:#64748b;">Phone:</strong> ${referral.borrower.phone}</div>
+    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Phone:</strong> ${referral.borrower.phone}</div>
+    <div><strong style="color:#64748b;">Current Status:</strong> ${referral.status}</div>
   </div>
   
   <!-- Mortgage Consultant at AFC Section -->
@@ -171,14 +168,13 @@ Action Needed: Update requested for ${buyerName}
 
 Hi ${agentFirstName},
 
-Current Status: ${referral.status}
-
 An update has been requested for one of your referrals:
 
 Buyer Info
 Buyer: ${buyerName}
 Email: ${referral.borrower.email}
 Phone: ${referral.borrower.phone}
+Current Status: ${referral.status}
 
 Mortgage Consultant at AFC
 Name: ${lenderName}

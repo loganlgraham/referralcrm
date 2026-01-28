@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Bell } from 'lucide-react';
 
 interface AutoReminderToggleProps {
@@ -14,6 +15,7 @@ export function AutoReminderToggle({
   autoRemindersEnabled: initialEnabled,
   viewerRole,
 }: AutoReminderToggleProps) {
+  const router = useRouter();
   const [enabled, setEnabled] = useState(initialEnabled);
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +43,8 @@ export function AutoReminderToggle({
       }
 
       setEnabled(newEnabled);
+      // Refresh the page to update the "Next scheduled send" display
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update');
       // Revert on error
