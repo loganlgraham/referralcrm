@@ -363,6 +363,39 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     agentDesignationMap.set(id, agent.ahaDesignation ?? null);
   });
 
+  const feeBreakdownSentByIds = [
+    ...new Set(
+      payments
+        .map((p) => p.feeBreakdownEmailSentBy)
+        .filter(
+          (s): s is string =>
+            typeof s === 'string' &&
+            s !== 'cron' &&
+            s !== 'system' &&
+            Types.ObjectId.isValid(s)
+        )
+    ),
+  ];
+  const sentByUserMap = new Map<
+    string,
+    { id: string; name: string | null; email: string | null }
+  >();
+  if (feeBreakdownSentByIds.length > 0) {
+    const sentByUsers = await User.find({
+      _id: { $in: feeBreakdownSentByIds.map((id) => new Types.ObjectId(id)) },
+    })
+      .select('_id name email')
+      .lean() as Array<{ _id: Types.ObjectId; name?: string | null; email?: string | null }>;
+    for (const u of sentByUsers) {
+      const id = u._id.toString();
+      sentByUserMap.set(id, {
+        id,
+        name: typeof u.name === 'string' && u.name.trim() ? u.name : null,
+        email: typeof u.email === 'string' && u.email ? u.email : null,
+      });
+    }
+  }
+
   const serialized = payments.map((payment) => {
     const referral = payment.referralId ?? null;
     const fallbackReferralId = (payment as any).referralId;
@@ -435,6 +468,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       side: payment.side ?? 'buy',
       feeBreakdownEmailSentAt: payment.feeBreakdownEmailSentAt ? payment.feeBreakdownEmailSentAt.toISOString() : null,
       feeBreakdownEmailSentBy: payment.feeBreakdownEmailSentBy ?? null,
+      feeBreakdownEmailSentByUser: (() => {
+        const s = typeof payment.feeBreakdownEmailSentBy === 'string'
+          ? payment.feeBreakdownEmailSentBy
+          : null;
+        if (!s || s === 'cron' || s === 'system') return null;
+        return sentByUserMap.get(s) ?? null;
+      })(),
       agent: agentId
         ? {
             id: agentId,
