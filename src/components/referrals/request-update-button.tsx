@@ -3,18 +3,13 @@
 import { useState, useMemo } from 'react';
 import { Mail, Clock, CheckCircle2, Send } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
-
-interface AgentContact {
-  _id: string;
-  name: string;
-  email: string;
-}
+import type { Contact } from '@/components/referrals/contact-assignment';
 
 interface RequestUpdateButtonProps {
   referralId: string;
-  assignedAgent?: AgentContact | null;
-  buySideAgent?: AgentContact | null;
-  sellSideAgent?: AgentContact | null;
+  assignedAgent?: Contact | null;
+  buySideAgent?: Contact | null;
+  sellSideAgent?: Contact | null;
   lastAutoReminderSentAt?: Date | null;
   lastManualReminderSentAt?: Date | null;
   audit?: Array<{
@@ -53,19 +48,21 @@ export function RequestUpdateButton({
 
   // Get unique agents
   const agents = useMemo(() => {
-    const agentMap = new Map<string, AgentContact>();
-    
-    if (assignedAgent && assignedAgent._id) {
-      agentMap.set(assignedAgent._id, assignedAgent);
+    const agentMap = new Map<string, Contact>();
+
+    if (assignedAgent?.id) {
+      agentMap.set(assignedAgent.id, assignedAgent);
     }
-    if (buySideAgent && buySideAgent._id) {
-      agentMap.set(buySideAgent._id, buySideAgent);
+    if (buySideAgent?.id) {
+      agentMap.set(buySideAgent.id, buySideAgent);
     }
-    if (sellSideAgent && sellSideAgent._id) {
-      agentMap.set(sellSideAgent._id, sellSideAgent);
+    if (sellSideAgent?.id) {
+      agentMap.set(sellSideAgent.id, sellSideAgent);
     }
-    
-    return Array.from(agentMap.values());
+
+    return Array.from(agentMap.entries())
+      .map(([id, contact]) => ({ ...contact, id }))
+      .filter((contact): contact is Contact & { id: string } => Boolean(contact.id));
   }, [assignedAgent, buySideAgent, sellSideAgent]);
 
   // Calculate last sent timestamp and agent response
@@ -164,7 +161,7 @@ export function RequestUpdateButton({
     setError(null);
     setSuccessMessage(null);
     // Pre-select all agents by default
-    setSelectedAgentIds(agents.map((a) => a._id));
+    setSelectedAgentIds(agents.map((a) => a.id));
   };
 
   const formatDate = (date: Date) => {
@@ -260,18 +257,18 @@ export function RequestUpdateButton({
           <div className="space-y-2">
             {agents.map((agent) => (
               <label
-                key={agent._id}
+                key={agent.id}
                 className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 cursor-pointer hover:bg-slate-50 transition"
               >
                 <input
                   type="checkbox"
-                  checked={selectedAgentIds.includes(agent._id)}
-                  onChange={() => handleToggleAgent(agent._id)}
+                  checked={selectedAgentIds.includes(agent.id)}
+                  onChange={() => handleToggleAgent(agent.id)}
                   className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
                 />
                 <div className="flex-1">
-                  <div className="font-medium text-sm text-slate-900">{agent.name}</div>
-                  <div className="text-xs text-slate-500">{agent.email}</div>
+                  <div className="font-medium text-sm text-slate-900">{agent.name ?? 'Agent'}</div>
+                  <div className="text-xs text-slate-500">{agent.email ?? 'No email on file'}</div>
                 </div>
               </label>
             ))}
