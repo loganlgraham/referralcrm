@@ -122,6 +122,20 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       slaModified = true;
     } else if (PRE_CONTRACT_STATUSES.has(nextStatus)) {
       if (nextStatus === 'Paired') {
+        // Default automated update reminders to enabled when a referral is paired.
+        // Admins can explicitly disable per referral via the toggle.
+        if (!referral.autoUpdateRemindersEnabled) {
+          referral.autoUpdateRemindersEnabled = true;
+          referral.audit.push({
+            actorRole: session.user.role,
+            actorId: actorId ?? undefined,
+            field: 'autoUpdateRemindersEnabled',
+            previousValue: false,
+            newValue: true,
+            timestamp: now,
+          } as any);
+        }
+
         sla.lastPairedAt = now;
         slaModified = true;
       } else if (nextStatus === 'In Communication') {
