@@ -9,6 +9,10 @@ const decimalFormatter = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 1
 });
 const dateFormatter = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' });
+const dateTimeFormatter = new Intl.DateTimeFormat('en-US', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
 
 export function formatCurrency(cents: number) {
   return currencyFormatter.format((cents || 0) / 100);
@@ -80,4 +84,17 @@ export function formatDate(value?: string | Date | null) {
   }
 
   return dateFormatter.format(parsed);
+}
+
+export function formatDateTime(value?: string | Date | null) {
+  if (!value) {
+    return '—';
+  }
+
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return '—';
+  }
+
+  return dateTimeFormatter.format(parsed);
 }
