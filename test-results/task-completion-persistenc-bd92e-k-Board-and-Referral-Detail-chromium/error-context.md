@@ -1,0 +1,364 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - region "Notifications alt+T"
+  - alert [ref=e2]
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - paragraph [ref=e7]: AFC · AHA
+          - paragraph [ref=e8]: Referral CRM
+        - button "Notifications" [ref=e10] [cursor=pointer]:
+          - img [ref=e11]
+      - navigation [ref=e14]:
+        - link "Dashboard" [ref=e15] [cursor=pointer]:
+          - /url: /dashboard
+        - link "Referrals" [ref=e16] [cursor=pointer]:
+          - /url: /referrals
+        - link "Deals" [ref=e17] [cursor=pointer]:
+          - /url: /deals
+        - link "Follow-up Tasks" [ref=e18] [cursor=pointer]:
+          - /url: /referrals/follow-ups
+        - link "Agents" [ref=e20] [cursor=pointer]:
+          - /url: /agents
+        - link "Mortgage Consultants" [ref=e21] [cursor=pointer]:
+          - /url: /lenders
+        - link "Imports" [ref=e23] [cursor=pointer]:
+          - /url: /imports
+        - link "Settings" [ref=e24] [cursor=pointer]:
+          - /url: /settings
+      - button "Sign out" [ref=e26] [cursor=pointer]:
+        - img [ref=e27]
+        - text: Sign out
+    - main [ref=e30]:
+      - generic [ref=e32]:
+        - generic [ref=e33]:
+          - generic [ref=e34]:
+            - generic [ref=e35]:
+              - paragraph [ref=e36]: Borrower
+              - generic [ref=e37]:
+                - heading "Zachary Durham" [level=1] [ref=e38]
+                - generic [ref=e39]:
+                  - link "zdurham707@gmail.com" [ref=e40] [cursor=pointer]:
+                    - /url: mailto:zdurham707@gmail.com
+                  - generic [ref=e41]: •
+                  - link "707-775-5557" [ref=e42] [cursor=pointer]:
+                    - /url: tel:707-775-5557
+              - generic [ref=e43]:
+                - generic [ref=e44]: Under Contract
+                - generic [ref=e45]: 12305 M - Highway AD, Mountain Grove, MO
+                - generic [ref=e46]: 22 days in stage
+            - generic [ref=e48]:
+              - generic [ref=e49]:
+                - heading "Status & progress" [level=2] [ref=e50]
+                - generic [ref=e51]: Pipeline
+              - generic [ref=e54]:
+                - generic [ref=e55]:
+                  - paragraph [ref=e56]: Pipeline Status
+                  - combobox [ref=e57]:
+                    - option "New Lead"
+                    - option "Paired"
+                    - option "In Communication"
+                    - option "Active Lead"
+                    - option "Under Contract" [selected]
+                    - option "Lost"
+                - generic [ref=e58]:
+                  - generic [ref=e59]: Pre-approval
+                  - generic [ref=e60]:
+                    - generic [ref=e61]: $360,000
+                    - button "Edit pre-approval" [ref=e62] [cursor=pointer]:
+                      - img [ref=e63]
+          - generic [ref=e66]:
+            - generic [ref=e67]:
+              - heading "Speed to serve" [level=2] [ref=e68]
+              - paragraph [ref=e69]: Time between key milestones in this referral journey and the AI coach's next steps.
+            - generic [ref=e70]:
+              - generic [ref=e71]:
+                - term [ref=e72]: New Lead → Paired
+                - definition [ref=e73]: 333h 1m
+              - generic [ref=e74]:
+                - term [ref=e75]: Paired → Communicating
+                - definition [ref=e76]: 6m
+              - generic [ref=e77]:
+                - term [ref=e78]: Communicating → Under Contract
+                - definition [ref=e79]: 0m
+              - generic [ref=e80]:
+                - term [ref=e81]: "Deal: Under Contract → Closed"
+                - definition [ref=e82]: Pending
+              - generic [ref=e83]:
+                - term [ref=e84]: "Deal: Closed → Paid"
+                - definition [ref=e85]: Pending
+          - generic [ref=e86]:
+            - generic [ref=e87]:
+              - generic [ref=e88]:
+                - heading "Follow-up tasks" [level=2] [ref=e89]
+                - paragraph [ref=e90]: These action items stay in sync with the follow-up task board so your team sees one shared checklist.
+              - generic [ref=e91]:
+                - generic [ref=e92]: 5 of 7 tasks outstanding
+                - button "Add manual task" [ref=e93] [cursor=pointer]
+              - list [ref=e94]:
+                - listitem [ref=e95]:
+                  - button "Mark task complete" [ref=e96] [cursor=pointer]:
+                    - img [ref=e97]
+                  - generic [ref=e99]:
+                    - generic [ref=e100]:
+                      - paragraph [ref=e101]: Save Contract in Gdrive folder
+                      - generic [ref=e102]: ops
+                    - paragraph [ref=e103]: Save the contract documents to the Google Drive folder.
+                    - generic [ref=e104]:
+                      - generic [ref=e105]: urgent
+                      - generic [ref=e106]: Overdue by 22 days
+                      - generic [ref=e107]: Due Jan 5, 2026 2:25 PM MT
+                - listitem [ref=e108]:
+                  - button "Mark task complete" [ref=e109] [cursor=pointer]:
+                    - img [ref=e110]
+                  - generic [ref=e112]:
+                    - generic [ref=e113]:
+                      - paragraph [ref=e114]: Check in UC - Midway
+                      - generic [ref=e115]: communication
+                    - paragraph [ref=e116]: Midway check-in for the under contract deal.
+                    - generic [ref=e117]:
+                      - generic [ref=e118]: urgent
+                      - generic [ref=e119]: Overdue by 8 days
+                      - generic [ref=e120]: Due Jan 19, 2026 2:25 PM MT
+                - listitem [ref=e121]:
+                  - button "Mark task complete" [ref=e122] [cursor=pointer]:
+                    - img [ref=e123]
+                  - generic [ref=e125]:
+                    - generic [ref=e126]:
+                      - paragraph [ref=e127]: Send W-9 and Check Instructions
+                      - generic [ref=e128]: finance
+                    - paragraph [ref=e129]: Send W-9 form and check payment instructions to the agent.
+                    - generic [ref=e130]:
+                      - generic [ref=e131]: high
+                      - generic [ref=e132]: Due tomorrow
+                      - generic [ref=e133]: Due Jan 28, 2026 2:25 PM MT
+                - listitem [ref=e134]:
+                  - button "Mark task complete" [ref=e135] [cursor=pointer]:
+                    - img [ref=e136]
+                  - generic [ref=e138]:
+                    - generic [ref=e139]:
+                      - paragraph [ref=e140]: Call and Confirm Closing is still on
+                      - generic [ref=e141]: communication
+                    - paragraph [ref=e142]: Call to confirm the closing date is still on track.
+                    - generic [ref=e143]:
+                      - generic [ref=e144]: low
+                      - generic [ref=e145]: Due in 7 days
+                      - generic [ref=e146]: Due Feb 3, 2026 2:25 PM MT
+                - listitem [ref=e147]:
+                  - button "Mark task complete" [ref=e148] [cursor=pointer]:
+                    - img [ref=e149]
+                  - generic [ref=e151]:
+                    - generic [ref=e152]:
+                      - paragraph [ref=e153]: Change Deal to Closed/ Double check close date is correct
+                      - generic [ref=e154]: ops
+                    - paragraph [ref=e155]: Change deal status to Closed and verify the closing date is correct.
+                    - generic [ref=e156]:
+                      - generic [ref=e157]: low
+                      - generic [ref=e158]: Due in 9 days
+                      - generic [ref=e159]: Due Feb 5, 2026 2:25 PM MT
+              - button "Show 2 completed tasks" [ref=e161] [cursor=pointer]
+            - generic [ref=e162]:
+              - generic [ref=e163]:
+                - heading "Team assignments" [level=2] [ref=e164]
+                - paragraph [ref=e165]: Keep the right partners aligned on this referral.
+              - generic [ref=e168]:
+                - generic [ref=e169]:
+                  - paragraph [ref=e170]: Buy-side Agent
+                  - generic [ref=e171]:
+                    - paragraph [ref=e172]: Sasha Spachmann
+                    - paragraph [ref=e173]:
+                      - text: "Email:"
+                      - link "comehomewithsasha@gmail.com" [ref=e174] [cursor=pointer]:
+                        - /url: mailto:comehomewithsasha@gmail.com
+                    - paragraph [ref=e175]:
+                      - text: "Phone:"
+                      - link "636-534-8100" [ref=e176] [cursor=pointer]:
+                        - /url: tel:636-534-8100
+                - button "Reassign" [ref=e177] [cursor=pointer]
+              - generic [ref=e180]:
+                - generic [ref=e181]:
+                  - paragraph [ref=e182]: Mortgage Consultant
+                  - generic [ref=e183]:
+                    - paragraph [ref=e184]: Eric Freiboth
+                    - paragraph [ref=e185]:
+                      - text: "Email:"
+                      - link "eric.freiboth@americanfinancing.net" [ref=e186] [cursor=pointer]:
+                        - /url: mailto:eric.freiboth@americanfinancing.net
+                    - paragraph [ref=e187]:
+                      - text: "Phone:"
+                      - link "720-903-7165" [ref=e188] [cursor=pointer]:
+                        - /url: tel:720-903-7165
+                - button "Reassign" [ref=e189] [cursor=pointer]
+              - generic [ref=e190]:
+                - generic [ref=e191]:
+                  - generic [ref=e192]:
+                    - paragraph [ref=e193]: Intro emails
+                    - paragraph [ref=e194]: Send friendly updates to the agent and MC.
+                  - button "Send now" [ref=e195] [cursor=pointer]
+                - textbox "Add a note to include in the agent email (optional)" [ref=e196]
+                - paragraph [ref=e197]: Agent emails include the MC's contact info, and the MC email highlights the agent's details.
+        - generic [ref=e198]:
+          - generic [ref=e199]:
+            - generic [ref=e200]:
+              - heading "Referral details" [level=2] [ref=e201]
+              - paragraph [ref=e202]: Key context provided at intake.
+            - button "Edit details" [ref=e203] [cursor=pointer]
+          - generic [ref=e204]:
+            - generic [ref=e205]:
+              - term [ref=e206]: "Loan File #"
+              - definition [ref=e207]: "20130940216"
+            - generic [ref=e208]:
+              - term [ref=e209]: Loan Type
+              - definition [ref=e210]: Conventional
+            - generic [ref=e211]:
+              - term [ref=e212]: Pre-approval Amount
+              - definition [ref=e213]: $360,000.00
+            - generic [ref=e214]:
+              - term [ref=e215]: Source
+              - definition [ref=e216]: YouTube - Timcast IRL
+            - generic [ref=e217]:
+              - term [ref=e218]: Endorser
+              - definition [ref=e219]: Tim Pool
+            - generic [ref=e220]:
+              - term [ref=e221]: Client Type
+              - definition [ref=e222]: Buyer
+            - generic [ref=e223]:
+              - term [ref=e224]: Looking In (Zip)
+              - definition [ref=e225]: "65711"
+            - generic [ref=e226]:
+              - term [ref=e227]: Stage on Transfer
+              - definition [ref=e228]: Pre-approved
+            - generic [ref=e229]:
+              - term [ref=e230]: Timeline
+              - definition [ref=e231]: Not specified
+            - generic [ref=e232]:
+              - term [ref=e233]: Created Date
+              - definition [ref=e234]: Nov 7, 2025
+            - generic [ref=e235]:
+              - term [ref=e236]: Borrower Current Address
+              - definition [ref=e237]: 914 A Hwy AD, Mountain Grove, MO
+        - generic [ref=e238]:
+          - generic [ref=e239]:
+            - heading "Notes" [level=2] [ref=e240]
+            - paragraph [ref=e241]: Capture context and decisions for this referral
+          - generic [ref=e242]:
+            - textbox "Add a note with borrower updates or next steps" [ref=e243]
+            - generic [ref=e244]:
+              - switch "Hide from agent" [ref=e245] [cursor=pointer]:
+                - generic [ref=e248]: Hide from agent
+              - switch "Hide from MC" [ref=e249] [cursor=pointer]:
+                - generic [ref=e252]: Hide from MC
+              - switch "Email agent" [ref=e253] [cursor=pointer]:
+                - generic [ref=e256]: Email agent
+              - switch "Email MC" [ref=e257] [cursor=pointer]:
+                - generic [ref=e260]: Email MC
+              - switch "Email admin" [ref=e261] [cursor=pointer]:
+                - generic [ref=e264]: Email admin
+            - generic [ref=e265]:
+              - button "Save note" [disabled] [ref=e266]
+              - button "Cancel" [ref=e267] [cursor=pointer]
+          - generic [ref=e271]:
+            - generic [ref=e272]:
+              - generic [ref=e273]: Logan Graham · admin
+              - generic [ref=e274]:
+                - generic [ref=e275]: 1/5/2026, 2:18:50 PM
+                - button "Edit note" [ref=e276] [cursor=pointer]:
+                  - img [ref=e277]
+                - button "Delete note" [ref=e280] [cursor=pointer]:
+                  - img [ref=e281]
+            - paragraph [ref=e284]: Goes by Zach
+        - generic [ref=e285]:
+          - generic [ref=e286]:
+            - generic [ref=e287]:
+              - paragraph [ref=e288]: Deals
+              - heading "Referral deals" [level=2] [ref=e289]
+            - button "+ Add deal" [ref=e290] [cursor=pointer]:
+              - generic [ref=e291]: +
+              - text: Add deal
+          - generic [ref=e294]:
+            - generic [ref=e295]:
+              - generic [ref=e296]:
+                - paragraph [ref=e297]: Status
+                - paragraph [ref=e298]: Terminated
+                - paragraph [ref=e299]: Created Jan 5, 2026
+                - paragraph [ref=e300]: "Closing date: Jan 5, 2026"
+                - paragraph [ref=e301]: "Termination reason: Financing"
+              - generic [ref=e302]:
+                - text: Update stage
+                - combobox "Update stage" [ref=e303]:
+                  - option "Under Contract"
+                  - option "Past Inspection"
+                  - option "Past Appraisal"
+                  - option "Clear to Close"
+                  - option "Closed"
+                  - option "Payment Sent"
+                  - option "Payment Received"
+                  - option "Terminated" [selected]
+              - generic [ref=e304]:
+                - text: Termination reason
+                - combobox "Termination reason" [ref=e305]:
+                  - option "Select reason"
+                  - option "Inspection"
+                  - option "Appraisal"
+                  - option "Financing" [selected]
+                  - option "Changed Mind"
+            - generic [ref=e306]:
+              - paragraph [ref=e307]: Expected
+              - paragraph [ref=e308]: $2,700.00
+              - paragraph [ref=e309]: "Net paid: $0.00"
+            - generic [ref=e310]:
+              - paragraph [ref=e311]: "Contract price: $360,000.00"
+              - paragraph [ref=e312]: "Commission: 3.00%"
+              - paragraph [ref=e313]: "Referral fee: 25.00%"
+              - paragraph [ref=e314]: "Side: Buy-side"
+              - paragraph [ref=e315]: "Used AFC: Yes"
+              - paragraph [ref=e316]: "Used Agent: Yes"
+              - paragraph [ref=e317]: "Address: 12305 M - Highway AD"
+              - paragraph [ref=e318]: "Agent: Sasha Spachmann"
+            - generic [ref=e319]:
+              - button "Mark Paid" [ref=e320] [cursor=pointer]
+              - button "Edit deal" [ref=e321] [cursor=pointer]
+              - button "Delete deal" [ref=e322] [cursor=pointer]
+              - button "Send Fee Breakdown Email" [ref=e323] [cursor=pointer]
+              - paragraph [ref=e324]: ⏰ Auto-sends 7 days before closing
+        - generic [ref=e325]:
+          - generic [ref=e326]:
+            - heading "Activity timeline" [level=2] [ref=e327]
+            - paragraph [ref=e328]: Latest interactions and updates from your team.
+          - generic [ref=e329]:
+            - generic [ref=e330]:
+              - generic [ref=e331]:
+                - generic [ref=e332]: update
+                - generic [ref=e333]: Jan 6, 2026, 3:01:27 PM
+              - paragraph [ref=e334]: Updated referral details (Created Date)
+              - paragraph [ref=e335]: by Admin
+            - generic [ref=e336]:
+              - generic [ref=e337]:
+                - generic [ref=e338]: update
+                - generic [ref=e339]: Jan 5, 2026, 3:20:08 PM
+              - paragraph [ref=e340]: Assigned mortgage consultant Eric Freiboth
+              - paragraph [ref=e341]: by Admin
+            - generic [ref=e342]:
+              - generic [ref=e343]:
+                - generic [ref=e344]: status
+                - generic [ref=e345]: Jan 5, 2026, 2:25:58 PM
+              - paragraph [ref=e346]: Status changed from In Communication to Under Contract
+              - paragraph [ref=e347]: by Admin
+            - generic [ref=e348]:
+              - generic [ref=e349]:
+                - generic [ref=e350]: status
+                - generic [ref=e351]: Jan 5, 2026, 2:25:52 PM
+              - paragraph [ref=e352]: Status changed from Paired to In Communication
+              - paragraph [ref=e353]: by Admin
+            - generic [ref=e354]:
+              - generic [ref=e355]:
+                - generic [ref=e356]: update
+                - generic [ref=e357]: Jan 5, 2026, 2:21:24 PM
+              - paragraph [ref=e358]: Assigned buy agent Sasha Spachmann
+              - paragraph [ref=e359]: by Admin
+            - button "Show all activity" [ref=e360] [cursor=pointer]
+        - button "Delete referral" [ref=e362] [cursor=pointer]
+```
