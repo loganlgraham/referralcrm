@@ -92,8 +92,9 @@ async function main() {
   const now = new Date();
 
   for (const referral of referrals) {
+    const referralId = String(referral._id);
     const result: ReminderResult = {
-      referralId: referral._id.toString(),
+      referralId,
       loanFileNumber: referral.loanFileNumber || 'N/A',
       borrowerName: referral.borrower?.name || 'Unknown',
       emailsSent: 0,
@@ -146,7 +147,7 @@ async function main() {
 
       // Send emails
       const appOrigin = getAppOrigin();
-      const referralUrl = `${appOrigin}/referrals/${referral._id}`;
+      const referralUrl = `${appOrigin}/referrals/${referralId}`;
       
       const daysInStatus = referral.statusLastUpdated
         ? Math.floor((now.getTime() - new Date(referral.statusLastUpdated).getTime()) / (1000 * 60 * 60 * 24))
@@ -222,7 +223,7 @@ Referral CRM Team
       }
 
       // Update timestamp and create audit entry
-      await Referral.findByIdAndUpdate(referral._id, {
+      await Referral.findByIdAndUpdate(referralId, {
         $set: { lastAutoReminderSentAt: now },
         $push: {
           audit: {
@@ -239,7 +240,7 @@ Referral CRM Team
       // Log activity
       const agentNames = agents.map((a) => a.name).join(', ');
       await logReferralActivity({
-        referralId: referral._id.toString(),
+        referralId,
         actorRole: 'system',
         actorId: null,
         channel: 'email',
@@ -251,7 +252,7 @@ Referral CRM Team
     } catch (error) {
       result.status = 'error';
       result.reason = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`❌ Error processing referral ${referral._id}:`, error);
+      console.error(`❌ Error processing referral ${referralId}:`, error);
     }
 
     results.push(result);
