@@ -84,6 +84,7 @@ async function main() {
     .populate('assignedAgent', '_id name email')
     .populate('buySideAgent', '_id name email')
     .populate('sellSideAgent', '_id name email')
+    .populate('lender', '_id name email phone')
     .lean();
 
   console.log(`📊 Found ${referrals.length} referrals with automation enabled`);
@@ -149,27 +150,56 @@ async function main() {
       const appOrigin = getAppOrigin();
       const referralUrl = `${appOrigin}/referrals/${referralId}`;
       
-      const daysInStatus = referral.statusLastUpdated
-        ? Math.floor((now.getTime() - new Date(referral.statusLastUpdated).getTime()) / (1000 * 60 * 60 * 24))
-        : 0;
+      // Get lender contact info
+      const lender = referral.lender && typeof referral.lender === 'object' ? referral.lender : null;
+      const lenderName = lender?.name || 'Not provided';
+      const lenderEmail = lender?.email || 'Not provided';
+      const lenderPhone = lender?.phone || 'Not provided';
+
+      // Helper to extract first name from full name
+      const getFirstName = (fullName: string): string => {
+        const [first] = fullName.trim().split(/\s+/);
+        return first || fullName;
+      };
+
+      const buyerName = referral.borrower?.name || 'Unknown';
 
       for (const agent of agents) {
+        const agentFirstName = getFirstName(agent.name);
+
         const emailHtml = `
 <div style="font-family:Inter,system-ui,-apple-system,sans-serif;max-width:640px;color:#0f172a;line-height:1.6;">
-  <h2 style="font-size:20px;margin-bottom:16px;color:#0f172a;">Scheduled Update: ${referral.borrower.name}</h2>
+  <h2 style="font-size:20px;margin-bottom:16px;color:#0f172a;">Scheduled Update: ${buyerName}</h2>
   
-  <p style="margin:0 0 16px 0;">Hi ${agent.name},</p>
+  <p style="margin:0 0 8px 0;">Hi ${agentFirstName},</p>
+  
+  <p style="margin:0 0 16px 0;"><strong>Current Status:</strong> ${referral.status}</p>
   
   <p style="margin:0 0 16px 0;">This is an automated reminder to update one of your referrals (Day ${daysSincePairing} since pairing):</p>
   
+  <!-- Buyer Info Section -->
   <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;">
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Borrower:</strong> ${referral.borrower.name}</div>
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Email:</strong> ${referral.borrower.email}</div>
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Phone:</strong> ${referral.borrower.phone}</div>
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Loan File #:</strong> ${referral.loanFileNumber || 'N/A'}</div>
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Current Status:</strong> ${referral.status}</div>
-    ${daysInStatus > 0 ? `<div style="margin-bottom:8px;"><strong style="color:#64748b;">Days in status:</strong> ${daysInStatus}</div>` : ''}
-    <div><strong style="color:#64748b;">Property:</strong> ${referral.propertyAddress || referral.lookingInZip || 'N/A'}</div>
+    <h3 style="margin:0 0 12px 0;font-size:16px;font-weight:600;color:#0f172a;">Buyer Info</h3>
+    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Buyer:</strong> ${buyerName}</div>
+    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Email:</strong> ${referral.borrower?.email || 'Not provided'}</div>
+    <div><strong style="color:#64748b;">Phone:</strong> ${referral.borrower?.phone || 'Not provided'}</div>
+  </div>
+  
+  <!-- Mortgage Consultant at AFC Section -->
+  <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;">
+    <h3 style="margin:0 0 12px 0;font-size:16px;font-weight:600;color:#0f172a;">Mortgage Consultant at AFC</h3>
+    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Name:</strong> ${lenderName}</div>
+    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Email:</strong> ${lenderEmail}</div>
+    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Phone:</strong> ${lenderPhone}</div>
+    <div><strong style="color:#64748b;">File Number:</strong> ${referral.loanFileNumber || 'N/A'}</div>
+  </div>
+  
+  <!-- Agent Relationship Coordinator Section -->
+  <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;">
+    <h3 style="margin:0 0 12px 0;font-size:16px;font-weight:600;color:#0f172a;">Agent Relationship Coordinator</h3>
+    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Name:</strong> Kristen Truong</div>
+    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Email:</strong> kristen.truong@americanhomeagents.com</div>
+    <div><strong style="color:#64748b;">Phone:</strong> 303-557-4230</div>
   </div>
   
   <p style="margin:16px 0;">Please log in to update the status and add any relevant notes:</p>
@@ -186,19 +216,29 @@ async function main() {
         `.trim();
 
         const emailText = `
-Scheduled Update: ${referral.borrower.name}
+Scheduled Update: ${buyerName}
 
-Hi ${agent.name},
+Hi ${agentFirstName},
+
+Current Status: ${referral.status}
 
 This is an automated reminder to update one of your referrals (Day ${daysSincePairing} since pairing):
 
-Borrower: ${referral.borrower.name}
-Email: ${referral.borrower.email}
-Phone: ${referral.borrower.phone}
-Loan File #: ${referral.loanFileNumber || 'N/A'}
-Current Status: ${referral.status}
-${daysInStatus > 0 ? `Days in status: ${daysInStatus}` : ''}
-Property: ${referral.propertyAddress || referral.lookingInZip || 'N/A'}
+Buyer Info
+Buyer: ${buyerName}
+Email: ${referral.borrower?.email || 'Not provided'}
+Phone: ${referral.borrower?.phone || 'Not provided'}
+
+Mortgage Consultant at AFC
+Name: ${lenderName}
+Email: ${lenderEmail}
+Phone: ${lenderPhone}
+File Number: ${referral.loanFileNumber || 'N/A'}
+
+Agent Relationship Coordinator
+Name: Kristen Truong
+Email: kristen.truong@americanhomeagents.com
+Phone: 303-557-4230
 
 Please log in to update the status and add any relevant notes:
 ${referralUrl}
@@ -212,7 +252,7 @@ Referral CRM Team
 
         const delivered = await sendTransactionalEmail({
           to: [agent.email],
-          subject: `Scheduled Update: ${referral.borrower.name}`,
+          subject: `Scheduled Update: ${buyerName}`,
           html: emailHtml,
           text: emailText,
         });

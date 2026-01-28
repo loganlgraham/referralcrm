@@ -30,6 +30,11 @@ interface ReferralLean {
   statusLastUpdated?: Date;
   propertyAddress?: string;
   lookingInZip?: string;
+  lender?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+  } | null;
 }
 
 /**
@@ -60,11 +65,12 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     await connectMongo();
 
-    // Fetch referral with populated agents
+    // Fetch referral with populated agents and lender
     const referral = await Referral.findById(params.id)
       .populate('assignedAgent', 'name email')
       .populate('buySideAgent', 'name email')
       .populate('sellSideAgent', 'name email')
+      .populate('lender', 'name email phone')
       .lean<ReferralLean | null>();
 
     if (!referral) {
@@ -95,6 +101,18 @@ export async function POST(request: NextRequest, { params }: Params) {
       failed: [],
     };
 
+    // Helper to extract first name from full name
+    const getFirstName = (fullName: string): string => {
+      const [first] = fullName.trim().split(/\s+/);
+      return first || fullName;
+    };
+
+    // Get lender contact info
+    const lender = referral.lender && typeof referral.lender === 'object' ? referral.lender : null;
+    const lenderName = lender?.name || 'Not provided';
+    const lenderEmail = lender?.email || 'Not provided';
+    const lenderPhone = lender?.phone || 'Not provided';
+
     for (const agent of agents) {
       if (!agent.email) {
         console.warn(`Agent ${agent.name} (${agent._id}) has no email address`);
@@ -102,22 +120,42 @@ export async function POST(request: NextRequest, { params }: Params) {
         continue;
       }
 
+      const agentFirstName = getFirstName(agent.name);
+      const buyerName = referral.borrower.name;
+
       const emailHtml = `
 <div style="font-family:Inter,system-ui,-apple-system,sans-serif;max-width:640px;color:#0f172a;line-height:1.6;">
-  <h2 style="font-size:20px;margin-bottom:16px;color:#0f172a;">Action Needed: Update requested for ${referral.borrower.name}</h2>
+  <h2 style="font-size:20px;margin-bottom:16px;color:#0f172a;">Action Needed: Update requested for ${buyerName}</h2>
   
-  <p style="margin:0 0 16px 0;">Hi ${agent.name},</p>
+  <p style="margin:0 0 8px 0;">Hi ${agentFirstName},</p>
+  
+  <p style="margin:0 0 16px 0;"><strong>Current Status:</strong> ${referral.status}</p>
   
   <p style="margin:0 0 16px 0;">An update has been requested for one of your referrals:</p>
   
+  <!-- Buyer Info Section -->
   <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;">
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Borrower:</strong> ${referral.borrower.name}</div>
+    <h3 style="margin:0 0 12px 0;font-size:16px;font-weight:600;color:#0f172a;">Buyer Info</h3>
+    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Buyer:</strong> ${buyerName}</div>
     <div style="margin-bottom:8px;"><strong style="color:#64748b;">Email:</strong> ${referral.borrower.email}</div>
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Phone:</strong> ${referral.borrower.phone}</div>
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Loan File #:</strong> ${referral.loanFileNumber || 'N/A'}</div>
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Current Status:</strong> ${referral.status}</div>
-    ${daysInStatus > 0 ? `<div style="margin-bottom:8px;"><strong style="color:#64748b;">Days in status:</strong> ${daysInStatus}</div>` : ''}
-    <div><strong style="color:#64748b;">Property:</strong> ${referral.propertyAddress || referral.lookingInZip || 'N/A'}</div>
+    <div><strong style="color:#64748b;">Phone:</strong> ${referral.borrower.phone}</div>
+  </div>
+  
+  <!-- Mortgage Consultant at AFC Section -->
+  <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;">
+    <h3 style="margin:0 0 12px 0;font-size:16px;font-weight:600;color:#0f172a;">Mortgage Consultant at AFC</h3>
+    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Name:</strong> ${lenderName}</div>
+    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Email:</strong> ${lenderEmail}</div>
+    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Phone:</strong> ${lenderPhone}</div>
+    <div><strong style="color:#64748b;">File Number:</strong> ${referral.loanFileNumber || 'N/A'}</div>
+  </div>
+  
+  <!-- Agent Relationship Coordinator Section -->
+  <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;">
+    <h3 style="margin:0 0 12px 0;font-size:16px;font-weight:600;color:#0f172a;">Agent Relationship Coordinator</h3>
+    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Name:</strong> Kristen Truong</div>
+    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Email:</strong> kristen.truong@americanhomeagents.com</div>
+    <div><strong style="color:#64748b;">Phone:</strong> 303-557-4230</div>
   </div>
   
   <p style="margin:16px 0;">Please log in to update the status and add any relevant notes:</p>
@@ -129,19 +167,29 @@ export async function POST(request: NextRequest, { params }: Params) {
       `.trim();
 
       const emailText = `
-Action Needed: Update requested for ${referral.borrower.name}
+Action Needed: Update requested for ${buyerName}
 
-Hi ${agent.name},
+Hi ${agentFirstName},
+
+Current Status: ${referral.status}
 
 An update has been requested for one of your referrals:
 
-Borrower: ${referral.borrower.name}
+Buyer Info
+Buyer: ${buyerName}
 Email: ${referral.borrower.email}
 Phone: ${referral.borrower.phone}
-Loan File #: ${referral.loanFileNumber || 'N/A'}
-Current Status: ${referral.status}
-${daysInStatus > 0 ? `Days in status: ${daysInStatus}` : ''}
-Property: ${referral.propertyAddress || referral.lookingInZip || 'N/A'}
+
+Mortgage Consultant at AFC
+Name: ${lenderName}
+Email: ${lenderEmail}
+Phone: ${lenderPhone}
+File Number: ${referral.loanFileNumber || 'N/A'}
+
+Agent Relationship Coordinator
+Name: Kristen Truong
+Email: kristen.truong@americanhomeagents.com
+Phone: 303-557-4230
 
 Please log in to update the status and add any relevant notes:
 ${referralUrl}
@@ -152,7 +200,7 @@ Referral CRM Team
 
       const delivered = await sendTransactionalEmail({
         to: [agent.email],
-        subject: `Action Needed: Update requested for ${referral.borrower.name}`,
+        subject: `Action Needed: Update requested for ${buyerName}`,
         html: emailHtml,
         text: emailText,
       });
