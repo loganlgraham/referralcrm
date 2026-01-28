@@ -10,6 +10,7 @@ import { StatusChanger } from '@/components/referrals/status-changer';
 import { SLAWidget } from '@/components/referrals/sla-widget';
 import { ContactAssignment, type Contact } from '@/components/referrals/contact-assignment';
 import { EmailActivityLink } from '@/components/common/email-activity-link';
+import { PhoneActivityLink } from '@/components/common/phone-activity-link';
 import type { ReferralLike } from '@/utils/sla-insights';
 import { ReferralFollowUpCard } from '@/components/referrals/referral-follow-up-card';
 import { RequestUpdateButton } from '@/components/referrals/request-update-button';
@@ -895,9 +896,15 @@ export function ReferralHeader({
                 )}
                 {borrowerEmail && borrowerPhone && <span className="text-slate-300">•</span>}
                 {borrowerPhone && (
-                  <a className="text-brand hover:underline" href={`tel:${borrowerPhone}`}>
+                  <PhoneActivityLink
+                    referralId={referral._id}
+                    phone={borrowerPhone}
+                    recipient="Borrower"
+                    recipientName={borrowerName}
+                    className="text-sm"
+                  >
                     {borrowerPhone}
-                  </a>
+                  </PhoneActivityLink>
                 )}
               </div>
             ) : (

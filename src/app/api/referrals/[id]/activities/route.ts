@@ -128,6 +128,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     content: parsed.data.content
   });
 
+  await Referral.findByIdAndUpdate(params.id, { $set: { updatedAt: new Date() } });
+
   // Create notifications for admins if this is an email activity from non-admin
   if (parsed.data.channel === 'email' && activity.actor !== 'Admin') {
     const actorName = session.user.name || session.user.email || 'A team member';

@@ -8,6 +8,7 @@ import { ArrowRightIcon, Loader2Icon, MailIcon, PhoneIcon, SearchIcon, SparklesI
 
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatDecimal, formatNumber, formatPhoneNumber } from '@/utils/formatters';
+import { buildGmailComposeUrl } from '@/utils/gmail';
 
 interface MortgageConsultant {
   _id: string;
@@ -283,7 +284,9 @@ export function MortgageConsultantSearch() {
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
                       <a
-                        href={`mailto:${mc.email}`}
+                        href={buildGmailComposeUrl(mc.email)}
+                        target="_blank"
+                        rel="noreferrer"
                         className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-brand hover:text-brand"
                       >
                         <MailIcon className="h-4 w-4" />
