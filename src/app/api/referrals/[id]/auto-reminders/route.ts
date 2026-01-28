@@ -68,7 +68,9 @@ export async function GET(request: NextRequest, { params }: Params) {
     await requireAdmin();
     await connectMongo();
 
-    const referral = await Referral.findById(params.id).select('autoUpdateRemindersEnabled').lean();
+    const referral = await Referral.findById(params.id)
+      .select('autoUpdateRemindersEnabled')
+      .lean<{ autoUpdateRemindersEnabled?: boolean } | null>();
 
     if (!referral) {
       return NextResponse.json({ error: 'Referral not found' }, { status: 404 });
