@@ -2,6 +2,10 @@
  * Utility functions for calculating automated update reminder schedules
  */
 
+import { addDays, differenceInDays, startOfDay } from 'date-fns';
+import { utcToZonedTime, zonedTimeToUtc } from 'date-fns-tz';
+import { SLA_TIME_ZONE } from '@/utils/sla-insights';
+
 // Reminder schedule: days from pairing when reminders should be sent
 const REMINDER_SCHEDULE = [1, 3, 7, 14];
 
@@ -12,6 +16,9 @@ for (let day = 28; day <= 365; day += 14) {
 
 // Terminal statuses that should not receive reminders
 const TERMINAL_STATUSES = ['Closed', 'Lost', 'Terminated'];
+
+// Sends occur at 8:00 AM Mountain Time (America/Denver)
+const REMINDER_SEND_HOUR_MT = 8;
 
 interface GetNextSendAtParams {
   pairedAt: Date | null | undefined;
@@ -63,11 +70,17 @@ export function getNextAutoUpdateSendAt({
   }
 
   const pairedDate = pairedAt instanceof Date ? pairedAt : new Date(pairedAt);
-  const nowTime = now.getTime();
-  const pairedTime = pairedDate.getTime();
+  const lastSentDate =
+    lastAutoSentAt == null
+      ? null
+      : lastAutoSentAt instanceof Date
+        ? lastAutoSentAt
+        : new Date(lastAutoSentAt);
 
-  // Calculate days since pairing
-  const daysSincePairing = Math.floor((nowTime - pairedTime) / (1000 * 60 * 60 * 24));
+  // Compute "days since pairing" in Mountain Time to match the cron schedule window.
+  const zonedNowStart = startOfDay(utcToZonedTime(now, SLA_TIME_ZONE));
+  const zonedPairedStart = startOfDay(utcToZonedTime(pairedDate, SLA_TIME_ZONE));
+  const daysSincePairing = differenceInDays(zonedNowStart, zonedPairedStart);
 
   // Find the next scheduled day that hasn't been sent yet
   let nextScheduledDay: number | null = null;
@@ -81,12 +94,10 @@ export function getNextAutoUpdateSendAt({
     // If this is today or in the future, check if we should send it
     if (scheduledDay === daysSincePairing) {
       // Today is a scheduled day - check if we already sent today
-      if (lastAutoSentAt) {
-        const lastSentDate = lastAutoSentAt instanceof Date 
-          ? lastAutoSentAt 
-          : new Date(lastAutoSentAt);
-        const daysSinceLastSent = Math.floor((nowTime - lastSentDate.getTime()) / (1000 * 60 * 60 * 24));
-        
+      if (lastSentDate) {
+        const zonedLastSentStart = startOfDay(utcToZonedTime(lastSentDate, SLA_TIME_ZONE));
+        const daysSinceLastSent = differenceInDays(zonedNowStart, zonedLastSentStart);
+
         // If we sent today (daysSinceLastSent === 0), next is the next scheduled day
         if (daysSinceLastSent === 0) {
           continue;
@@ -112,10 +123,12 @@ export function getNextAutoUpdateSendAt({
 
   // Calculate the actual date for the next scheduled day
   const daysUntilNext = nextScheduledDay - daysSincePairing;
-  const nextSendDate = new Date(pairedTime + daysUntilNext * 24 * 60 * 60 * 1000);
-  
-  // Set to start of day (midnight) for consistency
-  nextSendDate.setHours(0, 0, 0, 0);
+  const zonedNextDayStart = addDays(zonedPairedStart, daysUntilNext);
+
+  // Pin to 8:00 AM Mountain Time, then convert back to a real UTC Date.
+  const zonedNextAt = new Date(zonedNextDayStart);
+  zonedNextAt.setHours(REMINDER_SEND_HOUR_MT, 0, 0, 0);
+  const nextSendDate = zonedTimeToUtc(zonedNextAt, SLA_TIME_ZONE);
 
   return {
     nextAt: nextSendDate,

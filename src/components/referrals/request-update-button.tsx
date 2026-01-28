@@ -5,6 +5,8 @@ import { Mail, Clock, CheckCircle2, Send, Calendar } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import type { Contact } from '@/components/referrals/contact-assignment';
 import { getNextAutoUpdateSendAt } from '@/utils/auto-update-schedule';
+import { formatInTimeZone } from 'date-fns-tz';
+import { SLA_TIME_ZONE } from '@/utils/sla-insights';
 
 interface RequestUpdateButtonProps {
   referralId: string;
@@ -182,13 +184,17 @@ export function RequestUpdateButton({
   };
 
   const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(date);
+    try {
+      return formatInTimeZone(date, SLA_TIME_ZONE, "MMM d, yyyy h:mm a 'MT'");
+    } catch {
+      return new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      }).format(date);
+    }
   };
 
   const daysSince = (date: Date) => {
