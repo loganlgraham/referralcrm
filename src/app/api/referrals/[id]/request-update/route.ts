@@ -18,6 +18,20 @@ interface AgentContact {
   email: string;
 }
 
+interface ReferralLean {
+  _id: unknown;
+  borrower: {
+    name: string;
+    email: string;
+    phone: string;
+  };
+  loanFileNumber?: string;
+  status: string;
+  statusLastUpdated?: Date;
+  propertyAddress?: string;
+  lookingInZip?: string;
+}
+
 /**
  * POST /api/referrals/[id]/request-update
  * Send update request emails to selected agents
@@ -51,7 +65,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       .populate('assignedAgent', 'name email')
       .populate('buySideAgent', 'name email')
       .populate('sellSideAgent', 'name email')
-      .lean();
+      .lean<ReferralLean | null>();
 
     if (!referral) {
       return NextResponse.json({ error: 'Referral not found' }, { status: 404 });
