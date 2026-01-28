@@ -122,12 +122,13 @@ export async function POST(request: NextRequest, { params }: Params) {
 
       const agentFirstName = getFirstName(agent.name);
       const buyerName = referral.borrower.name;
+      const buyerFirstName = getFirstName(buyerName);
 
       const emailHtml = `
 <div style="font-family:Inter,system-ui,-apple-system,sans-serif;max-width:640px;color:#0f172a;line-height:1.6;">
   <p style="margin:0 0 8px 0;">Hi ${agentFirstName},</p>
   
-  <p style="margin:0 0 16px 0;">An update has been requested for one of your referrals:</p>
+  <p style="margin:0 0 16px 0;">Hope everything's going well with ${buyerFirstName}. When you have a moment, please log in to the referral portal to add a brief update and confirm the current status. Quick notes like "showing homes this weekend," "submitting an offer," or "still in touch but pausing for now" help us stay aligned and best support the client.</p>
   
   <!-- Buyer Info Section -->
   <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;">
@@ -168,7 +169,7 @@ Action Needed: Update requested for ${buyerName}
 
 Hi ${agentFirstName},
 
-An update has been requested for one of your referrals:
+Hope everything's going well with ${buyerFirstName}. When you have a moment, please log in to the referral portal to add a brief update and confirm the current status. Quick notes like "showing homes this weekend," "submitting an offer," or "still in touch but pausing for now" help us stay aligned and best support the client.
 
 Buyer Info
 Buyer: ${buyerName}
