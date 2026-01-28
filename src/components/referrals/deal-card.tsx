@@ -6,7 +6,7 @@ import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/constants/deals';
-import { formatCurrency, formatDate } from '@/utils/formatters';
+import { formatCurrency, formatDate, formatDateTime } from '@/utils/formatters';
 import { useAgentOptions } from '@/hooks/use-agent-options';
 export type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
 export type AgentSelectValue = '' | 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT';
@@ -39,6 +39,7 @@ export interface DealRecord {
   closingDate?: string | null;
   feeBreakdownEmailSentAt?: string | null;
   feeBreakdownEmailSentBy?: string | null;
+  feeBreakdownEmailSentByUser?: { id: string; name: string | null; email: string | null } | null;
 }
 
 export interface DealOverrides {
@@ -151,6 +152,9 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
         contractPriceCents: deal.contractPriceCents ?? null,
         agent: normalizedAgent,
         agentId: normalizedAgent?.id ?? null,
+        feeBreakdownEmailSentAt: deal.feeBreakdownEmailSentAt ?? null,
+        feeBreakdownEmailSentBy: deal.feeBreakdownEmailSentBy ?? null,
+        feeBreakdownEmailSentByUser: deal.feeBreakdownEmailSentByUser ?? null,
       };
     })
     .sort((a, b) => {
@@ -982,7 +986,7 @@ export function DealCard({
   const handleSendFeeBreakdown = (deal: DealRecord) => async () => {
     const confirmed = window.confirm(
       'Send fee breakdown email to agent now?\n\n' +
-      'Note: This email is automatically sent 7 days before closing.'
+        'If you send manually, the automatic send (7 days before closing) will be disabled for this deal.'
     );
     if (!confirmed) {
       return;
@@ -1396,12 +1400,25 @@ export function DealCard({
                   Referral Fee Notification
                 </p>
                 {deal.closingDate && (
-                  <p className="text-xs text-slate-600 mb-2">
-                    {deal.feeBreakdownEmailSentAt 
-                      ? `✓ Sent ${formatDate(deal.feeBreakdownEmailSentAt)}`
-                      : '⏰ Auto-sends 7 days before closing'
-                    }
-                  </p>
+                  <div className="space-y-0.5 mb-2">
+                    <p className="text-xs text-slate-600">
+                      {deal.feeBreakdownEmailSentAt ? (
+                        <>
+                          {deal.feeBreakdownEmailSentBy === 'cron'
+                            ? `✓ Sent ${formatDateTime(deal.feeBreakdownEmailSentAt)} (auto)`
+                            : `✓ Sent ${formatDateTime(deal.feeBreakdownEmailSentAt)} by ${deal.feeBreakdownEmailSentByUser?.name ?? deal.feeBreakdownEmailSentByUser?.email ?? 'admin'}`}
+                        </>
+                      ) : (
+                        '⏰ Auto-sends 7 days before closing.'
+                      )}
+                    </p>
+                    {deal.feeBreakdownEmailSentAt &&
+                      deal.feeBreakdownEmailSentBy !== 'cron' && (
+                        <p className="text-xs text-amber-600">
+                          Auto-send disabled for this deal because it was sent manually.
+                        </p>
+                      )}
+                  </div>
                 )}
                 <button
                   type="button"
@@ -1419,12 +1436,6 @@ export function DealCard({
                 {!selectedAgentId && deal.closingDate && (
                   <p className="mt-2 text-xs text-amber-600">
                     Assign an agent to enable
-                  </p>
-                )}
-                {deal.feeBreakdownEmailSentAt && (
-                  <p className="mt-2 text-xs text-slate-500">
-                    Note: This email is automatically sent 7 days before closing. 
-                    Use this button to resend if needed.
                   </p>
                 )}
               </div>

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/constants/deals';
-import { formatCurrency, formatDate } from '@/utils/formatters';
+import { formatCurrency, formatDate, formatDateTime } from '@/utils/formatters';
 import type { ReferralPayment } from '@/types/referral-payment';
 
 interface ReferralDealsProps {
@@ -181,7 +181,7 @@ function DealCard({
   const handleSendFeeBreakdown = async () => {
     const confirmed = window.confirm(
       'Send fee breakdown email to agent now?\n\n' +
-      'Note: This email is automatically sent 7 days before closing.'
+        'If you send manually, the automatic send (7 days before closing) will be disabled for this deal.'
     );
     if (!confirmed) {
       return;
@@ -456,12 +456,25 @@ function DealCard({
                   Send Fee Breakdown Email
                 </button>
                 {deal.closingDate && (
-                  <p className="text-xs text-slate-500">
-                    {deal.feeBreakdownEmailSentAt 
-                      ? `✓ Sent ${formatDate(deal.feeBreakdownEmailSentAt)}`
-                      : '⏰ Auto-sends 7 days before closing'
-                    }
-                  </p>
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-slate-500">
+                      {deal.feeBreakdownEmailSentAt ? (
+                        <>
+                          {deal.feeBreakdownEmailSentBy === 'cron'
+                            ? `✓ Sent ${formatDateTime(deal.feeBreakdownEmailSentAt)} (auto)`
+                            : `✓ Sent ${formatDateTime(deal.feeBreakdownEmailSentAt)} by ${deal.feeBreakdownEmailSentByUser?.name ?? deal.feeBreakdownEmailSentByUser?.email ?? 'admin'}`}
+                        </>
+                      ) : (
+                        '⏰ Auto-sends 7 days before closing.'
+                      )}
+                    </p>
+                    {deal.feeBreakdownEmailSentAt &&
+                      deal.feeBreakdownEmailSentBy !== 'cron' && (
+                        <p className="text-xs text-amber-600">
+                          Auto-send disabled for this deal because it was sent manually.
+                        </p>
+                      )}
+                  </div>
                 )}
                 {!deal.closingDate && (
                   <p className="text-xs text-amber-600">

@@ -24,4 +24,5 @@ export interface ReferralPayment {
   agentId?: string | null;
   feeBreakdownEmailSentAt?: string | null;
   feeBreakdownEmailSentBy?: string | null;
+  feeBreakdownEmailSentByUser?: { id: string; name: string | null; email: string | null } | null;
 }

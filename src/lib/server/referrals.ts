@@ -571,6 +571,39 @@ export async function getReferralById(id: string) {
   const adminUsers = (await User.find({ role: 'admin', email: { $ne: null } })
     .select('name email')
     .lean()) as Array<{ name?: string | null; email?: string | null }>;
+
+  const feeBreakdownSentByIds = [
+    ...new Set(
+      (payments as any[])
+        .map((p) => p.feeBreakdownEmailSentBy)
+        .filter(
+          (s): s is string =>
+            typeof s === 'string' &&
+            s !== 'cron' &&
+            s !== 'system' &&
+            Types.ObjectId.isValid(s)
+        )
+    ),
+  ];
+  const sentByUserMap = new Map<
+    string,
+    { id: string; name: string | null; email: string | null }
+  >();
+  if (feeBreakdownSentByIds.length > 0) {
+    const users = await User.find({
+      _id: { $in: feeBreakdownSentByIds.map((id) => new Types.ObjectId(id)) },
+    })
+      .select('_id name email')
+      .lean() as Array<{ _id: Types.ObjectId; name?: string | null; email?: string | null }>;
+    for (const u of users) {
+      const id = u._id.toString();
+      sentByUserMap.set(id, {
+        id,
+        name: typeof u.name === 'string' && u.name.trim() ? u.name : null,
+        email: typeof u.email === 'string' && u.email ? u.email : null,
+      });
+    }
+  }
   const adminContacts = adminUsers.map((admin) => ({
     name: typeof admin.name === 'string' && admin.name.trim() ? admin.name : null,
     email: typeof admin.email === 'string' && admin.email ? admin.email : null,
@@ -634,50 +667,64 @@ export async function getReferralById(id: string) {
     hasAhaOosAgentAttached,
     hasAhaDesignatedAgentAttached,
     hasAhaAgentAttached,
-    payments: payments.map((payment: any) => ({
-      _id: payment._id.toString(),
-      status: payment.status,
-      expectedAmountCents: payment.expectedAmountCents ?? 0,
-      receivedAmountCents: payment.receivedAmountCents ?? 0,
-      netReferralFeePaidCents: payment.netReferralFeePaidCents ?? null,
-      invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
-      paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
-      closingDate: payment.closingDate ? payment.closingDate.toISOString() : null,
-      createdAt: payment.createdAt ? payment.createdAt.toISOString() : null,
-      updatedAt: payment.updatedAt ? payment.updatedAt.toISOString() : null,
-      terminatedReason: payment.terminatedReason ?? null,
-      agentAttribution: payment.agentAttribution ?? null,
-      propertyAddress: payment.propertyAddress ?? null,
-      propertyCity: payment.propertyCity ?? null,
-      propertyState: payment.propertyState ?? null,
-      agent:
-        payment.agentId
-          ? {
-              id:
-                typeof payment.agentId === 'string'
-                  ? payment.agentId
-                  : payment.agentId instanceof Types.ObjectId
-                  ? payment.agentId.toString()
-                  : payment.agentId._id?.toString?.() ?? '',
-              name:
-                typeof payment.agentId === 'object' && payment.agentId !== null && 'name' in payment.agentId
-                  ? (payment.agentId as { name?: string | null }).name ?? null
-                  : null,
-            }
+    payments: payments.map((payment: any) => {
+      const sentBy = payment.feeBreakdownEmailSentBy ?? null;
+      const sentByStr =
+        typeof sentBy === 'string' ? sentBy : sentBy?.toString?.() ?? null;
+      const sentByUser =
+        sentByStr && sentByStr !== 'cron' && sentByStr !== 'system'
+          ? sentByUserMap.get(sentByStr) ?? null
+          : null;
+      return {
+        _id: payment._id.toString(),
+        status: payment.status,
+        expectedAmountCents: payment.expectedAmountCents ?? 0,
+        receivedAmountCents: payment.receivedAmountCents ?? 0,
+        netReferralFeePaidCents: payment.netReferralFeePaidCents ?? null,
+        invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
+        paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
+        closingDate: payment.closingDate ? payment.closingDate.toISOString() : null,
+        createdAt: payment.createdAt ? payment.createdAt.toISOString() : null,
+        updatedAt: payment.updatedAt ? payment.updatedAt.toISOString() : null,
+        terminatedReason: payment.terminatedReason ?? null,
+        agentAttribution: payment.agentAttribution ?? null,
+        propertyAddress: payment.propertyAddress ?? null,
+        propertyCity: payment.propertyCity ?? null,
+        propertyState: payment.propertyState ?? null,
+        agent:
+          payment.agentId
+            ? {
+                id:
+                  typeof payment.agentId === 'string'
+                    ? payment.agentId
+                    : payment.agentId instanceof Types.ObjectId
+                    ? payment.agentId.toString()
+                    : payment.agentId._id?.toString?.() ?? '',
+                name:
+                  typeof payment.agentId === 'object' && payment.agentId !== null && 'name' in payment.agentId
+                    ? (payment.agentId as { name?: string | null }).name ?? null
+                    : null,
+              }
+            : null,
+        usedAfc: Boolean(payment.usedAfc),
+        usedAssignedAgent: Boolean(payment.usedAssignedAgent),
+        commissionBasisPoints: payment.commissionBasisPoints ?? null,
+        referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
+        contractPriceCents: payment.contractPriceCents ?? null,
+        side: payment.side ?? null,
+        agentId:
+          typeof payment.agentId === 'string'
+            ? payment.agentId
+            : payment.agentId instanceof Types.ObjectId
+            ? payment.agentId.toString()
+            : payment.agentId?._id?.toString?.() ?? null,
+        feeBreakdownEmailSentAt: payment.feeBreakdownEmailSentAt
+          ? payment.feeBreakdownEmailSentAt.toISOString()
           : null,
-      usedAfc: Boolean(payment.usedAfc),
-      usedAssignedAgent: Boolean(payment.usedAssignedAgent),
-      commissionBasisPoints: payment.commissionBasisPoints ?? null,
-      referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
-      contractPriceCents: payment.contractPriceCents ?? null,
-      side: payment.side ?? null,
-      agentId:
-        typeof payment.agentId === 'string'
-          ? payment.agentId
-          : payment.agentId instanceof Types.ObjectId
-          ? payment.agentId.toString()
-          : payment.agentId?._id?.toString?.() ?? null,
-    })),
+        feeBreakdownEmailSentBy: sentByStr,
+        feeBreakdownEmailSentByUser: sentByUser,
+      };
+    }),
     preApprovalAmountCents: typeof referral.preApprovalAmountCents === 'number' ? referral.preApprovalAmountCents : 0,
     estPurchasePriceCents: typeof referral.estPurchasePriceCents === 'number' ? referral.estPurchasePriceCents : 0,
     referralFeeDueCents: typeof referral.referralFeeDueCents === 'number' ? referral.referralFeeDueCents : 0,
