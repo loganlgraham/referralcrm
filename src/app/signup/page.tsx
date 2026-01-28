@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
 import clsx from 'clsx';
+import { buildGmailComposeUrl } from '@/utils/gmail';
 import { FormEvent, Suspense, useEffect, useMemo, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
@@ -360,7 +361,9 @@ function SignupPageContent() {
           <p className="text-center text-xs text-slate-400">
             Need assistance?{' '}
             <a
-              href="mailto:support@referralcrm.example.com"
+              href={buildGmailComposeUrl('support@referralcrm.example.com')}
+              target="_blank"
+              rel="noreferrer"
               className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950 hover:decoration-slate-500"
             >
               Contact support

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { formatPhoneNumber } from '@/utils/formatters';
+import { buildGmailComposeUrl } from '@/utils/gmail';
 import { LenderAdminEditor, type LenderAdminEditorProps } from '@/components/people/lender-admin-editor';
 import { SendWelcomeEmailButton } from '@/components/people/send-welcome-email-button';
 
@@ -22,7 +23,12 @@ export function LenderOverviewCard({ lender, isAdmin }: LenderOverviewCardProps)
           <div className="mt-2 space-y-1 text-sm text-slate-600">
             <p>
               Email{' '}
-              <a href={`mailto:${lender.email}`} className="text-brand hover:underline">
+              <a
+                href={buildGmailComposeUrl(lender.email)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand hover:underline"
+              >
                 {lender.email}
               </a>
             </p>

@@ -5,6 +5,7 @@ import useSWR, { useSWRConfig } from 'swr';
 import { toast } from 'sonner';
 
 import { EmailActivityLink } from '@/components/common/email-activity-link';
+import { PhoneActivityLink } from '@/components/common/phone-activity-link';
 
 interface PaginatedResponse<T> {
   items: T[];
@@ -261,9 +262,15 @@ export function ContactAssignment({
                 {formattedContact.phone && (
                   <p className="text-xs text-slate-500">
                     Phone:{' '}
-                    <a className="text-brand hover:underline" href={`tel:${formattedContact.phone}`}>
+                    <PhoneActivityLink
+                      referralId={referralId}
+                      phone={formattedContact.phone}
+                      recipient={title}
+                      recipientName={formattedContact.name}
+                      className="text-xs"
+                    >
                       {formattedContact.phone}
-                    </a>
+                    </PhoneActivityLink>
                   </p>
                 )}
               </div>

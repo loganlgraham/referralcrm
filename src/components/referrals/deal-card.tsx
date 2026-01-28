@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 
 import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/constants/deals';
 import { formatCurrency, formatDate, formatDateTime } from '@/utils/formatters';
+import { buildGmailComposeUrl } from '@/utils/gmail';
 import { useAgentOptions } from '@/hooks/use-agent-options';
 export type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
 export type AgentSelectValue = '' | 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT';
@@ -343,7 +344,7 @@ export function DealCard({
   const assignedAgentEmail = referral.assignedAgent?.email?.trim();
   const assignedAgentPhone = referral.assignedAgent?.phone?.trim();
   const assignedAgentHref = assignedAgentEmail
-    ? `mailto:${assignedAgentEmail}`
+    ? buildGmailComposeUrl(assignedAgentEmail)
     : assignedAgentPhone
       ? `tel:${assignedAgentPhone.replace(/[^0-9+]/g, '')}`
       : null;
@@ -1165,6 +1166,8 @@ export function DealCard({
                   {assignedAgentHref ? (
                     <a
                       href={assignedAgentHref}
+                      target="_blank"
+                      rel="noreferrer"
                       className="text-brand underline-offset-2 hover:underline"
                     >
                       {assignedAgentName}
@@ -1497,6 +1500,8 @@ export function DealCard({
                   assignedAgentHref ? (
                     <a
                       href={assignedAgentHref}
+                      target="_blank"
+                      rel="noreferrer"
                       className="text-brand underline-offset-2 hover:underline"
                     >
                       {assignedAgentName}

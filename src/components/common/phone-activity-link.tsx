@@ -3,23 +3,22 @@
 import { useCallback } from 'react';
 import type { ReactNode } from 'react';
 import clsx from 'clsx';
-import { buildGmailComposeUrl } from '@/utils/gmail';
 
-interface EmailActivityLinkProps {
+interface PhoneActivityLinkProps {
   referralId: string;
-  email: string;
+  phone: string;
   recipient: string;
   recipientName?: string | null;
   className?: string;
   children?: ReactNode;
 }
 
-const logEmailActivity = (referralId: string, message: string) => {
+const logCallActivity = (referralId: string, message: string) => {
   if (typeof window === 'undefined') {
     return;
   }
 
-  const payload = JSON.stringify({ channel: 'email', content: message });
+  const payload = JSON.stringify({ channel: 'call', content: message });
   const url = new URL(`/api/referrals/${referralId}/activities`, window.location.origin);
 
   try {
@@ -36,21 +35,21 @@ const logEmailActivity = (referralId: string, message: string) => {
       keepalive: true,
       credentials: 'include'
     }).catch((error) => {
-      console.error('Failed to log email activity', error);
+      console.error('Failed to log call activity', error);
     });
   } catch (error) {
-    console.error('Failed to log email activity', error);
+    console.error('Failed to log call activity', error);
   }
 };
 
-export function EmailActivityLink({
+export function PhoneActivityLink({
   referralId,
-  email,
+  phone,
   recipient,
   recipientName,
   className,
   children
-}: EmailActivityLinkProps) {
+}: PhoneActivityLinkProps) {
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLAnchorElement>) => {
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
@@ -59,21 +58,19 @@ export function EmailActivityLink({
 
       const trimmedName = recipientName?.toString().trim();
       const messageBase = trimmedName ? `${recipient} ${trimmedName}` : recipient;
-      const content = `Email sent to ${messageBase} (${email})`;
-      logEmailActivity(referralId, content);
+      const content = `Call initiated to ${messageBase} (${phone})`;
+      logCallActivity(referralId, content);
     },
-    [email, recipient, recipientName, referralId]
+    [phone, recipient, recipientName, referralId]
   );
 
   return (
     <a
-      href={buildGmailComposeUrl(email)}
+      href={`tel:${phone.replace(/[^0-9+]/g, '')}`}
       onClick={handleClick}
-      target="_blank"
-      rel="noreferrer"
       className={clsx('text-brand hover:underline', className)}
     >
-      {children ?? email}
+      {children ?? phone}
     </a>
   );
 }

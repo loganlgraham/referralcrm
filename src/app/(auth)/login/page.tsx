@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
 import { FormEvent, Suspense, useMemo, useState } from 'react';
+import { buildGmailComposeUrl } from '@/utils/gmail';
 import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 
@@ -188,7 +189,9 @@ function LoginForm() {
           <p className="text-center text-xs text-slate-400">
             Need help?{' '}
             <a
-              href="mailto:logan.graham@americanfinancing.net?subject=Referrio%20Assistance%20Needed&body=Hello%2C%0A%0AI%20need%20help%20with%20Referrio.%20Please%20assist.%0A%0AThank%20you."
+              href={buildGmailComposeUrl('logan.graham@americanfinancing.net')}
+              target="_blank"
+              rel="noreferrer"
               className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950 hover:decoration-slate-500"
             >
               Contact support

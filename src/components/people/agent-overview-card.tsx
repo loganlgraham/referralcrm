@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { AgentAdminEditor, type AgentAdminEditorProps } from '@/components/people/agent-admin-editor';
 import { SendWelcomeEmailButton } from '@/components/people/send-welcome-email-button';
 import { formatPhoneNumber } from '@/utils/formatters';
+import { buildGmailComposeUrl } from '@/utils/gmail';
 
 interface AgentOverviewCardProps {
   agent: AgentAdminEditorProps['agent'] & {
@@ -58,7 +59,12 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
           <div className="mt-2 space-y-1 text-sm text-slate-600">
             <p>
               Email{' '}
-              <a href={`mailto:${agent.email}`} className="text-brand hover:underline">
+              <a
+                href={buildGmailComposeUrl(agent.email)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand hover:underline"
+              >
                 {agent.email}
               </a>
             </p>

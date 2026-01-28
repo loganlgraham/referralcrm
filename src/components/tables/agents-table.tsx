@@ -17,6 +17,7 @@ import useSWR from 'swr';
 import { Pagination } from '@/components/tables/pagination';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatDecimal, formatPhoneNumber } from '@/utils/formatters';
+import { buildGmailComposeUrl } from '@/utils/gmail';
 
 interface CoverageLocation {
   label: string;
@@ -302,9 +303,14 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
                       </Link>
                     </div>
                     <div className="text-xs text-slate-500">
-                      <a href={`mailto:${agent.email}`} className="text-brand hover:underline">
-                        {agent.email}
-                      </a>
+                      <a
+                      href={buildGmailComposeUrl(agent.email)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-brand hover:underline"
+                    >
+                      {agent.email}
+                    </a>
                     </div>
                     <div className="text-xs text-slate-500">{formatPhoneNumber(agent.phone) || '—'}</div>
                   </td>
