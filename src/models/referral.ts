@@ -203,6 +203,7 @@ const referralSchema = new Schema(
     autoUpdateRemindersEnabled: { type: Boolean, default: false },
     lastAutoReminderSentAt: { type: Date, default: null },
     lastManualReminderSentAt: { type: Date, default: null },
+    lastUpdateRequestResponseNotifiedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
     deals: [DealSchema], // Ensure this is an array
   },
@@ -314,6 +315,7 @@ export interface ReferralDocument {
   autoUpdateRemindersEnabled?: boolean;
   lastAutoReminderSentAt?: Date | null;
   lastManualReminderSentAt?: Date | null;
+  lastUpdateRequestResponseNotifiedAt?: Date | null;
   deletedAt?: Date;
   audit?: AuditEntry[];
   lostAssignments?: {

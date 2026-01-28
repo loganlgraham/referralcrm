@@ -1111,6 +1111,9 @@ export function ReferralHeader({
                 sellSideAgent={effectiveSellSideContact}
                 lastAutoReminderSentAt={referral.lastAutoReminderSentAt}
                 lastManualReminderSentAt={referral.lastManualReminderSentAt}
+                autoRemindersEnabled={referral.autoUpdateRemindersEnabled || false}
+                status={referral.status}
+                lastPairedAt={referral.sla?.lastPairedAt}
                 audit={referral.audit || []}
                 notes={referral.notes || []}
                 viewerRole={viewerRole}

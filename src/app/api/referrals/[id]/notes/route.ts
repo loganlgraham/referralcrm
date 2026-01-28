@@ -9,6 +9,7 @@ import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/em
 import { logReferralActivity } from '@/lib/server/activities';
 import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
 import { createAdminNotifications } from '@/lib/server/notifications';
+import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
 
 type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknown';
 
@@ -190,6 +191,23 @@ ${referralLink ? `Review the referral: ${referralLink}` : ''}`
       actorRole: session.user.role,
       actorName: note.authorName,
       content: `${note.authorName} added a note on ${borrowerName}`,
+    });
+  }
+
+  // Check if this agent action should trigger an update request response notification
+  if (session.user.role === 'agent') {
+    await maybeNotifyAdminsOnUpdateRequestResponse({
+      referral: {
+        _id: referral._id,
+        lastAutoReminderSentAt: referral.lastAutoReminderSentAt,
+        lastManualReminderSentAt: referral.lastManualReminderSentAt,
+        lastUpdateRequestResponseNotifiedAt: referral.lastUpdateRequestResponseNotifiedAt,
+        borrower: referral.borrower,
+      },
+      actorRole: session.user.role,
+      actorName: note.authorName,
+      actionAt: new Date(),
+      actionSummary: 'added a note',
     });
   }
 

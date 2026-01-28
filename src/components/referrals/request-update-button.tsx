@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Mail, Clock, CheckCircle2, Send } from 'lucide-react';
+import { Mail, Clock, CheckCircle2, Send, Calendar } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import type { Contact } from '@/components/referrals/contact-assignment';
+import { getNextAutoUpdateSendAt } from '@/utils/auto-update-schedule';
 
 interface RequestUpdateButtonProps {
   referralId: string;
@@ -12,6 +13,9 @@ interface RequestUpdateButtonProps {
   sellSideAgent?: Contact | null;
   lastAutoReminderSentAt?: Date | null;
   lastManualReminderSentAt?: Date | null;
+  autoRemindersEnabled?: boolean;
+  status?: string;
+  lastPairedAt?: Date | null;
   audit?: Array<{
     actorRole: string;
     field: string;
@@ -31,6 +35,9 @@ export function RequestUpdateButton({
   sellSideAgent,
   lastAutoReminderSentAt,
   lastManualReminderSentAt,
+  autoRemindersEnabled = false,
+  status = 'New Lead',
+  lastPairedAt,
   audit = [],
   notes = [],
   viewerRole,
@@ -112,6 +119,16 @@ export function RequestUpdateButton({
     };
   }, [lastAutoReminderSentAt, lastManualReminderSentAt, audit, notes]);
 
+  // Calculate next scheduled send
+  const nextSendInfo = useMemo(() => {
+    return getNextAutoUpdateSendAt({
+      pairedAt: lastPairedAt,
+      lastAutoSentAt: lastAutoReminderSentAt,
+      autoRemindersEnabled,
+      status,
+    });
+  }, [lastPairedAt, lastAutoReminderSentAt, autoRemindersEnabled, status]);
+
   const handleToggleAgent = (agentId: string) => {
     setSelectedAgentIds((prev) =>
       prev.includes(agentId) ? prev.filter((id) => id !== agentId) : [...prev, agentId]
@@ -178,7 +195,11 @@ export function RequestUpdateButton({
     const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
     if (days === 0) return 'today';
     if (days === 1) return 'yesterday';
-    return `${days} days ago`;
+    if (days > 0) return `${days} days ago`;
+    // Future date
+    const futureDays = Math.abs(days);
+    if (futureDays === 1) return 'tomorrow';
+    return `in ${futureDays} days`;
   };
 
   return (
@@ -222,6 +243,21 @@ export function RequestUpdateButton({
               <span>Never sent</span>
             </div>
           )}
+          
+          {/* Next Scheduled Send */}
+          {nextSendInfo.nextAt ? (
+            <div className="flex items-center gap-1.5 text-blue-600 mt-2">
+              <Calendar className="h-3.5 w-3.5" />
+              <span>
+                Next scheduled: {formatDate(nextSendInfo.nextAt)} ({daysSince(nextSendInfo.nextAt)})
+              </span>
+            </div>
+          ) : nextSendInfo.reason ? (
+            <div className="flex items-center gap-1.5 text-slate-500 mt-2">
+              <Calendar className="h-3.5 w-3.5" />
+              <span>{nextSendInfo.reason}</span>
+            </div>
+          ) : null}
         </div>
       )}
 

@@ -15,6 +15,7 @@ import { inferStateFromPostalCode } from '@/utils/location';
 import { calculateBusinessMinutesBetween } from '@/utils/sla-insights';
 import { createAdminNotifications } from '@/lib/server/notifications';
 import { syncReferralTasks } from '@/lib/server/task-sync';
+import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
 
 interface Params {
   params: { id: string };
@@ -343,6 +344,24 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         actorRole: session.user.role,
         actorName,
         content: `${actorName} changed status from ${previousStatus} to ${referral.status} for ${borrowerName}`,
+      });
+    }
+
+    // Check if this agent action should trigger an update request response notification
+    if (session.user.role === 'agent') {
+      const actorName = session.user.name || session.user.email || 'Agent';
+      await maybeNotifyAdminsOnUpdateRequestResponse({
+        referral: {
+          _id: referral._id,
+          lastAutoReminderSentAt: referral.lastAutoReminderSentAt,
+          lastManualReminderSentAt: referral.lastManualReminderSentAt,
+          lastUpdateRequestResponseNotifiedAt: referral.lastUpdateRequestResponseNotifiedAt,
+          borrower: referral.borrower,
+        },
+        actorRole: session.user.role,
+        actorName,
+        actionAt: now,
+        actionSummary: `changed status from ${previousStatus} to ${referral.status}`,
       });
     }
 
