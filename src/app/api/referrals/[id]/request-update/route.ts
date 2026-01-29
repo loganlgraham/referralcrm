@@ -130,6 +130,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   
   <p style="margin:0 0 16px 0;">Hope everything's going well with ${buyerFirstName}. When you have a moment, please log in to the referral portal to add a brief update and confirm the current status. Quick notes like "showing homes this weekend," "submitting an offer," or "still in touch but pausing for now" help us stay aligned and best support the client.</p>
   
+  <a href="${referralUrl}" style="display:inline-block;margin:16px 0;padding:12px 24px;border-radius:8px;background:#0f172a;color:#fff;font-weight:600;text-decoration:none;">Log in to Referral Portal</a>
+  
   <!-- Buyer Info Section -->
   <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;">
     <h3 style="margin:0 0 12px 0;font-size:16px;font-weight:600;color:#0f172a;">Buyer Info</h3>
@@ -156,10 +158,6 @@ export async function POST(request: NextRequest, { params }: Params) {
     <div><strong style="color:#64748b;">Phone:</strong> 303-557-4230</div>
   </div>
   
-  <p style="margin:16px 0;">Please log in to update the status and add any relevant notes:</p>
-  
-  <a href="${referralUrl}" style="display:inline-block;margin:16px 0;padding:12px 24px;border-radius:8px;background:#0f172a;color:#fff;font-weight:600;text-decoration:none;">View Referral</a>
-  
   <p style="margin:16px 0 0 0;color:#64748b;font-size:14px;">Thanks,<br>Referral CRM Team</p>
 </div>
       `.trim();
@@ -170,6 +168,9 @@ Action Needed: Update requested for ${buyerName}
 Hi ${agentFirstName},
 
 Hope everything's going well with ${buyerFirstName}. When you have a moment, please log in to the referral portal to add a brief update and confirm the current status. Quick notes like "showing homes this weekend," "submitting an offer," or "still in touch but pausing for now" help us stay aligned and best support the client.
+
+Log in to Referral Portal:
+${referralUrl}
 
 Buyer Info
 Buyer: ${buyerName}
@@ -187,9 +188,6 @@ Agent Relationship Coordinator
 Name: Kristen Truong
 Email: kristen.truong@americanhomeagents.com
 Phone: 303-557-4230
-
-Please log in to update the status and add any relevant notes:
-${referralUrl}
 
 Thanks,
 Referral CRM Team
