@@ -278,7 +278,7 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     });
 
     if (changedDetailFields.includes('timeline')) {
-      generateAndReconcileAdminTasks({
+      await generateAndReconcileAdminTasks({
         referralId: existing._id.toString(),
         trigger: 'referral.timeline_changed',
         actorId: session.user.id,

@@ -381,7 +381,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       });
     }
 
-    generateAndReconcileAdminTasks({
+    await generateAndReconcileAdminTasks({
       referralId: referral._id.toString(),
       trigger: 'referral.status_changed',
       actorId: session.user.id,

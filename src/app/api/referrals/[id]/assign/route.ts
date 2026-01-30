@@ -154,7 +154,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     content: activityContent,
   });
 
-  generateAndReconcileAdminTasks({
+  await generateAndReconcileAdminTasks({
     referralId: referral._id.toString(),
     trigger: 'referral.agent_assigned',
     actorId: session.user.id,
