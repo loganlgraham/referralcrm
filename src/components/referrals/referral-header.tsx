@@ -807,6 +807,14 @@ export function ReferralHeader({
       statusLastUpdated: statusUpdatedAt.toISOString(),
       daysInStatus: computedDaysInStatus,
     });
+
+    const referralIdStr = String(referral._id);
+    void mutate(
+      (key: unknown) =>
+        typeof key === 'string' &&
+        key.startsWith('/api/admin/tasks') &&
+        key.includes(`referralId=${referralIdStr}`)
+    );
   };
 
   const handlePreApprovalSaved = (details: { preApprovalAmountCents: number; referralFeeDueCents: number }) => {

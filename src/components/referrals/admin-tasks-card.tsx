@@ -3,10 +3,8 @@
 import { FormEvent, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { formatInTimeZone } from 'date-fns-tz';
-import { CheckCircle2, Circle, MoreHorizontal, Plus, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronRight, Circle, MoreHorizontal, Plus } from 'lucide-react';
 import { toast } from 'sonner';
-
-import { formatDate } from '@/utils/formatters';
 
 const SLA_TIME_ZONE = 'America/Denver';
 
@@ -64,6 +62,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
   }
 
   const [statusFilter, setStatusFilter] = useState<'open' | 'completed'>('open');
+  const [showUpcoming, setShowUpcoming] = useState(false);
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualTitle, setManualTitle] = useState('');
   const [manualDueAt, setManualDueAt] = useState('');
@@ -84,6 +83,20 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
       return dateA - dateB;
     });
   }, [tasks]);
+
+  const { overdueAndToday, upcoming } = useMemo(() => {
+    const overdueAndToday: AdminTask[] = [];
+    const upcoming: AdminTask[] = [];
+    for (const task of sortedTasks) {
+      const bucket = getDueBucket(task.effectiveDueAt);
+      if (bucket === 0 || bucket === 1) {
+        overdueAndToday.push(task);
+      } else {
+        upcoming.push(task);
+      }
+    }
+    return { overdueAndToday, upcoming };
+  }, [sortedTasks]);
 
   const handleComplete = async (taskId: string) => {
     try {
@@ -268,12 +281,12 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
       )}
 
       <ul className="space-y-2">
-        {sortedTasks.length === 0 ? (
-          <li className="py-4 text-center text-sm text-slate-500">
-            {statusFilter === 'open' ? 'No open tasks' : 'No completed tasks'}
-          </li>
-        ) : (
-          sortedTasks.map((task) => (
+        {statusFilter === 'open' ? (
+          overdueAndToday.length === 0 && upcoming.length === 0 ? (
+            <li className="py-4 text-center text-sm text-slate-500">No open tasks</li>
+          ) : (
+            <>
+              {overdueAndToday.map((task) => (
             <li
               key={task._id}
               className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/50 p-3"
@@ -373,6 +386,141 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
                   <MoreHorizontal className="h-4 w-4" />
                 </button>
               )}
+            </li>
+              ))}
+              {upcoming.length > 0 && (
+                <li className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowUpcoming(!showUpcoming)}
+                    className="flex items-center gap-1 text-sm font-semibold text-slate-700 hover:text-slate-900"
+                  >
+                    {showUpcoming ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                    Upcoming tasks ({upcoming.length})
+                  </button>
+                  {showUpcoming && (
+                    <ul className="mt-2 space-y-2">
+                      {upcoming.map((task) => (
+                        <li
+                          key={task._id}
+                          className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/50 p-3"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleComplete(task._id)}
+                            className="mt-0.5 shrink-0 text-slate-400 transition hover:text-brand"
+                            title="Complete"
+                          >
+                            <Circle className="h-5 w-5" />
+                          </button>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-slate-900">{task.title}</p>
+                            <p className="text-xs text-slate-500">
+                              {formatDueDate(task.effectiveDueAt ?? task.dueAt)}
+                              {task.snoozedUntil && new Date(task.snoozedUntil) > new Date() && (
+                                <span className="ml-1 text-amber-600">(snoozed)</span>
+                              )}
+                            </p>
+                            {expandedTaskId === task._id && (
+                              <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
+                                {task.ruleKey && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDismiss(task._id)}
+                                    className="block text-xs font-semibold text-rose-600 hover:underline"
+                                  >
+                                    Dismiss
+                                  </button>
+                                )}
+                                {task.snoozedUntil && new Date(task.snoozedUntil) > new Date() ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUnsnooze(task._id)}
+                                    className="block text-xs font-semibold text-slate-600 hover:underline"
+                                  >
+                                    Unsnooze
+                                  </button>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="datetime-local"
+                                      value={snoozeUntil}
+                                      onChange={(e) => setSnoozeUntil(e.target.value)}
+                                      className="rounded border border-slate-200 px-2 py-1 text-xs"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSnooze(task._id)}
+                                      className="text-xs font-semibold text-slate-600 hover:underline"
+                                    >
+                                      Snooze
+                                    </button>
+                                  </div>
+                                )}
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <input
+                                    type="datetime-local"
+                                    value={dueOverride}
+                                    onChange={(e) => setDueOverride(e.target.value)}
+                                    placeholder="Override due date"
+                                    className="rounded border border-slate-200 px-2 py-1 text-xs"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetDueOverride(task._id, null)}
+                                    className="text-xs font-semibold text-slate-600 hover:underline"
+                                  >
+                                    Clear override
+                                  </button>
+                                  {dueOverride && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSetDueOverride(task._id, dueOverride)}
+                                      className="text-xs font-semibold text-brand hover:underline"
+                                    >
+                                      Set override
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedTaskId(expandedTaskId === task._id ? null : task._id)
+                            }
+                            className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              )}
+            </>
+          )
+        ) : sortedTasks.length === 0 ? (
+          <li className="py-4 text-center text-sm text-slate-500">No completed tasks</li>
+        ) : (
+          sortedTasks.map((task) => (
+            <li
+              key={task._id}
+              className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/50 p-3"
+            >
+              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-slate-900">{task.title}</p>
+                <p className="text-xs text-slate-500">
+                  {formatDueDate(task.effectiveDueAt ?? task.dueAt)}
+                </p>
+              </div>
             </li>
           ))
         )}

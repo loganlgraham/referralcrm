@@ -1,7 +1,10 @@
-import { addDays, format, startOfDay } from 'date-fns';
+import { addDays, format } from 'date-fns';
+import { formatInTimeZone, zonedTimeToUtc } from 'date-fns-tz';
 import { Types } from 'mongoose';
 
 import { AdminTask, type AdminTaskLean } from '@/models/admin-task';
+
+const SLA_TIME_ZONE = 'America/Denver';
 import { Referral } from '@/models/referral';
 import { normalizeReferralStatus, type ReferralStatus } from '@/constants/referrals';
 import {
@@ -159,8 +162,15 @@ function computeCycleKey(
   return 'once';
 }
 
+function startOfDayDenver(date: Date): Date {
+  const dateStr = formatInTimeZone(date, SLA_TIME_ZONE, 'yyyy-MM-dd');
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const midnightLocal = new Date(y, m - 1, d, 0, 0, 0);
+  return zonedTimeToUtc(midnightLocal, SLA_TIME_ZONE);
+}
+
 function computeDueAt(rule: TaskRuleDefinition, baseDate: Date): Date {
-  return startOfDay(addDays(baseDate, rule.dueOffsetDays));
+  return startOfDayDenver(addDays(baseDate, rule.dueOffsetDays));
 }
 
 export async function generateAndReconcileAdminTasks({
@@ -245,8 +255,8 @@ export async function generateAndReconcileAdminTasks({
       );
       const cycleIndex = Math.max(0, Math.floor(daysSinceBase / 30));
       const cycleStart = addDays(baseDate, cycleIndex * 30);
-      dueAt = addDays(cycleStart, rule.dueOffsetDays);
-      cycleKey = format(dueAt, 'yyyy-MM');
+      dueAt = startOfDayDenver(addDays(cycleStart, rule.dueOffsetDays));
+      cycleKey = formatInTimeZone(dueAt, SLA_TIME_ZONE, 'yyyy-MM');
     } else {
       cycleKey = 'once';
       dueAt = computeDueAt(rule, baseDate);

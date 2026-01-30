@@ -52,6 +52,7 @@ export interface ReferralRow {
   hasAhaOosAgentAttached?: boolean;
   hasAhaDesignatedAgentAttached?: boolean;
   hasAhaAgentAttached?: boolean;
+  urgentTaskCount?: number;
 }
 
 type TableMode = 'admin' | 'mc' | 'agent';
@@ -331,7 +332,7 @@ function buildColumns(
     header: sortableHeader('Borrower', 'borrowerName', currentSortBy, currentSortDirection, onSortChange),
     accessorKey: 'borrowerName',
     cell: ({ row }) => {
-      const { _id, borrowerName, borrowerPhone } = row.original;
+      const { _id, borrowerName, borrowerPhone, urgentTaskCount } = row.original;
       return (
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
@@ -345,6 +346,14 @@ function buildColumns(
             <Link href={`/referrals/${_id}`} className="font-medium text-brand">
               {borrowerName}
             </Link>
+            {mode === 'admin' && (urgentTaskCount ?? 0) > 0 ? (
+              <span
+                className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800"
+                title={`${urgentTaskCount} overdue or due today`}
+              >
+                {urgentTaskCount}
+              </span>
+            ) : null}
           </div>
           {borrowerPhone ? (
             <span className="text-xs text-slate-500">{borrowerPhone}</span>
