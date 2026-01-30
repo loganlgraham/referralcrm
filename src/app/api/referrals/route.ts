@@ -1154,7 +1154,7 @@ export async function POST(request: Request) {
     content: `Created referral for ${borrowerName || 'a new client'}`,
   });
 
-  generateAndReconcileAdminTasks({
+  await generateAndReconcileAdminTasks({
     referralId: referral._id.toString(),
     trigger: 'referral.created',
     actorId: session.user.id,
