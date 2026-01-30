@@ -1,4 +1,4 @@
-import { addDays, format } from 'date-fns';
+import { addDays } from 'date-fns';
 import { formatInTimeZone, zonedTimeToUtc } from 'date-fns-tz';
 import { Types } from 'mongoose';
 
@@ -110,17 +110,17 @@ function getRulesToDismiss(
   if (trigger === 'referral.status_changed') {
     if (status !== 'New Lead') {
       toDismiss.push(
-        ...GLOBAL_ON_CREATED_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: 'once' }))
+        ...GLOBAL_ON_CREATED_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: '*' }))
       );
     }
     if (status !== 'Paired') {
       toDismiss.push(
-        ...PAIRED_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: 'once' }))
+        ...PAIRED_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: '*' }))
       );
     }
     if (status !== 'In Communication') {
       toDismiss.push(
-        ...IN_COMMUNICATION_SHORT_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: 'once' })),
+        ...IN_COMMUNICATION_SHORT_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: '*' })),
         ...IN_COMMUNICATION_LONG_RULES.map((r) => ({
           ruleKey: r.ruleKey,
           cycleKey: 'month',
@@ -129,12 +129,12 @@ function getRulesToDismiss(
     }
     if (status !== 'Active Lead') {
       toDismiss.push(
-        ...ACTIVE_LEAD_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: 'once' }))
+        ...ACTIVE_LEAD_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: '*' }))
       );
     }
     if (status !== 'Under Contract') {
       toDismiss.push(
-        ...UNDER_CONTRACT_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: 'once' }))
+        ...UNDER_CONTRACT_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: '*' }))
       );
     }
   }
@@ -149,7 +149,7 @@ function getRulesToDismiss(
       );
     } else if (isTimelineLongTerm(timeline)) {
       toDismiss.push(
-        ...IN_COMMUNICATION_SHORT_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: 'once' }))
+        ...IN_COMMUNICATION_SHORT_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: '*' }))
       );
     }
   }
@@ -163,13 +163,14 @@ function computeCycleKey(
   referral: ReferralSnapshot
 ): string {
   if (rule.cycleType === 'once') {
-    return 'once';
+    // Use time-based key so re-entering status creates fresh tasks
+    return formatInTimeZone(baseDate, SLA_TIME_ZONE, 'yyyy-MM');
   }
   if (rule.cycleType === 'month') {
     const dueDate = addDays(baseDate, rule.dueOffsetDays);
-    return format(dueDate, 'yyyy-MM');
+    return formatInTimeZone(dueDate, SLA_TIME_ZONE, 'yyyy-MM');
   }
-  return 'once';
+  return formatInTimeZone(baseDate, SLA_TIME_ZONE, 'yyyy-MM');
 }
 
 function startOfDayDenver(date: Date): Date {
@@ -234,13 +235,17 @@ export async function generateAndReconcileAdminTasks({
         );
       }
     } else {
+      // Dismiss matching ruleKey regardless of cycleKey when wildcard
+      const query: Record<string, unknown> = {
+        referralId: referral._id,
+        ruleKey,
+        status: 'open',
+      };
+      if (cycleKey !== '*') {
+        query.cycleKey = cycleKey;
+      }
       await AdminTask.updateMany(
-        {
-          referralId: referral._id,
-          ruleKey,
-          cycleKey: 'once',
-          status: 'open',
-        },
+        query,
         {
           $set: {
             status: 'dismissed',
@@ -268,7 +273,7 @@ export async function generateAndReconcileAdminTasks({
       dueAt = startOfDayDenver(addDays(cycleStart, rule.dueOffsetDays));
       cycleKey = formatInTimeZone(dueAt, SLA_TIME_ZONE, 'yyyy-MM');
     } else {
-      cycleKey = 'once';
+      cycleKey = computeCycleKey(rule, baseDate, snapshot);
       dueAt = computeDueAt(rule, baseDate);
     }
 
