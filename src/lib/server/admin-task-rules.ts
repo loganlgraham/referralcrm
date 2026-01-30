@@ -110,6 +110,42 @@ export const IN_COMMUNICATION_LONG_RULES: TaskRuleDefinition[] = [
   },
 ];
 
+/** Rules for Active Lead - weekly check-ins */
+export const ACTIVE_LEAD_RULES: TaskRuleDefinition[] = [
+  {
+    ruleKey: 'active_lead_check_in_week_1',
+    title: 'Active Lead Check-in – Week 1',
+    category: 'communication',
+    dueOffsetDays: 7,
+    statuses: ['Active Lead'],
+    cycleType: 'once',
+  },
+  {
+    ruleKey: 'active_lead_check_in_week_2',
+    title: 'Active Lead Check-in – Week 2',
+    category: 'communication',
+    dueOffsetDays: 14,
+    statuses: ['Active Lead'],
+    cycleType: 'once',
+  },
+  {
+    ruleKey: 'active_lead_check_in_week_3',
+    title: 'Active Lead Check-in – Week 3',
+    category: 'communication',
+    dueOffsetDays: 21,
+    statuses: ['Active Lead'],
+    cycleType: 'once',
+  },
+  {
+    ruleKey: 'active_lead_check_in_week_4',
+    title: 'Active Lead Check-in – Week 4',
+    category: 'communication',
+    dueOffsetDays: 28,
+    statuses: ['Active Lead'],
+    cycleType: 'once',
+  },
+];
+
 /** Rules for Under Contract - one-time */
 export const UNDER_CONTRACT_RULES: TaskRuleDefinition[] = [
   { ruleKey: 'uc_update_realtor_audit', title: 'Update Realtor Audit Spreadsheet', category: 'ops', dueOffsetDays: 0, statuses: ['Under Contract'], cycleType: 'once' },

@@ -12,6 +12,7 @@ import {
   PAIRED_RULES,
   IN_COMMUNICATION_SHORT_RULES,
   IN_COMMUNICATION_LONG_RULES,
+  ACTIVE_LEAD_RULES,
   UNDER_CONTRACT_RULES,
   isTimelineLongTerm,
   isTimelineShortTerm,
@@ -86,6 +87,10 @@ function getApplicableRules(
     }
   }
 
+  if (status === 'Active Lead') {
+    rules.push(...ACTIVE_LEAD_RULES);
+  }
+
   if (status === 'Under Contract') {
     rules.push(...UNDER_CONTRACT_RULES);
   }
@@ -120,6 +125,11 @@ function getRulesToDismiss(
           ruleKey: r.ruleKey,
           cycleKey: 'month',
         }))
+      );
+    }
+    if (status !== 'Active Lead') {
+      toDismiss.push(
+        ...ACTIVE_LEAD_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: 'once' }))
       );
     }
     if (status !== 'Under Contract') {
