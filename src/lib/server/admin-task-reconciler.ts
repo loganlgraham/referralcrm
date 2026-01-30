@@ -163,8 +163,8 @@ function computeCycleKey(
   referral: ReferralSnapshot
 ): string {
   if (rule.cycleType === 'once') {
-    // Use time-based key so re-entering status creates fresh tasks
-    return formatInTimeZone(baseDate, SLA_TIME_ZONE, 'yyyy-MM');
+    // Use per-entry key so re-entering status creates fresh tasks (even same day)
+    return `entry-${baseDate.getTime()}`;
   }
   if (rule.cycleType === 'month') {
     const dueDate = addDays(baseDate, rule.dueOffsetDays);
