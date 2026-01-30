@@ -42,12 +42,12 @@ const registerModels = async () => {
 
   await Promise.all([
     import('@/models/activity'),
+    import('@/models/admin-task'),
     import('@/models/agent'),
     import('@/models/coverage-suggestion'),
     import('@/models/lender'),
     import('@/models/payment'),
     import('@/models/pre-approval-metric'),
-    import('@/models/follow-up-task-state'),
     import('@/models/referral'),
     import('@/models/referral-metadata'),
     import('@/models/user'),

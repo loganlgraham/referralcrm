@@ -12,15 +12,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { AlertCircle } from 'lucide-react';
 
 import { REFERRAL_STATUSES, ReferralStatus, type ReferralTimeline } from '@/constants/referrals';
 import { formatCurrency, formatNumber, formatPhoneNumber } from '@/utils/formatters';
 import { calculateTimelineDaysRemaining, formatTimelineCountdown } from '@/utils/timeline-countdown';
-import { useFollowUpTaskContext } from '@/components/referrals/follow-up-task-provider';
-import { buildFollowUpTasksForReferral, type FollowUpTaskRole } from '@/components/referrals/use-follow-up-tasks';
-import type { ReferralLike } from '@/utils/sla-insights';
-
 export interface ReferralRow {
   _id: string;
   createdAt: string;
@@ -66,163 +61,6 @@ type ReferralTableProps = {
   mode: TableMode;
   showAgentOriginIndicator?: boolean;
 };
-
-/**
- * Helper to convert ReferralRow to ReferralLike for task computation
- */
-function toReferralLike(row: ReferralRow): ReferralLike & { borrower: { name: string } } {
-  return {
-    _id: row._id,
-    createdAt: row.createdAt,
-    status: row.status,
-    statusLastUpdated: row.statusLastUpdated ?? null,
-    daysInStatus: row.daysInStatus,
-    clientType: row.clientType ?? undefined,
-    dealSide: row.dealSide ?? undefined,
-    assignedAgent: row.assignedAgentName ? { name: row.assignedAgentName } : null,
-    assignedAgentName: row.assignedAgentName,
-    buySideAgentName: undefined,
-    sellSideAgentName: undefined,
-    lender: row.lenderName ? { name: row.lenderName } : null,
-    origin: row.origin ?? undefined,
-    borrower: { name: row.borrowerName },
-    notes: [],
-    payments: [],
-    audit: [],
-    ahaBucket: row.ahaBucket ?? null,
-    timeline: row.timeline ?? undefined,
-    hasAhaOosAgentAttached: row.hasAhaOosAgentAttached ?? false,
-    hasAhaDesignatedAgentAttached: row.hasAhaDesignatedAgentAttached ?? false,
-    hasAhaAgentAttached: row.hasAhaAgentAttached ?? false,
-  };
-}
-
-/**
- * Task indicator component that shows an icon when there are incomplete tasks
- */
-function TaskIndicator({ referral }: { referral: ReferralRow }) {
-  const { data: session } = useSession();
-  const { 
-    completions, 
-    manualTasks, 
-    shownTasks, 
-    taskMetadata, 
-    toggleTask, 
-    removeManualTask, 
-    markTasksAsShown, 
-    storeTaskMetadata,
-    loadReferralStates,
-  } = useFollowUpTaskContext();
-  
-  const viewerRole: FollowUpTaskRole = useMemo(() => {
-    const role = session?.user?.role;
-    if (role === 'mc') return 'mc';
-    if (role === 'agent') return 'agent';
-    return 'admin';
-  }, [session?.user?.role]);
-
-  const referralLike = useMemo(() => toReferralLike(referral), [referral]);
-
-  useEffect(() => {
-    loadReferralStates([referral._id]);
-  }, [loadReferralStates, referral._id]);
-  
-  const result = useMemo(() => {
-    return buildFollowUpTasksForReferral(referralLike, {
-      completions,
-      manualTasks,
-      shownTasks,
-      taskMetadata,
-      toggleTask,
-      removeManualTask,
-      markTasksAsShown,
-      storeTaskMetadata,
-      viewerRole,
-    });
-  }, [referralLike, completions, manualTasks, shownTasks, taskMetadata, toggleTask, removeManualTask, markTasksAsShown, storeTaskMetadata, viewerRole]);
-
-  // Handle side effects for marking tasks as shown and storing metadata
-  useEffect(() => {
-    const { tasks, currentTasks, referralId, referralStatus } = result;
-    
-    // Mark all task IDs as shown
-    const allTaskIds = tasks.map((t) => t.id);
-    const existingShownTasks = shownTasks[referralId] || [];
-    
-    // Only update if there are new task IDs
-    const hasNewTasks = allTaskIds.some(id => !existingShownTasks.includes(id));
-    if (hasNewTasks) {
-      markTasksAsShown(referralId, allTaskIds);
-    }
-
-    // Store metadata for new tasks (only those not already in metadata)
-    const metadataToStore = currentTasks
-      .filter((task) => {
-        const fullTaskId = task.taskId;
-        return !taskMetadata[fullTaskId];
-      })
-      .map((task) => ({
-        taskId: task.taskId,
-        metadata: {
-          title: task.title,
-          message: task.message,
-          priority: task.priority,
-          category: task.category,
-          dueAt: task.dueAt,
-          supportingMetric: task.supportingMetric,
-          isManual: task.isManual,
-          createdAt: new Date().toISOString(),
-          statusWhenCreated: referralStatus,
-        },
-      }));
-
-    if (metadataToStore.length > 0) {
-      storeTaskMetadata(metadataToStore);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [referral._id, referral.status, completions, manualTasks, shownTasks, taskMetadata]);
-
-  const hasIncompleteTasks = useMemo(() => {
-    const incompleteTasks = result.tasks.filter((task) => !task.completed);
-    
-    // Only show icon for tasks that are due today
-    if (incompleteTasks.length === 0) {
-      return false;
-    }
-    
-    // Get today's date normalized to midnight
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    // Check if any incomplete task is due today
-    return incompleteTasks.some((task) => {
-      // Skip tasks without a due date
-      if (!task.dueAt) {
-        return false;
-      }
-      
-      // Parse and normalize the due date
-      const dueDate = new Date(task.dueAt);
-      dueDate.setHours(0, 0, 0, 0);
-      
-      // Check if due date equals today
-      return dueDate.getTime() === today.getTime();
-    });
-  }, [result.tasks]);
-
-  if (!hasIncompleteTasks) {
-    return null;
-  }
-
-  return (
-    <span title="This referral has incomplete follow-up tasks due today">
-      <AlertCircle 
-        className="h-4 w-4 text-amber-600" 
-        aria-label="Has incomplete tasks due today"
-      />
-    </span>
-  );
-}
 
 interface StatusSelectProps {
   referralId: string;
@@ -507,7 +345,6 @@ function buildColumns(
             <Link href={`/referrals/${_id}`} className="font-medium text-brand">
               {borrowerName}
             </Link>
-            <TaskIndicator referral={row.original} />
           </div>
           {borrowerPhone ? (
             <span className="text-xs text-slate-500">{borrowerPhone}</span>

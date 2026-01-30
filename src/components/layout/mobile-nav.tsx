@@ -70,7 +70,7 @@ export function MobileNav({ session }: MobileNavProps) {
               }
 
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-              const isReferralsParent = item.href === '/referrals' && pathname.startsWith('/referrals/follow-ups');
+              const isReferralsParent = item.href === '/referrals' && pathname.startsWith('/admin/tasks');
               const active = isActive && !isReferralsParent;
 
               return (

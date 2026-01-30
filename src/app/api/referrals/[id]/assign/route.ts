@@ -9,6 +9,7 @@ import { canManageReferral } from '@/lib/rbac';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
 import { Agent } from '@/models/agent';
+import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
 
 interface Params {
   params: { id: string };
@@ -151,6 +152,14 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     actorId: auditActorId ?? session.user.id,
     channel: 'update',
     content: activityContent,
+  });
+
+  generateAndReconcileAdminTasks({
+    referralId: referral._id.toString(),
+    trigger: 'referral.agent_assigned',
+    actorId: session.user.id,
+  }).catch((error) => {
+    console.error('[Admin Tasks] Failed to reconcile tasks after agent assign:', error);
   });
 
   return NextResponse.json({ id: referral._id.toString() });
