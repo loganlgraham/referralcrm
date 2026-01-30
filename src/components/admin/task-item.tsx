@@ -1,11 +1,21 @@
 'use client';
 
 import { useState } from 'react';
+import { addDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { CheckCircle2, Circle, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 
 const SLA_TIME_ZONE = 'America/Denver';
+
+function getSnoozeBaseDate(task: TaskItemData): Date {
+  const effective = task.effectiveDueAt ?? task.dueAt;
+  if (effective) {
+    const d = new Date(effective);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  return new Date();
+}
 
 export interface TaskItemData {
   _id: string;
@@ -51,29 +61,33 @@ export function TaskItem({
   expandedTaskId,
   onToggleExpand,
 }: TaskItemProps) {
-  const [snoozeUntil, setSnoozeUntil] = useState('');
   const [dueOverride, setDueOverride] = useState('');
   const isExpanded = expandedTaskId === task._id;
   const isSnoozed = task.snoozedUntil && new Date(task.snoozedUntil) > new Date();
 
-  const handleSnooze = () => {
-    const until = snoozeUntil ? new Date(snoozeUntil) : null;
-    if (!until || Number.isNaN(until.getTime())) {
-      toast.error('Select a valid snooze date');
-      return;
-    }
+  const handleSnoozePreset = (days: number) => {
+    const base = getSnoozeBaseDate(task);
+    const until = addDays(base, days);
     void onSnooze(task._id, until);
-    setSnoozeUntil('');
     onToggleExpand(task._id);
   };
 
-  const handleSetOverride = () => {
-    void onSetDueOverride(task._id, dueOverride || null);
+  const handleSetReschedule = () => {
+    if (!dueOverride) {
+      toast.error('Select a date first');
+      return;
+    }
+    const d = new Date(dueOverride);
+    if (Number.isNaN(d.getTime())) {
+      toast.error('Invalid date');
+      return;
+    }
+    void onSetDueOverride(task._id, dueOverride);
     setDueOverride('');
     onToggleExpand(task._id);
   };
 
-  const handleClearOverride = () => {
+  const handleResetReschedule = () => {
     void onSetDueOverride(task._id, null);
     setDueOverride('');
     onToggleExpand(task._id);
@@ -119,23 +133,22 @@ export function TaskItem({
                 Unsnooze
               </button>
             ) : (
-              <div className="flex items-center gap-2">
-                <input
-                  type="datetime-local"
-                  value={snoozeUntil}
-                  onChange={(e) => setSnoozeUntil(e.target.value)}
-                  className="rounded border border-slate-200 px-2 py-1 text-xs"
-                />
-                <button
-                  type="button"
-                  onClick={handleSnooze}
-                  className="text-xs font-semibold text-slate-600 hover:underline"
-                >
-                  Snooze
-                </button>
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="mr-1 text-xs text-slate-500">Snooze:</span>
+                {([1, 3, 7, 30] as const).map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    onClick={() => handleSnoozePreset(days)}
+                    className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    +{days} day{days === 1 ? '' : 's'}
+                  </button>
+                ))}
               </div>
             )}
             <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-slate-500">Reschedule:</span>
               <input
                 type="datetime-local"
                 value={dueOverride}
@@ -144,18 +157,19 @@ export function TaskItem({
               />
               <button
                 type="button"
-                onClick={handleClearOverride}
-                className="text-xs font-semibold text-slate-600 hover:underline"
+                onClick={handleSetReschedule}
+                disabled={!dueOverride}
+                className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
               >
-                Clear override
+                Set
               </button>
-              {dueOverride && (
+              {task.dueAtOverride && (
                 <button
                   type="button"
-                  onClick={handleSetOverride}
-                  className="text-xs font-semibold text-brand hover:underline"
+                  onClick={handleResetReschedule}
+                  className="text-xs font-semibold text-slate-600 hover:underline"
                 >
-                  Set override
+                  Reset to original
                 </button>
               )}
             </div>

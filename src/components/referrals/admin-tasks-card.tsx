@@ -2,11 +2,10 @@
 
 import { FormEvent, useMemo, useState } from 'react';
 import useSWR from 'swr';
-import { formatInTimeZone } from 'date-fns-tz';
-import { CheckCircle2, ChevronDown, ChevronRight, Circle, MoreHorizontal, Plus } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
-const SLA_TIME_ZONE = 'America/Denver';
+import { TaskItem, type TaskItemData } from '@/components/admin/task-item';
 
 interface AdminTask {
   _id: string;
@@ -33,15 +32,6 @@ interface AdminTasksCardProps {
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-function formatDueDate(value: string | null | undefined): string {
-  if (!value) return 'No due date';
-  try {
-    return formatInTimeZone(new Date(value), SLA_TIME_ZONE, "MMM d, yyyy h:mm a 'MT'");
-  } catch {
-    return new Date(value).toLocaleString();
-  }
-}
-
 function getDueBucket(effectiveDue: string | null | undefined): number {
   if (!effectiveDue) return 4;
   const now = new Date();
@@ -67,8 +57,6 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
   const [manualTitle, setManualTitle] = useState('');
   const [manualDueAt, setManualDueAt] = useState('');
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
-  const [snoozeUntil, setSnoozeUntil] = useState('');
-  const [dueOverride, setDueOverride] = useState('');
 
   const tasksUrl = `/api/admin/tasks?referralId=${referralId}&status=${statusFilter}`;
   const { data: tasks = [], mutate } = useSWR<AdminTask[]>(tasksUrl, fetcher);
@@ -129,12 +117,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
     }
   };
 
-  const handleSnooze = async (taskId: string) => {
-    const until = snoozeUntil ? new Date(snoozeUntil) : null;
-    if (!until || Number.isNaN(until.getTime())) {
-      toast.error('Select a valid snooze date');
-      return;
-    }
+  const handleSnooze = async (taskId: string, until: Date) => {
     try {
       const res = await fetch(`/api/admin/tasks/${taskId}`, {
         method: 'PATCH',
@@ -144,7 +127,6 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
       if (!res.ok) throw new Error(await res.text());
       toast.success('Task snoozed');
       void mutate();
-      setSnoozeUntil('');
       setExpandedTaskId(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to snooze task');
@@ -181,11 +163,14 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
       if (!res.ok) throw new Error(await res.text());
       toast.success(override ? 'Due date updated' : 'Due date override cleared');
       void mutate();
-      setDueOverride('');
       setExpandedTaskId(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to update due date');
     }
+  };
+
+  const handleToggleExpand = (taskId: string) => {
+    setExpandedTaskId((prev) => (prev === taskId ? null : taskId));
   };
 
   const handleManualSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -287,106 +272,18 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
           ) : (
             <>
               {overdueAndToday.map((task) => (
-            <li
-              key={task._id}
-              className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/50 p-3"
-            >
-              {statusFilter === 'open' ? (
-                <button
-                  type="button"
-                  onClick={() => handleComplete(task._id)}
-                  className="mt-0.5 shrink-0 text-slate-400 transition hover:text-brand"
-                  title="Complete"
-                >
-                  <Circle className="h-5 w-5" />
-                </button>
-              ) : (
-                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-slate-900">{task.title}</p>
-                <p className="text-xs text-slate-500">
-                  {formatDueDate(task.effectiveDueAt ?? task.dueAt)}
-                  {task.snoozedUntil && new Date(task.snoozedUntil) > new Date() && (
-                    <span className="ml-1 text-amber-600">(snoozed)</span>
-                  )}
-                </p>
-                {expandedTaskId === task._id && statusFilter === 'open' && (
-                  <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
-                    {task.ruleKey && (
-                      <button
-                        type="button"
-                        onClick={() => handleDismiss(task._id)}
-                        className="block text-xs font-semibold text-rose-600 hover:underline"
-                      >
-                        Dismiss
-                      </button>
-                    )}
-                    {task.snoozedUntil && new Date(task.snoozedUntil) > new Date() ? (
-                      <button
-                        type="button"
-                        onClick={() => handleUnsnooze(task._id)}
-                        className="block text-xs font-semibold text-slate-600 hover:underline"
-                      >
-                        Unsnooze
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="datetime-local"
-                          value={snoozeUntil}
-                          onChange={(e) => setSnoozeUntil(e.target.value)}
-                          className="rounded border border-slate-200 px-2 py-1 text-xs"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleSnooze(task._id)}
-                          className="text-xs font-semibold text-slate-600 hover:underline"
-                        >
-                          Snooze
-                        </button>
-                      </div>
-                    )}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        type="datetime-local"
-                        value={dueOverride}
-                        onChange={(e) => setDueOverride(e.target.value)}
-                        placeholder="Override due date"
-                        className="rounded border border-slate-200 px-2 py-1 text-xs"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleSetDueOverride(task._id, null)}
-                        className="text-xs font-semibold text-slate-600 hover:underline"
-                      >
-                        Clear override
-                      </button>
-                      {dueOverride && (
-                        <button
-                          type="button"
-                          onClick={() => handleSetDueOverride(task._id, dueOverride)}
-                          className="text-xs font-semibold text-brand hover:underline"
-                        >
-                          Set override
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-              {statusFilter === 'open' && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setExpandedTaskId(expandedTaskId === task._id ? null : task._id)
-                  }
-                  className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </button>
-              )}
-            </li>
+                <TaskItem
+                  key={task._id}
+                  task={task as TaskItemData}
+                  showAsCompleted={false}
+                  onComplete={handleComplete}
+                  onDismiss={handleDismiss}
+                  onSnooze={handleSnooze}
+                  onUnsnooze={handleUnsnooze}
+                  onSetDueOverride={handleSetDueOverride}
+                  expandedTaskId={expandedTaskId}
+                  onToggleExpand={handleToggleExpand}
+                />
               ))}
               {upcoming.length > 0 && (
                 <li className="pt-2">
@@ -405,100 +302,18 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
                   {showUpcoming && (
                     <ul className="mt-2 space-y-2">
                       {upcoming.map((task) => (
-                        <li
+                        <TaskItem
                           key={task._id}
-                          className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/50 p-3"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => handleComplete(task._id)}
-                            className="mt-0.5 shrink-0 text-slate-400 transition hover:text-brand"
-                            title="Complete"
-                          >
-                            <Circle className="h-5 w-5" />
-                          </button>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-slate-900">{task.title}</p>
-                            <p className="text-xs text-slate-500">
-                              {formatDueDate(task.effectiveDueAt ?? task.dueAt)}
-                              {task.snoozedUntil && new Date(task.snoozedUntil) > new Date() && (
-                                <span className="ml-1 text-amber-600">(snoozed)</span>
-                              )}
-                            </p>
-                            {expandedTaskId === task._id && (
-                              <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
-                                {task.ruleKey && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDismiss(task._id)}
-                                    className="block text-xs font-semibold text-rose-600 hover:underline"
-                                  >
-                                    Dismiss
-                                  </button>
-                                )}
-                                {task.snoozedUntil && new Date(task.snoozedUntil) > new Date() ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleUnsnooze(task._id)}
-                                    className="block text-xs font-semibold text-slate-600 hover:underline"
-                                  >
-                                    Unsnooze
-                                  </button>
-                                ) : (
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="datetime-local"
-                                      value={snoozeUntil}
-                                      onChange={(e) => setSnoozeUntil(e.target.value)}
-                                      className="rounded border border-slate-200 px-2 py-1 text-xs"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSnooze(task._id)}
-                                      className="text-xs font-semibold text-slate-600 hover:underline"
-                                    >
-                                      Snooze
-                                    </button>
-                                  </div>
-                                )}
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <input
-                                    type="datetime-local"
-                                    value={dueOverride}
-                                    onChange={(e) => setDueOverride(e.target.value)}
-                                    placeholder="Override due date"
-                                    className="rounded border border-slate-200 px-2 py-1 text-xs"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSetDueOverride(task._id, null)}
-                                    className="text-xs font-semibold text-slate-600 hover:underline"
-                                  >
-                                    Clear override
-                                  </button>
-                                  {dueOverride && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSetDueOverride(task._id, dueOverride)}
-                                      className="text-xs font-semibold text-brand hover:underline"
-                                    >
-                                      Set override
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setExpandedTaskId(expandedTaskId === task._id ? null : task._id)
-                            }
-                            className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </button>
-                        </li>
+                          task={task as TaskItemData}
+                          showAsCompleted={false}
+                          onComplete={handleComplete}
+                          onDismiss={handleDismiss}
+                          onSnooze={handleSnooze}
+                          onUnsnooze={handleUnsnooze}
+                          onSetDueOverride={handleSetDueOverride}
+                          expandedTaskId={expandedTaskId}
+                          onToggleExpand={handleToggleExpand}
+                        />
                       ))}
                     </ul>
                   )}
@@ -510,18 +325,18 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
           <li className="py-4 text-center text-sm text-slate-500">No completed tasks</li>
         ) : (
           sortedTasks.map((task) => (
-            <li
+            <TaskItem
               key={task._id}
-              className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/50 p-3"
-            >
-              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-slate-900">{task.title}</p>
-                <p className="text-xs text-slate-500">
-                  {formatDueDate(task.effectiveDueAt ?? task.dueAt)}
-                </p>
-              </div>
-            </li>
+              task={task as TaskItemData}
+              showAsCompleted
+              onComplete={handleComplete}
+              onDismiss={handleDismiss}
+              onSnooze={handleSnooze}
+              onUnsnooze={handleUnsnooze}
+              onSetDueOverride={handleSetDueOverride}
+              expandedTaskId={null}
+              onToggleExpand={() => {}}
+            />
           ))
         )}
       </ul>
