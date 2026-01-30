@@ -208,7 +208,6 @@ export async function generateAndReconcileAdminTasks({
               status: 'dismissed',
               dismissedAt: now,
               dismissedBy: actorId ?? 'system',
-              updatedAt: now,
               updatedBy: actorId ?? 'system',
             },
           }
@@ -227,7 +226,6 @@ export async function generateAndReconcileAdminTasks({
             status: 'dismissed',
             dismissedAt: now,
             dismissedBy: actorId ?? 'system',
-            updatedAt: now,
             updatedBy: actorId ?? 'system',
           },
         }
@@ -284,7 +282,6 @@ export async function generateAndReconcileAdminTasks({
           ruleKey: rule.ruleKey,
           cycleKey,
           createdBy: 'system',
-          updatedAt: now,
         },
       },
       { upsert: true }
