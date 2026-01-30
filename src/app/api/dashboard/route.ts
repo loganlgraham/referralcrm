@@ -1057,8 +1057,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ? realizedRevenueCents / revenueContributingClosedDeals.length
     : 0;
   const totalVolumeClosedCents = dealsClosed.reduce((sum, payment) => {
-    const contractPrice = payment.contractPriceCents ?? 0;
-    return contractPrice > 0 ? sum + contractPrice : sum;
+    const price =
+      payment.contractPriceCents ??
+      payment.referral?.closedPriceCents ??
+      payment.referral?.estPurchasePriceCents ??
+      0;
+    return price > 0 ? sum + price : sum;
   }, 0);
   const averageClosedDealAmountCents = computeAverage(closedDealPrices);
 
@@ -1154,6 +1158,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     string,
     { total: number; transfers: number; ahaReferrals: number; ahaOosReferrals: number }
   >();
+  const referralIdsByMonth = new Map<string, Set<string>>();
   referralsByNetwork.forEach((referral) => {
     if (!referral.createdAt) return;
     const createdAt = new Date(referral.createdAt);
@@ -1171,17 +1176,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       current.ahaOosReferrals += 1;
     }
     referralMonthlyMap.set(key, current);
+    const ids = referralIdsByMonth.get(key) ?? new Set<string>();
+    ids.add(referral._id.toString());
+    referralIdsByMonth.set(key, ids);
   });
 
+  // Match deals to referrals created in the same month (aligns with summary close rate logic)
   const dealMonthlyMap = new Map<string, { dealsClosed: number; revenueReceivedCents: number }>();
   paymentsByNetwork.forEach((payment) => {
-    const metricDate = payment.metricDate ?? resolveMetricDate(payment);
-    if (!metricDate) return;
     if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
     if (payment.usedAssignedAgent !== true) return;
     if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return;
 
-    const key = `${metricDate.getFullYear()}-${String(metricDate.getMonth() + 1).padStart(2, '0')}`;
+    const referralCreatedAt = payment.referral?.createdAt ? new Date(payment.referral.createdAt) : null;
+    if (!referralCreatedAt) return;
+
+    const key = `${referralCreatedAt.getFullYear()}-${String(referralCreatedAt.getMonth() + 1).padStart(2, '0')}`;
+    const referralIds = referralIdsByMonth.get(key);
+    if (!referralIds?.has(payment.referral._id.toString())) return;
+
     const current = dealMonthlyMap.get(key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
     current.dealsClosed += 1;
     current.revenueReceivedCents += payment.receivedAmountCents ?? 0;
