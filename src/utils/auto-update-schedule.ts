@@ -14,8 +14,8 @@ for (let day = 28; day <= 365; day += 14) {
   REMINDER_SCHEDULE.push(day);
 }
 
-// Terminal statuses that should not receive reminders
-const TERMINAL_STATUSES = ['Closed', 'Lost', 'Terminated'];
+// Terminal statuses that should not receive reminders (excludes Terminated - continue cron)
+const TERMINAL_STATUSES = ['Closed', 'Lost'];
 
 // Sends occur at 8:00 AM Mountain Time (America/Denver)
 const REMINDER_SEND_HOUR_MT = 8;
