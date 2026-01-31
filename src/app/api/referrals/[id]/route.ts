@@ -27,7 +27,7 @@ const DETAIL_FIELD_LABELS = {
   loanType: 'Loan Type',
   preApprovalAmount: 'Pre-approval Amount',
   timeline: 'Timeline',
-  createdAt: 'Created Date',
+  referralDate: 'Referral date (historical)',
 } as const;
 
 export async function GET(request: NextRequest, context: RouteContext): Promise<NextResponse> {
@@ -136,13 +136,13 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     if (!(field in updatePayload)) {
       return false;
     }
-    // Special handling for createdAt - compare ISO strings
-    if (field === 'createdAt') {
+    // Special handling for referralDate - compare ISO strings or null
+    if (field === 'referralDate') {
       const nextValue = updatePayload[field];
       const previousValue = (existing as Record<string, unknown>)[field];
-      if (nextValue instanceof Date && previousValue instanceof Date) {
-        return nextValue.getTime() !== previousValue.getTime();
-      }
+      if (nextValue === null && (previousValue === null || previousValue === undefined)) return false;
+      if (nextValue === null) return true;
+      if (previousValue === null || previousValue === undefined) return true;
       const nextISO = nextValue instanceof Date ? nextValue.toISOString() : String(nextValue);
       const prevISO = previousValue instanceof Date ? previousValue.toISOString() : String(previousValue);
       return nextISO !== prevISO;
@@ -154,20 +154,20 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
 
   delete updatePayload.preApprovalAmount;
 
-  // Handle createdAt update - only allow for admin users
-  let createdAtDate: Date | undefined;
-  if ('createdAt' in updatePayload) {
+  // Handle referralDate update - only allow for admin users
+  if ('referralDate' in updatePayload) {
     if (session.user.role !== 'admin') {
-      return NextResponse.json({ error: 'Only admins can update the created date' }, { status: 403 });
+      return NextResponse.json({ error: 'Only admins can update the referral date' }, { status: 403 });
     }
-    const createdAtValue = updatePayload.createdAt;
-    delete updatePayload.createdAt; // Remove from updatePayload, we'll handle via raw Mongo update
-    if (typeof createdAtValue === 'string') {
-      const parsedDate = new Date(createdAtValue);
+    const referralDateValue = updatePayload.referralDate;
+    if (referralDateValue === null) {
+      updatePayload.referralDate = null;
+    } else if (typeof referralDateValue === 'string') {
+      const parsedDate = new Date(referralDateValue);
       if (Number.isNaN(parsedDate.getTime())) {
-        return NextResponse.json({ error: 'Invalid created date format' }, { status: 422 });
+        return NextResponse.json({ error: 'Invalid referral date format' }, { status: 422 });
       }
-      createdAtDate = parsedDate;
+      updatePayload.referralDate = parsedDate;
     }
   }
 
@@ -186,9 +186,7 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
       auditEntry.actorId = auditActorId;
     }
 
-    // Build update object with $set for createdAt if it was changed
-    // Mongoose will automatically convert top-level fields to $set, but we use explicit $set for createdAt
-    // to ensure it's definitely updated (since createdAt is a special timestamp field)
+    // Build update object with $set for updated fields
     const updateObject: Record<string, unknown> = {
       $push: {
         audit: auditEntry
@@ -246,25 +244,6 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     await referral.save();
   }
 
-  // Explicitly update createdAt if it was changed.
-  // IMPORTANT: Use the native collection to bypass Mongoose timestamp/update behavior.
-  if (createdAtDate) {
-    await Referral.collection.updateOne(
-      { _id: referral._id },
-      { $set: { createdAt: createdAtDate } }
-    );
-    
-    // Reload the referral to get the updated createdAt with populated fields
-    referral = await Referral.findById(context.params.id)
-      .populate('assignedAgent', 'userId')
-      .populate('buySideAgent', 'userId')
-      .populate('sellSideAgent', 'userId')
-      .populate('lender', 'userId');
-    if (!referral) {
-      return new NextResponse('Not found', { status: 404 });
-    }
-  }
-
   if (changedDetailFields.length > 0) {
     const updatedFieldsLabel = changedDetailFields
       .map((field) => DETAIL_FIELD_LABELS[field])
@@ -310,12 +289,17 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     }
   }
 
-  // Ensure createdAt is properly serialized as ISO string
+  // Ensure dates are properly serialized as ISO strings
   const referralResponse = referral.toObject ? referral.toObject() : referral;
   if (referralResponse.createdAt instanceof Date) {
     referralResponse.createdAt = referralResponse.createdAt.toISOString();
   } else if (referralResponse.createdAt && typeof referralResponse.createdAt === 'object' && 'toISOString' in referralResponse.createdAt) {
     referralResponse.createdAt = (referralResponse.createdAt as Date).toISOString();
+  }
+  if (referralResponse.referralDate instanceof Date) {
+    referralResponse.referralDate = referralResponse.referralDate.toISOString();
+  } else if (referralResponse.referralDate && typeof referralResponse.referralDate === 'object' && 'toISOString' in referralResponse.referralDate) {
+    referralResponse.referralDate = (referralResponse.referralDate as Date).toISOString();
   }
 
   return NextResponse.json(referralResponse);

@@ -654,6 +654,7 @@ export async function getReferralById(id: string) {
     ...referral,
     _id: referral._id.toString(),
     createdAt: referral.createdAt.toISOString(),
+    referralDate: referral.referralDate ? referral.referralDate.toISOString() : null,
     assignedAgent: referral.assignedAgent
       ? { ...referral.assignedAgent, _id: referral.assignedAgent._id.toString() }
       : null,
