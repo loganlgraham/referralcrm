@@ -1031,9 +1031,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // Close rate calculation: For accurate close rate, we need to match deals to referrals
   // created in the timeframe, not just deals closed in the timeframe.
   // This ensures we're measuring "of referrals created this period, how many closed?"
+  // Use paymentsByNetwork (all payments) to count deals from referrals created in timeframe,
+  // regardless of when the deal closed (cohort-based calculation)
   const filteredReferralIds = new Set(filteredReferrals.map((r) => r._id.toString()));
   
-  const dealsClosedForCloseRate = filteredPaymentsByNetwork.filter(
+  const dealsClosedForCloseRate = paymentsByNetwork.filter(
     (payment) =>
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
       payment.usedAssignedAgent === true &&
@@ -1042,12 +1044,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   );
 
   // Deals closed in timeframe: matches "Deals closed" graph logic (closed | payment_sent | paid)
-  const dealsClosedInTimeframe = filteredPaymentsByNetwork.filter(
-    (payment) =>
-      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
-      payment.usedAssignedAgent === true &&
-      ['closed', 'payment_sent', 'paid'].includes(payment.status)
-  );
+  // Use paymentsByNetwork (same as graph) and filter by metricDate being within timeframe
+  const dealsClosedInTimeframe = paymentsByNetwork.filter((payment) => {
+    const metricDate = payment.metricDate ?? resolveMetricDate(payment);
+    if (!metricDate) return false;
+    if (timeframeStart && metricDate < timeframeStart) return false;
+    if (timeframeEnd && metricDate > timeframeEnd) return false;
+    if (payment.agentAttribution === 'OUTSIDE_AGENT') return false;
+    if (payment.usedAssignedAgent !== true) return false;
+    if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return false;
+    return true;
+  });
   
   const lostReferrals = filteredReferrals.filter((referral) => referral.status === 'Lost');
   const endOfToday = endOfDay(new Date());
@@ -1445,8 +1452,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   // Close rate per bucket: deals (closed/paid) whose referral was created in that bucket
+  // Use paymentsByNetwork (all payments) to count deals from referrals created in each bucket,
+  // regardless of when the deal closed (cohort-based calculation)
   const dealsClosedByReferralBucket = new Map<string, number>();
-  filteredPaymentsByNetwork.forEach((payment) => {
+  paymentsByNetwork.forEach((payment) => {
     if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
     if (payment.usedAssignedAgent !== true) return;
     if (payment.status !== 'closed' && payment.status !== 'paid') return;
