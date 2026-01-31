@@ -14,9 +14,9 @@ import { resolveAuditActorId } from '@/lib/server/audit';
 import { inferStateFromPostalCode } from '@/utils/location';
 import { calculateBusinessMinutesBetween } from '@/utils/sla-insights';
 import { createAdminNotifications } from '@/lib/server/notifications';
-import { syncReferralTasks } from '@/lib/server/task-sync';
 import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
 import { hasAhaOosAgentAttached } from '@/lib/server/auto-update-reminders';
+import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
 
 interface Params {
   params: { id: string };
@@ -381,9 +381,12 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       });
     }
 
-    // Sync follow-up tasks for the updated status (runs in background)
-    syncReferralTasks(referral._id).catch((error) => {
-      console.error('[Task Sync] Failed to sync tasks after status change:', error);
+    await generateAndReconcileAdminTasks({
+      referralId: referral._id.toString(),
+      trigger: 'referral.status_changed',
+      actorId: session.user.id,
+    }).catch((error) => {
+      console.error('[Admin Tasks] Failed to reconcile tasks after status change:', error);
     });
   }
 

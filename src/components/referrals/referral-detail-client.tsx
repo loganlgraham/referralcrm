@@ -1206,110 +1206,11 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     [referral.payments]
   );
 
-  const followUpReferral = useMemo(() => {
-    const createdAt = (() => {
-      if (typeof referral.createdAt === 'string') {
-        return referral.createdAt;
-      }
-      if (referral.createdAt) {
-        try {
-          return new Date(referral.createdAt).toISOString();
-        } catch (error) {
-          console.warn('Unable to parse referral.createdAt for follow-up tasks', error);
-        }
-      }
-      return new Date().toISOString();
-    })();
-
-    const auditEntries = Array.isArray(referral.audit)
-      ? referral.audit.map((entry) => {
-          if (!entry || typeof entry !== 'object') {
-            return {};
-          }
-
-          const candidate = entry as {
-            field?: unknown;
-            newValue?: unknown;
-            timestamp?: unknown;
-          };
-
-          return {
-            field: typeof candidate.field === 'string' ? candidate.field : undefined,
-            newValue:
-              typeof candidate.newValue === 'string'
-                ? candidate.newValue
-                : candidate.newValue != null
-                ? String(candidate.newValue)
-                : undefined,
-            timestamp:
-              typeof candidate.timestamp === 'string'
-                ? candidate.timestamp
-                : candidate.timestamp instanceof Date
-                ? candidate.timestamp.toISOString()
-                : undefined,
-          };
-        })
-      : [];
-
-    return {
-      _id: referral._id,
-      createdAt,
-      status: financials.status,
-      statusLastUpdated: referral.statusLastUpdated,
-      daysInStatus: referral.daysInStatus,
-      clientType: referral.clientType ?? null,
-      dealSide:
-        financials.dealSide ??
-        (referral.dealSide === 'sell' || referral.dealSide === 'buy' ? referral.dealSide : null),
-      assignedAgent: primaryAgentContact?.name
-        ? { name: primaryAgentContact.name }
-        : referral.assignedAgent?.name
-        ? { name: referral.assignedAgent.name }
-        : null,
-      assignedAgentName:
-        primaryAgentContact?.name ?? referral.assignedAgent?.name ?? undefined,
-      buySideAgent: referral.buySideAgent
-        ? { name: referral.buySideAgent.name ?? null, fullName: referral.buySideAgent.name ?? null }
-        : null,
-      sellSideAgent: referral.sellSideAgent
-        ? { name: referral.sellSideAgent.name ?? null, fullName: referral.sellSideAgent.name ?? null }
-        : null,
-      buySideAgentName: referral.buySideAgent?.name ?? undefined,
-      sellSideAgentName: referral.sellSideAgent?.name ?? undefined,
-      borrower: referral.borrower,
-      notes: referral.notes ?? [],
-      payments: referral.payments ?? [],
-      audit: auditEntries,
-      hasAhaOosAgentAttached: (referral as any).hasAhaOosAgentAttached ?? false,
-      hasAhaDesignatedAgentAttached: (referral as any).hasAhaDesignatedAgentAttached ?? false,
-      hasAhaAgentAttached: (referral as any).hasAhaAgentAttached ?? false,
-      timeline: referral.timeline ?? undefined,
-    };
-  }, [
-    primaryAgentContact?.name,
-    financials.status,
-    financials.dealSide,
-    referral._id,
-    referral.audit,
-    referral.clientType,
-    referral.borrower,
-    referral.createdAt,
-    referral.daysInStatus,
-    referral.dealSide,
-    referral.notes,
-    referral.buySideAgent,
-    referral.sellSideAgent,
-    referral.payments,
-    referral.statusLastUpdated,
-    referral.assignedAgent?.name,
-  ]);
-
   return (
     <div className="space-y-8">
       <ReferralHeader
         referral={headerReferral}
         viewerRole={viewerRole}
-        followUpReferral={followUpReferral}
         onFinancialsChange={handleFinancialsChange}
         buySideAgentContact={buySideAgentContact}
         sellSideAgentContact={sellSideAgentContact}

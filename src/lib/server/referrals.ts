@@ -4,8 +4,12 @@ import { Referral, ReferralDocument } from '@/models/referral';
 import { LenderMC } from '@/models/lender';
 import { Agent } from '@/models/agent';
 import { Payment } from '@/models/payment';
+import { AdminTask, getEffectiveDueDate, type AdminTaskLean } from '@/models/admin-task';
 import { differenceInDays } from 'date-fns';
+import { formatInTimeZone, zonedTimeToUtc } from 'date-fns-tz';
 import { Types } from 'mongoose';
+
+const SLA_TIME_ZONE = 'America/Denver';
 import { getCurrentSession } from '@/lib/auth';
 import { ACTIVE_REFERRAL_STATUS_VALUES, normalizeReferralStatus } from '@/constants/referrals';
 import { User } from '@/models/user';
@@ -91,6 +95,7 @@ interface ReferralListItem {
   hasAhaOosAgentAttached?: boolean;
   hasAhaDesignatedAgentAttached?: boolean;
   hasAhaAgentAttached?: boolean;
+  urgentTaskCount?: number;
 }
 
 /**
@@ -446,6 +451,29 @@ export async function getReferrals(params: GetReferralsParams) {
     dealStatusMap.set(key, record);
   }
 
+  const todayStr = formatInTimeZone(new Date(), SLA_TIME_ZONE, 'yyyy-MM-dd');
+  const [y, m, d] = todayStr.split('-').map(Number);
+  const endOfTodayDenver = zonedTimeToUtc(
+    new Date(y, m - 1, d, 23, 59, 59, 999),
+    SLA_TIME_ZONE
+  );
+
+  const openTasks = await AdminTask.find({
+    referralId: { $in: referralIds },
+    status: 'open',
+  })
+    .select('referralId dueAt dueAtOverride snoozedUntil')
+    .lean<AdminTaskLean[]>();
+
+  const urgentTaskCountMap = new Map<string, number>();
+  for (const task of openTasks) {
+    const effectiveDue = getEffectiveDueDate(task);
+    if (effectiveDue && effectiveDue <= endOfTodayDenver) {
+      const key = task.referralId.toString();
+      urgentTaskCountMap.set(key, (urgentTaskCountMap.get(key) ?? 0) + 1);
+    }
+  }
+
   return {
     items: items.map((item: PopulatedReferral) => {
       const agent = resolveAgent(item);
@@ -522,7 +550,8 @@ export async function getReferrals(params: GetReferralsParams) {
         ahaBucket: item.ahaBucket ?? null,
         hasAhaOosAgentAttached,
         hasAhaDesignatedAgentAttached,
-        hasAhaAgentAttached
+        hasAhaAgentAttached,
+        urgentTaskCount: urgentTaskCountMap.get(item._id.toString()) ?? 0
       } as ReferralListItem;
     }),
     total,
