@@ -1354,13 +1354,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     dealTimeframeMap.set(key, current);
   });
 
+  // Close rate per bucket: deals (closed/paid) whose referral was created in that bucket
+  const dealsClosedByReferralBucket = new Map<string, number>();
+  filteredPaymentsByNetwork.forEach((payment) => {
+    if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
+    if (payment.usedAssignedAgent !== true) return;
+    if (payment.status !== 'closed' && payment.status !== 'paid') return;
+    const createdAt = payment.referral?.createdAt;
+    if (!createdAt) return;
+    const key = getTimeframeBucketKey(new Date(createdAt), context.timeframe);
+    dealsClosedByReferralBucket.set(key, (dealsClosedByReferralBucket.get(key) ?? 0) + 1);
+  });
+
   const mainTrends = timeframeBuckets.map((bucket) => {
     const referralStats = referralTimeframeMap.get(bucket.key) ?? { total: 0, transfers: 0 };
     const dealStats = dealTimeframeMap.get(bucket.key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
+    const dealsClosedForCloseRate = dealsClosedByReferralBucket.get(bucket.key) ?? 0;
     const closeRate =
       referralStats.total === 0
         ? 0
-        : (dealStats.dealsClosed / Math.max(referralStats.total, 1)) * 100;
+        : (dealsClosedForCloseRate / Math.max(referralStats.total, 1)) * 100;
     return {
       key: bucket.key,
       label: bucket.label,
