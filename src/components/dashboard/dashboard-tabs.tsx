@@ -92,12 +92,14 @@ interface DashboardResponse {
       revenue: TrendPoint[];
       deals: TrendPoint[];
       closeRate: TrendPoint[];
-      mcTransfers: TrendPoint[];
+      referrals: TrendPoint[];
     };
     revenueBySource: { label: string; value: number }[];
     revenueByEndorser: { label: string; value: number }[];
     revenueByState: { label: string; value: number }[];
-    referralRequestsByZip: { label: string; value: number }[];
+    referralRequestsBySource: { label: string; value: number }[];
+    referralRequestsByEndorser: { label: string; value: number }[];
+    referralRequestsByState: { label: string; value: number }[];
     monthlyReferrals: {
       monthKey: string;
       label: string;
@@ -1271,11 +1273,11 @@ function MainDashboard({
       extraStats: [{ label: 'Closed, not paid', value: formatCurrency(summary.closedNotPaidCents) }]
     },
     {
-      title: 'Pending closings',
+      title: 'Total Future Closings',
       value: formatNumber(summary.pendingClosings),
       extraStats: [
-        { label: 'This month', value: formatNumber(summary.pendingClosingsThisMonth) },
-        { label: 'Next month', value: formatNumber(summary.pendingClosingsNextMonth) }
+        { label: 'Closings this month', value: formatNumber(summary.pendingClosingsThisMonth) },
+        { label: 'Closings next month', value: formatNumber(summary.pendingClosingsNextMonth) }
       ]
     },
     {
@@ -1342,16 +1344,30 @@ function MainDashboard({
         <LineChartCard title="Revenue received" data={data.trends.revenue} formatValue={formatCurrency} />
         <LineChartCard title="Deals closed" data={data.trends.deals} formatValue={(value) => formatNumber(Math.round(value))} />
         <LineChartCard title="Close rate" data={data.trends.closeRate} formatValue={(value) => `${value.toFixed(1)}%`} />
-        <LineChartCard title="MC transfers" data={data.trends.mcTransfers} formatValue={(value) => formatNumber(Math.round(value))} />
+        <LineChartCard title="Referrals received" data={data.trends.referrals} formatValue={(value) => formatNumber(Math.round(value))} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-4">
         <RankedList title="Revenue by source" items={data.revenueBySource} />
+        <RankedList
+          title="Referral requests by source"
+          items={data.referralRequestsBySource}
+          formatValue={(value) => formatNumber(value)}
+          emptyMessage="No referral requests recorded."
+        />
         <RankedList title="Revenue by endorser" items={data.revenueByEndorser} />
+        <RankedList
+          title="Referral requests by endorser"
+          items={data.referralRequestsByEndorser}
+          formatValue={(value) => formatNumber(value)}
+          emptyMessage="No referral requests recorded."
+        />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
         <RankedList title="Revenue by state" items={data.revenueByState} />
         <RankedList
-          title="Referral requests by ZIP"
-          items={data.referralRequestsByZip}
+          title="Referral requests by state"
+          items={data.referralRequestsByState}
           formatValue={(value) => formatNumber(value)}
           emptyMessage="No referral requests recorded."
         />
