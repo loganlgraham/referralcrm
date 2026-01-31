@@ -12,11 +12,13 @@
  * - Leave already-correct rows alone
  *
  * Run: pnpm migrate:referral-dates [--dry-run] [--threshold-days=7]
+ * Run: pnpm migrate:referral-dates --fix-sla-only [--dry-run]  # Fix SLA for referrals with referralDate
  * Loads .env and .env.local (Next.js convention) before connecting to MongoDB.
  */
 import { config } from 'dotenv';
 import { resolve } from 'path';
-import type { Types } from 'mongoose';
+import type { Model, Types } from 'mongoose';
+import type { ReferralDocument } from '../src/models/referral';
 import { differenceInDays, differenceInMinutes } from 'date-fns';
 
 // Load env before mongoose is imported (dynamic import in main)
@@ -24,6 +26,7 @@ config({ path: resolve(process.cwd(), '.env') });
 config({ path: resolve(process.cwd(), '.env.local'), override: true });
 
 const DRY_RUN = process.argv.includes('--dry-run');
+const FIX_SLA_ONLY = process.argv.includes('--fix-sla-only');
 const THRESHOLD_ARG = process.argv.find((a) => a.startsWith('--threshold-days='));
 const THRESHOLD_DAYS = THRESHOLD_ARG ? parseInt(THRESHOLD_ARG.split('=')[1] ?? '7', 10) : 7;
 
@@ -37,6 +40,107 @@ async function main() {
 
   await connectMongo();
 
+  if (FIX_SLA_ONLY) {
+    await runFixSlaOnly(Referral);
+  } else {
+    await runDateMigration(Referral);
+  }
+
+  process.exit(0);
+}
+
+async function runFixSlaOnly(Referral: Model<ReferralDocument>) {
+  console.log(
+    `Fixing SLA for referrals with referralDate set${DRY_RUN ? ' [DRY RUN - no changes]' : ''}\n`
+  );
+
+  const referrals = await Referral.find({ deletedAt: null, referralDate: { $ne: null } })
+    .select('_id createdAt sla')
+    .lean<
+      Array<{
+        _id: Types.ObjectId;
+        createdAt: Date;
+        sla?: {
+          lastPairedAt?: Date | string | null;
+          timeToAssignmentHours?: number | null;
+          timeToFirstAgentContactHours?: number | null;
+          daysToContract?: number | null;
+          daysToClose?: number | null;
+        } | null;
+      }>
+    >();
+
+  console.log(`Referrals with referralDate: ${referrals.length}\n`);
+
+  if (referrals.length === 0) {
+    console.log('Nothing to fix.');
+    return;
+  }
+
+  console.log('Sample IDs to fix (first 5):');
+  referrals.slice(0, 5).forEach((r) => {
+    const createdAt = r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt);
+    const lastPairedAt = r.sla?.lastPairedAt
+      ? r.sla.lastPairedAt instanceof Date
+        ? r.sla.lastPairedAt
+        : new Date(r.sla.lastPairedAt as string)
+      : null;
+    const newTimeToAssignment =
+      lastPairedAt &&
+      !Number.isNaN(lastPairedAt.getTime()) &&
+      !Number.isNaN(createdAt.getTime()) &&
+      lastPairedAt > createdAt
+        ? Math.round((differenceInMinutes(lastPairedAt, createdAt) / 60) * 10) / 10
+        : null;
+    const oldTimeToAssignment = r.sla?.timeToAssignmentHours ?? null;
+    const oldTimeToFirstContact = r.sla?.timeToFirstAgentContactHours ?? null;
+    const oldDaysToContract = r.sla?.daysToContract ?? null;
+    const oldDaysToClose = r.sla?.daysToClose ?? null;
+    console.log(
+      `  ${r._id} | timeToAssignment: ${oldTimeToAssignment ?? 'null'}h -> ${newTimeToAssignment ?? 'null'}h | timeToFirstContact: ${oldTimeToFirstContact ?? 'null'}h -> null | daysToContract: ${oldDaysToContract ?? 'null'} -> null | daysToClose: ${oldDaysToClose ?? 'null'} -> null`
+    );
+  });
+
+  if (!DRY_RUN) {
+    let updated = 0;
+    for (const r of referrals) {
+      const createdAt = r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt);
+      const lastPairedAt = r.sla?.lastPairedAt
+        ? r.sla.lastPairedAt instanceof Date
+          ? r.sla.lastPairedAt
+          : new Date(r.sla.lastPairedAt as string)
+        : null;
+      const newTimeToAssignment =
+        lastPairedAt &&
+        !Number.isNaN(lastPairedAt.getTime()) &&
+        !Number.isNaN(createdAt.getTime()) &&
+        lastPairedAt > createdAt
+          ? Math.round((differenceInMinutes(lastPairedAt, createdAt) / 60) * 10) / 10
+          : null;
+
+      await Referral.collection.updateOne(
+        { _id: r._id },
+        {
+          $set: {
+            'sla.timeToAssignmentHours': newTimeToAssignment ?? null,
+            'sla.timeToFirstAgentContactHours': null,
+            'sla.daysToContract': null,
+            'sla.daysToClose': null,
+          },
+        }
+      );
+      updated++;
+      if (updated <= 10 || updated === referrals.length) {
+        console.log(`  ✓ Updated ${r._id} (${updated}/${referrals.length})`);
+      }
+    }
+    console.log(`\nDone. Updated ${updated} referral(s).`);
+  } else {
+    console.log('\nDry run complete. Run without --dry-run to apply changes.');
+  }
+}
+
+async function runDateMigration(Referral: Model<ReferralDocument>) {
   console.log(
     `Migrating backfilled referral dates (threshold: ${THRESHOLD_DAYS} days)${DRY_RUN ? ' [DRY RUN - no changes]' : ''}\n`
   );
@@ -155,8 +259,6 @@ async function main() {
   } else {
     console.log('\nNothing to migrate.');
   }
-
-  process.exit(0);
 }
 
 main().catch((err) => {
