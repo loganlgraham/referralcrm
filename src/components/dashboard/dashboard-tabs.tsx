@@ -256,8 +256,8 @@ function NetworkFilterButtons({
 
 const CHART_WIDTH = 320;
 const CHART_HEIGHT = 180;
-const CHART_PADDING_X = 36;
-const CHART_PADDING_Y = 28;
+const CHART_PADDING_X = 44;
+const CHART_PADDING_Y = 32;
 
 function SummaryCard({
   title,
@@ -332,8 +332,10 @@ function LineChartCard({
   const hasData = safeData.length > 0;
   const maxValue = hasData ? Math.max(...safeData.map((point) => point.value), 0) : 0;
   const minValue = hasData ? Math.min(...safeData.map((point) => point.value), 0) : 0;
-  const normalizedMax = maxValue === minValue ? maxValue || 1 : maxValue;
-  const normalizedMin = maxValue === minValue ? 0 : minValue;
+  const range = maxValue - minValue || 1;
+  const headroom = range * 0.12;
+  const normalizedMax = maxValue === minValue ? (maxValue || 1) * 1.15 : maxValue + headroom;
+  const normalizedMin = maxValue === minValue ? 0 : Math.max(0, minValue - headroom);
 
   const stepX = safeData.length > 1 ? (CHART_WIDTH - CHART_PADDING_X * 2) / (safeData.length - 1) : 0;
   const rangeY = normalizedMax - normalizedMin || 1;
@@ -373,7 +375,11 @@ function LineChartCard({
       Math.max(tooltipPoint.x - width / 2, CHART_PADDING_X),
       CHART_WIDTH - CHART_PADDING_X - width
     );
-    const y = Math.max(tooltipPoint.y - height - 8, 8);
+    const roomAbove = tooltipPoint.y - CHART_PADDING_Y;
+    const y =
+      roomAbove >= height + 12
+        ? tooltipPoint.y - height - 10
+        : Math.min(tooltipPoint.y + 12, CHART_HEIGHT - CHART_PADDING_Y - height - 4);
     tooltipMetrics = { width, height, x, y, valueLabel, labelText };
   }
 
@@ -488,12 +494,18 @@ function LineChartCard({
               stroke="#e2e8f0"
               strokeWidth={1}
             />
-            <text x={CHART_PADDING_X} y={CHART_HEIGHT - CHART_PADDING_Y / 2} className="text-[10px] fill-slate-400">
+            <text
+              x={CHART_PADDING_X - 6}
+              y={CHART_HEIGHT - CHART_PADDING_Y / 2}
+              textAnchor="end"
+              className="text-[10px] fill-slate-400"
+            >
               {formatValue(normalizedMin)}
             </text>
             <text
-              x={CHART_PADDING_X}
-              y={CHART_PADDING_Y - 6}
+              x={CHART_PADDING_X - 6}
+              y={CHART_PADDING_Y - 4}
+              textAnchor="end"
               className="text-[10px] fill-slate-400"
             >
               {formatValue(normalizedMax)}
