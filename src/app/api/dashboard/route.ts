@@ -299,7 +299,11 @@ function calculateOutstandingExpected(payment: AggregatedPayment): number {
   return 0;
 }
 
-function extractState(referral: AggregatedPayment['referral']): string {
+function extractState(referral: AggregatedPayment['referral']): string;
+function extractState(referral: { propertyState?: string; propertyAddress?: string; borrowerCurrentAddress?: string }): string;
+function extractState(
+  referral: { propertyState?: string; propertyAddress?: string; borrowerCurrentAddress?: string }
+): string {
   const normalizedState = referral.propertyState?.toString().trim().toUpperCase();
   if (normalizedState) {
     return normalizedState;
@@ -541,12 +545,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           revenue: [],
           deals: [],
           closeRate: [],
-          mcTransfers: []
+          referrals: []
         },
         revenueBySource: [],
         revenueByEndorser: [],
         revenueByState: [],
-        referralRequestsByZip: [],
+        referralRequestsBySource: [],
+        referralRequestsByEndorser: [],
+        referralRequestsByState: [],
         monthlyReferrals: [],
         preApprovalConversion: {
           trend: [],
@@ -842,37 +848,36 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       : terminatedWithinTimeframe.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
 
   const totalReferrals = filteredReferrals.length;
-  const referralZipMap = new Map<string, number>();
-  referralsByNetwork.forEach((referral) => {
-    const zipCandidates = Array.isArray(referral.lookingInZips)
-      ? referral.lookingInZips
-      : referral.lookingInZip
-        ? [referral.lookingInZip]
-        : [];
-
-    const uniqueZips = Array.from(
-      new Set(
-        zipCandidates
-          .map((zip) => zip?.toString().trim())
-          .filter((zip): zip is string => Boolean(zip))
-      )
-    );
-
-    uniqueZips.forEach((zip) => {
-      referralZipMap.set(zip, (referralZipMap.get(zip) ?? 0) + 1);
-    });
+  const referralRequestsBySourceMap = new Map<string, number>();
+  const referralRequestsByEndorserMap = new Map<string, number>();
+  const referralRequestsByStateMap = new Map<string, number>();
+  filteredReferrals.forEach((referral) => {
+    const source = String(referral.source ?? 'Unknown');
+    referralRequestsBySourceMap.set(source, (referralRequestsBySourceMap.get(source) ?? 0) + 1);
+    const endorser = referral.endorser?.trim() || 'Unattributed';
+    referralRequestsByEndorserMap.set(endorser, (referralRequestsByEndorserMap.get(endorser) ?? 0) + 1);
+    const state = extractState(referral);
+    referralRequestsByStateMap.set(state, (referralRequestsByStateMap.get(state) ?? 0) + 1);
   });
   // Close rate calculation: For accurate close rate, we need to match deals to referrals
   // created in the timeframe, not just deals closed in the timeframe.
   // This ensures we're measuring "of referrals created this period, how many closed?"
   const filteredReferralIds = new Set(filteredReferrals.map((r) => r._id.toString()));
   
-  const dealsClosed = filteredPaymentsByNetwork.filter(
+  const dealsClosedForCloseRate = filteredPaymentsByNetwork.filter(
     (payment) =>
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
       payment.usedAssignedAgent === true &&
       (payment.status === 'closed' || payment.status === 'paid') &&
       filteredReferralIds.has(payment.referral._id.toString())
+  );
+
+  // Deals closed in timeframe: matches "Deals closed" graph logic (closed | payment_sent | paid)
+  const dealsClosedInTimeframe = filteredPaymentsByNetwork.filter(
+    (payment) =>
+      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+      payment.usedAssignedAgent === true &&
+      ['closed', 'payment_sent', 'paid'].includes(payment.status)
   );
   
   const lostReferrals = filteredReferrals.filter((referral) => referral.status === 'Lost');
@@ -897,7 +902,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!closingDate) return false;
     return closingDate > endOfToday;
   });
-  const pendingClosingsThisMonth = pendingClosings.filter((payment) => {
+  const nonTerminatedStatuses = new Set([
+    'under_contract',
+    'past_inspection',
+    'past_appraisal',
+    'clear_to_close',
+    'closed',
+    'payment_sent',
+    'paid'
+  ]);
+  const pendingClosingsThisMonth = paymentsByNetwork.filter((payment) => {
+    if (payment.status === 'terminated') return false;
+    if (!nonTerminatedStatuses.has(payment.status)) return false;
+    if (payment.usedAssignedAgent !== true) return false;
     const closingDate = payment.closingDate ? new Date(payment.closingDate) : null;
     return (
       closingDate &&
@@ -905,7 +922,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       closingDate <= endOfCurrentMonth
     );
   });
-  const pendingClosingsNextMonth = pendingClosings.filter((payment) => {
+  const pendingClosingsNextMonth = paymentsByNetwork.filter((payment) => {
+    if (payment.status === 'terminated') return false;
+    if (!nonTerminatedStatuses.has(payment.status)) return false;
+    if (payment.usedAssignedAgent !== true) return false;
     const closingDate = payment.closingDate ? new Date(payment.closingDate) : null;
     return (
       closingDate &&
@@ -913,7 +933,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       closingDate <= endOfNextMonth
     );
   });
-  const closeRate = totalReferrals === 0 ? 0 : (dealsClosed.length / totalReferrals) * 100;
+  const closeRate = totalReferrals === 0 ? 0 : (dealsClosedForCloseRate.length / totalReferrals) * 100;
 
   // Identify Glenn Beck referrals early to exclude from revenue
   // Use referralsByNetwork (not filteredReferrals) to exclude all Glenn Beck referrals
@@ -1056,7 +1076,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const averageRevenuePerDealCents = revenueContributingClosedDeals.length
     ? realizedRevenueCents / revenueContributingClosedDeals.length
     : 0;
-  const totalVolumeClosedCents = dealsClosed.reduce((sum, payment) => {
+  const totalVolumeClosedCents = dealsClosedInTimeframe.reduce((sum, payment) => {
     const price =
       payment.contractPriceCents ??
       payment.referral?.closedPriceCents ??
@@ -1116,7 +1136,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .map(([label, value]) => ({ label, value }))
     .sort((a, b) => b.value - a.value);
 
-  const referralRequestsByZip = Array.from(referralZipMap.entries())
+  const referralRequestsBySource = Array.from(referralRequestsBySourceMap.entries())
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+  const referralRequestsByEndorser = Array.from(referralRequestsByEndorserMap.entries())
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+  const referralRequestsByState = Array.from(referralRequestsByStateMap.entries())
     .map(([label, value]) => ({ label, value }))
     .sort((a, b) => b.value - a.value);
 
@@ -1348,6 +1374,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     aha: groupTrendByTimeframe(ahaReferralDates, timeframe),
     ahaOos: groupTrendByTimeframe(ahaOosReferralDates, timeframe)
   };
+
+  // Referrals received trend: cumulative so last point equals totalReferrals (matches Total referrals card)
+  const referralsTrendBuckets = groupTrendByTimeframe(allReferralDates, timeframe);
+  let cumulative = 0;
+  const referralsTrend = referralsTrendBuckets.map((point) => {
+    cumulative += point.value;
+    return { key: point.key, label: point.label, value: cumulative };
+  });
 
   // Aggregate MC metrics from payments
   // Excludes deals attributed to outside agents from revenue/close rate calculations
@@ -1799,7 +1833,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     main: {
       summary: {
         totalReferrals,
-        dealsClosed: dealsClosed.length,
+        dealsClosed: dealsClosedInTimeframe.length,
         dealsUnderContract: dealsUnderContract.length,
         pendingClosings: pendingClosings.length,
         pendingClosingsThisMonth: pendingClosingsThisMonth.length,
@@ -1829,12 +1863,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         revenue: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.revenueReceivedCents })),
         deals: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.dealsClosed })),
         closeRate: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.closeRate })),
-        mcTransfers: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.mcTransfers }))
+        referrals: referralsTrend
       },
       revenueBySource,
       revenueByEndorser,
       revenueByState,
-      referralRequestsByZip,
+      referralRequestsBySource,
+      referralRequestsByEndorser,
+      referralRequestsByState,
       monthlyReferrals: monthlyReferrals.map((entry) => ({
         monthKey: entry.monthKey,
         label: entry.label,
