@@ -17,7 +17,7 @@
 import { config } from 'dotenv';
 import { resolve } from 'path';
 import type { Types } from 'mongoose';
-import { differenceInDays } from 'date-fns';
+import { differenceInDays, differenceInMinutes } from 'date-fns';
 
 // Load env before mongoose is imported (dynamic import in main)
 config({ path: resolve(process.cwd(), '.env') });
@@ -42,10 +42,34 @@ async function main() {
   );
 
   const referrals = await Referral.find({ deletedAt: null })
-    .select('_id createdAt referralDate')
-    .lean<Array<{ _id: Types.ObjectId; createdAt: Date; referralDate?: Date | null }>>();
+    .select('_id createdAt referralDate sla')
+    .lean<
+      Array<{
+        _id: Types.ObjectId;
+        createdAt: Date;
+        referralDate?: Date | null;
+        sla?: {
+          lastPairedAt?: Date | string | null;
+          timeToAssignmentHours?: number | null;
+          timeToFirstAgentContactHours?: number | null;
+          daysToContract?: number | null;
+          daysToClose?: number | null;
+        } | null;
+      }>
+    >();
 
-  const toMigrate: Array<{ _id: Types.ObjectId; createdAt: Date; referralDate: Date }> = [];
+  const toMigrate: Array<{
+    _id: Types.ObjectId;
+    createdAt: Date;
+    referralDate: Date;
+    sla?: {
+      lastPairedAt?: Date | string | null;
+      timeToAssignmentHours?: number | null;
+      timeToFirstAgentContactHours?: number | null;
+      daysToContract?: number | null;
+      daysToClose?: number | null;
+    } | null;
+  }> = [];
   let skipped = 0;
 
   for (const r of referrals) {
@@ -59,6 +83,7 @@ async function main() {
         _id: r._id,
         createdAt,
         referralDate: createdAt,
+        sla: r.sla ?? undefined,
       });
     } else {
       skipped++;
@@ -73,8 +98,21 @@ async function main() {
     console.log('Sample IDs to migrate (first 5):');
     toMigrate.slice(0, 5).forEach((r) => {
       const objectIdTime = getObjectIdTimestamp(r._id);
+      const lastPairedAt = r.sla?.lastPairedAt
+        ? r.sla.lastPairedAt instanceof Date
+          ? r.sla.lastPairedAt
+          : new Date(r.sla.lastPairedAt as string)
+        : null;
+      const newTimeToAssignment =
+        lastPairedAt && lastPairedAt > objectIdTime
+          ? Math.round((differenceInMinutes(lastPairedAt, objectIdTime) / 60) * 10) / 10
+          : null;
+      const oldTimeToAssignment = r.sla?.timeToAssignmentHours ?? null;
+      const oldTimeToFirstContact = r.sla?.timeToFirstAgentContactHours ?? null;
+      const oldDaysToContract = r.sla?.daysToContract ?? null;
+      const oldDaysToClose = r.sla?.daysToClose ?? null;
       console.log(
-        `  ${r._id} | createdAt: ${r.createdAt.toISOString()} -> referralDate | new createdAt: ${objectIdTime.toISOString()}`
+        `  ${r._id} | timeToAssignment: ${oldTimeToAssignment ?? 'null'}h -> ${newTimeToAssignment ?? 'null'}h | timeToFirstContact: ${oldTimeToFirstContact ?? 'null'}h -> null | daysToContract: ${oldDaysToContract ?? 'null'} -> null | daysToClose: ${oldDaysToClose ?? 'null'} -> null`
       );
     });
   }
@@ -83,12 +121,26 @@ async function main() {
     let updated = 0;
     for (const r of toMigrate) {
       const objectIdTime = getObjectIdTimestamp(r._id);
+      const lastPairedAt = r.sla?.lastPairedAt
+        ? r.sla.lastPairedAt instanceof Date
+          ? r.sla.lastPairedAt
+          : new Date(r.sla.lastPairedAt as string)
+        : null;
+      const newTimeToAssignment =
+        lastPairedAt && !Number.isNaN(lastPairedAt.getTime()) && lastPairedAt > objectIdTime
+          ? Math.round((differenceInMinutes(lastPairedAt, objectIdTime) / 60) * 10) / 10
+          : null;
+
       await Referral.collection.updateOne(
         { _id: r._id },
         {
           $set: {
             referralDate: r.referralDate,
             createdAt: objectIdTime,
+            'sla.timeToAssignmentHours': newTimeToAssignment ?? null,
+            'sla.timeToFirstAgentContactHours': null,
+            'sla.daysToContract': null,
+            'sla.daysToClose': null,
           },
         }
       );
