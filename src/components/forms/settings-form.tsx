@@ -3,8 +3,6 @@
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import { ReminderSettingsToggle } from '@/components/referrals/reminder-settings-toggle';
-
 const DASHBOARD_METRICS = [
   { id: 'summary', label: 'Executive summary (totals & close rate)' },
   { id: 'revenue', label: 'Revenue trends & expected revenue' },
@@ -158,10 +156,6 @@ export function SettingsForm() {
 
   return (
     <div className="space-y-6">
-      <ReminderSettingsToggle
-        title="Global task reminder emails"
-        helperText="Choose how often to receive task reminders across every referral assigned to you. Admins apply this to all referrals."
-      />
       <form onSubmit={handleSubmit} className="space-y-4 rounded-lg bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Referral fee policy</h1>
         <p className="text-sm text-slate-500">Configure default referral fee tiers.</p>

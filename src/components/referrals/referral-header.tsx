@@ -11,10 +11,9 @@ import { SLAWidget } from '@/components/referrals/sla-widget';
 import { ContactAssignment, type Contact } from '@/components/referrals/contact-assignment';
 import { EmailActivityLink } from '@/components/common/email-activity-link';
 import { PhoneActivityLink } from '@/components/common/phone-activity-link';
-import type { ReferralLike } from '@/utils/sla-insights';
-import { ReferralFollowUpCard } from '@/components/referrals/referral-follow-up-card';
 import { RequestUpdateButton } from '@/components/referrals/request-update-button';
 import { AutoReminderToggle } from '@/components/referrals/auto-reminder-toggle';
+import { AdminTasksCard } from '@/components/referrals/admin-tasks-card';
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
 type AhaBucketValue = '' | 'AHA' | 'AHA_OOS';
@@ -149,7 +148,6 @@ interface ContractDraftSnapshot {
 type ReferralHeaderProps = {
   referral: any;
   viewerRole: ViewerRole;
-  followUpReferral: ReferralLike & { borrower?: { name?: string } };
   onFinancialsChange?: (snapshot: FinancialSnapshot) => void;
   onContractDraftChange?: (draft: ContractDraftSnapshot) => void;
   onUnderContractIntentChange?: (isPreparing: boolean) => void;
@@ -178,7 +176,6 @@ type ReferralHeaderProps = {
 export function ReferralHeader({
   referral,
   viewerRole,
-  followUpReferral,
   onFinancialsChange,
   onContractDraftChange,
   onUnderContractIntentChange,
@@ -810,6 +807,14 @@ export function ReferralHeader({
       statusLastUpdated: statusUpdatedAt.toISOString(),
       daysInStatus: computedDaysInStatus,
     });
+
+    const referralIdStr = String(referral._id);
+    void mutate(
+      (key: unknown) =>
+        typeof key === 'string' &&
+        key.startsWith('/api/admin/tasks') &&
+        key.includes(`referralId=${referralIdStr}`)
+    );
   };
 
   const handlePreApprovalSaved = (details: { preApprovalAmountCents: number; referralFeeDueCents: number }) => {
@@ -966,7 +971,7 @@ export function ReferralHeader({
       {referral.origin !== 'agent' && <SLAWidget referral={{ ...referral, status, audit: auditEntries }} />}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr),minmax(280px,1fr)]">
-        <ReferralFollowUpCard referral={followUpReferral} />
+        <AdminTasksCard referralId={String(referral._id)} viewerRole={viewerRole} />
         <section className="space-y-4 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
           <div className="space-y-1">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Team assignments</h2>
