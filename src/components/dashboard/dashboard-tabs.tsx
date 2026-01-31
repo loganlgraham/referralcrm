@@ -51,6 +51,7 @@ const LIST_PREVIEW_LIMIT = 5;
 interface DashboardSummary {
   totalReferrals: number;
   dealsClosed: number;
+  dealsClosedInTimeframe: number;
   dealsUnderContract: number;
   pendingClosings: number;
   pendingClosingsThisMonth: number;
@@ -1295,7 +1296,7 @@ function MainDashboard({
     {
       title: 'Total referrals',
       value: formatNumber(summary.totalReferrals),
-      extraStats: [{ label: 'Closed', value: formatNumber(summary.dealsClosed) }]
+      extraStats: [{ label: 'Deals closed', value: formatNumber(summary.dealsClosedInTimeframe) }]
     },
     {
       title: 'Close rate',

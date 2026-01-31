@@ -515,6 +515,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         summary: {
           totalReferrals: 0,
           dealsClosed: 0,
+          dealsClosedInTimeframe: 0,
           dealsUnderContract: 0,
           pendingClosings: 0,
           pendingClosingsThisMonth: 0,
@@ -877,7 +878,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       (payment.status === 'closed' || payment.status === 'paid') &&
       filteredReferralIds.has(payment.referral._id.toString())
   );
-  
+
+  // Deals closed in timeframe (matches "Deals closed" chart logic: by metricDate, no referral-created filter)
+  const dealsClosedInTimeframe = filteredPaymentsByNetwork.filter(
+    (payment) =>
+      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+      payment.usedAssignedAgent === true &&
+      ['closed', 'payment_sent', 'paid'].includes(payment.status)
+  ).length;
+
   const lostReferrals = filteredReferrals.filter((referral) => referral.status === 'Lost');
   const endOfToday = endOfDay(new Date());
   const startOfCurrentMonth = startOfMonth(new Date());
@@ -1794,6 +1803,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       summary: {
         totalReferrals,
         dealsClosed: dealsClosed.length,
+        dealsClosedInTimeframe,
         dealsUnderContract: dealsUnderContract.length,
         pendingClosings: pendingClosings.length,
         pendingClosingsThisMonth: pendingClosingsThisMonth.length,
