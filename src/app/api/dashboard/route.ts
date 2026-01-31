@@ -65,6 +65,7 @@ interface AggregatedPayment {
   referral: {
     _id: Types.ObjectId;
     createdAt: Date;
+    referralDate?: Date | null;
     source: 'Lender' | 'MC';
     endorser?: string;
     origin?: 'agent' | 'mc' | 'admin' | '';
@@ -105,6 +106,7 @@ interface AggregatedPayment {
 interface DashboardReferral {
   _id: Types.ObjectId;
   createdAt: Date;
+  referralDate?: Date | null;
   source: 'Lender' | 'MC';
   endorser?: string;
   origin?: 'agent' | 'mc' | 'admin' | '';
@@ -618,7 +620,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...referralMatch,
   })
     .select(
-      'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin sla lookingInZip lookingInZips'
+      'createdAt referralDate status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin sla lookingInZip lookingInZips'
     )
     .lean<DashboardReferral[]>()
     .exec();
@@ -668,6 +670,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         referral: {
           _id: '$referral._id',
           createdAt: '$referral.createdAt',
+          referralDate: '$referral.referralDate',
           source: '$referral.source',
           endorser: '$referral.endorser',
           origin: '$referral.origin',
@@ -1023,18 +1026,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           return storedDays;
         }
 
-        const createdAt = payment.referral?.createdAt ? new Date(payment.referral.createdAt) : null;
+        const leadStart = payment.referral?.referralDate
+          ? new Date(payment.referral.referralDate)
+          : payment.referral?.createdAt
+            ? new Date(payment.referral.createdAt)
+            : null;
         const underContractAt = payment.referral?.sla?.lastUnderContractAt
           ? new Date(payment.referral.sla.lastUnderContractAt)
           : null;
 
-        if (createdAt && underContractAt) {
-          return differenceInCalendarDays(underContractAt, createdAt);
+        if (leadStart && underContractAt) {
+          return differenceInCalendarDays(underContractAt, leadStart);
         }
 
-        if (createdAt && payment.status === 'under_contract') {
+        if (leadStart && payment.status === 'under_contract') {
           const paymentCreatedAt = new Date(payment.updatedAt);
-          return differenceInCalendarDays(paymentCreatedAt, createdAt);
+          return differenceInCalendarDays(paymentCreatedAt, leadStart);
         }
 
         return null;
@@ -1609,11 +1616,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .filter((value): value is number => value != null)
   );
 
-  const daysToContractAvg = computeAverage(
-    slaFields
-      .map((sla) => sla.daysToContract ?? null)
-      .filter((value): value is number => value != null)
-  );
+  const daysToContractValues = adminEligibleReferrals
+    .filter((referral): referral is typeof referral & { sla: NonNullable<typeof referral.sla> } =>
+      Boolean(referral.sla)
+    )
+    .map((referral) => {
+      const stored = referral.sla.daysToContract;
+      if (stored != null && stored >= 0) return stored;
+
+      const referralDate = referral.referralDate ? new Date(referral.referralDate) : null;
+      const lastUnderContractAt = referral.sla.lastUnderContractAt
+        ? new Date(referral.sla.lastUnderContractAt)
+        : null;
+      if (referralDate && lastUnderContractAt && lastUnderContractAt >= referralDate) {
+        return differenceInCalendarDays(lastUnderContractAt, referralDate);
+      }
+      return null;
+    })
+    .filter((value): value is number => value != null && value >= 0);
+  const daysToContractAvg = computeAverage(daysToContractValues);
 
   const daysToCloseAvg = computeAverage(
     slaFields
