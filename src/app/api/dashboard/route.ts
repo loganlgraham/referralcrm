@@ -1763,10 +1763,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return metricDate ? isWithinTimeframe(metricDate) : false;
   });
 
-  const assignedReferrals = adminEligibleReferrals.filter((referral) => Boolean(referral.assignedAgent)).length;
-  const unassignedReferrals = Math.max(adminEligibleReferrals.length - assignedReferrals, 0);
+  const pairedReferrals = adminEligibleReferrals.filter(
+    (referral) => (referral.status ?? '').toLowerCase() === 'paired'
+  ).length;
+  const assignedReferrals = pairedReferrals;
+  const unassignedReferrals = Math.max(adminEligibleReferrals.length - pairedReferrals, 0);
   const assignmentRate = adminEligibleReferrals.length
-    ? (assignedReferrals / adminEligibleReferrals.length) * 100
+    ? (pairedReferrals / adminEligibleReferrals.length) * 100
     : 0;
 
   const slaFields = adminEligibleReferrals

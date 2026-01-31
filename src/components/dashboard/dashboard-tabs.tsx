@@ -1489,7 +1489,7 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
     ? (data.assignedReferrals / data.totalReferrals) * 100
     : 0;
   const assignmentHelper = data.totalReferrals
-    ? `${formatNumber(data.assignedReferrals)} of ${formatNumber(data.totalReferrals)} referrals assigned`
+    ? `${formatNumber(data.assignedReferrals)} of ${formatNumber(data.totalReferrals)} referrals paired`
     : 'No referrals this period';
   const firstContactHelper = data.firstContactSampleSize
     ? `${formatNumber(data.firstContactWithin24HoursCount)} of ${formatNumber(data.firstContactSampleSize)} contacts`
@@ -1513,7 +1513,7 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
     {
       title: 'Unassigned referrals',
       value: formatNumber(data.unassignedReferrals),
-      helper: data.unassignedReferrals > 0 ? 'Needs follow-up' : 'All referrals assigned'
+      helper: data.unassignedReferrals > 0 ? 'Needs follow-up' : 'All referrals paired'
     }
   ];
 
