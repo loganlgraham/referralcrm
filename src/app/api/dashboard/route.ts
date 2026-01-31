@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Types } from 'mongoose';
 import {
+  addDays,
+  addHours,
+  addMonths,
+  addWeeks,
   differenceInCalendarDays,
   endOfDay,
   format,
   startOfDay,
   endOfMonth,
-  addMonths,
   startOfHour,
   startOfMonth,
   startOfWeek,
@@ -429,6 +432,122 @@ function groupTrendByTimeframe(dates: Date[], timeframe: TimeframeInfo): TrendPo
     .map(([key, bucket]) => ({ key, label: bucket.label, value: bucket.value, sort: bucket.sort }))
     .sort((a, b) => a.sort - b.sort)
     .map(({ sort: _sort, ...rest }) => rest);
+}
+
+interface TimeframeBucket {
+  key: string;
+  label: string;
+  sort: number;
+}
+
+function buildTimeframeBuckets(timeframe: TimeframeInfo): TimeframeBucket[] {
+  const now = new Date();
+  let effectiveKey: TimeframeKey = timeframe.key;
+  let rangeStart: Date;
+  let rangeEnd: Date;
+
+  if (timeframe.key === 'custom') {
+    const start = timeframe.start ?? startOfMonth(now);
+    const end = timeframe.end ?? endOfDay(now);
+    const dayDiff = Math.max(differenceInCalendarDays(end, start), 0);
+    effectiveKey = dayDiff <= 1 ? 'day' : dayDiff <= 7 ? 'week' : dayDiff <= 31 ? 'month' : dayDiff <= 180 ? 'month' : 'year';
+    rangeStart = startOfDay(start);
+    rangeEnd = endOfDay(end);
+  } else if (timeframe.key === 'all') {
+    rangeStart = subYears(timeframe.end ?? now, 2);
+    rangeEnd = endOfDay(timeframe.end ?? now);
+    effectiveKey = 'year';
+  } else {
+    rangeStart = timeframe.start ? startOfDay(timeframe.start) : startOfDay(now);
+    rangeEnd = timeframe.end ? endOfDay(timeframe.end) : endOfDay(now);
+  }
+
+  const buckets: TimeframeBucket[] = [];
+  let cursor: Date;
+
+  switch (effectiveKey) {
+    case 'day': {
+      cursor = startOfHour(rangeStart);
+      const endHour = endOfDay(rangeEnd);
+      while (cursor <= endHour) {
+        buckets.push({
+          key: format(cursor, 'yyyy-MM-dd-HH'),
+          label: format(cursor, 'ha'),
+          sort: cursor.getTime()
+        });
+        cursor = addHours(cursor, 1);
+      }
+      break;
+    }
+    case 'week': {
+      cursor = startOfDay(rangeStart);
+      while (cursor <= rangeEnd) {
+        buckets.push({
+          key: format(cursor, 'yyyy-MM-dd'),
+          label: format(cursor, 'EEE dd'),
+          sort: cursor.getTime()
+        });
+        cursor = addDays(cursor, 1);
+      }
+      break;
+    }
+    case 'month': {
+      cursor = startOfWeek(rangeStart, { weekStartsOn: 1 });
+      const endWeek = startOfWeek(rangeEnd, { weekStartsOn: 1 });
+      while (cursor <= endWeek) {
+        buckets.push({
+          key: `${format(cursor, 'yyyy')}-W${format(cursor, 'II')}`,
+          label: format(cursor, 'MMM d'),
+          sort: cursor.getTime()
+        });
+        cursor = addWeeks(cursor, 1);
+      }
+      break;
+    }
+    case 'year':
+    case 'ytd':
+    default: {
+      cursor = startOfMonth(rangeStart);
+      const endMonth = startOfMonth(rangeEnd);
+      while (cursor <= endMonth) {
+        buckets.push({
+          key: format(cursor, 'yyyy-MM'),
+          label: format(cursor, 'MMM yy'),
+          sort: cursor.getTime()
+        });
+        cursor = addMonths(cursor, 1);
+      }
+      break;
+    }
+  }
+
+  return buckets;
+}
+
+function getTimeframeBucketKey(date: Date, timeframe: TimeframeInfo): string {
+  const now = new Date();
+  let effectiveKey: TimeframeKey = timeframe.key;
+
+  if (timeframe.key === 'custom' && timeframe.start && timeframe.end) {
+    const dayDiff = Math.max(differenceInCalendarDays(timeframe.end, timeframe.start), 0);
+    effectiveKey = dayDiff <= 1 ? 'day' : dayDiff <= 7 ? 'week' : dayDiff <= 31 ? 'month' : dayDiff <= 180 ? 'month' : 'year';
+  } else if (timeframe.key === 'all') {
+    effectiveKey = 'year';
+  }
+
+  const d = new Date(date);
+  switch (effectiveKey) {
+    case 'day':
+      return format(startOfHour(d), 'yyyy-MM-dd-HH');
+    case 'week':
+      return format(startOfDay(d), 'yyyy-MM-dd');
+    case 'month':
+      return `${format(startOfWeek(d, { weekStartsOn: 1 }), 'yyyy')}-W${format(startOfWeek(d, { weekStartsOn: 1 }), 'II')}`;
+    case 'year':
+    case 'ytd':
+    default:
+      return format(startOfMonth(d), 'yyyy-MM');
+  }
 }
 
 function computeAverage(values: number[]): number {
@@ -1204,6 +1323,55 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     dealMonthlyMap.set(key, current);
   });
 
+  const timeframeBuckets = buildTimeframeBuckets(context.timeframe);
+  const referralTimeframeMap = new Map<
+    string,
+    { total: number; transfers: number }
+  >();
+  filteredReferrals.forEach((referral) => {
+    if (!referral.createdAt) return;
+    const key = getTimeframeBucketKey(new Date(referral.createdAt), context.timeframe);
+    const current = referralTimeframeMap.get(key) ?? { total: 0, transfers: 0 };
+    current.total += 1;
+    if (referral.origin === 'admin' && referral.lender) {
+      current.transfers += 1;
+    }
+    referralTimeframeMap.set(key, current);
+  });
+
+  const dealTimeframeMap = new Map<string, { dealsClosed: number; revenueReceivedCents: number }>();
+  filteredPaymentsByNetwork.forEach((payment) => {
+    const metricDate = payment.metricDate ?? resolveMetricDate(payment);
+    if (!metricDate) return;
+    if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
+    if (payment.usedAssignedAgent !== true) return;
+    if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return;
+
+    const key = getTimeframeBucketKey(new Date(metricDate), context.timeframe);
+    const current = dealTimeframeMap.get(key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
+    current.dealsClosed += 1;
+    current.revenueReceivedCents += payment.receivedAmountCents ?? 0;
+    dealTimeframeMap.set(key, current);
+  });
+
+  const mainTrends = timeframeBuckets.map((bucket) => {
+    const referralStats = referralTimeframeMap.get(bucket.key) ?? { total: 0, transfers: 0 };
+    const dealStats = dealTimeframeMap.get(bucket.key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
+    const closeRate =
+      referralStats.total === 0
+        ? 0
+        : (dealStats.dealsClosed / Math.max(referralStats.total, 1)) * 100;
+    return {
+      key: bucket.key,
+      label: bucket.label,
+      totalReferrals: referralStats.total,
+      mcTransfers: referralStats.transfers,
+      dealsClosed: dealStats.dealsClosed,
+      revenueReceivedCents: dealStats.revenueReceivedCents,
+      closeRate: Number(closeRate.toFixed(1))
+    };
+  });
+
   const preApprovalMap = new Map<
     string,
     { preApprovals: number; ahaPreApprovals: number; ahaOosPreApprovals: number; updatedAt: Date }
@@ -1830,10 +1998,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     lostReferrals: lostReferrals.length
   },
       trends: {
-        revenue: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.revenueReceivedCents })),
-        deals: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.dealsClosed })),
-        closeRate: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.closeRate })),
-        mcTransfers: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.mcTransfers }))
+        revenue: mainTrends.map((entry) => ({ key: entry.key, label: entry.label, value: entry.revenueReceivedCents })),
+        deals: mainTrends.map((entry) => ({ key: entry.key, label: entry.label, value: entry.dealsClosed })),
+        closeRate: mainTrends.map((entry) => ({ key: entry.key, label: entry.label, value: entry.closeRate })),
+        mcTransfers: mainTrends.map((entry) => ({ key: entry.key, label: entry.label, value: entry.mcTransfers }))
       },
       revenueBySource,
       revenueByEndorser,
