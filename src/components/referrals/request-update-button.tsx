@@ -252,10 +252,14 @@ export function RequestUpdateButton({
           
           {/* Next Scheduled Send */}
           {nextSendInfo.nextAt ? (
-            <div className="flex items-center gap-1.5 text-blue-600 mt-2">
+            <div
+              className={`flex items-center gap-1.5 mt-2 ${nextSendInfo.nextAt.getTime() < Date.now() ? 'text-amber-600' : 'text-blue-600'}`}
+            >
               <Calendar className="h-3.5 w-3.5" />
               <span>
-                Next scheduled: {formatDate(nextSendInfo.nextAt)} ({daysSince(nextSendInfo.nextAt)})
+                {nextSendInfo.nextAt.getTime() < Date.now()
+                  ? `Overdue: ${formatDate(nextSendInfo.nextAt)} (${daysSince(nextSendInfo.nextAt)})`
+                  : `Next scheduled: ${formatDate(nextSendInfo.nextAt)} (${daysSince(nextSendInfo.nextAt)})`}
               </span>
             </div>
           ) : nextSendInfo.reason ? (
