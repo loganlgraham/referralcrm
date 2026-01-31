@@ -9,8 +9,8 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
 import { calculateReferralFeeDue } from '@/utils/referral';
-import { syncReferralTasks } from '@/lib/server/task-sync';
 import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
+import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
 
 interface RouteContext {
   params: { id: string };
@@ -277,10 +277,13 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
       content: `Updated referral details (${updatedFieldsLabel})`,
     });
 
-    // Sync follow-up tasks if timeline changed (affects task generation)
     if (changedDetailFields.includes('timeline')) {
-      syncReferralTasks(existing._id).catch((error) => {
-        console.error('[Task Sync] Failed to sync tasks after timeline change:', error);
+      await generateAndReconcileAdminTasks({
+        referralId: existing._id.toString(),
+        trigger: 'referral.timeline_changed',
+        actorId: session.user.id,
+      }).catch((error) => {
+        console.error('[Admin Tasks] Failed to reconcile tasks after timeline change:', error);
       });
     }
 

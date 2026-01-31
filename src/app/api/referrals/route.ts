@@ -15,7 +15,7 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { sendTransactionalEmail, isTransactionalEmailConfigured } from '@/lib/email';
 import { buildReferralLink } from '@/lib/referral-links';
 import { normalizePhoneNumber } from '@/utils/phone-utils';
-import { syncReferralTasks } from '@/lib/server/task-sync';
+import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
 import {
   addWeeks,
   format,
@@ -1154,9 +1154,12 @@ export async function POST(request: Request) {
     content: `Created referral for ${borrowerName || 'a new client'}`,
   });
 
-  // Sync follow-up tasks for the new referral (runs in background)
-  syncReferralTasks(referral._id).catch((error) => {
-    console.error('[Task Sync] Failed to sync tasks for new referral:', error);
+  await generateAndReconcileAdminTasks({
+    referralId: referral._id.toString(),
+    trigger: 'referral.created',
+    actorId: session.user.id,
+  }).catch((error) => {
+    console.error('[Admin Tasks] Failed to reconcile tasks for new referral:', error);
   });
 
   // Send email notification to kristen.truong@americanhomeagents.com

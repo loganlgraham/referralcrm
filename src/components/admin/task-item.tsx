@@ -1,0 +1,190 @@
+'use client';
+
+import { useState } from 'react';
+import { addDays } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
+import { CheckCircle2, Circle, MoreHorizontal } from 'lucide-react';
+import { toast } from 'sonner';
+
+const SLA_TIME_ZONE = 'America/Denver';
+
+function getSnoozeBaseDate(task: TaskItemData): Date {
+  const effective = task.effectiveDueAt ?? task.dueAt;
+  if (effective) {
+    const d = new Date(effective);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  return new Date();
+}
+
+export interface TaskItemData {
+  _id: string;
+  referralId: string;
+  title: string;
+  status: 'open' | 'completed' | 'dismissed';
+  dueAt?: string;
+  dueAtOverride?: string;
+  snoozedUntil?: string;
+  ruleKey?: string | null;
+  effectiveDueAt: string | null;
+}
+
+function formatDueDate(value: string | null | undefined): string {
+  if (!value) return 'No due date';
+  try {
+    return formatInTimeZone(new Date(value), SLA_TIME_ZONE, "MMM d, yyyy h:mm a 'MT'");
+  } catch {
+    return new Date(value).toLocaleString();
+  }
+}
+
+interface TaskItemProps {
+  task: TaskItemData;
+  showAsCompleted?: boolean;
+  onComplete: (taskId: string) => void | Promise<void>;
+  onDismiss: (taskId: string) => void | Promise<void>;
+  onSnooze: (taskId: string, until: Date) => void | Promise<void>;
+  onUnsnooze: (taskId: string) => void | Promise<void>;
+  onSetDueOverride: (taskId: string, overrideValue: string | null) => void | Promise<void>;
+  expandedTaskId: string | null;
+  onToggleExpand: (taskId: string) => void;
+}
+
+export function TaskItem({
+  task,
+  showAsCompleted = false,
+  onComplete,
+  onDismiss,
+  onSnooze,
+  onUnsnooze,
+  onSetDueOverride,
+  expandedTaskId,
+  onToggleExpand,
+}: TaskItemProps) {
+  const [dueOverride, setDueOverride] = useState('');
+  const isExpanded = expandedTaskId === task._id;
+  const isSnoozed = task.snoozedUntil && new Date(task.snoozedUntil) > new Date();
+
+  const handleSnoozePreset = (days: number) => {
+    const base = getSnoozeBaseDate(task);
+    const until = addDays(base, days);
+    void onSnooze(task._id, until);
+    onToggleExpand(task._id);
+  };
+
+  const handleSetReschedule = () => {
+    if (!dueOverride) {
+      toast.error('Select a date first');
+      return;
+    }
+    const d = new Date(dueOverride);
+    if (Number.isNaN(d.getTime())) {
+      toast.error('Invalid date');
+      return;
+    }
+    void onSetDueOverride(task._id, dueOverride);
+    setDueOverride('');
+    onToggleExpand(task._id);
+  };
+
+  const handleResetReschedule = () => {
+    void onSetDueOverride(task._id, null);
+    setDueOverride('');
+    onToggleExpand(task._id);
+  };
+
+  return (
+    <li className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+      {!showAsCompleted ? (
+        <button
+          type="button"
+          onClick={() => onComplete(task._id)}
+          className="mt-0.5 shrink-0 text-slate-400 transition hover:text-brand"
+          title="Complete"
+        >
+          <Circle className="h-5 w-5" />
+        </button>
+      ) : (
+        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-slate-900">{task.title}</p>
+        <p className="text-xs text-slate-500">
+          {formatDueDate(task.effectiveDueAt ?? task.dueAt)}
+          {isSnoozed && <span className="ml-1 text-amber-600">(snoozed)</span>}
+        </p>
+        {isExpanded && !showAsCompleted && (
+          <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
+            {task.ruleKey && (
+              <button
+                type="button"
+                onClick={() => onDismiss(task._id)}
+                className="block text-xs font-semibold text-rose-600 hover:underline"
+              >
+                Dismiss
+              </button>
+            )}
+            {isSnoozed ? (
+              <button
+                type="button"
+                onClick={() => onUnsnooze(task._id)}
+                className="block text-xs font-semibold text-slate-600 hover:underline"
+              >
+                Unsnooze
+              </button>
+            ) : (
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="mr-1 text-xs text-slate-500">Snooze:</span>
+                {([1, 3, 7, 30] as const).map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    onClick={() => handleSnoozePreset(days)}
+                    className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    +{days} day{days === 1 ? '' : 's'}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-slate-500">Reschedule:</span>
+              <input
+                type="datetime-local"
+                value={dueOverride}
+                onChange={(e) => setDueOverride(e.target.value)}
+                className="rounded border border-slate-200 px-2 py-1 text-xs"
+              />
+              <button
+                type="button"
+                onClick={handleSetReschedule}
+                disabled={!dueOverride}
+                className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+              >
+                Set
+              </button>
+              {task.dueAtOverride && (
+                <button
+                  type="button"
+                  onClick={handleResetReschedule}
+                  className="text-xs font-semibold text-slate-600 hover:underline"
+                >
+                  Reset to original
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      {!showAsCompleted && (
+        <button
+          type="button"
+          onClick={() => onToggleExpand(task._id)}
+          className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+      )}
+    </li>
+  );
+}

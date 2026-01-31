@@ -18,7 +18,7 @@ export const navItems: NavItem[] = [
   { type: 'link', href: '/dashboard', label: 'Dashboard', roles: ['admin'] },
   { type: 'link', href: '/referrals', label: 'Referrals', roles: ['admin', 'mc', 'agent'] },
   { type: 'link', href: '/deals', label: 'Deals', roles: ['admin', 'agent'] },
-  { type: 'link', href: '/referrals/follow-ups', label: 'Follow-up Tasks', roles: ['admin', 'mc', 'agent'] },
+  { type: 'link', href: '/admin/tasks', label: 'Admin Tasks', roles: ['admin'] },
   { type: 'divider' },
   { type: 'link', href: '/agents', label: 'Agents', roles: ['admin'] },
   { type: 'link', href: '/find-agent', label: 'Find Referral Agent', roles: ['agent'] },
@@ -74,7 +74,7 @@ export function Sidebar({ session, className }: { session: Session; className?: 
 
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const isReferralsParent =
-            item.href === '/referrals' && pathname.startsWith('/referrals/follow-ups');
+            item.href === '/referrals' && pathname.startsWith('/admin/tasks');
           const active = isActive && !isReferralsParent;
 
           return (
