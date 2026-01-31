@@ -1258,6 +1258,20 @@ function MainDashboard({
   onPreApprovalSaved: () => void;
 }) {
   const summary = data.summary;
+  const realizedRevenueCents = Math.max(summary.realizedRevenueCents ?? 0, 0);
+  const expectedRevenueCents = Math.max(summary.expectedRevenueCents ?? 0, 0);
+  const closedNotPaidCents = Math.max(summary.closedNotPaidCents ?? 0, 0);
+
+  // "Expected revenue" here is outstanding expected (not total), so use:
+  // realized / (realized + outstanding)
+  const revenueRealizationRate =
+    realizedRevenueCents + expectedRevenueCents > 0
+      ? (realizedRevenueCents / (realizedRevenueCents + expectedRevenueCents)) * 100
+      : null;
+
+  // Share of outstanding expected that is already in a closed-but-not-paid state.
+  const closedNotPaidPercentOfExpected =
+    expectedRevenueCents > 0 ? (closedNotPaidCents / expectedRevenueCents) * 100 : null;
 
   const highlights: {
     title: string;
@@ -1312,9 +1326,17 @@ function MainDashboard({
   const revenueMetrics = [
     { label: 'Expected revenue', value: formatCurrency(summary.expectedRevenueCents) },
     { label: 'Closed, not paid', value: formatCurrency(summary.closedNotPaidCents) },
+    {
+      label: 'Revenue realization rate',
+      value: revenueRealizationRate == null ? '—' : `${revenueRealizationRate.toFixed(1)}%`
+    },
+    {
+      label: 'Closed-not-paid % of expected',
+      value:
+        closedNotPaidPercentOfExpected == null ? '—' : `${closedNotPaidPercentOfExpected.toFixed(1)}%`
+    },
     { label: 'Total volume closed', value: formatCurrency(summary.totalVolumeClosedCents) },
     { label: 'Avg. referral fee paid', value: formatCurrency(summary.averageReferralFeePaidCents) },
-    { label: 'Avg. days new lead → under contract', value: `${summary.averageDaysNewLeadToContract.toFixed(1)} days` },
     { label: 'Avg. days closed → paid', value: `${summary.averageDaysClosedToPaid.toFixed(1)} days` },
     { label: 'Avg. closed deal amount', value: formatCurrency(summary.averageClosedDealAmountCents) }
   ];
