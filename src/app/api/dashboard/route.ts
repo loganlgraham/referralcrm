@@ -1404,11 +1404,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   // Close Rate: cohort-based (deals from referrals created in month X / referrals in month X)
+  // Use closed/paid only (not payment_sent) to match card close rate
   const dealsFromCohort = new Map<string, number>();
   paymentsByNetwork.forEach((payment) => {
     if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
     if (payment.usedAssignedAgent !== true) return;
-    if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return;
+    if (payment.status !== 'closed' && payment.status !== 'paid') return;
 
     const referralCreatedAt = payment.referral?.createdAt ? new Date(payment.referral.createdAt) : null;
     if (!referralCreatedAt) return;
@@ -1544,6 +1545,34 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       preApprovalsUpdatedAt: preApprovalStats.updatedAt
     };
   });
+
+  // Derive card deals closed from same source as graph (dealsByClosingDate)
+  const dealsClosedForSummary = (() => {
+    let sum = 0;
+    for (const [key, stats] of dealsByClosingDate) {
+      const [y, m] = key.split('-').map(Number);
+      const bucketStart = startOfMonth(new Date(y, m - 1, 1));
+      if (timeframeEnd && bucketStart > timeframeEnd) continue;
+      if (timeframeStart && bucketStart < timeframeStart) continue;
+      sum += stats.dealsClosed;
+    }
+    return sum;
+  })();
+
+  // Derive card close rate from same source as graph (monthlyReferrals)
+  const closeRateForSummary = (() => {
+    let sumDeals = 0;
+    let sumReferrals = 0;
+    for (const entry of monthlyReferrals) {
+      const [y, m] = entry.monthKey.split('-').map(Number);
+      const bucketStart = startOfMonth(new Date(y, m - 1, 1));
+      if (timeframeEnd && bucketStart > timeframeEnd) continue;
+      if (timeframeStart && bucketStart < timeframeStart) continue;
+      sumDeals += entry.totalReferrals === 0 ? 0 : (entry.closeRate / 100) * entry.totalReferrals;
+      sumReferrals += entry.totalReferrals;
+    }
+    return sumReferrals === 0 ? 0 : (sumDeals / sumReferrals) * 100;
+  })();
 
   const afcRelevant = filteredPaymentsByNetwork.filter(
     (payment) =>
@@ -2093,12 +2122,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     main: {
       summary: {
         totalReferrals,
-        dealsClosed: dealsClosedInTimeframe.length,
+        dealsClosed: dealsClosedForSummary,
+        dealsClosedInTimeframe: dealsClosedForSummary,
         dealsUnderContract: dealsUnderContract.length,
         pendingClosings: pendingClosings.length,
         pendingClosingsThisMonth: pendingClosingsThisMonth.length,
         pendingClosingsNextMonth: pendingClosingsNextMonth.length,
-        closeRate,
+        closeRate: closeRateForSummary,
         afcDealsLost,
         afcAttachRate,
         ahaDealsLost,
