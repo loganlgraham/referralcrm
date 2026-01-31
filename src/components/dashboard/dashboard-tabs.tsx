@@ -1273,11 +1273,11 @@ function MainDashboard({
       extraStats: [{ label: 'Closed, not paid', value: formatCurrency(summary.closedNotPaidCents) }]
     },
     {
-      title: 'Pending closings',
+      title: 'Total Future Closings',
       value: formatNumber(summary.pendingClosings),
       extraStats: [
-        { label: 'This month', value: formatNumber(summary.pendingClosingsThisMonth) },
-        { label: 'Next month', value: formatNumber(summary.pendingClosingsNextMonth) }
+        { label: 'Closings this month', value: formatNumber(summary.pendingClosingsThisMonth) },
+        { label: 'Closings next month', value: formatNumber(summary.pendingClosingsNextMonth) }
       ]
     },
     {
