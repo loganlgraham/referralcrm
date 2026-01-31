@@ -41,6 +41,7 @@ interface ReferralDetailNote {
 interface ReferralDetail {
   _id: string;
   createdAt: string;
+  referralDate?: string | null;
   loanFileNumber: string;
   source?: ReferralSource | null;
   endorser?: string | null;
@@ -121,7 +122,7 @@ interface DetailDraft {
   loanType: string;
   preApprovalAmount: string;
   timeline: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified';
-  createdAt: string;
+  referralDate: string;
 }
 
 const DETAIL_FIELD_KEYS: (keyof DetailDraft)[] = [
@@ -135,6 +136,7 @@ const DETAIL_FIELD_KEYS: (keyof DetailDraft)[] = [
   'loanType',
   'preApprovalAmount',
   'timeline',
+  'referralDate',
 ];
 
 const ensureString = (value: unknown) => (typeof value === 'string' ? value : '');
@@ -293,7 +295,7 @@ const createDetailDraft = (referral: ReferralDetail): DetailDraft => ({
   timeline: (referral?.timeline && REFERRAL_TIMELINE_VALUES.includes(referral.timeline as any))
     ? (referral.timeline as DetailDraft['timeline'])
     : 'not_specified',
-  createdAt: isoToDateTimeLocal(referral?.createdAt),
+  referralDate: isoToDateTimeLocal(referral?.referralDate ?? null),
 });
 
 const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
@@ -307,7 +309,7 @@ const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
   loanType: draft.loanType.trim(),
   preApprovalAmount: sanitizeCurrencyInput(draft.preApprovalAmount),
   timeline: draft.timeline,
-  createdAt: draft.createdAt.trim(),
+  referralDate: draft.referralDate.trim(),
 });
 
 const formatFullAddress = (
@@ -589,14 +591,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       referral.loanType,
       referral.preApprovalAmountCents,
       referral.timeline,
-      referral.createdAt,
+      referral.referralDate,
     ]
   );
   const detailsChanged = useMemo(
     () => {
       const standardFieldsChanged = DETAIL_FIELD_KEYS.some((field) => normalizedDetailDraft[field] !== normalizedCurrentDetails[field]);
-      const createdAtChanged = viewerRole === 'admin' && normalizedDetailDraft.createdAt !== normalizedCurrentDetails.createdAt;
-      return standardFieldsChanged || createdAtChanged;
+      const referralDateChanged = viewerRole === 'admin' && normalizedDetailDraft.referralDate !== normalizedCurrentDetails.referralDate;
+      return standardFieldsChanged || referralDateChanged;
     },
     [normalizedDetailDraft, normalizedCurrentDetails, viewerRole]
   );
@@ -635,7 +637,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referral.borrowerCurrentAddress,
     referral.stageOnTransfer,
     referral.timeline,
-    referral.createdAt,
+    referral.referralDate,
   ]);
 
   useEffect(() => {
@@ -805,9 +807,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     let preApprovalAmountValue: number | undefined;
 
     const standardFieldsChanged = DETAIL_FIELD_KEYS.some((field) => normalizedDraft[field] !== normalizedCurrent[field]);
-    const createdAtChanged = viewerRole === 'admin' && normalizedDraft.createdAt !== normalizedCurrent.createdAt;
+    const referralDateChanged = viewerRole === 'admin' && normalizedDraft.referralDate !== normalizedCurrent.referralDate;
     
-    if (!standardFieldsChanged && !createdAtChanged) {
+    if (!standardFieldsChanged && !referralDateChanged) {
       toast.info('No changes to save');
       setIsEditingDetails(false);
       return;
@@ -847,6 +849,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
     const payload: Record<string, unknown> = {};
     DETAIL_FIELD_KEYS.forEach((field) => {
+      if (field === 'referralDate') return; // Handled separately below
       if (normalizedDraft[field] !== normalizedCurrent[field]) {
         if (field === 'preApprovalAmount') {
           payload.preApprovalAmount = preApprovalAmountValue;
@@ -856,12 +859,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       }
     });
 
-    // Handle createdAt separately - only for admin users
-    if (viewerRole === 'admin' && createdAtChanged) {
-      const isoDate = dateTimeLocalToISO(normalizedDraft.createdAt);
-      if (isoDate) {
-        payload.createdAt = isoDate;
-      }
+    // Handle referralDate separately - only for admin users
+    if (viewerRole === 'admin' && referralDateChanged) {
+      const isoDate = normalizedDraft.referralDate ? dateTimeLocalToISO(normalizedDraft.referralDate) : null;
+      payload.referralDate = isoDate ?? null;
     }
 
     if (payload.lookingInZip) {
@@ -954,30 +955,19 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               : Math.round(preApprovalAmountValue * 100),
         };
 
-        // Update createdAt from response if it was changed
-        if (createdAtChanged) {
-          if (updatedReferral?.createdAt) {
-            // API response will have createdAt as ISO string after JSON serialization
-            const responseCreatedAt = updatedReferral.createdAt;
-            if (typeof responseCreatedAt === 'string') {
-              baseUpdate.createdAt = responseCreatedAt;
-            } else {
-              // Fallback: try to parse as date (shouldn't happen with JSON, but just in case)
-              try {
-                baseUpdate.createdAt = new Date(responseCreatedAt as unknown as string | number | Date).toISOString();
-              } catch {
-                // If response parsing fails, use the ISO date we sent
-                const isoDate = dateTimeLocalToISO(normalizedDraft.createdAt);
-                if (isoDate) {
-                  baseUpdate.createdAt = isoDate;
-                }
-              }
-            }
+        // Update referralDate from response if it was changed
+        if (referralDateChanged && updatedReferral) {
+          const responseReferralDate = updatedReferral.referralDate;
+          if (responseReferralDate === null || responseReferralDate === undefined) {
+            baseUpdate.referralDate = null;
+          } else if (typeof responseReferralDate === 'string') {
+            baseUpdate.referralDate = responseReferralDate;
           } else {
-            // If response doesn't include createdAt, use the ISO date we sent
-            const isoDate = dateTimeLocalToISO(normalizedDraft.createdAt);
-            if (isoDate) {
-              baseUpdate.createdAt = isoDate;
+            try {
+              baseUpdate.referralDate = new Date(responseReferralDate as unknown as string | number | Date).toISOString();
+            } catch {
+              const isoDate = normalizedDraft.referralDate ? dateTimeLocalToISO(normalizedDraft.referralDate) : null;
+              baseUpdate.referralDate = isoDate ?? null;
             }
           }
         }
@@ -985,7 +975,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         return baseUpdate;
       });
       
-      // Update details draft with the normalized draft (which includes updated createdAt)
+      // Update details draft with the normalized draft (which includes updated referralDate)
       setDetailsDraft(normalizedDraft);
       setIsEditingDetails(false);
       toast.success('Referral details updated');
@@ -1366,12 +1356,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               </label>
               {viewerRole === 'admin' && (
                 <label className="space-y-1 text-sm font-medium text-slate-600">
-                  <span>Created Date</span>
+                  <span>Referral date (historical)</span>
                   <input
                     type="datetime-local"
-                    name="createdAt"
-                    value={detailsDraft.createdAt}
-                    onChange={handleDetailInputChange('createdAt')}
+                    name="referralDate"
+                    value={detailsDraft.referralDate}
+                    onChange={handleDetailInputChange('referralDate')}
                     disabled={savingDetails}
                     className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                   />
@@ -1455,10 +1445,16 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   : '—'}
               </dd>
             </div>
+            <div className="space-y-1">
+              <dt className="text-xs uppercase text-slate-500">Entered into CRM</dt>
+              <dd className="text-sm text-slate-700">{formatDate(referral.createdAt)}</dd>
+            </div>
             {viewerRole === 'admin' && (
               <div className="space-y-1">
-                <dt className="text-xs uppercase text-slate-500">Created Date</dt>
-                <dd className="text-sm text-slate-700">{formatDate(referral.createdAt)}</dd>
+                <dt className="text-xs uppercase text-slate-500">Referral date (historical)</dt>
+                <dd className="text-sm text-slate-700">
+                  {referral.referralDate ? formatDate(referral.referralDate) : '—'}
+                </dd>
               </div>
             )}
             <div className="space-y-1 sm:col-span-2 lg:col-span-3">

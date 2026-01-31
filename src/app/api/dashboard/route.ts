@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Types } from 'mongoose';
 import {
+  addDays,
+  addHours,
+  addMonths,
+  addWeeks,
   differenceInCalendarDays,
   endOfDay,
   format,
   startOfDay,
   endOfMonth,
-  addMonths,
   startOfHour,
   startOfMonth,
   startOfWeek,
@@ -66,6 +69,7 @@ interface AggregatedPayment {
   referral: {
     _id: Types.ObjectId;
     createdAt: Date;
+    referralDate?: Date | null;
     source: 'Lender' | 'MC';
     endorser?: string;
     origin?: 'agent' | 'mc' | 'admin' | '';
@@ -106,6 +110,7 @@ interface AggregatedPayment {
 interface DashboardReferral {
   _id: Types.ObjectId;
   createdAt: Date;
+  referralDate?: Date | null;
   source: 'Lender' | 'MC';
   endorser?: string;
   origin?: 'agent' | 'mc' | 'admin' | '';
@@ -479,6 +484,122 @@ function groupTrendByTimeframe(dates: Date[], timeframe: TimeframeInfo): TrendPo
     .map(({ sort: _sort, ...rest }) => rest);
 }
 
+interface TimeframeBucket {
+  key: string;
+  label: string;
+  sort: number;
+}
+
+function buildTimeframeBuckets(timeframe: TimeframeInfo): TimeframeBucket[] {
+  const now = new Date();
+  let effectiveKey: TimeframeKey = timeframe.key;
+  let rangeStart: Date;
+  let rangeEnd: Date;
+
+  if (timeframe.key === 'custom') {
+    const start = timeframe.start ?? startOfMonth(now);
+    const end = timeframe.end ?? endOfDay(now);
+    const dayDiff = Math.max(differenceInCalendarDays(end, start), 0);
+    effectiveKey = dayDiff <= 1 ? 'day' : dayDiff <= 7 ? 'week' : dayDiff <= 31 ? 'month' : dayDiff <= 180 ? 'month' : 'year';
+    rangeStart = startOfDay(start);
+    rangeEnd = endOfDay(end);
+  } else if (timeframe.key === 'all') {
+    rangeStart = subYears(timeframe.end ?? now, 2);
+    rangeEnd = endOfDay(timeframe.end ?? now);
+    effectiveKey = 'year';
+  } else {
+    rangeStart = timeframe.start ? startOfDay(timeframe.start) : startOfDay(now);
+    rangeEnd = timeframe.end ? endOfDay(timeframe.end) : endOfDay(now);
+  }
+
+  const buckets: TimeframeBucket[] = [];
+  let cursor: Date;
+
+  switch (effectiveKey) {
+    case 'day': {
+      cursor = startOfHour(rangeStart);
+      const endHour = endOfDay(rangeEnd);
+      while (cursor <= endHour) {
+        buckets.push({
+          key: format(cursor, 'yyyy-MM-dd-HH'),
+          label: format(cursor, 'ha'),
+          sort: cursor.getTime()
+        });
+        cursor = addHours(cursor, 1);
+      }
+      break;
+    }
+    case 'week': {
+      cursor = startOfDay(rangeStart);
+      while (cursor <= rangeEnd) {
+        buckets.push({
+          key: format(cursor, 'yyyy-MM-dd'),
+          label: format(cursor, 'EEE dd'),
+          sort: cursor.getTime()
+        });
+        cursor = addDays(cursor, 1);
+      }
+      break;
+    }
+    case 'month': {
+      cursor = startOfWeek(rangeStart, { weekStartsOn: 1 });
+      const endWeek = startOfWeek(rangeEnd, { weekStartsOn: 1 });
+      while (cursor <= endWeek) {
+        buckets.push({
+          key: `${format(cursor, 'yyyy')}-W${format(cursor, 'II')}`,
+          label: format(cursor, 'MMM d'),
+          sort: cursor.getTime()
+        });
+        cursor = addWeeks(cursor, 1);
+      }
+      break;
+    }
+    case 'year':
+    case 'ytd':
+    default: {
+      cursor = startOfMonth(rangeStart);
+      const endMonth = startOfMonth(rangeEnd);
+      while (cursor <= endMonth) {
+        buckets.push({
+          key: format(cursor, 'yyyy-MM'),
+          label: format(cursor, 'MMM yy'),
+          sort: cursor.getTime()
+        });
+        cursor = addMonths(cursor, 1);
+      }
+      break;
+    }
+  }
+
+  return buckets;
+}
+
+function getTimeframeBucketKey(date: Date, timeframe: TimeframeInfo): string {
+  const now = new Date();
+  let effectiveKey: TimeframeKey = timeframe.key;
+
+  if (timeframe.key === 'custom' && timeframe.start && timeframe.end) {
+    const dayDiff = Math.max(differenceInCalendarDays(timeframe.end, timeframe.start), 0);
+    effectiveKey = dayDiff <= 1 ? 'day' : dayDiff <= 7 ? 'week' : dayDiff <= 31 ? 'month' : dayDiff <= 180 ? 'month' : 'year';
+  } else if (timeframe.key === 'all') {
+    effectiveKey = 'year';
+  }
+
+  const d = new Date(date);
+  switch (effectiveKey) {
+    case 'day':
+      return format(startOfHour(d), 'yyyy-MM-dd-HH');
+    case 'week':
+      return format(startOfDay(d), 'yyyy-MM-dd');
+    case 'month':
+      return `${format(startOfWeek(d, { weekStartsOn: 1 }), 'yyyy')}-W${format(startOfWeek(d, { weekStartsOn: 1 }), 'II')}`;
+    case 'year':
+    case 'ytd':
+    default:
+      return format(startOfMonth(d), 'yyyy-MM');
+  }
+}
+
 function computeAverage(values: number[]): number {
   if (!values.length) return 0;
   const total = values.reduce((sum, value) => sum + value, 0);
@@ -563,6 +684,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         summary: {
           totalReferrals: 0,
           dealsClosed: 0,
+          dealsClosedInTimeframe: 0,
           dealsUnderContract: 0,
           pendingClosings: 0,
           pendingClosingsThisMonth: 0,
@@ -670,7 +792,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...referralMatch,
   })
     .select(
-      'createdAt status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin sla lookingInZip lookingInZips'
+      'createdAt referralDate status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin sla lookingInZip lookingInZips'
     )
     .lean<DashboardReferral[]>()
     .exec();
@@ -720,6 +842,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         referral: {
           _id: '$referral._id',
           createdAt: '$referral.createdAt',
+          referralDate: '$referral.referralDate',
           source: '$referral.source',
           endorser: '$referral.endorser',
           origin: '$referral.origin',
@@ -1089,18 +1212,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           return storedDays;
         }
 
-        const createdAt = payment.referral?.createdAt ? new Date(payment.referral.createdAt) : null;
+        const leadStart = payment.referral?.referralDate
+          ? new Date(payment.referral.referralDate)
+          : payment.referral?.createdAt
+            ? new Date(payment.referral.createdAt)
+            : null;
         const underContractAt = payment.referral?.sla?.lastUnderContractAt
           ? new Date(payment.referral.sla.lastUnderContractAt)
           : null;
 
-        if (createdAt && underContractAt) {
-          return differenceInCalendarDays(underContractAt, createdAt);
+        if (leadStart && underContractAt) {
+          return differenceInCalendarDays(underContractAt, leadStart);
         }
 
-        if (createdAt && payment.status === 'under_contract') {
+        if (leadStart && payment.status === 'under_contract') {
           const paymentCreatedAt = new Date(payment.updatedAt);
-          return differenceInCalendarDays(paymentCreatedAt, createdAt);
+          return differenceInCalendarDays(paymentCreatedAt, leadStart);
         }
 
         return null;
@@ -1284,6 +1411,68 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!referralIds?.has(payment.referral._id.toString())) return;
 
     dealsFromCohort.set(key, (dealsFromCohort.get(key) ?? 0) + 1);
+  });
+
+  const timeframeBuckets = buildTimeframeBuckets(context.timeframe);
+  const referralTimeframeMap = new Map<
+    string,
+    { total: number; transfers: number }
+  >();
+  filteredReferrals.forEach((referral) => {
+    if (!referral.createdAt) return;
+    const key = getTimeframeBucketKey(new Date(referral.createdAt), context.timeframe);
+    const current = referralTimeframeMap.get(key) ?? { total: 0, transfers: 0 };
+    current.total += 1;
+    if (referral.origin === 'admin' && referral.lender) {
+      current.transfers += 1;
+    }
+    referralTimeframeMap.set(key, current);
+  });
+
+  const dealTimeframeMap = new Map<string, { dealsClosed: number; revenueReceivedCents: number }>();
+  filteredPaymentsByNetwork.forEach((payment) => {
+    const metricDate = payment.metricDate ?? resolveMetricDate(payment);
+    if (!metricDate) return;
+    if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
+    if (payment.usedAssignedAgent !== true) return;
+    if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return;
+
+    const key = getTimeframeBucketKey(new Date(metricDate), context.timeframe);
+    const current = dealTimeframeMap.get(key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
+    current.dealsClosed += 1;
+    current.revenueReceivedCents += payment.receivedAmountCents ?? 0;
+    dealTimeframeMap.set(key, current);
+  });
+
+  // Close rate per bucket: deals (closed/paid) whose referral was created in that bucket
+  const dealsClosedByReferralBucket = new Map<string, number>();
+  filteredPaymentsByNetwork.forEach((payment) => {
+    if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
+    if (payment.usedAssignedAgent !== true) return;
+    if (payment.status !== 'closed' && payment.status !== 'paid') return;
+    const createdAt = payment.referral?.createdAt;
+    if (!createdAt) return;
+    const key = getTimeframeBucketKey(new Date(createdAt), context.timeframe);
+    dealsClosedByReferralBucket.set(key, (dealsClosedByReferralBucket.get(key) ?? 0) + 1);
+  });
+
+  const mainTrends = timeframeBuckets.map((bucket) => {
+    const referralStats = referralTimeframeMap.get(bucket.key) ?? { total: 0, transfers: 0 };
+    const dealStats = dealTimeframeMap.get(bucket.key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
+    const dealsClosedForCloseRate = dealsClosedByReferralBucket.get(bucket.key) ?? 0;
+    const closeRate =
+      referralStats.total === 0
+        ? 0
+        : (dealsClosedForCloseRate / Math.max(referralStats.total, 1)) * 100;
+    return {
+      key: bucket.key,
+      label: bucket.label,
+      totalReferrals: referralStats.total,
+      mcTransfers: referralStats.transfers,
+      dealsClosed: dealStats.dealsClosed,
+      revenueReceivedCents: dealStats.revenueReceivedCents,
+      closeRate: Number(closeRate.toFixed(1))
+    };
   });
 
   const preApprovalMap = new Map<
@@ -1686,8 +1875,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return metricDate ? isWithinTimeframe(metricDate) : false;
   });
 
-  const assignedReferrals = adminEligibleReferrals.filter((referral) => Boolean(referral.assignedAgent)).length;
-  const unassignedReferrals = Math.max(adminEligibleReferrals.length - assignedReferrals, 0);
+  const unassignedReferrals = adminEligibleReferrals.filter(
+    (referral) => (referral.status ?? '').toLowerCase() === 'new lead'
+  ).length;
+  const assignedReferrals = Math.max(adminEligibleReferrals.length - unassignedReferrals, 0);
   const assignmentRate = adminEligibleReferrals.length
     ? (assignedReferrals / adminEligibleReferrals.length) * 100
     : 0;
@@ -1716,11 +1907,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .filter((value): value is number => value != null)
   );
 
-  const daysToContractAvg = computeAverage(
-    slaFields
-      .map((sla) => sla.daysToContract ?? null)
-      .filter((value): value is number => value != null)
-  );
+  const daysToContractValues = adminEligibleReferrals
+    .filter((referral): referral is typeof referral & { sla: NonNullable<typeof referral.sla> } =>
+      Boolean(referral.sla)
+    )
+    .map((referral) => {
+      const stored = referral.sla.daysToContract;
+      if (stored != null && stored >= 0) return stored;
+
+      const referralDate = referral.referralDate ? new Date(referral.referralDate) : null;
+      const lastUnderContractAt = referral.sla.lastUnderContractAt
+        ? new Date(referral.sla.lastUnderContractAt)
+        : null;
+      if (referralDate && lastUnderContractAt && lastUnderContractAt >= referralDate) {
+        return differenceInCalendarDays(lastUnderContractAt, referralDate);
+      }
+      return null;
+    })
+    .filter((value): value is number => value != null && value >= 0);
+  const daysToContractAvg = computeAverage(daysToContractValues);
 
   const daysToCloseAvg = computeAverage(
     slaFields

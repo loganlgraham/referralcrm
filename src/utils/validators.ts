@@ -40,7 +40,7 @@ export const updateReferralSchema = z.object({
   loanType: z.string().optional(),
   preApprovalAmount: z.number().min(0).optional(),
   timeline: z.enum(REFERRAL_TIMELINE_VALUES).optional(),
-  createdAt: z.string().datetime().optional(),
+  referralDate: z.union([z.string().datetime(), z.null()]).optional(),
 });
 
 export const createActivitySchema = z.object({
