@@ -16,6 +16,7 @@ import {
 } from 'date-fns';
 import { connectMongo } from '@/lib/mongoose';
 import { getCurrentSession } from '@/lib/auth';
+import { zipToState, inferStateFromLocationText } from '@/utils/location';
 import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
 import { Agent } from '@/models/agent';
@@ -320,6 +321,51 @@ function extractState(
       return looseMatch[1].toUpperCase();
     }
   }
+  return 'Unknown';
+}
+
+type ReferralForState = {
+  lookingInZip?: string;
+  lookingInZips?: string[] | null;
+  propertyState?: string;
+  propertyAddress?: string;
+  borrowerCurrentAddress?: string;
+};
+
+async function extractStateAsync(referral: ReferralForState): Promise<string> {
+  const zips = Array.isArray(referral.lookingInZips)
+    ? referral.lookingInZips.filter((z) => typeof z === 'string' && /^\d{5}$/.test(z.trim()))
+    : [];
+  const primaryZip =
+    zips[0] ??
+    (referral.lookingInZip && /^\d{5}$/.test(referral.lookingInZip.trim()) ? referral.lookingInZip.trim() : null);
+  if (primaryZip) {
+    const state = zipToState(primaryZip);
+    if (state) return state;
+  }
+
+  const normalizedState = referral.propertyState?.toString().trim().toUpperCase();
+  if (normalizedState) return normalizedState;
+
+  const candidates = [referral.propertyAddress, referral.borrowerCurrentAddress];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const match = candidate.match(/,\s*([A-Za-z]{2})\s*\d{5}/);
+    if (match?.[1]) return match[1].toUpperCase();
+    const looseMatch = candidate.match(/,\s*([A-Za-z]{2})\b/);
+    if (looseMatch?.[1]) return looseMatch[1].toUpperCase();
+  }
+
+  const fallbackTexts = [
+    referral.propertyState,
+    referral.propertyAddress,
+    referral.borrowerCurrentAddress
+  ].filter((t): t is string => Boolean(t?.toString().trim()));
+  for (const text of fallbackTexts) {
+    const state = await inferStateFromLocationText(text.toString().trim());
+    if (state) return state;
+  }
+
   return 'Unknown';
 }
 
@@ -851,14 +897,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const referralRequestsBySourceMap = new Map<string, number>();
   const referralRequestsByEndorserMap = new Map<string, number>();
   const referralRequestsByStateMap = new Map<string, number>();
-  filteredReferrals.forEach((referral) => {
+  for (const referral of filteredReferrals) {
     const source = String(referral.source ?? 'Unknown');
     referralRequestsBySourceMap.set(source, (referralRequestsBySourceMap.get(source) ?? 0) + 1);
     const endorser = referral.endorser?.trim() || 'Unattributed';
     referralRequestsByEndorserMap.set(endorser, (referralRequestsByEndorserMap.get(endorser) ?? 0) + 1);
-    const state = extractState(referral);
+    const state = await extractStateAsync(referral);
     referralRequestsByStateMap.set(state, (referralRequestsByStateMap.get(state) ?? 0) + 1);
-  });
+  }
   // Close rate calculation: For accurate close rate, we need to match deals to referrals
   // created in the timeframe, not just deals closed in the timeframe.
   // This ensures we're measuring "of referrals created this period, how many closed?"
@@ -1090,9 +1136,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const revenueByEndorserMap = new Map<string, number>();
   const revenueByStateMap = new Map<string, number>();
 
-  revenueEligiblePayments.forEach((payment) => {
+  for (const payment of revenueEligiblePayments) {
     const revenue = payment.receivedAmountCents ?? 0;
-    if (revenue <= 0) return;
+    if (revenue <= 0) continue;
 
     const source = payment.referral?.source ?? 'Unknown';
     revenueBySourceMap.set(source, (revenueBySourceMap.get(source) ?? 0) + revenue);
@@ -1100,9 +1146,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const endorser = payment.referral?.endorser?.trim() || 'Unattributed';
     revenueByEndorserMap.set(endorser, (revenueByEndorserMap.get(endorser) ?? 0) + revenue);
 
-    const state = extractState(payment.referral);
+    const state = await extractStateAsync(payment.referral);
     revenueByStateMap.set(state, (revenueByStateMap.get(state) ?? 0) + revenue);
-  });
+  }
 
   const averagePaAmountCents = computeAverage(
     filteredReferrals

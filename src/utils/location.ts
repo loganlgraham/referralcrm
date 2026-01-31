@@ -1,6 +1,9 @@
+import zipState from 'zip-state';
+
 const stateCache = new Map<string, string>();
 const locationZipCache = new Map<string, string[]>();
 const zipExpansionCache = new Map<string, string[]>();
+const locationTextStateCache = new Map<string, string>();
 
 const stateNameToCode: Record<string, string> = {
   ALABAMA: 'AL',
@@ -61,6 +64,19 @@ const extractStateCode = (content: string): string | null => {
   const match = content.toUpperCase().match(/\b([A-Z]{2})\b/);
   return match?.[1] ?? null;
 };
+
+/**
+ * Maps a 5-digit US ZIP code to its two-letter state abbreviation.
+ * Uses static lookup (no API). Returns null for invalid or unknown ZIPs.
+ */
+export function zipToState(zip: string): string | null {
+  const trimmed = zip?.trim();
+  if (!trimmed || !/^\d{5}$/.test(trimmed)) {
+    return null;
+  }
+  const state = zipState(trimmed);
+  return typeof state === 'string' ? state : null;
+}
 
 export function normalizeStateInput(location: string): string | null {
   if (!location) return null;
@@ -200,6 +216,70 @@ export async function inferZipCodesFromLocation(location: string): Promise<strin
   } catch (error) {
     console.error('Failed to infer ZIPs from location', error);
     return [];
+  }
+}
+
+/**
+ * Infers the US state from freeform location text (e.g., propertyState, propertyAddress, borrowerCurrentAddress).
+ * Uses OpenAI when regex parsing fails. Results are cached by normalized text.
+ */
+export async function inferStateFromLocationText(text: string): Promise<string | null> {
+  const trimmed = text?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const cacheKey = trimmed.toLowerCase();
+  const cached = locationTextStateCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return null;
+  }
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        temperature: 0,
+        max_tokens: 12,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Extract the U.S. state from this text. Reply with only the two-letter state code (e.g., CA, TX). If unclear or not a US location, reply UNKNOWN.',
+          },
+          {
+            role: 'user',
+            content: trimmed,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = await response.json();
+    const content = payload?.choices?.[0]?.message?.content ?? '';
+    const state = extractStateCode(content);
+    if (state && state !== 'UNKNOWN') {
+      locationTextStateCache.set(cacheKey, state);
+      return state;
+    }
+    return null;
+  } catch (error) {
+    console.error('Failed to infer state from location text', error);
+    return null;
   }
 }
 
