@@ -262,6 +262,10 @@ const CHART_WIDTH = 320;
 const CHART_HEIGHT = 180;
 const CHART_PADDING_X = 44;
 const CHART_PADDING_Y = 32;
+/** Multi-line chart uses left Y-axis so labels don't overlap tooltip on the right */
+const MULTI_LINE_CHART_PLOT_LEFT = 72;
+const MULTI_LINE_CHART_PLOT_RIGHT = 296;
+const MULTI_LINE_CHART_Y_TICKS = [0, 0.5, 1];
 
 function SummaryCard({
   title,
@@ -525,6 +529,16 @@ function LineChartCard({
   );
 }
 
+/** Short format for Y-axis labels so they fit in the left margin (value in cents) */
+function formatAxisCurrency(cents: number): string {
+  const abs = Math.abs(cents);
+  if (abs >= 100_00) {
+    const k = cents / 100 / 1000;
+    return `$${k >= 0 ? '' : '-'}${Math.abs(k).toFixed(k % 1 === 0 ? 0 : 1)}k`;
+  }
+  return formatCurrency(cents);
+}
+
 function MultiLineChartCard({
   title,
   series,
@@ -549,7 +563,8 @@ function MultiLineChartCard({
   const normalizedMax = maxValue === minValue ? maxValue || 1 : maxValue;
   const normalizedMin = maxValue === minValue ? 0 : minValue;
 
-  const stepX = referenceSeries.length > 1 ? (CHART_WIDTH - CHART_PADDING_X * 2) / (referenceSeries.length - 1) : 0;
+  const plotWidth = MULTI_LINE_CHART_PLOT_RIGHT - MULTI_LINE_CHART_PLOT_LEFT;
+  const stepX = referenceSeries.length > 1 ? plotWidth / (referenceSeries.length - 1) : 0;
   const rangeY = normalizedMax - normalizedMin || 1;
 
   const seriesPoints = safeSeries.map((entry) => ({
@@ -557,7 +572,7 @@ function MultiLineChartCard({
     points: referenceSeries.map((refPoint, index) => {
       const value = entry.data[index]?.value ?? 0;
       const label = entry.data[index]?.label ?? refPoint.label;
-      const x = CHART_PADDING_X + stepX * index;
+      const x = MULTI_LINE_CHART_PLOT_LEFT + stepX * index;
       const ratio = (value - normalizedMin) / rangeY;
       const y = CHART_PADDING_Y + (CHART_HEIGHT - CHART_PADDING_Y * 2) * (1 - ratio);
       return { x, y, label, value };
@@ -590,13 +605,13 @@ function MultiLineChartCard({
   if (tooltipPoint && labelText) {
     const longestValue = Math.max(...tooltipValues.map((item) => formatValue(item.value).length), 0);
     const textLength = Math.max(labelText.length, longestValue + 6);
-    const width = Math.min(Math.max(textLength * 7 + 24, 140), CHART_WIDTH - CHART_PADDING_X);
+    const width = Math.min(Math.max(textLength * 7 + 24, 140), plotWidth - 24);
     const height = 52 + tooltipValues.length * 16;
-    const x = Math.min(
-      Math.max(tooltipPoint.x - width / 2, CHART_PADDING_X),
-      CHART_WIDTH - CHART_PADDING_X - width
+    const x = Math.max(
+      MULTI_LINE_CHART_PLOT_LEFT,
+      Math.min(tooltipPoint.x - width / 2, MULTI_LINE_CHART_PLOT_RIGHT - width)
     );
-    const y = Math.max(tooltipPoint.y - height - 8, 8);
+    const y = Math.max(8, Math.min(tooltipPoint.y - height - 8, CHART_HEIGHT - height - 8));
     tooltipMetrics = { width, height, x, y };
   }
 
@@ -640,33 +655,34 @@ function MultiLineChartCard({
               </linearGradient>
             </defs>
             <rect
-              x={CHART_PADDING_X}
+              x={MULTI_LINE_CHART_PLOT_LEFT}
               y={CHART_PADDING_Y}
-              width={CHART_WIDTH - CHART_PADDING_X * 2}
+              width={plotWidth}
               height={CHART_HEIGHT - CHART_PADDING_Y * 2}
               fill="url(#gridGradient)"
               className="stroke-0"
             />
-            {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+            {MULTI_LINE_CHART_Y_TICKS.map((ratio) => {
               const y = CHART_PADDING_Y + (CHART_HEIGHT - CHART_PADDING_Y * 2) * ratio;
               const value = normalizedMax - (normalizedMax - normalizedMin) * ratio;
               return (
                 <g key={ratio}>
                   <line
-                    x1={CHART_PADDING_X}
+                    x1={MULTI_LINE_CHART_PLOT_LEFT}
                     y1={y}
-                    x2={CHART_WIDTH - CHART_PADDING_X}
+                    x2={MULTI_LINE_CHART_PLOT_RIGHT}
                     y2={y}
                     stroke="#e2e8f0"
                     strokeWidth={1}
                     strokeDasharray="4 4"
                   />
                   <text
-                    x={CHART_WIDTH - CHART_PADDING_X + 6}
+                    x={MULTI_LINE_CHART_PLOT_LEFT - 6}
                     y={y + 4}
+                    textAnchor="end"
                     className="fill-slate-400 text-[10px]"
                   >
-                    {formatValue(value)}
+                    {formatAxisCurrency(value)}
                   </text>
                 </g>
               );
@@ -701,6 +717,7 @@ function MultiLineChartCard({
                   stroke="#cbd5e1"
                   strokeWidth={1}
                   strokeDasharray="4 4"
+                  className="pointer-events-none"
                 />
                 <rect
                   x={tooltipMetrics.x}
