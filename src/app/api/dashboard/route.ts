@@ -389,8 +389,7 @@ function resolveClosingDate(payment: AggregatedPayment): Date | null {
   if (payment.closingDate) return payment.closingDate;
   const lastClosedAt = payment.referral?.sla?.lastClosedAt;
   if (lastClosedAt) return typeof lastClosedAt === 'string' ? new Date(lastClosedAt) : lastClosedAt;
-  const metricDate = payment.metricDate ?? resolveMetricDate(payment);
-  return metricDate;
+  return resolveMetricDate(payment);
 }
 
 function createDashboardContext(request: NextRequest): DashboardRequestContext {
