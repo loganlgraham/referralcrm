@@ -14,6 +14,18 @@ import {
   IN_COMMUNICATION_LONG_RULES,
   ACTIVE_LEAD_RULES,
   UNDER_CONTRACT_RULES,
+  AHA_OOS_GLOBAL_ON_CREATED_RULES,
+  AHA_OOS_PAIRED_RULES,
+  AHA_OOS_IN_COMMUNICATION_SHORT_RULES,
+  AHA_OOS_IN_COMMUNICATION_LONG_RULES,
+  AHA_OOS_ACTIVE_LEAD_RULES,
+  AHA_OOS_UNDER_CONTRACT_RULES,
+  AHA_GLOBAL_ON_CREATED_RULES,
+  AHA_PAIRED_RULES,
+  AHA_IN_COMMUNICATION_SHORT_RULES,
+  AHA_IN_COMMUNICATION_LONG_RULES,
+  AHA_ACTIVE_LEAD_RULES,
+  AHA_UNDER_CONTRACT_RULES,
   isTimelineLongTerm,
   isTimelineShortTerm,
   type TaskRuleDefinition,
@@ -25,6 +37,12 @@ export type AdminTaskTrigger =
   | 'referral.timeline_changed'
   | 'referral.agent_assigned';
 
+import { getAhaDesignation, type AhaDesignation } from './admin-task-designation';
+
+interface AgentLike {
+  ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
+}
+
 interface ReferralSnapshot {
   _id: Types.ObjectId;
   status: string;
@@ -35,6 +53,7 @@ interface ReferralSnapshot {
     lastPairedAt?: Date | null;
     lastUnderContractAt?: Date | null;
   } | null;
+  designation: AhaDesignation;
 }
 
 function getBaseDateForStatus(
@@ -68,31 +87,44 @@ function getApplicableRules(
 ): TaskRuleDefinition[] {
   const status = normalizeReferralStatus(referral.status) ?? 'New Lead';
   const timeline = referral.timeline ?? 'not_specified';
+  const d = referral.designation;
 
   const rules: TaskRuleDefinition[] = [];
 
   if (trigger === 'referral.created' && status === 'New Lead') {
-    rules.push(...GLOBAL_ON_CREATED_RULES);
+    if (d === 'AHA_OOS') rules.push(...AHA_OOS_GLOBAL_ON_CREATED_RULES);
+    else if (d === 'AHA') rules.push(...AHA_GLOBAL_ON_CREATED_RULES);
+    else rules.push(...GLOBAL_ON_CREATED_RULES);
   }
 
   if (status === 'Paired') {
-    rules.push(...PAIRED_RULES);
+    if (d === 'AHA_OOS') rules.push(...AHA_OOS_PAIRED_RULES);
+    else if (d === 'AHA') rules.push(...AHA_PAIRED_RULES);
+    else rules.push(...PAIRED_RULES);
   }
 
   if (status === 'In Communication') {
     if (isTimelineShortTerm(timeline)) {
-      rules.push(...IN_COMMUNICATION_SHORT_RULES);
+      if (d === 'AHA_OOS') rules.push(...AHA_OOS_IN_COMMUNICATION_SHORT_RULES);
+      else if (d === 'AHA') rules.push(...AHA_IN_COMMUNICATION_SHORT_RULES);
+      else rules.push(...IN_COMMUNICATION_SHORT_RULES);
     } else if (isTimelineLongTerm(timeline)) {
-      rules.push(...IN_COMMUNICATION_LONG_RULES);
+      if (d === 'AHA_OOS') rules.push(...AHA_OOS_IN_COMMUNICATION_LONG_RULES);
+      else if (d === 'AHA') rules.push(...AHA_IN_COMMUNICATION_LONG_RULES);
+      else rules.push(...IN_COMMUNICATION_LONG_RULES);
     }
   }
 
   if (status === 'Active Lead') {
-    rules.push(...ACTIVE_LEAD_RULES);
+    if (d === 'AHA_OOS') rules.push(...AHA_OOS_ACTIVE_LEAD_RULES);
+    else if (d === 'AHA') rules.push(...AHA_ACTIVE_LEAD_RULES);
+    else rules.push(...ACTIVE_LEAD_RULES);
   }
 
   if (status === 'Under Contract') {
-    rules.push(...UNDER_CONTRACT_RULES);
+    if (d === 'AHA_OOS') rules.push(...AHA_OOS_UNDER_CONTRACT_RULES);
+    else if (d === 'AHA') rules.push(...AHA_UNDER_CONTRACT_RULES);
+    else rules.push(...UNDER_CONTRACT_RULES);
   }
 
   return rules;
@@ -107,50 +139,50 @@ function getRulesToDismiss(
 
   const toDismiss: { ruleKey: string; cycleKey: string }[] = [];
 
+  const addRule = (r: TaskRuleDefinition, cycleKey: string) =>
+    toDismiss.push({ ruleKey: r.ruleKey, cycleKey });
+
   if (trigger === 'referral.status_changed') {
     if (status !== 'New Lead') {
-      toDismiss.push(
-        ...GLOBAL_ON_CREATED_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: '*' }))
-      );
+      [...GLOBAL_ON_CREATED_RULES, ...AHA_OOS_GLOBAL_ON_CREATED_RULES, ...AHA_GLOBAL_ON_CREATED_RULES].forEach((r) => addRule(r, '*'));
     }
     if (status !== 'Paired') {
-      toDismiss.push(
-        ...PAIRED_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: '*' }))
-      );
+      [...PAIRED_RULES, ...AHA_OOS_PAIRED_RULES, ...AHA_PAIRED_RULES].forEach((r) => addRule(r, '*'));
     }
     if (status !== 'In Communication') {
-      toDismiss.push(
-        ...IN_COMMUNICATION_SHORT_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: '*' })),
-        ...IN_COMMUNICATION_LONG_RULES.map((r) => ({
-          ruleKey: r.ruleKey,
-          cycleKey: 'month',
-        }))
-      );
+      [IN_COMMUNICATION_SHORT_RULES, AHA_OOS_IN_COMMUNICATION_SHORT_RULES, AHA_IN_COMMUNICATION_SHORT_RULES].flat().forEach((r) => addRule(r, '*'));
+      [IN_COMMUNICATION_LONG_RULES, AHA_OOS_IN_COMMUNICATION_LONG_RULES, AHA_IN_COMMUNICATION_LONG_RULES].flat().forEach((r) => addRule(r, 'month'));
     }
     if (status !== 'Active Lead') {
-      toDismiss.push(
-        ...ACTIVE_LEAD_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: '*' }))
-      );
+      [...ACTIVE_LEAD_RULES, ...AHA_OOS_ACTIVE_LEAD_RULES, ...AHA_ACTIVE_LEAD_RULES].forEach((r) => addRule(r, '*'));
     }
     if (status !== 'Under Contract') {
-      toDismiss.push(
-        ...UNDER_CONTRACT_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: '*' }))
-      );
+      [...UNDER_CONTRACT_RULES, ...AHA_OOS_UNDER_CONTRACT_RULES, ...AHA_UNDER_CONTRACT_RULES].forEach((r) => addRule(r, '*'));
     }
+  }
+
+  if (trigger === 'referral.agent_assigned') {
+    const d = referral.designation;
+    const dismissOtherDesignations = (defaultRules: TaskRuleDefinition[], oosRules: TaskRuleDefinition[], ahaRules: TaskRuleDefinition[], cycleKey: string) => {
+      if (d !== 'default') defaultRules.forEach((r) => addRule(r, cycleKey));
+      if (d !== 'AHA_OOS') oosRules.forEach((r) => addRule(r, cycleKey));
+      if (d !== 'AHA') ahaRules.forEach((r) => addRule(r, cycleKey));
+    };
+    if (status === 'New Lead') dismissOtherDesignations(GLOBAL_ON_CREATED_RULES, AHA_OOS_GLOBAL_ON_CREATED_RULES, AHA_GLOBAL_ON_CREATED_RULES, '*');
+    if (status === 'Paired') dismissOtherDesignations(PAIRED_RULES, AHA_OOS_PAIRED_RULES, AHA_PAIRED_RULES, '*');
+    if (status === 'In Communication') {
+      if (isTimelineShortTerm(timeline)) dismissOtherDesignations(IN_COMMUNICATION_SHORT_RULES, AHA_OOS_IN_COMMUNICATION_SHORT_RULES, AHA_IN_COMMUNICATION_SHORT_RULES, '*');
+      else if (isTimelineLongTerm(timeline)) dismissOtherDesignations(IN_COMMUNICATION_LONG_RULES, AHA_OOS_IN_COMMUNICATION_LONG_RULES, AHA_IN_COMMUNICATION_LONG_RULES, 'month');
+    }
+    if (status === 'Active Lead') dismissOtherDesignations(ACTIVE_LEAD_RULES, AHA_OOS_ACTIVE_LEAD_RULES, AHA_ACTIVE_LEAD_RULES, '*');
+    if (status === 'Under Contract') dismissOtherDesignations(UNDER_CONTRACT_RULES, AHA_OOS_UNDER_CONTRACT_RULES, AHA_UNDER_CONTRACT_RULES, '*');
   }
 
   if (trigger === 'referral.timeline_changed' && status === 'In Communication') {
     if (isTimelineShortTerm(timeline)) {
-      toDismiss.push(
-        ...IN_COMMUNICATION_LONG_RULES.map((r) => ({
-          ruleKey: r.ruleKey,
-          cycleKey: 'month',
-        }))
-      );
+      [IN_COMMUNICATION_LONG_RULES, AHA_OOS_IN_COMMUNICATION_LONG_RULES, AHA_IN_COMMUNICATION_LONG_RULES].flat().forEach((r) => addRule(r, 'month'));
     } else if (isTimelineLongTerm(timeline)) {
-      toDismiss.push(
-        ...IN_COMMUNICATION_SHORT_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: '*' }))
-      );
+      [IN_COMMUNICATION_SHORT_RULES, AHA_OOS_IN_COMMUNICATION_SHORT_RULES, AHA_IN_COMMUNICATION_SHORT_RULES].flat().forEach((r) => addRule(r, '*'));
     }
   }
 
@@ -195,9 +227,14 @@ export async function generateAndReconcileAdminTasks({
 }): Promise<void> {
   const referral = await Referral.findById(referralId)
     .select('_id status statusLastUpdated timeline createdAt sla')
-    .lean<ReferralSnapshot | null>();
+    .populate('assignedAgent', 'ahaDesignation')
+    .populate('buySideAgent', 'ahaDesignation')
+    .populate('sellSideAgent', 'ahaDesignation')
+    .lean();
 
   if (!referral) return;
+
+  const designation = getAhaDesignation(referral as { assignedAgent?: AgentLike | null; buySideAgent?: AgentLike | null; sellSideAgent?: AgentLike | null });
 
   const snapshot: ReferralSnapshot = {
     _id: referral._id as Types.ObjectId,
@@ -206,6 +243,7 @@ export async function generateAndReconcileAdminTasks({
     timeline: referral.timeline ?? 'not_specified',
     createdAt: referral.createdAt ?? new Date(),
     sla: referral.sla,
+    designation,
   };
 
   const status = normalizeReferralStatus(snapshot.status) ?? 'New Lead';

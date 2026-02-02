@@ -293,6 +293,25 @@ Expected: ✅ 13 tests passing
 
 ---
 
+## AHA Tasks Rules (Feb 2026)
+
+**Task:** Fix AHA OOS tasks populating for referrals with AHA agent attached. Use separate rule sets for AHA OOS vs AHA assigned agent referrals.
+
+**Files changed:**
+- `src/lib/server/admin-task-rules.ts` – Added AHA_OOS_* and AHA_* rule arrays
+- `src/lib/server/admin-task-designation.ts` – New: `getAhaDesignation()` helper
+- `src/lib/server/admin-task-reconciler.ts` – Rule selection by designation, agent_assigned dismiss logic
+- `tests/unit/admin-task-reconciler.test.ts` – Unit tests for `getAhaDesignation`
+
+**Manual verification:**
+1. Create a referral and assign an AHA agent (ahaDesignation = AHA). Set status to Paired. Confirm only AHA Paired tasks appear: "Add agent in Homebot" (+1), "Check in – Customer Care Call" (+3), (+14).
+2. Create a referral and assign an AHA_OOS agent. Set status to Paired. Confirm AHA OOS Paired tasks: "Add Real Estate Agent to Homebot" (+0), "Check in: has agent connected with buyer?" (+1).
+3. For AHA OOS referral, move to In Communication (short timeline). Confirm Week 1/2/Ongoing momentum tasks.
+4. For AHA OOS referral, move to Under Contract. Confirm full UC task list.
+5. For AHA referral, move to In Communication or Under Contract. Confirm no tasks (AHA flow stops at Paired).
+
+---
+
 ## Conclusion
 
 ✅ **All tasks from the verification plan have been completed successfully.**

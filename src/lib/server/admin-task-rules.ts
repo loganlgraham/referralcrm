@@ -159,3 +159,95 @@ export const UNDER_CONTRACT_RULES: TaskRuleDefinition[] = [
   { ruleKey: 'uc_congrats_call_post_closing', title: 'Congrats call and Post Closing card – Agent/Buyer', category: 'communication', dueOffsetDays: 31, statuses: ['Under Contract'], cycleType: 'once' },
   { ruleKey: 'uc_confirm_referral_fee', title: 'Confirm receipt of referral fee', category: 'finance', dueOffsetDays: 40, statuses: ['Under Contract'], cycleType: 'once' },
 ];
+
+/** AHA OOS: Global rule on referral created (same as default) */
+export const AHA_OOS_GLOBAL_ON_CREATED_RULES: TaskRuleDefinition[] = [
+  {
+    ruleKey: 'assign_agent_paired',
+    title: 'Assign Agent → set status to Paired',
+    category: 'assignment',
+    priority: 'high',
+    dueOffsetDays: 0,
+    statuses: ['New Lead'],
+    cycleType: 'once',
+  },
+];
+
+/** AHA OOS: Rules for Paired status */
+export const AHA_OOS_PAIRED_RULES: TaskRuleDefinition[] = [
+  {
+    ruleKey: 'add_agent_homebot',
+    title: 'Add Real Estate Agent to Homebot',
+    category: 'communication',
+    dueOffsetDays: 0,
+    statuses: ['Paired'],
+    cycleType: 'once',
+  },
+  {
+    ruleKey: 'check_in_agent_connected',
+    title: 'Check in: has agent connected with buyer?',
+    category: 'communication',
+    dueOffsetDays: 1,
+    statuses: ['Paired'],
+    cycleType: 'once',
+  },
+];
+
+/** AHA OOS: Rules for In Communication short timeline (same as default) */
+export const AHA_OOS_IN_COMMUNICATION_SHORT_RULES = IN_COMMUNICATION_SHORT_RULES;
+
+/** AHA OOS: Rules for In Communication long timeline (same as default) */
+export const AHA_OOS_IN_COMMUNICATION_LONG_RULES = IN_COMMUNICATION_LONG_RULES;
+
+/** AHA OOS: Rules for Under Contract (same as default) */
+export const AHA_OOS_UNDER_CONTRACT_RULES = UNDER_CONTRACT_RULES;
+
+/** AHA OOS: No Active Lead rules */
+export const AHA_OOS_ACTIVE_LEAD_RULES: TaskRuleDefinition[] = [];
+
+/** AHA assigned: Global rule on referral created (same as default) */
+export const AHA_GLOBAL_ON_CREATED_RULES: TaskRuleDefinition[] = [
+  {
+    ruleKey: 'assign_agent_paired',
+    title: 'Assign Agent → set status to Paired',
+    category: 'assignment',
+    priority: 'high',
+    dueOffsetDays: 0,
+    statuses: ['New Lead'],
+    cycleType: 'once',
+  },
+];
+
+/** AHA assigned: Rules for Paired status - different tasks than AHA OOS */
+export const AHA_PAIRED_RULES: TaskRuleDefinition[] = [
+  {
+    ruleKey: 'aha_add_agent_homebot',
+    title: 'Add agent in Homebot',
+    category: 'communication',
+    dueOffsetDays: 1,
+    statuses: ['Paired'],
+    cycleType: 'once',
+  },
+  {
+    ruleKey: 'aha_check_in_care_3',
+    title: 'Check in – Customer Care Call',
+    category: 'communication',
+    dueOffsetDays: 3,
+    statuses: ['Paired'],
+    cycleType: 'once',
+  },
+  {
+    ruleKey: 'aha_check_in_care_14',
+    title: 'Check in – Customer Care Call',
+    category: 'communication',
+    dueOffsetDays: 14,
+    statuses: ['Paired'],
+    cycleType: 'once',
+  },
+];
+
+/** AHA assigned: No In Communication, Active Lead, or Under Contract rules */
+export const AHA_IN_COMMUNICATION_SHORT_RULES: TaskRuleDefinition[] = [];
+export const AHA_IN_COMMUNICATION_LONG_RULES: TaskRuleDefinition[] = [];
+export const AHA_ACTIVE_LEAD_RULES: TaskRuleDefinition[] = [];
+export const AHA_UNDER_CONTRACT_RULES: TaskRuleDefinition[] = [];
