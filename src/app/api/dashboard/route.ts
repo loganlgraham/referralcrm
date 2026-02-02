@@ -384,6 +384,14 @@ function resolveMetricDate(payment: AggregatedPayment): Date {
   return payment.updatedAt;
 }
 
+/** Closing date for bucketing "generated" revenue (when the deal closed). */
+function resolveClosingDate(payment: AggregatedPayment): Date | null {
+  if (payment.closingDate) return payment.closingDate;
+  const lastClosedAt = payment.referral?.sla?.lastClosedAt;
+  if (lastClosedAt) return typeof lastClosedAt === 'string' ? new Date(lastClosedAt) : lastClosedAt;
+  return resolveMetricDate(payment);
+}
+
 function createDashboardContext(request: NextRequest): DashboardRequestContext {
   const timeframe = parseTimeframe(
     request.nextUrl.searchParams.get('timeframe'),
@@ -699,6 +707,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           activePipeline: 0,
           expectedRevenueCents: 0,
           realizedRevenueCents: 0,
+          generatedRevenueCents: 0,
           closedNotPaidCents: 0,
           averageDaysNewLeadToContract: 0,
           averageDaysClosedToPaid: 0,
@@ -711,6 +720,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         },
         trends: {
           revenue: [],
+          revenueGenerated: [],
           deals: [],
           closeRate: [],
           referrals: []
@@ -1387,20 +1397,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     referralIdsByMonth.set(key, ids);
   });
 
-  // Revenue and Deals Closed: bucket by closing date (when deal actually closed)
-  const dealsByClosingDate = new Map<string, { dealsClosed: number; revenueReceivedCents: number }>();
+  // Generated revenue: bucket by closing date (when deal actually closed). Expected fee from closed deals.
+  const dealsByClosingDate = new Map<string, { dealsClosed: number; revenueGeneratedCents: number }>();
+  // Received revenue: bucket by metric date (when payment received/invoiced).
+  const revenueReceivedByMonth = new Map<string, number>();
   paymentsByNetwork.forEach((payment) => {
     const metricDate = payment.metricDate ?? resolveMetricDate(payment);
-    if (!metricDate) return;
+    const closingDate = resolveClosingDate(payment);
     if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
     if (payment.usedAssignedAgent !== true) return;
     if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return;
 
-    const key = `${metricDate.getFullYear()}-${String(metricDate.getMonth() + 1).padStart(2, '0')}`;
-    const current = dealsByClosingDate.get(key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
-    current.dealsClosed += 1;
-    current.revenueReceivedCents += payment.receivedAmountCents ?? 0;
-    dealsByClosingDate.set(key, current);
+    const expectedCents = Math.max(payment.expectedAmountCents ?? 0, 0);
+    const receivedCents = payment.receivedAmountCents ?? 0;
+
+    if (closingDate) {
+      const closeKey = `${closingDate.getFullYear()}-${String(closingDate.getMonth() + 1).padStart(2, '0')}`;
+      const current = dealsByClosingDate.get(closeKey) ?? { dealsClosed: 0, revenueGeneratedCents: 0 };
+      current.dealsClosed += 1;
+      current.revenueGeneratedCents += expectedCents;
+      dealsByClosingDate.set(closeKey, current);
+    }
+    if (metricDate) {
+      const receivedKey = `${metricDate.getFullYear()}-${String(metricDate.getMonth() + 1).padStart(2, '0')}`;
+      revenueReceivedByMonth.set(receivedKey, (revenueReceivedByMonth.get(receivedKey) ?? 0) + receivedCents);
+    }
   });
 
   // Close Rate: cohort-based (deals from referrals created in month X / referrals in month X)
@@ -1438,18 +1459,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   const dealTimeframeMap = new Map<string, { dealsClosed: number; revenueReceivedCents: number }>();
+  const generatedByTimeframe = new Map<string, { dealsClosed: number; revenueGeneratedCents: number }>();
   filteredPaymentsByNetwork.forEach((payment) => {
     const metricDate = payment.metricDate ?? resolveMetricDate(payment);
-    if (!metricDate) return;
+    const closingDate = resolveClosingDate(payment);
     if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
     if (payment.usedAssignedAgent !== true) return;
     if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return;
 
-    const key = getTimeframeBucketKey(new Date(metricDate), context.timeframe);
-    const current = dealTimeframeMap.get(key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
-    current.dealsClosed += 1;
-    current.revenueReceivedCents += payment.receivedAmountCents ?? 0;
-    dealTimeframeMap.set(key, current);
+    const expectedCents = Math.max(payment.expectedAmountCents ?? 0, 0);
+    const receivedCents = payment.receivedAmountCents ?? 0;
+
+    if (metricDate) {
+      const key = getTimeframeBucketKey(new Date(metricDate), context.timeframe);
+      const current = dealTimeframeMap.get(key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
+      current.dealsClosed += 1;
+      current.revenueReceivedCents += receivedCents;
+      dealTimeframeMap.set(key, current);
+    }
+    if (closingDate) {
+      const key = getTimeframeBucketKey(closingDate, context.timeframe);
+      const current = generatedByTimeframe.get(key) ?? { dealsClosed: 0, revenueGeneratedCents: 0 };
+      current.dealsClosed += 1;
+      current.revenueGeneratedCents += expectedCents;
+      generatedByTimeframe.set(key, current);
+    }
   });
 
   // Close rate per bucket: deals (closed/paid) whose referral was created in that bucket
@@ -1469,6 +1503,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const mainTrends = timeframeBuckets.map((bucket) => {
     const referralStats = referralTimeframeMap.get(bucket.key) ?? { total: 0, transfers: 0 };
     const dealStats = dealTimeframeMap.get(bucket.key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
+    const generatedStats = generatedByTimeframe.get(bucket.key) ?? { dealsClosed: 0, revenueGeneratedCents: 0 };
     const dealsClosedForCloseRate = dealsClosedByReferralBucket.get(bucket.key) ?? 0;
     const closeRate =
       referralStats.total === 0
@@ -1481,6 +1516,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       mcTransfers: referralStats.transfers,
       dealsClosed: dealStats.dealsClosed,
       revenueReceivedCents: dealStats.revenueReceivedCents,
+      revenueGeneratedCents: generatedStats.revenueGeneratedCents,
       closeRate: Number(closeRate.toFixed(1))
     };
   });
@@ -1502,7 +1538,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const monthlyReferrals = monthBuckets.map((bucket) => {
     const referralStats =
       referralMonthlyMap.get(bucket.key) ?? { total: 0, transfers: 0, ahaReferrals: 0, ahaOosReferrals: 0 };
-    const closingStats = dealsByClosingDate.get(bucket.key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
+    const closingStats = dealsByClosingDate.get(bucket.key) ?? { dealsClosed: 0, revenueGeneratedCents: 0 };
+    const revenueReceivedCents = revenueReceivedByMonth.get(bucket.key) ?? 0;
     const cohortDeals = dealsFromCohort.get(bucket.key) ?? 0;
     const preApprovalStats =
       preApprovalMap.get(bucket.key) ?? { preApprovals: 0, ahaPreApprovals: 0, ahaOosPreApprovals: 0, updatedAt: undefined };
@@ -1534,7 +1571,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       ahaReferrals: referralStats.ahaReferrals,
       ahaOosReferrals: referralStats.ahaOosReferrals,
       dealsClosed: closingStats.dealsClosed,
-      revenueReceivedCents: closingStats.revenueReceivedCents,
+      revenueGeneratedCents: closingStats.revenueGeneratedCents,
+      revenueReceivedCents,
       closeRate: Number(monthlyCloseRate.toFixed(1)),
       preApprovals: preApprovalStats.preApprovals,
       ahaPreApprovals: preApprovalStats.ahaPreApprovals,
@@ -1555,6 +1593,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       if (timeframeEnd && bucketStart > timeframeEnd) continue;
       if (timeframeStart && bucketStart < timeframeStart) continue;
       sum += stats.dealsClosed;
+    }
+    return sum;
+  })();
+
+  // Generated revenue in timeframe (by closing date)
+  const generatedRevenueCentsForSummary = (() => {
+    let sum = 0;
+    for (const bucket of timeframeBuckets) {
+      const stats = generatedByTimeframe.get(bucket.key);
+      if (stats) sum += stats.revenueGeneratedCents;
     }
     return sum;
   })();
@@ -2138,6 +2186,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     activePipeline,
     expectedRevenueCents,
     realizedRevenueCents,
+    generatedRevenueCents: generatedRevenueCentsForSummary,
     closedNotPaidCents,
     averageDaysNewLeadToContract,
     averageDaysClosedToPaid,
@@ -2151,6 +2200,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   },
       trends: {
         revenue: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.revenueReceivedCents })),
+        revenueGenerated: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.revenueGeneratedCents })),
         deals: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.dealsClosed })),
         closeRate: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.closeRate })),
         referrals: referralsTrend
