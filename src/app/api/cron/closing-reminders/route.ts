@@ -3,6 +3,7 @@ import { addDays, startOfDay, endOfDay } from 'date-fns';
 import { Types } from 'mongoose';
 
 import { connectMongo } from '@/lib/mongoose';
+import { Agent } from '@/models/agent';
 import { Payment } from '@/models/payment';
 import { getAppOrigin } from '@/lib/server/app-origin';
 
@@ -54,11 +55,28 @@ export async function GET(request: NextRequest) {
   console.log(`[Closing Reminders] Looking for deals closing on ${targetDateStart.toISOString()} to ${targetDateEnd.toISOString()}`);
 
   try {
+    // Exclude deals with AHA- or AGIT-designated agents (only AHA_OOS and others get auto-send)
+    const ahaAgents = await Agent.find({ ahaDesignation: { $in: ['AHA', 'AGIT'] } })
+      .select('_id')
+      .lean();
+    const ahaAgentIds = ahaAgents.map((a) => a._id);
+    if (ahaAgentIds.length > 0) {
+      console.log(`[Closing Reminders] Excluding ${ahaAgentIds.length} AHA/AGIT-designated agents from auto-send`);
+    }
+
     // Query for payments that:
     // 1. Have a closing date 7 days from now
     // 2. Are not terminated
     // 3. Have not already been sent a fee breakdown email
-    // 4. Have an agent assigned
+    // 4. Have an agent assigned (excluding AHA-designated agents)
+    const agentIdFilter: Record<string, unknown> = {
+      $ne: null,
+      $exists: true,
+    };
+    if (ahaAgentIds.length > 0) {
+      agentIdFilter.$nin = ahaAgentIds;
+    }
+
     const payments = await Payment.find({
       closingDate: {
         $gte: targetDateStart,
@@ -66,7 +84,7 @@ export async function GET(request: NextRequest) {
       },
       status: { $ne: 'terminated' },
       feeBreakdownEmailSentAt: null,
-      agentId: { $ne: null, $exists: true },
+      agentId: agentIdFilter,
       contractPriceCents: { $ne: null, $gt: 0 },
       commissionBasisPoints: { $ne: null, $gt: 0 },
       referralFeeBasisPoints: { $ne: null, $gt: 0 },
