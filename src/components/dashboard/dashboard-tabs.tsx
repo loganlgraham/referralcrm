@@ -607,11 +607,18 @@ function MultiLineChartCard({
     const textLength = Math.max(labelText.length, longestValue + 6);
     const width = Math.min(Math.max(textLength * 7 + 24, 140), plotWidth - 24);
     const height = 52 + tooltipValues.length * 16;
-    const x = Math.max(
-      MULTI_LINE_CHART_PLOT_LEFT,
-      Math.min(tooltipPoint.x - width / 2, MULTI_LINE_CHART_PLOT_RIGHT - width)
-    );
-    const y = Math.max(8, Math.min(tooltipPoint.y - height - 8, CHART_HEIGHT - height - 8));
+    const gap = 14;
+    const plotCenterX = MULTI_LINE_CHART_PLOT_LEFT + plotWidth / 2;
+    const pointOnRight = tooltipPoint.x > plotCenterX;
+    const x = pointOnRight
+      ? Math.max(MULTI_LINE_CHART_PLOT_LEFT, tooltipPoint.x - width - gap)
+      : Math.min(MULTI_LINE_CHART_PLOT_RIGHT - width, tooltipPoint.x + gap);
+    const preferredYAbove = tooltipPoint.y - height - 12;
+    const preferredYBelow = tooltipPoint.y + 12;
+    const y =
+      preferredYAbove >= 8
+        ? Math.min(preferredYAbove, CHART_HEIGHT - height - 8)
+        : Math.max(8, Math.min(preferredYBelow, CHART_HEIGHT - height - 8));
     tooltipMetrics = { width, height, x, y };
   }
 
@@ -725,8 +732,7 @@ function MultiLineChartCard({
                   width={tooltipMetrics.width}
                   height={tooltipMetrics.height}
                   rx={6}
-                  className="fill-white"
-                  stroke="#cbd5e1"
+                  className="fill-white stroke-slate-200"
                 />
                 <text x={tooltipMetrics.x + 10} y={tooltipMetrics.y + 18} className="text-[11px] font-semibold fill-slate-900">
                   {labelText}
