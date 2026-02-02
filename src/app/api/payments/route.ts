@@ -906,7 +906,39 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     if (slaChanged) {
       referral.markModified('sla');
     }
+
+    // Auto-disable update reminders when deal reaches terminal status
+    const DEAL_TERMINAL_STATUSES = ['closed', 'payment_sent', 'paid'];
+    let autoRemindersDisabledForDeal = false;
+    if (
+      DEAL_TERMINAL_STATUSES.includes(payment.status) &&
+      referral.autoUpdateRemindersEnabled !== false
+    ) {
+      referral.autoUpdateRemindersEnabled = false;
+      referral.audit = referral.audit || [];
+      referral.audit.push({
+        actorRole: 'system',
+        actorId: null,
+        field: 'autoUpdateRemindersEnabled',
+        previousValue: true,
+        newValue: false,
+        timestamp: now,
+      } as any);
+      referral.markModified('audit');
+      autoRemindersDisabledForDeal = true;
+    }
+
     await referral.save();
+
+    if (autoRemindersDisabledForDeal) {
+      await logReferralActivity({
+        referralId: referral._id.toString(),
+        actorRole: 'system',
+        actorId: null,
+        channel: 'system',
+        content: `Automated update reminders disabled (deal status: ${payment.status})`,
+      });
+    }
 
     if (referralStatusChanged && previousReferralStatus !== referral.status) {
       await logReferralActivity({
