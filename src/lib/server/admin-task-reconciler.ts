@@ -43,6 +43,18 @@ interface AgentLike {
   ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
 }
 
+interface ReferralLeanResult {
+  _id: Types.ObjectId;
+  status?: string | null;
+  statusLastUpdated?: Date | null;
+  timeline?: string | null;
+  createdAt: Date;
+  sla?: { lastPairedAt?: Date | null; lastUnderContractAt?: Date | null } | null;
+  assignedAgent?: AgentLike | null;
+  buySideAgent?: AgentLike | null;
+  sellSideAgent?: AgentLike | null;
+}
+
 interface ReferralSnapshot {
   _id: Types.ObjectId;
   status: string;
@@ -225,16 +237,16 @@ export async function generateAndReconcileAdminTasks({
   trigger: AdminTaskTrigger;
   actorId?: string;
 }): Promise<void> {
-  const referral = await Referral.findById(referralId)
+  const referral = (await Referral.findById(referralId)
     .select('_id status statusLastUpdated timeline createdAt sla')
     .populate('assignedAgent', 'ahaDesignation')
     .populate('buySideAgent', 'ahaDesignation')
     .populate('sellSideAgent', 'ahaDesignation')
-    .lean();
+    .lean()) as ReferralLeanResult | null;
 
   if (!referral) return;
 
-  const designation = getAhaDesignation(referral as { assignedAgent?: AgentLike | null; buySideAgent?: AgentLike | null; sellSideAgent?: AgentLike | null });
+  const designation = getAhaDesignation(referral);
 
   const snapshot: ReferralSnapshot = {
     _id: referral._id as Types.ObjectId,
