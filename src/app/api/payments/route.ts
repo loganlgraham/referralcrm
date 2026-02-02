@@ -1072,6 +1072,76 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
               });
             }
           }
+        }
+        // Email to agent when ONLY usedAssignedAgent is true (no AFC)
+        else if (usedAssignedAgent && referral.assignedAgent) {
+          // Handle both populated and ObjectId cases
+          const agentId = referral.assignedAgent instanceof Types.ObjectId 
+            ? referral.assignedAgent 
+            : (referral.assignedAgent as any)?._id;
+          
+          if (!agentId) {
+            console.warn('Missing agentId for simplified closed deal email', {
+              paymentId: existingPayment._id.toString(),
+              referralId: referral._id.toString(),
+            });
+          } else {
+            // Fetch agent data if not populated or if email is missing
+            let agentEmail: string | null = null;
+            let agentName: string | null = null;
+            
+            if (referral.assignedAgent && typeof referral.assignedAgent === 'object' && 'email' in referral.assignedAgent) {
+              // Agent is populated
+              agentEmail = (referral.assignedAgent as any).email || null;
+              agentName = (referral.assignedAgent as any).name || null;
+            }
+            
+            // Fallback: fetch agent if email is missing
+            if (!agentEmail && agentId) {
+              const agentDoc = await Agent.findById(agentId).select('name email').lean<{ name?: string; email?: string } | null>();
+              if (agentDoc) {
+                agentEmail = agentDoc.email || null;
+                agentName = agentDoc.name || null;
+              }
+            }
+            
+            if (agentEmail) {
+              const agentFirstName = agentName ? agentName.split(' ')[0] : 'there';
+              const { buildPaymentActionLink } = await import('@/lib/referral-links');
+              const paymentSentLink = buildPaymentActionLink(existingPayment._id.toString());
+              
+              const emailSent = await sendTransactionalEmail({
+                to: [agentEmail],
+                subject: 'Congrats on your closing!',
+                html: `
+                  <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
+                    <p>Hi ${agentFirstName},</p>
+                    <p>Congrats on your closing! 🎉 It was great working together. Please click the button below when the referral fee has been sent so we can anticipate its arrival. Thank you again!</p>
+                    <p style="margin: 20px 0 0 0;">
+                      <a href="${paymentSentLink}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
+                        Mark Payment as Sent
+                      </a>
+                    </p>
+                  </div>
+                `,
+                text: `Hi ${agentFirstName},\n\nCongrats on your closing! 🎉 It was great working together. Please click the button below when the referral fee has been sent so we can anticipate its arrival. Thank you again!\n\nMark payment as sent: ${paymentSentLink}`,
+              });
+              
+              if (!emailSent) {
+                console.error('Failed to send simplified agent email for closed deal', {
+                  paymentId: existingPayment._id.toString(),
+                  referralId: referral._id.toString(),
+                  agentEmail,
+                });
+              }
+            } else {
+              console.warn('Cannot send simplified agent email for closed deal - missing agent email', {
+                paymentId: existingPayment._id.toString(),
+                referralId: referral._id.toString(),
+                agentId: agentId?.toString(),
+              });
+            }
+          }
         } else {
           // Log why email wasn't sent for debugging
           if (isClosingNow) {
