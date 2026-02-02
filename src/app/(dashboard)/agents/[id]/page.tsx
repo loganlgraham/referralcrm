@@ -3,22 +3,26 @@ import { notFound } from 'next/navigation';
 
 import { getCurrentSession } from '@/lib/auth';
 import { getAgentProfile } from '@/lib/server/people';
+import { getReferrals } from '@/lib/server/referrals';
 import { PersonNotes } from '@/components/people/person-notes';
 import { AgentNpsEditor } from '@/components/people/agent-nps-editor';
 import { PersonDealsTable } from '@/components/people/person-deals-table';
 import { AgentOverviewCard } from '@/components/people/agent-overview-card';
 import { PersonDeleteSection } from '@/components/people/person-delete-section';
+import { ReferralTable, type ReferralRow } from '@/components/tables/referral-table';
+import { Pagination } from '@/components/tables/pagination';
 import { formatCurrency, formatDecimal } from '@/utils/formatters';
 
 interface AgentDetailPageProps {
   params: { id: string };
+  searchParams: Record<string, string | string[] | undefined>;
 }
 
 export const metadata: Metadata = {
   title: 'Agent Detail | Referral CRM'
 };
 
-export default async function AgentDetailPage({ params }: AgentDetailPageProps) {
+export default async function AgentDetailPage({ params, searchParams }: AgentDetailPageProps) {
   const session = await getCurrentSession();
   if (!session || (session.user.role !== 'admin' && session.user.role !== 'mc' && session.user.role !== 'agent')) {
     notFound();
@@ -35,6 +39,25 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
   const canEditNps = isAdmin;
   const canViewNotes = isAdmin;
   const canViewDeals = !isAgent || isViewingOwnProfile;
+
+  const validPageSizes = [20, 25, 50, 100];
+  const pageSizeParam = searchParams.pageSize ? Number(searchParams.pageSize) : 25;
+  const pageSize = validPageSizes.includes(pageSizeParam) ? pageSizeParam : 25;
+  const sortBy = searchParams.sortBy?.toString() ?? null;
+  const sortDirection = (searchParams.sortDirection?.toString() as 'asc' | 'desc' | undefined) ?? null;
+
+  const referralsData = canViewDeals
+    ? await getReferrals({
+        session,
+        page: Number(searchParams.page || 1),
+        pageSize,
+        agent: params.id,
+        sortBy,
+        sortDirection
+      })
+    : null;
+
+  const referralItems = (referralsData?.items ?? []) as ReferralRow[];
 
   const metricCards = [
     { label: 'Closings (12 mo)', value: agent.metrics.closingsLast12Months.toString() },
@@ -114,12 +137,39 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
         )}
       </div>
       {canViewDeals && (
-        <div className="rounded-lg bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Deals</h2>
-          <div className="mt-4">
-            <PersonDealsTable deals={agent.deals} context="agent" />
+        <>
+          <div className="rounded-lg bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-900">Referrals</h2>
+            <div className="mt-4 space-y-4">
+              {referralItems.length > 0 ? (
+                <>
+                  <ReferralTable
+                    data={referralItems}
+                    mode={isAdmin ? 'admin' : isAgent ? 'agent' : 'mc'}
+                    hideAgentColumn
+                  />
+                  <Pagination
+                    currentPage={referralsData?.page ?? 1}
+                    totalItems={referralsData?.total ?? 0}
+                    pageSize={referralsData?.pageSize ?? 25}
+                    totalPages={Math.ceil((referralsData?.total ?? 0) / (referralsData?.pageSize ?? 25))}
+                    itemLabel="referrals"
+                  />
+                </>
+              ) : (
+                <div className="rounded-lg border border-dashed border-slate-200 p-10 text-center text-sm text-slate-500">
+                  No referrals yet.
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+          <div className="rounded-lg bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-900">Deals</h2>
+            <div className="mt-4">
+              <PersonDealsTable deals={agent.deals} context="agent" />
+            </div>
+          </div>
+        </>
       )}
       {canViewNotes && (
         <PersonNotes

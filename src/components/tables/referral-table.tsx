@@ -8,7 +8,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
@@ -61,6 +61,7 @@ type ReferralTableProps = {
   data: ReferralRow[] | undefined | null;
   mode: TableMode;
   showAgentOriginIndicator?: boolean;
+  hideAgentColumn?: boolean;
 };
 
 interface StatusSelectProps {
@@ -316,6 +317,7 @@ function buildColumns(
   mode: TableMode,
   options: { 
     showAgentOriginIndicator?: boolean;
+    hideAgentColumn?: boolean;
     currentSortBy?: string | null;
     currentSortDirection?: 'asc' | 'desc' | null;
     onSortChange?: (sortBy: string, sortDirection: 'asc' | 'desc') => void;
@@ -323,6 +325,7 @@ function buildColumns(
 ): ColumnDef<ReferralRow>[] {
   const { 
     showAgentOriginIndicator = false,
+    hideAgentColumn = false,
     currentSortBy = null,
     currentSortDirection = null,
     onSortChange = () => {}
@@ -461,36 +464,38 @@ function buildColumns(
     ];
   }
 
-  return [
+  const agentColumn: ColumnDef<ReferralRow> = {
+    header: sortableHeader('Agent', 'assignedAgentName', currentSortBy, currentSortDirection, onSortChange),
+    accessorKey: 'assignedAgentName',
+    cell: ({ row }) => {
+      const { assignedAgentName, assignedAgentPhone } = row.original;
+      if (!assignedAgentName && !assignedAgentPhone) {
+        return 'Unassigned';
+      }
+      return (
+        <div className="flex flex-col text-sm">
+          <span className="font-medium text-slate-700">{assignedAgentName || 'Unassigned'}</span>
+          {assignedAgentPhone && (
+            <span className="text-xs text-slate-500">{formatPhoneNumber(assignedAgentPhone)}</span>
+          )}
+        </div>
+      );
+    }
+  };
+
+  const adminColumns: ColumnDef<ReferralRow>[] = [
     borrowerColumn,
-      {
-        header: sortableHeader('Loan File #', 'loanFileNumber', currentSortBy, currentSortDirection, onSortChange),
-        accessorKey: 'loanFileNumber'
-      },
-      timelineColumn,
+    {
+      header: sortableHeader('Loan File #', 'loanFileNumber', currentSortBy, currentSortDirection, onSortChange),
+      accessorKey: 'loanFileNumber'
+    },
+    timelineColumn,
     {
       header: sortableHeader('Status', 'status', currentSortBy, currentSortDirection, onSortChange),
       accessorKey: 'status',
       cell: ({ row }) => <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />,
     },
-    {
-      header: sortableHeader('Agent', 'assignedAgentName', currentSortBy, currentSortDirection, onSortChange),
-      accessorKey: 'assignedAgentName',
-      cell: ({ row }) => {
-        const { assignedAgentName, assignedAgentPhone } = row.original;
-        if (!assignedAgentName && !assignedAgentPhone) {
-          return 'Unassigned';
-        }
-        return (
-          <div className="flex flex-col text-sm">
-            <span className="font-medium text-slate-700">{assignedAgentName || 'Unassigned'}</span>
-            {assignedAgentPhone && (
-              <span className="text-xs text-slate-500">{formatPhoneNumber(assignedAgentPhone)}</span>
-            )}
-          </div>
-        );
-      }
-    },
+    ...(hideAgentColumn ? [] : [agentColumn]),
     {
       header: sortableHeader('Lender/MC', 'lenderName', currentSortBy, currentSortDirection, onSortChange),
       accessorKey: 'lenderName',
@@ -512,10 +517,13 @@ function buildColumns(
     createdColumn,
     lastUpdatedColumn
   ];
+
+  return adminColumns;
 }
 
-export function ReferralTable({ data, mode, showAgentOriginIndicator }: ReferralTableProps) {
+export function ReferralTable({ data, mode, showAgentOriginIndicator, hideAgentColumn }: ReferralTableProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const searchParamsString = useMemo(() => searchParams.toString(), [searchParams]);
@@ -532,20 +540,21 @@ export function ReferralTable({ data, mode, showAgentOriginIndicator }: Referral
       params.delete('page');
       startTransition(() => {
         const queryString = params.toString();
-        router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
+        router.replace(queryString ? `${pathname}?${queryString}` : pathname);
       });
     },
-    [router, searchParamsString, startTransition]
+    [router, pathname, searchParamsString, startTransition]
   );
 
   const columns = useMemo<ColumnDef<ReferralRow>[]>(
     () => buildColumns(mode, { 
       showAgentOriginIndicator,
+      hideAgentColumn,
       currentSortBy,
       currentSortDirection,
       onSortChange: handleSortChange
     }),
-    [mode, showAgentOriginIndicator, currentSortBy, currentSortDirection, handleSortChange]
+    [mode, showAgentOriginIndicator, hideAgentColumn, currentSortBy, currentSortDirection, handleSortChange]
   );
 
   // Ensure data is always an array - handle all edge cases
