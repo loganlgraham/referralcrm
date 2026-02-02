@@ -6,7 +6,7 @@ import { formatDistanceToNow } from 'date-fns';
 
 interface Notification {
   _id: string;
-  type: 'note' | 'status_change' | 'email_response' | 'update_request_response';
+  type: 'note' | 'status_change' | 'email_response' | 'update_request_response' | 'nps_survey_completed';
   referralId: string;
   borrowerName: string;
   actorRole: string;
@@ -113,6 +113,8 @@ export function NotificationDropdown({
         return '📧';
       case 'update_request_response':
         return '✅';
+      case 'nps_survey_completed':
+        return '⭐';
       default:
         return '🔔';
     }

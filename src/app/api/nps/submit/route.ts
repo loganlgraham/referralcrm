@@ -27,9 +27,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     .lean<{
       _id?: any;
       type?: 'lender' | 'agent';
+      referralId?: any;
+      targetId?: any;
+      recipientName?: string;
       submitted?: boolean;
       expiresAt?: Date;
-      targetId?: any;
     } | null>();
 
   if (!npsToken || !npsToken._id) {
@@ -57,6 +59,40 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   // Update NPS score for agent or lender
   await updateNPSScore(npsToken.type, npsToken.targetId.toString(), score);
+
+  // Create admin notification for survey completion
+  const { Referral } = await import('@/models/referral');
+  const { Agent } = await import('@/models/agent');
+  const { LenderMC } = await import('@/models/lender');
+  const referral = await Referral.findById(npsToken.referralId)
+    .select('borrower')
+    .lean<{ borrower?: { name?: string } }>();
+
+  let targetName = 'Unknown';
+  if (npsToken.type === 'agent') {
+    const agentDoc = await Agent.findById(npsToken.targetId)
+      .select('name')
+      .lean<{ name?: string }>();
+    targetName = agentDoc?.name || 'Agent';
+  } else {
+    const lenderDoc = await LenderMC.findById(npsToken.targetId)
+      .select('name')
+      .lean<{ name?: string }>();
+    targetName = lenderDoc?.name || 'Mortgage Consultant';
+  }
+
+  const borrowerName = referral?.borrower?.name || 'Unknown';
+  const surveyType = npsToken.type === 'agent' ? 'Agent' : 'Lender';
+
+  const { createAdminNotifications } = await import('@/lib/server/notifications');
+  await createAdminNotifications({
+    type: 'nps_survey_completed',
+    referralId: npsToken.referralId.toString(),
+    borrowerName,
+    actorRole: npsToken.recipientName ?? 'Survey respondent',
+    actorName: targetName,
+    content: `${surveyType} ${targetName} received NPS score: ${score}/10`,
+  });
 
   return NextResponse.json({ success: true });
 }

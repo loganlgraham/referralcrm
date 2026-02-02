@@ -2,7 +2,7 @@ import { Types } from 'mongoose';
 import { Notification } from '@/models/notification';
 import { User } from '@/models/user';
 
-type NotificationType = 'note' | 'status_change' | 'email_response' | 'update_request_response';
+type NotificationType = 'note' | 'status_change' | 'email_response' | 'update_request_response' | 'nps_survey_completed';
 
 interface CreateNotificationParams {
   type: NotificationType;
