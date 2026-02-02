@@ -295,6 +295,29 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       { referralId: referral._id },
       { $set: { expectedAmountCents: 0 } }
     );
+
+    // Auto-disable update reminders when referral status is Lost
+    if (parsed.data.status === 'Lost' && referral.autoUpdateRemindersEnabled !== false) {
+      referral.autoUpdateRemindersEnabled = false;
+      const reminderAuditEntry: Record<string, unknown> = {
+        actorRole: session.user.role,
+        field: 'autoUpdateRemindersEnabled',
+        previousValue: true,
+        newValue: false,
+        timestamp: now,
+      };
+      if (actorId) {
+        reminderAuditEntry.actorId = actorId;
+      }
+      referral.audit.push(reminderAuditEntry as any);
+      await logReferralActivity({
+        referralId: referral._id.toString(),
+        actorRole: session.user.role,
+        actorId: session.user.id,
+        channel: 'update',
+        content: 'Automated update reminders disabled (referral lost)',
+      });
+    }
   } else if (parsed.data.status !== 'Closed') {
     const hasActiveDeal = await Payment.exists({
       referralId: referral._id,

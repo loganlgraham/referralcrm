@@ -1381,8 +1381,22 @@ function MainDashboard({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <LineChartCard title="Revenue received" data={data.trends.revenue} formatValue={formatCurrency} />
-        <LineChartCard title="Revenue generated (closed)" data={data.trends.revenueGenerated ?? []} formatValue={formatCurrency} />
+        <MultiLineChartCard
+          title="Revenue"
+          series={[
+            {
+              label: 'Revenue received',
+              color: '#10b981',
+              data: data.trends.revenue
+            },
+            {
+              label: 'Revenue generated (closed)',
+              color: '#0ea5e9',
+              data: data.trends.revenueGenerated ?? []
+            }
+          ]}
+          formatValue={formatCurrency}
+        />
         <LineChartCard title="Deals closed" data={data.trends.deals} formatValue={(value) => formatNumber(Math.round(value))} />
         <LineChartCard title="Close rate" data={data.trends.closeRate} formatValue={(value) => `${value.toFixed(1)}%`} />
         <LineChartCard title="Referrals received" data={data.trends.referrals} formatValue={(value) => formatNumber(Math.round(value))} />
