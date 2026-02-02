@@ -14,6 +14,8 @@ import {
   IN_COMMUNICATION_LONG_RULES,
   ACTIVE_LEAD_RULES,
   UNDER_CONTRACT_RULES,
+  AHA_PRE_UC_RULES,
+  AHA_UNDER_CONTRACT_RULES,
   isTimelineLongTerm,
   isTimelineShortTerm,
   type TaskRuleDefinition,
@@ -35,6 +37,8 @@ interface ReferralSnapshot {
     lastPairedAt?: Date | null;
     lastUnderContractAt?: Date | null;
   } | null;
+  /** True when any attached agent (assigned/buy/sell) has ahaDesignation === 'AHA' */
+  hasAhaAgentAttached?: boolean;
 }
 
 function getBaseDateForStatus(
@@ -62,12 +66,31 @@ function getBaseDateForStatus(
   return statusUpdated ?? createdAt;
 }
 
+function getBaseDateForAhaPreUc(referral: ReferralSnapshot): Date {
+  const created = referral.createdAt ? new Date(referral.createdAt) : new Date();
+  const statusUpdated = referral.statusLastUpdated
+    ? new Date(referral.statusLastUpdated)
+    : null;
+  const lastPaired =
+    referral.sla?.lastPairedAt && !Number.isNaN(new Date(referral.sla.lastPairedAt).getTime())
+      ? new Date(referral.sla.lastPairedAt)
+      : null;
+  return lastPaired ?? statusUpdated ?? created;
+}
+
 function getApplicableRules(
   referral: ReferralSnapshot,
   trigger: AdminTaskTrigger
 ): TaskRuleDefinition[] {
   const status = normalizeReferralStatus(referral.status) ?? 'New Lead';
   const timeline = referral.timeline ?? 'not_specified';
+
+  if (referral.hasAhaAgentAttached) {
+    if (status === 'Under Contract') {
+      return [...AHA_UNDER_CONTRACT_RULES];
+    }
+    return [...AHA_PRE_UC_RULES];
+  }
 
   const rules: TaskRuleDefinition[] = [];
 
@@ -106,6 +129,26 @@ function getRulesToDismiss(
   const timeline = referral.timeline ?? 'not_specified';
 
   const toDismiss: { ruleKey: string; cycleKey: string }[] = [];
+
+  if (referral.hasAhaAgentAttached) {
+    if (trigger === 'referral.status_changed') {
+      if (status === 'Under Contract') {
+        toDismiss.push(
+          ...AHA_PRE_UC_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: '*' }))
+        );
+      } else {
+        toDismiss.push(
+          ...AHA_UNDER_CONTRACT_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: '*' }))
+        );
+      }
+    }
+    return toDismiss;
+  }
+
+  toDismiss.push(
+    ...AHA_PRE_UC_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: '*' })),
+    ...AHA_UNDER_CONTRACT_RULES.map((r) => ({ ruleKey: r.ruleKey, cycleKey: '*' }))
+  );
 
   if (trigger === 'referral.status_changed') {
     if (status !== 'New Lead') {
@@ -184,6 +227,18 @@ function computeDueAt(rule: TaskRuleDefinition, baseDate: Date): Date {
   return startOfDayDenver(addDays(baseDate, rule.dueOffsetDays));
 }
 
+function hasAhaAgentAttached(referral: {
+  assignedAgent?: { ahaDesignation?: string | null } | null;
+  buySideAgent?: { ahaDesignation?: string | null } | null;
+  sellSideAgent?: { ahaDesignation?: string | null } | null;
+}): boolean {
+  return (
+    referral.assignedAgent?.ahaDesignation === 'AHA' ||
+    referral.buySideAgent?.ahaDesignation === 'AHA' ||
+    referral.sellSideAgent?.ahaDesignation === 'AHA'
+  );
+}
+
 export async function generateAndReconcileAdminTasks({
   referralId,
   trigger,
@@ -194,18 +249,34 @@ export async function generateAndReconcileAdminTasks({
   actorId?: string;
 }): Promise<void> {
   const referral = await Referral.findById(referralId)
-    .select('_id status statusLastUpdated timeline createdAt sla')
-    .lean<ReferralSnapshot | null>();
+    .select('_id status statusLastUpdated timeline createdAt sla assignedAgent buySideAgent sellSideAgent')
+    .populate('assignedAgent', 'ahaDesignation')
+    .populate('buySideAgent', 'ahaDesignation')
+    .populate('sellSideAgent', 'ahaDesignation')
+    .lean();
 
   if (!referral) return;
 
+  const ref = referral as unknown as {
+    _id: Types.ObjectId;
+    status?: string;
+    statusLastUpdated?: Date | null;
+    timeline?: string | null;
+    createdAt: Date;
+    sla?: ReferralSnapshot['sla'];
+    assignedAgent?: { ahaDesignation?: string | null } | null;
+    buySideAgent?: { ahaDesignation?: string | null } | null;
+    sellSideAgent?: { ahaDesignation?: string | null } | null;
+  };
+
   const snapshot: ReferralSnapshot = {
-    _id: referral._id as Types.ObjectId,
-    status: referral.status ?? 'New Lead',
-    statusLastUpdated: referral.statusLastUpdated,
-    timeline: referral.timeline ?? 'not_specified',
-    createdAt: referral.createdAt ?? new Date(),
-    sla: referral.sla,
+    _id: ref._id,
+    status: ref.status ?? 'New Lead',
+    statusLastUpdated: ref.statusLastUpdated,
+    timeline: ref.timeline ?? 'not_specified',
+    createdAt: ref.createdAt ?? new Date(),
+    sla: ref.sla,
+    hasAhaAgentAttached: hasAhaAgentAttached(ref),
   };
 
   const status = normalizeReferralStatus(snapshot.status) ?? 'New Lead';
@@ -214,10 +285,15 @@ export async function generateAndReconcileAdminTasks({
   const applicableRules = getApplicableRules(snapshot, trigger);
   const rulesToDismiss = getRulesToDismiss(snapshot, trigger);
 
+  const baseDate =
+    snapshot.hasAhaAgentAttached && status !== 'Under Contract'
+      ? getBaseDateForAhaPreUc(snapshot)
+      : getBaseDateForStatus(snapshot, status);
+
   for (const { ruleKey, cycleKey } of rulesToDismiss) {
     if (cycleKey === 'month') {
       const openLongTerm = await AdminTask.find({
-        referralId: referral._id,
+        referralId: ref._id,
         ruleKey,
         status: 'open',
       }).lean();
@@ -237,7 +313,7 @@ export async function generateAndReconcileAdminTasks({
     } else {
       // Dismiss matching ruleKey regardless of cycleKey when wildcard
       const query: Record<string, unknown> = {
-        referralId: referral._id,
+        referralId: ref._id,
         ruleKey,
         status: 'open',
       };
@@ -258,8 +334,6 @@ export async function generateAndReconcileAdminTasks({
     }
   }
 
-  const baseDate = getBaseDateForStatus(snapshot, status);
-
   for (const rule of applicableRules) {
     let cycleKey: string;
     let dueAt: Date;
@@ -278,7 +352,7 @@ export async function generateAndReconcileAdminTasks({
     }
 
     const existing = await AdminTask.findOne({
-      referralId: referral._id,
+      referralId: ref._id,
       ruleKey: rule.ruleKey,
       cycleKey,
     }).lean<AdminTaskLean | null>();
@@ -291,13 +365,13 @@ export async function generateAndReconcileAdminTasks({
 
     await AdminTask.findOneAndUpdate(
       {
-        referralId: referral._id,
+        referralId: ref._id,
         ruleKey: rule.ruleKey,
         cycleKey,
       },
       {
         $setOnInsert: {
-          referralId: referral._id,
+          referralId: ref._id,
           title: rule.title,
           description: rule.description,
           category: rule.category,

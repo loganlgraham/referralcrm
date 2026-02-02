@@ -159,3 +159,43 @@ export const UNDER_CONTRACT_RULES: TaskRuleDefinition[] = [
   { ruleKey: 'uc_congrats_call_post_closing', title: 'Congrats call and Post Closing card – Agent/Buyer', category: 'communication', dueOffsetDays: 31, statuses: ['Under Contract'], cycleType: 'once' },
   { ruleKey: 'uc_confirm_referral_fee', title: 'Confirm receipt of referral fee', category: 'finance', dueOffsetDays: 40, statuses: ['Under Contract'], cycleType: 'once' },
 ];
+
+/** AHA-designated referrals only: pre–Under Contract tasks (persist until status is Under Contract). */
+export const AHA_PRE_UC_RULES: TaskRuleDefinition[] = [
+  {
+    ruleKey: 'aha_customer_care_buyer_agent_connected',
+    title: 'Customer care call: Buyer and Agent Connected?',
+    category: 'communication',
+    dueOffsetDays: 1,
+    statuses: ['New Lead', 'Paired', 'In Communication', 'Active Lead'],
+    cycleType: 'once',
+  },
+  {
+    ruleKey: 'aha_customer_care_buyer_happy',
+    title: 'Customer care call: Buyer happy with Agent?',
+    category: 'communication',
+    dueOffsetDays: 7,
+    statuses: ['New Lead', 'Paired', 'In Communication', 'Active Lead'],
+    cycleType: 'once',
+  },
+];
+
+/** AHA-designated referrals only: Under Contract tasks (only these UC tasks for AHA; no standard UC rules). */
+export const AHA_UNDER_CONTRACT_RULES: TaskRuleDefinition[] = [
+  {
+    ruleKey: 'aha_uc_congratulations_call',
+    title: 'UC - Congratulations call',
+    category: 'communication',
+    dueOffsetDays: 0,
+    statuses: ['Under Contract'],
+    cycleType: 'once',
+  },
+  {
+    ruleKey: 'aha_closed_congrats_survey',
+    title: 'Closed - Congrats call, notify of survey',
+    category: 'communication',
+    dueOffsetDays: 31,
+    statuses: ['Under Contract'],
+    cycleType: 'once',
+  },
+];
