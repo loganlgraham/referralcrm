@@ -64,6 +64,7 @@ interface DashboardSummary {
   activePipeline: number;
   expectedRevenueCents: number;
   realizedRevenueCents: number;
+  generatedRevenueCents: number;
   closedNotPaidCents: number;
   averageDaysNewLeadToContract: number;
   averageDaysClosedToPaid: number;
@@ -91,6 +92,7 @@ interface DashboardResponse {
     summary: DashboardSummary;
     trends: {
       revenue: TrendPoint[];
+      revenueGenerated: TrendPoint[];
       deals: TrendPoint[];
       closeRate: TrendPoint[];
       referrals: TrendPoint[];
@@ -1295,9 +1297,12 @@ function MainDashboard({
     extraStats: { label: string; value: string }[];
   }[] = [
     {
-      title: 'Realized revenue',
+      title: 'Revenue received',
       value: formatCurrency(summary.realizedRevenueCents),
-      extraStats: [{ label: 'Closed, not paid', value: formatCurrency(summary.closedNotPaidCents) }]
+      extraStats: [
+        { label: 'Generated (closed)', value: formatCurrency(summary.generatedRevenueCents) },
+        { label: 'Closed, not paid', value: formatCurrency(summary.closedNotPaidCents) }
+      ]
     },
     {
       title: 'Total Future Closings',
@@ -1377,6 +1382,7 @@ function MainDashboard({
 
       <div className="grid gap-4 lg:grid-cols-2">
         <LineChartCard title="Revenue received" data={data.trends.revenue} formatValue={formatCurrency} />
+        <LineChartCard title="Revenue generated (closed)" data={data.trends.revenueGenerated ?? []} formatValue={formatCurrency} />
         <LineChartCard title="Deals closed" data={data.trends.deals} formatValue={(value) => formatNumber(Math.round(value))} />
         <LineChartCard title="Close rate" data={data.trends.closeRate} formatValue={(value) => `${value.toFixed(1)}%`} />
         <LineChartCard title="Referrals received" data={data.trends.referrals} formatValue={(value) => formatNumber(Math.round(value))} />
