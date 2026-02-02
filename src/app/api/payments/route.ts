@@ -935,7 +935,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         referralId: referral._id.toString(),
         actorRole: 'system',
         actorId: null,
-        channel: 'system',
+        channel: 'update',
         content: `Automated update reminders disabled (deal status: ${payment.status})`,
       });
     }

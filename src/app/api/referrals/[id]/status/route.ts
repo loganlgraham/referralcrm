@@ -314,7 +314,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         referralId: referral._id.toString(),
         actorRole: session.user.role,
         actorId: session.user.id,
-        channel: 'system',
+        channel: 'update',
         content: 'Automated update reminders disabled (referral lost)',
       });
     }
