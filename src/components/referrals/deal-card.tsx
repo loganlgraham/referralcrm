@@ -690,19 +690,17 @@ export function DealCard({
       const usedAfc = deal.usedAfc ?? false;
       const usedAssignedAgent = deal.usedAssignedAgent ?? false;
       
-      if (usedAfc && usedAssignedAgent) {
-        const confirmed = window.confirm(
-          'Send congratulations emails to the agent and borrower?'
-        );
+      if (usedAssignedAgent) {
+        const emailMessage = usedAfc
+          ? 'Send congratulations emails to the agent and borrower? (includes AFC rating survey)'
+          : 'Send congratulations emails to the agent and borrower?';
+        const confirmed = window.confirm(emailMessage);
         sendClosedEmails = confirmed;
         if (confirmed) {
           toast.success('Survey emails will be sent to the agent and borrower.');
         }
       } else {
-        const missing: string[] = [];
-        if (!usedAssignedAgent) missing.push('assigned agent');
-        if (!usedAfc) missing.push('AFC');
-        toast.warning(`Survey emails will not be sent. Please ensure the ${missing.join(' and ')} ${missing.length === 1 ? 'is' : 'are'} marked as used.`);
+        toast.warning('Survey emails will not be sent. Please ensure the assigned agent is marked as used.');
       }
     }
 
