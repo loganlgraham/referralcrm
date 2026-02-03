@@ -132,6 +132,10 @@ interface DashboardReferral {
   lender?: Types.ObjectId | null;
   status?: string;
   preApprovalAmountCents?: number;
+  loanFileNumber?: string;
+  borrower?: {
+    name?: string;
+  };
   sla?: {
     daysToContract?: number | null;
     daysToClose?: number | null;
@@ -802,7 +806,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...referralMatch,
   })
     .select(
-      'createdAt referralDate status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin sla lookingInZip lookingInZips'
+      'createdAt referralDate status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin sla lookingInZip lookingInZips loanFileNumber borrower.name'
     )
     .lean<DashboardReferral[]>()
     .exec();
@@ -2142,6 +2146,43 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       ? 0
       : (agitUsedAfcCount / agitClosedOrPaidPayments.length) * 100;
 
+  // Build AGIT referral rows for table display
+  const agitReferralRows = agitReferrals.map((referral) => {
+    const agentId = referral.assignedAgent?.toString() ?? null;
+    return {
+      id: referral._id.toString(),
+      borrowerName: referral.borrower?.name ?? 'Unknown',
+      loanFileNumber: referral.loanFileNumber ?? null,
+      status: referral.status ?? 'New Lead',
+      agentId,
+      agentName: agentId ? agentNameMap.get(agentId) ?? null : null,
+      createdAt: referral.createdAt.toISOString()
+    };
+  });
+
+  // Create a map of referral IDs to borrower names for deal rows
+  const agitReferralBorrowerMap = new Map<string, string>();
+  agitReferrals.forEach((referral) => {
+    agitReferralBorrowerMap.set(referral._id.toString(), referral.borrower?.name ?? 'Unknown');
+  });
+
+  // Build AGIT deal rows for table display
+  const agitDealRows = agitFilteredPayments.map((payment) => {
+    const agentId = payment.agentId?.toString() ?? payment.referral?.assignedAgent?.toString() ?? null;
+    return {
+      id: payment._id.toString(),
+      referralId: payment.referral._id.toString(),
+      borrowerName: agitReferralBorrowerMap.get(payment.referral._id.toString()) ?? 'Unknown',
+      status: payment.status,
+      expectedAmountCents: payment.expectedAmountCents ?? 0,
+      receivedAmountCents: payment.receivedAmountCents ?? 0,
+      agentId,
+      agentName: agentId ? agentNameMap.get(agentId) ?? null : null,
+      closingDate: payment.closingDate?.toISOString() ?? null,
+      usedAfc: payment.usedAfc ?? null
+    };
+  });
+
   const timeframeResponse = {
     key: timeframe.key,
     label: timeframe.label,
@@ -2264,7 +2305,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       usedAfcRate: agitUsedAfcRate,
       lostReferrals: agitLostReferrals,
       closeRate: agitCloseRate,
-      dealsClosed: agitDealsClosed
+      dealsClosed: agitDealsClosed,
+      referralRows: agitReferralRows,
+      dealRows: agitDealRows
     }
   };
 

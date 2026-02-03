@@ -11,9 +11,10 @@ import {
   useState
 } from 'react';
 import { useSession } from 'next-auth/react';
+import Link from 'next/link';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
-import { formatCurrency, formatNumber } from '@/utils/formatters';
+import { formatCurrency, formatDate, formatNumber } from '@/utils/formatters';
 import { Trash2 } from 'lucide-react';
 import {
   TimeframeDropdown,
@@ -201,7 +202,32 @@ interface DashboardResponse {
     lostReferrals: number;
     closeRate: number;
     dealsClosed: number;
+    referralRows: AgitReferralRow[];
+    dealRows: AgitDealRow[];
   };
+}
+
+interface AgitReferralRow {
+  id: string;
+  borrowerName: string;
+  loanFileNumber: string | null;
+  status: string;
+  agentId: string | null;
+  agentName: string | null;
+  createdAt: string;
+}
+
+interface AgitDealRow {
+  id: string;
+  referralId: string;
+  borrowerName: string;
+  status: string;
+  expectedAmountCents: number;
+  receivedAmountCents: number;
+  agentId: string | null;
+  agentName: string | null;
+  closingDate: string | null;
+  usedAfc: boolean | null;
 }
 
 const TAB_OPTIONS = [
@@ -1571,6 +1597,125 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
           title="Close Rate"
           value={`${data.closeRate.toFixed(1)}%`}
         />
+      </div>
+
+      {/* AGIT Referrals Table */}
+      <div>
+        <h3 className="mb-3 text-lg font-semibold text-slate-900">AGIT Referrals</h3>
+        {data.referralRows.length === 0 ? (
+          <p className="text-sm text-slate-500">No AGIT referrals in this timeframe.</p>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <table className="min-w-full divide-y divide-slate-200">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Borrower</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Created</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.referralRows.map((row) => (
+                  <tr key={row.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3 text-sm text-slate-700">
+                      <div className="flex flex-col">
+                        <Link
+                          prefetch={false}
+                          href={`/referrals/${row.id}`}
+                          className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+                        >
+                          {row.borrowerName}
+                        </Link>
+                        {row.loanFileNumber && (
+                          <span className="text-xs text-slate-500">Loan # {row.loanFileNumber}</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-700">{row.status}</td>
+                    <td className="px-4 py-3 text-sm text-slate-700">
+                      {row.agentId ? (
+                        <Link
+                          prefetch={false}
+                          href={`/agents/${row.agentId}`}
+                          className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+                        >
+                          {row.agentName || 'Agent'}
+                        </Link>
+                      ) : (
+                        <span className="text-slate-400">Unassigned</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-700">
+                      {formatDate(row.createdAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* AGIT Deals Table */}
+      <div>
+        <h3 className="mb-3 text-lg font-semibold text-slate-900">AGIT Deals</h3>
+        {data.dealRows.length === 0 ? (
+          <p className="text-sm text-slate-500">No deals for AGIT referrals in this timeframe.</p>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <table className="min-w-full divide-y divide-slate-200">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Expected</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Received</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Closing Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Used AFC</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.dealRows.map((row) => (
+                  <tr key={row.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3 text-sm text-slate-700">
+                      <Link
+                        prefetch={false}
+                        href={`/referrals/${row.referralId}`}
+                        className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+                      >
+                        {row.borrowerName}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-700 capitalize">{row.status.replace(/_/g, ' ')}</td>
+                    <td className="px-4 py-3 text-sm text-slate-700">{formatCurrency(row.expectedAmountCents)}</td>
+                    <td className="px-4 py-3 text-sm text-slate-700">{formatCurrency(row.receivedAmountCents)}</td>
+                    <td className="px-4 py-3 text-sm text-slate-700">
+                      {row.agentId ? (
+                        <Link
+                          prefetch={false}
+                          href={`/agents/${row.agentId}`}
+                          className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+                        >
+                          {row.agentName || 'Agent'}
+                        </Link>
+                      ) : (
+                        <span className="text-slate-400">Unassigned</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-700">
+                      {row.closingDate ? formatDate(row.closingDate) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-700">
+                      {row.usedAfc === null ? '—' : row.usedAfc ? 'Yes' : 'No'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
