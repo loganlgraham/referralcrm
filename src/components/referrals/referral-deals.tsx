@@ -103,6 +103,7 @@ function DealCard({
   onDelete,
   onUpdate,
   viewerRole,
+  feeBreakdownAutoSendEnabled,
 }: {
   deal: ReferralPayment;
   agents: AgentOption[];
@@ -119,6 +120,7 @@ function DealCard({
   onDelete: (deal: ReferralPayment) => void;
   onUpdate: (deal: ReferralPayment, payload: DealUpdatePayload) => Promise<boolean>;
   viewerRole?: string;
+  feeBreakdownAutoSendEnabled?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1429,6 +1431,7 @@ export function ReferralDeals({
               onDelete={handleDelete}
               onUpdate={handleDealEdit}
               viewerRole={viewerRole}
+              feeBreakdownAutoSendEnabled={feeBreakdownAutoSendEnabled}
             />
           ))
         )}
