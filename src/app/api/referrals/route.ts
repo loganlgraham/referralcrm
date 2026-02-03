@@ -995,10 +995,12 @@ export async function POST(request: Request) {
     }
   }
 
+  let creatorAgentDesignation: string | null = null;
   if (session.user.role === 'agent') {
-    const agent = await Agent.findOne({ userId: session.user.id }).select('_id');
+    const agent = await Agent.findOne({ userId: session.user.id }).select('_id ahaDesignation');
     if (agent) {
       const agentId = agent._id;
+      creatorAgentDesignation = agent.ahaDesignation ?? null;
       if (parsed.data.clientType === 'Seller') {
         referralData.sellSideAgent = agentId;
         referralData.assignedAgent = agentId;
@@ -1163,7 +1165,9 @@ export async function POST(request: Request) {
   });
 
   // Send email notification to kristen.truong@americanhomeagents.com
-  if (isTransactionalEmailConfigured()) {
+  // Skip if AGIT agent created the referral
+  const hasAgitCreator = creatorAgentDesignation === 'AGIT';
+  if (isTransactionalEmailConfigured() && !hasAgitCreator) {
     (async () => {
       try {
         const escapeHtml = (value: string): string => {

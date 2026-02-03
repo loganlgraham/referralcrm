@@ -681,6 +681,17 @@ export async function getReferralById(id: string) {
     (referral.sellSideAgent as any)?.ahaDesignation === 'AHA'
   );
 
+  // Check if fee breakdown auto-send should be enabled (disabled for AHA and AGIT agents)
+  const hasAhaOrAgitAgent = Boolean(
+    (referral.assignedAgent as any)?.ahaDesignation === 'AHA' ||
+    (referral.assignedAgent as any)?.ahaDesignation === 'AGIT' ||
+    (referral.buySideAgent as any)?.ahaDesignation === 'AHA' ||
+    (referral.buySideAgent as any)?.ahaDesignation === 'AGIT' ||
+    (referral.sellSideAgent as any)?.ahaDesignation === 'AHA' ||
+    (referral.sellSideAgent as any)?.ahaDesignation === 'AGIT'
+  );
+  const feeBreakdownAutoSendEnabled = !hasAhaOrAgitAgent;
+
   return {
     ...referral,
     _id: referral._id.toString(),
@@ -699,6 +710,7 @@ export async function getReferralById(id: string) {
     hasAhaOosAgentAttached,
     hasAhaDesignatedAgentAttached,
     hasAhaAgentAttached,
+    feeBreakdownAutoSendEnabled,
     payments: payments.map((payment: any) => {
       const sentBy = payment.feeBreakdownEmailSentBy ?? null;
       const sentByStr =

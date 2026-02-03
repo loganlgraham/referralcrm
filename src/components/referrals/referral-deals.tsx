@@ -17,6 +17,7 @@ interface ReferralDealsProps {
   onDealDeleted?: (id: string) => void;
   viewerRole?: string;
   referralOrigin?: 'agent' | 'admin' | 'mc' | null;
+  feeBreakdownAutoSendEnabled?: boolean;
 }
 
 type AgentOption = { id: string; name: string };
@@ -464,9 +465,9 @@ function DealCard({
                             ? `✓ Sent ${formatDateTimeMST(deal.feeBreakdownEmailSentAt)} (auto)`
                             : `✓ Sent ${formatDateTimeMST(deal.feeBreakdownEmailSentAt)} by ${deal.feeBreakdownEmailSentByUser?.name ?? deal.feeBreakdownEmailSentByUser?.email ?? 'admin'}`}
                         </>
-                      ) : (
+                      ) : feeBreakdownAutoSendEnabled !== false ? (
                         '⏰ Auto-sends 7 days before closing.'
-                      )}
+                      ) : null}
                     </p>
                     {deal.feeBreakdownEmailSentAt &&
                       deal.feeBreakdownEmailSentBy !== 'cron' && (
@@ -767,6 +768,7 @@ export function ReferralDeals({
   onDealDeleted,
   viewerRole,
   referralOrigin,
+  feeBreakdownAutoSendEnabled,
 }: ReferralDealsProps) {
   const [status, setStatus] = useState<DealStatus>('under_contract');
   const [markPaid, setMarkPaid] = useState(false);

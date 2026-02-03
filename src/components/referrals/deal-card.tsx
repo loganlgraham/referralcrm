@@ -80,6 +80,7 @@ export interface ReferralDealProps {
       email?: string | null;
       phone?: string | null;
     } | null;
+    feeBreakdownAutoSendEnabled?: boolean;
   };
   overrides?: DealOverrides;
   summary?: DealSummaryInfo;
@@ -1409,9 +1410,9 @@ export function DealCard({
                             ? `✓ Sent ${formatDateTimeMST(deal.feeBreakdownEmailSentAt)} (auto)`
                             : `✓ Sent ${formatDateTimeMST(deal.feeBreakdownEmailSentAt)} by ${deal.feeBreakdownEmailSentByUser?.name ?? deal.feeBreakdownEmailSentByUser?.email ?? 'admin'}`}
                         </>
-                      ) : (
+                      ) : referral.feeBreakdownAutoSendEnabled !== false ? (
                         '⏰ Auto-sends 7 days before closing.'
-                      )}
+                      ) : null}
                     </p>
                     {deal.feeBreakdownEmailSentAt &&
                       deal.feeBreakdownEmailSentBy !== 'cron' && (

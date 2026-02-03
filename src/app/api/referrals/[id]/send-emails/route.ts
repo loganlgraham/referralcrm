@@ -222,13 +222,28 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   await connectMongo();
   const referral = await Referral.findOne({ _id: params.id, deletedAt: null })
-    .populate('assignedAgent', 'name email phone')
-    .populate('buySideAgent', 'name email phone')
-    .populate('sellSideAgent', 'name email phone')
+    .populate('assignedAgent', 'name email phone ahaDesignation')
+    .populate('buySideAgent', 'name email phone ahaDesignation')
+    .populate('sellSideAgent', 'name email phone ahaDesignation')
     .populate('lender', 'name email phone');
 
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
+  }
+
+  // Check if any attached agent has AGIT designation - skip all automated emails
+  const hasAgitAgent =
+    (referral.assignedAgent as any)?.ahaDesignation === 'AGIT' ||
+    (referral.buySideAgent as any)?.ahaDesignation === 'AGIT' ||
+    (referral.sellSideAgent as any)?.ahaDesignation === 'AGIT';
+
+  if (hasAgitAgent) {
+    return NextResponse.json({
+      sent: [],
+      skipped: ['agent', 'mc', 'admin'],
+      errors: [],
+      message: 'Emails skipped - AGIT agent attached to referral'
+    });
   }
 
   const buySideContact = normalizeContact(referral.buySideAgent);

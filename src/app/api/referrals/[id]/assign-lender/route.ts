@@ -31,9 +31,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   await connectMongo();
   const referral = await Referral.findById(params.id)
-    .populate('assignedAgent', 'userId name email phone')
-    .populate('buySideAgent', 'userId')
-    .populate('sellSideAgent', 'userId')
+    .populate('assignedAgent', 'userId name email phone ahaDesignation')
+    .populate('buySideAgent', 'userId ahaDesignation')
+    .populate('sellSideAgent', 'userId ahaDesignation')
     .populate('lender', 'userId name');
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
@@ -103,7 +103,13 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const isNewAssignment = !previousLender || previousLender !== parsed.data.lenderId;
   const lenderEmail = nextLenderDoc?.email?.trim();
 
-  const shouldNotifyMc = referral.origin === 'agent';
+  // Check if any attached agent has AGIT designation - skip MC notification if so
+  const hasAgitAgent =
+    (referral.assignedAgent as any)?.ahaDesignation === 'AGIT' ||
+    (referral.buySideAgent as any)?.ahaDesignation === 'AGIT' ||
+    (referral.sellSideAgent as any)?.ahaDesignation === 'AGIT';
+
+  const shouldNotifyMc = referral.origin === 'agent' && !hasAgitAgent;
 
   if (isNewAssignment && lenderEmail && shouldNotifyMc && isTransactionalEmailConfigured()) {
     const borrowerName = referral.borrower?.name?.trim() || 'your referral';

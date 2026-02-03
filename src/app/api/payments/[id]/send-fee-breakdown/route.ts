@@ -63,7 +63,7 @@ export async function POST(
     // Fetch payment with related data
     const payment = await Payment.findById(paymentId)
       .populate('referralId')
-      .populate('agentId')
+      .populate('agentId', '_id name email ahaDesignation')
       .lean<PaymentLean>();
 
     if (!payment) {
@@ -84,9 +84,17 @@ export async function POST(
     }
 
     // Get agent email - agentId is populated, so it's an object
-    const agent = payment.agentId as { _id: Types.ObjectId; name?: string | null; email?: string | null } | null;
+    const agent = payment.agentId as { _id: Types.ObjectId; name?: string | null; email?: string | null; ahaDesignation?: string | null } | null;
     if (!agent || !agent.email) {
       return NextResponse.json({ error: 'Agent email not found' }, { status: 400 });
+    }
+
+    // Block fee breakdown emails for AHA and AGIT designated agents
+    if (agent.ahaDesignation === 'AHA' || agent.ahaDesignation === 'AGIT') {
+      return NextResponse.json(
+        { error: 'Fee breakdown emails are not sent to AHA or AGIT designated agents' },
+        { status: 400 }
+      );
     }
 
     // Get referral data - referralId is populated, so it's an object

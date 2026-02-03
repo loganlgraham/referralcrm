@@ -641,9 +641,13 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   }
 
   const referral = await Referral.findById(existingPayment.referralId)
-    .populate('assignedAgent', 'name email _id')
+    .populate('assignedAgent', 'name email _id ahaDesignation')
     .populate('lender', 'name email _id');
   const isAgentOrigin = referral?.origin === 'agent';
+
+  // Check if assigned agent has AGIT designation - skip automated emails if so
+  const assignedAgentDesignation = (referral?.assignedAgent as any)?.ahaDesignation ?? null;
+  const hasAgitAgent = assignedAgentDesignation === 'AGIT';
 
   const previousStatus = existingPayment.status;
   const isClosingNow = parsed.data.status === 'closed' && previousStatus !== 'closed';
@@ -951,8 +955,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     }
 
     // Send congratulatory emails with NPS survey links when deal is closed
+    // Skip all automated emails if AGIT agent is attached
     const shouldSendClosedEmails = parsed.data.sendClosedEmails ?? false;
-    if (isClosingNow && shouldSendClosedEmails && isTransactionalEmailConfigured()) {
+    if (isClosingNow && shouldSendClosedEmails && !hasAgitAgent && isTransactionalEmailConfigured()) {
       const usedAfc = payment.usedAfc ?? existingPayment.usedAfc ?? false;
       const usedAssignedAgent = payment.usedAssignedAgent ?? existingPayment.usedAssignedAgent ?? false;
       const origin = getReferralAppBaseUrl();

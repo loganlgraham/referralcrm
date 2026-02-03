@@ -47,6 +47,21 @@ export function hasAhaOosAgentAttached(referral: ReferralLike): boolean {
   );
 }
 
+/**
+ * Check if a referral has an attached agent with AGIT designation.
+ * Checks assignedAgent, buySideAgent, and sellSideAgent.
+ *
+ * @param referral - Referral object (or similar) with populated agent fields
+ * @returns true if any attached agent has ahaDesignation === 'AGIT'
+ */
+export function hasAgitAgentAttached(referral: ReferralLike): boolean {
+  return (
+    referral.assignedAgent?.ahaDesignation === 'AGIT' ||
+    referral.buySideAgent?.ahaDesignation === 'AGIT' ||
+    referral.sellSideAgent?.ahaDesignation === 'AGIT'
+  );
+}
+
 // Stop cron: referral status Lost or Closed; or any deal status closed/payment_sent/paid.
 // Continue cron for Terminated (referral or deal).
 const REFERRAL_TERMINAL_STATUSES = ['Closed', 'Lost'];
@@ -99,9 +114,9 @@ export async function runAutoUpdateReminders(
       { assignedAgent: { $exists: true, $ne: null } },
     ],
   })
-    .populate('assignedAgent', '_id name email')
-    .populate('buySideAgent', '_id name email')
-    .populate('sellSideAgent', '_id name email')
+    .populate('assignedAgent', '_id name email ahaDesignation')
+    .populate('buySideAgent', '_id name email ahaDesignation')
+    .populate('sellSideAgent', '_id name email ahaDesignation')
     .populate('lender', '_id name email phone')
     .lean();
 
@@ -119,6 +134,13 @@ export async function runAutoUpdateReminders(
     };
 
     try {
+      // Skip referrals with AGIT-designated agents - no automated emails for AGIT
+      if (hasAgitAgentAttached(referral as ReferralLike)) {
+        result.reason = 'AGIT agent attached - automated emails disabled';
+        results.push(result);
+        continue;
+      }
+
       if (!referral.sla?.lastPairedAt) {
         result.reason = 'No pairing date';
         results.push(result);
