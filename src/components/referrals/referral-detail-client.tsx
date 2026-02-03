@@ -13,7 +13,7 @@ import type { Contact } from '@/components/referrals/contact-assignment';
 import { normalizeReferralStatus, type ReferralStatus, REFERRAL_TIMELINE_OPTIONS, REFERRAL_TIMELINE_VALUES } from '@/constants/referrals';
 import { ReferralDeals } from '@/components/referrals/referral-deals';
 import type { ReferralPayment } from '@/types/referral-payment';
-import { formatCurrency, formatDate } from '@/utils/formatters';
+import { formatCurrency, formatDateMST } from '@/utils/formatters';
 
 type ReferralSource = string;
 type ReferralClientType = 'Seller' | 'Buyer' | 'Both';
@@ -1447,13 +1447,13 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             </div>
             <div className="space-y-1">
               <dt className="text-xs uppercase text-slate-500">Entered into CRM</dt>
-              <dd className="text-sm text-slate-700">{formatDate(referral.createdAt)}</dd>
+              <dd className="text-sm text-slate-700">{formatDateMST(referral.createdAt)}</dd>
             </div>
             {viewerRole === 'admin' && (
               <div className="space-y-1">
                 <dt className="text-xs uppercase text-slate-500">Referral date (historical)</dt>
                 <dd className="text-sm text-slate-700">
-                  {referral.referralDate ? formatDate(referral.referralDate) : '—'}
+                  {referral.referralDate ? formatDateMST(referral.referralDate) : '—'}
                 </dd>
               </div>
             )}

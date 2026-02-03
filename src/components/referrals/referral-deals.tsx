@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/constants/deals';
-import { formatCurrency, formatDate, formatDateTime } from '@/utils/formatters';
+import { formatCurrency, formatDateMST, formatDateTimeMST } from '@/utils/formatters';
 import type { ReferralPayment } from '@/types/referral-payment';
 
 interface ReferralDealsProps {
@@ -327,9 +327,9 @@ function DealCard({
           <div className="space-y-1">
             <p className="text-xs uppercase text-slate-500">Status</p>
             <p className="text-sm font-semibold text-slate-900">{statusLabel}</p>
-            <p className="text-xs text-slate-500">Created {formatDate(deal.createdAt)}</p>
+            <p className="text-xs text-slate-500">Created {formatDateMST(deal.createdAt)}</p>
             <p className="text-xs text-slate-500">
-              Closing date: {deal.closingDate ? formatDate(deal.closingDate) : '—'}
+              Closing date: {deal.closingDate ? formatDateMST(deal.closingDate) : '—'}
             </p>
             {deal.status === 'terminated' && (
               <p className="text-xs font-medium text-rose-600">
@@ -461,8 +461,8 @@ function DealCard({
                       {deal.feeBreakdownEmailSentAt ? (
                         <>
                           {deal.feeBreakdownEmailSentBy === 'cron'
-                            ? `✓ Sent ${formatDateTime(deal.feeBreakdownEmailSentAt)} (auto)`
-                            : `✓ Sent ${formatDateTime(deal.feeBreakdownEmailSentAt)} by ${deal.feeBreakdownEmailSentByUser?.name ?? deal.feeBreakdownEmailSentByUser?.email ?? 'admin'}`}
+                            ? `✓ Sent ${formatDateTimeMST(deal.feeBreakdownEmailSentAt)} (auto)`
+                            : `✓ Sent ${formatDateTimeMST(deal.feeBreakdownEmailSentAt)} by ${deal.feeBreakdownEmailSentByUser?.name ?? deal.feeBreakdownEmailSentByUser?.email ?? 'admin'}`}
                         </>
                       ) : (
                         '⏰ Auto-sends 7 days before closing.'

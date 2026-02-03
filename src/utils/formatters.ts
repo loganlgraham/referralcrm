@@ -1,3 +1,5 @@
+import { formatInTimeZone } from 'date-fns-tz';
+
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD'
@@ -13,6 +15,8 @@ const dateTimeFormatter = new Intl.DateTimeFormat('en-US', {
   dateStyle: 'medium',
   timeStyle: 'short',
 });
+
+const MST_TIMEZONE = 'America/Denver';
 
 export function formatCurrency(cents: number) {
   return currencyFormatter.format((cents || 0) / 100);
@@ -97,4 +101,30 @@ export function formatDateTime(value?: string | Date | null) {
   }
 
   return dateTimeFormatter.format(parsed);
+}
+
+export function formatDateMST(value?: string | Date | null) {
+  if (!value) {
+    return '—';
+  }
+
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return '—';
+  }
+
+  return formatInTimeZone(parsed, MST_TIMEZONE, 'MMM d, yyyy');
+}
+
+export function formatDateTimeMST(value?: string | Date | null) {
+  if (!value) {
+    return '—';
+  }
+
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return '—';
+  }
+
+  return formatInTimeZone(parsed, MST_TIMEZONE, "MMM d, yyyy 'at' h:mm a 'MT'");
 }

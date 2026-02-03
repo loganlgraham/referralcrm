@@ -3,7 +3,9 @@
 import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSWRConfig } from 'swr';
 import { differenceInDays } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
 import { toast } from 'sonner';
+import { SLA_TIME_ZONE } from '@/utils/sla-insights';
 
 import { ReferralStatus, REFERRAL_STATUSES, normalizeReferralStatus } from '@/constants/referrals';
 import { StatusChanger } from '@/components/referrals/status-changer';
@@ -1052,10 +1054,7 @@ export function ReferralHeader({
                     <p>{introEmailStatus.summary}</p>
                     <p>
                       Copied intro email for Gmail and sent at{' '}
-                      {introEmailStatus.sentAt.toLocaleString([], {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      })}
+                      {formatInTimeZone(new Date(introEmailStatus.sentAt), SLA_TIME_ZONE, "h:mm a 'MT'")}
                       .
                     </p>
                   </div>

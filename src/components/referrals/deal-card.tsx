@@ -6,7 +6,7 @@ import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/constants/deals';
-import { formatCurrency, formatDate, formatDateTime } from '@/utils/formatters';
+import { formatCurrency, formatDateTimeMST } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { useAgentOptions } from '@/hooks/use-agent-options';
 export type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
@@ -1406,8 +1406,8 @@ export function DealCard({
                       {deal.feeBreakdownEmailSentAt ? (
                         <>
                           {deal.feeBreakdownEmailSentBy === 'cron'
-                            ? `✓ Sent ${formatDateTime(deal.feeBreakdownEmailSentAt)} (auto)`
-                            : `✓ Sent ${formatDateTime(deal.feeBreakdownEmailSentAt)} by ${deal.feeBreakdownEmailSentByUser?.name ?? deal.feeBreakdownEmailSentByUser?.email ?? 'admin'}`}
+                            ? `✓ Sent ${formatDateTimeMST(deal.feeBreakdownEmailSentAt)} (auto)`
+                            : `✓ Sent ${formatDateTimeMST(deal.feeBreakdownEmailSentAt)} by ${deal.feeBreakdownEmailSentByUser?.name ?? deal.feeBreakdownEmailSentByUser?.email ?? 'admin'}`}
                         </>
                       ) : (
                         '⏰ Auto-sends 7 days before closing.'

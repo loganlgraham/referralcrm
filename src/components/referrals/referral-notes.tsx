@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSWRConfig } from 'swr';
 import { toast } from 'sonner';
 import { Trash2, Pencil } from 'lucide-react';
+import { formatInTimeZone } from 'date-fns-tz';
+import { SLA_TIME_ZONE } from '@/utils/sla-insights';
 
 interface ReferralNote {
   id: string;
@@ -36,7 +38,7 @@ interface Props {
 
 const formatTimestamp = (value: string) => {
   try {
-    return new Date(value).toLocaleString();
+    return formatInTimeZone(new Date(value), SLA_TIME_ZONE, "MMM d, yyyy 'at' h:mm a 'MT'");
   } catch (error) {
     return value;
   }
