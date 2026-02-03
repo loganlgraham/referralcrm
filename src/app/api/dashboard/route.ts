@@ -777,8 +777,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         firstContactSampleSize: 0
       },
       agit: {
-        totalReferrals: 0,
-        glennBeckReferrals: 0,
+        agitReferrals: 0,
+        agitPercentage: 0,
         usedAfcCount: 0,
         usedAfcRate: 0,
         lostReferrals: 0,
@@ -1956,15 +1956,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .sort((a, b) => b.referrals - a.referrals)
     .slice(0, 10);
 
-  const adminEligibleReferrals = referralsByNetwork.filter((referral) => {
-    const metricDate = getSlaMetricDate(referral, referral.createdAt ?? null);
-    return metricDate ? isWithinTimeframe(metricDate) : false;
-  });
+  // Admin metrics: referrals created within timeframe and network only.
+  // "Unassigned" = still in "New Lead" (not paired). "Assigned" = moved to Paired or beyond.
+  const adminEligibleReferrals = filteredReferrals;
 
   const unassignedReferrals = adminEligibleReferrals.filter(
-    (referral) => (referral.status ?? '').toLowerCase() === 'new lead'
+    (referral) => (referral.status ?? '').trim() === 'New Lead'
   ).length;
-  const assignedReferrals = Math.max(adminEligibleReferrals.length - unassignedReferrals, 0);
+  const assignedReferrals = adminEligibleReferrals.length - unassignedReferrals;
   const assignmentRate = adminEligibleReferrals.length
     ? (assignedReferrals / adminEligibleReferrals.length) * 100
     : 0;
@@ -2100,49 +2099,38 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       updatedAt: entry.preApprovalsUpdatedAt
     }));
 
-  // AGIT Dashboard Metrics: Filter referrals where endorser is "Glenn Beck"
-  const glennBeckReferrals = referralsByNetwork.filter((referral) => {
-    const endorser = referral.endorser?.trim().toLowerCase();
-    return endorser === 'glenn beck';
-  });
-
-  const glennBeckReferralsInTimeframe = glennBeckReferrals.filter((referral) =>
-    isWithinTimeframe(referral.createdAt)
+  // AGIT Dashboard Metrics: Filter referrals by agent designation === 'AGIT'
+  const agitReferrals = filteredReferrals.filter(
+    (referral) => getReferralDesignation(referral) === 'AGIT'
   );
+  const agitReferralIds = new Set(agitReferrals.map((r) => r._id.toString()));
+  const agitPercentage =
+    filteredReferrals.length === 0
+      ? 0
+      : (agitReferrals.length / filteredReferrals.length) * 100;
 
-  const glennBeckReferralIds = new Set(glennBeckReferralsInTimeframe.map((r) => r._id.toString()));
-
-  // Filter payments for Glenn Beck referrals
-  const glennBeckPayments = paymentsByNetwork.filter((payment) =>
-    glennBeckReferralIds.has(payment.referral._id.toString())
+  const agitFilteredPayments = filteredPaymentsByNetwork.filter((payment) =>
+    agitReferralIds.has(payment.referral._id.toString())
   );
-
-  const glennBeckFilteredPayments = filteredPaymentsByNetwork.filter((payment) =>
-    glennBeckReferralIds.has(payment.referral._id.toString())
-  );
-
-  // Calculate AGIT metrics
-  const agitTotalReferrals = glennBeckReferralsInTimeframe.length;
-  const agitGlennBeckReferrals = agitTotalReferrals; // Same value for clarity
 
   // Lost referrals (status === 'Lost')
-  const agitLostReferrals = glennBeckReferralsInTimeframe.filter(
+  const agitLostReferrals = agitReferrals.filter(
     (referral) => referral.status === 'Lost'
   ).length;
 
   // Closed/paid deals
-  const agitDealsClosed = glennBeckFilteredPayments.filter(
+  const agitDealsClosed = agitFilteredPayments.filter(
     (payment) =>
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
       (payment.status === 'closed' || payment.status === 'paid')
   ).length;
 
   // Close rate
-  const agitCloseRate = agitTotalReferrals === 0 ? 0 : (agitDealsClosed / agitTotalReferrals) * 100;
+  const agitCloseRate =
+    agitReferrals.length === 0 ? 0 : (agitDealsClosed / agitReferrals.length) * 100;
 
   // Used AFC / AFC Attach Rate
-  // Count payments where usedAfc === false (went to another lender, not AFC)
-  const agitClosedOrPaidPayments = glennBeckFilteredPayments.filter(
+  const agitClosedOrPaidPayments = agitFilteredPayments.filter(
     (payment) =>
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
       (payment.status === 'closed' || payment.status === 'paid')
@@ -2270,8 +2258,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       firstContactSampleSize: firstContactRecords.length
     },
     agit: {
-      totalReferrals: agitTotalReferrals,
-      glennBeckReferrals: agitGlennBeckReferrals,
+      agitReferrals: agitReferrals.length,
+      agitPercentage,
       usedAfcCount: agitUsedAfcCount,
       usedAfcRate: agitUsedAfcRate,
       lostReferrals: agitLostReferrals,
