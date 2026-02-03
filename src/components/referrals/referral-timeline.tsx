@@ -2,7 +2,8 @@
 
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
-import { format } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
+import { SLA_TIME_ZONE } from '@/utils/sla-insights';
 import { useMemo, useState } from 'react';
 
 interface Activity {
@@ -50,7 +51,7 @@ export function ReferralTimeline({ referralId }: { referralId: string }) {
             <div key={activity._id} className="rounded-lg border border-slate-200 bg-slate-50/60 p-4">
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span className="uppercase">{activity.channel}</span>
-                <span>{format(new Date(activity.createdAt), 'PPpp')}</span>
+                <span>{formatInTimeZone(new Date(activity.createdAt), SLA_TIME_ZONE, "MMM d, yyyy 'at' h:mm a 'MT'")}</span>
               </div>
               <p className="mt-2 text-sm text-slate-700">{activity.content}</p>
               <p className="text-xs text-slate-500">by {activity.actor}</p>
