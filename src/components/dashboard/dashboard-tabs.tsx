@@ -215,6 +215,7 @@ interface AgitReferralRow {
   agentId: string | null;
   agentName: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 interface AgitDealRow {
@@ -1613,6 +1614,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Created</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Last Updated</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1648,6 +1650,9 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-700">
                       {formatDate(row.createdAt)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-700">
+                      {formatDate(row.updatedAt)}
                     </td>
                   </tr>
                 ))}

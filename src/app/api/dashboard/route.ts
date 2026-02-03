@@ -110,6 +110,7 @@ interface AggregatedPayment {
 interface DashboardReferral {
   _id: Types.ObjectId;
   createdAt: Date;
+  updatedAt?: Date;
   referralDate?: Date | null;
   source: 'Lender' | 'MC';
   endorser?: string;
@@ -806,7 +807,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...referralMatch,
   })
     .select(
-      'createdAt referralDate status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin sla lookingInZip lookingInZips loanFileNumber borrower.name'
+      'createdAt updatedAt referralDate status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin sla lookingInZip lookingInZips loanFileNumber borrower.name'
     )
     .lean<DashboardReferral[]>()
     .exec();
@@ -2156,7 +2157,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       status: referral.status ?? 'New Lead',
       agentId,
       agentName: agentId ? agentNameMap.get(agentId) ?? null : null,
-      createdAt: referral.createdAt.toISOString()
+      createdAt: referral.createdAt.toISOString(),
+      updatedAt: referral.updatedAt?.toISOString() ?? referral.createdAt.toISOString()
     };
   });
 
