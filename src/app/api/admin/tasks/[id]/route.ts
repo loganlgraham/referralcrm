@@ -43,6 +43,7 @@ export async function PATCH(
   const body = await request.json();
   const action = body.action as string | undefined;
   const update: Record<string, unknown> = { updatedAt: new Date(), updatedBy: session.user.id };
+  const unsetFields: Record<string, ''> = {};
 
   if (action === 'complete') {
     if (existing.status !== 'open') {
@@ -80,11 +81,11 @@ export async function PATCH(
     }
     update.snoozedUntil = snoozedUntil;
   } else if (action === 'unsnooze') {
-    update.snoozedUntil = undefined;
+    unsetFields.snoozedUntil = '';
   } else if (action === 'set_due_override') {
     const dueAtOverride = body.dueAtOverride;
     if (dueAtOverride === null || dueAtOverride === undefined) {
-      update.dueAtOverride = undefined;
+      unsetFields.dueAtOverride = '';
     } else {
       const date = new Date(dueAtOverride);
       if (Number.isNaN(date.getTime())) {
@@ -115,9 +116,13 @@ export async function PATCH(
     );
   }
 
+  const updateOp: Record<string, unknown> = { $set: update };
+  if (Object.keys(unsetFields).length > 0) {
+    updateOp.$unset = unsetFields;
+  }
   const updated = await AdminTask.findByIdAndUpdate(
     id,
-    { $set: update },
+    updateOp,
     { new: true }
   ).lean<AdminTaskLean>();
 
