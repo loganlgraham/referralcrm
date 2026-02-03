@@ -130,6 +130,32 @@ export function getNextAutoUpdateSendAt({
   zonedNextAt.setHours(REMINDER_SEND_HOUR_MT, 0, 0, 0);
   const nextSendDate = zonedTimeToUtc(zonedNextAt, SLA_TIME_ZONE);
 
+  // If the calculated send time is in the past (e.g., scheduled for 8 AM today
+  // but it's now 3 PM, or reminders were disabled then re-enabled), advance to the next scheduled day
+  if (nextSendDate <= now) {
+    const nextScheduledDayAfterToday = REMINDER_SCHEDULE.find(
+      (day) => day > daysSincePairing
+    );
+
+    if (!nextScheduledDayAfterToday) {
+      return {
+        nextAt: null,
+        reason: 'Not scheduled (all reminder days have passed)',
+      };
+    }
+
+    const futureDaysUntilNext = nextScheduledDayAfterToday - daysSincePairing;
+    const futureZonedDayStart = addDays(zonedPairedStart, futureDaysUntilNext);
+    const futureZonedAt = new Date(futureZonedDayStart);
+    futureZonedAt.setHours(REMINDER_SEND_HOUR_MT, 0, 0, 0);
+    const futureNextSendDate = zonedTimeToUtc(futureZonedAt, SLA_TIME_ZONE);
+
+    return {
+      nextAt: futureNextSendDate,
+      reason: null,
+    };
+  }
+
   return {
     nextAt: nextSendDate,
     reason: null,
