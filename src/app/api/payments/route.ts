@@ -996,7 +996,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
               html: `
                 <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
                   <p>Hi ${borrowerFirstName},</p>
-                  <p>Congratulations on closing on your new home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent—your feedback means a lot and helps others tremendously. Wishing you all the best in your new place!</p>
+                  <p>Congratulations on closing on your new home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best in your new place!</p>
                   <p style="margin: 20px 0 0 0;">
                     <a href="${agentSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
                       Rate Your Agent
@@ -1004,7 +1004,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
                   </p>
                 </div>
               `,
-              text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your new home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent—your feedback means a lot and helps others tremendously. Wishing you all the best in your new place!\n\nRate your agent: ${agentSurveyUrl}`,
+              text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your new home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best in your new place!\n\nRate your agent: ${agentSurveyUrl}`,
             });
           }
         }

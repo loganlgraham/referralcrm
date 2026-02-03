@@ -89,7 +89,11 @@ function getApplicableRules(
     if (status === 'Under Contract') {
       return [...AHA_UNDER_CONTRACT_RULES];
     }
-    return [...AHA_PRE_UC_RULES];
+    // Only create AHA pre-UC tasks on status change, not on agent assignment
+    if (trigger === 'referral.status_changed') {
+      return [...AHA_PRE_UC_RULES];
+    }
+    return [];
   }
 
   const rules: TaskRuleDefinition[] = [];
@@ -216,15 +220,16 @@ function computeCycleKey(
   return formatInTimeZone(baseDate, SLA_TIME_ZONE, 'yyyy-MM');
 }
 
-function startOfDayDenver(date: Date): Date {
+function dueTimeDenver(date: Date): Date {
   const dateStr = formatInTimeZone(date, SLA_TIME_ZONE, 'yyyy-MM-dd');
   const [y, m, d] = dateStr.split('-').map(Number);
-  const midnightLocal = new Date(y, m - 1, d, 0, 0, 0);
-  return zonedTimeToUtc(midnightLocal, SLA_TIME_ZONE);
+  // 5 PM (17:00) in Denver timezone
+  const fivePmLocal = new Date(y, m - 1, d, 17, 0, 0);
+  return zonedTimeToUtc(fivePmLocal, SLA_TIME_ZONE);
 }
 
 function computeDueAt(rule: TaskRuleDefinition, baseDate: Date): Date {
-  return startOfDayDenver(addDays(baseDate, rule.dueOffsetDays));
+  return dueTimeDenver(addDays(baseDate, rule.dueOffsetDays));
 }
 
 function hasAhaAgentAttached(referral: {
@@ -344,7 +349,7 @@ export async function generateAndReconcileAdminTasks({
       );
       const cycleIndex = Math.max(0, Math.floor(daysSinceBase / 30));
       const cycleStart = addDays(baseDate, cycleIndex * 30);
-      dueAt = startOfDayDenver(addDays(cycleStart, rule.dueOffsetDays));
+      dueAt = dueTimeDenver(addDays(cycleStart, rule.dueOffsetDays));
       cycleKey = formatInTimeZone(dueAt, SLA_TIME_ZONE, 'yyyy-MM');
     } else {
       cycleKey = computeCycleKey(rule, baseDate, snapshot);
