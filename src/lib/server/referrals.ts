@@ -96,6 +96,7 @@ interface ReferralListItem {
   hasAhaDesignatedAgentAttached?: boolean;
   hasAhaAgentAttached?: boolean;
   urgentTaskCount?: number;
+  autoUpdateRemindersEnabled?: boolean;
 }
 
 /**
@@ -551,7 +552,8 @@ export async function getReferrals(params: GetReferralsParams) {
         hasAhaOosAgentAttached,
         hasAhaDesignatedAgentAttached,
         hasAhaAgentAttached,
-        urgentTaskCount: urgentTaskCountMap.get(item._id.toString()) ?? 0
+        urgentTaskCount: urgentTaskCountMap.get(item._id.toString()) ?? 0,
+        autoUpdateRemindersEnabled: item.autoUpdateRemindersEnabled ?? false
       } as ReferralListItem;
     }),
     total,

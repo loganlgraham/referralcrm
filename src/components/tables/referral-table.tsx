@@ -12,6 +12,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
+import { Clock } from 'lucide-react';
 
 import { REFERRAL_STATUSES, ReferralStatus, type ReferralTimeline } from '@/constants/referrals';
 import { formatCurrency, formatNumber, formatPhoneNumber } from '@/utils/formatters';
@@ -53,6 +54,7 @@ export interface ReferralRow {
   hasAhaDesignatedAgentAttached?: boolean;
   hasAhaAgentAttached?: boolean;
   urgentTaskCount?: number;
+  autoUpdateRemindersEnabled?: boolean;
 }
 
 type TableMode = 'admin' | 'mc' | 'agent';
@@ -444,7 +446,16 @@ function buildColumns(
         id: 'agentContact',
         cell: ({ row }) => (
           <div className="flex flex-col text-sm">
-            <span className="font-medium text-slate-700">{row.original.assignedAgentName || 'Unassigned'}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-medium text-slate-700">{row.original.assignedAgentName || 'Unassigned'}</span>
+              {row.original.autoUpdateRemindersEnabled && (
+                <Clock 
+                  className="h-3.5 w-3.5 text-slate-400" 
+                  aria-label="Auto reminders enabled"
+                  title="Auto reminders enabled"
+                />
+              )}
+            </div>
             {row.original.assignedAgentPhone && (
               <span className="text-xs text-slate-500">
                 {formatPhoneNumber(row.original.assignedAgentPhone)}
@@ -468,13 +479,22 @@ function buildColumns(
     header: sortableHeader('Agent', 'assignedAgentName', currentSortBy, currentSortDirection, onSortChange),
     accessorKey: 'assignedAgentName',
     cell: ({ row }) => {
-      const { assignedAgentName, assignedAgentPhone } = row.original;
+      const { assignedAgentName, assignedAgentPhone, autoUpdateRemindersEnabled } = row.original;
       if (!assignedAgentName && !assignedAgentPhone) {
         return 'Unassigned';
       }
       return (
         <div className="flex flex-col text-sm">
-          <span className="font-medium text-slate-700">{assignedAgentName || 'Unassigned'}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-slate-700">{assignedAgentName || 'Unassigned'}</span>
+            {autoUpdateRemindersEnabled && (
+              <Clock 
+                className="h-3.5 w-3.5 text-slate-400" 
+                aria-label="Auto reminders enabled"
+                title="Auto reminders enabled"
+              />
+            )}
+          </div>
           {assignedAgentPhone && (
             <span className="text-xs text-slate-500">{formatPhoneNumber(assignedAgentPhone)}</span>
           )}
