@@ -580,47 +580,16 @@ function MultiLineChartCard({
   }));
 
   const activeIndex = hoverIndex != null ? hoverIndex : referenceSeries.length > 0 ? referenceSeries.length - 1 : null;
-  const tooltipPoint =
-    activeIndex != null && seriesPoints[0]?.points[activeIndex]
-      ? seriesPoints[0].points[activeIndex]
-      : null;
+  const activePoint = activeIndex != null ? seriesPoints[0]?.points[activeIndex] : null;
   const labelText = activeIndex != null && referenceSeries[activeIndex] ? referenceSeries[activeIndex].label : '';
 
-  const tooltipValues =
+  const activeValues =
     activeIndex != null
       ? seriesPoints.map((entry) => ({
-          label: entry.label,
           color: entry.color,
           value: entry.points[activeIndex]?.value ?? 0
         }))
       : [];
-
-  let tooltipMetrics: {
-    width: number;
-    height: number;
-    x: number;
-    y: number;
-  } | null = null;
-
-  if (tooltipPoint && labelText) {
-    const longestValue = Math.max(...tooltipValues.map((item) => formatValue(item.value).length), 0);
-    const textLength = Math.max(labelText.length, longestValue + 6);
-    const width = Math.min(Math.max(textLength * 7 + 24, 140), plotWidth - 24);
-    const height = 52 + tooltipValues.length * 16;
-    const gap = 14;
-    const plotCenterX = MULTI_LINE_CHART_PLOT_LEFT + plotWidth / 2;
-    const pointOnRight = tooltipPoint.x > plotCenterX;
-    const x = pointOnRight
-      ? Math.max(MULTI_LINE_CHART_PLOT_LEFT, tooltipPoint.x - width - gap)
-      : Math.min(MULTI_LINE_CHART_PLOT_RIGHT - width, tooltipPoint.x + gap);
-    const preferredYAbove = tooltipPoint.y - height - 12;
-    const preferredYBelow = tooltipPoint.y + 12;
-    const y =
-      preferredYAbove >= 8
-        ? Math.min(preferredYAbove, CHART_HEIGHT - height - 8)
-        : Math.max(8, Math.min(preferredYBelow, CHART_HEIGHT - height - 8));
-    tooltipMetrics = { width, height, x, y };
-  }
 
   const handleMouseMove = (event: ReactMouseEvent<SVGSVGElement>) => {
     if (!hasData) return;
@@ -645,7 +614,20 @@ function MultiLineChartCard({
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
           {helper ? <p className="text-xs text-slate-500">{helper}</p> : null}
         </div>
-        {actions}
+        <div className="flex items-center gap-4">
+          {actions}
+          {hasData && labelText ? (
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-500">{labelText}</span>
+              {activeValues.map((item, index) => (
+                <span key={index} className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
+                  <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+                  {formatValue(item.value)}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
       {hasData ? (
         <div className="mt-4">
@@ -706,55 +688,31 @@ function MultiLineChartCard({
                       key={`${entry.label}-${point.x}-${point.y}`}
                       cx={point.x}
                       cy={point.y}
-                      r={activeIndex === index ? 4 : 3}
+                      r={activeIndex === index ? 5 : 3}
                       fill={entry.color}
-                      opacity={activeIndex == null || activeIndex === index ? 1 : 0.25}
+                      opacity={activeIndex == null || activeIndex === index ? 1 : 0.4}
                     />
                   ))}
                 </g>
               );
             })}
-            {tooltipPoint && tooltipMetrics ? (
-              <g>
-                <line
-                  x1={tooltipPoint.x}
-                  y1={CHART_PADDING_Y}
-                  x2={tooltipPoint.x}
-                  y2={CHART_HEIGHT - CHART_PADDING_Y}
-                  stroke="#cbd5e1"
-                  strokeWidth={1}
-                  strokeDasharray="4 4"
-                  className="pointer-events-none"
-                />
-                <rect
-                  x={tooltipMetrics.x}
-                  y={tooltipMetrics.y}
-                  width={tooltipMetrics.width}
-                  height={tooltipMetrics.height}
-                  rx={6}
-                  className="fill-white stroke-slate-200"
-                />
-                <text x={tooltipMetrics.x + 10} y={tooltipMetrics.y + 18} className="text-[11px] font-semibold fill-slate-900">
-                  {labelText}
-                </text>
-                {tooltipValues.map((item, index) => (
-                  <text
-                    key={item.label}
-                    x={tooltipMetrics.x + 10}
-                    y={tooltipMetrics.y + 34 + index * 14}
-                    className="text-[11px] fill-slate-600"
-                  >
-                    <tspan fill={item.color}>● </tspan>
-                    {item.label}: {formatValue(item.value)}
-                  </text>
-                ))}
-              </g>
+            {activePoint ? (
+              <line
+                x1={activePoint.x}
+                y1={CHART_PADDING_Y}
+                x2={activePoint.x}
+                y2={CHART_HEIGHT - CHART_PADDING_Y}
+                stroke="#94a3b8"
+                strokeWidth={1}
+                strokeDasharray="4 4"
+                className="pointer-events-none"
+              />
             ) : null}
           </svg>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
+          <div className="mt-3 flex flex-wrap items-center gap-4">
             {seriesPoints.map((entry) => (
-              <div key={entry.label} className="flex items-center gap-2 text-xs text-slate-600">
-                <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
+              <div key={entry.label} className="flex items-center gap-1.5 text-xs text-slate-600">
+                <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
                 {entry.label}
               </div>
             ))}
