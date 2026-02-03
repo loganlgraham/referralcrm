@@ -32,6 +32,8 @@ export interface AgentMetricsSummary {
   firstContactWithin24HoursRate: number | null;
   dealsClosedAllTime: number;
   averageDaysClosedToPaid: number | null;
+  averageDaysPairedToUnderContract: number | null;
+  averageDaysUnderContractToClosed: number | null;
 }
 
 type ReferralLean = {
@@ -44,6 +46,8 @@ type ReferralLean = {
     daysToClose?: number | null;
     closedToPaidMinutes?: number | null;
     previousClosedToPaidMinutes?: number | null;
+    lastPairedAt?: Date | string | null;
+    lastUnderContractAt?: Date | string | null;
     lastClosedAt?: Date | string | null;
   } | null;
   commissionBasisPoints?: number | null;
@@ -81,7 +85,9 @@ export const EMPTY_AGENT_METRICS: AgentMetricsSummary = {
   referralsLast30Days: 0,
   firstContactWithin24HoursRate: null,
   dealsClosedAllTime: 0,
-  averageDaysClosedToPaid: null
+  averageDaysClosedToPaid: null,
+  averageDaysPairedToUnderContract: null,
+  averageDaysUnderContractToClosed: null
 };
 
 export async function computeAgentMetrics(
@@ -304,6 +310,40 @@ export async function computeAgentMetrics(
         ? closedToPaidDays.reduce((sum, value) => sum + value, 0) / closedToPaidDays.length
         : null;
 
+    // Calculate average days paired → under contract
+    const pairedToContractDays = agentReferrals
+      .map((referral) => {
+        const paired = referral.sla?.lastPairedAt;
+        const underContract = referral.sla?.lastUnderContractAt;
+        if (!paired || !underContract) return null;
+        return differenceInCalendarDays(new Date(underContract), new Date(paired));
+      })
+      .filter((value): value is number => value != null);
+    const averageDaysPairedToUnderContract =
+      pairedToContractDays.length > 0
+        ? pairedToContractDays.reduce((sum, value) => sum + value, 0) / pairedToContractDays.length
+        : null;
+
+    // Calculate average days under contract → closed
+    const underContractToClosedDays = agentReferrals
+      .map((referral) => {
+        const underContract = referral.sla?.lastUnderContractAt;
+        const closed = referral.sla?.lastClosedAt;
+        const daysToClose = referral.sla?.daysToClose;
+        if (underContract && closed) {
+          return differenceInCalendarDays(new Date(closed), new Date(underContract));
+        }
+        if (daysToClose != null && daysToClose >= 0) {
+          return daysToClose;
+        }
+        return null;
+      })
+      .filter((value): value is number => value != null);
+    const averageDaysUnderContractToClosed =
+      underContractToClosedDays.length > 0
+        ? underContractToClosedDays.reduce((sum, value) => sum + value, 0) / underContractToClosedDays.length
+        : null;
+
     const npsScore = agentNpsScores?.get(id) ?? null;
 
     metricsByAgent.set(id, {
@@ -320,7 +360,9 @@ export async function computeAgentMetrics(
       referralsLast30Days,
       firstContactWithin24HoursRate,
       dealsClosedAllTime,
-      averageDaysClosedToPaid
+      averageDaysClosedToPaid,
+      averageDaysPairedToUnderContract,
+      averageDaysUnderContractToClosed
     });
   });
 

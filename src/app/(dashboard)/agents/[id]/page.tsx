@@ -67,7 +67,6 @@ export default async function AgentDetailPage({ params, searchParams }: AgentDet
         ? '—'
         : `${formatDecimal(agent.metrics.closingRate)}%`
     },
-    { label: 'NPS Score', value: agent.metrics.npsScore ?? '—' },
     {
       label: 'Avg Response (hrs)',
       value:
@@ -107,6 +106,20 @@ export default async function AgentDetailPage({ params, searchParams }: AgentDet
         const rate = formatDecimal(agent.metrics.firstContactWithin24HoursRate);
         return rate === '—' ? '—' : `${rate}%`;
       })()
+    },
+    {
+      label: 'Avg. days paired → under contract',
+      value:
+        agent.metrics.averageDaysPairedToUnderContract == null
+          ? '—'
+          : `${formatDecimal(agent.metrics.averageDaysPairedToUnderContract)} days`
+    },
+    {
+      label: 'Avg. days under contract → closed',
+      value:
+        agent.metrics.averageDaysUnderContractToClosed == null
+          ? '—'
+          : `${formatDecimal(agent.metrics.averageDaysUnderContractToClosed)} days`
     },
     {
       label: 'Avg. days closed → paid',
