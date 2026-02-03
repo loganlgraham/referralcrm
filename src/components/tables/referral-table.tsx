@@ -449,11 +449,12 @@ function buildColumns(
             <div className="flex items-center gap-1.5">
               <span className="font-medium text-slate-700">{row.original.assignedAgentName || 'Unassigned'}</span>
               {row.original.autoUpdateRemindersEnabled && (
-                <Clock 
-                  className="h-3.5 w-3.5 text-slate-400" 
-                  aria-label="Auto reminders enabled"
-                  title="Auto reminders enabled"
-                />
+                <span title="Auto reminders enabled">
+                  <Clock 
+                    className="h-3.5 w-3.5 text-slate-400" 
+                    aria-label="Auto reminders enabled"
+                  />
+                </span>
               )}
             </div>
             {row.original.assignedAgentPhone && (
@@ -488,11 +489,12 @@ function buildColumns(
           <div className="flex items-center gap-1.5">
             <span className="font-medium text-slate-700">{assignedAgentName || 'Unassigned'}</span>
             {autoUpdateRemindersEnabled && (
-              <Clock 
-                className="h-3.5 w-3.5 text-slate-400" 
-                aria-label="Auto reminders enabled"
-                title="Auto reminders enabled"
-              />
+              <span title="Auto reminders enabled">
+                <Clock 
+                  className="h-3.5 w-3.5 text-slate-400" 
+                  aria-label="Auto reminders enabled"
+                />
+              </span>
             )}
           </div>
           {assignedAgentPhone && (
