@@ -671,7 +671,7 @@ function MultiLineChartCard({
                     textAnchor="end"
                     className="fill-slate-400 text-[10px]"
                   >
-                    {formatAxisCurrency(value)}
+                    {formatValue(value)}
                   </text>
                 </g>
               );
