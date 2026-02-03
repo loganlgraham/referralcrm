@@ -122,8 +122,7 @@ export function getNextAutoUpdateSendAt({
   }
 
   // Calculate the actual date for the next scheduled day
-  const daysUntilNext = nextScheduledDay - daysSincePairing;
-  const zonedNextDayStart = addDays(zonedPairedStart, daysUntilNext);
+  const zonedNextDayStart = addDays(zonedPairedStart, nextScheduledDay);
 
   // Pin to 8:00 AM Mountain Time, then convert back to a real UTC Date.
   const zonedNextAt = new Date(zonedNextDayStart);
@@ -144,8 +143,7 @@ export function getNextAutoUpdateSendAt({
       };
     }
 
-    const futureDaysUntilNext = nextScheduledDayAfterToday - daysSincePairing;
-    const futureZonedDayStart = addDays(zonedPairedStart, futureDaysUntilNext);
+    const futureZonedDayStart = addDays(zonedPairedStart, nextScheduledDayAfterToday);
     const futureZonedAt = new Date(futureZonedDayStart);
     futureZonedAt.setHours(REMINDER_SEND_HOUR_MT, 0, 0, 0);
     const futureNextSendDate = zonedTimeToUtc(futureZonedAt, SLA_TIME_ZONE);
