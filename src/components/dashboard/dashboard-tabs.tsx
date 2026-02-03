@@ -194,8 +194,8 @@ interface DashboardResponse {
     firstContactSampleSize: number;
   };
   agit: {
-    totalReferrals: number;
-    glennBeckReferrals: number;
+    agitReferrals: number;
+    agitPercentage: number;
     usedAfcCount: number;
     usedAfcRate: number;
     lostReferrals: number;
@@ -1549,29 +1549,26 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard 
-          title="Total Referrals" 
-          value={formatNumber(data.totalReferrals)} 
+        <SummaryCard
+          title="AGIT Percentage"
+          value={`${data.agitPercentage.toFixed(1)}%`}
+          helper={`${formatNumber(data.agitReferrals)} of referrals in timeframe have AGIT agent`}
         />
-        <SummaryCard 
-          title="Glenn Beck Referrals" 
-          value={formatNumber(data.glennBeckReferrals)} 
+        <SummaryCard
+          title="Closed Deals"
+          value={formatNumber(data.dealsClosed)}
         />
-        <SummaryCard 
-          title="Closed Deals" 
-          value={formatNumber(data.dealsClosed)} 
-        />
-        <SummaryCard 
-          title="Used AFC (Attach Rate)" 
+        <SummaryCard
+          title="Used AFC (Attach Rate)"
           value={`${data.usedAfcRate.toFixed(1)}%`}
           helper={`${formatNumber(data.usedAfcCount)} went to another lender`}
         />
-        <SummaryCard 
-          title="Lost Referrals" 
-          value={formatNumber(data.lostReferrals)} 
+        <SummaryCard
+          title="Lost Referrals"
+          value={formatNumber(data.lostReferrals)}
         />
-        <SummaryCard 
-          title="Close Rate" 
+        <SummaryCard
+          title="Close Rate"
           value={`${data.closeRate.toFixed(1)}%`}
         />
       </div>

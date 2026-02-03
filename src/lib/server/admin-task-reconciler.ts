@@ -223,9 +223,9 @@ function computeCycleKey(
 function dueTimeDenver(date: Date): Date {
   const dateStr = formatInTimeZone(date, SLA_TIME_ZONE, 'yyyy-MM-dd');
   const [y, m, d] = dateStr.split('-').map(Number);
-  // 5 PM (17:00) in Denver timezone
-  const fivePmLocal = new Date(y, m - 1, d, 17, 0, 0);
-  return zonedTimeToUtc(fivePmLocal, SLA_TIME_ZONE);
+  // 8 AM in Denver timezone
+  const eightAmLocal = new Date(y, m - 1, d, 8, 0, 0);
+  return zonedTimeToUtc(eightAmLocal, SLA_TIME_ZONE);
 }
 
 function computeDueAt(rule: TaskRuleDefinition, baseDate: Date): Date {

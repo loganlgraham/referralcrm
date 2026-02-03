@@ -308,6 +308,80 @@ describe('Dashboard Metrics - Leaderboard Calculations', () => {
   });
 });
 
+describe('Dashboard Metrics - Admin Assignment and Unassigned', () => {
+  it('counts unassigned as referrals in New Lead status only', () => {
+    const adminEligibleReferrals = [
+      { status: 'New Lead' },
+      { status: 'Paired' },
+      { status: 'New Lead' },
+      { status: 'In Communication' },
+      { status: 'Under Contract' },
+    ];
+    const unassignedReferrals = adminEligibleReferrals.filter(
+      (r) => (r.status ?? '').trim() === 'New Lead'
+    ).length;
+    const assignedReferrals = adminEligibleReferrals.length - unassignedReferrals;
+    const assignmentRate = adminEligibleReferrals.length
+      ? (assignedReferrals / adminEligibleReferrals.length) * 100
+      : 0;
+
+    expect(unassignedReferrals).toBe(2);
+    expect(assignedReferrals).toBe(3);
+    expect(assignmentRate).toBe(60);
+  });
+
+  it('returns 0% assignment rate when all referrals are New Lead', () => {
+    const adminEligibleReferrals = [
+      { status: 'New Lead' },
+      { status: 'New Lead' },
+    ];
+    const unassignedReferrals = adminEligibleReferrals.filter(
+      (r) => (r.status ?? '').trim() === 'New Lead'
+    ).length;
+    const assignedReferrals = adminEligibleReferrals.length - unassignedReferrals;
+    const assignmentRate = adminEligibleReferrals.length
+      ? (assignedReferrals / adminEligibleReferrals.length) * 100
+      : 0;
+
+    expect(unassignedReferrals).toBe(2);
+    expect(assignedReferrals).toBe(0);
+    expect(assignmentRate).toBe(0);
+  });
+
+  it('returns 100% assignment rate when no referrals are New Lead', () => {
+    const adminEligibleReferrals = [
+      { status: 'Paired' },
+      { status: 'In Communication' },
+    ];
+    const unassignedReferrals = adminEligibleReferrals.filter(
+      (r) => (r.status ?? '').trim() === 'New Lead'
+    ).length;
+    const assignedReferrals = adminEligibleReferrals.length - unassignedReferrals;
+    const assignmentRate = adminEligibleReferrals.length
+      ? (assignedReferrals / adminEligibleReferrals.length) * 100
+      : 0;
+
+    expect(unassignedReferrals).toBe(0);
+    expect(assignedReferrals).toBe(2);
+    expect(assignmentRate).toBe(100);
+  });
+
+  it('handles empty admin eligible referrals', () => {
+    const adminEligibleReferrals: { status: string }[] = [];
+    const unassignedReferrals = adminEligibleReferrals.filter(
+      (r) => (r.status ?? '').trim() === 'New Lead'
+    ).length;
+    const assignedReferrals = adminEligibleReferrals.length - unassignedReferrals;
+    const assignmentRate = adminEligibleReferrals.length
+      ? (assignedReferrals / adminEligibleReferrals.length) * 100
+      : 0;
+
+    expect(unassignedReferrals).toBe(0);
+    expect(assignedReferrals).toBe(0);
+    expect(assignmentRate).toBe(0);
+  });
+});
+
 describe('Dashboard Metrics - Pre-Approval Conversion', () => {
   it('calculates conversion rate correctly', () => {
     const totalReferrals = 45;
