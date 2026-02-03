@@ -61,32 +61,28 @@ export function AgentNpsEditor({ agentId, initialScore }: AgentNpsEditorProps) {
 
   return (
     <form onSubmit={handleSubmit} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex-1">
-          <label className="text-sm font-semibold text-slate-700">
-            NPS score
-            <input
-              type="number"
-              inputMode="numeric"
-              min={-100}
-              max={100}
-              value={value}
-              onChange={(event) => setValue(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
-              placeholder="68"
-              disabled={saving}
-            />
-          </label>
-          <p className="mt-2 text-xs text-slate-500">Only admins can update this score. Leave blank to clear the value.</p>
-        </div>
+      <label className="block text-sm font-semibold text-slate-700">NPS score</label>
+      <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <input
+          type="number"
+          inputMode="numeric"
+          min={-100}
+          max={100}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40 sm:max-w-xs"
+          placeholder="68"
+          disabled={saving}
+        />
         <button
           type="submit"
           disabled={saving}
-          className="inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex shrink-0 items-center justify-center rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
         >
           {saving ? 'Saving…' : 'Save NPS'}
         </button>
       </div>
+      <p className="mt-2 text-xs text-slate-500">Only admins can update this score. Leave blank to clear the value.</p>
     </form>
   );
 }
