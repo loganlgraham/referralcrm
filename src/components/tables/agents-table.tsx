@@ -170,15 +170,6 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
     setDebouncedSearch(searchValue);
   }, [searchValue]);
 
-  // Debounce: update debouncedSearch from searchTerm
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setDebouncedSearch(searchTerm);
-      isTypingRef.current = false;
-    }, 200);
-    return () => window.clearTimeout(timeout);
-  }, [searchTerm]);
-
   // Push debouncedSearch to URL (with deduplication)
   useEffect(() => {
     const params = new URLSearchParams(searchParamsString);
@@ -201,6 +192,15 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
     isTypingRef.current = true;
     setSearchTerm(value);
   }, []);
+
+  // Debounce: update debouncedSearch from searchTerm
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      isTypingRef.current = false;
+    }, 200);
+    return () => window.clearTimeout(timeout);
+  }, [searchTerm]);
 
   // Refresh data when agents are added (via SWR mutate)
   useEffect(() => {
