@@ -264,7 +264,6 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
               type="text"
               value={searchTerm}
               onChange={(event) => handleSearchInput(event.target.value)}
-              disabled={isPending}
               className="mt-2 w-full max-w-2xl rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
               placeholder="Name, email, phone, brokerage"
             />
