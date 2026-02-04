@@ -286,12 +286,12 @@ export function DealsTable() {
     setSearchTerm(value);
   }, []);
 
-  // Debounce: update debouncedSearch from searchTerm (match referrals: 200ms)
+  // Debounce: update debouncedSearch from searchTerm (400ms for smoother typing)
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setDebouncedSearch(searchTerm);
       isTypingRef.current = false;
-    }, 200);
+    }, 400);
     return () => window.clearTimeout(timeout);
   }, [searchTerm]);
 
