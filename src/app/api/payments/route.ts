@@ -107,6 +107,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     : 25;
   const search = searchParams.get('search')?.trim() || null;
   const statusFilter = searchParams.get('status')?.trim() || null;
+  const designationParam = searchParams.get('designation')?.trim() || null;
+  const validDesignations = ['AHA', 'AHA_OOS', 'AGIT'] as const;
+  const designationList = designationParam
+    ? designationParam.split(',').map((s) => s.trim()).filter((s): s is typeof validDesignations[number] => validDesignations.includes(s as typeof validDesignations[number]))
+    : [];
   const sortBy = searchParams.get('sortBy')?.trim() || null;
   const sortDirection = (searchParams.get('sortDirection')?.trim() as 'asc' | 'desc') || 'desc';
 
@@ -153,6 +158,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       filter.status = statusList[0];
     } else if (statusList.length > 1) {
       filter.status = { $in: statusList };
+    }
+  }
+
+  // Add agent designation filter for admin/manager (server-side)
+  if (designationList.length > 0 && (role === 'admin' || role === 'manager')) {
+    const agentsWithDesignation = await Agent.find({ ahaDesignation: { $in: designationList } })
+      .select('_id')
+      .lean<{ _id: Types.ObjectId }[]>();
+    const designationAgentIds = agentsWithDesignation.map((a) => a._id);
+    if (designationAgentIds.length > 0) {
+      filter.agentId = { $in: designationAgentIds };
+    } else {
+      // No agents match the designation -> no payments
+      return NextResponse.json({
+        items: [],
+        total: 0,
+        page: 1,
+        pageSize: 25
+      });
     }
   }
 

@@ -25,6 +25,13 @@ const TERMINATED_REASON_OPTIONS: { value: TerminatedReason; label: string }[] = 
   { value: 'changed_mind', label: 'Changed Mind' },
 ];
 
+type AgentDesignationFilter = 'AHA' | 'AHA_OOS' | 'AGIT';
+const DESIGNATION_FILTER_OPTIONS: { value: AgentDesignationFilter; label: string }[] = [
+  { value: 'AHA', label: 'AHA' },
+  { value: 'AHA_OOS', label: 'AHA OOS' },
+  { value: 'AGIT', label: 'AGIT' },
+];
+
 interface DealRow {
   _id: string;
   referralId: string;
@@ -44,7 +51,7 @@ interface DealRow {
     id: string;
     name: string | null;
   } | null;
-  agentDesignation?: 'AHA' | 'AHA_OOS' | null;
+  agentDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   referral?: {
     borrowerName?: string | null;
     propertyAddress?: string | null;
@@ -130,6 +137,10 @@ export function DealsTable() {
   const search = searchParams.get('search') || '';
   const statusParam = searchParams.get('status') || '';
   const statusFilters = statusParam ? statusParam.split(',').filter(Boolean) as DealStatus[] : [];
+  const designationParam = searchParams.get('designation') || '';
+  const designationFilters = designationParam
+    ? (designationParam.split(',').filter(Boolean) as AgentDesignationFilter[])
+    : [];
   const sortBy = searchParams.get('sortBy') || null;
   const sortDirection = (searchParams.get('sortDirection') as 'asc' | 'desc') || null;
   
@@ -139,6 +150,7 @@ export function DealsTable() {
   apiParams.set('pageSize', pageSize.toString());
   if (search) apiParams.set('search', search);
   if (statusFilters.length > 0) apiParams.set('status', statusFilters.join(','));
+  if (designationFilters.length > 0) apiParams.set('designation', designationFilters.join(','));
   if (sortBy) apiParams.set('sortBy', sortBy);
   if (sortDirection) apiParams.set('sortDirection', sortDirection);
   
@@ -146,15 +158,27 @@ export function DealsTable() {
   const { data, mutate } = useSWR<PaymentsResponse>(apiUrl, fetcher);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
-  const [searchQuery, setSearchQuery] = useState(search);
+  const searchValue = search;
+  const [searchTerm, setSearchTerm] = useState(searchValue);
+  const [debouncedSearch, setDebouncedSearch] = useState(searchValue);
+  const isTypingRef = useRef(false);
   const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
+  const [isDesignationMenuOpen, setIsDesignationMenuOpen] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
+  const designationMenuRef = useRef<HTMLDivElement | null>(null);
 
   const deals = Array.isArray(data?.items) ? data.items : [];
   const isLoading = !data;
   
   const updateParams = useCallback(
-    (updates: { search?: string; status?: string; page?: number; sortBy?: string; sortDirection?: 'asc' | 'desc' }) => {
+    (updates: {
+      search?: string;
+      status?: string;
+      designation?: string;
+      page?: number;
+      sortBy?: string;
+      sortDirection?: 'asc' | 'desc';
+    }) => {
       const params = new URLSearchParams(searchParamsString);
       
       if (updates.search !== undefined) {
@@ -174,6 +198,15 @@ export function DealsTable() {
           params.set('status', updates.status);
         }
         // Reset to page 1 when status changes
+        params.delete('page');
+      }
+      
+      if (updates.designation !== undefined) {
+        if (!updates.designation) {
+          params.delete('designation');
+        } else {
+          params.set('designation', updates.designation);
+        }
         params.delete('page');
       }
       
@@ -223,21 +256,44 @@ export function DealsTable() {
   const isMcView = role === 'mc';
   const isAdminView = role === 'admin' || role === 'manager';
 
-  // Debounce search input
+  // Sync from URL to local state (only when not typing) — match referrals
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (searchQuery !== search) {
-        updateParams({ search: searchQuery });
-      }
-    }, 300);
+    if (isTypingRef.current) return;
+    setSearchTerm(searchValue);
+    setDebouncedSearch(searchValue);
+  }, [searchValue]);
 
-    return () => clearTimeout(timeout);
-  }, [searchQuery, search, updateParams]);
-
-  // Sync searchQuery with URL param
+  // Push debouncedSearch to URL (with deduplication)
   useEffect(() => {
-    setSearchQuery(search);
-  }, [search]);
+    const params = new URLSearchParams(searchParamsString);
+    const existing = params.get('search') ?? '';
+    const trimmed = debouncedSearch.trim();
+    if (trimmed === existing.trim()) return;
+    if (!trimmed) {
+      params.delete('search');
+    } else {
+      params.set('search', trimmed);
+    }
+    params.delete('page');
+    startTransition(() => {
+      const queryString = params.toString();
+      router.replace(queryString ? `/deals?${queryString}` : '/deals');
+    });
+  }, [debouncedSearch, router, searchParamsString, startTransition]);
+
+  const handleSearchInput = useCallback((value: string) => {
+    isTypingRef.current = true;
+    setSearchTerm(value);
+  }, []);
+
+  // Debounce: update debouncedSearch from searchTerm (match referrals: 200ms)
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      isTypingRef.current = false;
+    }, 200);
+    return () => window.clearTimeout(timeout);
+  }, [searchTerm]);
 
   const calculateCommission = (row: DealRow) => {
     if (row.status === 'terminated') {
@@ -260,8 +316,12 @@ export function DealsTable() {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (statusMenuRef.current && !statusMenuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (statusMenuRef.current && !statusMenuRef.current.contains(target)) {
         setIsStatusMenuOpen(false);
+      }
+      if (designationMenuRef.current && !designationMenuRef.current.contains(target)) {
+        setIsDesignationMenuOpen(false);
       }
     };
 
@@ -993,68 +1053,124 @@ export function DealsTable() {
           Search
           <input
             type="text"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+            value={searchTerm}
+            onChange={(event) => handleSearchInput(event.target.value)}
             disabled={isPending}
             className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
             placeholder="Borrower, address, loan #, agent"
           />
         </label>
         {isAdminView && (
-          <div className="md:w-80" ref={statusMenuRef}>
-            <span className="block text-xs font-semibold text-slate-600">Status</span>
-            <div className="relative mt-2">
-              <button
-                type="button"
-                onClick={() => setIsStatusMenuOpen((open) => !open)}
-                disabled={isPending}
-                className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <span className="truncate">
-                  {statusFilters.length > 0
-                    ? `${statusFilters.length} status${statusFilters.length > 1 ? 'es' : ''} selected`
-                    : 'All statuses'}
-                </span>
-                <span className="text-xs text-slate-500">{isStatusMenuOpen ? '▲' : '▼'}</span>
-              </button>
-              {isStatusMenuOpen && (
-                <div className="absolute left-0 right-0 z-10 mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
-                  <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600">
-                    <span>Filter statuses</span>
-                    <button
-                      type="button"
-                      className="text-brand hover:text-brand/80"
-                      onClick={() => updateParams({ status: '' })}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <div className="max-h-60 space-y-2 overflow-auto pr-1">
-                    {STATUS_FILTER_OPTIONS.map(({ value, label }) => (
-                      <label
-                        key={value}
-                        className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          <>
+            <div className="md:w-80" ref={statusMenuRef}>
+              <span className="block text-xs font-semibold text-slate-600">Status</span>
+              <div className="relative mt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsStatusMenuOpen((open) => !open)}
+                  disabled={isPending}
+                  className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="truncate">
+                    {statusFilters.length > 0
+                      ? `${statusFilters.length} status${statusFilters.length > 1 ? 'es' : ''} selected`
+                      : 'All statuses'}
+                  </span>
+                  <span className="text-xs text-slate-500">{isStatusMenuOpen ? '▲' : '▼'}</span>
+                </button>
+                {isStatusMenuOpen && (
+                  <div className="absolute left-0 right-0 z-10 mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+                    <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600">
+                      <span>Filter statuses</span>
+                      <button
+                        type="button"
+                        className="text-brand hover:text-brand/80"
+                        onClick={() => updateParams({ status: '' })}
                       >
-                        <span className="text-slate-700">{label}</span>
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-                          checked={statusFilters.includes(value as DealStatus)}
-                          onChange={(event) => {
-                            const checked = event.target.checked;
-                            const newFilters = checked
-                              ? [...statusFilters, value as DealStatus]
-                              : statusFilters.filter((status) => status !== value);
-                            updateParams({ status: newFilters.length > 0 ? newFilters.join(',') : '' });
-                          }}
-                        />
-                      </label>
-                    ))}
+                        Clear
+                      </button>
+                    </div>
+                    <div className="max-h-60 space-y-2 overflow-auto pr-1">
+                      {STATUS_FILTER_OPTIONS.map(({ value, label }) => (
+                        <label
+                          key={value}
+                          className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          <span className="text-slate-700">{label}</span>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                            checked={statusFilters.includes(value as DealStatus)}
+                            onChange={(event) => {
+                              const checked = event.target.checked;
+                              const newFilters = checked
+                                ? [...statusFilters, value as DealStatus]
+                                : statusFilters.filter((status) => status !== value);
+                              updateParams({ status: newFilters.length > 0 ? newFilters.join(',') : '' });
+                            }}
+                          />
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
-          </div>
+            <div className="md:w-80" ref={designationMenuRef}>
+              <span className="block text-xs font-semibold text-slate-600">Agent Designation</span>
+              <div className="relative mt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsDesignationMenuOpen((open) => !open)}
+                  disabled={isPending}
+                  className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="truncate">
+                    {designationFilters.length > 0
+                      ? `${designationFilters.length} designation${designationFilters.length > 1 ? 's' : ''} selected`
+                      : 'All designations'}
+                  </span>
+                  <span className="text-xs text-slate-500">{isDesignationMenuOpen ? '▲' : '▼'}</span>
+                </button>
+                {isDesignationMenuOpen && (
+                  <div className="absolute left-0 right-0 z-10 mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+                    <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600">
+                      <span>Filter by designation</span>
+                      <button
+                        type="button"
+                        className="text-brand hover:text-brand/80"
+                        onClick={() => updateParams({ designation: '' })}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div className="max-h-60 space-y-2 overflow-auto pr-1">
+                      {DESIGNATION_FILTER_OPTIONS.map(({ value, label }) => (
+                        <label
+                          key={value}
+                          className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          <span className="text-slate-700">{label}</span>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                            checked={designationFilters.includes(value)}
+                            onChange={(event) => {
+                              const checked = event.target.checked;
+                              const newFilters = checked
+                                ? [...designationFilters, value]
+                                : designationFilters.filter((d) => d !== value);
+                              updateParams({ designation: newFilters.length > 0 ? newFilters.join(',') : '' });
+                            }}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
         )}
       </div>
       {summarySection}

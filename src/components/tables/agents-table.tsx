@@ -193,12 +193,12 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
     setSearchTerm(value);
   }, []);
 
-  // Debounce: update debouncedSearch from searchTerm
+  // Debounce: update debouncedSearch from searchTerm (match referrals: 200ms)
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setDebouncedSearch(searchTerm);
       isTypingRef.current = false;
-    }, 400);
+    }, 200);
     return () => window.clearTimeout(timeout);
   }, [searchTerm]);
 
