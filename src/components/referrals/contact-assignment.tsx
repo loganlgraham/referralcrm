@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import useSWR, { useSWRConfig } from 'swr';
 import { toast } from 'sonner';
 
@@ -244,7 +245,16 @@ export function ContactAssignment({
             <p className="text-xs uppercase text-slate-400">{title}</p>
             {formattedContact ? (
               <div>
-                <p className="font-medium text-slate-900">{formattedContact.name}</p>
+                {currentContact?.id ? (
+                  <Link
+                    href={type === 'agent' ? `/agents/${currentContact.id}` : `/lenders/${currentContact.id}`}
+                    className="font-medium text-brand hover:underline"
+                  >
+                    {formattedContact.name}
+                  </Link>
+                ) : (
+                  <p className="font-medium text-slate-900">{formattedContact.name}</p>
+                )}
                 {formattedContact.email && (
                   <p className="text-xs text-slate-500">
                     Email:{' '}

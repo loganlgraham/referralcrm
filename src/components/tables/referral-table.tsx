@@ -338,7 +338,7 @@ function buildColumns(
     header: sortableHeader('Borrower', 'borrowerName', currentSortBy, currentSortDirection, onSortChange),
     accessorKey: 'borrowerName',
     cell: ({ row }) => {
-      const { _id, borrowerName, borrowerPhone, urgentTaskCount } = row.original;
+      const { _id, borrowerName, borrowerPhone, borrowerEmail, urgentTaskCount } = row.original;
       return (
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
@@ -361,8 +361,23 @@ function buildColumns(
               </span>
             ) : null}
           </div>
+          {borrowerEmail && (
+            <a
+              href={buildGmailComposeUrl(borrowerEmail)}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-brand hover:underline"
+            >
+              Email
+            </a>
+          )}
           {borrowerPhone ? (
-            <span className="text-xs text-slate-500">{borrowerPhone}</span>
+            <a
+              href={`tel:${borrowerPhone.replace(/[^0-9+]/g, '')}`}
+              className="text-xs text-brand hover:underline"
+            >
+              {formatPhoneNumber(borrowerPhone)}
+            </a>
           ) : (
             <span className="text-xs text-slate-400">—</span>
           )}
@@ -465,7 +480,7 @@ function buildColumns(
                 rel="noreferrer"
                 className="text-xs text-brand hover:underline"
               >
-                {row.original.assignedAgentEmail}
+                Email
               </a>
             )}
             {row.original.assignedAgentPhone && (
@@ -518,7 +533,7 @@ function buildColumns(
               rel="noreferrer"
               className="text-xs text-brand hover:underline"
             >
-              {assignedAgentEmail}
+              Email
             </a>
           )}
           {assignedAgentPhone && (
@@ -565,7 +580,7 @@ function buildColumns(
                 rel="noreferrer"
                 className="text-xs text-brand hover:underline"
               >
-                {lenderEmail}
+                Email
               </a>
             )}
             {lenderPhone && (
