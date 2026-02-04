@@ -198,7 +198,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
     const timeout = window.setTimeout(() => {
       setDebouncedSearch(searchTerm);
       isTypingRef.current = false;
-    }, 200);
+    }, 400);
     return () => window.clearTimeout(timeout);
   }, [searchTerm]);
 

@@ -217,6 +217,10 @@ interface AgitReferralRow {
   agentName: string | null;
   agentEmail: string | null;
   agentPhone: string | null;
+  mcId: string | null;
+  mcName: string | null;
+  mcEmail: string | null;
+  mcPhone: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -230,6 +234,10 @@ interface AgitDealRow {
   receivedAmountCents: number;
   agentId: string | null;
   agentName: string | null;
+  mcId: string | null;
+  mcName: string | null;
+  mcEmail: string | null;
+  mcPhone: string | null;
   closingDate: string | null;
   usedAfc: boolean | null;
 }
@@ -1616,6 +1624,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Borrower</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">MC</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Created</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Last Updated</th>
                 </tr>
@@ -1672,6 +1681,39 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-700">
+                      {row.mcId ? (
+                        <div className="flex flex-col">
+                          <Link
+                            prefetch={false}
+                            href={`/lenders/${row.mcId}`}
+                            className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+                          >
+                            {row.mcName || 'MC'}
+                          </Link>
+                          {row.mcEmail && (
+                            <a
+                              href={buildGmailComposeUrl(row.mcEmail)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block text-xs text-brand hover:underline"
+                            >
+                              {row.mcEmail}
+                            </a>
+                          )}
+                          {row.mcPhone && (
+                            <a
+                              href={`tel:${row.mcPhone.replace(/[^0-9+]/g, '')}`}
+                              className="block text-xs text-brand hover:underline"
+                            >
+                              {row.mcPhone}
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">Unassigned</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-700">
                       {formatDate(row.createdAt)}
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-700">
@@ -1700,6 +1742,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Expected</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Received</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">MC</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Closing Date</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Used AFC</th>
                 </tr>
@@ -1728,6 +1771,39 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                         >
                           {row.agentName || 'Agent'}
                         </Link>
+                      ) : (
+                        <span className="text-slate-400">Unassigned</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-700">
+                      {row.mcId ? (
+                        <div className="flex flex-col">
+                          <Link
+                            prefetch={false}
+                            href={`/lenders/${row.mcId}`}
+                            className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+                          >
+                            {row.mcName || 'MC'}
+                          </Link>
+                          {row.mcEmail && (
+                            <a
+                              href={buildGmailComposeUrl(row.mcEmail)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block text-xs text-brand hover:underline"
+                            >
+                              {row.mcEmail}
+                            </a>
+                          )}
+                          {row.mcPhone && (
+                            <a
+                              href={`tel:${row.mcPhone.replace(/[^0-9+]/g, '')}`}
+                              className="block text-xs text-brand hover:underline"
+                            >
+                              {row.mcPhone}
+                            </a>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-slate-400">Unassigned</span>
                       )}

@@ -16,6 +16,7 @@ import { Clock } from 'lucide-react';
 
 import { REFERRAL_STATUSES, ReferralStatus, type ReferralTimeline } from '@/constants/referrals';
 import { formatCurrency, formatNumber, formatPhoneNumber } from '@/utils/formatters';
+import { buildGmailComposeUrl } from '@/utils/gmail';
 import { calculateTimelineDaysRemaining, formatTimelineCountdown } from '@/utils/timeline-countdown';
 export interface ReferralRow {
   _id: string;
@@ -457,10 +458,23 @@ function buildColumns(
                 </span>
               )}
             </div>
+            {row.original.assignedAgentEmail && (
+              <a
+                href={buildGmailComposeUrl(row.original.assignedAgentEmail)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-brand hover:underline"
+              >
+                {row.original.assignedAgentEmail}
+              </a>
+            )}
             {row.original.assignedAgentPhone && (
-              <span className="text-xs text-slate-500">
+              <a
+                href={`tel:${row.original.assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
+                className="text-xs text-brand hover:underline"
+              >
                 {formatPhoneNumber(row.original.assignedAgentPhone)}
-              </span>
+              </a>
             )}
           </div>
         )
@@ -480,8 +494,8 @@ function buildColumns(
     header: sortableHeader('Agent', 'assignedAgentName', currentSortBy, currentSortDirection, onSortChange),
     accessorKey: 'assignedAgentName',
     cell: ({ row }) => {
-      const { assignedAgentName, assignedAgentPhone, autoUpdateRemindersEnabled } = row.original;
-      if (!assignedAgentName && !assignedAgentPhone) {
+      const { assignedAgentName, assignedAgentEmail, assignedAgentPhone, autoUpdateRemindersEnabled } = row.original;
+      if (!assignedAgentName && !assignedAgentPhone && !assignedAgentEmail) {
         return 'Unassigned';
       }
       return (
@@ -497,8 +511,23 @@ function buildColumns(
               </span>
             )}
           </div>
+          {assignedAgentEmail && (
+            <a
+              href={buildGmailComposeUrl(assignedAgentEmail)}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-brand hover:underline"
+            >
+              {assignedAgentEmail}
+            </a>
+          )}
           {assignedAgentPhone && (
-            <span className="text-xs text-slate-500">{formatPhoneNumber(assignedAgentPhone)}</span>
+            <a
+              href={`tel:${assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
+              className="text-xs text-brand hover:underline"
+            >
+              {formatPhoneNumber(assignedAgentPhone)}
+            </a>
           )}
         </div>
       );
@@ -522,15 +551,30 @@ function buildColumns(
       header: sortableHeader('Lender/MC', 'lenderName', currentSortBy, currentSortDirection, onSortChange),
       accessorKey: 'lenderName',
       cell: ({ row }) => {
-        const { lenderName, lenderPhone } = row.original;
-        if (!lenderName && !lenderPhone) {
+        const { lenderName, lenderEmail, lenderPhone } = row.original;
+        if (!lenderName && !lenderPhone && !lenderEmail) {
           return '—';
         }
         return (
           <div className="flex flex-col text-sm">
             <span className="font-medium text-slate-700">{lenderName || 'Unassigned'}</span>
+            {lenderEmail && (
+              <a
+                href={buildGmailComposeUrl(lenderEmail)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-brand hover:underline"
+              >
+                {lenderEmail}
+              </a>
+            )}
             {lenderPhone && (
-              <span className="text-xs text-slate-500">{formatPhoneNumber(lenderPhone)}</span>
+              <a
+                href={`tel:${lenderPhone.replace(/[^0-9+]/g, '')}`}
+                className="text-xs text-brand hover:underline"
+              >
+                {formatPhoneNumber(lenderPhone)}
+              </a>
             )}
           </div>
         );

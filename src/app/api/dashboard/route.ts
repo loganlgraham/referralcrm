@@ -960,7 +960,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const [lenders, agents] = await Promise.all([
     lenderIds.size
-      ? LenderMC.find({ _id: { $in: Array.from(lenderIds, (id) => new Types.ObjectId(id)) } }).select('name')
+      ? LenderMC.find({ _id: { $in: Array.from(lenderIds, (id) => new Types.ObjectId(id)) } }).select('name email phone')
       : Promise.resolve([]),
     agentIds.size
       ? Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } }).select('name email phone ahaDesignation')
@@ -968,8 +968,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   ]);
 
   const lenderNameMap = new Map<string, string>();
+  const lenderEmailMap = new Map<string, string | null>();
+  const lenderPhoneMap = new Map<string, string | null>();
   lenders.forEach((lender) => {
-    lenderNameMap.set(lender._id.toString(), lender.name || 'Unnamed MC');
+    const id = lender._id.toString();
+    lenderNameMap.set(id, lender.name || 'Unnamed MC');
+    lenderEmailMap.set(id, lender.email ?? null);
+    lenderPhoneMap.set(id, lender.phone ?? null);
   });
 
   const agentNameMap = new Map<string, string>();
@@ -2155,6 +2160,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // Build AGIT referral rows for table display
   const agitReferralRows = agitReferrals.map((referral) => {
     const agentId = referral.assignedAgent?.toString() ?? null;
+    const mcId = referral.lender?.toString() ?? null;
     return {
       id: referral._id.toString(),
       borrowerName: referral.borrower?.name ?? 'Unknown',
@@ -2164,6 +2170,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       agentName: agentId ? agentNameMap.get(agentId) ?? null : null,
       agentEmail: agentId ? agentEmailMap.get(agentId) ?? null : null,
       agentPhone: agentId ? agentPhoneMap.get(agentId) ?? null : null,
+      mcId,
+      mcName: mcId ? lenderNameMap.get(mcId) ?? null : null,
+      mcEmail: mcId ? lenderEmailMap.get(mcId) ?? null : null,
+      mcPhone: mcId ? lenderPhoneMap.get(mcId) ?? null : null,
       createdAt: referral.createdAt.toISOString(),
       updatedAt: referral.updatedAt?.toISOString() ?? referral.createdAt.toISOString()
     };
@@ -2178,6 +2188,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // Build AGIT deal rows for table display
   const agitDealRows = agitFilteredPayments.map((payment) => {
     const agentId = payment.agentId?.toString() ?? payment.referral?.assignedAgent?.toString() ?? null;
+    const mcId = payment.referral?.lender?.toString() ?? null;
     return {
       id: payment._id.toString(),
       referralId: payment.referral._id.toString(),
@@ -2187,6 +2198,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       receivedAmountCents: payment.receivedAmountCents ?? 0,
       agentId,
       agentName: agentId ? agentNameMap.get(agentId) ?? null : null,
+      mcId,
+      mcName: mcId ? lenderNameMap.get(mcId) ?? null : null,
+      mcEmail: mcId ? lenderEmailMap.get(mcId) ?? null : null,
+      mcPhone: mcId ? lenderPhoneMap.get(mcId) ?? null : null,
       closingDate: payment.closingDate?.toISOString() ?? null,
       usedAfc: payment.usedAfc ?? null
     };
