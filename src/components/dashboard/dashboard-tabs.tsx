@@ -214,6 +214,8 @@ interface AgitReferralRow {
   status: string;
   agentId: string | null;
   agentName: string | null;
+  agentEmail: string | null;
+  agentPhone: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1637,13 +1639,21 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                     <td className="px-4 py-3 text-sm text-slate-700">{row.status}</td>
                     <td className="px-4 py-3 text-sm text-slate-700">
                       {row.agentId ? (
-                        <Link
-                          prefetch={false}
-                          href={`/agents/${row.agentId}`}
-                          className="font-medium text-brand transition hover:text-brand-dark hover:underline"
-                        >
-                          {row.agentName || 'Agent'}
-                        </Link>
+                        <div className="flex flex-col">
+                          <Link
+                            prefetch={false}
+                            href={`/agents/${row.agentId}`}
+                            className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+                          >
+                            {row.agentName || 'Agent'}
+                          </Link>
+                          {row.agentEmail && (
+                            <span className="text-xs text-slate-500">{row.agentEmail}</span>
+                          )}
+                          {row.agentPhone && (
+                            <span className="text-xs text-slate-500">{row.agentPhone}</span>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-slate-400">Unassigned</span>
                       )}

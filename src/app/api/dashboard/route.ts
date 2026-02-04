@@ -963,7 +963,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       ? LenderMC.find({ _id: { $in: Array.from(lenderIds, (id) => new Types.ObjectId(id)) } }).select('name')
       : Promise.resolve([]),
     agentIds.size
-      ? Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } }).select('name ahaDesignation')
+      ? Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } }).select('name email phone ahaDesignation')
       : Promise.resolve([])
   ]);
 
@@ -973,8 +973,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   const agentNameMap = new Map<string, string>();
+  const agentEmailMap = new Map<string, string | null>();
+  const agentPhoneMap = new Map<string, string | null>();
   agents.forEach((agent) => {
-    agentNameMap.set(agent._id.toString(), agent.name || 'Unnamed Agent');
+    const id = agent._id.toString();
+    agentNameMap.set(id, agent.name || 'Unnamed Agent');
+    agentEmailMap.set(id, agent.email ?? null);
+    agentPhoneMap.set(id, agent.phone ?? null);
   });
 
   const agentDesignationMap = new Map<string, 'AHA' | 'AHA_OOS' | 'AGIT' | null>();
@@ -2157,6 +2162,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       status: referral.status ?? 'New Lead',
       agentId,
       agentName: agentId ? agentNameMap.get(agentId) ?? null : null,
+      agentEmail: agentId ? agentEmailMap.get(agentId) ?? null : null,
+      agentPhone: agentId ? agentPhoneMap.get(agentId) ?? null : null,
       createdAt: referral.createdAt.toISOString(),
       updatedAt: referral.updatedAt?.toISOString() ?? referral.createdAt.toISOString()
     };
