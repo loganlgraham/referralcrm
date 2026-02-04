@@ -68,7 +68,17 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
                 {agent.email}
               </a>
             </p>
-            <p>Phone: {formatPhoneNumber(agent.phone) || '—'}</p>
+            <p>
+              Phone:{' '}
+              {agent.phone ? (
+                <a
+                  href={`tel:${agent.phone.replace(/[^0-9+]/g, '')}`}
+                  className="text-brand hover:underline"
+                >
+                  {formatPhoneNumber(agent.phone)}
+                </a>
+              ) : '—'}
+            </p>
             <p>License: {agent.licenseNumber || '—'}</p>
             <p>Brokerage: {agent.brokerage || '—'}</p>
             {isAdmin && agent.source && (

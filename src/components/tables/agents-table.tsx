@@ -7,6 +7,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
 } from 'react';
@@ -101,8 +102,11 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
   
   const apiUrl = `/api/agents?${apiParams.toString()}`;
   const { data, mutate } = useSWR<AgentsResponse>(apiUrl, fetcher);
-  const [searchQuery, setSearchQuery] = useState(search);
-  
+  const searchValue = search;
+  const [searchTerm, setSearchTerm] = useState(searchValue);
+  const [debouncedSearch, setDebouncedSearch] = useState(searchValue);
+  const isTypingRef = useRef(false);
+
   const updateParams = useCallback(
     (updates: { search?: string; ahaFilter?: string; page?: number; sortBy?: string; sortDirection?: 'asc' | 'desc' }) => {
       const params = new URLSearchParams(searchParamsString);
@@ -159,21 +163,44 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
     [router, searchParamsString, startTransition]
   );
   
-  // Debounce search input
+  // Sync from URL to local state (only when not typing)
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (searchQuery !== search) {
-        updateParams({ search: searchQuery });
-      }
-    }, 300);
+    if (isTypingRef.current) return;
+    setSearchTerm(searchValue);
+    setDebouncedSearch(searchValue);
+  }, [searchValue]);
 
-    return () => clearTimeout(timeout);
-  }, [searchQuery, search, updateParams]);
-
-  // Sync searchQuery with URL param
+  // Debounce: update debouncedSearch from searchTerm
   useEffect(() => {
-    setSearchQuery(search);
-  }, [search]);
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      isTypingRef.current = false;
+    }, 200);
+    return () => window.clearTimeout(timeout);
+  }, [searchTerm]);
+
+  // Push debouncedSearch to URL (with deduplication)
+  useEffect(() => {
+    const params = new URLSearchParams(searchParamsString);
+    const existing = params.get('search') ?? '';
+    const trimmed = debouncedSearch.trim();
+    if (trimmed === existing.trim()) return;
+    if (!trimmed) {
+      params.delete('search');
+    } else {
+      params.set('search', trimmed);
+    }
+    params.delete('page');
+    startTransition(() => {
+      const queryString = params.toString();
+      router.replace(queryString ? `/agents?${queryString}` : '/agents');
+    });
+  }, [debouncedSearch, router, searchParamsString, startTransition]);
+
+  const handleSearchInput = useCallback((value: string) => {
+    isTypingRef.current = true;
+    setSearchTerm(value);
+  }, []);
 
   // Refresh data when agents are added (via SWR mutate)
   useEffect(() => {
@@ -235,8 +262,8 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
             Search
             <input
               type="text"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              value={searchTerm}
+              onChange={(event) => handleSearchInput(event.target.value)}
               disabled={isPending}
               className="mt-2 w-full max-w-2xl rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
               placeholder="Name, email, phone, brokerage"
@@ -312,7 +339,16 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
                       {agent.email}
                     </a>
                     </div>
-                    <div className="text-xs text-slate-500">{formatPhoneNumber(agent.phone) || '—'}</div>
+                    <div className="text-xs text-slate-500">
+                      {agent.phone ? (
+                        <a
+                          href={`tel:${agent.phone.replace(/[^0-9+]/g, '')}`}
+                          className="text-brand hover:underline"
+                        >
+                          {formatPhoneNumber(agent.phone)}
+                        </a>
+                      ) : '—'}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-700">{agent.metrics.closingsLast12Months}</td>
                   <td className="px-4 py-3 text-sm text-slate-700">

@@ -15,6 +15,7 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatDate, formatNumber } from '@/utils/formatters';
+import { buildGmailComposeUrl } from '@/utils/gmail';
 import { Trash2 } from 'lucide-react';
 import {
   TimeframeDropdown,
@@ -1648,10 +1649,22 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                             {row.agentName || 'Agent'}
                           </Link>
                           {row.agentEmail && (
-                            <span className="text-xs text-slate-500">{row.agentEmail}</span>
+                            <a
+                              href={buildGmailComposeUrl(row.agentEmail)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block text-xs text-brand hover:underline"
+                            >
+                              {row.agentEmail}
+                            </a>
                           )}
                           {row.agentPhone && (
-                            <span className="text-xs text-slate-500">{row.agentPhone}</span>
+                            <a
+                              href={`tel:${row.agentPhone.replace(/[^0-9+]/g, '')}`}
+                              className="block text-xs text-brand hover:underline"
+                            >
+                              {row.agentPhone}
+                            </a>
                           )}
                         </div>
                       ) : (
