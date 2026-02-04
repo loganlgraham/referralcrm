@@ -37,7 +37,7 @@ interface ReferralSnapshot {
     lastPairedAt?: Date | null;
     lastUnderContractAt?: Date | null;
   } | null;
-  /** True when any attached agent (assigned/buy/sell) has ahaDesignation === 'AHA' */
+  /** True when any attached agent (assigned/buy/sell) has ahaDesignation === 'AHA' or 'AGIT'. Uses AHA task template. */
   hasAhaAgentAttached?: boolean;
 }
 
@@ -232,6 +232,7 @@ function computeDueAt(rule: TaskRuleDefinition, baseDate: Date): Date {
   return dueTimeDenver(addDays(baseDate, rule.dueOffsetDays));
 }
 
+/** True when any attached agent has AHA or AGIT designation. Uses AHA task template (not AHA_OOS standard template). */
 function hasAhaAgentAttached(referral: {
   assignedAgent?: { ahaDesignation?: string | null } | null;
   buySideAgent?: { ahaDesignation?: string | null } | null;
@@ -239,8 +240,11 @@ function hasAhaAgentAttached(referral: {
 }): boolean {
   return (
     referral.assignedAgent?.ahaDesignation === 'AHA' ||
+    referral.assignedAgent?.ahaDesignation === 'AGIT' ||
     referral.buySideAgent?.ahaDesignation === 'AHA' ||
-    referral.sellSideAgent?.ahaDesignation === 'AHA'
+    referral.buySideAgent?.ahaDesignation === 'AGIT' ||
+    referral.sellSideAgent?.ahaDesignation === 'AHA' ||
+    referral.sellSideAgent?.ahaDesignation === 'AGIT'
   );
 }
 
