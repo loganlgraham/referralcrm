@@ -11,6 +11,7 @@ const METRIC_LABELS: Record<string, string> = {
   summary: 'Executive summary',
   revenue: 'Revenue trends & expected revenue',
   deals: 'Deals closed, pipeline, and under contract',
+  funnel: 'Conversion funnel by stage',
   attachRate: 'AFC/AHA attach rates and lost deals',
   preApprovals: 'Pre-approval conversion by lender',
   geography: 'Revenue by geography and ZIP',
@@ -136,10 +137,21 @@ async function computeMetrics(range: DateRange) {
       return acc;
     }, {});
 
+  const funnelOrder = ['New Lead', 'Paired', 'In Communication', 'Active Lead', 'Under Contract', 'Closed', 'Lost', 'Terminated'];
+  const funnel = funnelOrder.reduce<Record<string, number>>((acc, status) => {
+    acc[status] = 0;
+    return acc;
+  }, {});
+  referrals.forEach((referral) => {
+    const s = referral.status === 'Showing Homes' ? 'Active Lead' : (referral.status ?? 'New Lead');
+    if (funnel[s] !== undefined) funnel[s] += 1;
+  });
+
   return {
     summary: { totalReferrals, closedReferrals, closeRate, expectedRevenueCents, revenueReceivedCents },
     revenue: { expectedRevenueCents, revenueReceivedCents },
     deals: { activePipeline, closedReferrals },
+    funnel: { stages: funnel },
     attachRate: { attachRate },
     preApprovals: { count: preApprovals },
     geography,
@@ -178,6 +190,13 @@ const metricRenderers: Record<DashboardMetricId, (m: MetricsData) => string> = {
     <ul>
       <li>Active pipeline: ${m.deals.activePipeline}</li>
       <li>Closed deals: ${m.deals.closedReferrals}</li>
+    </ul>`,
+  funnel: (m) => `
+    <h3>${METRIC_LABELS.funnel}</h3>
+    <ul>
+      ${Object.entries(m.funnel.stages)
+        .map(([status, count]) => `<li>${status}: ${count}</li>`)
+        .join('\n      ')}
     </ul>`,
   attachRate: (m) => `
     <h3>${METRIC_LABELS.attachRate}</h3>
