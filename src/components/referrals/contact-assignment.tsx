@@ -5,6 +5,7 @@ import Link from 'next/link';
 import useSWR, { useSWRConfig } from 'swr';
 import { toast } from 'sonner';
 
+import { CopyButton } from '@/components/common/copy-button';
 import { EmailActivityLink } from '@/components/common/email-activity-link';
 import { PhoneActivityLink } from '@/components/common/phone-activity-link';
 
@@ -245,16 +246,19 @@ export function ContactAssignment({
             <p className="text-xs uppercase text-slate-400">{title}</p>
             {formattedContact ? (
               <div>
-                {currentContact?.id ? (
-                  <Link
-                    href={type === 'agent' ? `/agents/${currentContact.id}` : `/lenders/${currentContact.id}`}
-                    className="font-medium text-brand hover:underline"
-                  >
-                    {formattedContact.name}
-                  </Link>
-                ) : (
-                  <p className="font-medium text-slate-900">{formattedContact.name}</p>
-                )}
+                <div className="flex items-center gap-1">
+                  {currentContact?.id ? (
+                    <Link
+                      href={type === 'agent' ? `/agents/${currentContact.id}` : `/lenders/${currentContact.id}`}
+                      className="font-medium text-brand hover:underline"
+                    >
+                      {formattedContact.name}
+                    </Link>
+                  ) : (
+                    <p className="font-medium text-slate-900">{formattedContact.name}</p>
+                  )}
+                  <CopyButton value={formattedContact.name} label="Copy name" />
+                </div>
                 {formattedContact.email && (
                   <p className="text-xs text-slate-500">
                     Email:{' '}
@@ -267,6 +271,7 @@ export function ContactAssignment({
                     >
                       {formattedContact.email}
                     </EmailActivityLink>
+                    <CopyButton value={formattedContact.email} label="Copy email" className="ml-1" />
                   </p>
                 )}
                 {formattedContact.phone && (
@@ -281,6 +286,7 @@ export function ContactAssignment({
                     >
                       {formattedContact.phone}
                     </PhoneActivityLink>
+                    <CopyButton value={formattedContact.phone} label="Copy phone" className="ml-1" />
                   </p>
                 )}
               </div>

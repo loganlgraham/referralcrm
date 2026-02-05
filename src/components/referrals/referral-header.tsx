@@ -11,6 +11,7 @@ import { ReferralStatus, REFERRAL_STATUSES, normalizeReferralStatus } from '@/co
 import { StatusChanger } from '@/components/referrals/status-changer';
 import { SLAWidget } from '@/components/referrals/sla-widget';
 import { ContactAssignment, type Contact } from '@/components/referrals/contact-assignment';
+import { CopyButton } from '@/components/common/copy-button';
 import { EmailActivityLink } from '@/components/common/email-activity-link';
 import { PhoneActivityLink } from '@/components/common/phone-activity-link';
 import { RequestUpdateButton } from '@/components/referrals/request-update-button';
@@ -887,31 +888,40 @@ export function ReferralHeader({
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-brand">Borrower</p>
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900 lg:text-3xl">{borrowerName}</h1>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-2xl font-semibold text-slate-900 lg:text-3xl">{borrowerName}</h1>
+              <CopyButton value={borrowerName} label="Copy name" />
+            </div>
             {hasBorrowerContact ? (
               <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600">
                 {borrowerEmail && (
-                  <EmailActivityLink
-                    referralId={referral._id}
-                    email={borrowerEmail}
-                    recipient="Borrower"
-                    recipientName={borrowerName}
-                    className="text-sm"
-                  >
-                    {borrowerEmail}
-                  </EmailActivityLink>
+                  <>
+                    <EmailActivityLink
+                      referralId={referral._id}
+                      email={borrowerEmail}
+                      recipient="Borrower"
+                      recipientName={borrowerName}
+                      className="text-sm"
+                    >
+                      {borrowerEmail}
+                    </EmailActivityLink>
+                    <CopyButton value={borrowerEmail} label="Copy email" />
+                  </>
                 )}
                 {borrowerEmail && borrowerPhone && <span className="text-slate-300">•</span>}
                 {borrowerPhone && (
-                  <PhoneActivityLink
-                    referralId={referral._id}
-                    phone={borrowerPhone}
-                    recipient="Borrower"
-                    recipientName={borrowerName}
-                    className="text-sm"
-                  >
-                    {borrowerPhone}
-                  </PhoneActivityLink>
+                  <>
+                    <PhoneActivityLink
+                      referralId={referral._id}
+                      phone={borrowerPhone}
+                      recipient="Borrower"
+                      recipientName={borrowerName}
+                      className="text-sm"
+                    >
+                      {borrowerPhone}
+                    </PhoneActivityLink>
+                    <CopyButton value={borrowerPhone} label="Copy phone" />
+                  </>
                 )}
               </div>
             ) : (

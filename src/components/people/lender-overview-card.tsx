@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { CopyButton } from '@/components/common/copy-button';
 import { formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { LenderAdminEditor, type LenderAdminEditorProps } from '@/components/people/lender-admin-editor';
@@ -19,9 +20,12 @@ export function LenderOverviewCard({ lender, isAdmin }: LenderOverviewCardProps)
     <div className="rounded-lg bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">{lender.name}</h1>
+          <div className="flex items-center gap-1.5">
+            <h1 className="text-2xl font-semibold text-slate-900">{lender.name}</h1>
+            <CopyButton value={lender.name} label="Copy name" />
+          </div>
           <div className="mt-2 space-y-1 text-sm text-slate-600">
-            <p>
+            <p className="flex items-center gap-1">
               Email{' '}
               <a
                 href={buildGmailComposeUrl(lender.email)}
@@ -31,8 +35,12 @@ export function LenderOverviewCard({ lender, isAdmin }: LenderOverviewCardProps)
               >
                 {lender.email}
               </a>
+              <CopyButton value={lender.email} label="Copy email" />
             </p>
-            <p>Phone: {formatPhoneNumber(lender.phone) || '—'}</p>
+            <p className="flex items-center gap-1">
+              Phone: {formatPhoneNumber(lender.phone) || '—'}
+              {lender.phone && <CopyButton value={lender.phone} label="Copy phone" className="ml-1" />}
+            </p>
             <p>NMLS ID: {lender.nmlsId || '—'}</p>
             {isAdmin && lender.npsScore !== null && lender.npsScore !== undefined && (
               <p>

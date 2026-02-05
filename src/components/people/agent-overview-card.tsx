@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 
 import { AgentAdminEditor, type AgentAdminEditorProps } from '@/components/people/agent-admin-editor';
 import { SendWelcomeEmailButton } from '@/components/people/send-welcome-email-button';
+import { CopyButton } from '@/components/common/copy-button';
 import { formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 
@@ -55,9 +56,12 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
     <div className="rounded-lg bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">{agent.name}</h1>
+          <div className="flex items-center gap-1.5">
+            <h1 className="text-2xl font-semibold text-slate-900">{agent.name}</h1>
+            <CopyButton value={agent.name} label="Copy name" />
+          </div>
           <div className="mt-2 space-y-1 text-sm text-slate-600">
-            <p>
+            <p className="flex items-center gap-1">
               Email{' '}
               <a
                 href={buildGmailComposeUrl(agent.email)}
@@ -67,8 +71,9 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
               >
                 {agent.email}
               </a>
+              <CopyButton value={agent.email} label="Copy email" />
             </p>
-            <p>
+            <p className="flex items-center gap-1">
               Phone:{' '}
               {agent.phone ? (
                 <a
@@ -77,7 +82,10 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
                 >
                   {formatPhoneNumber(agent.phone)}
                 </a>
-              ) : '—'}
+              ) : (
+                '—'
+              )}
+              {agent.phone && <CopyButton value={agent.phone} label="Copy phone" />}
             </p>
             <p>License: {agent.licenseNumber || '—'}</p>
             <p>Brokerage: {agent.brokerage || '—'}</p>
