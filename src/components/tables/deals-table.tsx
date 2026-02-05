@@ -7,6 +7,17 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
+import {
+  TimeframeDropdown,
+  type TimeframeKey,
+  type TimeframePreset,
+  type DateRange,
+  getPresetRange,
+  formatDisplayRange,
+  formatDateInput,
+  isDateRangeValid,
+  TIMEFRAME_PRESETS
+} from '@/components/dashboard/timeframe-controls';
 import { DEAL_STATUS_LABELS, DEAL_STATUS_VALUES, type DealStatus } from '@/constants/deals';
 import { DEFAULT_AGENT_COMMISSION_BPS } from '@/constants/referrals';
 import { Pagination } from '@/components/tables/pagination';
@@ -148,6 +159,11 @@ export function DealsTable() {
   const apiParams = new URLSearchParams();
   apiParams.set('page', page.toString());
   apiParams.set('pageSize', pageSize.toString());
+  apiParams.set('timeframe', timeframe);
+  if (timeframe === 'custom') {
+    if (customRange.start) apiParams.set('start', customRange.start);
+    if (customRange.end) apiParams.set('end', customRange.end);
+  }
   if (search) apiParams.set('search', search);
   if (statusFilters.length > 0) apiParams.set('status', statusFilters.join(','));
   if (designationFilters.length > 0) apiParams.set('designation', designationFilters.join(','));
@@ -166,6 +182,8 @@ export function DealsTable() {
   const [isDesignationMenuOpen, setIsDesignationMenuOpen] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
   const designationMenuRef = useRef<HTMLDivElement | null>(null);
+  const [timeframe, setTimeframe] = useState<TimeframeKey>('all');
+  const [customRange, setCustomRange] = useState<DateRange>(() => getPresetRange('all'));
 
   const deals = Array.isArray(data?.items) ? data.items : [];
   const isLoading = !data;
@@ -245,6 +263,28 @@ export function DealsTable() {
     },
     [router, searchParamsString, startTransition]
   );
+
+  const handlePresetSelect = useCallback((preset: TimeframePreset) => {
+    setTimeframe(preset);
+    setCustomRange(getPresetRange(preset));
+  }, []);
+
+  const handleCustomRangeSelect = useCallback((range: DateRange) => {
+    if (!isDateRangeValid(range)) return;
+    setCustomRange(range);
+    setTimeframe('custom');
+  }, []);
+
+  useEffect(() => {
+    if (timeframe === 'custom') return;
+    setCustomRange(getPresetRange(timeframe));
+  }, [timeframe]);
+
+  const maxSelectableDate = formatDateInput(new Date());
+  const timeframeLabel =
+    timeframe === 'custom'
+      ? formatDisplayRange(customRange)
+      : TIMEFRAME_PRESETS.find((o) => o.value === timeframe)?.label ?? 'Select timeframe';
 
   const getDealAddress = (deal: DealRow) => {
     const address = (deal.propertyAddress ?? deal.referral?.propertyAddress ?? '').trim();
@@ -1061,6 +1101,16 @@ export function DealsTable() {
         </label>
         {isAdminView && (
           <>
+            <div className="flex flex-col items-end gap-2">
+              <TimeframeDropdown
+                timeframe={timeframe}
+                rangeLabel={timeframeLabel}
+                customRange={customRange}
+                onPresetSelect={handlePresetSelect}
+                onCustomRangeSelect={handleCustomRangeSelect}
+                maxDate={maxSelectableDate}
+              />
+            </div>
             <div className="md:w-80" ref={statusMenuRef}>
               <span className="block text-xs font-semibold text-slate-600">Status</span>
               <div className="relative mt-2">
