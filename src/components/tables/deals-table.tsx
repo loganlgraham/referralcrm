@@ -154,6 +154,8 @@ export function DealsTable() {
     : [];
   const sortBy = searchParams.get('sortBy') || null;
   const sortDirection = (searchParams.get('sortDirection') as 'asc' | 'desc') || null;
+  const [timeframe, setTimeframe] = useState<TimeframeKey>('all');
+  const [customRange, setCustomRange] = useState<DateRange>(() => getPresetRange('all'));
   
   // Build API URL with filters
   const apiParams = new URLSearchParams();
@@ -182,8 +184,6 @@ export function DealsTable() {
   const [isDesignationMenuOpen, setIsDesignationMenuOpen] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
   const designationMenuRef = useRef<HTMLDivElement | null>(null);
-  const [timeframe, setTimeframe] = useState<TimeframeKey>('all');
-  const [customRange, setCustomRange] = useState<DateRange>(() => getPresetRange('all'));
 
   const deals = Array.isArray(data?.items) ? data.items : [];
   const isLoading = !data;
