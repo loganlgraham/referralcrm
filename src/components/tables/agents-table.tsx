@@ -256,36 +256,46 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3">
-        {isAdmin && (
+      {!isAdmin && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Agents</h1>
+            <p className="text-sm text-slate-500">Browse real estate agent partners.</p>
+          </div>
+        </div>
+      )}
+      <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end">
+          {isAdmin && (
+            <label className="flex-1 text-xs font-semibold text-slate-600">
+              Search
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(event) => handleSearchInput(event.target.value)}
+                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                placeholder="Name, email, phone, brokerage"
+              />
+            </label>
+          )}
           <label className="text-xs font-semibold text-slate-600">
-            Search
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(event) => handleSearchInput(event.target.value)}
-              className="mt-2 w-full max-w-2xl rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder="Name, email, phone, brokerage"
-            />
+            Agent Designation
+            <select
+              value={ahaFilter}
+              onChange={(event) => updateParams({ ahaFilter: event.target.value })}
+              disabled={isPending}
+              className="mt-1 rounded border border-slate-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="all">All agents</option>
+              <option value="AHA">AHA</option>
+              <option value="AHA_OOS">AHA OOS</option>
+              <option value="AGIT">AGIT</option>
+            </select>
           </label>
-        )}
-        <label className="text-xs font-semibold text-slate-600">
-          Agent Designation
-          <select
-            value={ahaFilter}
-            onChange={(event) => updateParams({ ahaFilter: event.target.value })}
-            disabled={isPending}
-            className="mt-1 rounded border border-slate-200 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <option value="all">All agents</option>
-            <option value="AHA">AHA</option>
-            <option value="AHA_OOS">AHA OOS</option>
-            <option value="AGIT">AGIT</option>
-          </select>
-        </label>
+        </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>

@@ -1,4 +1,12 @@
-import { differenceInDays } from 'date-fns';
+import {
+  differenceInDays,
+  endOfDay,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+  startOfYear,
+  subYears
+} from 'date-fns';
 import { NextRequest, NextResponse } from 'next/server';
 import { connectMongo } from '@/lib/mongoose';
 import { Types, PipelineStage } from 'mongoose';
@@ -114,6 +122,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     : [];
   const sortBy = searchParams.get('sortBy')?.trim() || null;
   const sortDirection = (searchParams.get('sortDirection')?.trim() as 'asc' | 'desc') || 'desc';
+  const timeframeParam = searchParams.get('timeframe')?.trim() || null;
+  const startParam = searchParams.get('start')?.trim() || null;
+  const endParam = searchParams.get('end')?.trim() || null;
 
   await connectMongo();
 
@@ -158,6 +169,39 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       filter.status = statusList[0];
     } else if (statusList.length > 1) {
       filter.status = { $in: statusList };
+    }
+  }
+
+  // Add closingDate range filter when timeframe is set (admin/manager deals page)
+  if (timeframeParam && timeframeParam !== 'all') {
+    const now = new Date();
+    let rangeStart: Date | null = null;
+    let rangeEnd: Date = endOfDay(now);
+
+    switch (timeframeParam) {
+      case 'day':
+        rangeStart = startOfDay(now);
+        break;
+      case 'week':
+        rangeStart = startOfWeek(now, { weekStartsOn: 1 });
+        break;
+      case 'month':
+        rangeStart = startOfMonth(now);
+        break;
+      case 'year':
+        rangeStart = subYears(now, 1);
+        break;
+      case 'ytd':
+        rangeStart = startOfYear(now);
+        break;
+      case 'custom':
+        if (startParam) rangeStart = startOfDay(new Date(startParam));
+        if (endParam) rangeEnd = endOfDay(new Date(endParam));
+        break;
+    }
+
+    if (rangeStart) {
+      filter.closingDate = { $gte: rangeStart, $lte: rangeEnd };
     }
   }
 

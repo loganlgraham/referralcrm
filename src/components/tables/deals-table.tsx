@@ -7,10 +7,22 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
+import {
+  TimeframeDropdown,
+  type TimeframeKey,
+  type TimeframePreset,
+  type DateRange,
+  getPresetRange,
+  formatDisplayRange,
+  formatDateInput,
+  isDateRangeValid,
+  TIMEFRAME_PRESETS
+} from '@/components/dashboard/timeframe-controls';
 import { DEAL_STATUS_LABELS, DEAL_STATUS_VALUES, type DealStatus } from '@/constants/deals';
 import { DEFAULT_AGENT_COMMISSION_BPS } from '@/constants/referrals';
 import { Pagination } from '@/components/tables/pagination';
 import { fetcher } from '@/utils/fetcher';
+import { addYears } from 'date-fns';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 
 type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
@@ -71,9 +83,9 @@ interface DealRow {
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 px-4 py-3">
-      <p className="text-xs uppercase text-slate-400">{label}</p>
-      <p className="text-lg font-semibold text-slate-900">{value}</p>
+    <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-slate-900">{value}</p>
     </div>
   );
 }
@@ -143,11 +155,18 @@ export function DealsTable() {
     : [];
   const sortBy = searchParams.get('sortBy') || null;
   const sortDirection = (searchParams.get('sortDirection') as 'asc' | 'desc') || null;
+  const [timeframe, setTimeframe] = useState<TimeframeKey>('all');
+  const [customRange, setCustomRange] = useState<DateRange>(() => getPresetRange('month'));
   
   // Build API URL with filters
   const apiParams = new URLSearchParams();
   apiParams.set('page', page.toString());
   apiParams.set('pageSize', pageSize.toString());
+  apiParams.set('timeframe', timeframe);
+  if (timeframe === 'custom') {
+    if (customRange.start) apiParams.set('start', customRange.start);
+    if (customRange.end) apiParams.set('end', customRange.end);
+  }
   if (search) apiParams.set('search', search);
   if (statusFilters.length > 0) apiParams.set('status', statusFilters.join(','));
   if (designationFilters.length > 0) apiParams.set('designation', designationFilters.join(','));
@@ -245,6 +264,28 @@ export function DealsTable() {
     },
     [router, searchParamsString, startTransition]
   );
+
+  const handlePresetSelect = useCallback((preset: TimeframePreset) => {
+    setTimeframe(preset);
+    setCustomRange(getPresetRange(preset === 'all' ? 'month' : preset));
+  }, []);
+
+  const handleCustomRangeSelect = useCallback((range: DateRange) => {
+    if (!isDateRangeValid(range)) return;
+    setCustomRange(range);
+    setTimeframe('custom');
+  }, []);
+
+  useEffect(() => {
+    if (timeframe === 'custom') return;
+    setCustomRange(getPresetRange(timeframe === 'all' ? 'month' : timeframe));
+  }, [timeframe]);
+
+  const maxSelectableDate = formatDateInput(addYears(new Date(), 1));
+  const timeframeLabel =
+    timeframe === 'custom'
+      ? formatDisplayRange(customRange)
+      : TIMEFRAME_PRESETS.find((o) => o.value === timeframe)?.label ?? 'Select timeframe';
 
   const getDealAddress = (deal: DealRow) => {
     const address = (deal.propertyAddress ?? deal.referral?.propertyAddress ?? '').trim();
@@ -786,9 +827,9 @@ export function DealsTable() {
   };
 
   const renderAdminTable = () => (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
       <table className="min-w-full divide-y divide-slate-200">
-        <thead className="bg-slate-50">
+        <thead className="sticky top-0 z-10 bg-slate-50">
           <tr>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <SortableHeader label="Referral" sortKey="referral" />
@@ -842,7 +883,7 @@ export function DealsTable() {
             const isUpdating = updatingId === deal._id;
 
             return (
-              <tr key={deal._id} className="hover:bg-slate-50">
+              <tr key={deal._id} className="even:bg-slate-50/50 hover:bg-slate-100">
                 <td className="px-4 py-3 text-sm text-slate-700">
                   <div className="flex flex-col">
                     {renderReferralLink(deal)}
@@ -957,7 +998,7 @@ export function DealsTable() {
   );
 
   const renderDefaultTable = () => (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
       <table className="min-w-full divide-y divide-slate-200">
         <thead className="bg-slate-50">
           <tr>
@@ -1018,7 +1059,7 @@ export function DealsTable() {
                   : 'text-slate-500';
 
             return (
-              <tr key={deal._id} className="hover:bg-slate-50">
+              <tr key={deal._id} className="even:bg-slate-50/50 hover:bg-slate-100">
                 <td className="px-4 py-3 text-sm text-slate-700">
                   <div className="flex flex-col">
                     {renderReferralLink(deal)}
@@ -1043,137 +1084,176 @@ export function DealsTable() {
   );
 
   if (isLoading) {
-    return <div className="rounded-lg bg-white p-4 shadow-sm">Loading deals…</div>;
+    return (
+      <div className="space-y-6">
+        <div className="h-8 w-48 animate-pulse rounded-lg bg-slate-200" />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="h-20 animate-pulse rounded-xl bg-slate-200" />
+          <div className="h-20 animate-pulse rounded-xl bg-slate-200" />
+        </div>
+        <div className="h-96 animate-pulse rounded-xl bg-slate-200" />
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <label className="block text-xs font-semibold text-slate-600 md:flex-1">
-          Search
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(event) => handleSearchInput(event.target.value)}
-            className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
-            placeholder="Borrower, address, loan #, agent"
-          />
-        </label>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Deals</h1>
+          <p className="text-sm text-slate-500">
+            {data ? `${data.total} deal${data.total !== 1 ? 's' : ''}` : 'Loading...'}
+            {timeframe !== 'all' && isAdminView ? ` · ${timeframeLabel}` : ''}
+          </p>
+        </div>
         {isAdminView && (
-          <>
-            <div className="md:w-80" ref={statusMenuRef}>
-              <span className="block text-xs font-semibold text-slate-600">Status</span>
-              <div className="relative mt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsStatusMenuOpen((open) => !open)}
-                  disabled={isPending}
-                  className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <span className="truncate">
-                    {statusFilters.length > 0
-                      ? `${statusFilters.length} status${statusFilters.length > 1 ? 'es' : ''} selected`
-                      : 'All statuses'}
-                  </span>
-                  <span className="text-xs text-slate-500">{isStatusMenuOpen ? '▲' : '▼'}</span>
-                </button>
-                {isStatusMenuOpen && (
-                  <div className="absolute left-0 right-0 z-10 mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
-                    <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600">
-                      <span>Filter statuses</span>
-                      <button
-                        type="button"
-                        className="text-brand hover:text-brand/80"
-                        onClick={() => updateParams({ status: '' })}
-                      >
-                        Clear
-                      </button>
-                    </div>
-                    <div className="max-h-60 space-y-2 overflow-auto pr-1">
-                      {STATUS_FILTER_OPTIONS.map(({ value, label }) => (
-                        <label
-                          key={value}
-                          className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          <span className="text-slate-700">{label}</span>
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-                            checked={statusFilters.includes(value as DealStatus)}
-                            onChange={(event) => {
-                              const checked = event.target.checked;
-                              const newFilters = checked
-                                ? [...statusFilters, value as DealStatus]
-                                : statusFilters.filter((status) => status !== value);
-                              updateParams({ status: newFilters.length > 0 ? newFilters.join(',') : '' });
-                            }}
-                          />
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="md:w-80" ref={designationMenuRef}>
-              <span className="block text-xs font-semibold text-slate-600">Agent Designation</span>
-              <div className="relative mt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsDesignationMenuOpen((open) => !open)}
-                  disabled={isPending}
-                  className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <span className="truncate">
-                    {designationFilters.length > 0
-                      ? `${designationFilters.length} designation${designationFilters.length > 1 ? 's' : ''} selected`
-                      : 'All designations'}
-                  </span>
-                  <span className="text-xs text-slate-500">{isDesignationMenuOpen ? '▲' : '▼'}</span>
-                </button>
-                {isDesignationMenuOpen && (
-                  <div className="absolute left-0 right-0 z-10 mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
-                    <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600">
-                      <span>Filter by designation</span>
-                      <button
-                        type="button"
-                        className="text-brand hover:text-brand/80"
-                        onClick={() => updateParams({ designation: '' })}
-                      >
-                        Clear
-                      </button>
-                    </div>
-                    <div className="max-h-60 space-y-2 overflow-auto pr-1">
-                      {DESIGNATION_FILTER_OPTIONS.map(({ value, label }) => (
-                        <label
-                          key={value}
-                          className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          <span className="text-slate-700">{label}</span>
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-                            checked={designationFilters.includes(value)}
-                            onChange={(event) => {
-                              const checked = event.target.checked;
-                              const newFilters = checked
-                                ? [...designationFilters, value]
-                                : designationFilters.filter((d) => d !== value);
-                              updateParams({ designation: newFilters.length > 0 ? newFilters.join(',') : '' });
-                            }}
-                          />
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
+          <div className="flex flex-col items-end gap-2">
+            <TimeframeDropdown
+              timeframe={timeframe}
+              rangeLabel={timeframeLabel}
+              customRange={customRange}
+              onPresetSelect={handlePresetSelect}
+              onCustomRangeSelect={handleCustomRangeSelect}
+              maxDate={maxSelectableDate}
+            />
+          </div>
         )}
       </div>
+      <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end">
+          <label className="block flex-1 text-xs font-semibold text-slate-600">
+            Search
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(event) => handleSearchInput(event.target.value)}
+              className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="Borrower, address, loan #, agent"
+            />
+          </label>
+          {isAdminView && (
+            <>
+              <div className="md:w-80" ref={statusMenuRef}>
+                <span className="block text-xs font-semibold text-slate-600">Status</span>
+                <div className="relative mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsStatusMenuOpen((open) => !open)}
+                    disabled={isPending}
+                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="truncate">
+                      {statusFilters.length > 0
+                        ? `${statusFilters.length} status${statusFilters.length > 1 ? 'es' : ''} selected`
+                        : 'All statuses'}
+                    </span>
+                    <span className="text-xs text-slate-500">{isStatusMenuOpen ? '▲' : '▼'}</span>
+                  </button>
+                  {isStatusMenuOpen && (
+                    <div className="absolute left-0 right-0 z-10 mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+                      <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600">
+                        <span>Filter statuses</span>
+                        <button
+                          type="button"
+                          className="text-brand hover:text-brand/80"
+                          onClick={() => updateParams({ status: '' })}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <div className="max-h-60 space-y-2 overflow-auto pr-1">
+                        {STATUS_FILTER_OPTIONS.map(({ value, label }) => (
+                          <label
+                            key={value}
+                            className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            <span className="text-slate-700">{label}</span>
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                              checked={statusFilters.includes(value as DealStatus)}
+                              onChange={(event) => {
+                                const checked = event.target.checked;
+                                const newFilters = checked
+                                  ? [...statusFilters, value as DealStatus]
+                                  : statusFilters.filter((status) => status !== value);
+                                updateParams({ status: newFilters.length > 0 ? newFilters.join(',') : '' });
+                              }}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="md:w-80" ref={designationMenuRef}>
+                <span className="block text-xs font-semibold text-slate-600">Agent Designation</span>
+                <div className="relative mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDesignationMenuOpen((open) => !open)}
+                    disabled={isPending}
+                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="truncate">
+                      {designationFilters.length > 0
+                        ? `${designationFilters.length} designation${designationFilters.length > 1 ? 's' : ''} selected`
+                        : 'All designations'}
+                    </span>
+                    <span className="text-xs text-slate-500">{isDesignationMenuOpen ? '▲' : '▼'}</span>
+                  </button>
+                  {isDesignationMenuOpen && (
+                    <div className="absolute left-0 right-0 z-10 mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+                      <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600">
+                        <span>Filter by designation</span>
+                        <button
+                          type="button"
+                          className="text-brand hover:text-brand/80"
+                          onClick={() => updateParams({ designation: '' })}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <div className="max-h-60 space-y-2 overflow-auto pr-1">
+                        {DESIGNATION_FILTER_OPTIONS.map(({ value, label }) => (
+                          <label
+                            key={value}
+                            className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            <span className="text-slate-700">{label}</span>
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                              checked={designationFilters.includes(value)}
+                              onChange={(event) => {
+                                const checked = event.target.checked;
+                                const newFilters = checked
+                                  ? [...designationFilters, value]
+                                  : designationFilters.filter((d) => d !== value);
+                                updateParams({ designation: newFilters.length > 0 ? newFilters.join(',') : '' });
+                              }}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
       {summarySection}
-      {isAdminView ? renderAdminTable() : renderDefaultTable()}
+      {deals.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white py-16">
+          <p className="text-lg font-medium text-slate-500">No deals found</p>
+          <p className="mt-1 text-sm text-slate-400">Try adjusting your filters or timeframe</p>
+        </div>
+      ) : (
+        isAdminView ? renderAdminTable() : renderDefaultTable()
+      )}
       {data && (
         <Pagination
           currentPage={data.page}

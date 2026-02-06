@@ -17,11 +17,13 @@ export default async function AdminTasksPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Admin Tasks</h1>
-        <p className="text-sm text-slate-500">
-          Shared tasks across all referrals. All admins see the same task state.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Admin Tasks</h1>
+          <p className="text-sm text-slate-500">
+            Shared tasks across all referrals. All admins see the same task state.
+          </p>
+        </div>
       </div>
       <AdminTaskBoard />
     </div>
