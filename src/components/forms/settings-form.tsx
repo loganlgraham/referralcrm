@@ -156,8 +156,14 @@ export function SettingsForm() {
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Settings</h1>
+          <p className="text-sm text-slate-500">Manage referral fee policies, reports, and data exports.</p>
+        </div>
+      </div>
       <form onSubmit={handleSubmit} className="space-y-4 rounded-lg bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Referral fee policy</h1>
+        <h2 className="text-xl font-semibold text-slate-900">Referral fee policy</h2>
         <p className="text-sm text-slate-500">Configure default referral fee tiers.</p>
         <div className="grid gap-4 md:grid-cols-2">
           <label className="text-sm font-medium text-slate-600">

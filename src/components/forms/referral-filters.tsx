@@ -122,14 +122,14 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   }, [searchTerm]);
 
   return (
-    <div className="space-y-4 rounded-lg bg-white p-4 shadow-sm">
+    <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
       <label className="flex flex-col text-xs font-semibold text-slate-600">
         Search
         <input
           type="text"
           value={searchTerm}
           onChange={(event) => handleSearchInput(event.target.value)}
-          className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm"
+          className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-base shadow-sm"
           placeholder="Name, email, phone, loan #"
         />
       </label>

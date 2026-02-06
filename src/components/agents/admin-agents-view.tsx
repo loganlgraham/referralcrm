@@ -22,28 +22,32 @@ export function AdminAgentsView() {
 
   return (
     <div className="space-y-6">
-      {/* Icon buttons at the top */}
-      <div className="flex justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => setShowAddAgentModal(true)}
-          className="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          aria-label="Add agent"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Add Agent</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowAISearchModal(true)}
-          className="inline-flex items-center justify-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          aria-label="Find agent by area"
-        >
-          <MapPin className="h-4 w-4" />
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Agents</h1>
+          <p className="text-sm text-slate-500">Browse and manage real estate agent partners.</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setShowAddAgentModal(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            aria-label="Add agent"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Add Agent</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAISearchModal(true)}
+            className="inline-flex items-center justify-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            aria-label="Find agent by area"
+          >
+            <MapPin className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
-      {/* Main page content - regular search, designation, and table */}
       <AgentsTable />
 
       {/* Add Agent Modal */}

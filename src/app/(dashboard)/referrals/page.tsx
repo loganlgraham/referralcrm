@@ -63,7 +63,7 @@ export default async function ReferralsPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">
             {tableMode === 'agent' ? 'My referrals' : 'Referrals'}
@@ -106,7 +106,7 @@ export default async function ReferralsPage({
           />
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
           No referrals yet. Add your first referral to get started.
         </div>
       )}

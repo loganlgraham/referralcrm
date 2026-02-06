@@ -179,11 +179,14 @@ export function ImportWizard() {
   };
 
   return (
-    <div className="space-y-6 rounded-lg bg-white p-6 shadow-sm">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Import Wizard</h1>
-        <p className="text-sm text-slate-500">Upload CSV/XLSX/ZIP files and map to CRM fields.</p>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Import Wizard</h1>
+          <p className="text-sm text-slate-500">Upload CSV/XLSX/ZIP files and map to CRM fields.</p>
+        </div>
       </div>
+      <div className="space-y-6 rounded-lg bg-white p-6 shadow-sm">
       <div className="flex items-center gap-4 text-sm text-slate-500">
         {steps.map((item) => (
           <div key={item} className={`flex items-center gap-2 ${step === item ? 'font-semibold text-brand' : ''}`}>
@@ -429,6 +432,7 @@ export function ImportWizard() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

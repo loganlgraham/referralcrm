@@ -206,7 +206,7 @@ export function MortgageConsultantSearch() {
             <SparklesIcon className="h-5 w-5" />
           </div>
           <div className="space-y-2">
-            <h1 className="text-2xl font-semibold text-slate-900">Mortgage Consultants</h1>
+            <p className="text-sm font-semibold text-slate-700">Find a mortgage consultant</p>
             <p className="text-sm text-slate-600">
               Describe where your borrower needs a licensed mortgage consultant. We’ll surface teammates licensed in that state
               with recent performance so you can pick a partner and launch the referral flow.
