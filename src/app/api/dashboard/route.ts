@@ -112,6 +112,7 @@ interface DashboardReferral {
   createdAt: Date;
   updatedAt?: Date;
   referralDate?: Date | null;
+  statusLastUpdated?: Date;
   source: 'Lender' | 'MC';
   endorser?: string;
   origin?: 'agent' | 'mc' | 'admin' | '';
@@ -694,6 +695,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         role: role ?? null
       },
       main: {
+        funnel: { stages: [] },
+        periodOverPeriod: null,
         summary: {
           totalReferrals: 0,
           dealsClosed: 0,
@@ -721,7 +724,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           totalVolumeClosedCents: 0,
           averagePaAmountCents: 0,
           averageReferralFeePaidCents: 0,
-          pipelineValueCents: 0
+          pipelineValueCents: 0,
+          lostReferrals: 0
         },
         trends: {
           revenue: [],
@@ -807,7 +811,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...referralMatch,
   })
     .select(
-      'createdAt updatedAt referralDate status referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin sla lookingInZip lookingInZips loanFileNumber borrower.name'
+      'createdAt updatedAt referralDate status statusLastUpdated referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin sla lookingInZip lookingInZips loanFileNumber borrower.name'
     )
     .lean<DashboardReferral[]>()
     .exec();
@@ -1328,6 +1332,55 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const activePipeline = filteredReferrals.filter((referral) =>
     ACTIVE_PIPELINE_STATUSES.has((referral.status as string | undefined) ?? '')
   ).length;
+
+  // Conversion funnel: stages in pipeline order; "Showing Homes" normalized to "Active Lead"
+  const FUNNEL_ORDER = [
+    'New Lead',
+    'Paired',
+    'In Communication',
+    'Active Lead',
+    'Under Contract',
+    'Closed',
+    'Lost',
+    'Terminated'
+  ] as const;
+  const normalizeFunnelStatus = (status: string | undefined): string => {
+    if (!status) return 'New Lead';
+    return status === 'Showing Homes' ? 'Active Lead' : status;
+  };
+  const funnelCountByStatus = new Map<string, number>();
+  FUNNEL_ORDER.forEach((s) => funnelCountByStatus.set(s, 0));
+  const funnelDaysInStageByStatus = new Map<string, number[]>();
+  filteredReferrals.forEach((referral) => {
+    const status = normalizeFunnelStatus(referral.status);
+    funnelCountByStatus.set(status, (funnelCountByStatus.get(status) ?? 0) + 1);
+    const statusLastUpdated = referral.statusLastUpdated ?? referral.createdAt;
+    if (statusLastUpdated) {
+      const d = new Date(statusLastUpdated);
+      if (!Number.isNaN(d.getTime())) {
+        const days = differenceInCalendarDays(new Date(), d);
+        const arr = funnelDaysInStageByStatus.get(status) ?? [];
+        arr.push(days);
+        funnelDaysInStageByStatus.set(status, arr);
+      }
+    }
+  });
+  const funnelStages = FUNNEL_ORDER.map((status, index) => {
+    const count = funnelCountByStatus.get(status) ?? 0;
+    const prevCount = index === 0 ? count : (funnelCountByStatus.get(FUNNEL_ORDER[index - 1]) ?? 0);
+    const conversionFromPrevious = prevCount === 0 ? null : (count / prevCount) * 100;
+    const dropOffPercent = prevCount === 0 ? null : 100 - (conversionFromPrevious ?? 0);
+    const daysArr = funnelDaysInStageByStatus.get(status) ?? [];
+    const avgDaysInStage = daysArr.length === 0 ? null : daysArr.reduce((a, b) => a + b, 0) / daysArr.length;
+    return {
+      status,
+      label: status,
+      count,
+      conversionFromPrevious: conversionFromPrevious != null ? Number(conversionFromPrevious.toFixed(1)) : null,
+      dropOffPercent: dropOffPercent != null ? Number(dropOffPercent.toFixed(1)) : null,
+      avgDaysInStage: avgDaysInStage != null ? Number(avgDaysInStage.toFixed(1)) : null
+    };
+  });
 
   const revenueBySource = Array.from(revenueBySourceMap.entries())
     .map(([label, value]) => ({ label, value }))
@@ -2207,6 +2260,45 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     };
   });
 
+  // Period-over-period: previous period of same length ending at timeframe.start
+  let periodOverPeriod: {
+    previous: { totalReferrals: number; dealsClosed: number; realizedRevenueCents: number; closeRate: number };
+    current: { totalReferrals: number; dealsClosed: number; realizedRevenueCents: number; closeRate: number };
+  } | null = null;
+  if (timeframeStart && timeframeEnd && timeframeStart.getTime() < timeframeEnd.getTime()) {
+    const periodMs = timeframeEnd.getTime() - timeframeStart.getTime();
+    const previousEnd = new Date(timeframeStart.getTime() - 1);
+    const previousStart = new Date(previousEnd.getTime() - periodMs);
+    const prevReferrals = referralsByNetwork.filter((r) => {
+      const created = r.createdAt ? new Date(r.createdAt) : null;
+      if (!created) return false;
+      return created >= previousStart && created <= previousEnd;
+    });
+    const prevReferralIds = new Set(prevReferrals.map((r) => r._id.toString()));
+    const prevDealsClosed = paymentsByNetwork.filter(
+      (p) =>
+        p.agentAttribution !== 'OUTSIDE_AGENT' &&
+        p.usedAssignedAgent === true &&
+        (p.status === 'closed' || p.status === 'paid') &&
+        prevReferralIds.has(p.referral._id.toString())
+    );
+    const prevRealized = prevDealsClosed.reduce((sum, p) => sum + (p.receivedAmountCents ?? 0), 0);
+    periodOverPeriod = {
+      previous: {
+        totalReferrals: prevReferrals.length,
+        dealsClosed: prevDealsClosed.length,
+        realizedRevenueCents: prevRealized,
+        closeRate: prevReferrals.length === 0 ? 0 : (prevDealsClosed.length / prevReferrals.length) * 100
+      },
+      current: {
+        totalReferrals,
+        dealsClosed: dealsClosedForSummary,
+        realizedRevenueCents,
+        closeRate: closeRateForSummary
+      }
+    };
+  }
+
   const timeframeResponse = {
     key: timeframe.key,
     label: timeframe.label,
@@ -2221,6 +2313,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       role: role ?? null
     },
     main: {
+      funnel: { stages: funnelStages },
+      periodOverPeriod,
       summary: {
         totalReferrals,
         dealsClosed: dealsClosedForSummary,

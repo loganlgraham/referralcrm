@@ -79,6 +79,20 @@ interface DashboardSummary {
   lostReferrals: number;
 }
 
+interface FunnelStage {
+  status: string;
+  label: string;
+  count: number;
+  conversionFromPrevious: number | null;
+  dropOffPercent: number | null;
+  avgDaysInStage: number | null;
+}
+
+interface PeriodOverPeriod {
+  previous: { totalReferrals: number; dealsClosed: number; realizedRevenueCents: number; closeRate: number };
+  current: { totalReferrals: number; dealsClosed: number; realizedRevenueCents: number; closeRate: number };
+}
+
 interface DashboardResponse {
   timeframe: {
     key: TimeframeKey;
@@ -91,6 +105,8 @@ interface DashboardResponse {
     role: string | null;
   };
   main: {
+    funnel?: { stages: FunnelStage[] };
+    periodOverPeriod?: PeriodOverPeriod | null;
     summary: DashboardSummary;
     trends: {
       revenue: TrendPoint[];
@@ -309,15 +325,17 @@ function SummaryCard({
   title,
   value,
   helper,
-  extraStats
+  extraStats,
+  drillDownHref
 }: {
   title: string;
   value: string;
   helper?: string;
   extraStats?: { label: string; value: string }[];
+  drillDownHref?: string;
 }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+  const content = (
+    <>
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
       <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
       {helper ? <p className="mt-1 text-xs text-slate-500">{helper}</p> : null}
@@ -331,8 +349,17 @@ function SummaryCard({
           ))}
         </dl>
       ) : null}
-    </div>
+    </>
   );
+  const className = 'rounded-lg border border-slate-200 bg-white p-4 shadow-sm block transition hover:border-slate-300';
+  if (drillDownHref) {
+    return (
+      <Link href={drillDownHref} className={className}>
+        {content}
+      </Link>
+    );
+  }
+  return <div className={className}>{content}</div>;
 }
 
 function MetricGroupCard({
@@ -901,6 +928,54 @@ function TerminatedDealsList({
   );
 }
 
+function ConversionFunnelCard({
+  stages,
+  networkFilter
+}: {
+  stages: FunnelStage[];
+  networkFilter: NetworkFilter;
+}) {
+  const buildDrillDownUrl = (status: string) => {
+    const params = new URLSearchParams();
+    params.set('status', status);
+    if (networkFilter === 'AHA' || networkFilter === 'AHA_OOS') {
+      params.set('ahaBucket', networkFilter);
+    }
+    return `/referrals?${params.toString()}`;
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Conversion funnel</p>
+      <p className="mt-1 text-xs text-slate-500">Referrals by stage (click to view list)</p>
+      <div className="mt-4 space-y-2">
+        {stages.length ? (
+          stages.map((stage) => (
+            <Link
+              key={stage.status}
+              href={buildDrillDownUrl(stage.status)}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2 transition hover:border-slate-200 hover:bg-slate-50"
+            >
+              <span className="font-medium text-slate-900">{stage.label}</span>
+              <div className="flex items-center gap-3 text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">{formatNumber(stage.count)}</span>
+                {stage.avgDaysInStage != null ? (
+                  <span className="text-xs text-slate-500">avg {stage.avgDaysInStage} days</span>
+                ) : null}
+                {stage.dropOffPercent != null && stage.dropOffPercent > 0 ? (
+                  <span className="text-xs text-amber-600">{stage.dropOffPercent.toFixed(0)}% drop-off</span>
+                ) : null}
+              </div>
+            </Link>
+          ))
+        ) : (
+          <p className="py-4 text-center text-sm text-slate-500">No referral data for this period.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RankedList({
   title,
   items,
@@ -1284,19 +1359,34 @@ function PreApprovalConversionSection({
   );
 }
 
+function periodOverPeriodDelta(
+  current: number,
+  previous: number,
+  format: 'number' | 'currency' | 'percent'
+): string | null {
+  if (previous === 0) return current > 0 ? '+100%' : null;
+  const pct = ((current - previous) / previous) * 100;
+  if (pct === 0) return '0%';
+  const sign = pct > 0 ? '+' : '';
+  return `${sign}${pct.toFixed(1)}%`;
+}
+
 function MainDashboard({
   data,
   canEditPreApprovals,
-  onPreApprovalSaved
+  onPreApprovalSaved,
+  networkFilter
 }: {
   data: DashboardResponse['main'];
   canEditPreApprovals: boolean;
   onPreApprovalSaved: () => void;
+  networkFilter: NetworkFilter;
 }) {
   const summary = data.summary;
   const realizedRevenueCents = Math.max(summary.realizedRevenueCents ?? 0, 0);
   const expectedRevenueCents = Math.max(summary.expectedRevenueCents ?? 0, 0);
   const closedNotPaidCents = Math.max(summary.closedNotPaidCents ?? 0, 0);
+  const pop = data.periodOverPeriod ?? null;
 
   // "Expected revenue" here is outstanding expected (not total), so use:
   // realized / (realized + outstanding)
@@ -1309,15 +1399,21 @@ function MainDashboard({
   const closedNotPaidPercentOfExpected =
     expectedRevenueCents > 0 ? (closedNotPaidCents / expectedRevenueCents) * 100 : null;
 
+  const revenueVsPrev = pop ? periodOverPeriodDelta(realizedRevenueCents, pop.previous.realizedRevenueCents, 'currency') : null;
+  const referralsVsPrev = pop ? periodOverPeriodDelta(summary.totalReferrals, pop.previous.totalReferrals, 'number') : null;
+  const closeRateVsPrev = pop ? periodOverPeriodDelta(summary.closeRate, pop.previous.closeRate, 'percent') : null;
+
   const highlights: {
     title: string;
     value: string;
     helper?: string;
     extraStats: { label: string; value: string }[];
+    drillDownHref?: string;
   }[] = [
     {
       title: 'Revenue received',
       value: formatCurrency(summary.realizedRevenueCents),
+      helper: revenueVsPrev != null ? `vs previous period: ${revenueVsPrev}` : undefined,
       extraStats: [
         { label: 'Generated (closed)', value: formatCurrency(summary.generatedRevenueCents) },
         { label: 'Closed, not paid', value: formatCurrency(summary.closedNotPaidCents) }
@@ -1334,17 +1430,30 @@ function MainDashboard({
     {
       title: 'Total referrals',
       value: formatNumber(summary.totalReferrals),
-      extraStats: [{ label: 'Deals closed', value: formatNumber(summary.dealsClosedInTimeframe) }]
+      helper: referralsVsPrev != null ? `vs previous period: ${referralsVsPrev}` : undefined,
+      extraStats: [{ label: 'Deals closed', value: formatNumber(summary.dealsClosedInTimeframe) }],
+      drillDownHref: (() => {
+        const params = new URLSearchParams();
+        if (networkFilter === 'AHA' || networkFilter === 'AHA_OOS') params.set('ahaBucket', networkFilter);
+        return params.toString() ? `/referrals?${params.toString()}` : '/referrals';
+      })()
     },
     {
       title: 'Close rate',
       value: `${summary.closeRate.toFixed(1)}%`,
+      helper: closeRateVsPrev != null ? `vs previous period: ${closeRateVsPrev}` : undefined,
       extraStats: [
         {
           label: 'Avg. days closed → paid',
           value: `${summary.averageDaysClosedToPaid.toFixed(1)} days`
         }
-      ]
+      ],
+      drillDownHref: (() => {
+        const params = new URLSearchParams();
+        params.set('status', 'Closed');
+        if (networkFilter === 'AHA' || networkFilter === 'AHA_OOS') params.set('ahaBucket', networkFilter);
+        return `/referrals?${params.toString()}`;
+      })()
     }
   ];
 
@@ -1380,6 +1489,8 @@ function MainDashboard({
     { label: 'Avg. closed deal amount', value: formatCurrency(summary.averageClosedDealAmountCents) }
   ];
 
+  const funnelStages = data.funnel?.stages ?? [];
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1390,9 +1501,14 @@ function MainDashboard({
             value={card.value}
             helper={card.helper}
             extraStats={card.extraStats}
+            drillDownHref={card.drillDownHref}
           />
         ))}
       </div>
+
+      {funnelStages.length > 0 ? (
+        <ConversionFunnelCard stages={funnelStages} networkFilter={networkFilter} />
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <MetricGroupCard title="Pipeline health" metrics={pipelineMetrics} />
@@ -1991,7 +2107,12 @@ export function DashboardTabs() {
       ) : data ? (
         <div>
           {activeTab === 'main' ? (
-            <MainDashboard data={data.main} canEditPreApprovals={canViewGlobal} onPreApprovalSaved={handlePreApprovalSaved} />
+            <MainDashboard
+              data={data.main}
+              canEditPreApprovals={canViewGlobal}
+              onPreApprovalSaved={handlePreApprovalSaved}
+              networkFilter={activeNetworkFilter}
+            />
           ) : null}
           {activeTab === 'mc' ? <McDashboard data={data.mc} /> : null}
           {activeTab === 'agent' ? <AgentDashboard data={data.agent} /> : null}

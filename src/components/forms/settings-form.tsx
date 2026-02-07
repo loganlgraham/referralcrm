@@ -1,12 +1,13 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 const DASHBOARD_METRICS = [
   { id: 'summary', label: 'Executive summary (totals & close rate)' },
   { id: 'revenue', label: 'Revenue trends & expected revenue' },
   { id: 'deals', label: 'Deals closed, pipeline, and under contract' },
+  { id: 'funnel', label: 'Conversion funnel by stage' },
   { id: 'attachRate', label: 'AFC/AHA attach rates and lost deals' },
   { id: 'preApprovals', label: 'Pre-approval conversion by lender' },
   { id: 'geography', label: 'Revenue by geography and ZIP' },
@@ -16,7 +17,16 @@ const DASHBOARD_METRICS = [
 
 type DashboardMetricId = (typeof DASHBOARD_METRICS)[number]['id'];
 
-type ExportReport = 'referrals' | 'agents' | 'mcs' | 'deals';
+type ReportPresetConfig = {
+  reportName: string;
+  reportTimeframe: string;
+  customStartDate: string;
+  customEndDate: string;
+  metrics: DashboardMetricId[];
+  recipient: string;
+};
+
+type ExportReport = 'referrals' | 'agents' | 'mcs' | 'deals' | 'dashboard-metrics';
 
 const EXPORT_DEFINITIONS: Record<ExportReport, { label: string; helper: string }> = {
   referrals: {
@@ -34,6 +44,10 @@ const EXPORT_DEFINITIONS: Record<ExportReport, { label: string; helper: string }
   deals: {
     label: 'Deals',
     helper: 'Closed and active deals with referral fee details.'
+  },
+  'dashboard-metrics': {
+    label: 'Dashboard metrics',
+    helper: 'Key KPIs, funnel stages, and period-over-period as CSV (uses timeframe and network below).'
   }
 };
 
@@ -51,6 +65,56 @@ export function SettingsForm() {
   const [reportRecipient, setReportRecipient] = useState('ops@referralcrm.com');
   const [reportLoading, setReportLoading] = useState(false);
   const [exporting, setExporting] = useState<ExportReport | null>(null);
+  const [dashboardExportTimeframe, setDashboardExportTimeframe] = useState('month');
+  const [dashboardExportNetwork, setDashboardExportNetwork] = useState('ALL');
+  const [reportPresets, setReportPresets] = useState<{ name: string; config: ReportPresetConfig }[]>([]);
+  const [presetName, setPresetName] = useState('');
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('');
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem('dashboard-report-presets');
+      setReportPresets(raw ? (JSON.parse(raw) as { name: string; config: ReportPresetConfig }[]) : []);
+    } catch {
+      setReportPresets([]);
+    }
+  }, []);
+
+  const savePreset = () => {
+    const name = presetName.trim();
+    if (!name) {
+      toast.error('Enter a preset name.');
+      return;
+    }
+    const config: ReportPresetConfig = {
+      reportName,
+      reportTimeframe,
+      customStartDate,
+      customEndDate,
+      metrics: selectedMetrics,
+      recipient: reportRecipient
+    };
+    const next = reportPresets.some((p) => p.name === name)
+      ? reportPresets.map((p) => (p.name === name ? { name, config } : p))
+      : [...reportPresets, { name, config }];
+    setReportPresets(next);
+    window.localStorage.setItem('dashboard-report-presets', JSON.stringify(next));
+    setPresetName('');
+    toast.success(`Preset "${name}" saved.`);
+  };
+
+  const loadPreset = (name: string) => {
+    const preset = reportPresets.find((p) => p.name === name);
+    if (!preset) return;
+    setReportName(preset.config.reportName);
+    setReportTimeframe(preset.config.reportTimeframe);
+    setCustomStartDate(preset.config.customStartDate);
+    setCustomEndDate(preset.config.customEndDate);
+    setSelectedMetrics(preset.config.metrics);
+    setReportRecipient(preset.config.recipient);
+    setSelectedPresetId(name);
+    toast.success(`Loaded preset "${name}".`);
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -131,7 +195,12 @@ export function SettingsForm() {
     const { label } = EXPORT_DEFINITIONS[report];
     setExporting(report);
     try {
-      const response = await fetch(`/api/admin/exports?report=${report}`);
+      const params = new URLSearchParams({ report });
+      if (report === 'dashboard-metrics') {
+        params.set('timeframe', dashboardExportTimeframe);
+        params.set('network', dashboardExportNetwork);
+      }
+      const response = await fetch(`/api/admin/exports?${params.toString()}`);
       if (!response.ok) {
         const message = await response.text();
         throw new Error(message || 'Unable to download export.');
@@ -140,7 +209,7 @@ export function SettingsForm() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `${report}-report.csv`);
+      link.setAttribute('download', report === 'dashboard-metrics' ? 'dashboard-metrics.csv' : `${report}-report.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -304,6 +373,36 @@ export function SettingsForm() {
           </label>
         </div>
 
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 p-4">
+          <span className="text-sm font-medium text-slate-600">Presets</span>
+          <select
+            value={selectedPresetId}
+            onChange={(e) => {
+              const v = e.target.value;
+              setSelectedPresetId(v);
+              if (v) loadPreset(v);
+            }}
+            className="rounded border border-slate-200 px-3 py-1.5 text-sm"
+          >
+            <option value="">Load preset…</option>
+            {reportPresets.map((p) => (
+              <option key={p.name} value={p.name}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={presetName}
+            onChange={(e) => setPresetName(e.target.value)}
+            placeholder="Preset name"
+            className="w-40 rounded border border-slate-200 px-3 py-1.5 text-sm"
+          />
+          <button type="button" onClick={savePreset} className="rounded border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+            Save as preset
+          </button>
+        </div>
+
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 p-4 text-sm text-slate-700">
           <div>
             {selectedMetrics.length ? (
@@ -332,20 +431,62 @@ export function SettingsForm() {
           {(Object.keys(EXPORT_DEFINITIONS) as ExportReport[]).map((report) => {
             const definition = EXPORT_DEFINITIONS[report];
             const isDownloading = exporting === report;
+            const isDashboardMetrics = report === 'dashboard-metrics';
             return (
               <div key={report} className="flex flex-col justify-between gap-3 rounded-lg border border-slate-200 p-4">
                 <div>
                   <h3 className="text-base font-semibold text-slate-800">{definition.label}</h3>
                   <p className="text-sm text-slate-500">{definition.helper}</p>
                 </div>
-                <button
-                  type="button"
-                  disabled={isDownloading}
-                  onClick={() => void handleDownloadCsv(report)}
-                  className="w-full rounded border border-brand bg-white px-4 py-2 text-sm font-semibold text-brand transition hover:bg-brand/5 disabled:opacity-70"
-                >
-                  {isDownloading ? 'Preparing CSV…' : `Download ${definition.label.toLowerCase()} CSV`}
-                </button>
+                {isDashboardMetrics ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex gap-2">
+                      <label className="flex-1 text-xs text-slate-500">
+                        Timeframe
+                        <select
+                          value={dashboardExportTimeframe}
+                          onChange={(e) => setDashboardExportTimeframe(e.target.value)}
+                          className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm"
+                        >
+                          <option value="day">Today</option>
+                          <option value="week">This week</option>
+                          <option value="month">This month</option>
+                          <option value="ytd">Year to date</option>
+                          <option value="all">All time</option>
+                        </select>
+                      </label>
+                      <label className="flex-1 text-xs text-slate-500">
+                        Network
+                        <select
+                          value={dashboardExportNetwork}
+                          onChange={(e) => setDashboardExportNetwork(e.target.value)}
+                          className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm"
+                        >
+                          <option value="ALL">All</option>
+                          <option value="AHA">AHA</option>
+                          <option value="AHA_OOS">AHA OOS</option>
+                        </select>
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isDownloading}
+                      onClick={() => void handleDownloadCsv(report)}
+                      className="w-full rounded border border-brand bg-white px-4 py-2 text-sm font-semibold text-brand transition hover:bg-brand/5 disabled:opacity-70"
+                    >
+                      {isDownloading ? 'Preparing CSV…' : `Download ${definition.label.toLowerCase()} CSV`}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isDownloading}
+                    onClick={() => void handleDownloadCsv(report)}
+                    className="w-full rounded border border-brand bg-white px-4 py-2 text-sm font-semibold text-brand transition hover:bg-brand/5 disabled:opacity-70"
+                  >
+                    {isDownloading ? 'Preparing CSV…' : `Download ${definition.label.toLowerCase()} CSV`}
+                  </button>
+                )}
               </div>
             );
           })}
