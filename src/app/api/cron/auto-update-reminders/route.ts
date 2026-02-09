@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { connectMongo } from '@/lib/mongoose';
-import { runAutoUpdateReminders } from '@/lib/server/auto-update-reminders';
+import { runAutoUpdateReminders, runNoResponseChecks } from '@/lib/server/auto-update-reminders';
 
 export const runtime = 'nodejs';
 
@@ -42,6 +42,15 @@ export async function GET(request: NextRequest) {
       `[Auto-Update Reminders] Completed: ${successful} sent, ${skipped} skipped, ${failed} errors, ${totalEmails} emails`
     );
 
+    // Check for agents who haven't responded to check-in emails in 48+ hours
+    const noResponseResults = await runNoResponseChecks({ now });
+    const noResponseNotified = noResponseResults.filter((r) => r.status === 'notified').length;
+    const noResponseErrors = noResponseResults.filter((r) => r.status === 'error').length;
+
+    console.log(
+      `[No-Response Checks] Completed: ${noResponseNotified} notified, ${noResponseResults.length - noResponseNotified - noResponseErrors} skipped, ${noResponseErrors} errors`
+    );
+
     return NextResponse.json({
       success: true,
       timestamp: now.toISOString(),
@@ -51,8 +60,11 @@ export async function GET(request: NextRequest) {
         skipped,
         failed,
         emailsSent: totalEmails,
+        noResponseNotified,
+        noResponseErrors,
       },
       results,
+      noResponseResults,
     });
   } catch (error) {
     console.error('[Auto-Update Reminders] Cron job error:', error);

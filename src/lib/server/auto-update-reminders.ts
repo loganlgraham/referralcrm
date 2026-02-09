@@ -13,6 +13,7 @@ import { Payment } from '@/models/payment';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { getAppOrigin } from '@/lib/server/app-origin';
 import { logReferralActivity } from '@/lib/server/activities';
+import { createAdminNotifications } from '@/lib/server/notifications';
 import { getNextAutoUpdateSendAt } from '@/utils/auto-update-schedule';
 import { SLA_TIME_ZONE } from '@/utils/sla-insights';
 
@@ -74,6 +75,13 @@ export interface AutoUpdateReminderResult {
   emailsSent: number;
   daysSincePairing: number;
   status: 'success' | 'skipped' | 'error';
+  reason?: string;
+}
+
+export interface NoResponseCheckResult {
+  referralId: string;
+  borrowerName: string;
+  status: 'notified' | 'skipped' | 'error';
   reason?: string;
 }
 
@@ -312,6 +320,99 @@ Referral CRM Team
     }
 
     results.push(result);
+  }
+
+  return results;
+}
+
+/**
+ * Check for referrals where an auto check-in email was sent 48+ hours ago
+ * and the agent has not responded (no note, status change, or contact action).
+ *
+ * Creates an admin notification for each such referral, at most once per
+ * reminder cycle (deduplicated via lastNoResponse48hNotifiedAt).
+ *
+ * Caller must connect to Mongo before calling.
+ */
+export async function runNoResponseChecks(
+  options: RunAutoUpdateRemindersOptions = {}
+): Promise<NoResponseCheckResult[]> {
+  const now = options.now ?? new Date();
+  const cutoff = new Date(now.getTime() - 48 * 60 * 60 * 1000); // 48 hours ago
+
+  // Exclude referrals with closed deals (same as runAutoUpdateReminders)
+  const referralIdsWithClosedDeal = await Payment.distinct('referralId', {
+    status: { $in: DEAL_TERMINAL_STATUSES },
+  });
+
+  const referrals = await Referral.find({
+    autoUpdateRemindersEnabled: true,
+    status: { $nin: REFERRAL_TERMINAL_STATUSES },
+    _id: { $nin: referralIdsWithClosedDeal },
+    deletedAt: null,
+    // A reminder was sent more than 48h ago
+    lastAutoReminderSentAt: { $exists: true, $ne: null, $lte: cutoff },
+    // Agent has NOT responded to that reminder:
+    // lastUpdateRequestResponseNotifiedAt is either null or before the reminder
+    $or: [
+      { lastUpdateRequestResponseNotifiedAt: null },
+      { $expr: { $lt: ['$lastUpdateRequestResponseNotifiedAt', '$lastAutoReminderSentAt'] } },
+    ],
+  })
+    .select('_id borrower.name lastAutoReminderSentAt lastNoResponse48hNotifiedAt')
+    .lean();
+
+  const results: NoResponseCheckResult[] = [];
+
+  for (const referral of referrals) {
+    const referralId = String(referral._id);
+    const borrowerName = referral.borrower?.name || 'Unknown';
+
+    try {
+      // Dedup: skip if we already notified for this reminder cycle
+      const lastNotifiedTime = referral.lastNoResponse48hNotifiedAt
+        ? new Date(referral.lastNoResponse48hNotifiedAt).getTime()
+        : 0;
+      const lastReminderTime = referral.lastAutoReminderSentAt
+        ? new Date(referral.lastAutoReminderSentAt).getTime()
+        : 0;
+
+      if (lastNotifiedTime >= lastReminderTime) {
+        results.push({
+          referralId,
+          borrowerName,
+          status: 'skipped',
+          reason: 'Already notified for this reminder cycle',
+        });
+        continue;
+      }
+
+      await createAdminNotifications({
+        type: 'checkin_no_response_48h',
+        referralId,
+        borrowerName,
+        actorRole: 'system',
+        actorName: 'System',
+        content: `Agent has not responded to check-in email for ${borrowerName} (48+ hours)`,
+      });
+
+      await Referral.findByIdAndUpdate(referralId, {
+        $set: { lastNoResponse48hNotifiedAt: now },
+      });
+
+      results.push({
+        referralId,
+        borrowerName,
+        status: 'notified',
+      });
+    } catch (error) {
+      results.push({
+        referralId,
+        borrowerName,
+        status: 'error',
+        reason: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
   }
 
   return results;
