@@ -25,6 +25,7 @@ import { Payment } from '@/models/payment';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { PreApprovalMetric } from '@/models/pre-approval-metric';
+import { AdminTask, getEffectiveDueDate, type AdminTaskLean } from '@/models/admin-task';
 
 type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd' | 'all' | 'custom';
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
@@ -783,7 +784,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         unassignedReferrals: 0,
         firstContactWithin24HoursRate: 0,
         firstContactWithin24HoursCount: 0,
-        firstContactSampleSize: 0
+        firstContactSampleSize: 0,
+        overdueTaskCount: 0,
+        dueTodayTaskCount: 0,
+        completedTodayCount: 0,
+        totalOpenTasks: 0,
+        taskActivityTrend: {
+          outstanding: [],
+          completed: [],
+          created: []
+        }
       },
       agit: {
         agitReferrals: 0,
@@ -2089,6 +2099,108 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const adminAverageLeadToContract = daysToContractAvg;
   const adminAverageContractToClose = daysToCloseAvg;
 
+  // Admin task metrics: overdue, due today, completed today, 30-day trend
+  const adminTasks = await AdminTask.find({}).lean<AdminTaskLean[]>();
+  const now = new Date();
+  const todayStart = startOfDay(now);
+  const todayEnd = endOfDay(now);
+
+  function getTaskDueBucket(effectiveDue: Date | null, status: string): 'overdue' | 'today' | 'upcoming' | null {
+    if (status !== 'open') return null;
+    if (!effectiveDue) return 'upcoming';
+    const dueDate = new Date(effectiveDue.getFullYear(), effectiveDue.getMonth(), effectiveDue.getDate());
+    const diffMs = dueDate.getTime() - todayStart.getTime();
+    const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+    if (diffDays < 0) return 'overdue';
+    if (diffDays === 0) return 'today';
+    return 'upcoming';
+  }
+
+  let overdueTaskCount = 0;
+  let dueTodayTaskCount = 0;
+  const totalOpenTasks = adminTasks.filter((t) => t.status === 'open').length;
+  adminTasks.forEach((task) => {
+    const effectiveDue = getEffectiveDueDate(task);
+    const bucket = getTaskDueBucket(effectiveDue, task.status);
+    if (bucket === 'overdue') overdueTaskCount += 1;
+    if (bucket === 'today') dueTodayTaskCount += 1;
+  });
+
+  const completedTodayCount = adminTasks.filter((task) => {
+    const at = task.completedAt;
+    if (!at) return false;
+    const d = new Date(at);
+    return d >= todayStart && d <= todayEnd;
+  }).length;
+
+  // 30-day task activity trend: one point per day
+  const taskTrendDays = 30;
+  const trendStart = startOfDay(addDays(now, -taskTrendDays + 1));
+  const dayBuckets: { key: string; label: string; date: Date }[] = [];
+  for (let i = 0; i < taskTrendDays; i++) {
+    const d = addDays(trendStart, i);
+    dayBuckets.push({
+      key: format(d, 'yyyy-MM-dd'),
+      label: format(d, 'MMM d'),
+      date: d
+    });
+  }
+
+  const createdByDay = new Map<string, number>();
+  const completedByDay = new Map<string, number>();
+  dayBuckets.forEach((b) => {
+    createdByDay.set(b.key, 0);
+    completedByDay.set(b.key, 0);
+  });
+  adminTasks.forEach((task) => {
+    if (task.createdAt) {
+      const key = format(startOfDay(new Date(task.createdAt)), 'yyyy-MM-dd');
+      if (createdByDay.has(key)) createdByDay.set(key, (createdByDay.get(key) ?? 0) + 1);
+    }
+    if (task.completedAt) {
+      const key = format(startOfDay(new Date(task.completedAt)), 'yyyy-MM-dd');
+      if (completedByDay.has(key)) completedByDay.set(key, (completedByDay.get(key) ?? 0) + 1);
+    }
+    if (task.dismissedAt) {
+      const key = format(startOfDay(new Date(task.dismissedAt)), 'yyyy-MM-dd');
+      if (completedByDay.has(key)) completedByDay.set(key, (completedByDay.get(key) ?? 0) + 1);
+    }
+  });
+
+  // Outstanding at end of each day: tasks created on or before that day and not completed/dismissed on or before that day
+  const outstandingByDay = new Map<string, number>();
+  for (const b of dayBuckets) {
+    const endOfBucket = endOfDay(b.date);
+    const count = adminTasks.filter((task) => {
+      const created = task.createdAt ? new Date(task.createdAt) : null;
+      if (!created || created > endOfBucket) return false;
+      const completed = task.completedAt ? new Date(task.completedAt) : null;
+      if (completed && completed <= endOfBucket) return false;
+      const dismissed = task.dismissedAt ? new Date(task.dismissedAt) : null;
+      if (dismissed && dismissed <= endOfBucket) return false;
+      return true;
+    }).length;
+    outstandingByDay.set(b.key, count);
+  }
+
+  const taskActivityTrend = {
+    outstanding: dayBuckets.map((b) => ({
+      key: b.key,
+      label: b.label,
+      value: outstandingByDay.get(b.key) ?? 0
+    })),
+    completed: dayBuckets.map((b) => ({
+      key: b.key,
+      label: b.label,
+      value: completedByDay.get(b.key) ?? 0
+    })),
+    created: dayBuckets.map((b) => ({
+      key: b.key,
+      label: b.label,
+      value: createdByDay.get(b.key) ?? 0
+    }))
+  };
+
   const terminatedDealsByReason = terminatedWithinNetwork.reduce((map, payment) => {
     const reason = payment.terminatedReason;
     if (!reason) return map;
@@ -2414,7 +2526,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       assignmentRate,
       firstContactWithin24HoursRate,
       firstContactWithin24HoursCount,
-      firstContactSampleSize: firstContactRecords.length
+      firstContactSampleSize: firstContactRecords.length,
+      overdueTaskCount,
+      dueTodayTaskCount,
+      completedTodayCount,
+      totalOpenTasks,
+      taskActivityTrend
     },
     agit: {
       agitReferrals: agitReferrals.length,
