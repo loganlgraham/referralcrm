@@ -2248,11 +2248,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }))
   };
 
-  // Stale active pipeline: referrals not in terminal status with no activity in 14 days
+  // Stale active pipeline: AHA_OOS referrals not in terminal status with no activity in 14 days
   const TERMINAL_STATUSES = new Set<string>(['Lost', 'Closed', 'Terminated']);
   const staleCutoff = addDays(now, -14);
   const activeReferrals = referralsByNetwork.filter(
-    (r) => !TERMINAL_STATUSES.has((r.status as string) ?? '')
+    (r) =>
+      !TERMINAL_STATUSES.has((r.status as string) ?? '') &&
+      getReferralDesignation(r) === 'AHA_OOS'
   );
   const activeReferralIds = activeReferrals.map((r) => r._id);
   const lastActivities =
