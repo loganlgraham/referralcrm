@@ -19,6 +19,81 @@ interface FiltersProps {
   mode?: FilterMode;
 }
 
+function StatusMultiSelect({
+  selected,
+  onChange,
+  disabled
+}: {
+  selected: string[];
+  onChange: (statuses: string[]) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  const toggle = (status: string) => {
+    const next = selected.includes(status)
+      ? selected.filter((s) => s !== status)
+      : [...selected, status];
+    onChange(next);
+  };
+
+  const label = selected.length === 0 ? 'All' : `${selected.length} selected`;
+
+  return (
+    <div ref={containerRef} className="relative flex flex-col text-xs font-semibold uppercase text-slate-500">
+      Status
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        disabled={disabled}
+        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-2 text-left text-sm normal-case text-slate-700 disabled:opacity-50"
+      >
+        {label}
+        <span className="float-right text-slate-400">&#9662;</span>
+      </button>
+      {open && (
+        <div className="absolute top-full z-20 mt-1 max-h-60 w-full overflow-y-auto rounded border border-slate-200 bg-white py-1 shadow-lg">
+          {selected.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="w-full px-3 py-1.5 text-left text-sm normal-case text-indigo-600 hover:bg-slate-50"
+            >
+              Clear all
+            </button>
+          )}
+          {REFERRAL_STATUSES.map((status) => (
+            <label
+              key={status}
+              className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm normal-case text-slate-700 hover:bg-slate-50"
+            >
+              <input
+                type="checkbox"
+                checked={selected.includes(status)}
+                onChange={() => toggle(status)}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              {status}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Filters({ mode = 'admin' }: FiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -134,22 +209,11 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
         />
       </label>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
-          Status
-          <select
-            defaultValue={searchParams.get('status') ?? ''}
-            onChange={(event) => handleChange('status', event.target.value)}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
-            disabled={isPending}
-          >
-            <option value="">All</option>
-            {REFERRAL_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
-        </label>
+        <StatusMultiSelect
+          selected={searchParams.get('status')?.split(',').filter(Boolean) ?? []}
+          onChange={(statuses) => handleChange('status', statuses.join(','))}
+          disabled={isPending}
+        />
         {isAdminMode && (
           <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
             Agent referrals

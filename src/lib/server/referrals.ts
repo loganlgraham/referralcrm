@@ -145,7 +145,10 @@ export async function getReferrals(params: GetReferralsParams) {
     }
   };
 
-  if (status) query.status = status;
+  if (status) {
+    const statuses = status.split(',').map((s) => s.trim()).filter(Boolean);
+    query.status = statuses.length === 1 ? statuses[0] : { $in: statuses };
+  }
 
   if (zip) {
     const trimmedZip = zip.trim();

@@ -17,6 +17,7 @@ import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatDate, formatNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { Trash2 } from 'lucide-react';
+import { Modal } from '@/components/ui/modal';
 import {
   TimeframeDropdown,
   TIMEFRAME_PRESETS,
@@ -50,6 +51,16 @@ interface LeaderboardEntry {
 
 const LIST_PREVIEW_LIMIT = 5;
 
+interface LostDealEntry {
+  id: string;
+  referralId: string;
+  borrowerName: string;
+  agentName: string | null;
+  mcName: string | null;
+  status: string;
+  expectedAmountCents: number;
+}
+
 interface DashboardSummary {
   totalReferrals: number;
   dealsClosed: number;
@@ -60,8 +71,11 @@ interface DashboardSummary {
   pendingClosingsNextMonth: number;
   closeRate: number;
   afcDealsLost: number;
+  afcDealsLostList: LostDealEntry[];
   afcAttachRate: number;
   ahaAttachRate: number;
+  ahaOosDealsLost: number;
+  ahaOosDealsLostList: LostDealEntry[];
   ahaOosAttachRate: number;
   activePipeline: number;
   expectedRevenueCents: number;
@@ -376,7 +390,7 @@ function MetricGroupCard({
   metrics
 }: {
   title: string;
-  metrics: { label: string; value: string; helper?: string }[];
+  metrics: { label: string; value: string; helper?: string; onHelperClick?: () => void }[];
 }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -388,7 +402,19 @@ function MetricGroupCard({
               <dt className="text-sm text-slate-500">{metric.label}</dt>
               <dd className="text-sm font-semibold text-slate-900">{metric.value}</dd>
             </div>
-            {metric.helper ? <p className="text-xs text-slate-400">{metric.helper}</p> : null}
+            {metric.helper ? (
+              metric.onHelperClick ? (
+                <button
+                  type="button"
+                  onClick={metric.onHelperClick}
+                  className="text-xs text-indigo-500 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-700"
+                >
+                  {metric.helper}
+                </button>
+              ) : (
+                <p className="text-xs text-slate-400">{metric.helper}</p>
+              )
+            ) : null}
           </div>
         ))}
       </dl>
@@ -1391,6 +1417,7 @@ function MainDashboard({
   onPreApprovalSaved: () => void;
   networkFilter: NetworkFilter;
 }) {
+  const [dealsLostModal, setDealsLostModal] = useState<'afc' | 'ahaOos' | null>(null);
   const summary = data.summary;
   const realizedRevenueCents = Math.max(summary.realizedRevenueCents ?? 0, 0);
   const expectedRevenueCents = Math.max(summary.expectedRevenueCents ?? 0, 0);
@@ -1473,10 +1500,16 @@ function MainDashboard({
     {
       label: 'AFC attach rate',
       value: `${summary.afcAttachRate.toFixed(1)}%`,
-      helper: `${formatNumber(summary.afcDealsLost)} deals lost`
+      helper: `${formatNumber(summary.afcDealsLost)} deals lost`,
+      onHelperClick: summary.afcDealsLost > 0 ? () => setDealsLostModal('afc') : undefined
     },
     { label: 'AHA attach rate', value: `${summary.ahaAttachRate.toFixed(1)}%` },
-    { label: 'AHA OOS attach rate', value: `${summary.ahaOosAttachRate.toFixed(1)}%` },
+    {
+      label: 'AHA OOS attach rate',
+      value: `${summary.ahaOosAttachRate.toFixed(1)}%`,
+      helper: `${formatNumber(summary.ahaOosDealsLost)} deals lost`,
+      onHelperClick: summary.ahaOosDealsLost > 0 ? () => setDealsLostModal('ahaOos') : undefined
+    },
     { label: 'Avg. pre-approval amount', value: formatCurrency(summary.averagePaAmountCents) }
   ];
 
@@ -1591,6 +1624,59 @@ function MainDashboard({
           totalDeals={data.terminatedDeals.totalDeals}
         />
       </div>
+
+      <Modal
+        isOpen={dealsLostModal !== null}
+        onClose={() => setDealsLostModal(null)}
+        title={dealsLostModal === 'afc' ? 'AFC Deals Lost' : 'AHA OOS Deals Lost'}
+        size="lg"
+      >
+        <DealsLostTable
+          deals={
+            dealsLostModal === 'afc'
+              ? summary.afcDealsLostList
+              : dealsLostModal === 'ahaOos'
+                ? summary.ahaOosDealsLostList
+                : []
+          }
+        />
+      </Modal>
+    </div>
+  );
+}
+
+function DealsLostTable({ deals }: { deals: LostDealEntry[] }) {
+  if (!deals.length) {
+    return <p className="px-6 py-8 text-center text-sm text-slate-500">No lost deals.</p>;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 text-xs font-medium uppercase text-slate-500">
+            <th className="px-6 py-3">Borrower</th>
+            <th className="px-6 py-3">Agent</th>
+            <th className="px-6 py-3">MC</th>
+            <th className="px-6 py-3">Status</th>
+            <th className="px-6 py-3 text-right">Expected</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {deals.map((deal) => (
+            <tr key={deal.id} className="hover:bg-slate-50">
+              <td className="px-6 py-3 font-medium text-slate-700">
+                <Link href={`/referrals/${deal.referralId}`} className="hover:text-indigo-600 hover:underline">
+                  {deal.borrowerName}
+                </Link>
+              </td>
+              <td className="px-6 py-3 text-slate-600">{deal.agentName ?? '—'}</td>
+              <td className="px-6 py-3 text-slate-600">{deal.mcName ?? '—'}</td>
+              <td className="px-6 py-3 text-slate-600">{deal.status}</td>
+              <td className="px-6 py-3 text-right text-slate-600">{formatCurrency(deal.expectedAmountCents)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

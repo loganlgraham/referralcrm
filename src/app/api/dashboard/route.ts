@@ -708,10 +708,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           pendingClosingsNextMonth: 0,
           closeRate: 0,
           afcDealsLost: 0,
+          afcDealsLostList: [],
           afcAttachRate: 0,
           ahaDealsLost: 0,
           ahaAttachRate: 0,
           ahaOosDealsLost: 0,
+          ahaOosDealsLostList: [],
           ahaOosAttachRate: 0,
           activePipeline: 0,
           expectedRevenueCents: 0,
@@ -1730,6 +1732,35 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ? (ahaOosAttached.length / ahaOosRelevant.length) * 100
     : 0;
 
+  // Build referral-to-borrower map for lost deal lists
+  const referralBorrowerMap = new Map<string, string>();
+  referrals.forEach((referral) => {
+    referralBorrowerMap.set(referral._id.toString(), referral.borrower?.name ?? 'Unknown');
+  });
+
+  const serializeLostDeal = (payment: AggregatedPayment) => {
+    const refId = payment.referral._id.toString();
+    const agentId = (payment.agentId ?? payment.referral?.assignedAgent)?.toString() ?? null;
+    const mcId = payment.referral?.lender?.toString() ?? null;
+    return {
+      id: payment._id.toString(),
+      referralId: refId,
+      borrowerName: referralBorrowerMap.get(refId) ?? 'Unknown',
+      agentName: agentId ? (agentNameMap.get(agentId) ?? 'Unknown') : null,
+      mcName: mcId ? (lenderNameMap.get(mcId) ?? 'Unknown') : null,
+      status: payment.status,
+      expectedAmountCents: payment.expectedAmountCents ?? 0,
+    };
+  };
+
+  const afcDealsLostList = afcRelevant
+    .filter((payment) => !payment.usedAfc)
+    .map(serializeLostDeal);
+
+  const ahaOosDealsLostList = ahaOosRelevant
+    .filter((payment) => !payment.usedAssignedAgent)
+    .map(serializeLostDeal);
+
   // MC Leaderboard: Build leaderboard from referral counts by MC
   // Sorts by referral count descending and returns top 10
   const buildMcRequestLeaderboard = (sourceMap: Map<string, number>) =>
@@ -2437,10 +2468,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         pendingClosingsNextMonth: pendingClosingsNextMonth.length,
         closeRate: closeRateForSummary,
         afcDealsLost,
+        afcDealsLostList,
         afcAttachRate,
         ahaDealsLost,
         ahaAttachRate,
         ahaOosDealsLost,
+        ahaOosDealsLostList,
         ahaOosAttachRate,
     activePipeline,
     expectedRevenueCents,
