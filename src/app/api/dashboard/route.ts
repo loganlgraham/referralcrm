@@ -2249,11 +2249,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   };
 
   // Stale active pipeline: AHA_OOS referrals not in terminal status with no activity in 14 days
-  const TERMINAL_STATUSES = new Set<string>(['Lost', 'Closed', 'Terminated']);
+  const STALE_EXCLUDED_STATUSES = new Set<string>(['Lost', 'Closed', 'Terminated', 'Under Contract']);
   const staleCutoff = addDays(now, -14);
   const activeReferrals = referralsByNetwork.filter(
     (r) =>
-      !TERMINAL_STATUSES.has((r.status as string) ?? '') &&
+      !STALE_EXCLUDED_STATUSES.has((r.status as string) ?? '') &&
       getReferralDesignation(r) === 'AHA_OOS'
   );
   const activeReferralIds = activeReferrals.map((r) => r._id);
