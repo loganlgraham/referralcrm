@@ -210,6 +210,15 @@ interface DashboardResponse {
     firstContactWithin24HoursRate: number;
     firstContactWithin24HoursCount: number;
     firstContactSampleSize: number;
+    overdueTaskCount: number;
+    dueTodayTaskCount: number;
+    completedTodayCount: number;
+    totalOpenTasks: number;
+    taskActivityTrend: {
+      outstanding: TrendPoint[];
+      completed: TrendPoint[];
+      created: TrendPoint[];
+    };
   };
   agit: {
     agitReferrals: number;
@@ -1685,16 +1694,69 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
       title: 'Unassigned referrals',
       value: formatNumber(data.unassignedReferrals),
       helper: data.unassignedReferrals > 0 ? 'Needs follow-up' : 'All referrals paired'
+    },
+    {
+      title: 'Overdue tasks',
+      value: formatNumber(data.overdueTaskCount),
+      helper: 'Open tasks past due date',
+      drillDownHref: '/admin/tasks'
+    },
+    {
+      title: 'Due today',
+      value: formatNumber(data.dueTodayTaskCount),
+      helper: 'Tasks due today'
+    },
+    {
+      title: 'Completed today',
+      value: formatNumber(data.completedTodayCount),
+      helper: 'Tasks completed or dismissed today'
+    },
+    {
+      title: 'Completion rate today',
+      value: (() => {
+        const total = data.overdueTaskCount + data.dueTodayTaskCount + data.completedTodayCount;
+        return total > 0
+          ? `${((data.completedTodayCount / total) * 100).toFixed(1)}%`
+          : '—';
+      })(),
+      helper:
+        data.overdueTaskCount + data.dueTodayTaskCount + data.completedTodayCount > 0
+          ? `${formatNumber(data.completedTodayCount)} of ${formatNumber(data.overdueTaskCount + data.dueTodayTaskCount + data.completedTodayCount)} actionable tasks`
+          : 'No actionable tasks today'
     }
   ];
+
+  const taskTrend = data.taskActivityTrend;
+  const hasTaskTrendData =
+    (taskTrend.outstanding?.length ?? 0) > 0 ||
+    (taskTrend.completed?.length ?? 0) > 0 ||
+    (taskTrend.created?.length ?? 0) > 0;
 
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => (
-          <SummaryCard key={card.title} title={card.title} value={card.value} helper={card.helper} />
+          <SummaryCard
+            key={card.title}
+            title={card.title}
+            value={card.value}
+            helper={card.helper}
+            drillDownHref={'drillDownHref' in card ? card.drillDownHref : undefined}
+          />
         ))}
       </div>
+      {hasTaskTrendData ? (
+        <MultiLineChartCard
+          title="Task activity (30 days)"
+          helper="Outstanding open tasks and daily completed/created"
+          formatValue={(v) => String(Math.round(v))}
+          series={[
+            { label: 'Outstanding', color: '#0ea5e9', data: taskTrend.outstanding ?? [] },
+            { label: 'Completed', color: '#22c55e', data: taskTrend.completed ?? [] },
+            { label: 'Created', color: '#f59e0b', data: taskTrend.created ?? [] }
+          ]}
+        />
+      ) : null}
     </div>
   );
 }
