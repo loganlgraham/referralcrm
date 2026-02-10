@@ -226,7 +226,7 @@ interface DashboardResponse {
     firstContactSampleSize: number;
     overdueTaskCount: number;
     dueTodayTaskCount: number;
-    completedTodayCount: number;
+    completedInTimeframeCount: number;
     totalOpenTasks: number;
     taskActivityTrend: {
       outstanding: TrendPoint[];
@@ -1793,22 +1793,22 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
       helper: 'Tasks due today'
     },
     {
-      title: 'Completed today',
-      value: formatNumber(data.completedTodayCount),
-      helper: 'Tasks completed or dismissed today'
+      title: 'Tasks completed',
+      value: formatNumber(data.completedInTimeframeCount),
+      helper: 'Tasks completed or dismissed in period'
     },
     {
-      title: 'Completion rate today',
+      title: 'Task completion rate',
       value: (() => {
-        const total = data.overdueTaskCount + data.dueTodayTaskCount + data.completedTodayCount;
+        const total = data.overdueTaskCount + data.dueTodayTaskCount + data.completedInTimeframeCount;
         return total > 0
-          ? `${((data.completedTodayCount / total) * 100).toFixed(1)}%`
+          ? `${((data.completedInTimeframeCount / total) * 100).toFixed(1)}%`
           : '—';
       })(),
       helper:
-        data.overdueTaskCount + data.dueTodayTaskCount + data.completedTodayCount > 0
-          ? `${formatNumber(data.completedTodayCount)} of ${formatNumber(data.overdueTaskCount + data.dueTodayTaskCount + data.completedTodayCount)} actionable tasks`
-          : 'No actionable tasks today'
+        data.overdueTaskCount + data.dueTodayTaskCount + data.completedInTimeframeCount > 0
+          ? `${formatNumber(data.completedInTimeframeCount)} of ${formatNumber(data.overdueTaskCount + data.dueTodayTaskCount + data.completedInTimeframeCount)} actionable tasks`
+          : 'No actionable tasks in period'
     }
   ];
 

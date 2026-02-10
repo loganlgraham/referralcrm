@@ -789,7 +789,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         firstContactSampleSize: 0,
         overdueTaskCount: 0,
         dueTodayTaskCount: 0,
-        completedTodayCount: 0,
+        completedInTimeframeCount: 0,
         totalOpenTasks: 0,
         taskActivityTrend: {
           outstanding: [],
@@ -2168,11 +2168,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (bucket === 'today') dueTodayTaskCount += 1;
   });
 
-  const completedTodayCount = adminTasks.filter((task) => {
-    const at = task.completedAt;
+  const completedInTimeframeCount = adminTasks.filter((task) => {
+    const at = task.completedAt ?? task.dismissedAt;
     if (!at) return false;
     const d = new Date(at);
-    return d >= todayStart && d <= todayEnd;
+    if (timeframeStart && d < timeframeStart) return false;
+    if (timeframeEnd && d > timeframeEnd) return false;
+    return true;
   }).length;
 
   // 30-day task activity trend: one point per day
@@ -2573,7 +2575,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       firstContactSampleSize: firstContactRecords.length,
       overdueTaskCount,
       dueTodayTaskCount,
-      completedTodayCount,
+      completedInTimeframeCount,
       totalOpenTasks,
       taskActivityTrend
     },
