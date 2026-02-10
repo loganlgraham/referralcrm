@@ -6,6 +6,7 @@ import { Referral } from '@/models/referral';
 import { logReferralActivity } from '@/lib/server/activities';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { buildContactActionLink, buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
+import { buildGmailComposeUrl } from '@/utils/gmail';
 
 interface Params {
   params: { id: string };
@@ -499,6 +500,40 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
         const referralLink = referralLinkBase ? buildReferralLink(referral._id.toString()) : '';
 
+        const introSubject = `Introduction – Partnering on ${borrowerFirstName}'s Home Search`;
+        const agentEntries = pairedContacts.filter(({ label }) => label !== 'Mortgage Consultant');
+        const introLinkHtmlParts: string[] = [];
+        const introLinkTextParts: string[] = [];
+
+        for (const { contact } of agentEntries) {
+          if (!contact.email) continue;
+          const agentFirst = firstNameFromContact(contact, 'your agent');
+          const introBody = [
+            `Hi ${agentFirst},`,
+            '',
+            `I wanted to take a quick moment to introduce you to ${lenderFirstName}, the Mortgage Consultant here at American Financing who's been working with ${borrowerFirstName} on their pre-approval.`,
+            '',
+            `I understand ${borrowerFirstName} has been paired with you through our partnership with American Home Agents, and we're excited for you to connect and help guide them through their home search!`,
+            '',
+            `${lenderFirstName} will be reaching out shortly to introduce themselves and share a bit more detail about ${borrowerFirstName}'s loan status and qualifications, so you're both on the same page as the search begins.`,
+            '',
+            "I'll be here as a resource in the background to help coordinate communication and ensure a smooth process from pre-approval through closing. Please don't hesitate to reach out if you need anything along the way.",
+            '',
+            `Looking forward to working together to help ${borrowerFirstName} find their new home!`,
+            '',
+            'Best regards,',
+            'Logan'
+          ].join('\n');
+
+          const gmailUrl = buildGmailComposeUrl(contact.email, {
+            cc: lenderContact?.email ?? '',
+            subject: introSubject,
+            body: introBody
+          });
+          introLinkHtmlParts.push(`<p><a href="${gmailUrl}">Send Introduction Email to ${escapeHtml(contact.name ?? 'Agent')}</a></p>`);
+          introLinkTextParts.push(`Send Introduction Email to ${contact.name ?? 'Agent'}: ${gmailUrl}`);
+        }
+
         const pairingSummaryHtml = [
           `<p>A referral has been paired:</p>`,
           `<p><strong>Borrower:</strong> ${escapeHtml(borrowerName)}</p>`,
@@ -510,6 +545,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
               ).join('')}</ul>`
             : '<p>No team members paired yet.</p>',
           referralLink ? `<p><a href="${referralLink}">View the referral</a></p>` : '',
+          ...introLinkHtmlParts,
         ].filter(Boolean).join('');
 
         const pairingSummaryText = [
@@ -523,6 +559,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
               ).join('\n')}`
             : 'No team members paired yet.',
           referralLink ? `View the referral: ${referralLink}` : '',
+          ...introLinkTextParts,
         ].filter(Boolean).join('\n\n');
 
         await sendTransactionalEmail({
