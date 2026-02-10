@@ -233,6 +233,8 @@ interface DashboardResponse {
       completed: TrendPoint[];
       created: TrendPoint[];
     };
+    stalePipelineCount: number;
+    stalePipelineList: StaleReferralEntry[];
   };
   agit: {
     agitReferrals: number;
@@ -279,6 +281,16 @@ interface AgitDealRow {
   mcPhone: string | null;
   closingDate: string | null;
   usedAfc: boolean | null;
+}
+
+interface StaleReferralEntry {
+  id: string;
+  borrowerName: string;
+  status: string;
+  agentName: string | null;
+  mcName: string | null;
+  lastActivityAt: string | null;
+  daysSinceActivity: number;
 }
 
 const TAB_OPTIONS = [
@@ -349,13 +361,15 @@ function SummaryCard({
   value,
   helper,
   extraStats,
-  drillDownHref
+  drillDownHref,
+  onClick
 }: {
   title: string;
   value: string;
   helper?: string;
   extraStats?: { label: string; value: string }[];
   drillDownHref?: string;
+  onClick?: () => void;
 }) {
   const content = (
     <>
@@ -374,12 +388,19 @@ function SummaryCard({
       ) : null}
     </>
   );
-  const className = 'rounded-lg border border-slate-200 bg-white p-4 shadow-sm block transition hover:border-slate-300';
+  const className = 'rounded-lg border border-slate-200 bg-white p-4 shadow-sm block transition hover:border-slate-300 w-full text-left';
   if (drillDownHref) {
     return (
       <Link href={drillDownHref} className={className}>
         {content}
       </Link>
+    );
+  }
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {content}
+      </button>
     );
   }
   return <div className={className}>{content}</div>;
@@ -1750,7 +1771,54 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
   );
 }
 
+function StaleReferralsTable({ referrals }: { referrals: StaleReferralEntry[] }) {
+  if (!referrals.length) {
+    return <p className="px-6 py-8 text-center text-sm text-slate-500">No stale referrals.</p>;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead>
+          <tr className="border-b border-slate-200 text-xs font-medium uppercase text-slate-500">
+            <th className="px-6 py-3">Borrower</th>
+            <th className="px-6 py-3">Status</th>
+            <th className="px-6 py-3">Agent</th>
+            <th className="px-6 py-3">MC</th>
+            <th className="px-6 py-3">Last Activity</th>
+            <th className="px-6 py-3 text-right">Days Stale</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {referrals.map((row) => (
+            <tr key={row.id} className="hover:bg-slate-50">
+              <td className="px-6 py-3 font-medium text-slate-700">
+                <Link href={`/referrals/${row.id}`} className="hover:text-indigo-600 hover:underline">
+                  {row.borrowerName}
+                </Link>
+              </td>
+              <td className="px-6 py-3 text-slate-600">{row.status}</td>
+              <td className="px-6 py-3 text-slate-600">{row.agentName ?? '—'}</td>
+              <td className="px-6 py-3 text-slate-600">{row.mcName ?? '—'}</td>
+              <td className="px-6 py-3 text-slate-600">
+                {row.lastActivityAt
+                  ? new Date(row.lastActivityAt).toLocaleDateString(undefined, {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })
+                  : '—'}
+              </td>
+              <td className="px-6 py-3 text-right font-medium text-slate-700">{row.daysSinceActivity}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
+  const [showStaleModal, setShowStaleModal] = useState(false);
   const assignmentRate = data.totalReferrals
     ? (data.assignedReferrals / data.totalReferrals) * 100
     : 0;
@@ -1780,6 +1848,12 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
       title: 'Unassigned referrals',
       value: formatNumber(data.unassignedReferrals),
       helper: data.unassignedReferrals > 0 ? 'Needs follow-up' : 'All referrals paired'
+    },
+    {
+      title: 'Stale active pipeline',
+      value: formatNumber(data.stalePipelineCount),
+      helper: 'No activity in 14+ days',
+      onClick: data.stalePipelineCount > 0 ? () => setShowStaleModal(true) : undefined
     },
     {
       title: 'Overdue tasks',
@@ -1828,9 +1902,18 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
             value={card.value}
             helper={card.helper}
             drillDownHref={'drillDownHref' in card ? card.drillDownHref : undefined}
+            onClick={'onClick' in card ? card.onClick : undefined}
           />
         ))}
       </div>
+      <Modal
+        isOpen={showStaleModal}
+        onClose={() => setShowStaleModal(false)}
+        title="Stale active pipeline"
+        size="lg"
+      >
+        <StaleReferralsTable referrals={data.stalePipelineList} />
+      </Modal>
       {hasTaskTrendData ? (
         <MultiLineChartCard
           title="Task activity (30 days)"

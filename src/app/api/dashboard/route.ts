@@ -26,6 +26,7 @@ import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { PreApprovalMetric } from '@/models/pre-approval-metric';
 import { AdminTask, getEffectiveDueDate, type AdminTaskLean } from '@/models/admin-task';
+import { Activity } from '@/models/activity';
 
 type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd' | 'all' | 'custom';
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
@@ -795,7 +796,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           outstanding: [],
           completed: [],
           created: []
-        }
+        },
+        stalePipelineCount: 0,
+        stalePipelineList: []
       },
       agit: {
         agitReferrals: 0,
@@ -2245,6 +2248,50 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }))
   };
 
+  // Stale active pipeline: referrals not in terminal status with no activity in 14 days
+  const TERMINAL_STATUSES = new Set<string>(['Lost', 'Closed', 'Terminated']);
+  const staleCutoff = addDays(now, -14);
+  const activeReferrals = referralsByNetwork.filter(
+    (r) => !TERMINAL_STATUSES.has((r.status as string) ?? '')
+  );
+  const activeReferralIds = activeReferrals.map((r) => r._id);
+  const lastActivities =
+    activeReferralIds.length > 0
+      ? await Activity.aggregate<{ _id: Types.ObjectId; lastActivityAt: Date }>([
+          { $match: { referralId: { $in: activeReferralIds } } },
+          { $group: { _id: '$referralId', lastActivityAt: { $max: '$createdAt' } } }
+        ])
+      : [];
+  const lastActivityMap = new Map(
+    lastActivities.map((a) => [a._id.toString(), a.lastActivityAt])
+  );
+  const staleReferrals = activeReferrals.filter((r) => {
+    const lastActivity = lastActivityMap.get(r._id.toString());
+    const effectiveDate = lastActivity ?? r.updatedAt ?? r.createdAt;
+    return new Date(effectiveDate) < staleCutoff;
+  });
+  const stalePipelineList = staleReferrals
+    .map((r) => {
+      const lastActivity = lastActivityMap.get(r._id.toString());
+      const effectiveDate = lastActivity ?? r.updatedAt ?? r.createdAt;
+      const effectiveDateObj = effectiveDate ? new Date(effectiveDate) : null;
+      const daysSinceActivity = effectiveDateObj
+        ? differenceInCalendarDays(now, effectiveDateObj)
+        : 0;
+      const agentId = r.assignedAgent?.toString() ?? null;
+      const mcId = r.lender?.toString() ?? null;
+      return {
+        id: r._id.toString(),
+        borrowerName: r.borrower?.name ?? 'Unknown',
+        status: (r.status as string) ?? 'New Lead',
+        agentName: agentId ? (agentNameMap.get(agentId) ?? null) : null,
+        mcName: mcId ? (lenderNameMap.get(mcId) ?? null) : null,
+        lastActivityAt: effectiveDateObj ? effectiveDateObj.toISOString() : null,
+        daysSinceActivity
+      };
+    })
+    .sort((a, b) => b.daysSinceActivity - a.daysSinceActivity);
+
   const terminatedDealsByReason = terminatedWithinNetwork.reduce((map, payment) => {
     const reason = payment.terminatedReason;
     if (!reason) return map;
@@ -2577,7 +2624,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       dueTodayTaskCount,
       completedInTimeframeCount,
       totalOpenTasks,
-      taskActivityTrend
+      taskActivityTrend,
+      stalePipelineCount: staleReferrals.length,
+      stalePipelineList
     },
     agit: {
       agitReferrals: agitReferrals.length,
