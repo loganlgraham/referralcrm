@@ -91,7 +91,7 @@ export function Pagination({ currentPage, totalItems, pageSize, totalPages, item
             disabled={isPending}
             className="rounded border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {pageSize === 20 && <option value={20}>20</option>}
+            <option value={20}>20</option>
             <option value={25}>25</option>
             <option value={50}>50</option>
             <option value={100}>100</option>

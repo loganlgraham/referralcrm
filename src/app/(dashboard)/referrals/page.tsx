@@ -60,6 +60,14 @@ export default async function ReferralsPage({
   };
   const showAgentOriginIndicator = tableMode === 'admin' && agentReferrals === 'all';
   const showAddReferralButton = role !== 'mc';
+  const filterKeys = ['status', 'mc', 'agent', 'zip', 'search', 'ahaBucket', 'agentReferrals', 'timeline'];
+  const hasActiveFilters = filterKeys.some((key) => {
+    const value = searchParams[key];
+    if (Array.isArray(value)) {
+      return value.some((candidate) => candidate.trim().length > 0);
+    }
+    return typeof value === 'string' && value.trim().length > 0;
+  });
 
   return (
     <div className="space-y-6">
@@ -107,7 +115,9 @@ export default async function ReferralsPage({
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
-          No referrals yet. Add your first referral to get started.
+          {hasActiveFilters
+            ? 'No referrals match your current filters. Try adjusting your search criteria.'
+            : 'No referrals yet. Add your first referral to get started.'}
         </div>
       )}
     </div>

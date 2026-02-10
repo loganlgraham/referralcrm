@@ -86,6 +86,13 @@ interface DashboardSummary {
   averageDaysClosedToPaid: number;
   averageClosedDealAmountCents: number;
   averageRevenuePerDealCents: number;
+  medianDaysReferralToClose: number | null;
+  cohortConversionWindows: {
+    windowDays: number;
+    eligibleReferrals: number;
+    closedReferrals: number;
+    conversionRate: number;
+  }[];
   totalVolumeClosedCents: number;
   averagePaAmountCents: number;
   averageReferralFeePaidCents: number;
@@ -227,7 +234,12 @@ interface DashboardResponse {
     overdueTaskCount: number;
     dueTodayTaskCount: number;
     completedInTimeframeCount: number;
+    actionableTaskCountInTimeframe: number;
+    completionRateInTimeframe: number;
     totalOpenTasks: number;
+    stalePipelineCount: number;
+    stalePipelineThresholdDays: number;
+    pipelineAgingBuckets: { key: string; count: number }[];
     taskActivityTrend: {
       outstanding: TrendPoint[];
       completed: TrendPoint[];
@@ -1438,6 +1450,8 @@ function MainDashboard({
   const revenueVsPrev = pop ? periodOverPeriodDelta(realizedRevenueCents, pop.previous.realizedRevenueCents, 'currency') : null;
   const referralsVsPrev = pop ? periodOverPeriodDelta(summary.totalReferrals, pop.previous.totalReferrals, 'number') : null;
   const closeRateVsPrev = pop ? periodOverPeriodDelta(summary.closeRate, pop.previous.closeRate, 'percent') : null;
+  const cohort30Day = summary.cohortConversionWindows.find((entry) => entry.windowDays === 30) ?? null;
+  const cohort90Day = summary.cohortConversionWindows.find((entry) => entry.windowDays === 90) ?? null;
 
   const highlights: {
     title: string;
@@ -1475,13 +1489,31 @@ function MainDashboard({
       })()
     },
     {
-      title: 'Close rate',
+      title: 'Cohort close rate',
       value: `${summary.closeRate.toFixed(1)}%`,
-      helper: closeRateVsPrev != null ? `vs previous period: ${closeRateVsPrev}` : undefined,
+      helper:
+        closeRateVsPrev != null
+          ? `vs previous period: ${closeRateVsPrev} (based on referral-created cohorts)`
+          : 'Based on referrals created in period',
       extraStats: [
         {
-          label: 'Avg. days closed → paid',
-          value: `${summary.averageDaysClosedToPaid.toFixed(1)} days`
+          label: '30-day cohort',
+          value:
+            cohort30Day && cohort30Day.eligibleReferrals > 0
+              ? `${cohort30Day.conversionRate.toFixed(1)}%`
+              : '—'
+        },
+        {
+          label: '90-day cohort',
+          value:
+            cohort90Day && cohort90Day.eligibleReferrals > 0
+              ? `${cohort90Day.conversionRate.toFixed(1)}%`
+              : '—'
+        },
+        {
+          label: 'Median days referral → close',
+          value:
+            summary.medianDaysReferralToClose != null ? `${summary.medianDaysReferralToClose.toFixed(1)} days` : '—'
         }
       ],
       drillDownHref: (() => {
@@ -1760,6 +1792,11 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
   const firstContactHelper = data.firstContactSampleSize
     ? `${formatNumber(data.firstContactWithin24HoursCount)} of ${formatNumber(data.firstContactSampleSize)} contacts`
     : 'No contact records available';
+  const pipelineAgingHelper = data.pipelineAgingBuckets.length
+    ? data.pipelineAgingBuckets
+        .map((bucket) => `${bucket.key}: ${formatNumber(bucket.count)}`)
+        .join(' | ')
+    : 'No active pipeline referrals';
 
   const cards = [
     {
@@ -1799,16 +1836,21 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
     },
     {
       title: 'Task completion rate',
-      value: (() => {
-        const total = data.overdueTaskCount + data.dueTodayTaskCount + data.completedInTimeframeCount;
-        return total > 0
-          ? `${((data.completedInTimeframeCount / total) * 100).toFixed(1)}%`
-          : '—';
-      })(),
+      value: data.actionableTaskCountInTimeframe > 0 ? `${data.completionRateInTimeframe.toFixed(1)}%` : '—',
       helper:
-        data.overdueTaskCount + data.dueTodayTaskCount + data.completedInTimeframeCount > 0
-          ? `${formatNumber(data.completedInTimeframeCount)} of ${formatNumber(data.overdueTaskCount + data.dueTodayTaskCount + data.completedInTimeframeCount)} actionable tasks`
+        data.actionableTaskCountInTimeframe > 0
+          ? `${formatNumber(data.completedInTimeframeCount)} of ${formatNumber(data.actionableTaskCountInTimeframe)} tasks created/completed in period`
           : 'No actionable tasks in period'
+    },
+    {
+      title: 'Stale active pipeline',
+      value: formatNumber(data.stalePipelineCount),
+      helper: `No activity for ${data.stalePipelineThresholdDays}+ days`
+    },
+    {
+      title: 'Pipeline aging',
+      value: formatNumber(data.pipelineAgingBuckets.reduce((sum, bucket) => sum + bucket.count, 0)),
+      helper: pipelineAgingHelper
     }
   ];
 

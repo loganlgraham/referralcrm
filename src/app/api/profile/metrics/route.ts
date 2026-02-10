@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  addDays,
+  differenceInCalendarDays,
   endOfDay,
   format,
   parseISO,
@@ -37,6 +39,7 @@ const TIMEFRAME_LABELS: Record<Exclude<TimeframeKey, 'custom'>, string> = {
 
 const DISPLAY_LABEL_FORMAT = 'MMM d, yyyy';
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const COHORT_CONVERSION_WINDOWS_DAYS = [30, 60, 90, 120, 180] as const;
 
 function parseDateOnly(value: string | null): Date | null {
   if (!value || !DATE_ONLY_REGEX.test(value)) {
@@ -127,6 +130,21 @@ function resolveMetricDate(payment: any): Date {
     return new Date(payment.invoiceDate);
   }
   return new Date(payment.updatedAt ?? payment.createdAt ?? new Date());
+}
+
+function resolveCloseDate(payment: any): Date {
+  if (payment.closingDate) {
+    return new Date(payment.closingDate);
+  }
+  return resolveMetricDate(payment);
+}
+
+function toIdString(value: unknown): string | null {
+  if (value && typeof value === 'object' && 'toString' in value && typeof value.toString === 'function') {
+    return value.toString();
+  }
+  if (typeof value === 'string') return value;
+  return null;
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -223,7 +241,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .filter((payment) => payment.metricDate >= timeframe.start && payment.metricDate <= timeframe.end);
 
   const totalReferrals = referrals.length;
-  const dealsClosed = paymentsWithMetric.filter((payment) => payment.status === 'closed' || payment.status === 'paid');
+  const closedAtByReferralId = new Map<string, Date>();
+  payments.forEach((payment) => {
+    if (payment.status !== 'closed' && payment.status !== 'paid') return;
+    const referralId = payment.referralId?.toString?.();
+    if (!referralId) return;
+    const closeDate = resolveCloseDate(payment);
+    const existing = closedAtByReferralId.get(referralId);
+    if (!existing || closeDate < existing) {
+      closedAtByReferralId.set(referralId, closeDate);
+    }
+  });
+  const dealsClosed = referrals.filter((referral) => {
+    const referralId = toIdString(referral._id);
+    return referralId ? closedAtByReferralId.has(referralId) : false;
+  });
   const dealsUnderContract = paymentsWithMetric.filter((payment) =>
     [
       'under_contract',
@@ -233,6 +265,30 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ].includes(payment.status)
   );
   const closeRate = totalReferrals === 0 ? 0 : (dealsClosed.length / totalReferrals) * 100;
+  const cohortReferenceNow = new Date();
+  const cohortConversionWindows = COHORT_CONVERSION_WINDOWS_DAYS.map((windowDays) => {
+    let eligibleReferrals = 0;
+    let closedReferrals = 0;
+    referrals.forEach((referral) => {
+      const createdAt = referral.createdAt ? new Date(referral.createdAt) : null;
+      if (!createdAt) return;
+      if (differenceInCalendarDays(cohortReferenceNow, createdAt) < windowDays) return;
+      eligibleReferrals += 1;
+      const referralId = toIdString(referral._id);
+      if (!referralId) return;
+      const closedAt = closedAtByReferralId.get(referralId);
+      if (!closedAt) return;
+      if (closedAt <= addDays(createdAt, windowDays)) {
+        closedReferrals += 1;
+      }
+    });
+    return {
+      windowDays,
+      eligibleReferrals,
+      closedReferrals,
+      conversionRate: eligibleReferrals === 0 ? 0 : (closedReferrals / eligibleReferrals) * 100
+    };
+  });
 
   const revenueRealizedCents = paymentsWithMetric.reduce((sum, payment) => sum + (payment.receivedAmountCents ?? 0), 0);
   const revenueExpectedCents = paymentsWithMetric.reduce((sum, payment) => {
@@ -301,6 +357,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     dealsClosed: dealsClosed.length,
     activePipeline: dealsUnderContract.length,
     closeRate,
+    cohortConversionWindows: cohortConversionWindows.map((entry) => ({
+      windowDays: entry.windowDays,
+      eligibleReferrals: entry.eligibleReferrals,
+      closedReferrals: entry.closedReferrals,
+      conversionRate: Number(entry.conversionRate.toFixed(1))
+    })),
     revenueRealizedCents,
     revenueExpectedCents,
     averageCommissionCents,

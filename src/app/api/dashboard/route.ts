@@ -194,6 +194,8 @@ const EXPECTED_REVENUE_STATUSES = new Set<AggregatedPayment['status']>([
   'closed',
   'payment_sent'
 ]);
+const COHORT_CONVERSION_WINDOWS_DAYS = [30, 60, 90, 120, 180] as const;
+const STALE_PIPELINE_THRESHOLD_DAYS = 14;
 
 function parseDateOnly(value: string | null): Date | null {
   if (!value) return null;
@@ -621,6 +623,16 @@ function computeAverage(values: number[]): number {
   return total / values.length;
 }
 
+function computeMedian(values: number[]): number | null {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+  return sorted[mid];
+}
+
 function isWithinTimeframe(date: Date | null | undefined, timeframe: TimeframeInfo): boolean {
   if (!date) return false;
   const value = new Date(date);
@@ -724,6 +736,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           averageDaysClosedToPaid: 0,
           averageClosedDealAmountCents: 0,
           averageRevenuePerDealCents: 0,
+          medianDaysReferralToClose: null,
+          cohortConversionWindows: [],
           totalVolumeClosedCents: 0,
           averagePaAmountCents: 0,
           averageReferralFeePaidCents: 0,
@@ -790,7 +804,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         overdueTaskCount: 0,
         dueTodayTaskCount: 0,
         completedInTimeframeCount: 0,
+        actionableTaskCountInTimeframe: 0,
+        completionRateInTimeframe: 0,
         totalOpenTasks: 0,
+        stalePipelineCount: 0,
+        stalePipelineThresholdDays: STALE_PIPELINE_THRESHOLD_DAYS,
+        pipelineAgingBuckets: [],
         taskActivityTrend: {
           outstanding: [],
           completed: [],
@@ -1702,6 +1721,55 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return sumReferrals === 0 ? 0 : (sumDeals / sumReferrals) * 100;
   })();
 
+  const cohortReferenceNow = new Date();
+  const closedAtByReferralId = new Map<string, Date>();
+  paymentsByNetwork.forEach((payment) => {
+    if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
+    if (payment.usedAssignedAgent !== true) return;
+    if (payment.status !== 'closed' && payment.status !== 'paid') return;
+    const referralId = payment.referral?._id?.toString?.();
+    if (!referralId) return;
+    const closingDate = resolveClosingDate(payment);
+    if (!closingDate) return;
+    const existing = closedAtByReferralId.get(referralId);
+    if (!existing || closingDate < existing) {
+      closedAtByReferralId.set(referralId, closingDate);
+    }
+  });
+
+  const cohortConversionWindows = COHORT_CONVERSION_WINDOWS_DAYS.map((windowDays) => {
+    let eligibleReferrals = 0;
+    let closedReferrals = 0;
+    filteredReferrals.forEach((referral) => {
+      const createdAt = referral.createdAt ? new Date(referral.createdAt) : null;
+      if (!createdAt) return;
+      if (differenceInCalendarDays(cohortReferenceNow, createdAt) < windowDays) return;
+      eligibleReferrals += 1;
+      const closedAt = closedAtByReferralId.get(referral._id.toString());
+      if (!closedAt) return;
+      if (differenceInCalendarDays(closedAt, createdAt) <= windowDays) {
+        closedReferrals += 1;
+      }
+    });
+    return {
+      windowDays,
+      eligibleReferrals,
+      closedReferrals,
+      conversionRate: eligibleReferrals === 0 ? 0 : (closedReferrals / eligibleReferrals) * 100
+    };
+  });
+
+  const daysReferralToCloseSamples = filteredReferrals
+    .map((referral) => {
+      const createdAt = referral.createdAt ? new Date(referral.createdAt) : null;
+      const closedAt = closedAtByReferralId.get(referral._id.toString()) ?? null;
+      if (!createdAt || !closedAt) return null;
+      const delta = differenceInCalendarDays(closedAt, createdAt);
+      return delta >= 0 ? delta : null;
+    })
+    .filter((value): value is number => value != null);
+  const medianDaysReferralToClose = computeMedian(daysReferralToCloseSamples);
+
   const closedInTimeframe = (payment: AggregatedPayment) => {
     const closingDate = resolveClosingDate(payment);
     if (!closingDate) return false;
@@ -2141,11 +2209,40 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const adminAverageLeadToContract = daysToContractAvg;
   const adminAverageContractToClose = daysToCloseAvg;
 
-  // Admin task metrics: overdue, due today, completed today, 30-day trend
+  const nonTerminalPipelineReferrals = adminEligibleReferrals.filter((referral) => {
+    const status = (referral.status ?? '').trim();
+    return status !== 'Closed' && status !== 'Lost' && status !== 'Terminated';
+  });
+
+  const pipelineAgingBuckets = [
+    { key: '0-7', min: 0, max: 7, count: 0 },
+    { key: '8-14', min: 8, max: 14, count: 0 },
+    { key: '15-30', min: 15, max: 30, count: 0 },
+    { key: '31-60', min: 31, max: 60, count: 0 },
+    { key: '60+', min: 61, max: Number.POSITIVE_INFINITY, count: 0 }
+  ];
+
+  let stalePipelineCount = 0;
+  nonTerminalPipelineReferrals.forEach((referral) => {
+    const status = (referral.status ?? '').trim();
+    if (!ACTIVE_PIPELINE_STATUSES.has(status)) return;
+    const ageAnchor = referral.referralDate ? new Date(referral.referralDate) : new Date(referral.createdAt);
+    const ageDays = Math.max(differenceInCalendarDays(timeframeEnd ?? new Date(), ageAnchor), 0);
+    const bucket = pipelineAgingBuckets.find((candidate) => ageDays >= candidate.min && ageDays <= candidate.max);
+    if (bucket) {
+      bucket.count += 1;
+    }
+    const lastActivityAt = referral.updatedAt ? new Date(referral.updatedAt) : ageAnchor;
+    const inactiveDays = Math.max(differenceInCalendarDays(new Date(), lastActivityAt), 0);
+    if (inactiveDays >= STALE_PIPELINE_THRESHOLD_DAYS) {
+      stalePipelineCount += 1;
+    }
+  });
+
+  // Admin task metrics: overdue, due today, completed in timeframe, 30-day trend
   const adminTasks = await AdminTask.find({}).lean<AdminTaskLean[]>();
   const now = new Date();
   const todayStart = startOfDay(now);
-  const todayEnd = endOfDay(now);
 
   function getTaskDueBucket(effectiveDue: Date | null, status: string): 'overdue' | 'today' | 'upcoming' | null {
     if (status !== 'open') return null;
@@ -2176,6 +2273,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (timeframeEnd && d > timeframeEnd) return false;
     return true;
   }).length;
+  const openCreatedInTimeframeCount = adminTasks.filter((task) => {
+    if (task.status !== 'open') return false;
+    if (!task.createdAt) return false;
+    const createdAt = new Date(task.createdAt);
+    if (timeframeStart && createdAt < timeframeStart) return false;
+    if (timeframeEnd && createdAt > timeframeEnd) return false;
+    return true;
+  }).length;
+  const actionableTaskCountInTimeframe = completedInTimeframeCount + openCreatedInTimeframeCount;
+  const completionRateInTimeframe =
+    actionableTaskCountInTimeframe === 0 ? 0 : (completedInTimeframeCount / actionableTaskCountInTimeframe) * 100;
 
   // 30-day task activity trend: one point per day
   const taskTrendDays = 30;
@@ -2497,6 +2605,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     averageDaysClosedToPaid,
     averageClosedDealAmountCents,
     averageRevenuePerDealCents,
+    medianDaysReferralToClose,
+    cohortConversionWindows: cohortConversionWindows.map((entry) => ({
+      windowDays: entry.windowDays,
+      eligibleReferrals: entry.eligibleReferrals,
+      closedReferrals: entry.closedReferrals,
+      conversionRate: Number(entry.conversionRate.toFixed(1))
+    })),
     totalVolumeClosedCents,
     averagePaAmountCents,
     averageReferralFeePaidCents,
@@ -2576,7 +2691,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       overdueTaskCount,
       dueTodayTaskCount,
       completedInTimeframeCount,
+      actionableTaskCountInTimeframe,
+      completionRateInTimeframe,
       totalOpenTasks,
+      stalePipelineCount,
+      stalePipelineThresholdDays: STALE_PIPELINE_THRESHOLD_DAYS,
+      pipelineAgingBuckets: pipelineAgingBuckets.map((bucket) => ({
+        key: bucket.key,
+        count: bucket.count
+      })),
       taskActivityTrend
     },
     agit: {
