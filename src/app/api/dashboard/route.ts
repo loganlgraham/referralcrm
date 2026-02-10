@@ -1702,18 +1702,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return sumReferrals === 0 ? 0 : (sumDeals / sumReferrals) * 100;
   })();
 
-  const afcRelevant = filteredPaymentsByNetwork.filter(
+  const closedInTimeframe = (payment: AggregatedPayment) => {
+    const closingDate = resolveClosingDate(payment);
+    if (!closingDate) return false;
+    if (timeframeStart && closingDate < timeframeStart) return false;
+    if (timeframeEnd && closingDate > timeframeEnd) return false;
+    return true;
+  };
+
+  const afcRelevant = paymentsByNetwork.filter(
     (payment) =>
       payment.referral?.org === 'AFC' &&
-      closedOrPaidStatuses.has(payment.status)
+      closedOrPaidStatuses.has(payment.status) &&
+      closedInTimeframe(payment)
   );
   const afcDealsLost = afcRelevant.filter((payment) => !payment.usedAfc).length;
   const afcAttachRate = afcRelevant.length
     ? (afcRelevant.filter((payment) => Boolean(payment.usedAfc)).length / afcRelevant.length) * 100
     : 0;
 
-  const ahaRelevant = filteredPaymentsByNetwork.filter((payment) => {
+  const ahaRelevant = paymentsByNetwork.filter((payment) => {
     if (!closedOrPaidStatuses.has(payment.status)) return false;
+    if (!closedInTimeframe(payment)) return false;
     const designation = getAgentDesignation(payment);
     return designation === 'AHA';
   });
@@ -1721,8 +1731,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const ahaDealsLost = ahaRelevant.length - ahaAttached.length;
   const ahaAttachRate = ahaRelevant.length ? (ahaAttached.length / ahaRelevant.length) * 100 : 0;
 
-  const ahaOosRelevant = filteredPaymentsByNetwork.filter((payment) => {
+  const ahaOosRelevant = paymentsByNetwork.filter((payment) => {
     if (!closedOrPaidStatuses.has(payment.status)) return false;
+    if (!closedInTimeframe(payment)) return false;
     const designation = getAgentDesignation(payment);
     return designation === 'AHA_OOS';
   });
