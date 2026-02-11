@@ -6,7 +6,7 @@ import { Referral } from '@/models/referral';
 import { logReferralActivity } from '@/lib/server/activities';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { buildContactActionLink, buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
-import { buildGmailComposeUrl } from '@/utils/gmail';
+
 
 interface Params {
   params: { id: string };
@@ -525,13 +525,15 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             'Logan'
           ].join('\n');
 
-          const gmailUrl = buildGmailComposeUrl(contact.email, {
-            cc: lenderContact?.email ?? '',
-            subject: introSubject,
-            body: introBody
-          });
-          introLinkHtmlParts.push(`<p><a href="${gmailUrl}">Send Introduction Email to ${escapeHtml(contact.name ?? 'Agent')}</a></p>`);
-          introLinkTextParts.push(`Send Introduction Email to ${contact.name ?? 'Agent'}: ${gmailUrl}`);
+          const composePageParams = new URLSearchParams();
+          composePageParams.set('to', contact.email);
+          composePageParams.set('cc', lenderContact?.email ?? '');
+          composePageParams.set('subject', introSubject);
+          composePageParams.set('body', introBody);
+          const composePageUrl = `${referralLinkBase}/compose-email?${composePageParams.toString()}`;
+
+          introLinkHtmlParts.push(`<p><a href="${composePageUrl}">Send Introduction Email to ${escapeHtml(contact.name ?? 'Agent')}</a></p>`);
+          introLinkTextParts.push(`Send Introduction Email to ${contact.name ?? 'Agent'}: ${composePageUrl}`);
         }
 
         const pairingSummaryHtml = [
