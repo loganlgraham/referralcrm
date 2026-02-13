@@ -17,6 +17,7 @@ import {
   MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState
@@ -121,6 +122,9 @@ export function TimeframeDropdown({
   onCustomRangeSelect,
   maxDate
 }: TimeframeDropdownProps) {
+  const buttonId = useId();
+  const panelId = useId();
+  const helperId = useId();
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState<Date>(() => startOfMonth(new Date()));
@@ -232,18 +236,29 @@ export function TimeframeDropdown({
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
+        id={buttonId}
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        aria-controls={panelId}
+        className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
       >
         <span>{rangeLabel}</span>
         <span className="text-xs text-slate-400">▾</span>
       </button>
       {isOpen ? (
-        <div className="absolute right-0 z-20 mt-2 w-80 rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
+        <div
+          id={panelId}
+          role="dialog"
+          aria-modal="false"
+          aria-labelledby={buttonId}
+          className="absolute right-0 z-20 mt-2 w-[min(20rem,calc(100vw-1rem))] rounded-lg border border-slate-200 bg-white p-4 shadow-xl"
+        >
           <div className="flex items-center justify-between">
             <button
               type="button"
               onClick={() => setVisibleMonth((prev) => addMonths(prev, -1))}
-              className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+              aria-label="Previous month"
+              className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
             >
               ‹
             </button>
@@ -251,7 +266,8 @@ export function TimeframeDropdown({
             <button
               type="button"
               onClick={() => setVisibleMonth((prev) => addMonths(prev, 1))}
-              className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-40"
+              aria-label="Next month"
+              className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:opacity-40"
               disabled={!canGoNextMonth}
             >
               ›
@@ -284,8 +300,10 @@ export function TimeframeDropdown({
                       : isPastMax
                       ? 'text-slate-300'
                       : 'text-slate-700 hover:bg-slate-100'
-                  } ${isStart ? 'rounded-l-full' : ''} ${isEnd ? 'rounded-r-full' : ''}`}
+                  } ${isStart ? 'rounded-l-full' : ''} ${isEnd ? 'rounded-r-full' : ''} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1`}
                   disabled={isPastMax}
+                  aria-disabled={isPastMax}
+                  aria-describedby={helperId}
                 >
                   {formatDate(day, 'd')}
                 </button>
@@ -293,7 +311,7 @@ export function TimeframeDropdown({
             })}
           </div>
 
-          <div className="mt-3 text-xs text-slate-500">
+          <div id={helperId} className="mt-3 text-xs text-slate-500">
             <p>{selectionPrompt}</p>
             <p className="mt-1">Latest selectable date: {maxDateLabel}</p>
           </div>
@@ -308,11 +326,12 @@ export function TimeframeDropdown({
                     key={option.value}
                     type="button"
                     onClick={() => handlePresetClick(option.value)}
+                    aria-pressed={isActive}
                     className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
                       isActive
                         ? 'border-transparent bg-slate-900 text-white'
                         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                    }`}
+                    } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2`}
                   >
                     {option.label}
                   </button>

@@ -2,6 +2,7 @@
 
 import {
   FormEvent,
+  KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
   ReactNode,
   useCallback,
@@ -10,6 +11,7 @@ import {
   useRef,
   useState
 } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import useSWR from 'swr';
@@ -302,6 +304,7 @@ const TAB_OPTIONS = [
 ] as const;
 
 type TabValue = (typeof TAB_OPTIONS)[number]['value'];
+const TAB_VALUES = new Set<TabValue>(TAB_OPTIONS.map((option) => option.value));
 
 const NETWORK_FILTER_OPTIONS: { label: string; value: NetworkFilter }[] = [
   { label: 'All', value: 'ALL' },
@@ -317,6 +320,23 @@ const DEFAULT_NETWORK_FILTER: Record<TabValue, NetworkFilter> = {
   agit: 'ALL'
 };
 
+function isTabValue(value: string | null): value is TabValue {
+  return value != null && TAB_VALUES.has(value as TabValue);
+}
+
+function isTimeframeKey(value: string | null): value is TimeframeKey {
+  if (!value) return false;
+  if (value === 'custom') return true;
+  return TIMEFRAME_PRESETS.some((preset) => preset.value === value);
+}
+
+function parseNetworkFilter(value: string | null): NetworkFilter | null {
+  if (value === 'ALL' || value === 'AHA' || value === 'AHA_OOS') {
+    return value;
+  }
+  return null;
+}
+
 function NetworkFilterButtons({
   value,
   onChange
@@ -325,7 +345,7 @@ function NetworkFilterButtons({
   onChange: (value: NetworkFilter) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Network filter">
       {NETWORK_FILTER_OPTIONS.map((option) => {
         const isActive = value === option.value;
         return (
@@ -333,11 +353,12 @@ function NetworkFilterButtons({
             key={option.value}
             type="button"
             onClick={() => onChange(option.value)}
+            aria-pressed={isActive}
             className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
               isActive
                 ? 'border-transparent bg-slate-900 text-white'
                 : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-            }`}
+            } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2`}
           >
             {option.label}
           </button>
@@ -391,14 +412,14 @@ function SummaryCard({
   const className = 'rounded-lg border border-slate-200 bg-white p-4 shadow-sm block transition hover:border-slate-300 w-full text-left';
   if (drillDownHref) {
     return (
-      <Link href={drillDownHref} className={className}>
+      <Link href={drillDownHref} className={className} aria-label={`View details for ${title}`}>
         {content}
       </Link>
     );
   }
   if (onClick) {
     return (
-      <button type="button" onClick={onClick} className={className}>
+      <button type="button" onClick={onClick} className={className} aria-label={`Open details for ${title}`}>
         {content}
       </button>
     );
@@ -755,6 +776,8 @@ function MultiLineChartCard({
           <svg
             viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
             className="h-48 w-full"
+            role="img"
+            aria-label={`${title} trend comparison chart`}
             onMouseMove={handleMouseMove}
             onMouseLeave={() => setHoverIndex(null)}
           >
@@ -885,7 +908,7 @@ function PieChartCard({
       {total > 0 ? (
         <div className="mt-4 grid gap-4 sm:grid-cols-[1fr,1.2fr] sm:items-center">
           <div className="flex justify-center">
-            <svg viewBox="0 0 160 160" className="h-48 w-48">
+            <svg viewBox="0 0 160 160" className="h-48 w-48" role="img" aria-label={`${title} distribution chart`}>
               {data.map((item, index) => {
                 const sliceAngle = (item.value / total) * Math.PI * 2;
                 const startAngle = currentAngle;
@@ -943,6 +966,7 @@ function TerminatedDealsList({
 }) {
   const [showAll, setShowAll] = useState(false);
   const displayedDeals = showAll ? deals : deals.slice(0, LIST_PREVIEW_LIMIT);
+  const listId = 'terminated-deals-list';
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -954,7 +978,7 @@ function TerminatedDealsList({
         </div>
       </div>
 
-      <div className="mt-4 divide-y divide-slate-100">
+      <div id={listId} className="mt-4 divide-y divide-slate-100">
         {deals.length ? (
           displayedDeals.map((deal) => (
             <div key={deal.id} className="flex items-start justify-between gap-3 py-3">
@@ -976,6 +1000,8 @@ function TerminatedDealsList({
           type="button"
           className="mt-3 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
           onClick={() => setShowAll((prev) => !prev)}
+          aria-expanded={showAll}
+          aria-controls={listId}
         >
           {showAll ? 'Show less' : 'Show more'}
         </button>
@@ -1045,12 +1071,13 @@ function RankedList({
 }) {
   const [showAll, setShowAll] = useState(false);
   const displayedItems = showAll ? items : items.slice(0, LIST_PREVIEW_LIMIT);
+  const listId = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-list`;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
       <div className="mt-4 space-y-3">
-        <ul className="space-y-3">
+        <ul id={listId} className="space-y-3">
           {items.length ? (
             displayedItems.map((item) => (
               <li key={item.label} className="flex items-center justify-between text-sm text-slate-700">
@@ -1067,6 +1094,8 @@ function RankedList({
             type="button"
             className="text-sm font-semibold text-indigo-600 hover:text-indigo-700"
             onClick={() => setShowAll((prev) => !prev)}
+            aria-expanded={showAll}
+            aria-controls={listId}
           >
             {showAll ? 'Show less' : 'Show more'}
           </button>
@@ -1089,6 +1118,7 @@ function LeaderboardTable({
 }) {
   const [showAll, setShowAll] = useState(false);
   const displayedEntries = showAll ? entries : entries.slice(0, LIST_PREVIEW_LIMIT);
+  const tableId = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-table`;
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -1096,12 +1126,12 @@ function LeaderboardTable({
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
-      <table className="mt-4 w-full text-sm">
+      <table id={tableId} className="mt-4 w-full text-sm">
         <thead>
           <tr className="text-left text-xs text-slate-500">
-            <th className="py-1 font-medium">Rank</th>
-            <th className="py-1 font-medium">Name</th>
-            <th className="py-1 font-medium text-right">{valueLabel}</th>
+            <th scope="col" className="py-1 font-medium">Rank</th>
+            <th scope="col" className="py-1 font-medium">Name</th>
+            <th scope="col" className="py-1 font-medium text-right">{valueLabel}</th>
           </tr>
         </thead>
         <tbody>
@@ -1139,6 +1169,8 @@ function LeaderboardTable({
           type="button"
           className="mt-3 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
           onClick={() => setShowAll((prev) => !prev)}
+          aria-expanded={showAll}
+          aria-controls={tableId}
         >
           {showAll ? 'Show less' : 'Show more'}
         </button>
@@ -1164,6 +1196,8 @@ function PreApprovalConversionSection({
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [deletingMonth, setDeletingMonth] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<'month' | 'referrals' | 'conversion'>('month');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     const match = monthlyReferrals.find((entry) => entry.monthKey === selectedMonth);
@@ -1197,16 +1231,34 @@ function PreApprovalConversionSection({
   const ahaOosConversion = ahaOosPreApprovals > 0 ? (ahaOosReferrals / ahaOosPreApprovals) * 100 : 0;
 
   const sortedEntries = useMemo(() => {
-    return conversion.entries
-      .filter(
-        (entry) =>
-          entry.totalReferrals > 0 ||
-          entry.preApprovals > 0 ||
-          entry.ahaPreApprovals > 0 ||
-          entry.ahaOosPreApprovals > 0
-      )
-      .sort((a, b) => (a.monthKey < b.monthKey ? 1 : -1));
-  }, [conversion.entries]);
+    const filtered = conversion.entries.filter(
+      (entry) =>
+        entry.totalReferrals > 0 ||
+        entry.preApprovals > 0 ||
+        entry.ahaPreApprovals > 0 ||
+        entry.ahaOosPreApprovals > 0
+    );
+    const direction = sortDirection === 'asc' ? 1 : -1;
+    return filtered.sort((a, b) => {
+      if (sortKey === 'month') {
+        if (a.monthKey === b.monthKey) return 0;
+        return a.monthKey > b.monthKey ? direction : -direction;
+      }
+      if (sortKey === 'referrals') {
+        return (a.totalReferrals - b.totalReferrals) * direction;
+      }
+      return (a.conversionRate - b.conversionRate) * direction;
+    });
+  }, [conversion.entries, sortDirection, sortKey]);
+
+  const toggleSort = (nextKey: 'month' | 'referrals' | 'conversion') => {
+    if (sortKey === nextKey) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortKey(nextKey);
+    setSortDirection(nextKey === 'month' ? 'desc' : 'asc');
+  };
 
   const conversionSeries = useMemo(
     () => [
@@ -1364,14 +1416,26 @@ function PreApprovalConversionSection({
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-xs text-slate-500">
               <tr className="text-left">
-                <th className="px-3 py-2 font-medium">Month</th>
-                <th className="px-3 py-2 font-medium text-right">Referrals</th>
-                <th className="px-3 py-2 font-medium text-right">Pre-approvals (AHA)</th>
-                <th className="px-3 py-2 font-medium text-right">Pre-approvals (AHA OOS)</th>
-                <th className="px-3 py-2 font-medium text-right">Conversion (All)</th>
-                <th className="px-3 py-2 font-medium text-right">Conversion (AHA)</th>
-                <th className="px-3 py-2 font-medium text-right">Conversion (AHA OOS)</th>
-                {canEdit ? <th className="px-3 py-2 font-medium text-right">Actions</th> : null}
+                <th scope="col" className="px-3 py-2 font-medium" aria-sort={sortKey === 'month' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                  <button type="button" onClick={() => toggleSort('month')} className="inline-flex items-center gap-1 hover:text-slate-700">
+                    Month {sortKey === 'month' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+                  </button>
+                </th>
+                <th scope="col" className="px-3 py-2 font-medium text-right" aria-sort={sortKey === 'referrals' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                  <button type="button" onClick={() => toggleSort('referrals')} className="inline-flex items-center gap-1 hover:text-slate-700">
+                    Referrals {sortKey === 'referrals' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+                  </button>
+                </th>
+                <th scope="col" className="px-3 py-2 font-medium text-right">Pre-approvals (AHA)</th>
+                <th scope="col" className="px-3 py-2 font-medium text-right">Pre-approvals (AHA OOS)</th>
+                <th scope="col" className="px-3 py-2 font-medium text-right" aria-sort={sortKey === 'conversion' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                  <button type="button" onClick={() => toggleSort('conversion')} className="inline-flex items-center gap-1 hover:text-slate-700">
+                    Conversion (All) {sortKey === 'conversion' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+                  </button>
+                </th>
+                <th scope="col" className="px-3 py-2 font-medium text-right">Conversion (AHA)</th>
+                <th scope="col" className="px-3 py-2 font-medium text-right">Conversion (AHA OOS)</th>
+                {canEdit ? <th scope="col" className="px-3 py-2 font-medium text-right">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -1675,11 +1739,11 @@ function DealsLostTable({ deals }: { deals: LostDealEntry[] }) {
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-slate-200 text-xs font-medium uppercase text-slate-500">
-            <th className="px-6 py-3">Borrower</th>
-            <th className="px-6 py-3">Agent</th>
-            <th className="px-6 py-3">MC</th>
-            <th className="px-6 py-3">Status</th>
-            <th className="px-6 py-3 text-right">Expected</th>
+            <th scope="col" className="px-6 py-3">Borrower</th>
+            <th scope="col" className="px-6 py-3">Agent</th>
+            <th scope="col" className="px-6 py-3">MC</th>
+            <th scope="col" className="px-6 py-3">Status</th>
+            <th scope="col" className="px-6 py-3 text-right">Expected</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -1702,19 +1766,38 @@ function DealsLostTable({ deals }: { deals: LostDealEntry[] }) {
   );
 }
 
-function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
+function McDashboard({
+  data,
+  networkFilter
+}: {
+  data: DashboardResponse['mc'];
+  networkFilter: NetworkFilter;
+}) {
+  const requestTrend =
+    networkFilter === 'AHA'
+      ? data.requestTrend.aha
+      : networkFilter === 'AHA_OOS'
+        ? data.requestTrend.ahaOos
+        : data.requestTrend.all;
+  const requestLeaderboard =
+    networkFilter === 'AHA'
+      ? data.requestLeaderboard.aha
+      : networkFilter === 'AHA_OOS'
+        ? data.requestLeaderboard.ahaOos
+        : data.requestLeaderboard.all;
+
   return (
     <div className="space-y-6">
       <LineChartCard
         title="Requests received"
-        data={data.requestTrend.all}
+        data={requestTrend}
         formatValue={(value) => formatNumber(Math.round(value))}
         helper="Trend of referral requests routed to MCs (network filter applied above)"
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <LeaderboardTable
           title="Referral requests by MC"
-          entries={data.requestLeaderboard.all}
+          entries={requestLeaderboard}
           valueLabel="Requests"
         />
         <LeaderboardTable title="Revenue by MC" entries={data.revenueLeaderboard} valueLabel="Revenue" />
@@ -1780,12 +1863,12 @@ function StaleReferralsTable({ referrals }: { referrals: StaleReferralEntry[] })
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-slate-200 text-xs font-medium uppercase text-slate-500">
-            <th className="px-6 py-3">Borrower</th>
-            <th className="px-6 py-3">Status</th>
-            <th className="px-6 py-3">Agent</th>
-            <th className="px-6 py-3">MC</th>
-            <th className="px-6 py-3">Last Activity</th>
-            <th className="px-6 py-3 text-right">Days Stale</th>
+            <th scope="col" className="px-6 py-3">Borrower</th>
+            <th scope="col" className="px-6 py-3">Status</th>
+            <th scope="col" className="px-6 py-3">Agent</th>
+            <th scope="col" className="px-6 py-3">MC</th>
+            <th scope="col" className="px-6 py-3">Last Activity</th>
+            <th scope="col" className="px-6 py-3 text-right">Days Stale</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -1931,6 +2014,97 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
 }
 
 function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
+  const PAGE_SIZE = 10;
+  const [referralPage, setReferralPage] = useState(1);
+  const [dealPage, setDealPage] = useState(1);
+  const [referralSort, setReferralSort] = useState<{ key: 'borrowerName' | 'status' | 'createdAt' | 'updatedAt'; direction: 'asc' | 'desc' }>({
+    key: 'updatedAt',
+    direction: 'desc'
+  });
+  const [dealSort, setDealSort] = useState<{ key: 'borrowerName' | 'status' | 'expectedAmountCents' | 'receivedAmountCents' | 'closingDate' | 'usedAfc'; direction: 'asc' | 'desc' }>({
+    key: 'closingDate',
+    direction: 'desc'
+  });
+
+  const toggleReferralSort = (key: 'borrowerName' | 'status' | 'createdAt' | 'updatedAt') => {
+    setReferralSort((prev) => {
+      if (prev.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: key === 'borrowerName' || key === 'status' ? 'asc' : 'desc' };
+    });
+    setReferralPage(1);
+  };
+
+  const toggleDealSort = (key: 'borrowerName' | 'status' | 'expectedAmountCents' | 'receivedAmountCents' | 'closingDate' | 'usedAfc') => {
+    setDealSort((prev) => {
+      if (prev.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: key === 'borrowerName' || key === 'status' ? 'asc' : 'desc' };
+    });
+    setDealPage(1);
+  };
+
+  const sortedReferralRows = useMemo(() => {
+    const rows = [...data.referralRows];
+    const direction = referralSort.direction === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      const aValue = a[referralSort.key];
+      const bValue = b[referralSort.key];
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return aValue.localeCompare(bValue) * direction;
+      }
+      return 0;
+    });
+    return rows;
+  }, [data.referralRows, referralSort]);
+
+  const sortedDealRows = useMemo(() => {
+    const rows = [...data.dealRows];
+    const direction = dealSort.direction === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      if (dealSort.key === 'closingDate') {
+        const aDate = a.closingDate ?? '';
+        const bDate = b.closingDate ?? '';
+        return aDate.localeCompare(bDate) * direction;
+      }
+      if (dealSort.key === 'usedAfc') {
+        const aFlag = a.usedAfc === null ? -1 : a.usedAfc ? 1 : 0;
+        const bFlag = b.usedAfc === null ? -1 : b.usedAfc ? 1 : 0;
+        return (aFlag - bFlag) * direction;
+      }
+      const aValue = a[dealSort.key];
+      const bValue = b[dealSort.key];
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return (aValue - bValue) * direction;
+      }
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return aValue.localeCompare(bValue) * direction;
+      }
+      return 0;
+    });
+    return rows;
+  }, [data.dealRows, dealSort]);
+
+  const referralPageCount = Math.max(1, Math.ceil(sortedReferralRows.length / PAGE_SIZE));
+  const dealPageCount = Math.max(1, Math.ceil(sortedDealRows.length / PAGE_SIZE));
+
+  useEffect(() => {
+    setReferralPage((prev) => Math.min(prev, referralPageCount));
+  }, [referralPageCount]);
+
+  useEffect(() => {
+    setDealPage((prev) => Math.min(prev, dealPageCount));
+  }, [dealPageCount]);
+
+  const pagedReferralRows = sortedReferralRows.slice((referralPage - 1) * PAGE_SIZE, referralPage * PAGE_SIZE);
+  const pagedDealRows = sortedDealRows.slice((dealPage - 1) * PAGE_SIZE, dealPage * PAGE_SIZE);
+
+  const sortIndicator = (active: boolean, direction: 'asc' | 'desc') => (active ? (direction === 'asc' ? '↑' : '↓') : '');
+  const ariaSortValue = (active: boolean, direction: 'asc' | 'desc') =>
+    active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none';
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1962,22 +2136,38 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
       <div>
         <h3 className="mb-3 text-lg font-semibold text-slate-900">AGIT Referrals</h3>
         {data.referralRows.length === 0 ? (
-          <p className="text-sm text-slate-500">No AGIT referrals in this timeframe.</p>
+          <p className="text-sm text-slate-500">No AGIT referrals in this timeframe. Try adjusting the timeframe or network filters.</p>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Borrower</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">MC</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Created</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Last Updated</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500" aria-sort={ariaSortValue(referralSort.key === 'borrowerName', referralSort.direction)}>
+                    <button type="button" onClick={() => toggleReferralSort('borrowerName')} className="inline-flex items-center gap-1">
+                      Borrower {sortIndicator(referralSort.key === 'borrowerName', referralSort.direction)}
+                    </button>
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500" aria-sort={ariaSortValue(referralSort.key === 'status', referralSort.direction)}>
+                    <button type="button" onClick={() => toggleReferralSort('status')} className="inline-flex items-center gap-1">
+                      Status {sortIndicator(referralSort.key === 'status', referralSort.direction)}
+                    </button>
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">MC</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500" aria-sort={ariaSortValue(referralSort.key === 'createdAt', referralSort.direction)}>
+                    <button type="button" onClick={() => toggleReferralSort('createdAt')} className="inline-flex items-center gap-1">
+                      Created {sortIndicator(referralSort.key === 'createdAt', referralSort.direction)}
+                    </button>
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500" aria-sort={ariaSortValue(referralSort.key === 'updatedAt', referralSort.direction)}>
+                    <button type="button" onClick={() => toggleReferralSort('updatedAt')} className="inline-flex items-center gap-1">
+                      Last Updated {sortIndicator(referralSort.key === 'updatedAt', referralSort.direction)}
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {data.referralRows.map((row) => (
+                {pagedReferralRows.map((row) => (
                   <tr key={row.id} className="hover:bg-slate-50">
                     <td className="px-4 py-3 text-sm text-slate-700">
                       <div className="flex flex-col">
@@ -2070,6 +2260,33 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                 ))}
               </tbody>
             </table>
+            <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
+              <span>
+                Showing {(referralPage - 1) * PAGE_SIZE + 1}-{Math.min(referralPage * PAGE_SIZE, sortedReferralRows.length)} of{' '}
+                {sortedReferralRows.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReferralPage((prev) => Math.max(1, prev - 1))}
+                  disabled={referralPage === 1}
+                  className="rounded border border-slate-200 px-2 py-1 disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <span>
+                  Page {referralPage} of {referralPageCount}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setReferralPage((prev) => Math.min(referralPageCount, prev + 1))}
+                  disabled={referralPage === referralPageCount}
+                  className="rounded border border-slate-200 px-2 py-1 disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -2078,24 +2295,48 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
       <div>
         <h3 className="mb-3 text-lg font-semibold text-slate-900">AGIT Deals</h3>
         {data.dealRows.length === 0 ? (
-          <p className="text-sm text-slate-500">No deals for AGIT referrals in this timeframe.</p>
+          <p className="text-sm text-slate-500">No deals for AGIT referrals in this timeframe. Try broadening the selected date range.</p>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Expected</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Received</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">MC</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Closing Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Used AFC</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500" aria-sort={ariaSortValue(dealSort.key === 'borrowerName', dealSort.direction)}>
+                    <button type="button" onClick={() => toggleDealSort('borrowerName')} className="inline-flex items-center gap-1">
+                      Referral {sortIndicator(dealSort.key === 'borrowerName', dealSort.direction)}
+                    </button>
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500" aria-sort={ariaSortValue(dealSort.key === 'status', dealSort.direction)}>
+                    <button type="button" onClick={() => toggleDealSort('status')} className="inline-flex items-center gap-1">
+                      Status {sortIndicator(dealSort.key === 'status', dealSort.direction)}
+                    </button>
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500" aria-sort={ariaSortValue(dealSort.key === 'expectedAmountCents', dealSort.direction)}>
+                    <button type="button" onClick={() => toggleDealSort('expectedAmountCents')} className="inline-flex items-center gap-1">
+                      Expected {sortIndicator(dealSort.key === 'expectedAmountCents', dealSort.direction)}
+                    </button>
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500" aria-sort={ariaSortValue(dealSort.key === 'receivedAmountCents', dealSort.direction)}>
+                    <button type="button" onClick={() => toggleDealSort('receivedAmountCents')} className="inline-flex items-center gap-1">
+                      Received {sortIndicator(dealSort.key === 'receivedAmountCents', dealSort.direction)}
+                    </button>
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">MC</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500" aria-sort={ariaSortValue(dealSort.key === 'closingDate', dealSort.direction)}>
+                    <button type="button" onClick={() => toggleDealSort('closingDate')} className="inline-flex items-center gap-1">
+                      Closing Date {sortIndicator(dealSort.key === 'closingDate', dealSort.direction)}
+                    </button>
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500" aria-sort={ariaSortValue(dealSort.key === 'usedAfc', dealSort.direction)}>
+                    <button type="button" onClick={() => toggleDealSort('usedAfc')} className="inline-flex items-center gap-1">
+                      Used AFC {sortIndicator(dealSort.key === 'usedAfc', dealSort.direction)}
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {data.dealRows.map((row) => (
+                {pagedDealRows.map((row) => (
                   <tr key={row.id} className="hover:bg-slate-50">
                     <td className="px-4 py-3 text-sm text-slate-700">
                       <Link
@@ -2165,6 +2406,32 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                 ))}
               </tbody>
             </table>
+            <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-600">
+              <span>
+                Showing {(dealPage - 1) * PAGE_SIZE + 1}-{Math.min(dealPage * PAGE_SIZE, sortedDealRows.length)} of {sortedDealRows.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDealPage((prev) => Math.max(1, prev - 1))}
+                  disabled={dealPage === 1}
+                  className="rounded border border-slate-200 px-2 py-1 disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <span>
+                  Page {dealPage} of {dealPageCount}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDealPage((prev) => Math.min(dealPageCount, prev + 1))}
+                  disabled={dealPage === dealPageCount}
+                  className="rounded border border-slate-200 px-2 py-1 disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -2173,11 +2440,32 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
 }
 
 export function DashboardTabs() {
-  const [activeTab, setActiveTab] = useState<(typeof TAB_OPTIONS)[number]['value']>('main');
-  const [timeframe, setTimeframe] = useState<TimeframeKey>('month');
-  const [customRange, setCustomRange] = useState<DateRange>(() => getPresetRange('month'));
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  const tabParam = searchParams.get('tab');
+  const timeframeParam = searchParams.get('timeframe');
+  const initialTab: TabValue = isTabValue(tabParam) ? tabParam : 'main';
+  const initialTimeframe: TimeframeKey = isTimeframeKey(timeframeParam) ? timeframeParam : 'month';
+  const initialNetworkFilter = parseNetworkFilter(searchParams.get('network'));
+
+  const [activeTab, setActiveTab] = useState<TabValue>(initialTab);
+  const [timeframe, setTimeframe] = useState<TimeframeKey>(initialTimeframe);
+  const [customRange, setCustomRange] = useState<DateRange>(() => {
+    if (initialTimeframe === 'custom') {
+      const start = searchParams.get('start') ?? '';
+      const end = searchParams.get('end') ?? '';
+      if (start && end && start <= end) {
+        return { start, end };
+      }
+    }
+    return getPresetRange(initialTimeframe === 'custom' ? 'month' : initialTimeframe);
+  });
   const [networkFilters, setNetworkFilters] = useState<Record<TabValue, NetworkFilter>>(() => ({
-    ...DEFAULT_NETWORK_FILTER
+    ...DEFAULT_NETWORK_FILTER,
+    [initialTab]: initialNetworkFilter ?? DEFAULT_NETWORK_FILTER[initialTab]
   }));
   const { data: session } = useSession();
 
@@ -2240,6 +2528,25 @@ export function DashboardTabs() {
     }
   }, [visibleTabs, activeTab]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', activeTab);
+    params.set('timeframe', timeframe);
+    params.set('network', activeNetworkFilter);
+    if (timeframe === 'custom' && customRange.start && customRange.end) {
+      params.set('start', customRange.start);
+      params.set('end', customRange.end);
+    } else {
+      params.delete('start');
+      params.delete('end');
+    }
+    const nextQuery = params.toString();
+    if (nextQuery === searchParams.toString()) {
+      return;
+    }
+    router.replace(`${pathname}?${nextQuery}`, { scroll: false });
+  }, [activeTab, timeframe, activeNetworkFilter, customRange.start, customRange.end, pathname, router, searchParams]);
+
   const handlePreApprovalSaved = () => {
     if (!swrKey) {
       return;
@@ -2249,6 +2556,14 @@ export function DashboardTabs() {
 
   const maxSelectableDate = formatDateInput(new Date());
   const showSkeleton = Boolean(swrKey) && (isLoading || !data);
+  const skeletonCountByTab: Record<TabValue, number> = {
+    main: 8,
+    mc: 4,
+    agent: 6,
+    admin: 6,
+    agit: 6
+  };
+  const activeSkeletonCount = skeletonCountByTab[activeTab] ?? 6;
 
   const handlePresetSelect = (preset: TimeframePreset) => {
     setTimeframe(preset);
@@ -2263,6 +2578,28 @@ export function DashboardTabs() {
     setTimeframe('custom');
   };
 
+  const handleResetFilters = () => {
+    setTimeframe('month');
+    setCustomRange(getPresetRange('month'));
+    setNetworkFilters({ ...DEFAULT_NETWORK_FILTER });
+  };
+
+  const handleTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (!visibleTabs.length) return;
+    if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const lastIndex = visibleTabs.length - 1;
+    let nextIndex = index;
+    if (event.key === 'ArrowRight') nextIndex = index === lastIndex ? 0 : index + 1;
+    if (event.key === 'ArrowLeft') nextIndex = index === 0 ? lastIndex : index - 1;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = lastIndex;
+    const nextTab = visibleTabs[nextIndex];
+    if (!nextTab) return;
+    setActiveTab(nextTab.value);
+    tabRefs.current[nextTab.value]?.focus();
+  };
+
   const fallbackTimeframeLabel =
     timeframe === 'custom'
       ? formatDisplayRange(customRange)
@@ -2271,14 +2608,21 @@ export function DashboardTabs() {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-100 bg-red-50 p-4 text-red-700">
-        Unable to load dashboard analytics. Please try again later.
+      <div role="alert" aria-live="assertive" className="rounded-lg border border-red-100 bg-red-50 p-4 text-red-700">
+        <p>Unable to load dashboard analytics. Please try again later.</p>
+        <button
+          type="button"
+          onClick={() => void mutate()}
+          className="mt-3 rounded border border-red-300 px-3 py-1.5 text-sm font-medium hover:bg-red-100"
+        >
+          Retry
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" aria-busy={showSkeleton}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Performance dashboards</h1>
@@ -2300,22 +2644,38 @@ export function DashboardTabs() {
               onChange={(value) => handleNetworkFilterChange(activeTab, value)}
             />
           </div>
+          <button
+            type="button"
+            onClick={handleResetFilters}
+            className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+          >
+            Reset filters
+          </button>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {visibleTabs.map((tab) => {
+      <div role="tablist" aria-label="Dashboard views" className="flex flex-wrap gap-2">
+        {visibleTabs.map((tab, index) => {
           const isActive = activeTab === tab.value;
           return (
             <button
               key={tab.value}
+              id={`dashboard-tab-${tab.value}`}
+              ref={(node) => {
+                tabRefs.current[tab.value] = node;
+              }}
               type="button"
               onClick={() => setActiveTab(tab.value)}
+              onKeyDown={(event) => handleTabKeyDown(event, index)}
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={`dashboard-panel-${tab.value}`}
+              tabIndex={isActive ? 0 : -1}
               className={`rounded-full border px-4 py-1 text-sm font-medium transition ${
                 isActive
                   ? 'border-transparent bg-brand text-white'
                   : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-              }`}
+              } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2`}
             >
               {tab.label}
             </button>
@@ -2324,8 +2684,8 @@ export function DashboardTabs() {
       </div>
 
       {showSkeleton ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, index) => (
+        <div role="status" aria-live="polite" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: activeSkeletonCount }).map((_, index) => (
             <div key={index} className="h-32 animate-pulse rounded-lg border border-slate-200 bg-white" />
           ))}
         </div>
@@ -2333,10 +2693,11 @@ export function DashboardTabs() {
 
       {!swrKey ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          Select a start and end date to load dashboard metrics.
+          <p>Select a start and end date to load dashboard metrics.</p>
+          <p className="mt-1 text-xs">Tip: choose a quick range or reset filters to jump back to this month.</p>
         </div>
       ) : data ? (
-        <div>
+        <div id={`dashboard-panel-${activeTab}`} role="tabpanel" aria-labelledby={`dashboard-tab-${activeTab}`} tabIndex={0}>
           {activeTab === 'main' ? (
             <MainDashboard
               data={data.main}
@@ -2345,7 +2706,7 @@ export function DashboardTabs() {
               networkFilter={activeNetworkFilter}
             />
           ) : null}
-          {activeTab === 'mc' ? <McDashboard data={data.mc} /> : null}
+          {activeTab === 'mc' ? <McDashboard data={data.mc} networkFilter={activeNetworkFilter} /> : null}
           {activeTab === 'agent' ? <AgentDashboard data={data.agent} /> : null}
           {activeTab === 'admin' ? <AdminDashboard data={data.admin} /> : null}
           {activeTab === 'agit' ? <AgitDashboard data={data.agit} /> : null}
