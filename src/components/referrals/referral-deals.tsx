@@ -988,20 +988,17 @@ export function ReferralDeals({
     // Check survey email readiness when closing deal
     let sendClosedEmails = false;
     if (nextStatus === 'closed') {
-      const usedAfc = deal.usedAfc ?? false;
       const usedAssignedAgent = deal.usedAssignedAgent ?? false;
       
       if (usedAssignedAgent) {
-        const emailMessage = usedAfc
-          ? 'Send congratulations emails to the agent and borrower? (includes AFC rating survey)'
-          : 'Send congratulations emails to the agent and borrower?';
+        const emailMessage = 'Send a congratulations email to the referral to rate their agent?';
         const confirmed = window.confirm(emailMessage);
         sendClosedEmails = confirmed;
         if (confirmed) {
-          toast.success('Survey emails will be sent to the agent and borrower.');
+          toast.success('A referral rating email will be sent to the referral.');
         }
       } else {
-        toast.warning('Survey emails will not be sent. Please ensure the assigned agent is marked as used.');
+        toast.warning('Referral rating email will not be sent. Please ensure the assigned agent is marked as used.');
       }
     }
     
