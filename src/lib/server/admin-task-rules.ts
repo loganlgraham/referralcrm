@@ -163,6 +163,14 @@ export const UNDER_CONTRACT_RULES: TaskRuleDefinition[] = [
 /** AHA-designated referrals only: pre–Under Contract tasks (persist until status is Under Contract). */
 export const AHA_PRE_UC_RULES: TaskRuleDefinition[] = [
   {
+    ruleKey: 'aha_add_agent_homebot',
+    title: 'Add Agent to Homebot',
+    category: 'communication',
+    dueOffsetDays: 0,
+    statuses: ['New Lead', 'Paired', 'In Communication', 'Active Lead'],
+    cycleType: 'once',
+  },
+  {
     ruleKey: 'aha_customer_care_buyer_agent_connected',
     title: 'Customer care call: Buyer and Agent Connected?',
     category: 'communication',
@@ -174,7 +182,7 @@ export const AHA_PRE_UC_RULES: TaskRuleDefinition[] = [
     ruleKey: 'aha_customer_care_buyer_happy',
     title: 'Customer care call: Buyer happy with Agent?',
     category: 'communication',
-    dueOffsetDays: 7,
+    dueOffsetDays: 14,
     statuses: ['New Lead', 'Paired', 'In Communication', 'Active Lead'],
     cycleType: 'once',
   },
