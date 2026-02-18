@@ -1150,7 +1150,7 @@ export function DealsTable() {
                     <span className="text-xs text-slate-500">{isStatusMenuOpen ? '▲' : '▼'}</span>
                   </button>
                   {isStatusMenuOpen && (
-                    <div className="absolute left-0 right-0 z-10 mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+                    <div className="absolute left-0 right-0 z-30 mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
                       <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600">
                         <span>Filter statuses</span>
                         <button
@@ -1204,7 +1204,7 @@ export function DealsTable() {
                     <span className="text-xs text-slate-500">{isDesignationMenuOpen ? '▲' : '▼'}</span>
                   </button>
                   {isDesignationMenuOpen && (
-                    <div className="absolute left-0 right-0 z-10 mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+                    <div className="absolute left-0 right-0 z-30 mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
                       <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600">
                         <span>Filter by designation</span>
                         <button
