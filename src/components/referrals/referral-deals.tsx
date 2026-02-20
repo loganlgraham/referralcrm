@@ -182,11 +182,11 @@ function DealCard({
   }, [populateFromDeal, editing]);
 
   const handleSendFeeBreakdown = async () => {
-    const confirmed = window.confirm(
-      'Send fee breakdown email to agent now?\n\n' +
-        'If you send manually, the automatic send (7 days before closing) will be disabled for this deal.'
-    );
-    if (!confirmed) {
+    const message = deal.feeBreakdownEmailSentAt
+      ? 'This fee breakdown was already sent. Resend it now?'
+      : 'Send fee breakdown email to agent now?\n\n' +
+        'If you send manually, the automatic send (7 days before closing) will be disabled for this deal.';
+    if (!window.confirm(message)) {
       return;
     }
 
@@ -456,7 +456,7 @@ function DealCard({
                   disabled={saving || !deal.closingDate || !deal.agentId}
                   className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Send Fee Breakdown Email
+                  {deal.feeBreakdownEmailSentAt ? 'Resend Fee Breakdown Email' : 'Send Fee Breakdown Email'}
                 </button>
                 {deal.closingDate && (
                   <div className="space-y-0.5">
