@@ -9,6 +9,12 @@ import { getAppOrigin } from '@/lib/server/app-origin';
 
 export const runtime = 'nodejs';
 
+const SEND_DELAY_MS = 1000;
+const MAX_RETRIES = 2;
+const RETRY_BASE_MS = 2000;
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 interface ReminderResult {
   paymentId: string;
   closingDate: string;
@@ -106,68 +112,78 @@ export async function GET(request: NextRequest) {
     }
 
     const results: ReminderResult[] = [];
+    const baseUrl = getAppOrigin(request);
 
-    // Process each payment
-    for (const payment of payments) {
+    for (let i = 0; i < payments.length; i++) {
+      if (i > 0) await delay(SEND_DELAY_MS);
+
+      const payment = payments[i];
       const paymentId = (payment._id as Types.ObjectId).toString();
-      
-      try {
-        console.log(`[Closing Reminders] Sending fee breakdown for payment ${paymentId}`);
-        
-        // Call the fee breakdown API
-        // Use APP_URL/NEXTAUTH_URL if set (production: https://referrio.app), otherwise fallback to VERCEL_URL or request origin
-        const baseUrl = getAppOrigin(request);
-        const apiUrl = `${baseUrl}/api/payments/${paymentId}/send-fee-breakdown`;
+      const apiUrl = `${baseUrl}/api/payments/${paymentId}/send-fee-breakdown`;
 
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${cronSecret}`,
-          },
-        });
+      let lastError = '';
+      let succeeded = false;
 
-        // Parse response body safely - handle both JSON and HTML/text responses
-        let responseData: { error?: string; [key: string]: unknown } = { error: 'Unknown error' };
-        const responseText = await response.text().catch(() => '');
-        if (responseText) {
-          try {
-            responseData = JSON.parse(responseText);
-          } catch {
-            // Not JSON - likely HTML error page or plain text
-            responseData = { error: `Non-JSON response (${response.status})`, rawBody: responseText.substring(0, 200) };
-          }
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        if (attempt > 0) {
+          const backoff = RETRY_BASE_MS * Math.pow(2, attempt - 1);
+          console.log(`[Closing Reminders] Retry ${attempt}/${MAX_RETRIES} for payment ${paymentId} after ${backoff}ms`);
+          await delay(backoff);
+        } else {
+          console.log(`[Closing Reminders] Sending fee breakdown for payment ${paymentId}`);
         }
 
-        if (!response.ok) {
+        try {
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${cronSecret}`,
+            },
+          });
+
+          if (response.ok) {
+            console.log(`[Closing Reminders] Successfully sent fee breakdown for payment ${paymentId}`);
+            succeeded = true;
+            break;
+          }
+
+          let responseData: { error?: string; [key: string]: unknown } = { error: 'Unknown error' };
+          const responseText = await response.text().catch(() => '');
+          if (responseText) {
+            try {
+              responseData = JSON.parse(responseText);
+            } catch {
+              responseData = { error: `Non-JSON response (${response.status})`, rawBody: responseText.substring(0, 200) };
+            }
+          }
+
+          lastError = responseData.error || `HTTP ${response.status}`;
+
+          if (response.status === 429 && attempt < MAX_RETRIES) {
+            continue;
+          }
+
           console.error(
             `[Closing Reminders] Failed to send fee breakdown for payment ${paymentId}:`,
             response.status,
-            responseData.error || 'Unknown error'
+            lastError
           );
-          results.push({
-            paymentId,
-            closingDate: payment.closingDate?.toISOString() || 'unknown',
-            success: false,
-            error: responseData.error || `HTTP ${response.status}`,
-          });
-        } else {
-          console.log(`[Closing Reminders] Successfully sent fee breakdown for payment ${paymentId}`);
-          results.push({
-            paymentId,
-            closingDate: payment.closingDate?.toISOString() || 'unknown',
-            success: true,
-          });
+          break;
+        } catch (error) {
+          lastError = error instanceof Error ? error.message : 'Unknown error';
+          if (attempt < MAX_RETRIES) continue;
+          console.error(`[Closing Reminders] Error processing payment ${paymentId}:`, error);
+          break;
         }
-      } catch (error) {
-        console.error(`[Closing Reminders] Error processing payment ${paymentId}:`, error);
-        results.push({
-          paymentId,
-          closingDate: payment.closingDate?.toISOString() || 'unknown',
-          success: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
       }
+
+      results.push({
+        paymentId,
+        closingDate: payment.closingDate?.toISOString() || 'unknown',
+        success: succeeded,
+        error: succeeded ? undefined : lastError,
+      });
     }
 
     const successful = results.filter((r) => r.success).length;
