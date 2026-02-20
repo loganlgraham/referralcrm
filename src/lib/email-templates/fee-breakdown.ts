@@ -8,6 +8,8 @@ export interface FeeBreakdownEmailData {
   referral: {
     borrowerName: string;
     propertyAddress: string;
+    propertyCity?: string | null;
+    propertyState?: string | null;
     loanFileNumber?: string | null;
   };
   deal: {
@@ -246,7 +248,11 @@ export function generateFeeBreakdownEmailHTML(data: FeeBreakdownEmailData): { ht
         
         <div class="info-row">
           <div class="label">Property Address</div>
-          <div class="value">${data.referral.propertyAddress}</div>
+          <div class="value">${data.referral.propertyAddress}${
+  data.referral.propertyCity || data.referral.propertyState
+    ? `<br>${[data.referral.propertyCity, data.referral.propertyState].filter(Boolean).join(', ')}`
+    : ''
+}</div>
         </div>
         
         <div class="info-row">
@@ -349,7 +355,11 @@ REFERRAL INFORMATION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Borrower Name:           ${data.referral.borrowerName}
-Property Address:        ${data.referral.propertyAddress}
+Property Address:        ${data.referral.propertyAddress}${
+  data.referral.propertyCity || data.referral.propertyState
+    ? `\n                         ${[data.referral.propertyCity, data.referral.propertyState].filter(Boolean).join(', ')}`
+    : ''
+}
 Expected Closing Date:   ${closingDateFormatted}
 ${data.deal.usedAfc && data.referral.loanFileNumber ? `Loan File Number:        ${data.referral.loanFileNumber}` : ''}
 Deal Side:              ${dealSideLabel}

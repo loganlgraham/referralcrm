@@ -24,6 +24,8 @@ interface PaymentLean {
   side?: 'buy' | 'sell' | null;
   usedAfc?: boolean | null;
   propertyAddress?: string | null;
+  propertyCity?: string | null;
+  propertyState?: string | null;
 }
 
 export async function POST(
@@ -98,7 +100,7 @@ export async function POST(
     }
 
     // Get referral data - referralId is populated, so it's an object
-    const referral = payment.referralId as { _id: Types.ObjectId; borrower?: { name?: string | null } | null; propertyAddress?: string | null; loanFileNumber?: string | null } | null;
+    const referral = payment.referralId as { _id: Types.ObjectId; borrower?: { name?: string | null } | null; propertyAddress?: string | null; propertyCity?: string | null; propertyState?: string | null; loanFileNumber?: string | null } | null;
     if (!referral) {
       return NextResponse.json({ error: 'Referral not found' }, { status: 404 });
     }
@@ -120,6 +122,8 @@ export async function POST(
       referral: {
         borrowerName,
         propertyAddress: payment.propertyAddress || referral.propertyAddress || 'Address not available',
+        propertyCity: payment.propertyCity || referral.propertyCity || null,
+        propertyState: payment.propertyState || referral.propertyState || null,
         loanFileNumber: referral.loanFileNumber || null,
       },
       deal: {
