@@ -10,6 +10,7 @@ import { getReferralAppBaseUrl, verifyContactActionToken } from '@/lib/referral-
 import { calculateBusinessMinutesBetween } from '@/utils/sla-insights';
 import { createAdminAndMcNotifications } from '@/lib/server/notifications';
 import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
+import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
 
 interface Params {
   params: { id: string };
@@ -167,6 +168,17 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
     actorName,
     content: activityContent,
   });
+
+  if (shouldUpdateStatus) {
+    const taskActorId = session ? session.user.id : (activityActorId ?? undefined);
+    await generateAndReconcileAdminTasks({
+      referralId: referral._id.toString(),
+      trigger: 'referral.status_changed',
+      actorId: taskActorId ?? undefined,
+    }).catch((error) => {
+      console.error('[Admin Tasks] Failed to reconcile tasks after contact-action status change:', error);
+    });
+  }
 
   // Check if this agent action should trigger an update request response notification
   const actorRole = session?.user.role ?? 'agent';
