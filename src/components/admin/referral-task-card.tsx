@@ -12,15 +12,16 @@ const GMAIL_COMPOSE_BASE = 'https://mail.google.com/mail/?view=cm&to=';
 
 interface ReferralTaskCardProps {
   card: ReferralTaskCardType;
+  view?: 'urgent' | 'upcoming';
   onMutate: () => void;
 }
 
-export function ReferralTaskCard({ card, onMutate }: ReferralTaskCardProps) {
+export function ReferralTaskCard({ card, view = 'urgent', onMutate }: ReferralTaskCardProps) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [addTitle, setAddTitle] = useState('');
   const [addDueAt, setAddDueAt] = useState('');
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
-  const [showUpcoming, setShowUpcoming] = useState(false);
+  const [showCollapsedPrimary, setShowCollapsedPrimary] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
 
   const handleComplete = async (taskId: string) => {
@@ -261,56 +262,114 @@ export function ReferralTaskCard({ card, onMutate }: ReferralTaskCardProps) {
         </form>
       )}
 
-      <ul className="space-y-2">
-        {card.overdueTasks.map((task) => renderTask(task, false))}
-        {card.todayTasks.map((task) => renderTask(task, false))}
-      </ul>
+      {view === 'upcoming' ? (
+        <>
+          <ul className="space-y-2">
+            {card.upcomingTasks.map((task) => renderTask(task, false))}
+          </ul>
 
-      {(card.upcomingTasks.length > 0 || card.completedTasks.length > 0) && (
-        <div className="mt-4 space-y-2 border-t border-slate-200 pt-4">
-          {card.upcomingTasks.length > 0 && (
-            <div>
-              <button
-                type="button"
-                onClick={() => setShowUpcoming(!showUpcoming)}
-                className="flex items-center gap-1 text-sm font-semibold text-slate-700 hover:text-slate-900"
-              >
-                {showUpcoming ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-                Upcoming tasks ({card.upcomingTasks.length})
-              </button>
-              {showUpcoming && (
-                <ul className="mt-2 space-y-2">
-                  {card.upcomingTasks.map((task) => renderTask(task, false))}
-                </ul>
+          {(card.overdueTasks.length > 0 || card.todayTasks.length > 0 || card.completedTasks.length > 0) && (
+            <div className="mt-4 space-y-2 border-t border-slate-200 pt-4">
+              {(card.overdueTasks.length > 0 || card.todayTasks.length > 0) && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCollapsedPrimary(!showCollapsedPrimary)}
+                    className="flex items-center gap-1 text-sm font-semibold text-slate-700 hover:text-slate-900"
+                  >
+                    {showCollapsedPrimary ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                    Overdue / today tasks ({card.overdueTasks.length + card.todayTasks.length})
+                  </button>
+                  {showCollapsedPrimary && (
+                    <ul className="mt-2 space-y-2">
+                      {card.overdueTasks.map((task) => renderTask(task, false))}
+                      {card.todayTasks.map((task) => renderTask(task, false))}
+                    </ul>
+                  )}
+                </div>
+              )}
+              {card.completedTasks.length > 0 && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCompleted(!showCompleted)}
+                    className="flex items-center gap-1 text-sm font-semibold text-slate-700 hover:text-slate-900"
+                  >
+                    {showCompleted ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                    Completed tasks ({card.completedTasks.length})
+                  </button>
+                  {showCompleted && (
+                    <ul className="mt-2 space-y-2">
+                      {card.completedTasks.map((task) => renderTask(task, true))}
+                    </ul>
+                  )}
+                </div>
               )}
             </div>
           )}
-          {card.completedTasks.length > 0 && (
-            <div>
-              <button
-                type="button"
-                onClick={() => setShowCompleted(!showCompleted)}
-                className="flex items-center gap-1 text-sm font-semibold text-slate-700 hover:text-slate-900"
-              >
-                {showCompleted ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-                Completed tasks ({card.completedTasks.length})
-              </button>
-              {showCompleted && (
-                <ul className="mt-2 space-y-2">
-                  {card.completedTasks.map((task) => renderTask(task, true))}
-                </ul>
+        </>
+      ) : (
+        <>
+          <ul className="space-y-2">
+            {card.overdueTasks.map((task) => renderTask(task, false))}
+            {card.todayTasks.map((task) => renderTask(task, false))}
+          </ul>
+
+          {(card.upcomingTasks.length > 0 || card.completedTasks.length > 0) && (
+            <div className="mt-4 space-y-2 border-t border-slate-200 pt-4">
+              {card.upcomingTasks.length > 0 && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCollapsedPrimary(!showCollapsedPrimary)}
+                    className="flex items-center gap-1 text-sm font-semibold text-slate-700 hover:text-slate-900"
+                  >
+                    {showCollapsedPrimary ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                    Upcoming tasks ({card.upcomingTasks.length})
+                  </button>
+                  {showCollapsedPrimary && (
+                    <ul className="mt-2 space-y-2">
+                      {card.upcomingTasks.map((task) => renderTask(task, false))}
+                    </ul>
+                  )}
+                </div>
+              )}
+              {card.completedTasks.length > 0 && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCompleted(!showCompleted)}
+                    className="flex items-center gap-1 text-sm font-semibold text-slate-700 hover:text-slate-900"
+                  >
+                    {showCompleted ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                    Completed tasks ({card.completedTasks.length})
+                  </button>
+                  {showCompleted && (
+                    <ul className="mt-2 space-y-2">
+                      {card.completedTasks.map((task) => renderTask(task, true))}
+                    </ul>
+                  )}
+                </div>
               )}
             </div>
           )}
-        </div>
+        </>
       )}
     </section>
   );

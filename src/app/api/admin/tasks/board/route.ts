@@ -81,6 +81,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const { searchParams } = new URL(request.url);
   const groupBy = searchParams.get('groupBy') ?? 'due';
+  const view = searchParams.get('view') ?? 'urgent';
 
   const tasks = await AdminTask.find({ status: { $in: ['open', 'completed'] } })
     .sort({ dueAt: 1, createdAt: 1 })
@@ -210,6 +211,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const hasUrgentTasks = (card: ReferralTaskCard) =>
     card.overdueTasks.length > 0 || card.todayTasks.length > 0;
 
+  const hasUpcomingTasks = (card: ReferralTaskCard) =>
+    card.upcomingTasks.length > 0;
+
   const getEarliestUrgentDue = (card: ReferralTaskCard): number => {
     const overdue = card.overdueTasks[0]?.effectiveDue?.getTime();
     const today = card.todayTasks[0]?.effectiveDue?.getTime();
@@ -217,8 +221,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return overdue ?? today ?? Infinity;
   };
 
+  const getEarliestUpcomingDue = (card: ReferralTaskCard): number =>
+    card.upcomingTasks[0]?.effectiveDue?.getTime() ?? Infinity;
+
+  const cardFilter = view === 'upcoming' ? hasUpcomingTasks : hasUrgentTasks;
+  const cardSorter = view === 'upcoming'
+    ? (a: ReferralTaskCard, b: ReferralTaskCard) => getEarliestUpcomingDue(a) - getEarliestUpcomingDue(b)
+    : (a: ReferralTaskCard, b: ReferralTaskCard) => getEarliestUrgentDue(a) - getEarliestUrgentDue(b);
+
   if (groupBy === 'agent') {
-    const visibleCards = referralCards.filter(hasUrgentTasks);
+    const visibleCards = referralCards.filter(cardFilter);
     const byAgent = new Map<string, ReferralTaskCard[]>();
 
     for (const card of visibleCards) {
@@ -236,12 +248,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const payload = sortedAgents.map((agentName) => ({
       groupKey: agentName,
       groupLabel: agentName,
-      referralCards: byAgent.get(agentName)!.sort((a, b) => getEarliestUrgentDue(a) - getEarliestUrgentDue(b)),
+      referralCards: byAgent.get(agentName)!.sort(cardSorter),
     }));
 
     return NextResponse.json(payload, { headers: NO_CACHE_HEADERS });
   }
 
-  const visibleCards = referralCards.filter(hasUrgentTasks).sort((a, b) => getEarliestUrgentDue(a) - getEarliestUrgentDue(b));
+  const visibleCards = referralCards.filter(cardFilter).sort(cardSorter);
   return NextResponse.json(visibleCards, { headers: NO_CACHE_HEADERS });
 }

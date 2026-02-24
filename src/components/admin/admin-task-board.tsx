@@ -16,8 +16,9 @@ interface AgentGroup {
 
 export function AdminTaskBoard() {
   const [groupBy, setGroupBy] = useState<'due' | 'agent'>('due');
+  const [view, setView] = useState<'urgent' | 'upcoming'>('urgent');
 
-  const boardUrl = `/api/admin/tasks/board?groupBy=${groupBy}`;
+  const boardUrl = `/api/admin/tasks/board?groupBy=${groupBy}&view=${view}`;
   const { data, mutate } = useSWR<ReferralTaskCardData[] | AgentGroup[]>(boardUrl, fetcher);
 
   const referralCards: ReferralTaskCardData[] =
@@ -27,48 +28,81 @@ export function AdminTaskBoard() {
 
   const agentGroups = groupBy === 'agent' ? (data as AgentGroup[] | undefined) ?? [] : [];
 
+  const emptyLabel = view === 'upcoming'
+    ? 'No referrals with upcoming tasks'
+    : 'No referrals with urgent tasks';
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setGroupBy('due')}
-          className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
-            groupBy === 'due'
-              ? 'bg-brand text-white'
-              : 'border border-slate-200 text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          Group by due date
-        </button>
-        <button
-          type="button"
-          onClick={() => setGroupBy('agent')}
-          className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
-            groupBy === 'agent'
-              ? 'bg-brand text-white'
-              : 'border border-slate-200 text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          Group by agent
-        </button>
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setView('urgent')}
+            className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
+              view === 'urgent'
+                ? 'bg-brand text-white'
+                : 'border border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Urgent
+          </button>
+          <button
+            type="button"
+            onClick={() => setView('upcoming')}
+            className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
+              view === 'upcoming'
+                ? 'bg-brand text-white'
+                : 'border border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Upcoming
+          </button>
+        </div>
+
+        <div className="h-6 w-px bg-slate-200" />
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setGroupBy('due')}
+            className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
+              groupBy === 'due'
+                ? 'bg-brand text-white'
+                : 'border border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Group by due date
+          </button>
+          <button
+            type="button"
+            onClick={() => setGroupBy('agent')}
+            className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
+              groupBy === 'agent'
+                ? 'bg-brand text-white'
+                : 'border border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Group by agent
+          </button>
+        </div>
       </div>
 
       {groupBy === 'due' ? (
         referralCards.length === 0 ? (
           <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
-            No referrals with urgent tasks
+            {emptyLabel}
           </div>
         ) : (
           <div className="space-y-4">
             {referralCards.map((card) => (
-              <ReferralTaskCard key={card.referralId} card={card} onMutate={() => void mutate()} />
+              <ReferralTaskCard key={card.referralId} card={card} view={view} onMutate={() => void mutate()} />
             ))}
           </div>
         )
       ) : agentGroups.length === 0 ? (
         <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
-          No referrals with urgent tasks
+          {emptyLabel}
         </div>
       ) : (
         <div className="space-y-6">
@@ -82,7 +116,7 @@ export function AdminTaskBoard() {
               </h2>
               <div className="space-y-4">
                 {group.referralCards.map((card) => (
-                  <ReferralTaskCard key={card.referralId} card={card} onMutate={() => void mutate()} />
+                  <ReferralTaskCard key={card.referralId} card={card} view={view} onMutate={() => void mutate()} />
                 ))}
               </div>
             </section>
