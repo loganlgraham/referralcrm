@@ -21,7 +21,8 @@ export function ReferralTaskCard({ card, view = 'urgent', onMutate }: ReferralTa
   const [addTitle, setAddTitle] = useState('');
   const [addDueAt, setAddDueAt] = useState('');
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
-  const [showCollapsedPrimary, setShowCollapsedPrimary] = useState(false);
+  const [showUpcoming, setShowUpcoming] = useState(false);
+  const [showOverdueToday, setShowOverdueToday] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
 
   const handleComplete = async (taskId: string) => {
@@ -274,17 +275,17 @@ export function ReferralTaskCard({ card, view = 'urgent', onMutate }: ReferralTa
                 <div>
                   <button
                     type="button"
-                    onClick={() => setShowCollapsedPrimary(!showCollapsedPrimary)}
+                    onClick={() => setShowOverdueToday(!showOverdueToday)}
                     className="flex items-center gap-1 text-sm font-semibold text-slate-700 hover:text-slate-900"
                   >
-                    {showCollapsedPrimary ? (
+                    {showOverdueToday ? (
                       <ChevronDown className="h-4 w-4" />
                     ) : (
                       <ChevronRight className="h-4 w-4" />
                     )}
                     Overdue / today tasks ({card.overdueTasks.length + card.todayTasks.length})
                   </button>
-                  {showCollapsedPrimary && (
+                  {showOverdueToday && (
                     <ul className="mt-2 space-y-2">
                       {card.overdueTasks.map((task) => renderTask(task, false))}
                       {card.todayTasks.map((task) => renderTask(task, false))}
@@ -329,17 +330,17 @@ export function ReferralTaskCard({ card, view = 'urgent', onMutate }: ReferralTa
                 <div>
                   <button
                     type="button"
-                    onClick={() => setShowCollapsedPrimary(!showCollapsedPrimary)}
+                    onClick={() => setShowUpcoming(!showUpcoming)}
                     className="flex items-center gap-1 text-sm font-semibold text-slate-700 hover:text-slate-900"
                   >
-                    {showCollapsedPrimary ? (
+                    {showUpcoming ? (
                       <ChevronDown className="h-4 w-4" />
                     ) : (
                       <ChevronRight className="h-4 w-4" />
                     )}
                     Upcoming tasks ({card.upcomingTasks.length})
                   </button>
-                  {showCollapsedPrimary && (
+                  {showUpcoming && (
                     <ul className="mt-2 space-y-2">
                       {card.upcomingTasks.map((task) => renderTask(task, false))}
                     </ul>
