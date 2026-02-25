@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { toast } from 'sonner';
@@ -24,6 +24,12 @@ export function ReferralTaskCard({ card, view = 'urgent', onMutate }: ReferralTa
   const [showUpcoming, setShowUpcoming] = useState(false);
   const [showOverdueToday, setShowOverdueToday] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
+
+  useEffect(() => {
+    setShowUpcoming(false);
+    setShowOverdueToday(false);
+    setShowCompleted(false);
+  }, [view]);
 
   const handleComplete = async (taskId: string) => {
     try {
