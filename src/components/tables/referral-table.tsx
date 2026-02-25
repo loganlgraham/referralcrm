@@ -324,6 +324,7 @@ function buildColumns(
     currentSortBy?: string | null;
     currentSortDirection?: 'asc' | 'desc' | null;
     onSortChange?: (sortBy: string, sortDirection: 'asc' | 'desc') => void;
+    listParams?: string;
   } = {}
 ): ColumnDef<ReferralRow>[] {
   const { 
@@ -331,7 +332,8 @@ function buildColumns(
     hideAgentColumn = false,
     currentSortBy = null,
     currentSortDirection = null,
-    onSortChange = () => {}
+    onSortChange = () => {},
+    listParams = '',
   } = options;
 
   const borrowerColumn: ColumnDef<ReferralRow> = {
@@ -349,7 +351,7 @@ function buildColumns(
                 title="Agent-created referral"
               />
             ) : null}
-            <Link href={`/referrals/${_id}`} className="font-medium text-brand">
+            <Link href={listParams ? `/referrals/${_id}?${listParams}` : `/referrals/${_id}`} className="font-medium text-brand">
               {borrowerName}
             </Link>
             {mode === 'admin' && (urgentTaskCount ?? 0) > 0 ? (
@@ -612,12 +614,18 @@ export function ReferralTable({ data, mode, showAgentOriginIndicator, hideAgentC
   const currentSortBy = searchParams.get('sortBy');
   const currentSortDirection = (searchParams.get('sortDirection') as 'asc' | 'desc' | null) || null;
 
+  const listParams = useMemo(() => {
+    const params = new URLSearchParams(searchParamsString);
+    params.delete('page');
+    params.delete('pageSize');
+    return params.toString();
+  }, [searchParamsString]);
+
   const handleSortChange = useCallback(
     (sortBy: string, sortDirection: 'asc' | 'desc') => {
       const params = new URLSearchParams(searchParamsString);
       params.set('sortBy', sortBy);
       params.set('sortDirection', sortDirection);
-      // Reset to page 1 when sort changes
       params.delete('page');
       startTransition(() => {
         const queryString = params.toString();
@@ -633,9 +641,10 @@ export function ReferralTable({ data, mode, showAgentOriginIndicator, hideAgentC
       hideAgentColumn,
       currentSortBy,
       currentSortDirection,
-      onSortChange: handleSortChange
+      onSortChange: handleSortChange,
+      listParams,
     }),
-    [mode, showAgentOriginIndicator, hideAgentColumn, currentSortBy, currentSortDirection, handleSortChange]
+    [mode, showAgentOriginIndicator, hideAgentColumn, currentSortBy, currentSortDirection, handleSortChange, listParams]
   );
 
   // Ensure data is always an array - handle all edge cases

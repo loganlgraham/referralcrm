@@ -125,15 +125,21 @@ function getSortObject(sortBy: string | null | undefined, sortDirection: 'asc' |
   return sortMap[sortBy] || defaultSort;
 }
 
-export async function getReferrals(params: GetReferralsParams) {
-  const { session, page = 1, pageSize, fetchAll = false, status, mc, agent, zip, ahaBucket, agentReferrals, search, timeline, sortBy, sortDirection } = params;
-  await connectMongo();
-  
-  // Validate pageSize - must be one of: 20, 25, 50, 100 (default to 25)
-  const validPageSizes = [20, 25, 50, 100];
-  const effectivePageSize = pageSize && validPageSizes.includes(pageSize) ? pageSize : 25;
-  const shouldPaginate = !fetchAll;
-  const effectivePage = shouldPaginate ? page : 1;
+interface FilterQueryParams {
+  session: Session | null;
+  status?: string | null;
+  mc?: string | null;
+  agent?: string | null;
+  zip?: string | null;
+  search?: string | null;
+  ahaBucket?: string | null;
+  agentReferrals?: string | null;
+}
+
+async function buildReferralFilterQuery(
+  params: FilterQueryParams
+): Promise<{ query: Record<string, unknown>; empty: boolean }> {
+  const { session, status, mc, agent, zip, search, ahaBucket, agentReferrals } = params;
 
   const query: Record<string, unknown> = { deletedAt: null };
   const appendOrConditions = (conditions: Record<string, unknown>[]) => {
@@ -177,73 +183,55 @@ export async function getReferrals(params: GetReferralsParams) {
       ]);
     }
   }
+
   if (ahaBucket === 'AHA' || ahaBucket === 'AHA_OOS' || ahaBucket === 'AGIT') {
     const agentsWithDesignation = await Agent.find({
       ahaDesignation: ahaBucket
     }).select('_id').lean<{ _id: Types.ObjectId }[]>();
-    
+
     if (agentsWithDesignation.length > 0) {
-      const agentIds = agentsWithDesignation.map((agent) => agent._id);
+      const agentIds = agentsWithDesignation.map((a) => a._id);
       appendOrConditions([
         { assignedAgent: { $in: agentIds } },
         { buySideAgent: { $in: agentIds } },
         { sellSideAgent: { $in: agentIds } },
       ]);
     } else {
-      // If no agents match the designation, return no results
       query._id = new Types.ObjectId('000000000000000000000000');
     }
   }
 
   const searchTerm = search?.trim();
   if (searchTerm) {
-    // Normalize phone number digits for better matching
     const normalizedDigits = searchTerm.replace(/\D/g, '');
     const isLikelyPhoneNumber = normalizedDigits.length >= 7 && normalizedDigits.length <= 15;
     const isLikelyEmail = searchTerm.includes('@');
-    const isMultiWord = searchTerm.split(/\s+/).length > 1;
-    
-    // Optimize regex patterns to leverage indexes better
-    // Use anchored patterns (^) for fields where we have compound indexes - this helps MongoDB use indexes
+
     const escapedSearch = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const searchConditions: Record<string, unknown>[] = [];
-    
-    // For name searches: use non-anchored regex for partial name matching
-    // MongoDB can still use indexes efficiently for case-insensitive searches on indexed fields
+
     searchConditions.push({ 'borrower.name': new RegExp(escapedSearch, 'i') });
-    
-    // For email: prefer anchored match (better index usage) if it looks like a complete email prefix
-    // Otherwise use non-anchored for partial matching
+
     if (isLikelyEmail) {
-      // If it contains @, try exact prefix match first (uses index better)
       searchConditions.push({ 'borrower.email': new RegExp(`^${escapedSearch}`, 'i') });
     } else {
       searchConditions.push({ 'borrower.email': new RegExp(escapedSearch, 'i') });
     }
-    
-    // For loan file number: use anchored regex (leverages index on loanFileNumber)
-    // Loan numbers typically match from the start
+
     searchConditions.push({ loanFileNumber: new RegExp(`^${escapedSearch}`, 'i') });
-    
-    // For phone numbers: prioritize normalized matching for better performance
-    // Normalize phone numbers by removing non-digit characters for exact matching
+
     if (isLikelyPhoneNumber && normalizedDigits) {
-      // Normalized phone number search with anchored pattern - best for index usage
-      // This allows matching phone numbers regardless of formatting (e.g., (555) 123-4567 vs 5551234567)
       const escapedDigits = normalizedDigits.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       searchConditions.push({ 'borrower.phone': new RegExp(`^${escapedDigits}`) });
-      // Also include original format matching for flexibility (in case the stored format matches)
       searchConditions.push({ 'borrower.phone': new RegExp(escapedSearch, 'i') });
     } else {
-      // General phone search - try both original format and normalized
       searchConditions.push({ 'borrower.phone': new RegExp(escapedSearch, 'i') });
-      // If we extracted digits, also try normalized search for better matching
       if (normalizedDigits && normalizedDigits.length >= 7) {
         const escapedDigits = normalizedDigits.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         searchConditions.push({ 'borrower.phone': new RegExp(`^${escapedDigits}`) });
       }
     }
-    
+
     appendOrConditions(searchConditions);
   }
 
@@ -258,31 +246,23 @@ export async function getReferrals(params: GetReferralsParams) {
   if (session?.user?.role === 'mc') {
     const lender = await LenderMC.findOne({ userId: session.user.id }).select('_id');
     if (!lender) {
-      return {
-        items: [],
-        total: 0,
-        page: effectivePage,
-        pageSize: shouldPaginate ? effectivePageSize : 0
-      };
+      return { query, empty: true };
     }
     query.lender = lender._id;
   }
+
   if (session?.user?.role === 'agent') {
-    const agent = await Agent.findOne({ userId: session.user.id }).select('_id');
-    if (!agent) {
-      return {
-        items: [],
-        total: 0,
-        page: effectivePage,
-        pageSize: shouldPaginate ? effectivePageSize : 0
-      };
+    const agentDoc = await Agent.findOne({ userId: session.user.id }).select('_id');
+    if (!agentDoc) {
+      return { query, empty: true };
     }
     appendOrConditions([
-      { assignedAgent: agent._id },
-      { buySideAgent: agent._id },
-      { sellSideAgent: agent._id },
+      { assignedAgent: agentDoc._id },
+      { buySideAgent: agentDoc._id },
+      { sellSideAgent: agentDoc._id },
     ]);
   }
+
   if (mc) {
     if (Types.ObjectId.isValid(mc)) {
       query.lender = new Types.ObjectId(mc);
@@ -295,6 +275,7 @@ export async function getReferrals(params: GetReferralsParams) {
       }
     }
   }
+
   if (agent) {
     if (Types.ObjectId.isValid(agent)) {
       appendOrConditions([
@@ -314,6 +295,31 @@ export async function getReferrals(params: GetReferralsParams) {
         ]);
       }
     }
+  }
+
+  return { query, empty: false };
+}
+
+export async function getReferrals(params: GetReferralsParams) {
+  const { session, page = 1, pageSize, fetchAll = false, status, mc, agent, zip, ahaBucket, agentReferrals, search, timeline, sortBy, sortDirection } = params;
+  await connectMongo();
+  
+  const validPageSizes = [20, 25, 50, 100];
+  const effectivePageSize = pageSize && validPageSizes.includes(pageSize) ? pageSize : 25;
+  const shouldPaginate = !fetchAll;
+  const effectivePage = shouldPaginate ? page : 1;
+
+  const { query, empty } = await buildReferralFilterQuery({
+    session, status, mc, agent, zip, search, ahaBucket, agentReferrals,
+  });
+
+  if (empty) {
+    return {
+      items: [],
+      total: 0,
+      page: effectivePage,
+      pageSize: shouldPaginate ? effectivePageSize : 0,
+    };
   }
 
   const paymentMatch: Record<string, unknown> = {};
@@ -811,4 +817,47 @@ export async function getReferralById(id: string) {
     adminContacts,
     viewerRole
   };
+}
+
+export async function getAdjacentReferralIds(
+  currentId: string,
+  params: {
+    session: Session | null;
+    status?: string | null;
+    mc?: string | null;
+    agent?: string | null;
+    zip?: string | null;
+    search?: string | null;
+    ahaBucket?: string | null;
+    agentReferrals?: string | null;
+    sortBy?: string | null;
+    sortDirection?: 'asc' | 'desc' | null;
+  }
+): Promise<{ prevId: string | null; nextId: string | null }> {
+  const { session, status, mc, agent, zip, search, ahaBucket, agentReferrals, sortBy, sortDirection } = params;
+  await connectMongo();
+
+  const { query, empty } = await buildReferralFilterQuery({
+    session, status, mc, agent, zip, search, ahaBucket, agentReferrals,
+  });
+
+  if (empty) {
+    return { prevId: null, nextId: null };
+  }
+
+  const sortObject = getSortObject(sortBy, sortDirection);
+  const ids = await Referral.find(query)
+    .sort(sortObject)
+    .select('_id')
+    .lean<{ _id: Types.ObjectId }[]>();
+
+  const currentIndex = ids.findIndex((doc) => String(doc._id) === currentId);
+  if (currentIndex === -1) {
+    return { prevId: null, nextId: null };
+  }
+
+  const prevId = currentIndex > 0 ? String(ids[currentIndex - 1]._id) : null;
+  const nextId = currentIndex < ids.length - 1 ? String(ids[currentIndex + 1]._id) : null;
+
+  return { prevId, nextId };
 }

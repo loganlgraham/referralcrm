@@ -14,6 +14,8 @@ import { normalizeReferralStatus, type ReferralStatus, REFERRAL_TIMELINE_OPTIONS
 import { ReferralDeals } from '@/components/referrals/referral-deals';
 import type { ReferralPayment } from '@/types/referral-payment';
 import { formatCurrency, formatDateMST } from '@/utils/formatters';
+import Link from 'next/link';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 type ReferralSource = string;
 type ReferralClientType = 'Seller' | 'Buyer' | 'Both';
@@ -94,6 +96,9 @@ interface ReferralDetailClientProps {
   viewerRole: string;
   notes: ReferralDetailNote[];
   referralId: string;
+  prevReferralId?: string | null;
+  nextReferralId?: string | null;
+  listParams?: string;
 }
 
 
@@ -335,7 +340,7 @@ const formatFullAddress = (
   return [trimmedStreet, localityParts.join(', ')].filter((part) => part && part.length > 0).join(', ');
 };
 
-export function ReferralDetailClient({ referral: initialReferral, viewerRole, notes, referralId }: ReferralDetailClientProps) {
+export function ReferralDetailClient({ referral: initialReferral, viewerRole, notes, referralId, prevReferralId, nextReferralId, listParams }: ReferralDetailClientProps) {
   const router = useRouter();
   const { mutate } = useSWRConfig();
   const [isPending, startTransition] = useTransition();
@@ -1206,8 +1211,43 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     [referral.payments]
   );
 
+  const showNav = (viewerRole === 'admin' || viewerRole === 'manager') && (prevReferralId || nextReferralId);
+  const buildNavHref = (id: string) => listParams ? `/referrals/${id}?${listParams}` : `/referrals/${id}`;
+
   return (
     <div className="space-y-8">
+      {showNav && (
+        <nav className="flex items-center justify-end gap-3" aria-label="Referral navigation">
+          {prevReferralId ? (
+            <Link
+              href={buildNavHref(prevReferralId)}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Prev
+            </Link>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs text-slate-300">
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Prev
+            </span>
+          )}
+          {nextReferralId ? (
+            <Link
+              href={buildNavHref(nextReferralId)}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            >
+              Next
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs text-slate-300">
+              Next
+              <ChevronRight className="h-3.5 w-3.5" />
+            </span>
+          )}
+        </nav>
+      )}
       <ReferralHeader
         referral={headerReferral}
         viewerRole={viewerRole}
