@@ -125,6 +125,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const timeframeParam = searchParams.get('timeframe')?.trim() || null;
   const startParam = searchParams.get('start')?.trim() || null;
   const endParam = searchParams.get('end')?.trim() || null;
+  const usedAgentParam = searchParams.get('usedAgent')?.trim() || null;
+  const usedAfcParam = searchParams.get('usedAfc')?.trim() || null;
 
   await connectMongo();
 
@@ -222,6 +224,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         pageSize: 25
       });
     }
+  }
+
+  if (usedAgentParam === 'true' || usedAgentParam === 'false') {
+    filter.usedAssignedAgent = usedAgentParam === 'true';
+  }
+
+  if (usedAfcParam === 'true' || usedAfcParam === 'false') {
+    filter.usedAfc = usedAfcParam === 'true';
   }
 
   if (role === 'agent') {

@@ -43,6 +43,7 @@ const DESIGNATION_FILTER_OPTIONS: { value: AgentDesignationFilter; label: string
   { value: 'AHA_OOS', label: 'AHA OOS' },
   { value: 'AGIT', label: 'AGIT' },
 ];
+type TriStateFilterValue = 'all' | 'true' | 'false';
 
 interface DealRow {
   _id: string;
@@ -155,6 +156,12 @@ export function DealsTable() {
     : [];
   const sortBy = searchParams.get('sortBy') || null;
   const sortDirection = (searchParams.get('sortDirection') as 'asc' | 'desc') || null;
+  const usedAgentParam = searchParams.get('usedAgent');
+  const usedAfcParam = searchParams.get('usedAfc');
+  const usedAgentFilter: TriStateFilterValue =
+    usedAgentParam === 'true' || usedAgentParam === 'false' ? usedAgentParam : 'all';
+  const usedAfcFilter: TriStateFilterValue =
+    usedAfcParam === 'true' || usedAfcParam === 'false' ? usedAfcParam : 'all';
   const [timeframe, setTimeframe] = useState<TimeframeKey>('all');
   const [customRange, setCustomRange] = useState<DateRange>(() => getPresetRange('month'));
   
@@ -170,6 +177,8 @@ export function DealsTable() {
   if (search) apiParams.set('search', search);
   if (statusFilters.length > 0) apiParams.set('status', statusFilters.join(','));
   if (designationFilters.length > 0) apiParams.set('designation', designationFilters.join(','));
+  if (usedAgentFilter !== 'all') apiParams.set('usedAgent', usedAgentFilter);
+  if (usedAfcFilter !== 'all') apiParams.set('usedAfc', usedAfcFilter);
   if (sortBy) apiParams.set('sortBy', sortBy);
   if (sortDirection) apiParams.set('sortDirection', sortDirection);
   
@@ -194,6 +203,8 @@ export function DealsTable() {
       search?: string;
       status?: string;
       designation?: string;
+      usedAgent?: TriStateFilterValue;
+      usedAfc?: TriStateFilterValue;
       page?: number;
       sortBy?: string;
       sortDirection?: 'asc' | 'desc';
@@ -225,6 +236,24 @@ export function DealsTable() {
           params.delete('designation');
         } else {
           params.set('designation', updates.designation);
+        }
+        params.delete('page');
+      }
+
+      if (updates.usedAgent !== undefined) {
+        if (updates.usedAgent === 'all') {
+          params.delete('usedAgent');
+        } else {
+          params.set('usedAgent', updates.usedAgent);
+        }
+        params.delete('page');
+      }
+
+      if (updates.usedAfc !== undefined) {
+        if (updates.usedAfc === 'all') {
+          params.delete('usedAfc');
+        } else {
+          params.set('usedAfc', updates.usedAfc);
         }
         params.delete('page');
       }
@@ -286,6 +315,13 @@ export function DealsTable() {
     timeframe === 'custom'
       ? formatDisplayRange(customRange)
       : TIMEFRAME_PRESETS.find((o) => o.value === timeframe)?.label ?? 'Select timeframe';
+  const hasActiveFilters =
+    Boolean(search.trim()) ||
+    statusFilters.length > 0 ||
+    designationFilters.length > 0 ||
+    usedAgentFilter !== 'all' ||
+    usedAfcFilter !== 'all' ||
+    timeframe !== 'all';
 
   const getDealAddress = (deal: DealRow) => {
     const address = (deal.propertyAddress ?? deal.referral?.propertyAddress ?? '').trim();
@@ -1102,7 +1138,9 @@ export function DealsTable() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Deals</h1>
           <p className="text-sm text-slate-500">
-            {data ? `${data.total} deal${data.total !== 1 ? 's' : ''}` : 'Loading...'}
+            {data
+              ? `${data.total} ${hasActiveFilters ? 'filtered ' : ''}deal${data.total !== 1 ? 's' : ''}`
+              : 'Loading...'}
             {timeframe !== 'all' && isAdminView ? ` · ${timeframeLabel}` : ''}
           </p>
         </div>
@@ -1241,6 +1279,36 @@ export function DealsTable() {
                   )}
                 </div>
               </div>
+              <label className="md:w-44">
+                <span className="block text-xs font-semibold text-slate-600">Used Agent</span>
+                <select
+                  value={usedAgentFilter}
+                  onChange={(event) =>
+                    updateParams({ usedAgent: event.target.value as TriStateFilterValue })
+                  }
+                  className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={isPending}
+                >
+                  <option value="all">All</option>
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
+                </select>
+              </label>
+              <label className="md:w-44">
+                <span className="block text-xs font-semibold text-slate-600">Used AFC</span>
+                <select
+                  value={usedAfcFilter}
+                  onChange={(event) =>
+                    updateParams({ usedAfc: event.target.value as TriStateFilterValue })
+                  }
+                  className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={isPending}
+                >
+                  <option value="all">All</option>
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
+                </select>
+              </label>
             </>
           )}
         </div>
