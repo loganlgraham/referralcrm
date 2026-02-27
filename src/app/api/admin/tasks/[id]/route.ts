@@ -95,6 +95,7 @@ export async function PATCH(
         );
       }
       update.dueAtOverride = date;
+      unsetFields.snoozedUntil = '';
     }
   } else if (action === 'edit') {
     if (body.title !== undefined) update.title = String(body.title).trim();
