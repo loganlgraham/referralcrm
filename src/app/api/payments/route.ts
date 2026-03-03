@@ -410,7 +410,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const statusAllowsPaid = statusList.length === 0 || statusList.includes('paid');
-  let receivedRevenueCents = 0;
+  let receivedRevenueCents: number | null = null;
 
   if (statusAllowsPaid) {
     const receivedRevenueFilter: Record<string, unknown> = { ...filter, status: 'paid' };
@@ -634,9 +634,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     total,
     page,
     pageSize,
-    summary: {
-      receivedRevenueCents
-    }
+    ...(receivedRevenueCents !== null
+      ? {
+          summary: {
+            receivedRevenueCents
+          }
+        }
+      : {})
   });
 }
 
