@@ -853,6 +853,19 @@ export function ReferralDeals({
     }
   }, [commissionPercentage, contractPrice, referralFeePercentage, expectedManuallyEdited]);
 
+  useEffect(() => {
+    if (isAgentOrigin || usedAssignedAgent) {
+      return;
+    }
+
+    // Outside-agent deals do not carry owed fee values.
+    setCommissionPercentage('');
+    setReferralFeePercentage('');
+    setExpectedAmount('');
+    setExpectedManuallyEdited(false);
+    setNetReferralFeePaid('');
+  }, [isAgentOrigin, usedAssignedAgent]);
+
   const sortedDeals = useMemo(
     () => [...deals].sort((a, b) => {
       const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -866,32 +879,39 @@ export function ReferralDeals({
     event.preventDefault();
     if (!canManage || submitting) return;
 
-    const expectedAmountCents = isAgentOrigin ? 0 : toCents(expectedAmount);
-    let netReferralFeePaidCents = isAgentOrigin ? 0 : toCents(netReferralFeePaid);
+    const isOutsideAgent = !isAgentOrigin && !usedAssignedAgent;
+    const expectedAmountCents = isAgentOrigin || isOutsideAgent ? 0 : toCents(expectedAmount);
+    let netReferralFeePaidCents = isAgentOrigin || isOutsideAgent ? 0 : toCents(netReferralFeePaid);
     const contractPriceCents = contractPrice ? toCents(contractPrice) : null;
-    const commissionBasisPoints = isAgentOrigin
+    const commissionBasisPoints = isAgentOrigin || isOutsideAgent
       ? null
       : commissionPercentage
           ? Math.round(Number.parseFloat(commissionPercentage) * 100)
           : null;
-    const referralFeeBasisPoints = isAgentOrigin
+    const referralFeeBasisPoints = isAgentOrigin || isOutsideAgent
       ? null
       : referralFeePercentage
           ? Math.round(Number.parseFloat(referralFeePercentage) * 100)
           : null;
 
     const shouldComputeExpected =
-      !isAgentOrigin && !expectedAmountCents && contractPriceCents && commissionBasisPoints && referralFeeBasisPoints;
+      !isAgentOrigin &&
+      !isOutsideAgent &&
+      !expectedAmountCents &&
+      contractPriceCents &&
+      commissionBasisPoints &&
+      referralFeeBasisPoints;
     const computedExpected = shouldComputeExpected
       ? Math.round((contractPriceCents * commissionBasisPoints * referralFeeBasisPoints) / 100_000_000)
       : 0;
-    const finalExpectedAmountCents = isAgentOrigin ? 0 : expectedAmountCents || computedExpected;
+    const finalExpectedAmountCents =
+      isAgentOrigin || isOutsideAgent ? 0 : expectedAmountCents || computedExpected;
 
-    if (!isAgentOrigin && markPaid && !netReferralFeePaidCents && finalExpectedAmountCents) {
+    if (!isAgentOrigin && !isOutsideAgent && markPaid && !netReferralFeePaidCents && finalExpectedAmountCents) {
       netReferralFeePaidCents = finalExpectedAmountCents;
     }
 
-    if (!isAgentOrigin && !finalExpectedAmountCents) {
+    if (!isAgentOrigin && !isOutsideAgent && !finalExpectedAmountCents) {
       toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
       return;
     }
@@ -929,6 +949,7 @@ export function ReferralDeals({
           agentId: agentId || null,
           usedAfc: isAgentOrigin ? false : usedAfc,
           usedAssignedAgent: isAgentOrigin ? true : usedAssignedAgent,
+          agentAttribution: isOutsideAgent ? 'OUTSIDE_AGENT' : null,
           side,
           terminatedReason: statusToSend === 'terminated' ? terminatedReason : null,
         }),
@@ -1183,7 +1204,7 @@ export function ReferralDeals({
                   onChange={(event) => setCommissionPercentage(event.target.value)}
                   className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                   placeholder="0.00"
-                  disabled={submitting}
+                  disabled={submitting || !usedAssignedAgent}
                 />
               </label>
               <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -1197,7 +1218,7 @@ export function ReferralDeals({
                   onChange={(event) => setReferralFeePercentage(event.target.value)}
                   className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                   placeholder="0.00"
-                  disabled={submitting}
+                  disabled={submitting || !usedAssignedAgent}
                 />
               </label>
               <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -1215,7 +1236,7 @@ export function ReferralDeals({
                   }}
                   className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                   placeholder="0.00"
-                  disabled={submitting}
+                  disabled={submitting || !usedAssignedAgent}
                 />
               </label>
               <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -1229,7 +1250,7 @@ export function ReferralDeals({
                   onChange={(event) => setNetReferralFeePaid(event.target.value)}
                   className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                   placeholder="0.00"
-                  disabled={submitting}
+                  disabled={submitting || !usedAssignedAgent}
                 />
               </label>
             </>
@@ -1378,6 +1399,11 @@ export function ReferralDeals({
               />
               Used Agent
             </label>
+            {!isAgentOrigin && !usedAssignedAgent && (
+              <p className="text-xs text-slate-500">
+                Outside-agent deal selected: commission/referral fee fields are disabled and owed amount is forced to $0.
+              </p>
+            )}
             <label className="flex items-center gap-2 text-slate-700">
               <input
                 type="checkbox"

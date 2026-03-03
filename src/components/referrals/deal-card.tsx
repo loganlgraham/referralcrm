@@ -437,25 +437,26 @@ export function DealCard({
 
   const handleSaveDealDetails = (deal: DealRecord) => async () => {
     const draft = detailDraftMap[deal._id] ?? getDefaultDraft(deal);
+    const isOutsideAgent = (agentMap[deal._id] ?? '') === 'OUTSIDE_AGENT';
     const contractPriceCents = parseCurrencyInput(draft.contractPrice);
     const commissionBasisPoints = parsePercentInput(draft.commissionPercent);
     const referralFeeBasisPoints = isAgentOrigin ? 0 : parsePercentInput(draft.referralFeePercent);
 
-    if (contractPriceCents == null || commissionBasisPoints == null) {
+    if (!isOutsideAgent && (contractPriceCents == null || commissionBasisPoints == null)) {
       toast.error('Enter the contract price and commission % before saving.');
       return;
     }
 
-    if (!isAgentOrigin && referralFeeBasisPoints == null) {
+    if (!isAgentOrigin && !isOutsideAgent && referralFeeBasisPoints == null) {
       toast.error('Enter the referral fee % before saving.');
       return;
     }
 
-    const expectedAmountCents = isAgentOrigin
+    const expectedAmountCents = isAgentOrigin || isOutsideAgent
       ? 0
       : deriveReferralFeeCents(contractPriceCents, commissionBasisPoints, referralFeeBasisPoints ?? 0);
 
-    if (!isAgentOrigin && (!expectedAmountCents || expectedAmountCents <= 0)) {
+    if (!isAgentOrigin && !isOutsideAgent && (!expectedAmountCents || expectedAmountCents <= 0)) {
       toast.error('Enter valid deal details to calculate the referral fee.');
       return;
     }
@@ -468,11 +469,14 @@ export function DealCard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: deal._id,
-          contractPriceCents,
-          commissionBasisPoints,
-          referralFeeBasisPoints: referralFeeBasisPoints ?? 0,
+          contractPriceCents: contractPriceCents ?? null,
+          commissionBasisPoints: isOutsideAgent ? null : commissionBasisPoints,
+          referralFeeBasisPoints: isOutsideAgent ? 0 : referralFeeBasisPoints ?? 0,
           side: draft.side,
           expectedAmountCents,
+          receivedAmountCents: isOutsideAgent ? 0 : undefined,
+          usedAssignedAgent: isOutsideAgent ? false : true,
+          agentAttribution: isOutsideAgent ? 'OUTSIDE_AGENT' : null,
         }),
       });
 
@@ -494,10 +498,13 @@ export function DealCard({
             ? {
                 ...item,
                 contractPriceCents,
-                commissionBasisPoints,
-                referralFeeBasisPoints,
+                commissionBasisPoints: isOutsideAgent ? null : commissionBasisPoints,
+                referralFeeBasisPoints: isOutsideAgent ? 0 : referralFeeBasisPoints,
                 side: draft.side,
                 expectedAmountCents,
+                receivedAmountCents: isOutsideAgent ? 0 : item.receivedAmountCents,
+                usedAssignedAgent: isOutsideAgent ? false : true,
+                agentAttribution: isOutsideAgent ? 'OUTSIDE_AGENT' : null,
                 updatedAt: new Date().toISOString(),
               }
             : item
@@ -511,8 +518,8 @@ export function DealCard({
         ...previous,
         [deal._id]: {
           contractPrice: formatDraftCurrency(contractPriceCents),
-          commissionPercent: formatDraftPercent(commissionBasisPoints),
-          referralFeePercent: formatDraftPercent(referralFeeBasisPoints),
+          commissionPercent: isOutsideAgent ? '' : formatDraftPercent(commissionBasisPoints),
+          referralFeePercent: isOutsideAgent ? '' : formatDraftPercent(referralFeeBasisPoints),
           side: draft.side,
         },
       }));
@@ -876,6 +883,44 @@ export function DealCard({
           throw new Error('Unable to update agent outcome');
         }
 
+        let updatedDeals: DealRecord[] | null = null;
+        setDeals((previous) => {
+          updatedDeals = previous.map((item) =>
+            item._id === deal._id
+              ? {
+                  ...item,
+                  agentAttribution: nextAttribution,
+                  usedAssignedAgent: nextOutcome !== 'OUTSIDE_AGENT',
+                  expectedAmountCents:
+                    nextOutcome === 'OUTSIDE_AGENT'
+                      ? 0
+                      : expectedAmountCents > 0
+                      ? expectedAmountCents
+                      : item.expectedAmountCents,
+                  receivedAmountCents: nextOutcome === 'OUTSIDE_AGENT' ? 0 : item.receivedAmountCents,
+                }
+              : item
+          );
+          return updatedDeals;
+        });
+        if (updatedDeals && onDealsChange) {
+          onDealsChange(updatedDeals);
+        }
+
+        if (nextOutcome === 'OUTSIDE_AGENT') {
+          setDetailDraftMap((previous) => {
+            const current = previous[deal._id] ?? getDefaultDraft(deal);
+            return {
+              ...previous,
+              [deal._id]: {
+                ...current,
+                commissionPercent: '',
+                referralFeePercent: '',
+              },
+            };
+          });
+        }
+
         toast.success('Agent outcome saved');
       } catch (error) {
         console.error(error);
@@ -1050,6 +1095,7 @@ export function DealCard({
     const selectedReason = reasonMap[deal._id] ?? deal.terminatedReason ?? 'inspection';
     const agentSelection = agentMap[deal._id] ?? '';
     const agentOutcomeSelection = agentSelection === 'OUTSIDE_AGENT' ? 'OUTSIDE_AGENT' : 'USED_AGENT';
+    const isOutsideAgentSelected = agentOutcomeSelection === 'OUTSIDE_AGENT';
     const usedAfc = afcMap[deal._id] ?? false;
     const assignedBucket = referral.ahaBucket ?? null;
     const matchesAssigned =
@@ -1234,7 +1280,7 @@ export function DealCard({
                     onChange={handleDraftChange('commissionPercent')}
                     className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
                     placeholder="3"
-                    disabled={isDetailSaving}
+                    disabled={isDetailSaving || isOutsideAgentSelected}
                   />
                 </label>
                 {!isAgentOrigin && (
@@ -1247,7 +1293,7 @@ export function DealCard({
                       onChange={handleDraftChange('referralFeePercent')}
                       className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
                       placeholder="25"
-                      disabled={isDetailSaving}
+                      disabled={isDetailSaving || isOutsideAgentSelected}
                     />
                   </label>
                 )}
@@ -1267,6 +1313,8 @@ export function DealCard({
               <div className="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
                 {isAgentOrigin ? (
                   <p>No referral fee is collected for agent-sourced deals.</p>
+                ) : isOutsideAgentSelected ? (
+                  <p>Outside-agent deal selected. Owed referral fee is forced to $0.</p>
                 ) : (
                   <p>
                     Projected Referral Fee:{' '}
@@ -1314,10 +1362,15 @@ export function DealCard({
                   <p className="text-xs text-slate-500">
                     {isAgentOrigin
                       ? 'Update the contract details to keep this deal accurate for reporting.'
+                      : isOutsideAgentSelected
+                      ? 'Outside-agent deals are tracked for reporting and keep owed amount at $0.'
                       : 'Update the contract and percentage details to keep this referral fee accurate for reporting.'}
                   </p>
                 )}
-                {expectedAmountCents <= 0 && status !== 'terminated' && !isAgentOrigin && (
+                {expectedAmountCents <= 0 &&
+                  status !== 'terminated' &&
+                  !isAgentOrigin &&
+                  !isOutsideAgentSelected && (
                   <p className="mt-2 text-xs text-amber-600">
                     Enter contract details to calculate the referral fee before updating deal status.
                   </p>

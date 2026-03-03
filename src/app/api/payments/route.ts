@@ -620,6 +620,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const isAgentOrigin = referralForCreate.origin === 'agent';
   const fallbackSide = referralForCreate.dealSide === 'sell' ? 'sell' : 'buy';
+  const requestedUsedAssignedAgent = parsed.data.usedAssignedAgent ?? true;
+  const requestedAgentAttribution = parsed.data.agentAttribution ?? null;
+  const isOutsideAgent =
+    !isAgentOrigin &&
+    (requestedUsedAssignedAgent === false || requestedAgentAttribution === 'OUTSIDE_AGENT');
+  const normalizedUsedAssignedAgent = isOutsideAgent ? false : requestedUsedAssignedAgent;
+  const normalizedAgentAttribution = isOutsideAgent ? 'OUTSIDE_AGENT' : requestedAgentAttribution;
   let defaultAgentId: Types.ObjectId | string | null = null;
 
   if (session.user.role === 'agent' && referralForCreate.assignedAgent) {
@@ -634,13 +641,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const payment = await Payment.create({
     referralId: parsed.data.referralId,
     status: parsed.data.status,
-    expectedAmountCents: isAgentOrigin ? 0 : parsed.data.expectedAmountCents,
-    receivedAmountCents: isAgentOrigin ? 0 : parsed.data.receivedAmountCents,
+    expectedAmountCents: isAgentOrigin || isOutsideAgent ? 0 : parsed.data.expectedAmountCents,
+    receivedAmountCents: isAgentOrigin || isOutsideAgent ? 0 : parsed.data.receivedAmountCents,
     terminatedReason: parsed.data.terminatedReason ?? null,
-    agentAttribution: parsed.data.agentAttribution ?? null,
+    agentAttribution: isAgentOrigin ? null : normalizedAgentAttribution,
     usedAfc: parsed.data.usedAfc ?? true,
-    usedAssignedAgent: parsed.data.usedAssignedAgent ?? true,
-    netReferralFeePaidCents: isAgentOrigin ? 0 : parsed.data.netReferralFeePaidCents ?? null,
+    usedAssignedAgent: isAgentOrigin ? true : normalizedUsedAssignedAgent,
+    netReferralFeePaidCents:
+      isAgentOrigin || isOutsideAgent ? 0 : parsed.data.netReferralFeePaidCents ?? null,
     propertyAddress: parsed.data.propertyAddress ?? null,
     closingDate: parsed.data.closingDate ?? null,
     invoiceDate: parsed.data.invoiceDate,
@@ -656,6 +664,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   });
   if (referralForCreate) {
     let referralUpdated = false;
+    let previousReferralStatusForLostLog: string | null = null;
     if (parsed.data.propertyAddress !== undefined) {
       referralForCreate.propertyAddress = parsed.data.propertyAddress ?? '';
       referralUpdated = true;
@@ -668,8 +677,50 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       referralForCreate.propertyState = parsed.data.propertyState ?? '';
       referralUpdated = true;
     }
+
+    if (isOutsideAgent) {
+      const previousReferralStatus = referralForCreate.status ?? null;
+      const now = new Date();
+      previousReferralStatusForLostLog = previousReferralStatus;
+
+      referralForCreate.estPurchasePriceCents = 0;
+      referralForCreate.referralFeeDueCents = 0;
+      referralForCreate.status = 'Lost';
+      referralForCreate.statusLastUpdated = now;
+      referralForCreate.audit = Array.isArray(referralForCreate.audit) ? referralForCreate.audit : [];
+
+      const auditEntry: Record<string, unknown> = {
+        actorRole: session.user.role,
+        field: 'status',
+        previousValue: previousReferralStatus,
+        newValue: 'Lost',
+        timestamp: now,
+      };
+      const actorId = resolveAuditActorId(session.user.id);
+      if (actorId) {
+        auditEntry.actorId = actorId;
+      }
+      referralForCreate.audit.push(auditEntry as any);
+      referralUpdated = true;
+
+      await Payment.updateMany(
+        { referralId: referralForCreate._id },
+        { $set: { expectedAmountCents: 0, receivedAmountCents: 0 } }
+      );
+
+    }
+
     if (referralUpdated) {
       await referralForCreate.save();
+    }
+    if (previousReferralStatusForLostLog && previousReferralStatusForLostLog !== 'Lost') {
+      await logReferralActivity({
+        referralId: referralForCreate._id.toString(),
+        actorRole: session.user.role,
+        actorId: session.user.id,
+        channel: 'status',
+        content: `Status changed from ${previousReferralStatusForLostLog} to Lost`,
+      });
     }
   }
 
