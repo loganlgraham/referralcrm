@@ -132,6 +132,9 @@ interface PaymentsResponse {
   total: number;
   page: number;
   pageSize: number;
+  summary?: {
+    receivedRevenueCents?: number;
+  };
 }
 
 export function DealsTable() {
@@ -525,6 +528,7 @@ export function DealsTable() {
       totalTerminated: 0,
     }
   );
+  const adminReceivedRevenue = data?.summary?.receivedRevenueCents ?? aggregates.receivedRevenue;
 
   const totalCommission = aggregates.commissionEarned - aggregates.referralFeesPaid;
 
@@ -533,7 +537,7 @@ export function DealsTable() {
       return (
         <div className="grid gap-4 sm:grid-cols-2">
           <SummaryCard label="Expected Revenue" value={formatCurrency(aggregates.expectedRevenue)} />
-          <SummaryCard label="Received Revenue" value={formatCurrency(aggregates.receivedRevenue)} />
+          <SummaryCard label="Received Revenue" value={formatCurrency(adminReceivedRevenue)} />
         </div>
       );
     }
