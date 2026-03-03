@@ -163,48 +163,47 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   };
 
   const filter: Record<string, unknown> = {};
-  
+  const statusList = statusFilter
+    ? statusFilter.split(',').map((s) => s.trim()).filter(Boolean)
+    : [];
+  const now = new Date();
+  let timeframeStart: Date | null = null;
+  let timeframeEnd: Date = endOfDay(now);
+
   // Add status filter if provided (can be comma-separated)
-  if (statusFilter) {
-    const statusList = statusFilter.split(',').map(s => s.trim()).filter(Boolean);
-    if (statusList.length === 1) {
-      filter.status = statusList[0];
-    } else if (statusList.length > 1) {
-      filter.status = { $in: statusList };
+  if (statusList.length === 1) {
+    filter.status = statusList[0];
+  } else if (statusList.length > 1) {
+    filter.status = { $in: statusList };
+  }
+
+  if (timeframeParam && timeframeParam !== 'all') {
+    switch (timeframeParam) {
+      case 'day':
+        timeframeStart = startOfDay(now);
+        break;
+      case 'week':
+        timeframeStart = startOfWeek(now, { weekStartsOn: 1 });
+        break;
+      case 'month':
+        timeframeStart = startOfMonth(now);
+        break;
+      case 'year':
+        timeframeStart = subYears(now, 1);
+        break;
+      case 'ytd':
+        timeframeStart = startOfYear(now);
+        break;
+      case 'custom':
+        if (startParam) timeframeStart = startOfDay(new Date(startParam));
+        if (endParam) timeframeEnd = endOfDay(new Date(endParam));
+        break;
     }
   }
 
-  // Add closingDate range filter when timeframe is set (admin/manager deals page)
-  if (timeframeParam && timeframeParam !== 'all') {
-    const now = new Date();
-    let rangeStart: Date | null = null;
-    let rangeEnd: Date = endOfDay(now);
-
-    switch (timeframeParam) {
-      case 'day':
-        rangeStart = startOfDay(now);
-        break;
-      case 'week':
-        rangeStart = startOfWeek(now, { weekStartsOn: 1 });
-        break;
-      case 'month':
-        rangeStart = startOfMonth(now);
-        break;
-      case 'year':
-        rangeStart = subYears(now, 1);
-        break;
-      case 'ytd':
-        rangeStart = startOfYear(now);
-        break;
-      case 'custom':
-        if (startParam) rangeStart = startOfDay(new Date(startParam));
-        if (endParam) rangeEnd = endOfDay(new Date(endParam));
-        break;
-    }
-
-    if (rangeStart) {
-      filter.closingDate = { $gte: rangeStart, $lte: rangeEnd };
-    }
+  // Keep closingDate filtering for table rows.
+  if (timeframeStart) {
+    filter.closingDate = { $gte: timeframeStart, $lte: timeframeEnd };
   }
 
   // Add agent designation filter for admin/manager (server-side)
@@ -284,22 +283,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Use aggregation if search is provided, otherwise use simple find
-  let payments: PaymentWithReferral[];
-  let total: number;
+  const buildSearchPipeline = (searchTerm: string): PipelineStage[] => {
+    const escapedSearch = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const normalizedDigits = searchTerm.replace(/\D/g, '');
 
-  if (search) {
-    // Build aggregation pipeline for search
-    const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const normalizedDigits = search.replace(/\D/g, '');
-    
     const searchConditions: Record<string, unknown>[] = [
       { 'referral.borrower.name': new RegExp(escapedSearch, 'i') },
       { 'referral.loanFileNumber': new RegExp(escapedSearch, 'i') },
       { propertyAddress: new RegExp(escapedSearch, 'i') },
       { 'referral.propertyAddress': new RegExp(escapedSearch, 'i') }
     ];
-    
+
     if (normalizedDigits) {
       searchConditions.push(
         { 'referral.loanFileNumber': new RegExp(normalizedDigits) },
@@ -308,8 +302,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const pipeline: PipelineStage[] = [
-      { $match: filter },
+    return [
       {
         $lookup: {
           from: 'referrals',
@@ -343,7 +336,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             { 'assignedAgent.name': new RegExp(escapedSearch, 'i') }
           ]
         }
-      },
+      }
+    ];
+  };
+
+  // Use aggregation if search is provided, otherwise use simple find
+  let payments: PaymentWithReferral[];
+  let total: number;
+
+  if (search) {
+    const searchPipeline = buildSearchPipeline(search);
+    const pipeline: PipelineStage[] = [
+      { $match: filter },
+      ...searchPipeline,
       { $sort: getSortObject(sortBy, sortDirection) }
     ];
 
@@ -402,6 +407,43 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         .lean<PaymentWithReferral[]>(),
       Payment.countDocuments(filter)
     ]);
+  }
+
+  const statusAllowsPaid = statusList.length === 0 || statusList.includes('paid');
+  let receivedRevenueCents: number | null = null;
+
+  if (statusAllowsPaid) {
+    const receivedRevenueFilter: Record<string, unknown> = { ...filter, status: 'paid' };
+    delete receivedRevenueFilter.closingDate;
+    if (timeframeStart) {
+      receivedRevenueFilter.paidDate = { $gte: timeframeStart, $lte: timeframeEnd };
+    }
+
+    if (search) {
+      const summaryPipeline: PipelineStage[] = [
+        { $match: receivedRevenueFilter },
+        ...buildSearchPipeline(search),
+        {
+          $group: {
+            _id: null,
+            receivedRevenueCents: { $sum: { $ifNull: ['$receivedAmountCents', 0] } }
+          }
+        }
+      ];
+      const summaryResult = await Payment.aggregate(summaryPipeline);
+      receivedRevenueCents = summaryResult[0]?.receivedRevenueCents ?? 0;
+    } else {
+      const summaryResult = await Payment.aggregate([
+        { $match: receivedRevenueFilter },
+        {
+          $group: {
+            _id: null,
+            receivedRevenueCents: { $sum: { $ifNull: ['$receivedAmountCents', 0] } }
+          }
+        }
+      ]);
+      receivedRevenueCents = summaryResult[0]?.receivedRevenueCents ?? 0;
+    }
   }
 
   const agentIds = new Set<string>();
@@ -591,7 +633,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     items: serialized,
     total,
     page,
-    pageSize
+    pageSize,
+    ...(receivedRevenueCents !== null
+      ? {
+          summary: {
+            receivedRevenueCents
+          }
+        }
+      : {})
   });
 }
 
