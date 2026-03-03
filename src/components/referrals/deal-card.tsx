@@ -476,7 +476,7 @@ export function DealCard({
           expectedAmountCents,
           receivedAmountCents: isOutsideAgent ? 0 : undefined,
           usedAssignedAgent: isOutsideAgent ? false : true,
-          agentAttribution: isOutsideAgent ? 'OUTSIDE_AGENT' : null,
+          agentAttribution: isOutsideAgent ? 'OUTSIDE_AGENT' : undefined,
         }),
       });
 
@@ -491,9 +491,9 @@ export function DealCard({
         throw new Error(message);
       }
 
-      let updatedDeals: DealRecord[] | null = null;
+      let updatedDeals: DealRecord[] = [];
       setDeals((previous) => {
-        updatedDeals = previous.map((item) =>
+        const nextDeals = previous.map((item) =>
           item._id === deal._id
             ? {
                 ...item,
@@ -504,14 +504,17 @@ export function DealCard({
                 expectedAmountCents,
                 receivedAmountCents: isOutsideAgent ? 0 : item.receivedAmountCents,
                 usedAssignedAgent: isOutsideAgent ? false : true,
-                agentAttribution: isOutsideAgent ? 'OUTSIDE_AGENT' : null,
+                agentAttribution: (isOutsideAgent
+                  ? 'OUTSIDE_AGENT'
+                  : item.agentAttribution ?? '') as AgentSelectValue,
                 updatedAt: new Date().toISOString(),
               }
             : item
         );
-        return updatedDeals;
+        updatedDeals = nextDeals;
+        return nextDeals;
       });
-      if (updatedDeals && onDealsChange) {
+      if (onDealsChange) {
         onDealsChange(updatedDeals);
       }
       setDetailDraftMap((previous) => ({
@@ -837,7 +840,7 @@ export function DealCard({
     }
   };
 
-  const resolveAssignedAgentOutcome = () => {
+  const resolveAssignedAgentOutcome = (): 'AHA' | 'AHA_OOS' | null => {
     if (referral.ahaBucket === 'AHA' || referral.ahaBucket === 'AHA_OOS') {
       return referral.ahaBucket;
     }
@@ -848,7 +851,7 @@ export function DealCard({
     (deal: DealRecord, expectedAmountCents: number) =>
     async (event: ChangeEvent<HTMLSelectElement>) => {
       const nextOutcome = event.target.value as 'USED_AGENT' | 'OUTSIDE_AGENT';
-      const nextAttribution =
+      const nextAttribution: AgentSelectValue | null =
         nextOutcome === 'OUTSIDE_AGENT' ? 'OUTSIDE_AGENT' : resolveAssignedAgentOutcome();
       const previousValue = agentMap[deal._id] ?? '';
 
@@ -883,13 +886,13 @@ export function DealCard({
           throw new Error('Unable to update agent outcome');
         }
 
-        let updatedDeals: DealRecord[] | null = null;
+        let updatedDeals: DealRecord[] = [];
         setDeals((previous) => {
-          updatedDeals = previous.map((item) =>
+          const nextDeals = previous.map((item) =>
             item._id === deal._id
               ? {
                   ...item,
-                  agentAttribution: nextAttribution,
+                  agentAttribution: (nextAttribution ?? '') as AgentSelectValue,
                   usedAssignedAgent: nextOutcome !== 'OUTSIDE_AGENT',
                   expectedAmountCents:
                     nextOutcome === 'OUTSIDE_AGENT'
@@ -901,9 +904,10 @@ export function DealCard({
                 }
               : item
           );
-          return updatedDeals;
+          updatedDeals = nextDeals;
+          return nextDeals;
         });
-        if (updatedDeals && onDealsChange) {
+        if (onDealsChange) {
           onDealsChange(updatedDeals);
         }
 
@@ -957,9 +961,9 @@ export function DealCard({
         throw new Error('Unable to update deal agent');
       }
 
-      let updatedDeals: DealRecord[] | null = null;
+      let updatedDeals: DealRecord[] = [];
       setDeals((previous) => {
-        updatedDeals = previous.map((item) =>
+        const nextDeals = previous.map((item) =>
           item._id === deal._id
             ? {
                 ...item,
@@ -970,9 +974,10 @@ export function DealCard({
               }
             : item
         );
-        return updatedDeals;
+        updatedDeals = nextDeals;
+        return nextDeals;
       });
-      if (updatedDeals && onDealsChange) {
+      if (onDealsChange) {
         onDealsChange(updatedDeals);
       }
       toast.success('Deal agent saved');
