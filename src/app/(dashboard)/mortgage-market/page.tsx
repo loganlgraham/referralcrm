@@ -1,11 +1,11 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
-import { MortgageMarketInsights } from '@/components/mortgage/mortgage-market-insights';
+import { MarketIntelWidget } from '@/components/mortgage/market-intel-widget';
 import { getCurrentSession } from '@/lib/auth';
 
 export const metadata: Metadata = {
-  title: 'Mortgage Market | Referral CRM',
+  title: 'Market Intelligence | Referral CRM',
 };
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ export default async function MortgageMarketPage() {
 
   return (
     <div className="space-y-6">
-      <MortgageMarketInsights />
+      <MarketIntelWidget />
     </div>
   );
 }
