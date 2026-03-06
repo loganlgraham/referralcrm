@@ -815,11 +815,11 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     parsed.data.contractPriceCents !== undefined
       ? parsed.data.contractPriceCents
       : existingPayment.contractPriceCents ?? null;
-  const nextCommissionBasisPoints =
+  let nextCommissionBasisPoints =
     parsed.data.commissionBasisPoints !== undefined
       ? parsed.data.commissionBasisPoints ?? null
       : existingPayment.commissionBasisPoints ?? null;
-  const nextReferralFeeBasisPoints =
+  let nextReferralFeeBasisPoints =
     parsed.data.referralFeeBasisPoints !== undefined
       ? parsed.data.referralFeeBasisPoints ?? null
       : existingPayment.referralFeeBasisPoints ?? null;
@@ -879,6 +879,14 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     } else if (nextAgentAttribution === 'AHA' || nextAgentAttribution === 'AHA_OOS') {
       nextUsedAssignedAgent = true;
     }
+  }
+
+  const isOutsideAgentDeal = !isAgentOrigin && !nextUsedAssignedAgent;
+  if (isOutsideAgentDeal) {
+    nextCommissionBasisPoints = null;
+    nextReferralFeeBasisPoints = null;
+    nextExpectedAmountCents = 0;
+    nextReceivedAmountCents = 0;
   }
 
   const updatePayload: Record<string, unknown> = { ...parsed.data };

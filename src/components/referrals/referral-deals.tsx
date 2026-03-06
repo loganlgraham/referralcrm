@@ -18,6 +18,7 @@ interface ReferralDealsProps {
   viewerRole?: string;
   referralOrigin?: 'agent' | 'admin' | 'mc' | null;
   feeBreakdownAutoSendEnabled?: boolean;
+  hiddenOutsideAgentCount?: number;
 }
 
 type AgentOption = { id: string; name: string };
@@ -150,6 +151,7 @@ function DealCard({
     (deal.terminatedReason as TerminatedReason | undefined) ?? null
   );
   const agentCreatedReferral = Boolean(isAgentOrigin);
+  const isOutsideAgent = !agentCreatedReferral && !usedAssignedAgent;
   const router = useRouter();
 
   const populateFromDeal = useCallback(() => {
@@ -214,7 +216,7 @@ function DealCard({
   };
 
   useEffect(() => {
-    if (expectedManuallyEdited || agentCreatedReferral) return;
+    if (expectedManuallyEdited || agentCreatedReferral || isOutsideAgent) return;
     const contract = Number.parseFloat(contractPrice);
     const commission = Number.parseFloat(commissionPercentage);
     const referral = Number.parseFloat(referralFeePercentage);
@@ -224,21 +226,33 @@ function DealCard({
         setExpectedAmount(computed.toFixed(2));
       }
     }
-    }, [commissionPercentage, contractPrice, referralFeePercentage, expectedManuallyEdited, agentCreatedReferral]);
+    }, [commissionPercentage, contractPrice, referralFeePercentage, expectedManuallyEdited, agentCreatedReferral, isOutsideAgent]);
+
+  useEffect(() => {
+    if (!isOutsideAgent) {
+      return;
+    }
+
+    setCommissionPercentage('');
+    setReferralFeePercentage('');
+    setExpectedAmount('');
+    setExpectedManuallyEdited(false);
+    setNetReferralFeePaid('');
+  }, [isOutsideAgent]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canManage || saving) return;
 
-    const expectedAmountCents = agentCreatedReferral ? 0 : toCents(expectedAmount);
-    let netReferralFeePaidCents = agentCreatedReferral ? 0 : toCents(netReferralFeePaid);
+    const expectedAmountCents = agentCreatedReferral || isOutsideAgent ? 0 : toCents(expectedAmount);
+    let netReferralFeePaidCents = agentCreatedReferral || isOutsideAgent ? 0 : toCents(netReferralFeePaid);
     const contractPriceCents = contractPrice ? toCents(contractPrice) : null;
-    const commissionBasisPoints = agentCreatedReferral
+    const commissionBasisPoints = agentCreatedReferral || isOutsideAgent
       ? null
       : commissionPercentage
           ? Math.round(Number.parseFloat(commissionPercentage) * 100)
           : null;
-    const referralFeeBasisPoints = agentCreatedReferral
+    const referralFeeBasisPoints = agentCreatedReferral || isOutsideAgent
       ? null
       : referralFeePercentage
           ? Math.round(Number.parseFloat(referralFeePercentage) * 100)
@@ -246,6 +260,7 @@ function DealCard({
 
     const shouldComputeExpected =
       !agentCreatedReferral &&
+      !isOutsideAgent &&
       !expectedAmountCents &&
       contractPriceCents &&
       commissionBasisPoints &&
@@ -253,13 +268,13 @@ function DealCard({
     const computedExpected = shouldComputeExpected
       ? Math.round((contractPriceCents * commissionBasisPoints * referralFeeBasisPoints) / 100_000_000)
       : 0;
-    const finalExpectedAmountCents = agentCreatedReferral ? 0 : expectedAmountCents || computedExpected;
+    const finalExpectedAmountCents = agentCreatedReferral || isOutsideAgent ? 0 : expectedAmountCents || computedExpected;
 
-    if (!agentCreatedReferral && markPaid && !netReferralFeePaidCents && finalExpectedAmountCents) {
+    if (!agentCreatedReferral && !isOutsideAgent && markPaid && !netReferralFeePaidCents && finalExpectedAmountCents) {
       netReferralFeePaidCents = finalExpectedAmountCents;
     }
 
-    if (!agentCreatedReferral && !finalExpectedAmountCents) {
+    if (!agentCreatedReferral && !isOutsideAgent && !finalExpectedAmountCents) {
       toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
       return;
     }
@@ -508,7 +523,7 @@ function DealCard({
               onChange={(event) => setContractPrice(event.target.value)}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
               placeholder="0.00"
-              disabled={saving}
+              disabled={saving || isOutsideAgent}
             />
           </label>
           <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -522,7 +537,7 @@ function DealCard({
               onChange={(event) => setCommissionPercentage(event.target.value)}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
               placeholder="0.00"
-              disabled={saving}
+              disabled={saving || isOutsideAgent}
             />
           </label>
           <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -536,7 +551,7 @@ function DealCard({
               onChange={(event) => setReferralFeePercentage(event.target.value)}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
               placeholder="0.00"
-              disabled={saving}
+              disabled={saving || isOutsideAgent}
             />
           </label>
           <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -554,7 +569,7 @@ function DealCard({
               }}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
               placeholder="0.00"
-              disabled={saving}
+              disabled={saving || isOutsideAgent}
             />
           </label>
           <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -568,7 +583,7 @@ function DealCard({
               onChange={(event) => setNetReferralFeePaid(event.target.value)}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
               placeholder="0.00"
-              disabled={saving}
+              disabled={saving || isOutsideAgent}
             />
           </label>
             <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -715,6 +730,11 @@ function DealCard({
               />
               Used Agent
             </label>
+            {!agentCreatedReferral && isOutsideAgent && (
+              <p className="text-xs text-slate-500">
+                Outside-agent deal selected: commission/referral fee fields are disabled and owed amount is forced to $0.
+              </p>
+            )}
             <label className="flex items-center gap-2 text-slate-700">
               <input
                 type="checkbox"
@@ -771,6 +791,7 @@ export function ReferralDeals({
   viewerRole,
   referralOrigin,
   feeBreakdownAutoSendEnabled,
+  hiddenOutsideAgentCount = 0,
 }: ReferralDealsProps) {
   const [status, setStatus] = useState<DealStatus>('under_contract');
   const [markPaid, setMarkPaid] = useState(false);
@@ -874,6 +895,7 @@ export function ReferralDeals({
     }),
     [deals]
   );
+  const showAgentLostOnlyState = viewerRole === 'agent' && sortedDeals.length === 0 && hiddenOutsideAgentCount > 0;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1437,26 +1459,41 @@ export function ReferralDeals({
       )}
 
       <div className="space-y-3">
-        {sortedDeals.length === 0 ? (
+        {showAgentLostOnlyState ? (
+          <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3">
+            <p className="text-sm font-semibold text-rose-700">Outcome: Lost</p>
+            <p className="text-xs text-rose-600">No visible deals for this referral.</p>
+          </div>
+        ) : sortedDeals.length === 0 ? (
           <p className="text-sm text-slate-600">No deals have been added yet.</p>
         ) : (
-          sortedDeals.map((deal) => (
-            <DealCard
-              key={deal._id}
-              deal={deal}
-              agents={agents}
-              agentsLoading={agentsLoading}
-              canManage={canManage}
-              isAgentOrigin={isAgentOrigin}
-              statusUpdating={statusUpdating[deal._id]}
-              deleting={deleting[deal._id]}
-              onStatusChange={handleStatusChange}
-              onDelete={handleDelete}
-              onUpdate={handleDealEdit}
-              viewerRole={viewerRole}
-              feeBreakdownAutoSendEnabled={feeBreakdownAutoSendEnabled}
-            />
-          ))
+          <>
+            {viewerRole === 'agent' && hiddenOutsideAgentCount > 0 && (
+              <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3">
+                <p className="text-sm font-semibold text-rose-700">Outcome: Lost</p>
+                <p className="text-xs text-rose-600">
+                  Some outside-agent deals are hidden from agent view.
+                </p>
+              </div>
+            )}
+            {sortedDeals.map((deal) => (
+              <DealCard
+                key={deal._id}
+                deal={deal}
+                agents={agents}
+                agentsLoading={agentsLoading}
+                canManage={canManage}
+                isAgentOrigin={isAgentOrigin}
+                statusUpdating={statusUpdating[deal._id]}
+                deleting={deleting[deal._id]}
+                onStatusChange={handleStatusChange}
+                onDelete={handleDelete}
+                onUpdate={handleDealEdit}
+                viewerRole={viewerRole}
+                feeBreakdownAutoSendEnabled={feeBreakdownAutoSendEnabled}
+              />
+            ))}
+          </>
         )}
       </div>
     </section>
