@@ -47,6 +47,24 @@ export async function GET() {
       });
     }
 
+    const systemPrompt = `You are a US mortgage market strategist writing a daily brief for residential real estate agents.
+Today is ${formattedToday}.
+
+Search the web for today's top mortgage and housing market news. Then produce a JSON object with EXACTLY these keys:
+- headline: string — a punchy 8-12 word summary of today's rate/market story
+- summary: string — 2 sentences: what's happening and why agents should care
+- headlineStories: array of 3 objects, each with { headline: string, takeaway: string, source: string } — real news stories you found, with headline (the actual story title), a one-sentence agent-specific takeaway, and the publication name as source
+- rateSignals: array of 3 strings — rate/market signals referencing the live Mortgage News Daily widget for exact numbers (never quote specific rates yourself)
+- coachingAngles: array of 3 strings — specific scripts or actions agents can use TODAY based on the news stories you found. Each tip must directly reference something from the headlines (e.g. "Given that [news thing], tell buyers...")
+- borrowerAdvice: array of 3 strings — plain-language talking points agents can use word-for-word with buyers
+- caution: array of 1 string — a brief disclaimer
+
+Rules:
+- Never quote a specific interest rate number
+- Keep focus on purchase market (not refinance)
+- Coaching angles must be grounded in the actual news you found, not generic
+- Return ONLY the raw JSON object. No markdown, no code fences, no extra text.`;
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -54,51 +72,16 @@ export async function GET() {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o-mini-search-preview',
         temperature: 0.4,
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'mortgage_market_brief',
-            schema: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                headline: { type: 'string' },
-                summary: { type: 'string' },
-                headlineStories: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    additionalProperties: false,
-                    properties: {
-                      headline: { type: 'string' },
-                      takeaway: { type: 'string' },
-                      source: { type: 'string' },
-                    },
-                    required: ['headline', 'takeaway'],
-                  },
-                  minItems: 0,
-                },
-                rateSignals: { type: 'array', items: { type: 'string' }, minItems: 1 },
-                coachingAngles: { type: 'array', items: { type: 'string' }, minItems: 1 },
-                borrowerAdvice: { type: 'array', items: { type: 'string' }, minItems: 1 },
-                caution: { type: 'array', items: { type: 'string' }, minItems: 0 },
-                averageRates: { type: 'array', items: { type: 'string' }, minItems: 0 },
-              },
-              required: ['headline', 'summary', 'rateSignals', 'coachingAngles', 'borrowerAdvice'],
-            },
-          },
-        },
         messages: [
           {
             role: 'system',
-            content: `You are a US mortgage market strategist. Audience: residential real estate agents. Avoid quoting specific rates—tell them to use the Mortgage News Daily widget for live numbers. Keep messaging purchase-focused and defer pricing to the lender they work with. Date: ${formattedToday}.`,
+            content: systemPrompt,
           },
           {
             role: 'user',
-            content:
-              'Create a succinct mortgage market brief for agents. Include: a punchy headline, 2-3 rate/market signals referencing the live widget for numbers, 2-3 coaching angles (scripts or actions for buyers/sellers/prospects), 3 borrower-facing talking points, up to 2 current mortgage/real-estate headlines with short takeaways (only if confident; otherwise omit), and any cautions. Keep it under 140 words. Keep the focus on purchase conversations, not refinance pitches.',
+            content: `Search for today's (${formattedToday}) top 3 mortgage/housing news stories, then write the mortgage market brief JSON as instructed. Ground the coaching angles in what you found.`,
           },
         ],
       }),
@@ -124,7 +107,21 @@ export async function GET() {
       });
     }
 
-    const parsed = JSON.parse(content);
+    // Strip any accidental markdown code fences before parsing
+    const cleaned = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      return NextResponse.json(fallbackBrief, {
+        status: 200,
+        headers: {
+          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=3600',
+        },
+      });
+    }
+
     const mergedBrief = {
       ...fallbackBrief,
       ...parsed,
