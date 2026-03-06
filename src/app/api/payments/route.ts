@@ -234,22 +234,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   if (role === 'agent') {
-    const candidateIds: (Types.ObjectId | string)[] = [];
-    if (session.user?.id && Types.ObjectId.isValid(session.user.id)) {
-      candidateIds.push(new Types.ObjectId(session.user.id));
-    }
-    if (session.user?.id) {
-      candidateIds.push(session.user.id);
-    }
-
     const agentRecord = await Agent.findOne({ userId: session.user?.id })
       .select('_id')
       .lean<{ _id: Types.ObjectId } | null>();
-    if (agentRecord?._id) {
-      candidateIds.push(agentRecord._id);
-    }
-
-    if (candidateIds.length === 0) {
+    if (!agentRecord?._id) {
       return NextResponse.json({
         items: [],
         total: 0,
@@ -258,22 +246,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    const referralDocs = await Referral.find({ assignedAgent: { $in: candidateIds } })
+    const referralDocs = await Referral.find({ assignedAgent: agentRecord._id })
       .select('_id')
       .lean<{ _id: Types.ObjectId }[]>();
 
-    const referralFilter = referralDocs.length
-      ? { $in: referralDocs.map((doc) => doc._id) }
-      : undefined;
-
-    const agentFilter = candidateIds.length ? { $in: candidateIds } : undefined;
-
-    if (referralFilter || agentFilter) {
-      filter.$or = [
-        ...(referralFilter ? [{ referralId: referralFilter }] : []),
-        ...(agentFilter ? [{ agentId: agentFilter }] : []),
-      ];
-    } else {
+    if (referralDocs.length === 0) {
       return NextResponse.json({
         items: [],
         total: 0,
@@ -281,6 +258,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         pageSize: 25
       });
     }
+
+    filter.usedAssignedAgent = true;
+    filter.referralId = { $in: referralDocs.map((doc) => doc._id) };
   }
 
   const buildSearchPipeline = (searchTerm: string): PipelineStage[] => {
