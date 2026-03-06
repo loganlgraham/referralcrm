@@ -15,6 +15,7 @@ import { ACTIVE_REFERRAL_STATUS_VALUES, normalizeReferralStatus } from '@/consta
 import { User } from '@/models/user';
 import { DEAL_STATUS_LABELS } from '@/constants/deals';
 import { Zip } from '@/models/zip';
+import { buildDealStatusMap } from '@/lib/server/referral-deal-status';
 
 interface GetReferralsParams {
   session: Session | null;
@@ -441,25 +442,17 @@ export async function getReferrals(params: GetReferralsParams) {
   };
   const paymentDocs = await Payment.find({ referralId: { $in: referralIds } })
     .sort({ createdAt: -1 })
-    .select('referralId status')
-    .lean<{ referralId: Types.ObjectId; status?: string }[]>();
+    .select('referralId status usedAssignedAgent agentAttribution')
+    .lean<
+      {
+        referralId: Types.ObjectId;
+        status?: string | null;
+        usedAssignedAgent?: boolean | null;
+        agentAttribution?: string | null;
+      }[]
+    >();
 
-  const dealStatusMap = new Map<string, { primary?: string; fallback?: string }>();
-  for (const payment of paymentDocs) {
-    const status = typeof payment.status === 'string' ? payment.status : null;
-    if (!status) {
-      continue;
-    }
-    const key = payment.referralId.toString();
-    const record = dealStatusMap.get(key) ?? {};
-    if (!record.fallback) {
-      record.fallback = status;
-    }
-    if (!record.primary && status !== 'terminated') {
-      record.primary = status;
-    }
-    dealStatusMap.set(key, record);
-  }
+  const dealStatusMap = buildDealStatusMap(paymentDocs);
 
   const todayStr = formatInTimeZone(new Date(), SLA_TIME_ZONE, 'yyyy-MM-dd');
   const [y, m, d] = todayStr.split('-').map(Number);
