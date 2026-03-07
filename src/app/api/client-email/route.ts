@@ -13,15 +13,8 @@ export async function GET() {
     const articles = await fetchRssNews();
     const headlines = articles.map((a) => a.title).filter(Boolean);
     const summary = await generateMarketSummary(headlines);
-    const [talkingPoints, briefRes] = await Promise.all([
-      generateTalkingPoints(summary),
-      fetch(`${process.env.NEXTAUTH_URL ?? 'http://localhost:3000'}/api/daily-market-brief`).then(
-        (r) => r.json() as Promise<{ brief?: string }>
-      ),
-    ]);
-
-    const brief = briefRes.brief ?? summary;
-    const email = await generateClientEmail(brief, talkingPoints);
+    const talkingPoints = await generateTalkingPoints(summary);
+    const email = await generateClientEmail(summary, talkingPoints);
 
     return NextResponse.json({ email }, { status: 200 });
   } catch {

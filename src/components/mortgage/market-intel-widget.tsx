@@ -181,7 +181,87 @@ export function MarketIntelWidget() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Live Rate Snapshot — top of page */}
+      <div className="rounded-xl bg-white shadow">
+        <div className="px-5 pt-5">
+          <p className="text-center text-xs font-medium uppercase tracking-wide text-slate-500">
+            Live national mortgage rates — via Mortgage News Daily
+          </p>
+        </div>
+
+        <div className="mt-3 max-w-3xl mx-auto px-4">
+          <div className="overflow-hidden rounded-md border border-slate-200 shadow-sm">
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '6px 0',
+                backgroundColor: '#0f172a',
+                color: '#ffffff',
+              }}
+            >
+              <a
+                href="https://www.mortgagenewsdaily.com/mortgage-rates"
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: '#ffffff', textDecoration: 'none', fontSize: '13px' }}
+              >
+                Mortgage Interest Rates
+              </a>
+            </div>
+            <div className="overflow-x-auto">
+              <iframe
+                src="//widgets.mortgagenewsdaily.com/widget/f/rates?t=large&sn=true&c=0f172a&u=&cbu=&w=720&h=290"
+                width="720"
+                height="290"
+                frameBorder="0"
+                scrolling="no"
+                style={{
+                  border: 'solid 1px #0f172a',
+                  borderWidth: '0 1px',
+                  boxSizing: 'border-box',
+                  minWidth: '720px',
+                  width: '720px',
+                  height: '290px',
+                  display: 'block',
+                }}
+              />
+            </div>
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '6px 0',
+                backgroundColor: '#0f172a',
+                color: '#ffffff',
+              }}
+            >
+              View More{' '}
+              <a
+                href="https://www.mortgagenewsdaily.com/mortgage-rates"
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: '#ffffff', textDecoration: 'none', fontSize: '13px' }}
+              >
+                Mortgage Rates
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div className="mx-auto mt-3 max-w-3xl px-4 pb-5">
+          <div className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-start sm:gap-3">
+            <div className="flex items-center gap-1.5 font-semibold text-amber-800 sm:shrink-0">
+              <AlertCircleIcon className="h-4 w-4" />
+              <span className="text-sm">Use with care</span>
+            </div>
+            <p className="text-sm text-amber-800">
+              These figures are for educational context only. Always defer exact rate quotes to the
+              lender you are working with.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Page header row */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Market Intelligence</h1>
@@ -197,95 +277,6 @@ export function MarketIntelWidget() {
           <RefreshCwIcon className="h-4 w-4" />
           Refresh
         </button>
-      </div>
-
-      {/* Rate Panel + MND Widget */}
-      <div className="rounded-xl bg-white p-5 shadow">
-        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-800">Live Rate Snapshot</h2>
-            <p className="text-xs text-slate-500">
-              Powered by Mortgage News Daily — confirm exact quotes with your lender.
-            </p>
-          </div>
-          <div className="flex gap-4">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-center">
-              <p className="text-xs text-slate-500">30-yr Fixed</p>
-              <p className="text-base font-bold text-slate-900">6.02%</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-center">
-              <p className="text-xs text-slate-500">15-yr Fixed</p>
-              <p className="text-base font-bold text-slate-900">5.41%</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
-          <div
-            style={{
-              textAlign: 'center',
-              padding: '6px 0',
-              backgroundColor: '#0f172a',
-              color: '#ffffff',
-            }}
-          >
-            <a
-              href="https://www.mortgagenewsdaily.com/mortgage-rates"
-              target="_blank"
-              rel="noreferrer"
-              style={{ color: '#ffffff', textDecoration: 'none', fontSize: '13px' }}
-            >
-              Mortgage Interest Rates
-            </a>
-          </div>
-          <div className="overflow-x-auto">
-            <iframe
-              src="//widgets.mortgagenewsdaily.com/widget/f/rates?t=large&sn=true&c=0f172a&u=&cbu=&w=720&h=290"
-              width="720"
-              height="290"
-              frameBorder="0"
-              scrolling="no"
-              style={{
-                border: 'solid 1px #0f172a',
-                borderWidth: '0 1px',
-                boxSizing: 'border-box',
-                minWidth: '720px',
-                width: '720px',
-                height: '290px',
-                display: 'block',
-              }}
-            />
-          </div>
-          <div
-            style={{
-              textAlign: 'center',
-              padding: '6px 0',
-              backgroundColor: '#0f172a',
-              color: '#ffffff',
-            }}
-          >
-            View More{' '}
-            <a
-              href="https://www.mortgagenewsdaily.com/mortgage-rates"
-              target="_blank"
-              rel="noreferrer"
-              style={{ color: '#ffffff', textDecoration: 'none', fontSize: '13px' }}
-            >
-              Mortgage Rates
-            </a>
-          </div>
-        </div>
-
-        <div className="mt-3 flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-start sm:gap-3">
-          <div className="flex items-center gap-1.5 font-semibold text-amber-800 sm:shrink-0">
-            <AlertCircleIcon className="h-4 w-4" />
-            <span className="text-sm">Use with care</span>
-          </div>
-          <p className="text-sm text-amber-800">
-            These figures are for educational context only. Always defer exact rate quotes to the
-            lender you are working with.
-          </p>
-        </div>
       </div>
 
       {/* Daily Market Brief */}
