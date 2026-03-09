@@ -133,6 +133,8 @@ interface DashboardReferral {
   commissionBasisPoints?: number;
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   assignedAgent?: Types.ObjectId | null;
+  buySideAgent?: Types.ObjectId | null;
+  sellSideAgent?: Types.ObjectId | null;
   lender?: Types.ObjectId | null;
   status?: string;
   preApprovalAmountCents?: number;
@@ -826,7 +828,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...referralMatch,
   })
     .select(
-      'createdAt updatedAt referralDate status statusLastUpdated referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin sla lookingInZip lookingInZips loanFileNumber borrower.name'
+      'createdAt updatedAt referralDate status statusLastUpdated referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent buySideAgent sellSideAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin sla lookingInZip lookingInZips loanFileNumber borrower.name'
     )
     .lean<DashboardReferral[]>()
     .exec();
@@ -964,6 +966,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   referrals.forEach((referral) => {
     if (referral.lender) lenderIds.add(referral.lender.toString());
     if (referral.assignedAgent) agentIds.add(referral.assignedAgent.toString());
+    if (referral.buySideAgent) agentIds.add(referral.buySideAgent.toString());
+    if (referral.sellSideAgent) agentIds.add(referral.sellSideAgent.toString());
   });
 
   filteredPayments.forEach((payment) => {
@@ -1018,8 +1022,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   };
 
   const getReferralDesignation = (referral: DashboardReferral): 'AHA' | 'AHA_OOS' | 'AGIT' | null => {
-    if (!referral.assignedAgent) return null;
-    return agentDesignationMap.get(referral.assignedAgent.toString()) ?? null;
+    const slots = [referral.assignedAgent, referral.buySideAgent, referral.sellSideAgent];
+    for (const id of slots) {
+      if (!id) continue;
+      const des = agentDesignationMap.get(id.toString());
+      if (des) return des;
+    }
+    return null;
   };
 
   const matchesNetwork = (designation: 'AHA' | 'AHA_OOS' | 'AGIT' | null) => {
