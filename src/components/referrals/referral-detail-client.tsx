@@ -12,6 +12,7 @@ import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import type { Contact } from '@/components/referrals/contact-assignment';
 import { normalizeReferralStatus, type ReferralStatus, REFERRAL_TIMELINE_OPTIONS, REFERRAL_TIMELINE_VALUES } from '@/constants/referrals';
 import { ReferralDeals } from '@/components/referrals/referral-deals';
+import { getReferralDealsVisibility } from '@/components/referrals/deal-visibility';
 import type { ReferralPayment } from '@/types/referral-payment';
 import { formatCurrency, formatDateMST } from '@/utils/formatters';
 import Link from 'next/link';
@@ -1210,6 +1211,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         : [],
     [referral.payments]
   );
+  const { visibleDeals: visibleReferralDeals, hiddenOutsideAgentCount } = useMemo(
+    () => getReferralDealsVisibility(referralDeals, viewerRole),
+    [referralDeals, viewerRole]
+  );
 
   const showNav = (viewerRole === 'admin' || viewerRole === 'manager') && (prevReferralId || nextReferralId);
   const buildNavHref = (id: string) => listParams ? `/referrals/${id}?${listParams}` : `/referrals/${id}`;
@@ -1522,13 +1527,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       />
       <ReferralDeals
         referralId={referralId}
-        deals={referralDeals}
+        deals={visibleReferralDeals}
         onDealCreated={handleDealCreated}
         onDealUpdated={handleDealUpdated}
         onDealDeleted={handleDealDeleted}
         viewerRole={viewerRole}
         referralOrigin={referral.origin}
         feeBreakdownAutoSendEnabled={referral.feeBreakdownAutoSendEnabled as boolean | undefined}
+        hiddenOutsideAgentCount={hiddenOutsideAgentCount}
       />
       <ReferralTimeline referralId={referralId} />
       {canDelete && (
