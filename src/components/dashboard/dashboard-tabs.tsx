@@ -73,6 +73,7 @@ interface DashboardSummary {
   afcDealsLost: number;
   afcDealsLostList: LostDealEntry[];
   afcAttachRate: number;
+  ahaDealsLost: number;
   ahaAttachRate: number;
   ahaOosDealsLost: number;
   ahaOosDealsLostList: LostDealEntry[];
@@ -1004,8 +1005,6 @@ function ConversionFunnelCard({
     return `/referrals?${params.toString()}`;
   };
 
-  const topCount = stages.length > 0 ? Math.max(stages[0].count, 1) : 1;
-
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Conversion funnel</p>
@@ -1013,7 +1012,6 @@ function ConversionFunnelCard({
       <div className="mt-4 space-y-1.5">
         {stages.length ? (
           stages.map((stage) => {
-            const barWidthPct = Math.max((stage.count / topCount) * 100, stage.count > 0 ? 2 : 0);
             return (
               <Link
                 key={stage.status}
@@ -1031,12 +1029,6 @@ function ConversionFunnelCard({
                       <span className="text-xs font-medium text-amber-600">↓{stage.dropOffPercent.toFixed(0)}%</span>
                     ) : null}
                   </div>
-                </div>
-                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full bg-sky-400 transition-all duration-300"
-                    style={{ width: `${barWidthPct}%` }}
-                  />
                 </div>
               </Link>
             );
@@ -1903,14 +1895,14 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
     {
       title: 'Task completion rate',
       value: (() => {
-        const total = data.overdueTaskCount + data.dueTodayTaskCount + data.completedInTimeframeCount;
+        const total = data.totalOpenTasks + data.completedInTimeframeCount;
         return total > 0
           ? `${((data.completedInTimeframeCount / total) * 100).toFixed(1)}%`
           : '—';
       })(),
       helper:
-        data.overdueTaskCount + data.dueTodayTaskCount + data.completedInTimeframeCount > 0
-          ? `${formatNumber(data.completedInTimeframeCount)} of ${formatNumber(data.overdueTaskCount + data.dueTodayTaskCount + data.completedInTimeframeCount)} actionable tasks`
+        data.totalOpenTasks + data.completedInTimeframeCount > 0
+          ? `${formatNumber(data.completedInTimeframeCount)} completed, ${formatNumber(data.totalOpenTasks)} still open`
           : 'No actionable tasks in period'
     }
   ];
