@@ -1047,7 +1047,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       : filteredPayments.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
 
   const isWithinTimeframe = (date: Date | string | null | undefined) => {
-    if (!date) return true;
+    if (!date) return false;
     const candidate = new Date(date);
     if (Number.isNaN(candidate.getTime())) return false;
     if (timeframeStart && candidate < timeframeStart) return false;
@@ -1828,13 +1828,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ahaOos: groupTrendByTimeframe(ahaOosReferralDates, timeframe)
   };
 
-  // Referrals received trend: cumulative so last point equals totalReferrals (matches Total referrals card)
-  const referralsTrendBuckets = groupTrendByTimeframe(allReferralDates, timeframe);
-  let cumulative = 0;
-  const referralsTrend = referralsTrendBuckets.map((point) => {
-    cumulative += point.value;
-    return { key: point.key, label: point.label, value: cumulative };
-  });
+  const referralsTrend = groupTrendByTimeframe(allReferralDates, timeframe);
 
   // Aggregate MC metrics from payments
   // Excludes deals attributed to outside agents from revenue/close rate calculations
@@ -2341,9 +2335,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     breakdown: terminatedReasonBreakdown,
     totalLostReferralFeeCents: terminatedDeals.reduce((sum, deal) => sum + deal.lostReferralFeeCents, 0),
     totalDeals: terminatedDeals.length,
-    deals: terminatedDeals
-      .sort((a, b) => b.lostReferralFeeCents - a.lostReferralFeeCents)
-      .slice(0, 10)
+    deals: terminatedDeals.sort((a, b) => b.lostReferralFeeCents - a.lostReferralFeeCents)
   };
 
   const preApprovalConversionTrend = monthlyReferrals.reduce(
@@ -2418,7 +2410,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       (payment.status === 'closed' || payment.status === 'paid')
   );
 
-  const agitUsedAfcCount = agitClosedOrPaidPayments.filter((payment) => !payment.usedAfc).length;
+  const agitUsedAfcCount = agitClosedOrPaidPayments.filter((payment) => payment.usedAfc).length;
   const agitUsedAfcRate =
     agitClosedOrPaidPayments.length === 0
       ? 0
@@ -2532,7 +2524,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       summary: {
         totalReferrals,
         dealsClosed: dealsClosedForSummary,
-        dealsClosedInTimeframe: dealsClosedForSummary,
+        dealsClosedInTimeframe: dealsClosedInTimeframe.length,
         dealsUnderContract: dealsUnderContract.length,
         pendingClosings: pendingClosings.length,
         pendingClosingsThisMonth: pendingClosingsThisMonth.length,
@@ -2562,10 +2554,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     lostReferrals: lostReferrals.length
   },
       trends: {
-        revenue: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.revenueReceivedCents })),
-        revenueGenerated: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.revenueGeneratedCents })),
-        deals: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.dealsClosed })),
-        closeRate: monthlyReferrals.map((entry) => ({ key: entry.monthKey, label: entry.label, value: entry.closeRate })),
+        revenue: mainTrends.map((entry) => ({ key: entry.key, label: entry.label, value: entry.revenueReceivedCents })),
+        revenueGenerated: mainTrends.map((entry) => ({ key: entry.key, label: entry.label, value: entry.revenueGeneratedCents })),
+        deals: mainTrends.map((entry) => ({ key: entry.key, label: entry.label, value: entry.dealsClosed })),
+        closeRate: mainTrends.map((entry) => ({ key: entry.key, label: entry.label, value: entry.closeRate })),
         referrals: referralsTrend
       },
       revenueBySource,
