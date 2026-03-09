@@ -91,10 +91,10 @@ export async function POST(
       return NextResponse.json({ error: 'Agent email not found' }, { status: 400 });
     }
 
-    // Block fee breakdown emails for AHA and AGIT designated agents
-    if (agent.ahaDesignation === 'AHA' || agent.ahaDesignation === 'AGIT') {
+    // Block fee breakdown emails for AGIT agents always; block AHA agents only for auto-send (cron)
+    if (agent.ahaDesignation === 'AGIT' || (isCronRequest && agent.ahaDesignation === 'AHA')) {
       return NextResponse.json(
-        { error: 'Fee breakdown emails are not sent to AHA or AGIT designated agents' },
+        { error: 'Fee breakdown emails are not sent to AGIT designated agents, and AHA agents are excluded from auto-send' },
         { status: 400 }
       );
     }
