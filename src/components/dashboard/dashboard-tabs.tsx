@@ -47,6 +47,23 @@ interface LeaderboardEntry {
   dealsClosed?: number;
   totalReferrals?: number;
   referrals?: number;
+  afcAttachRate?: number;
+  avgDaysToContract?: number;
+  avgTimeToFirstContactHours?: number;
+  npsScore?: number;
+}
+
+interface AhaLeaderboardGroup {
+  referralCount: LeaderboardEntry[];
+  closeRate: LeaderboardEntry[];
+  afcAttachRate: LeaderboardEntry[];
+  revenuePaid: LeaderboardEntry[];
+  avgDealSize: LeaderboardEntry[];
+  netCommission: LeaderboardEntry[];
+  lostDeals: LeaderboardEntry[];
+  avgDaysToContract: LeaderboardEntry[];
+  avgTimeToFirstContact: LeaderboardEntry[];
+  npsScore: LeaderboardEntry[];
 }
 
 const LIST_PREVIEW_LIMIT = 5;
@@ -209,6 +226,8 @@ interface DashboardResponse {
     netRevenue: LeaderboardEntry[];
     lostDeals: LeaderboardEntry[];
     agentCreatedMcAssignments: LeaderboardEntry[];
+    ahaLeaderboards: AhaLeaderboardGroup;
+    ahaOosLeaderboards: AhaLeaderboardGroup;
   };
   admin: {
     slaAverages: {
@@ -1136,13 +1155,21 @@ function LeaderboardTable({
                     ? formatCurrency(entry.revenueCents)
                     : entry.expectedRevenueCents != null
                       ? formatCurrency(entry.expectedRevenueCents)
-                      : entry.closeRate != null
-                        ? `${entry.closeRate.toFixed(1)}%`
-                        : entry.referrals != null
-                          ? formatNumber(entry.referrals)
-                          : entry.dealsClosed != null
-                            ? `${formatNumber(entry.dealsClosed)} / ${formatNumber(entry.totalReferrals ?? 0)}`
-                            : '—'}
+                      : entry.afcAttachRate != null
+                        ? `${entry.afcAttachRate.toFixed(1)}% (${formatNumber(entry.dealsClosed ?? 0)}/${formatNumber(entry.totalReferrals ?? 0)})`
+                        : entry.closeRate != null
+                          ? `${entry.closeRate.toFixed(1)}%`
+                          : entry.avgDaysToContract != null
+                            ? `${formatNumber(entry.avgDaysToContract)} days`
+                            : entry.avgTimeToFirstContactHours != null
+                              ? `${entry.avgTimeToFirstContactHours.toFixed(1)} hrs`
+                              : entry.npsScore != null
+                                ? formatNumber(entry.npsScore)
+                                : entry.referrals != null
+                                  ? formatNumber(entry.referrals)
+                                  : entry.dealsClosed != null
+                                    ? `${formatNumber(entry.dealsClosed)} / ${formatNumber(entry.totalReferrals ?? 0)}`
+                                    : '—'}
                 </td>
               </tr>
             ))
@@ -1745,6 +1772,30 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
   );
 }
 
+function AhaLeaderboardSection({ title, data }: { title: string; data: AhaLeaderboardGroup }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm space-y-4">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">{title}</h3>
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <LeaderboardTable title="Referral count" entries={data.referralCount} valueLabel="Referrals" />
+        <LeaderboardTable title="Close rate" entries={data.closeRate} valueLabel="Close rate" />
+        <LeaderboardTable title="AFC attach rate" entries={data.afcAttachRate} valueLabel="Attach rate" />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <LeaderboardTable title="Revenue paid" entries={data.revenuePaid} valueLabel="Revenue" />
+        <LeaderboardTable title="Avg. deal size" entries={data.avgDealSize} valueLabel="Avg. deal" />
+        <LeaderboardTable title="Net commission" entries={data.netCommission} valueLabel="Net commission" />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+        <LeaderboardTable title="Lost deals" entries={data.lostDeals} valueLabel="Lost deals" />
+        <LeaderboardTable title="Avg. days to contract" entries={data.avgDaysToContract} valueLabel="Avg. days" />
+        <LeaderboardTable title="Avg. time to first contact" entries={data.avgTimeToFirstContact} valueLabel="Avg. hrs" />
+        <LeaderboardTable title="NPS score" entries={data.npsScore} valueLabel="NPS" />
+      </div>
+    </div>
+  );
+}
+
 function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
   const averageCommissionDisplay =
     data.averageCommissionPercent > 0 ? `${data.averageCommissionPercent.toFixed(2)}%` : '—';
@@ -1762,6 +1813,12 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
 
   return (
     <div className="space-y-6">
+      {data.ahaLeaderboards && (
+        <AhaLeaderboardSection title="AHA Agent Leaderboard" data={data.ahaLeaderboards} />
+      )}
+      {data.ahaOosLeaderboards && (
+        <AhaLeaderboardSection title="AHA OOS Agent Leaderboard" data={data.ahaOosLeaderboards} />
+      )}
       <div className="grid gap-4 md:grid-cols-2">
         <SummaryCard title="Average agent commission" value={averageCommissionDisplay} helper={commissionHelper} />
         <SummaryCard title="Average referral fee" value={averageReferralFeeDisplay} helper={referralFeeHelper} />
