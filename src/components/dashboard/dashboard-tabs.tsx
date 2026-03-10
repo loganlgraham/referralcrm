@@ -47,23 +47,21 @@ interface LeaderboardEntry {
   dealsClosed?: number;
   totalReferrals?: number;
   referrals?: number;
-  afcAttachRate?: number;
-  avgDaysToContract?: number;
-  avgTimeToFirstContactHours?: number;
-  npsScore?: number;
 }
 
-interface AhaLeaderboardGroup {
-  referralCount: LeaderboardEntry[];
-  closeRate: LeaderboardEntry[];
-  afcAttachRate: LeaderboardEntry[];
-  revenuePaid: LeaderboardEntry[];
-  avgDealSize: LeaderboardEntry[];
-  netCommission: LeaderboardEntry[];
-  lostDeals: LeaderboardEntry[];
-  avgDaysToContract: LeaderboardEntry[];
-  avgTimeToFirstContact: LeaderboardEntry[];
-  npsScore: LeaderboardEntry[];
+interface AhaRankedAgent {
+  id: string;
+  name: string;
+  score: number;
+  rank: number;
+  kpis: {
+    label: string;
+    key: string;
+    rawValue: number;
+    displayValue: string;
+    normalizedScore: number;
+    weight: 'high' | 'medium' | 'low';
+  }[];
 }
 
 const LIST_PREVIEW_LIMIT = 5;
@@ -226,8 +224,8 @@ interface DashboardResponse {
     netRevenue: LeaderboardEntry[];
     lostDeals: LeaderboardEntry[];
     agentCreatedMcAssignments: LeaderboardEntry[];
-    ahaLeaderboards: AhaLeaderboardGroup;
-    ahaOosLeaderboards: AhaLeaderboardGroup;
+    ahaLeaderboards: { rankedAgents: AhaRankedAgent[] };
+    ahaOosLeaderboards: { rankedAgents: AhaRankedAgent[] };
   };
   admin: {
     slaAverages: {
@@ -1155,21 +1153,13 @@ function LeaderboardTable({
                     ? formatCurrency(entry.revenueCents)
                     : entry.expectedRevenueCents != null
                       ? formatCurrency(entry.expectedRevenueCents)
-                      : entry.afcAttachRate != null
-                        ? `${entry.afcAttachRate.toFixed(1)}% (${formatNumber(entry.dealsClosed ?? 0)}/${formatNumber(entry.totalReferrals ?? 0)})`
-                        : entry.closeRate != null
-                          ? `${entry.closeRate.toFixed(1)}%`
-                          : entry.avgDaysToContract != null
-                            ? `${formatNumber(entry.avgDaysToContract)} days`
-                            : entry.avgTimeToFirstContactHours != null
-                              ? `${entry.avgTimeToFirstContactHours.toFixed(1)} hrs`
-                              : entry.npsScore != null
-                                ? formatNumber(entry.npsScore)
-                                : entry.referrals != null
-                                  ? formatNumber(entry.referrals)
-                                  : entry.dealsClosed != null
-                                    ? `${formatNumber(entry.dealsClosed)} / ${formatNumber(entry.totalReferrals ?? 0)}`
-                                    : '—'}
+                      : entry.closeRate != null
+                        ? `${entry.closeRate.toFixed(1)}%`
+                        : entry.referrals != null
+                          ? formatNumber(entry.referrals)
+                          : entry.dealsClosed != null
+                            ? `${formatNumber(entry.dealsClosed)} / ${formatNumber(entry.totalReferrals ?? 0)}`
+                            : '—'}
                 </td>
               </tr>
             ))
@@ -1772,26 +1762,111 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
   );
 }
 
-function AhaLeaderboardSection({ title, data }: { title: string; data: AhaLeaderboardGroup }) {
+function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: AhaRankedAgent[] } }) {
+  const [selectedAgent, setSelectedAgent] = useState<AhaRankedAgent | null>(null);
+
+  const getScoreStyle = (score: number) => {
+    if (score >= 75) return 'bg-emerald-50 text-emerald-700';
+    if (score >= 50) return 'bg-amber-50 text-amber-700';
+    return 'bg-red-50 text-red-700';
+  };
+
+  const getWeightBadge = (weight: 'high' | 'medium' | 'low') => {
+    if (weight === 'high') return 'bg-slate-700 text-white';
+    if (weight === 'medium') return 'bg-slate-400 text-white';
+    return 'bg-slate-200 text-slate-600';
+  };
+
+  const getWeightLabel = (weight: 'high' | 'medium' | 'low') => {
+    if (weight === 'high') return 'HIGH';
+    if (weight === 'medium') return 'MED';
+    return 'LOW';
+  };
+
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm space-y-4">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-600">{title}</h3>
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        <LeaderboardTable title="Referral count" entries={data.referralCount} valueLabel="Referrals" />
-        <LeaderboardTable title="Close rate" entries={data.closeRate} valueLabel="Close rate" />
-        <LeaderboardTable title="AFC attach rate" entries={data.afcAttachRate} valueLabel="Attach rate" />
-      </div>
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        <LeaderboardTable title="Revenue paid" entries={data.revenuePaid} valueLabel="Revenue" />
-        <LeaderboardTable title="Avg. deal size" entries={data.avgDealSize} valueLabel="Avg. deal" />
-        <LeaderboardTable title="Net commission" entries={data.netCommission} valueLabel="Net commission" />
-      </div>
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-        <LeaderboardTable title="Lost deals" entries={data.lostDeals} valueLabel="Lost deals" />
-        <LeaderboardTable title="Avg. days to contract" entries={data.avgDaysToContract} valueLabel="Avg. days" />
-        <LeaderboardTable title="Avg. time to first contact" entries={data.avgTimeToFirstContact} valueLabel="Avg. hrs" />
-        <LeaderboardTable title="NPS score" entries={data.npsScore} valueLabel="NPS" />
-      </div>
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+      {data.rankedAgents.length === 0 ? (
+        <p className="py-8 text-center text-sm text-slate-500">No agents with data for this period.</p>
+      ) : (
+        <table className="mt-4 w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-slate-500">
+              <th className="py-1 font-medium w-10">Rank</th>
+              <th className="py-1 font-medium">Agent</th>
+              <th className="py-1 font-medium text-right">Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.rankedAgents.map((agent) => (
+              <tr key={agent.id} className="border-t border-slate-100 text-slate-700">
+                <td className="py-2 text-slate-400">#{agent.rank}</td>
+                <td className="py-2 font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAgent(agent)}
+                    className="text-sky-600 hover:text-sky-800 hover:underline text-left"
+                  >
+                    {agent.name}
+                  </button>
+                </td>
+                <td className="py-2 text-right">
+                  <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${getScoreStyle(agent.score)}`}>
+                    {agent.score.toFixed(1)}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <Modal
+        isOpen={selectedAgent != null}
+        onClose={() => setSelectedAgent(null)}
+        title={selectedAgent?.name ?? ''}
+        size="md"
+      >
+        {selectedAgent && (
+          <div className="p-6 space-y-5">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-slate-500">Composite Score</span>
+              <span className={`inline-block rounded-full px-3 py-1 text-sm font-bold tabular-nums ${getScoreStyle(selectedAgent.score)}`}>
+                {selectedAgent.score.toFixed(1)} / 100
+              </span>
+            </div>
+            <div>
+              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-400">KPI Breakdown</p>
+              <div className="space-y-3">
+                {selectedAgent.kpis.map((kpi) => (
+                  <div key={kpi.key}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-slate-700">{kpi.label}</span>
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getWeightBadge(kpi.weight)}`}>
+                          {getWeightLabel(kpi.weight)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-sm">
+                        <span className="text-slate-500">{kpi.displayValue}</span>
+                        <span className="font-semibold text-slate-900 tabular-nums w-12 text-right">
+                          {kpi.normalizedScore.toFixed(0)}/100
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-slate-100">
+                      <div
+                        className={`h-1.5 rounded-full transition-all ${kpi.normalizedScore >= 75 ? 'bg-emerald-500' : kpi.normalizedScore >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                        style={{ width: `${kpi.normalizedScore}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
@@ -1814,10 +1889,10 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
   return (
     <div className="space-y-6">
       {data.ahaLeaderboards && (
-        <AhaLeaderboardSection title="AHA Agent Leaderboard" data={data.ahaLeaderboards} />
+        <AhaRankedList title="AHA Agent Leaderboard" data={data.ahaLeaderboards} />
       )}
       {data.ahaOosLeaderboards && (
-        <AhaLeaderboardSection title="AHA OOS Agent Leaderboard" data={data.ahaOosLeaderboards} />
+        <AhaRankedList title="AHA OOS Agent Leaderboard" data={data.ahaOosLeaderboards} />
       )}
       <div className="grid gap-4 md:grid-cols-2">
         <SummaryCard title="Average agent commission" value={averageCommissionDisplay} helper={commissionHelper} />
