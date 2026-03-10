@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { addDays, endOfDay, startOfMonth, startOfWeek, startOfYear, subDays } from 'date-fns';
+import { addDays, endOfDay, endOfMonth, startOfMonth, startOfWeek, startOfYear, subDays } from 'date-fns';
 
 import { connectMongo } from '@/lib/mongoose';
 import { requireAdmin } from '@/lib/auth';
@@ -38,7 +38,7 @@ function resolveDateRange(payload: ReportPayload): DateRange {
     case 'This week':
       return { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfDay(addDays(startOfWeek(now, { weekStartsOn: 1 }), 6)) };
     case 'This month':
-      return { start: startOfMonth(now), end: endOfDay(addDays(startOfMonth(now), 32)) };
+      return { start: startOfMonth(now), end: endOfMonth(now) };
     case 'Last 90 days':
       return { start: subDays(now, 90), end: endOfDay(now) };
     case 'Year to date':
@@ -77,19 +77,27 @@ async function computeMetrics(range: DateRange) {
     }
   }
 
+  const ACTIVE_PIPELINE_STATUSES = new Set([
+    'Paired',
+    'In Communication',
+    'Active Lead',
+    'Showing Homes',
+    'Under Contract'
+  ]);
+
   const [referrals, payments] = await Promise.all([
     Referral.find(referralMatch)
       .select('status referralFeeDueCents referralFeeBasisPoints closedPriceCents assignedAgent ahaBucket preApprovalAmountCents propertyState')
       .populate('assignedAgent', 'name')
       .lean(),
     Payment.find(paymentMatch)
-      .select('status receivedAmountCents expectedAmountCents terminatedReason agentAttribution createdAt')
+      .select('status receivedAmountCents expectedAmountCents terminatedReason agentAttribution usedAssignedAgent createdAt')
       .populate({ path: 'referralId', select: 'referralFeeBasisPoints closedPriceCents assignedAgent', populate: { path: 'assignedAgent', select: 'name' } })
       .lean()
   ]);
 
   const totalReferrals = referrals.length;
-  const closedReferrals = referrals.filter((referral) => (referral.status ?? '').toLowerCase() === 'closed').length;
+  const closedReferrals = referrals.filter((referral) => referral.status === 'Closed').length;
   const closeRate = totalReferrals === 0 ? 0 : (closedReferrals / totalReferrals) * 100;
 
   const expectedRevenueCents = payments
@@ -98,19 +106,22 @@ async function computeMetrics(range: DateRange) {
         payment.status
       )
     )
-    .reduce((sum, payment) => sum + (payment.receivedAmountCents ?? (payment as any).expectedAmountCents ?? 0), 0);
+    .reduce((sum, payment) => sum + (payment.expectedAmountCents ?? 0), 0);
 
   const revenueReceivedCents = payments
     .filter((payment) => payment.status === 'paid')
     .reduce((sum, payment) => sum + (payment.receivedAmountCents ?? 0), 0);
 
   const activePipeline = referrals.filter(
-    (referral) => !['Closed', 'Lost', 'Terminated'].includes(referral.status ?? '')
+    (referral) => ACTIVE_PIPELINE_STATUSES.has(referral.status ?? '')
   ).length;
 
-  const attachRate = totalReferrals === 0
+  const closedOrPaidPayments = payments.filter(
+    (p) => (p.status === 'closed' || p.status === 'paid') && p.agentAttribution !== 'OUTSIDE_AGENT'
+  );
+  const attachRate = closedOrPaidPayments.length === 0
     ? 0
-    : (referrals.filter((referral) => referral.assignedAgent != null).length / totalReferrals) * 100;
+    : (closedOrPaidPayments.filter((p) => (p as any).usedAssignedAgent === true).length / closedOrPaidPayments.length) * 100;
 
   const preApprovals = referrals.filter((referral) => (referral.preApprovalAmountCents ?? 0) > 0).length;
 

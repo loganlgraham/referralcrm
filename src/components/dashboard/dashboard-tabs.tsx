@@ -73,6 +73,7 @@ interface DashboardSummary {
   afcDealsLost: number;
   afcDealsLostList: LostDealEntry[];
   afcAttachRate: number;
+  ahaDealsLost: number;
   ahaAttachRate: number;
   ahaOosDealsLost: number;
   ahaOosDealsLostList: LostDealEntry[];
@@ -335,7 +336,7 @@ function NetworkFilterButtons({
             onClick={() => onChange(option.value)}
             className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
               isActive
-                ? 'border-transparent bg-slate-900 text-white'
+                ? 'border-transparent bg-brand text-white'
                 : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
             }`}
           >
@@ -371,6 +372,7 @@ function SummaryCard({
   drillDownHref?: string;
   onClick?: () => void;
 }) {
+  const isInteractive = Boolean(drillDownHref ?? onClick);
   const content = (
     <>
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
@@ -379,8 +381,8 @@ function SummaryCard({
       {extraStats?.length ? (
         <dl className="mt-3 grid grid-cols-2 gap-2">
           {extraStats.map((stat) => (
-            <div key={`${title}-${stat.label}`} className="rounded bg-slate-50 px-2 py-1">
-              <dt className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{stat.label}</dt>
+            <div key={`${title}-${stat.label}`} className="rounded-lg bg-slate-50 px-2 py-1">
+              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{stat.label}</dt>
               <dd className="text-sm font-semibold text-slate-900">{stat.value}</dd>
             </div>
           ))}
@@ -388,7 +390,7 @@ function SummaryCard({
       ) : null}
     </>
   );
-  const className = 'rounded-lg border border-slate-200 bg-white p-4 shadow-sm block transition hover:border-slate-300 w-full text-left';
+  const className = `rounded-xl border border-slate-200 bg-white p-4 shadow-sm block w-full text-left transition${isInteractive ? ' cursor-pointer hover:border-sky-300 hover:shadow-md' : ''}`;
   if (drillDownHref) {
     return (
       <Link href={drillDownHref} className={className}>
@@ -416,19 +418,19 @@ function MetricGroupCard({
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
-      <dl className="mt-3 space-y-3">
-        {metrics.map((metric) => (
-          <div key={`${title}-${metric.label}`} className="space-y-1">
+      <dl className="mt-3 divide-y divide-slate-100">
+        {metrics.map((metric, index) => (
+          <div key={`${title}-${metric.label}`} className="space-y-0.5 py-2.5 first:pt-0 last:pb-0">
             <div className="flex items-baseline justify-between gap-3">
-              <dt className="text-sm text-slate-500">{metric.label}</dt>
-              <dd className="text-sm font-semibold text-slate-900">{metric.value}</dd>
+              <dt className={index < 2 ? 'text-sm font-medium text-slate-700' : 'text-sm text-slate-500'}>{metric.label}</dt>
+              <dd className={index < 2 ? 'text-base font-bold text-slate-900' : 'text-sm font-semibold text-slate-900'}>{metric.value}</dd>
             </div>
             {metric.helper ? (
               metric.onHelperClick ? (
                 <button
                   type="button"
                   onClick={metric.onHelperClick}
-                  className="text-xs text-indigo-500 underline decoration-indigo-300 underline-offset-2 hover:text-indigo-700"
+                  className="text-xs text-sky-600 underline decoration-sky-300 underline-offset-2 hover:text-sky-800"
                 >
                   {metric.helper}
                 </button>
@@ -448,13 +450,15 @@ function LineChartCard({
   data,
   formatValue,
   helper,
-  actions
+  actions,
+  color = '#0ea5e9'
 }: {
   title: string;
   data: TrendPoint[];
   formatValue: (value: number) => string;
   helper?: string;
   actions?: ReactNode;
+  color?: string;
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const safeData = data ?? [];
@@ -529,7 +533,7 @@ function LineChartCard({
   };
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
@@ -557,16 +561,16 @@ function LineChartCard({
           >
             <defs>
               <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.25" />
-                <stop offset="100%" stopColor="#0ea5e9" stopOpacity="0" />
+                <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+                <stop offset="100%" stopColor={color} stopOpacity="0" />
               </linearGradient>
             </defs>
-            <path d={path} fill="none" stroke="#0ea5e9" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
             {points.length >= 2 ? (
               <path
                 d={`${path} L${points[points.length - 1].x.toFixed(2)} ${CHART_HEIGHT - CHART_PADDING_Y} L${points[0].x.toFixed(2)} ${CHART_HEIGHT - CHART_PADDING_Y} Z`}
                 fill={`url(#${gradientId})`}
-                opacity={0.2}
+                opacity={0.25}
               />
             ) : null}
             {points.map((point, index) => (
@@ -575,7 +579,8 @@ function LineChartCard({
                   cx={point.x}
                   cy={point.y}
                   r={activeIndex === index ? 5 : 3}
-                  fill={activeIndex === index ? '#0ea5e9' : '#bae6fd'}
+                  fill={color}
+                  opacity={activeIndex === index ? 1 : 0.45}
                   onMouseEnter={() => setHoverIndex(index)}
                 />
               </g>
@@ -874,7 +879,7 @@ function PieChartCard({
   let currentAngle = -Math.PI / 2;
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
@@ -945,7 +950,7 @@ function TerminatedDealsList({
   const displayedDeals = showAll ? deals : deals.slice(0, LIST_PREVIEW_LIMIT);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-baseline justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Terminated deals</p>
@@ -974,7 +979,7 @@ function TerminatedDealsList({
       {deals.length > LIST_PREVIEW_LIMIT ? (
         <button
           type="button"
-          className="mt-3 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+          className="mt-3 text-sm font-semibold text-sky-600 hover:text-sky-800"
           onClick={() => setShowAll((prev) => !prev)}
         >
           {showAll ? 'Show less' : 'Show more'}
@@ -1003,27 +1008,31 @@ function ConversionFunnelCard({
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Conversion funnel</p>
-      <p className="mt-1 text-xs text-slate-500">Referrals by stage (click to view list)</p>
-      <div className="mt-4 space-y-2">
+      <p className="mt-1 text-xs text-slate-500">Referrals by stage — click any row to view list</p>
+      <div className="mt-4 space-y-1.5">
         {stages.length ? (
-          stages.map((stage) => (
-            <Link
-              key={stage.status}
-              href={buildDrillDownUrl(stage.status)}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-3 py-2 transition hover:border-slate-200 hover:bg-slate-50"
-            >
-              <span className="font-medium text-slate-900">{stage.label}</span>
-              <div className="flex items-center gap-3 text-sm text-slate-600">
-                <span className="font-semibold text-slate-900">{formatNumber(stage.count)}</span>
-                {stage.avgDaysInStage != null ? (
-                  <span className="text-xs text-slate-500">avg {stage.avgDaysInStage} days</span>
-                ) : null}
-                {stage.dropOffPercent != null && stage.dropOffPercent > 0 ? (
-                  <span className="text-xs text-amber-600">{stage.dropOffPercent.toFixed(0)}% drop-off</span>
-                ) : null}
-              </div>
-            </Link>
-          ))
+          stages.map((stage) => {
+            return (
+              <Link
+                key={stage.status}
+                href={buildDrillDownUrl(stage.status)}
+                className="group block rounded-lg border border-slate-100 px-3 py-2 transition hover:border-sky-200 hover:bg-sky-50"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium text-slate-900 group-hover:text-sky-700">{stage.label}</span>
+                  <div className="flex items-center gap-3 text-sm text-slate-600">
+                    <span className="font-semibold text-slate-900">{formatNumber(stage.count)}</span>
+                    {stage.avgDaysInStage != null ? (
+                      <span className="text-xs text-slate-500">avg {stage.avgDaysInStage}d</span>
+                    ) : null}
+                    {stage.dropOffPercent != null && stage.dropOffPercent > 0 ? (
+                      <span className="text-xs font-medium text-amber-600">↓{stage.dropOffPercent.toFixed(0)}%</span>
+                    ) : null}
+                  </div>
+                </div>
+              </Link>
+            );
+          })
         ) : (
           <p className="py-4 text-center text-sm text-slate-500">No referral data for this period.</p>
         )}
@@ -1045,19 +1054,31 @@ function RankedList({
 }) {
   const [showAll, setShowAll] = useState(false);
   const displayedItems = showAll ? items : items.slice(0, LIST_PREVIEW_LIMIT);
+  const maxValue = items.length > 0 ? Math.max(...items.map((i) => i.value), 1) : 1;
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
       <div className="mt-4 space-y-3">
-        <ul className="space-y-3">
+        <ul className="space-y-2.5">
           {items.length ? (
-            displayedItems.map((item) => (
-              <li key={item.label} className="flex items-center justify-between text-sm text-slate-700">
-                <span className="font-medium text-slate-900">{item.label}</span>
-                <span>{formatValue(item.value)}</span>
-              </li>
-            ))
+            displayedItems.map((item) => {
+              const barPct = Math.max((item.value / maxValue) * 100, item.value > 0 ? 2 : 0);
+              return (
+                <li key={item.label}>
+                  <div className="flex items-center justify-between text-sm text-slate-700">
+                    <span className="font-medium text-slate-900">{item.label}</span>
+                    <span className="text-slate-600">{formatValue(item.value)}</span>
+                  </div>
+                  <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full bg-sky-400"
+                      style={{ width: `${barPct}%` }}
+                    />
+                  </div>
+                </li>
+              );
+            })
           ) : (
             <li className="text-sm text-slate-500">{emptyMessage}</li>
           )}
@@ -1065,7 +1086,7 @@ function RankedList({
         {items.length > LIST_PREVIEW_LIMIT ? (
           <button
             type="button"
-            className="text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+            className="text-sm font-semibold text-sky-600 hover:text-sky-800"
             onClick={() => setShowAll((prev) => !prev)}
           >
             {showAll ? 'Show less' : 'Show more'}
@@ -1091,7 +1112,7 @@ function LeaderboardTable({
   const displayedEntries = showAll ? entries : entries.slice(0, LIST_PREVIEW_LIMIT);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -1108,7 +1129,7 @@ function LeaderboardTable({
           {entries.length ? (
             displayedEntries.map((entry, index) => (
               <tr key={`${entry.id}-${index}`} className="border-t border-slate-100 text-slate-700">
-                <td className="py-2">#{index + 1}</td>
+                <td className="py-2 text-slate-400">#{index + 1}</td>
                 <td className="py-2 font-medium text-slate-900">{entry.name}</td>
                 <td className="py-2 text-right">
                   {entry.revenueCents != null
@@ -1137,7 +1158,7 @@ function LeaderboardTable({
       {entries.length > LIST_PREVIEW_LIMIT ? (
         <button
           type="button"
-          className="mt-3 text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+          className="mt-3 text-sm font-semibold text-sky-600 hover:text-sky-800"
           onClick={() => setShowAll((prev) => !prev)}
         >
           {showAll ? 'Show less' : 'Show more'}
@@ -1281,7 +1302,7 @@ function PreApprovalConversionSection({
   };
 
   return (
-    <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Pre-approval conversion</p>
@@ -1595,9 +1616,9 @@ function MainDashboard({
           ]}
           formatValue={formatCurrency}
         />
-        <LineChartCard title="Deals closed" data={data.trends.deals} formatValue={(value) => formatNumber(Math.round(value))} />
-        <LineChartCard title="Close rate" data={data.trends.closeRate} formatValue={(value) => `${value.toFixed(1)}%`} />
-        <LineChartCard title="Referrals received" data={data.trends.referrals} formatValue={(value) => formatNumber(Math.round(value))} />
+        <LineChartCard title="Deals closed" data={data.trends.deals} formatValue={(value) => formatNumber(Math.round(value))} color="#f59e0b" />
+        <LineChartCard title="Close rate" data={data.trends.closeRate} formatValue={(value) => `${value.toFixed(1)}%`} color="#8b5cf6" />
+        <LineChartCard title="Referrals received" data={data.trends.referrals} formatValue={(value) => formatNumber(Math.round(value))} color="#0ea5e9" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-4">
@@ -1686,7 +1707,7 @@ function DealsLostTable({ deals }: { deals: LostDealEntry[] }) {
           {deals.map((deal) => (
             <tr key={deal.id} className="hover:bg-slate-50">
               <td className="px-6 py-3 font-medium text-slate-700">
-                <Link href={`/referrals/${deal.referralId}`} className="hover:text-indigo-600 hover:underline">
+                <Link href={`/referrals/${deal.referralId}`} className="hover:text-sky-600 hover:underline">
                   {deal.borrowerName}
                 </Link>
               </td>
@@ -1749,7 +1770,7 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
         <LeaderboardTable title="Referrals by agent" entries={data.referralLeaderboard} valueLabel="Referrals" />
         <LeaderboardTable title="Close rate by agent" entries={data.closeRateLeaderboard} valueLabel="Close rate" />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-3">
         <LeaderboardTable
           title="Avg. closed deal amount by agent"
           entries={data.averageClosedDealAmount}
@@ -1758,14 +1779,16 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
         <LeaderboardTable title="Revenue paid by agent" entries={data.revenuePaid} valueLabel="Revenue" />
         <LeaderboardTable title="Revenue expected by agent" entries={data.revenueExpected} valueLabel="Expected" />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+      <div className={`grid gap-4 lg:grid-cols-2${data.agentCreatedMcAssignments.length > 0 ? ' xl:grid-cols-3' : ''}`}>
         <LeaderboardTable title="Agent net earnings" entries={data.netRevenue} valueLabel="Net revenue" />
         <LeaderboardTable title="Deals lost to outside agents" entries={data.lostDeals} valueLabel="Lost deals" />
-        <LeaderboardTable
-          title="Agent-created referrals assigned to MCs"
-          entries={data.agentCreatedMcAssignments}
-          valueLabel="Referrals"
-        />
+        {data.agentCreatedMcAssignments.length > 0 ? (
+          <LeaderboardTable
+            title="Agent-created referrals assigned to MCs"
+            entries={data.agentCreatedMcAssignments}
+            valueLabel="Referrals"
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -1792,7 +1815,7 @@ function StaleReferralsTable({ referrals }: { referrals: StaleReferralEntry[] })
           {referrals.map((row) => (
             <tr key={row.id} className="hover:bg-slate-50">
               <td className="px-6 py-3 font-medium text-slate-700">
-                <Link href={`/referrals/${row.id}`} className="hover:text-indigo-600 hover:underline">
+                <Link href={`/referrals/${row.id}`} className="hover:text-sky-600 hover:underline">
                   {row.borrowerName}
                 </Link>
               </td>
@@ -1874,14 +1897,14 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
     {
       title: 'Task completion rate',
       value: (() => {
-        const total = data.overdueTaskCount + data.dueTodayTaskCount + data.completedInTimeframeCount;
+        const total = data.totalOpenTasks + data.completedInTimeframeCount;
         return total > 0
           ? `${((data.completedInTimeframeCount / total) * 100).toFixed(1)}%`
           : '—';
       })(),
       helper:
-        data.overdueTaskCount + data.dueTodayTaskCount + data.completedInTimeframeCount > 0
-          ? `${formatNumber(data.completedInTimeframeCount)} of ${formatNumber(data.overdueTaskCount + data.dueTodayTaskCount + data.completedInTimeframeCount)} actionable tasks`
+        data.totalOpenTasks + data.completedInTimeframeCount > 0
+          ? `${formatNumber(data.completedInTimeframeCount)} completed, ${formatNumber(data.totalOpenTasks)} still open`
           : 'No actionable tasks in period'
     }
   ];
@@ -1964,7 +1987,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
         {data.referralRows.length === 0 ? (
           <p className="text-sm text-slate-500">No AGIT referrals in this timeframe.</p>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr>
@@ -2080,7 +2103,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
         {data.dealRows.length === 0 ? (
           <p className="text-sm text-slate-500">No deals for AGIT referrals in this timeframe.</p>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr>
@@ -2294,7 +2317,7 @@ export function DashboardTabs() {
             maxDate={maxSelectableDate}
           />
           <div className="flex flex-col items-end gap-2">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Network</span>
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Network</span>
             <NetworkFilterButtons
               value={activeNetworkFilter}
               onChange={(value) => handleNetworkFilterChange(activeTab, value)}
@@ -2324,10 +2347,21 @@ export function DashboardTabs() {
       </div>
 
       {showSkeleton ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div key={index} className="h-32 animate-pulse rounded-lg border border-slate-200 bg-white" />
-          ))}
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="h-28 animate-pulse rounded-xl border border-slate-200 bg-white" />
+            ))}
+          </div>
+          <div className="h-40 animate-pulse rounded-xl border border-slate-200 bg-white" />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="h-52 animate-pulse rounded-xl border border-slate-200 bg-white" />
+            <div className="h-52 animate-pulse rounded-xl border border-slate-200 bg-white" />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="h-48 animate-pulse rounded-xl border border-slate-200 bg-white" />
+            <div className="h-48 animate-pulse rounded-xl border border-slate-200 bg-white" />
+          </div>
         </div>
       ) : null}
 

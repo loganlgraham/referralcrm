@@ -7,7 +7,7 @@ const config: Config = {
     './src/components/**/*.{ts,tsx}',
     './src/app/**/*.{ts,tsx}'
   ],
-  darkMode: 'media',
+  darkMode: 'selector',
   theme: {
     extend: {
       fontFamily: {
