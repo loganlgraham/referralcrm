@@ -1911,8 +1911,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       closedVolumeCents: number;
     }
   >();
-  // Track deals lost to outside agents per agent
+  // Track lost referrals per agent (referrals with status 'Lost')
   const agentLostDealsMap = new Map<string, number>();
+  filteredReferrals.forEach((referral) => {
+    if (referral.status === 'Lost') {
+      const key = referral.assignedAgent ? referral.assignedAgent.toString() : 'unassigned';
+      agentLostDealsMap.set(key, (agentLostDealsMap.get(key) ?? 0) + 1);
+    }
+  });
 
   // Aggregate agent metrics from payments
   // Excludes terminated deals and tracks outside agent attribution separately
@@ -1977,9 +1983,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           const paidReferralFeeCents = payment.receivedAmountCents ?? referralFeeCents;
           current.netCommissionCents += commissionCents - paidReferralFeeCents;
         }
-      } else {
-        // Track deals lost to outside agents
-        agentLostDealsMap.set(key, (agentLostDealsMap.get(key) ?? 0) + 1);
       }
     }
     current.totalReferrals = agentReferralCount.get(key) ?? current.totalReferrals;
