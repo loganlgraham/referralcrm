@@ -1770,7 +1770,7 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
         <LeaderboardTable title="Referrals by agent" entries={data.referralLeaderboard} valueLabel="Referrals" />
         <LeaderboardTable title="Close rate by agent" entries={data.closeRateLeaderboard} valueLabel="Close rate" />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-3">
         <LeaderboardTable
           title="Avg. closed deal amount by agent"
           entries={data.averageClosedDealAmount}
@@ -1779,14 +1779,16 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
         <LeaderboardTable title="Revenue paid by agent" entries={data.revenuePaid} valueLabel="Revenue" />
         <LeaderboardTable title="Revenue expected by agent" entries={data.revenueExpected} valueLabel="Expected" />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+      <div className={`grid gap-4 lg:grid-cols-2${data.agentCreatedMcAssignments.length > 0 ? ' xl:grid-cols-3' : ''}`}>
         <LeaderboardTable title="Agent net earnings" entries={data.netRevenue} valueLabel="Net revenue" />
         <LeaderboardTable title="Deals lost to outside agents" entries={data.lostDeals} valueLabel="Lost deals" />
-        <LeaderboardTable
-          title="Agent-created referrals assigned to MCs"
-          entries={data.agentCreatedMcAssignments}
-          valueLabel="Referrals"
-        />
+        {data.agentCreatedMcAssignments.length > 0 ? (
+          <LeaderboardTable
+            title="Agent-created referrals assigned to MCs"
+            entries={data.agentCreatedMcAssignments}
+            valueLabel="Referrals"
+          />
+        ) : null}
       </div>
     </div>
   );
