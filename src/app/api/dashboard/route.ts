@@ -2106,34 +2106,36 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   type AhaLeaderboardsResult = { rankedAgents: AhaRankedAgent[] };
 
   const AHA_KPI_WEIGHTS: Record<string, number> = {
-    referralCount: 3, closeRate: 3, afcAttachRate: 3, npsScore: 3,
-    avgDaysToContract: 3, lostDeals: 3,
+    closeRate: 5,
+    underContractRate: 3, afcAttachRate: 3, npsScore: 3, lostDeals: 3, avgDaysToContract: 3,
     revenuePaid: 2, avgTimeToFirstContact: 2,
-    avgDealSize: 1, netCommission: 1,
+    avgDealSize: 1, netCommission: 1, referralCount: 1,
   };
   const AHA_KPI_TIERS: Record<string, 'high' | 'medium' | 'low'> = {
-    referralCount: 'high', closeRate: 'high', afcAttachRate: 'high', npsScore: 'high',
-    avgDaysToContract: 'high', lostDeals: 'high',
+    closeRate: 'high', underContractRate: 'high', afcAttachRate: 'high', npsScore: 'high',
+    lostDeals: 'high', avgDaysToContract: 'high',
     revenuePaid: 'medium', avgTimeToFirstContact: 'medium',
-    avgDealSize: 'low', netCommission: 'low',
+    avgDealSize: 'low', netCommission: 'low', referralCount: 'low',
   };
   const AHA_KPI_LABELS: Record<string, string> = {
-    referralCount: 'Referral Count', closeRate: 'Close Rate',
+    closeRate: 'Close Rate', underContractRate: 'Under Contract Rate',
     afcAttachRate: 'AFC Attach Rate', npsScore: 'NPS Score',
-    avgDaysToContract: 'Avg. Days to Contract', lostDeals: 'Lost Deals',
+    lostDeals: 'Lost Deals', avgDaysToContract: 'Avg. Days to Contract',
     revenuePaid: 'Revenue Paid', avgTimeToFirstContact: 'Avg. Time to First Contact',
     avgDealSize: 'Avg. Deal Size', netCommission: 'Net Commission',
+    referralCount: 'Referral Count',
   };
   const AHA_KPI_ORDER = [
-    'referralCount', 'closeRate', 'afcAttachRate', 'lostDeals',
+    'closeRate', 'underContractRate', 'afcAttachRate', 'lostDeals',
     'avgDaysToContract', 'npsScore', 'revenuePaid', 'avgTimeToFirstContact',
-    'avgDealSize', 'netCommission',
+    'avgDealSize', 'netCommission', 'referralCount',
   ];
 
   const formatAhaKpiDisplay = (key: string, raw: number): string => {
     switch (key) {
       case 'closeRate':
       case 'afcAttachRate':
+      case 'underContractRate':
         return `${raw.toFixed(1)}%`;
       case 'revenuePaid':
       case 'avgDealSize':
@@ -2161,6 +2163,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const referralCountMap = new Map<string, number>();
     const lostDealsMap = new Map<string, number>();
+    const underContractCountMap = new Map<string, number>();
     const slaContractDaysMap = new Map<string, number[]>();
     const slaFirstContactMap = new Map<string, number[]>();
 
@@ -2169,6 +2172,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       referralCountMap.set(key, (referralCountMap.get(key) ?? 0) + 1);
       if (r.status === 'Lost') {
         lostDealsMap.set(key, (lostDealsMap.get(key) ?? 0) + 1);
+      }
+      if ((r.status ?? '').trim() === 'Under Contract') {
+        underContractCountMap.set(key, (underContractCountMap.get(key) ?? 0) + 1);
       }
       if (r.sla) {
         const stored = r.sla.daysToContract;
@@ -2244,9 +2250,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     // Build per-KPI raw value maps (exclude 'unassigned')
     const kpiRaw: Record<string, Map<string, number>> = {
-      referralCount: new Map(), closeRate: new Map(), afcAttachRate: new Map(),
-      revenuePaid: new Map(), avgDealSize: new Map(), netCommission: new Map(),
-      lostDeals: new Map(), avgDaysToContract: new Map(),
+      referralCount: new Map(), closeRate: new Map(), underContractRate: new Map(),
+      afcAttachRate: new Map(), revenuePaid: new Map(), avgDealSize: new Map(),
+      netCommission: new Map(), lostDeals: new Map(), avgDaysToContract: new Map(),
       avgTimeToFirstContact: new Map(), npsScore: new Map(),
     };
 
@@ -2255,6 +2261,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const perf = agentPerfMap.get(id);
       kpiRaw.referralCount.set(id, count);
       kpiRaw.closeRate.set(id, count > 0 ? ((perf?.closed ?? 0) / count) * 100 : 0);
+      kpiRaw.underContractRate.set(id, count > 0 ? ((underContractCountMap.get(id) ?? 0) / count) * 100 : 0);
       kpiRaw.revenuePaid.set(id, perf?.revenue ?? 0);
       kpiRaw.netCommission.set(id, perf?.netCommissionCents ?? 0);
       kpiRaw.lostDeals.set(id, lostDealsMap.get(id) ?? 0);
@@ -2298,6 +2305,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const kpiNorm: Record<string, Map<string, number>> = {
       referralCount:         normalizeMap(kpiRaw.referralCount, false),
       closeRate:             normalizeMap(kpiRaw.closeRate, false),
+      underContractRate:     normalizeMap(kpiRaw.underContractRate, false),
       afcAttachRate:         normalizeMap(kpiRaw.afcAttachRate, false),
       revenuePaid:           normalizeMap(kpiRaw.revenuePaid, false),
       avgDealSize:           normalizeMap(kpiRaw.avgDealSize, false),

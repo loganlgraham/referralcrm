@@ -1762,8 +1762,12 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
   );
 }
 
+const AHA_RANK_PREVIEW = 10;
+
 function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: AhaRankedAgent[] } }) {
   const [selectedAgent, setSelectedAgent] = useState<AhaRankedAgent | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const displayed = showAll ? data.rankedAgents : data.rankedAgents.slice(0, AHA_RANK_PREVIEW);
 
   const getScoreStyle = (score: number) => {
     if (score >= 75) return 'bg-emerald-50 text-emerald-700';
@@ -1789,36 +1793,47 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
       {data.rankedAgents.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-500">No agents with data for this period.</p>
       ) : (
-        <table className="mt-4 w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-slate-500">
-              <th className="py-1 font-medium w-10">Rank</th>
-              <th className="py-1 font-medium">Agent</th>
-              <th className="py-1 font-medium text-right">Score</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.rankedAgents.map((agent) => (
-              <tr key={agent.id} className="border-t border-slate-100 text-slate-700">
-                <td className="py-2 text-slate-400">#{agent.rank}</td>
-                <td className="py-2 font-medium">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedAgent(agent)}
-                    className="text-sky-600 hover:text-sky-800 hover:underline text-left"
-                  >
-                    {agent.name}
-                  </button>
-                </td>
-                <td className="py-2 text-right">
-                  <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${getScoreStyle(agent.score)}`}>
-                    {agent.score.toFixed(1)}
-                  </span>
-                </td>
+        <>
+          <table className="mt-4 w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-slate-500">
+                <th className="py-1 font-medium w-10">Rank</th>
+                <th className="py-1 font-medium">Agent</th>
+                <th className="py-1 font-medium text-right">Score</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {displayed.map((agent) => (
+                <tr key={agent.id} className="border-t border-slate-100 text-slate-700">
+                  <td className="py-2 text-slate-400">#{agent.rank}</td>
+                  <td className="py-2 font-medium">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAgent(agent)}
+                      className="text-sky-600 hover:text-sky-800 hover:underline text-left"
+                    >
+                      {agent.name}
+                    </button>
+                  </td>
+                  <td className="py-2 text-right">
+                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${getScoreStyle(agent.score)}`}>
+                      {agent.score.toFixed(1)}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {data.rankedAgents.length > AHA_RANK_PREVIEW && (
+            <button
+              type="button"
+              className="mt-3 text-sm font-semibold text-sky-600 hover:text-sky-800"
+              onClick={() => setShowAll((prev) => !prev)}
+            >
+              {showAll ? 'Show less' : `Show more (${data.rankedAgents.length - AHA_RANK_PREVIEW} more)`}
+            </button>
+          )}
+        </>
       )}
 
       <Modal
