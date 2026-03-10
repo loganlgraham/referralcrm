@@ -889,6 +889,13 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     nextReceivedAmountCents = 0;
   }
 
+  if (hasAgitAgent) {
+    nextCommissionBasisPoints = null;
+    nextReferralFeeBasisPoints = null;
+    nextExpectedAmountCents = 0;
+    nextReceivedAmountCents = 0;
+  }
+
   const updatePayload: Record<string, unknown> = { ...parsed.data };
   delete updatePayload.referralId;
   updatePayload.contractPriceCents = nextContractPriceCents ?? null;

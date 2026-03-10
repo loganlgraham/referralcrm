@@ -68,6 +68,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
   const now = new Date();
   const isAgentOrigin = referral.origin === 'agent';
+  const isAgitDeal = (referral.assignedAgent as any)?.ahaDesignation === 'AGIT';
+  const isNoFeeDeal = isAgentOrigin || isAgitDeal;
   const requestedStatus = parsed.data.status;
   const nextStatus = requestedStatus === 'Showing Homes' ? 'Active Lead' : requestedStatus;
   const createNewDeal = Boolean(parsed.data.createNewDeal);
@@ -224,13 +226,13 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       referral.propertyPostalCode = propertyPostalCode;
       referral.estPurchasePriceCents = Math.round(details.contractPrice * 100);
       referral.commissionBasisPoints = Math.round(details.agentCommissionPercentage * 100);
-      referral.referralFeeBasisPoints = isAgentOrigin
+      referral.referralFeeBasisPoints = isNoFeeDeal
         ? 0
         : Math.round(details.referralFeePercentage * 100);
       referral.dealSide = details.dealSide;
       const commissionRate = details.agentCommissionPercentage / 100;
       const referralRate = details.referralFeePercentage / 100;
-      const referralFeeDue = isAgentOrigin ? 0 : details.contractPrice * commissionRate * referralRate;
+      const referralFeeDue = isNoFeeDeal ? 0 : details.contractPrice * commissionRate * referralRate;
       referral.referralFeeDueCents = Math.round(referralFeeDue * 100);
     }
 
@@ -239,9 +241,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         { referralId: referral._id, status: 'under_contract' },
         {
           $set: {
-            expectedAmountCents: isAgentOrigin ? 0 : referral.referralFeeDueCents ?? 0,
+            expectedAmountCents: isNoFeeDeal ? 0 : referral.referralFeeDueCents ?? 0,
             commissionBasisPoints: referral.commissionBasisPoints ?? null,
-            referralFeeBasisPoints: isAgentOrigin ? null : referral.referralFeeBasisPoints ?? null,
+            referralFeeBasisPoints: isNoFeeDeal ? null : referral.referralFeeBasisPoints ?? null,
             side: referral.dealSide,
             contractPriceCents: referral.estPurchasePriceCents ?? null,
           },
@@ -256,9 +258,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         const newDeal = await Payment.create({
           referralId: referral._id,
           status: 'under_contract',
-          expectedAmountCents: isAgentOrigin ? 0 : referral.referralFeeDueCents ?? 0,
+          expectedAmountCents: isNoFeeDeal ? 0 : referral.referralFeeDueCents ?? 0,
           commissionBasisPoints: referral.commissionBasisPoints ?? null,
-          referralFeeBasisPoints: isAgentOrigin ? null : referral.referralFeeBasisPoints ?? null,
+          referralFeeBasisPoints: isNoFeeDeal ? null : referral.referralFeeBasisPoints ?? null,
           side: referral.dealSide,
           contractPriceCents: referral.estPurchasePriceCents ?? null,
           usedAssignedAgent: true,
@@ -274,9 +276,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       const newDeal = await Payment.create({
         referralId: referral._id,
         status: 'under_contract',
-        expectedAmountCents: isAgentOrigin ? 0 : referral.referralFeeDueCents ?? 0,
+        expectedAmountCents: isNoFeeDeal ? 0 : referral.referralFeeDueCents ?? 0,
         commissionBasisPoints: referral.commissionBasisPoints ?? null,
-        referralFeeBasisPoints: isAgentOrigin ? null : referral.referralFeeBasisPoints ?? null,
+        referralFeeBasisPoints: isNoFeeDeal ? null : referral.referralFeeBasisPoints ?? null,
         side: referral.dealSide,
         contractPriceCents: referral.estPurchasePriceCents ?? null,
         usedAssignedAgent: true,
@@ -335,7 +337,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     });
 
     if (!hasActiveDeal) {
-      if (isAgentOrigin) {
+      if (isNoFeeDeal) {
         referral.referralFeeDueCents = 0;
         await Payment.updateMany(
           { referralId: referral._id, status: 'under_contract' },
