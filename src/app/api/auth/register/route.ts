@@ -108,34 +108,27 @@ export async function POST(request: Request) {
         await Agent.findOneAndUpdate(
           { $or: [{ userId: user._id }, { email }] },
           {
-            userId: user._id,
-            name,
-            email,
-            phone: '',
-            statesLicensed: [],
-            zipCoverage: [],
-            closings12mo: 0,
-            closingRatePercentage: null,
-            npsScore: null,
-            avgResponseHours: null,
-            active: true,
+            $set: { userId: user._id, name, email, active: true },
+            $setOnInsert: {
+              phone: '',
+              statesLicensed: [],
+              zipCoverage: [],
+              closings12mo: 0,
+              closingRatePercentage: null,
+              npsScore: null,
+              avgResponseHours: null,
+            },
           },
-          { upsert: true, new: true, setDefaultsOnInsert: true }
+          { upsert: true, new: true }
         );
       } else if (role === 'mortgage-consultant') {
         await LenderMC.findOneAndUpdate(
           { $or: [{ userId: user._id }, { email }] },
           {
-            userId: user._id,
-            name,
-            email,
-            phone: '',
-            nmlsId: '',
-            licensedStates: [],
-            team: '',
-            region: '',
+            $set: { userId: user._id, name, email },
+            $setOnInsert: { phone: '', nmlsId: '', licensedStates: [], team: '', region: '' },
           },
-          { upsert: true, new: true, setDefaultsOnInsert: true }
+          { upsert: true, new: true }
         );
       }
     } catch (error) {
