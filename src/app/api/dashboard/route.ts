@@ -2341,14 +2341,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return { rankedAgents };
   };
 
-  const ahaFilteredReferrals = filteredReferrals.filter((r) => r.ahaBucket === 'AHA');
-  const ahaOosFilteredReferrals = filteredReferrals.filter((r) => r.ahaBucket === 'AHA_OOS');
-  const ahaFilteredPayments = filteredPaymentsByNetwork.filter(
-    (p) => p.referral?.ahaBucket === 'AHA'
-  );
-  const ahaOosFilteredPayments = filteredPaymentsByNetwork.filter(
-    (p) => p.referral?.ahaBucket === 'AHA_OOS'
-  );
+  const ahaFilteredReferrals = filteredReferrals.filter((r) => getReferralDesignation(r) === 'AHA');
+  const ahaOosFilteredReferrals = filteredReferrals.filter((r) => getReferralDesignation(r) === 'AHA_OOS');
+  const ahaFilteredPayments = filteredPaymentsByNetwork.filter((p) => getAgentDesignation(p) === 'AHA');
+  const ahaOosFilteredPayments = filteredPaymentsByNetwork.filter((p) => getAgentDesignation(p) === 'AHA_OOS');
 
   const ahaLeaderboards = buildAhaAgentLeaderboards(ahaFilteredReferrals, ahaFilteredPayments);
   const ahaOosLeaderboards = buildAhaAgentLeaderboards(ahaOosFilteredReferrals, ahaOosFilteredPayments);
