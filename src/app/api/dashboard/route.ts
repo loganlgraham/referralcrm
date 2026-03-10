@@ -986,7 +986,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       ? LenderMC.find({ _id: { $in: Array.from(lenderIds, (id) => new Types.ObjectId(id)) } }).select('name email phone')
       : Promise.resolve([]),
     agentIds.size
-      ? Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } }).select('name email phone ahaDesignation')
+      ? Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } }).select('name email phone ahaDesignation npsScore')
       : Promise.resolve([])
   ]);
 
@@ -1011,8 +1011,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   const agentDesignationMap = new Map<string, 'AHA' | 'AHA_OOS' | 'AGIT' | null>();
+  const agentNpsMap = new Map<string, number | null>();
   agents.forEach((agent) => {
-    agentDesignationMap.set(agent._id.toString(), agent.ahaDesignation ?? null);
+    const id = agent._id.toString();
+    agentDesignationMap.set(id, agent.ahaDesignation ?? null);
+    agentNpsMap.set(id, (agent as { npsScore?: number | null }).npsScore ?? null);
   });
 
   const getAgentDesignation = (payment: AggregatedPayment): 'AHA' | 'AHA_OOS' | 'AGIT' | null => {
@@ -2085,6 +2088,275 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .sort((a, b) => b.referrals - a.referrals)
     .slice(0, 10);
 
+  // AHA / AHA OOS agent leaderboards — composite score (0–100) per agent
+  type AhaRankedAgent = {
+    id: string;
+    name: string;
+    score: number;
+    rank: number;
+    kpis: {
+      label: string;
+      key: string;
+      rawValue: number;
+      displayValue: string;
+      normalizedScore: number;
+      weight: 'high' | 'medium' | 'low';
+    }[];
+  };
+  type AhaLeaderboardsResult = { rankedAgents: AhaRankedAgent[] };
+
+  const AHA_KPI_WEIGHTS: Record<string, number> = {
+    closeRate: 5,
+    underContractRate: 3, afcAttachRate: 3, npsScore: 3, lostDeals: 3, avgDaysToContract: 3,
+    revenuePaid: 2, avgTimeToFirstContact: 2,
+    avgDealSize: 1, netCommission: 1, referralCount: 1,
+  };
+  const AHA_KPI_TIERS: Record<string, 'high' | 'medium' | 'low'> = {
+    closeRate: 'high', underContractRate: 'high', afcAttachRate: 'high', npsScore: 'high',
+    lostDeals: 'high', avgDaysToContract: 'high',
+    revenuePaid: 'medium', avgTimeToFirstContact: 'medium',
+    avgDealSize: 'low', netCommission: 'low', referralCount: 'low',
+  };
+  const AHA_KPI_LABELS: Record<string, string> = {
+    closeRate: 'Close Rate', underContractRate: 'Under Contract Rate',
+    afcAttachRate: 'AFC Attach Rate', npsScore: 'NPS Score',
+    lostDeals: 'Lost Deals', avgDaysToContract: 'Avg. Days to Contract',
+    revenuePaid: 'Revenue Paid', avgTimeToFirstContact: 'Avg. Time to First Contact',
+    avgDealSize: 'Avg. Deal Size', netCommission: 'Net Commission',
+    referralCount: 'Referral Count',
+  };
+  const AHA_KPI_ORDER = [
+    'closeRate', 'underContractRate', 'afcAttachRate', 'lostDeals',
+    'avgDaysToContract', 'npsScore', 'revenuePaid', 'avgTimeToFirstContact',
+    'avgDealSize', 'netCommission', 'referralCount',
+  ];
+
+  const formatAhaKpiDisplay = (key: string, raw: number): string => {
+    switch (key) {
+      case 'closeRate':
+      case 'afcAttachRate':
+      case 'underContractRate':
+        return `${raw.toFixed(1)}%`;
+      case 'revenuePaid':
+      case 'avgDealSize':
+      case 'netCommission': {
+        const dollars = raw / 100;
+        if (Math.abs(dollars) >= 1_000_000) return `$${(dollars / 1_000_000).toFixed(1)}M`;
+        if (Math.abs(dollars) >= 1_000) return `$${(dollars / 1_000).toFixed(0)}K`;
+        return `$${Math.round(dollars)}`;
+      }
+      case 'avgDaysToContract':
+        return `${Math.round(raw)} days`;
+      case 'avgTimeToFirstContact':
+        return `${raw.toFixed(1)} hrs`;
+      default:
+        return String(Math.round(raw));
+    }
+  };
+
+  const buildAhaAgentLeaderboards = (
+    bucketReferrals: DashboardReferral[],
+    bucketPayments: AggregatedPayment[]
+  ): AhaLeaderboardsResult => {
+    const getName = (key: string) =>
+      key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent';
+
+    const referralCountMap = new Map<string, number>();
+    const lostDealsMap = new Map<string, number>();
+    const underContractCountMap = new Map<string, number>();
+    const slaContractDaysMap = new Map<string, number[]>();
+    const slaFirstContactMap = new Map<string, number[]>();
+
+    bucketReferrals.forEach((r) => {
+      const key = r.assignedAgent?.toString() ?? 'unassigned';
+      referralCountMap.set(key, (referralCountMap.get(key) ?? 0) + 1);
+      if (r.status === 'Lost') {
+        lostDealsMap.set(key, (lostDealsMap.get(key) ?? 0) + 1);
+      }
+      if ((r.status ?? '').trim() === 'Under Contract') {
+        underContractCountMap.set(key, (underContractCountMap.get(key) ?? 0) + 1);
+      }
+      if (r.sla) {
+        const stored = r.sla.daysToContract;
+        let daysToContract: number | null = null;
+        if (stored != null && stored >= 0) {
+          daysToContract = stored;
+        } else {
+          const referralDate = r.referralDate ? new Date(r.referralDate) : null;
+          const lastUC = r.sla.lastUnderContractAt ? new Date(r.sla.lastUnderContractAt) : null;
+          if (referralDate && lastUC && lastUC >= referralDate) {
+            daysToContract = differenceInCalendarDays(lastUC, referralDate);
+          }
+        }
+        if (daysToContract != null && daysToContract >= 0) {
+          const arr = slaContractDaysMap.get(key) ?? [];
+          arr.push(daysToContract);
+          slaContractDaysMap.set(key, arr);
+        }
+        const firstContact = r.sla.timeToFirstAgentContactHours;
+        if (firstContact != null) {
+          const arr = slaFirstContactMap.get(key) ?? [];
+          arr.push(firstContact);
+          slaFirstContactMap.set(key, arr);
+        }
+      }
+    });
+
+    const agentPerfMap = new Map<
+      string,
+      {
+        revenue: number;
+        closed: number;
+        afcAttachedDeals: number;
+        afcEligibleDeals: number;
+        closedVolumeCents: number;
+        netCommissionCents: number;
+      }
+    >();
+
+    bucketPayments.forEach((payment) => {
+      if (payment.status === 'terminated') return;
+      const key = payment.referral?.assignedAgent?.toString() ?? 'unassigned';
+      const current = agentPerfMap.get(key) ?? {
+        revenue: 0,
+        closed: 0,
+        afcAttachedDeals: 0,
+        afcEligibleDeals: 0,
+        closedVolumeCents: 0,
+        netCommissionCents: 0
+      };
+      const isOutside = payment.agentAttribution === 'OUTSIDE_AGENT';
+      if (!isOutside) {
+        current.revenue += payment.receivedAmountCents ?? 0;
+        if (payment.status === 'closed' || payment.status === 'paid') {
+          current.closed += 1;
+          const contractPriceCents =
+            payment.contractPriceCents ?? payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
+          if (contractPriceCents > 0) current.closedVolumeCents += contractPriceCents;
+          current.afcEligibleDeals += 1;
+          if (payment.usedAfc) current.afcAttachedDeals += 1;
+          if (payment.status === 'paid') {
+            const commissionBps = payment.referral?.commissionBasisPoints ?? 0;
+            if (commissionBps > 0 && contractPriceCents > 0) {
+              const commissionCents = (contractPriceCents * commissionBps) / 10000;
+              const referralFeePaid = payment.receivedAmountCents ?? payment.referral?.referralFeeDueCents ?? 0;
+              current.netCommissionCents += commissionCents - referralFeePaid;
+            }
+          }
+        }
+      }
+      agentPerfMap.set(key, current);
+    });
+
+    // Build per-KPI raw value maps (exclude 'unassigned')
+    const kpiRaw: Record<string, Map<string, number>> = {
+      referralCount: new Map(), closeRate: new Map(), underContractRate: new Map(),
+      afcAttachRate: new Map(), revenuePaid: new Map(), avgDealSize: new Map(),
+      netCommission: new Map(), lostDeals: new Map(), avgDaysToContract: new Map(),
+      avgTimeToFirstContact: new Map(), npsScore: new Map(),
+    };
+
+    for (const [id, count] of referralCountMap) {
+      if (id === 'unassigned') continue;
+      const perf = agentPerfMap.get(id);
+      kpiRaw.referralCount.set(id, count);
+      kpiRaw.closeRate.set(id, count > 0 ? ((perf?.closed ?? 0) / count) * 100 : 0);
+      kpiRaw.underContractRate.set(id, count > 0 ? ((underContractCountMap.get(id) ?? 0) / count) * 100 : 0);
+      kpiRaw.revenuePaid.set(id, perf?.revenue ?? 0);
+      kpiRaw.netCommission.set(id, perf?.netCommissionCents ?? 0);
+      kpiRaw.lostDeals.set(id, lostDealsMap.get(id) ?? 0);
+      if (perf && perf.afcEligibleDeals > 0) {
+        kpiRaw.afcAttachRate.set(id, (perf.afcAttachedDeals / perf.afcEligibleDeals) * 100);
+      }
+      if (perf && perf.closed > 0) {
+        kpiRaw.avgDealSize.set(id, perf.closedVolumeCents / perf.closed);
+      }
+      const contractDays = slaContractDaysMap.get(id);
+      if (contractDays && contractDays.length > 0) {
+        kpiRaw.avgDaysToContract.set(id, computeAverage(contractDays));
+      }
+      const firstContactHours = slaFirstContactMap.get(id);
+      if (firstContactHours && firstContactHours.length > 0) {
+        kpiRaw.avgTimeToFirstContact.set(id, computeAverage(firstContactHours));
+      }
+      const nps = agentNpsMap.get(id);
+      if (nps != null) kpiRaw.npsScore.set(id, nps);
+    }
+
+    // Min-max normalize each KPI map
+    const normalizeMap = (rawMap: Map<string, number>, lowerIsBetter: boolean): Map<string, number> => {
+      if (rawMap.size === 0) return new Map();
+      const vals = Array.from(rawMap.values());
+      const min = Math.min(...vals);
+      const max = Math.max(...vals);
+      const result = new Map<string, number>();
+      for (const [id, val] of rawMap) {
+        if (max === min) {
+          result.set(id, 100);
+        } else if (lowerIsBetter) {
+          result.set(id, ((max - val) / (max - min)) * 100);
+        } else {
+          result.set(id, ((val - min) / (max - min)) * 100);
+        }
+      }
+      return result;
+    };
+
+    const kpiNorm: Record<string, Map<string, number>> = {
+      referralCount:         normalizeMap(kpiRaw.referralCount, false),
+      closeRate:             normalizeMap(kpiRaw.closeRate, false),
+      underContractRate:     normalizeMap(kpiRaw.underContractRate, false),
+      afcAttachRate:         normalizeMap(kpiRaw.afcAttachRate, false),
+      revenuePaid:           normalizeMap(kpiRaw.revenuePaid, false),
+      avgDealSize:           normalizeMap(kpiRaw.avgDealSize, false),
+      netCommission:         normalizeMap(kpiRaw.netCommission, false),
+      lostDeals:             normalizeMap(kpiRaw.lostDeals, true),
+      avgDaysToContract:     normalizeMap(kpiRaw.avgDaysToContract, true),
+      avgTimeToFirstContact: normalizeMap(kpiRaw.avgTimeToFirstContact, true),
+      npsScore:              normalizeMap(kpiRaw.npsScore, false),
+    };
+
+    // Compute composite score per agent
+    const rankedAgents: AhaRankedAgent[] = Array.from(kpiRaw.referralCount.keys()).map((id) => {
+      let weightedSum = 0;
+      let totalWeight = 0;
+      const kpis: AhaRankedAgent['kpis'] = [];
+
+      for (const key of AHA_KPI_ORDER) {
+        const rawVal = kpiRaw[key].get(id);
+        if (rawVal == null) continue;
+        const normalizedScore = kpiNorm[key].get(id) ?? 0;
+        const w = AHA_KPI_WEIGHTS[key];
+        weightedSum += normalizedScore * w;
+        totalWeight += w;
+        kpis.push({
+          label: AHA_KPI_LABELS[key],
+          key,
+          rawValue: rawVal,
+          displayValue: formatAhaKpiDisplay(key, rawVal),
+          normalizedScore: Math.round(normalizedScore * 10) / 10,
+          weight: AHA_KPI_TIERS[key],
+        });
+      }
+
+      const score = totalWeight > 0 ? Math.round((weightedSum / totalWeight) * 10) / 10 : 0;
+      return { id, name: getName(id), score, rank: 0, kpis };
+    });
+
+    rankedAgents.sort((a, b) => b.score - a.score);
+    rankedAgents.forEach((a, i) => { a.rank = i + 1; });
+
+    return { rankedAgents };
+  };
+
+  const ahaFilteredReferrals = filteredReferrals.filter((r) => getReferralDesignation(r) === 'AHA');
+  const ahaOosFilteredReferrals = filteredReferrals.filter((r) => getReferralDesignation(r) === 'AHA_OOS');
+  const ahaFilteredPayments = filteredPaymentsByNetwork.filter((p) => getAgentDesignation(p) === 'AHA');
+  const ahaOosFilteredPayments = filteredPaymentsByNetwork.filter((p) => getAgentDesignation(p) === 'AHA_OOS');
+
+  const ahaLeaderboards = buildAhaAgentLeaderboards(ahaFilteredReferrals, ahaFilteredPayments);
+  const ahaOosLeaderboards = buildAhaAgentLeaderboards(ahaOosFilteredReferrals, ahaOosFilteredPayments);
+
   // Admin metrics: referrals created within timeframe and network only.
   // "Unassigned" = still in "New Lead" (not paired). "Assigned" = moved to Paired or beyond.
   const adminEligibleReferrals = filteredReferrals;
@@ -2608,7 +2880,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       averageClosedDealAmount: agentAverageClosedDeal,
       netRevenue: agentNetRevenue,
       lostDeals: agentLostDeals,
-      agentCreatedMcAssignments: agentCreatedMcLeaderboard
+      agentCreatedMcAssignments: agentCreatedMcLeaderboard,
+      ahaLeaderboards,
+      ahaOosLeaderboards
     },
     admin: {
       slaAverages: {

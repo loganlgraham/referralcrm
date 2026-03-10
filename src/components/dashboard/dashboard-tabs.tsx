@@ -49,6 +49,21 @@ interface LeaderboardEntry {
   referrals?: number;
 }
 
+interface AhaRankedAgent {
+  id: string;
+  name: string;
+  score: number;
+  rank: number;
+  kpis: {
+    label: string;
+    key: string;
+    rawValue: number;
+    displayValue: string;
+    normalizedScore: number;
+    weight: 'high' | 'medium' | 'low';
+  }[];
+}
+
 const LIST_PREVIEW_LIMIT = 5;
 
 interface LostDealEntry {
@@ -209,6 +224,8 @@ interface DashboardResponse {
     netRevenue: LeaderboardEntry[];
     lostDeals: LeaderboardEntry[];
     agentCreatedMcAssignments: LeaderboardEntry[];
+    ahaLeaderboards: { rankedAgents: AhaRankedAgent[] };
+    ahaOosLeaderboards: { rankedAgents: AhaRankedAgent[] };
   };
   admin: {
     slaAverages: {
@@ -1745,6 +1762,130 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
   );
 }
 
+const AHA_RANK_PREVIEW = 10;
+
+function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: AhaRankedAgent[] } }) {
+  const [selectedAgent, setSelectedAgent] = useState<AhaRankedAgent | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const displayed = showAll ? data.rankedAgents : data.rankedAgents.slice(0, AHA_RANK_PREVIEW);
+
+  const getScoreStyle = (score: number) => {
+    if (score >= 75) return 'bg-emerald-50 text-emerald-700';
+    if (score >= 50) return 'bg-amber-50 text-amber-700';
+    return 'bg-red-50 text-red-700';
+  };
+
+  const getWeightBadge = (weight: 'high' | 'medium' | 'low') => {
+    if (weight === 'high') return 'bg-slate-700 text-white';
+    if (weight === 'medium') return 'bg-slate-400 text-white';
+    return 'bg-slate-200 text-slate-600';
+  };
+
+  const getWeightLabel = (weight: 'high' | 'medium' | 'low') => {
+    if (weight === 'high') return 'HIGH';
+    if (weight === 'medium') return 'MED';
+    return 'LOW';
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+      {data.rankedAgents.length === 0 ? (
+        <p className="py-8 text-center text-sm text-slate-500">No agents with data for this period.</p>
+      ) : (
+        <>
+          <table className="mt-4 w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-slate-500">
+                <th className="py-1 font-medium w-10">Rank</th>
+                <th className="py-1 font-medium">Agent</th>
+                <th className="py-1 font-medium text-right">Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayed.map((agent) => (
+                <tr key={agent.id} className="border-t border-slate-100 text-slate-700">
+                  <td className="py-2 text-slate-400">#{agent.rank}</td>
+                  <td className="py-2 font-medium">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAgent(agent)}
+                      className="text-sky-600 hover:text-sky-800 hover:underline text-left"
+                    >
+                      {agent.name}
+                    </button>
+                  </td>
+                  <td className="py-2 text-right">
+                    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${getScoreStyle(agent.score)}`}>
+                      {agent.score.toFixed(1)}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {data.rankedAgents.length > AHA_RANK_PREVIEW && (
+            <button
+              type="button"
+              className="mt-3 text-sm font-semibold text-sky-600 hover:text-sky-800"
+              onClick={() => setShowAll((prev) => !prev)}
+            >
+              {showAll ? 'Show less' : `Show more (${data.rankedAgents.length - AHA_RANK_PREVIEW} more)`}
+            </button>
+          )}
+        </>
+      )}
+
+      <Modal
+        isOpen={selectedAgent != null}
+        onClose={() => setSelectedAgent(null)}
+        title={selectedAgent?.name ?? ''}
+        size="md"
+      >
+        {selectedAgent && (
+          <div className="p-6 space-y-5">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-slate-500">Composite Score</span>
+              <span className={`inline-block rounded-full px-3 py-1 text-sm font-bold tabular-nums ${getScoreStyle(selectedAgent.score)}`}>
+                {selectedAgent.score.toFixed(1)} / 100
+              </span>
+            </div>
+            <div>
+              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-400">KPI Breakdown</p>
+              <div className="space-y-3">
+                {selectedAgent.kpis.map((kpi) => (
+                  <div key={kpi.key}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-slate-700">{kpi.label}</span>
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getWeightBadge(kpi.weight)}`}>
+                          {getWeightLabel(kpi.weight)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-sm">
+                        <span className="text-slate-500">{kpi.displayValue}</span>
+                        <span className="font-semibold text-slate-900 tabular-nums w-12 text-right">
+                          {kpi.normalizedScore.toFixed(0)}/100
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-slate-100">
+                      <div
+                        className={`h-1.5 rounded-full transition-all ${kpi.normalizedScore >= 75 ? 'bg-emerald-500' : kpi.normalizedScore >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                        style={{ width: `${kpi.normalizedScore}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
 function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
   const averageCommissionDisplay =
     data.averageCommissionPercent > 0 ? `${data.averageCommissionPercent.toFixed(2)}%` : '—';
@@ -1762,6 +1903,12 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
 
   return (
     <div className="space-y-6">
+      {data.ahaLeaderboards && (
+        <AhaRankedList title="AHA Agent Leaderboard" data={data.ahaLeaderboards} />
+      )}
+      {data.ahaOosLeaderboards && (
+        <AhaRankedList title="AHA OOS Agent Leaderboard" data={data.ahaOosLeaderboards} />
+      )}
       <div className="grid gap-4 md:grid-cols-2">
         <SummaryCard title="Average agent commission" value={averageCommissionDisplay} helper={commissionHelper} />
         <SummaryCard title="Average referral fee" value={averageReferralFeeDisplay} helper={referralFeeHelper} />
