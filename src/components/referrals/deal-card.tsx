@@ -32,6 +32,7 @@ export interface DealRecord {
   usedAfc?: boolean | null;
   usedAssignedAgent?: boolean | null;
   commissionBasisPoints?: number | null;
+  commissionFlatFeeCents?: number | null;
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
   contractPriceCents?: number | null;
@@ -93,6 +94,8 @@ export interface ReferralDealProps {
 interface DealDraft {
   contractPrice: string;
   commissionPercent: string;
+  commissionFlat: string;
+  commissionMode: '%' | '$';
   referralFeePercent: string;
   side: 'buy' | 'sell';
 }
@@ -100,15 +103,25 @@ interface DealDraft {
 const deriveReferralFeeCents = (
   contractPriceCents?: number | null,
   commissionBasisPoints?: number | null,
-  referralFeeBasisPoints?: number | null
+  referralFeeBasisPoints?: number | null,
+  commissionFlatFeeCents?: number | null,
 ) => {
+  if (!referralFeeBasisPoints || referralFeeBasisPoints <= 0) {
+    return null;
+  }
+
+  if (commissionFlatFeeCents && commissionFlatFeeCents > 0) {
+    const computed = (commissionFlatFeeCents * referralFeeBasisPoints) / 10_000;
+    if (!Number.isFinite(computed) || computed <= 0) {
+      return null;
+    }
+    return Math.round(computed);
+  }
+
   if (!contractPriceCents || contractPriceCents <= 0) {
     return null;
   }
   if (!commissionBasisPoints || commissionBasisPoints <= 0) {
-    return null;
-  }
-  if (!referralFeeBasisPoints || referralFeeBasisPoints <= 0) {
     return null;
   }
 
@@ -150,6 +163,7 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
         usedAssignedAgent: deal.usedAssignedAgent ?? null,
         usedAfc: deal.usedAfc ?? false,
         commissionBasisPoints: deal.commissionBasisPoints ?? null,
+        commissionFlatFeeCents: deal.commissionFlatFeeCents ?? null,
         referralFeeBasisPoints: deal.referralFeeBasisPoints ?? null,
         side: deal.side ?? null,
         contractPriceCents: deal.contractPriceCents ?? null,
@@ -306,10 +320,12 @@ export function DealCard({
     overrides?.commissionBasisPoints ?? summary?.commissionBasisPoints ?? null;
   const summaryReferralFeeBasisPoints =
     overrides?.referralFeeBasisPoints ?? summary?.referralFeeBasisPoints ?? null;
+  const primaryDealFlatFeeCents = deals.find((d) => d.commissionFlatFeeCents && d.commissionFlatFeeCents > 0)?.commissionFlatFeeCents ?? null;
   const derivedSummaryReferralFee = deriveReferralFeeCents(
     summaryContractPriceCents,
     summaryCommissionBasisPoints,
-    summaryReferralFeeBasisPoints
+    summaryReferralFeeBasisPoints,
+    primaryDealFlatFeeCents,
   );
   const summaryReferralFeeCents =
     derivedSummaryReferralFee ??
@@ -324,20 +340,21 @@ export function DealCard({
     : '—';
   const summaryReferralFeeDisplay =
     summaryReferralFeeCents != null ? formatCurrency(summaryReferralFeeCents) : '—';
-
   const summaryCommissionCents =
     summaryContractPriceCents && summaryCommissionBasisPoints
       ? Math.round((summaryContractPriceCents * summaryCommissionBasisPoints) / 10000)
-      : null;
+      : primaryDealFlatFeeCents ?? null;
   const summaryNetCommissionCents =
     summaryCommissionCents != null
       ? summaryCommissionCents - (summaryReferralFeeCents ?? 0)
       : null;
   const summaryNetCommissionDisplay =
     summaryNetCommissionCents != null ? formatCurrency(summaryNetCommissionCents) : '—';
-  const summaryCommissionPercentDisplay = summaryCommissionBasisPoints
+  const summaryCommissionDisplay = summaryCommissionBasisPoints
     ? `${(summaryCommissionBasisPoints / 100).toFixed(2)}%`
-    : '—';
+    : primaryDealFlatFeeCents
+      ? formatCurrency(primaryDealFlatFeeCents)
+      : '—';
   const summaryReferralFeePercentDisplay = summaryReferralFeeBasisPoints
     ? `${(summaryReferralFeeBasisPoints / 100).toFixed(2)}%`
     : '—';
@@ -373,12 +390,16 @@ export function DealCard({
     (deal: DealRecord): DealDraft => {
       const priceCents = deal.contractPriceCents ?? summaryContractPriceCents ?? null;
       const commissionBps = deal.commissionBasisPoints ?? summaryCommissionBasisPoints ?? null;
+      const flatFeeCents = deal.commissionFlatFeeCents ?? null;
       const referralFeeBps = deal.referralFeeBasisPoints ?? summaryReferralFeeBasisPoints ?? null;
       const side = deal.side ?? overrides?.dealSide ?? summaryDealSide ?? 'buy';
+      const commissionMode: '%' | '$' = flatFeeCents && flatFeeCents > 0 ? '$' : '%';
 
       return {
         contractPrice: formatDraftCurrency(priceCents),
         commissionPercent: formatDraftPercent(commissionBps),
+        commissionFlat: commissionMode === '$' ? formatDraftCurrency(flatFeeCents) : '',
+        commissionMode,
         referralFeePercent: formatDraftPercent(referralFeeBps),
         side,
       };
@@ -439,13 +460,24 @@ export function DealCard({
   const handleSaveDealDetails = (deal: DealRecord) => async () => {
     const draft = detailDraftMap[deal._id] ?? getDefaultDraft(deal);
     const isOutsideAgent = (agentMap[deal._id] ?? '') === 'OUTSIDE_AGENT';
+    const isFlatFeeMode = draft.commissionMode === '$';
     const contractPriceCents = parseCurrencyInput(draft.contractPrice);
-    const commissionBasisPoints = parsePercentInput(draft.commissionPercent);
+    const commissionBasisPoints = isFlatFeeMode ? null : parsePercentInput(draft.commissionPercent);
+    const commissionFlatFeeCents = isFlatFeeMode ? parseCurrencyInput(draft.commissionFlat) : null;
     const referralFeeBasisPoints = isAgentOrigin ? 0 : parsePercentInput(draft.referralFeePercent);
 
-    if (!isOutsideAgent && (contractPriceCents == null || commissionBasisPoints == null)) {
-      toast.error('Enter the contract price and commission % before saving.');
-      return;
+    if (!isOutsideAgent) {
+      if (isFlatFeeMode) {
+        if (!contractPriceCents || commissionFlatFeeCents == null) {
+          toast.error('Enter the contract price and commission amount before saving.');
+          return;
+        }
+      } else {
+        if (contractPriceCents == null || commissionBasisPoints == null) {
+          toast.error('Enter the contract price and commission % before saving.');
+          return;
+        }
+      }
     }
 
     if (!isAgentOrigin && !isOutsideAgent && referralFeeBasisPoints == null) {
@@ -455,7 +487,7 @@ export function DealCard({
 
     const expectedAmountCents = isAgentOrigin || isOutsideAgent
       ? 0
-      : deriveReferralFeeCents(contractPriceCents, commissionBasisPoints, referralFeeBasisPoints ?? 0);
+      : deriveReferralFeeCents(contractPriceCents, commissionBasisPoints, referralFeeBasisPoints ?? 0, commissionFlatFeeCents);
 
     if (!isAgentOrigin && !isOutsideAgent && (!expectedAmountCents || expectedAmountCents <= 0)) {
       toast.error('Enter valid deal details to calculate the referral fee.');
@@ -472,6 +504,7 @@ export function DealCard({
           id: deal._id,
           contractPriceCents: contractPriceCents ?? null,
           commissionBasisPoints: isOutsideAgent ? null : commissionBasisPoints,
+          commissionFlatFeeCents: isOutsideAgent ? null : commissionFlatFeeCents,
           referralFeeBasisPoints: isOutsideAgent ? 0 : referralFeeBasisPoints ?? 0,
           side: draft.side,
           expectedAmountCents,
@@ -500,6 +533,7 @@ export function DealCard({
                 ...item,
                 contractPriceCents,
                 commissionBasisPoints: isOutsideAgent ? null : commissionBasisPoints,
+                commissionFlatFeeCents: isOutsideAgent ? null : commissionFlatFeeCents,
                 referralFeeBasisPoints: isOutsideAgent ? 0 : referralFeeBasisPoints,
                 side: draft.side,
                 expectedAmountCents,
@@ -522,7 +556,9 @@ export function DealCard({
         ...previous,
         [deal._id]: {
           contractPrice: formatDraftCurrency(contractPriceCents),
-          commissionPercent: isOutsideAgent ? '' : formatDraftPercent(commissionBasisPoints),
+          commissionPercent: isOutsideAgent || isFlatFeeMode ? '' : formatDraftPercent(commissionBasisPoints),
+          commissionFlat: isOutsideAgent || !isFlatFeeMode ? '' : formatDraftCurrency(commissionFlatFeeCents),
+          commissionMode: isOutsideAgent ? '%' : draft.commissionMode,
           referralFeePercent: isOutsideAgent ? '' : formatDraftPercent(referralFeeBasisPoints),
           side: draft.side,
         },
@@ -657,6 +693,7 @@ export function DealCard({
     const baseCommissionBps = isPrimary
       ? overrides?.commissionBasisPoints ?? deal.commissionBasisPoints ?? summary?.commissionBasisPoints ?? null
       : deal.commissionBasisPoints ?? summary?.commissionBasisPoints ?? null;
+    const baseCommissionFlatFeeCents = deal.commissionFlatFeeCents ?? null;
     const baseReferralFeeBps = isPrimary
       ? overrides?.referralFeeBasisPoints ?? deal.referralFeeBasisPoints ?? summary?.referralFeeBasisPoints ?? null
       : deal.referralFeeBasisPoints ?? summary?.referralFeeBasisPoints ?? null;
@@ -664,7 +701,8 @@ export function DealCard({
     const derivedAmount = deriveReferralFeeCents(
       baseContractPrice,
       baseCommissionBps,
-      baseReferralFeeBps
+      baseReferralFeeBps,
+      baseCommissionFlatFeeCents,
     );
 
     if (derivedAmount && derivedAmount > 0) {
@@ -1116,16 +1154,20 @@ export function DealCard({
     const agentSelectDisabled = isSaving || isDetailSaving || loadingAgentOptions;
 
     const draftContractPriceCents = parseCurrencyInput(draft.contractPrice);
-    const draftCommissionBasisPoints = parsePercentInput(draft.commissionPercent);
+    const draftIsFlatFeeMode = draft.commissionMode === '$';
+    const draftCommissionBasisPoints = draftIsFlatFeeMode ? null : parsePercentInput(draft.commissionPercent);
+    const draftCommissionFlatFeeCents = draftIsFlatFeeMode ? parseCurrencyInput(draft.commissionFlat) : null;
     const draftReferralFeeBasisPoints = parsePercentInput(draft.referralFeePercent);
     const draftReferralFeeCents =
-      draftContractPriceCents != null &&
-      draftCommissionBasisPoints != null &&
-      draftReferralFeeBasisPoints != null
+      draftReferralFeeBasisPoints != null &&
+      (draftIsFlatFeeMode
+        ? draftCommissionFlatFeeCents != null
+        : draftContractPriceCents != null && draftCommissionBasisPoints != null)
         ? deriveReferralFeeCents(
             draftContractPriceCents,
             draftCommissionBasisPoints,
-            draftReferralFeeBasisPoints
+            draftReferralFeeBasisPoints,
+            draftCommissionFlatFeeCents,
           )
         : null;
     const draftReferralFeeDisplay =
@@ -1168,6 +1210,21 @@ export function DealCard({
         ...previous,
         [deal._id]: getDefaultDraft(deal),
       }));
+    };
+
+    const handleCommissionModeToggle = (mode: '%' | '$') => {
+      setDetailDraftMap((previous) => {
+        const current = previous[deal._id] ?? getDefaultDraft(deal);
+        return {
+          ...previous,
+          [deal._id]: {
+            ...current,
+            commissionMode: mode,
+            commissionPercent: mode === '%' ? current.commissionPercent : '',
+            commissionFlat: mode === '$' ? current.commissionFlat : '',
+          },
+        };
+      });
     };
 
     const handleSubmitDetails = async (event: FormEvent<HTMLFormElement>) => {
@@ -1277,18 +1334,50 @@ export function DealCard({
                     disabled={isDetailSaving}
                   />
                 </label>
-                <label className="flex flex-col gap-1 text-xs uppercase text-slate-400">
-                  Agent Commission %
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={draft.commissionPercent}
-                    onChange={handleDraftChange('commissionPercent')}
-                    className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
-                    placeholder="3"
-                    disabled={isDetailSaving || isOutsideAgentSelected}
-                  />
-                </label>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs uppercase text-slate-400">Agent Commission</span>
+                    <div className="flex rounded border border-slate-300 text-xs font-medium overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => handleCommissionModeToggle('%')}
+                        disabled={isDetailSaving || isOutsideAgentSelected}
+                        className={`px-1.5 py-0.5 transition-colors ${draft.commissionMode === '%' ? 'bg-brand text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                      >
+                        %
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCommissionModeToggle('$')}
+                        disabled={isDetailSaving || isOutsideAgentSelected}
+                        className={`px-1.5 py-0.5 transition-colors ${draft.commissionMode === '$' ? 'bg-brand text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                      >
+                        $
+                      </button>
+                    </div>
+                  </div>
+                  {draft.commissionMode === '%' ? (
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={draft.commissionPercent}
+                      onChange={handleDraftChange('commissionPercent')}
+                      className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+                      placeholder="3"
+                      disabled={isDetailSaving || isOutsideAgentSelected}
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={draft.commissionFlat}
+                      onChange={handleDraftChange('commissionFlat')}
+                      className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+                      placeholder="5000"
+                      disabled={isDetailSaving || isOutsideAgentSelected}
+                    />
+                  )}
+                </div>
                 {!isAgentOrigin && (
                   <label className="flex flex-col gap-1 text-xs uppercase text-slate-400">
                     Referral Fee %
@@ -1545,8 +1634,10 @@ export function DealCard({
               <dd className="text-sm font-medium text-slate-900">{summaryContractPriceDisplay}</dd>
             </div>
             <div>
-              <dt className="text-xs uppercase text-slate-400">Agent Commission %</dt>
-              <dd className="text-sm font-medium text-slate-900">{summaryCommissionPercentDisplay}</dd>
+              <dt className="text-xs uppercase text-slate-400">
+                Agent Commission {primaryDealFlatFeeCents ? '$' : '%'}
+              </dt>
+              <dd className="text-sm font-medium text-slate-900">{summaryCommissionDisplay}</dd>
             </div>
             <div>
               <dt className="text-xs uppercase text-slate-400">Agent</dt>

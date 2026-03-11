@@ -39,6 +39,7 @@ type DealUpdatePayload = {
   netReferralFeePaidCents: number;
   contractPriceCents: number | null;
   commissionBasisPoints: number | null;
+  commissionFlatFeeCents: number | null;
   referralFeeBasisPoints: number | null;
   propertyAddress: string | null;
   propertyCity: string | null;
@@ -136,8 +137,14 @@ function DealCard({
     centsToDisplay(deal.netReferralFeePaidCents ?? deal.receivedAmountCents)
   );
   const [contractPrice, setContractPrice] = useState(centsToDisplay(deal.contractPriceCents));
+  const [commissionMode, setCommissionMode] = useState<'%' | '$'>(
+    deal.commissionFlatFeeCents ? '$' : '%'
+  );
   const [commissionPercentage, setCommissionPercentage] = useState(
     basisPointsToDisplay(deal.commissionBasisPoints)
+  );
+  const [commissionFlat, setCommissionFlat] = useState(
+    deal.commissionFlatFeeCents ? centsToDisplay(deal.commissionFlatFeeCents) : ''
   );
   const [referralFeePercentage, setReferralFeePercentage] = useState(
     basisPointsToDisplay(deal.referralFeeBasisPoints)
@@ -166,7 +173,9 @@ function DealCard({
     setExpectedManuallyEdited(false);
     setNetReferralFeePaid(centsToDisplay(deal.netReferralFeePaidCents ?? deal.receivedAmountCents));
     setContractPrice(centsToDisplay(deal.contractPriceCents));
+    setCommissionMode(deal.commissionFlatFeeCents ? '$' : '%');
     setCommissionPercentage(basisPointsToDisplay(deal.commissionBasisPoints));
+    setCommissionFlat(deal.commissionFlatFeeCents ? centsToDisplay(deal.commissionFlatFeeCents) : '');
     setReferralFeePercentage(basisPointsToDisplay(deal.referralFeeBasisPoints));
     setPropertyAddress(deal.propertyAddress ?? '');
     setPropertyCity(deal.propertyCity ?? '');
@@ -224,23 +233,36 @@ function DealCard({
 
   useEffect(() => {
     if (expectedManuallyEdited || agentCreatedReferral || isNoFeeDeal) return;
-    const contract = Number.parseFloat(contractPrice);
-    const commission = Number.parseFloat(commissionPercentage);
     const referral = Number.parseFloat(referralFeePercentage);
-    if (Number.isFinite(contract) && Number.isFinite(commission) && Number.isFinite(referral)) {
-      const computed = ((contract * commission) / 100) * (referral / 100);
-      if (Number.isFinite(computed)) {
-        setExpectedAmount(computed.toFixed(2));
+    if (!Number.isFinite(referral)) return;
+    if (commissionMode === '$') {
+      const flatFee = Number.parseFloat(commissionFlat);
+      if (Number.isFinite(flatFee)) {
+        const computed = flatFee * (referral / 100);
+        if (Number.isFinite(computed)) {
+          setExpectedAmount(computed.toFixed(2));
+        }
+      }
+    } else {
+      const contract = Number.parseFloat(contractPrice);
+      const commission = Number.parseFloat(commissionPercentage);
+      if (Number.isFinite(contract) && Number.isFinite(commission)) {
+        const computed = ((contract * commission) / 100) * (referral / 100);
+        if (Number.isFinite(computed)) {
+          setExpectedAmount(computed.toFixed(2));
+        }
       }
     }
-    }, [commissionPercentage, contractPrice, referralFeePercentage, expectedManuallyEdited, agentCreatedReferral, isNoFeeDeal]);
+  }, [commissionMode, commissionFlat, commissionPercentage, contractPrice, referralFeePercentage, expectedManuallyEdited, agentCreatedReferral, isNoFeeDeal]);
 
   useEffect(() => {
     if (!isNoFeeDeal) {
       return;
     }
 
+    setCommissionMode('%');
     setCommissionPercentage('');
+    setCommissionFlat('');
     setReferralFeePercentage('');
     setExpectedAmount('');
     setExpectedManuallyEdited(false);
@@ -251,13 +273,19 @@ function DealCard({
     event.preventDefault();
     if (!canManage || saving) return;
 
+    const isFlatFeeMode = commissionMode === '$';
     const expectedAmountCents = agentCreatedReferral || isNoFeeDeal ? 0 : toCents(expectedAmount);
     let netReferralFeePaidCents = agentCreatedReferral || isNoFeeDeal ? 0 : toCents(netReferralFeePaid);
     const contractPriceCents = contractPrice ? toCents(contractPrice) : null;
-    const commissionBasisPoints = agentCreatedReferral || isNoFeeDeal
+    const commissionBasisPoints = agentCreatedReferral || isNoFeeDeal || isFlatFeeMode
       ? null
       : commissionPercentage
           ? Math.round(Number.parseFloat(commissionPercentage) * 100)
+          : null;
+    const commissionFlatFeeCents = agentCreatedReferral || isNoFeeDeal || !isFlatFeeMode
+      ? null
+      : commissionFlat
+          ? toCents(commissionFlat)
           : null;
     const referralFeeBasisPoints = agentCreatedReferral || isNoFeeDeal
       ? null
@@ -269,11 +297,12 @@ function DealCard({
       !agentCreatedReferral &&
       !isNoFeeDeal &&
       !expectedAmountCents &&
-      contractPriceCents &&
-      commissionBasisPoints &&
-      referralFeeBasisPoints;
+      referralFeeBasisPoints &&
+      (isFlatFeeMode ? commissionFlatFeeCents : contractPriceCents && commissionBasisPoints);
     const computedExpected = shouldComputeExpected
-      ? Math.round((contractPriceCents * commissionBasisPoints * referralFeeBasisPoints) / 100_000_000)
+      ? isFlatFeeMode
+        ? Math.round((commissionFlatFeeCents! * referralFeeBasisPoints) / 10_000)
+        : Math.round((contractPriceCents! * commissionBasisPoints! * referralFeeBasisPoints) / 100_000_000)
       : 0;
     const finalExpectedAmountCents = agentCreatedReferral || isNoFeeDeal ? 0 : expectedAmountCents || computedExpected;
 
@@ -308,6 +337,7 @@ function DealCard({
       netReferralFeePaidCents,
       contractPriceCents,
       commissionBasisPoints,
+      commissionFlatFeeCents,
       referralFeeBasisPoints,
       propertyAddress: propertyAddress.trim() || null,
       propertyCity: propertyCity.trim() || null,
@@ -537,20 +567,54 @@ function DealCard({
               disabled={saving || isNoFeeDeal}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
-            <span>Commission %</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={commissionPercentage}
-              onChange={(event) => setCommissionPercentage(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-              placeholder="0.00"
-              disabled={saving || isNoFeeDeal}
-            />
-          </label>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-slate-700">Commission</span>
+              <div className="flex rounded border border-slate-300 text-xs font-medium overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setCommissionMode('%')}
+                  disabled={saving || isNoFeeDeal}
+                  className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-brand text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                >
+                  %
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCommissionMode('$')}
+                  disabled={saving || isNoFeeDeal}
+                  className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-brand text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                >
+                  $
+                </button>
+              </div>
+            </div>
+            {commissionMode === '%' ? (
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                value={commissionPercentage}
+                onChange={(event) => setCommissionPercentage(event.target.value)}
+                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                placeholder="0.00"
+                disabled={saving || isNoFeeDeal}
+              />
+            ) : (
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                value={commissionFlat}
+                onChange={(event) => setCommissionFlat(event.target.value)}
+                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                placeholder="0.00"
+                disabled={saving || isNoFeeDeal}
+              />
+            )}
+          </div>
           <label className="space-y-1 text-sm font-medium text-slate-700">
             <span>Referral fee %</span>
             <input
@@ -823,7 +887,9 @@ export function ReferralDeals({
   const [expectedManuallyEdited, setExpectedManuallyEdited] = useState(false);
   const [netReferralFeePaid, setNetReferralFeePaid] = useState('');
   const [contractPrice, setContractPrice] = useState('');
+  const [commissionMode, setCommissionMode] = useState<'%' | '$'>('%');
   const [commissionPercentage, setCommissionPercentage] = useState('');
+  const [commissionFlat, setCommissionFlat] = useState('');
   const [referralFeePercentage, setReferralFeePercentage] = useState('');
   const [propertyAddress, setPropertyAddress] = useState('');
   const [propertyCity, setPropertyCity] = useState('');
@@ -889,16 +955,27 @@ export function ReferralDeals({
 
   useEffect(() => {
     if (expectedManuallyEdited || isAgentOrigin) return;
-    const contract = Number.parseFloat(contractPrice);
-    const commission = Number.parseFloat(commissionPercentage);
     const referral = Number.parseFloat(referralFeePercentage);
-    if (Number.isFinite(contract) && Number.isFinite(commission) && Number.isFinite(referral)) {
-      const computed = ((contract * commission) / 100) * (referral / 100);
-      if (Number.isFinite(computed)) {
-        setExpectedAmount(computed.toFixed(2));
+    if (!Number.isFinite(referral)) return;
+    if (commissionMode === '$') {
+      const flatFee = Number.parseFloat(commissionFlat);
+      if (Number.isFinite(flatFee)) {
+        const computed = flatFee * (referral / 100);
+        if (Number.isFinite(computed)) {
+          setExpectedAmount(computed.toFixed(2));
+        }
+      }
+    } else {
+      const contract = Number.parseFloat(contractPrice);
+      const commission = Number.parseFloat(commissionPercentage);
+      if (Number.isFinite(contract) && Number.isFinite(commission)) {
+        const computed = ((contract * commission) / 100) * (referral / 100);
+        if (Number.isFinite(computed)) {
+          setExpectedAmount(computed.toFixed(2));
+        }
       }
     }
-  }, [commissionPercentage, contractPrice, referralFeePercentage, expectedManuallyEdited]);
+  }, [commissionMode, commissionFlat, commissionPercentage, contractPrice, referralFeePercentage, expectedManuallyEdited, isAgentOrigin]);
 
   useEffect(() => {
     if (isAgentOrigin || (usedAssignedAgent && !isAgitDeal)) {
@@ -906,7 +983,9 @@ export function ReferralDeals({
     }
 
     // Outside-agent and AGIT deals do not carry owed fee values.
+    setCommissionMode('%');
     setCommissionPercentage('');
+    setCommissionFlat('');
     setReferralFeePercentage('');
     setExpectedAmount('');
     setExpectedManuallyEdited(false);
@@ -929,13 +1008,19 @@ export function ReferralDeals({
 
     const isOutsideAgent = !isAgentOrigin && !usedAssignedAgent;
     const isNoFeeDeal = isAgitDeal || isOutsideAgent;
+    const isFlatFeeMode = commissionMode === '$';
     const expectedAmountCents = isAgentOrigin || isNoFeeDeal ? 0 : toCents(expectedAmount);
     let netReferralFeePaidCents = isAgentOrigin || isNoFeeDeal ? 0 : toCents(netReferralFeePaid);
     const contractPriceCents = contractPrice ? toCents(contractPrice) : null;
-    const commissionBasisPoints = isAgentOrigin || isNoFeeDeal
+    const commissionBasisPoints = isAgentOrigin || isNoFeeDeal || isFlatFeeMode
       ? null
       : commissionPercentage
           ? Math.round(Number.parseFloat(commissionPercentage) * 100)
+          : null;
+    const commissionFlatFeeCents = isAgentOrigin || isNoFeeDeal || !isFlatFeeMode
+      ? null
+      : commissionFlat
+          ? toCents(commissionFlat)
           : null;
     const referralFeeBasisPoints = isAgentOrigin || isNoFeeDeal
       ? null
@@ -947,11 +1032,12 @@ export function ReferralDeals({
       !isAgentOrigin &&
       !isNoFeeDeal &&
       !expectedAmountCents &&
-      contractPriceCents &&
-      commissionBasisPoints &&
-      referralFeeBasisPoints;
+      referralFeeBasisPoints &&
+      (isFlatFeeMode ? commissionFlatFeeCents : contractPriceCents && commissionBasisPoints);
     const computedExpected = shouldComputeExpected
-      ? Math.round((contractPriceCents * commissionBasisPoints * referralFeeBasisPoints) / 100_000_000)
+      ? isFlatFeeMode
+        ? Math.round((commissionFlatFeeCents! * referralFeeBasisPoints) / 10_000)
+        : Math.round((contractPriceCents! * commissionBasisPoints! * referralFeeBasisPoints) / 100_000_000)
       : 0;
     const finalExpectedAmountCents =
       isAgentOrigin || isNoFeeDeal ? 0 : expectedAmountCents || computedExpected;
@@ -990,6 +1076,7 @@ export function ReferralDeals({
           netReferralFeePaidCents,
           contractPriceCents,
           commissionBasisPoints,
+          commissionFlatFeeCents,
           referralFeeBasisPoints,
           propertyAddress: propertyAddress.trim() || null,
           propertyCity: propertyCity.trim() || null,
@@ -1019,6 +1106,7 @@ export function ReferralDeals({
           netReferralFeePaidCents,
           contractPriceCents,
           commissionBasisPoints,
+          commissionFlatFeeCents,
           referralFeeBasisPoints,
           propertyAddress: propertyAddress.trim() || null,
           propertyCity: propertyCity.trim() || null,
@@ -1180,11 +1268,13 @@ export function ReferralDeals({
         netReferralFeePaidCents: payload.netReferralFeePaidCents,
         contractPriceCents: payload.contractPriceCents ?? null,
         commissionBasisPoints: payload.commissionBasisPoints ?? null,
+        commissionFlatFeeCents: payload.commissionFlatFeeCents ?? null,
         referralFeeBasisPoints: payload.referralFeeBasisPoints ?? null,
         propertyAddress: payload.propertyAddress ?? null,
         propertyCity: payload.propertyCity ?? null,
         propertyState: payload.propertyState ?? null,
         closingDate: payload.closingDate ?? null,
+        underContractDate: payload.underContractDate ?? null,
         agentId: updatedAgentId,
         agent: updatedAgentId
           ? { id: updatedAgentId, name: agentName }
@@ -1244,20 +1334,54 @@ export function ReferralDeals({
           </label>
           {!isAgentOrigin && (
             <>
-              <label className="space-y-1 text-sm font-medium text-slate-700">
-                <span>Commission %</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
-                  value={commissionPercentage}
-                  onChange={(event) => setCommissionPercentage(event.target.value)}
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-                  placeholder="0.00"
-                  disabled={submitting || !usedAssignedAgent || isAgitDeal}
-                />
-              </label>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-slate-700">Commission</span>
+                  <div className="flex rounded border border-slate-300 text-xs font-medium overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setCommissionMode('%')}
+                      disabled={submitting || !usedAssignedAgent || isAgitDeal}
+                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-brand text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                    >
+                      %
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCommissionMode('$')}
+                      disabled={submitting || !usedAssignedAgent || isAgitDeal}
+                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-brand text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                    >
+                      $
+                    </button>
+                  </div>
+                </div>
+                {commissionMode === '%' ? (
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    value={commissionPercentage}
+                    onChange={(event) => setCommissionPercentage(event.target.value)}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                    placeholder="0.00"
+                    disabled={submitting || !usedAssignedAgent || isAgitDeal}
+                  />
+                ) : (
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    value={commissionFlat}
+                    onChange={(event) => setCommissionFlat(event.target.value)}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                    placeholder="0.00"
+                    disabled={submitting || !usedAssignedAgent || isAgitDeal}
+                  />
+                )}
+              </div>
               <label className="space-y-1 text-sm font-medium text-slate-700">
                 <span>Referral fee %</span>
                 <input

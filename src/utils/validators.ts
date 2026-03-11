@@ -133,6 +133,7 @@ export const paymentSchema = z.object({
   notes: z.string().optional(),
   side: z.enum(['buy', 'sell']).optional(),
   commissionBasisPoints: z.number().int().min(0).nullable().optional(),
+  commissionFlatFeeCents: z.number().int().min(0).nullable().optional(),
   referralFeeBasisPoints: z.number().int().min(0).nullable().optional(),
   contractPriceCents: z.number().int().min(0).nullable().optional(),
   netReferralFeePaidCents: z.number().int().min(0).optional(),

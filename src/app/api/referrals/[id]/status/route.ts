@@ -265,6 +265,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
           contractPriceCents: referral.estPurchasePriceCents ?? null,
           usedAssignedAgent: true,
           usedAfc: true,
+          underContractDate: new Date(),
           agentId:
             referral.assignedAgent && typeof (referral.assignedAgent as any) === 'object'
               ? ((referral.assignedAgent as any)._id ?? null)
@@ -283,6 +284,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         contractPriceCents: referral.estPurchasePriceCents ?? null,
         usedAssignedAgent: true,
         usedAfc: true,
+        underContractDate: new Date(),
         agentId:
           referral.assignedAgent && typeof (referral.assignedAgent as any) === 'object'
             ? ((referral.assignedAgent as any)._id ?? null)
