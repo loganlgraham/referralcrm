@@ -452,7 +452,11 @@ function DealCard({
           </p>
           <p>
             <span className="text-xs uppercase text-slate-500">Commission: </span>
-            <span className="font-semibold">{formatPercent(deal.commissionBasisPoints)}</span>
+            <span className="font-semibold">
+              {deal.commissionFlatFeeCents
+                ? formatCurrency(deal.commissionFlatFeeCents)
+                : formatPercent(deal.commissionBasisPoints)}
+            </span>
           </p>
           <p>
             <span className="text-xs uppercase text-slate-500">Referral fee: </span>
