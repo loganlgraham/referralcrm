@@ -19,6 +19,7 @@ interface ReferralDealsProps {
   referralOrigin?: 'agent' | 'admin' | 'mc' | null;
   feeBreakdownAutoSendEnabled?: boolean;
   hiddenOutsideAgentCount?: number;
+  assignedAgentDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
 }
 
 type AgentOption = { id: string; name: string };
@@ -44,6 +45,7 @@ type DealUpdatePayload = {
   propertyState: string | null;
   agentId: string | null;
   closingDate: string | null;
+  underContractDate: string | null;
   side: 'buy' | 'sell';
   usedAfc: boolean;
   usedAssignedAgent: boolean;
@@ -100,6 +102,7 @@ function DealCard({
   statusUpdating,
   deleting,
   isAgentOrigin,
+  isAgitDeal,
   onStatusChange,
   onDelete,
   onUpdate,
@@ -113,6 +116,7 @@ function DealCard({
   statusUpdating?: boolean;
   deleting?: boolean;
   isAgentOrigin?: boolean;
+  isAgitDeal?: boolean;
   onStatusChange: (
     deal: ReferralPayment,
     status: DealStatus,
@@ -142,6 +146,7 @@ function DealCard({
   const [propertyCity, setPropertyCity] = useState(deal.propertyCity ?? '');
   const [propertyState, setPropertyState] = useState(deal.propertyState ?? '');
   const [closingDate, setClosingDate] = useState(deal.closingDate ? deal.closingDate.slice(0, 10) : '');
+  const [underContractDate, setUnderContractDate] = useState(deal.underContractDate ? deal.underContractDate.slice(0, 10) : '');
   const [agentId, setAgentId] = useState(deal.agentId ?? deal.agent?.id ?? '');
   const [side, setSide] = useState<'buy' | 'sell'>(deal.side ?? 'buy');
   const [usedAfc, setUsedAfc] = useState(Boolean(deal.usedAfc));
@@ -152,6 +157,7 @@ function DealCard({
   );
   const agentCreatedReferral = Boolean(isAgentOrigin);
   const isOutsideAgent = !agentCreatedReferral && !usedAssignedAgent;
+  const isNoFeeDeal = Boolean(isAgitDeal) || isOutsideAgent;
   const router = useRouter();
 
   const populateFromDeal = useCallback(() => {
@@ -166,6 +172,7 @@ function DealCard({
     setPropertyCity(deal.propertyCity ?? '');
     setPropertyState(deal.propertyState ?? '');
     setClosingDate(deal.closingDate ? deal.closingDate.slice(0, 10) : '');
+    setUnderContractDate(deal.underContractDate ? deal.underContractDate.slice(0, 10) : '');
     // Properly handle agentId from either deal.agentId or deal.agent?.id
     const dealAgentId = deal.agentId ?? deal.agent?.id ?? null;
     setAgentId(dealAgentId ?? '');
@@ -216,7 +223,7 @@ function DealCard({
   };
 
   useEffect(() => {
-    if (expectedManuallyEdited || agentCreatedReferral || isOutsideAgent) return;
+    if (expectedManuallyEdited || agentCreatedReferral || isNoFeeDeal) return;
     const contract = Number.parseFloat(contractPrice);
     const commission = Number.parseFloat(commissionPercentage);
     const referral = Number.parseFloat(referralFeePercentage);
@@ -226,10 +233,10 @@ function DealCard({
         setExpectedAmount(computed.toFixed(2));
       }
     }
-    }, [commissionPercentage, contractPrice, referralFeePercentage, expectedManuallyEdited, agentCreatedReferral, isOutsideAgent]);
+    }, [commissionPercentage, contractPrice, referralFeePercentage, expectedManuallyEdited, agentCreatedReferral, isNoFeeDeal]);
 
   useEffect(() => {
-    if (!isOutsideAgent) {
+    if (!isNoFeeDeal) {
       return;
     }
 
@@ -238,21 +245,21 @@ function DealCard({
     setExpectedAmount('');
     setExpectedManuallyEdited(false);
     setNetReferralFeePaid('');
-  }, [isOutsideAgent]);
+  }, [isNoFeeDeal]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canManage || saving) return;
 
-    const expectedAmountCents = agentCreatedReferral || isOutsideAgent ? 0 : toCents(expectedAmount);
-    let netReferralFeePaidCents = agentCreatedReferral || isOutsideAgent ? 0 : toCents(netReferralFeePaid);
+    const expectedAmountCents = agentCreatedReferral || isNoFeeDeal ? 0 : toCents(expectedAmount);
+    let netReferralFeePaidCents = agentCreatedReferral || isNoFeeDeal ? 0 : toCents(netReferralFeePaid);
     const contractPriceCents = contractPrice ? toCents(contractPrice) : null;
-    const commissionBasisPoints = agentCreatedReferral || isOutsideAgent
+    const commissionBasisPoints = agentCreatedReferral || isNoFeeDeal
       ? null
       : commissionPercentage
           ? Math.round(Number.parseFloat(commissionPercentage) * 100)
           : null;
-    const referralFeeBasisPoints = agentCreatedReferral || isOutsideAgent
+    const referralFeeBasisPoints = agentCreatedReferral || isNoFeeDeal
       ? null
       : referralFeePercentage
           ? Math.round(Number.parseFloat(referralFeePercentage) * 100)
@@ -260,7 +267,7 @@ function DealCard({
 
     const shouldComputeExpected =
       !agentCreatedReferral &&
-      !isOutsideAgent &&
+      !isNoFeeDeal &&
       !expectedAmountCents &&
       contractPriceCents &&
       commissionBasisPoints &&
@@ -268,13 +275,13 @@ function DealCard({
     const computedExpected = shouldComputeExpected
       ? Math.round((contractPriceCents * commissionBasisPoints * referralFeeBasisPoints) / 100_000_000)
       : 0;
-    const finalExpectedAmountCents = agentCreatedReferral || isOutsideAgent ? 0 : expectedAmountCents || computedExpected;
+    const finalExpectedAmountCents = agentCreatedReferral || isNoFeeDeal ? 0 : expectedAmountCents || computedExpected;
 
-    if (!agentCreatedReferral && !isOutsideAgent && markPaid && !netReferralFeePaidCents && finalExpectedAmountCents) {
+    if (!agentCreatedReferral && !isNoFeeDeal && markPaid && !netReferralFeePaidCents && finalExpectedAmountCents) {
       netReferralFeePaidCents = finalExpectedAmountCents;
     }
 
-    if (!agentCreatedReferral && !isOutsideAgent && !finalExpectedAmountCents) {
+    if (!agentCreatedReferral && !isNoFeeDeal && !finalExpectedAmountCents) {
       toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
       return;
     }
@@ -306,6 +313,7 @@ function DealCard({
       propertyCity: propertyCity.trim() || null,
       propertyState: propertyState.trim().toUpperCase() || null,
       closingDate: closingDateToSend,
+      underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : null,
       // Always include agentId, even if empty (will be converted to null)
       agentId: agentId.trim() || null,
       side,
@@ -346,6 +354,9 @@ function DealCard({
             <p className="text-xs uppercase text-slate-500">Status</p>
             <p className="text-sm font-semibold text-slate-900">{statusLabel}</p>
             <p className="text-xs text-slate-500">Created {formatDateMST(deal.createdAt)}</p>
+            <p className="text-xs text-slate-500">
+              Under contract: {deal.underContractDate ? formatDateMST(deal.underContractDate) : '—'}
+            </p>
             <p className="text-xs text-slate-500">
               Closing date: {deal.closingDate ? formatDateMST(deal.closingDate) : '—'}
             </p>
@@ -523,7 +534,7 @@ function DealCard({
               onChange={(event) => setContractPrice(event.target.value)}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
               placeholder="0.00"
-              disabled={saving || isOutsideAgent}
+              disabled={saving || isNoFeeDeal}
             />
           </label>
           <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -537,7 +548,7 @@ function DealCard({
               onChange={(event) => setCommissionPercentage(event.target.value)}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
               placeholder="0.00"
-              disabled={saving || isOutsideAgent}
+              disabled={saving || isNoFeeDeal}
             />
           </label>
           <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -551,7 +562,7 @@ function DealCard({
               onChange={(event) => setReferralFeePercentage(event.target.value)}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
               placeholder="0.00"
-              disabled={saving || isOutsideAgent}
+              disabled={saving || isNoFeeDeal}
             />
           </label>
           <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -569,7 +580,7 @@ function DealCard({
               }}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
               placeholder="0.00"
-              disabled={saving || isOutsideAgent}
+              disabled={saving || isNoFeeDeal}
             />
           </label>
           <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -583,7 +594,7 @@ function DealCard({
               onChange={(event) => setNetReferralFeePaid(event.target.value)}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
               placeholder="0.00"
-              disabled={saving || isOutsideAgent}
+              disabled={saving || isNoFeeDeal}
             />
           </label>
             <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -623,6 +634,16 @@ function DealCard({
                 </select>
               </label>
             )}
+            <label className="space-y-1 text-sm font-medium text-slate-700">
+              <span>Under contract date</span>
+              <input
+                type="date"
+                value={underContractDate}
+                onChange={(event) => setUnderContractDate(event.target.value)}
+                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                disabled={saving}
+              />
+            </label>
             <label className="space-y-1 text-sm font-medium text-slate-700">
               <span>Closing date</span>
               <input
@@ -730,9 +751,11 @@ function DealCard({
               />
               Used Agent
             </label>
-            {!agentCreatedReferral && isOutsideAgent && (
+            {!agentCreatedReferral && isNoFeeDeal && (
               <p className="text-xs text-slate-500">
-                Outside-agent deal selected: commission/referral fee fields are disabled and owed amount is forced to $0.
+                {isAgitDeal
+                  ? 'AGIT agent deal: no referral fee is collected. Commission/referral fee fields are disabled and owed amount is forced to $0.'
+                  : 'Outside-agent deal selected: commission/referral fee fields are disabled and owed amount is forced to $0.'}
               </p>
             )}
             <label className="flex items-center gap-2 text-slate-700">
@@ -792,6 +815,7 @@ export function ReferralDeals({
   referralOrigin,
   feeBreakdownAutoSendEnabled,
   hiddenOutsideAgentCount = 0,
+  assignedAgentDesignation,
 }: ReferralDealsProps) {
   const [status, setStatus] = useState<DealStatus>('under_contract');
   const [markPaid, setMarkPaid] = useState(false);
@@ -805,6 +829,7 @@ export function ReferralDeals({
   const [propertyCity, setPropertyCity] = useState('');
   const [propertyState, setPropertyState] = useState('');
   const [closingDate, setClosingDate] = useState('');
+  const [underContractDate, setUnderContractDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [agentId, setAgentId] = useState('');
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [usedAfc, setUsedAfc] = useState(false);
@@ -818,6 +843,7 @@ export function ReferralDeals({
   const [deleting, setDeleting] = useState<Record<string, boolean>>({});
   const [showForm, setShowForm] = useState(false);
   const isAgentOrigin = referralOrigin === 'agent';
+  const isAgitDeal = assignedAgentDesignation === 'AGIT';
 
   const canManage = viewerRole !== 'viewer';
 
@@ -875,17 +901,17 @@ export function ReferralDeals({
   }, [commissionPercentage, contractPrice, referralFeePercentage, expectedManuallyEdited]);
 
   useEffect(() => {
-    if (isAgentOrigin || usedAssignedAgent) {
+    if (isAgentOrigin || (usedAssignedAgent && !isAgitDeal)) {
       return;
     }
 
-    // Outside-agent deals do not carry owed fee values.
+    // Outside-agent and AGIT deals do not carry owed fee values.
     setCommissionPercentage('');
     setReferralFeePercentage('');
     setExpectedAmount('');
     setExpectedManuallyEdited(false);
     setNetReferralFeePaid('');
-  }, [isAgentOrigin, usedAssignedAgent]);
+  }, [isAgentOrigin, usedAssignedAgent, isAgitDeal]);
 
   const sortedDeals = useMemo(
     () => [...deals].sort((a, b) => {
@@ -902,15 +928,16 @@ export function ReferralDeals({
     if (!canManage || submitting) return;
 
     const isOutsideAgent = !isAgentOrigin && !usedAssignedAgent;
-    const expectedAmountCents = isAgentOrigin || isOutsideAgent ? 0 : toCents(expectedAmount);
-    let netReferralFeePaidCents = isAgentOrigin || isOutsideAgent ? 0 : toCents(netReferralFeePaid);
+    const isNoFeeDeal = isAgitDeal || isOutsideAgent;
+    const expectedAmountCents = isAgentOrigin || isNoFeeDeal ? 0 : toCents(expectedAmount);
+    let netReferralFeePaidCents = isAgentOrigin || isNoFeeDeal ? 0 : toCents(netReferralFeePaid);
     const contractPriceCents = contractPrice ? toCents(contractPrice) : null;
-    const commissionBasisPoints = isAgentOrigin || isOutsideAgent
+    const commissionBasisPoints = isAgentOrigin || isNoFeeDeal
       ? null
       : commissionPercentage
           ? Math.round(Number.parseFloat(commissionPercentage) * 100)
           : null;
-    const referralFeeBasisPoints = isAgentOrigin || isOutsideAgent
+    const referralFeeBasisPoints = isAgentOrigin || isNoFeeDeal
       ? null
       : referralFeePercentage
           ? Math.round(Number.parseFloat(referralFeePercentage) * 100)
@@ -918,7 +945,7 @@ export function ReferralDeals({
 
     const shouldComputeExpected =
       !isAgentOrigin &&
-      !isOutsideAgent &&
+      !isNoFeeDeal &&
       !expectedAmountCents &&
       contractPriceCents &&
       commissionBasisPoints &&
@@ -927,13 +954,13 @@ export function ReferralDeals({
       ? Math.round((contractPriceCents * commissionBasisPoints * referralFeeBasisPoints) / 100_000_000)
       : 0;
     const finalExpectedAmountCents =
-      isAgentOrigin || isOutsideAgent ? 0 : expectedAmountCents || computedExpected;
+      isAgentOrigin || isNoFeeDeal ? 0 : expectedAmountCents || computedExpected;
 
-    if (!isAgentOrigin && !isOutsideAgent && markPaid && !netReferralFeePaidCents && finalExpectedAmountCents) {
+    if (!isAgentOrigin && !isNoFeeDeal && markPaid && !netReferralFeePaidCents && finalExpectedAmountCents) {
       netReferralFeePaidCents = finalExpectedAmountCents;
     }
 
-    if (!isAgentOrigin && !isOutsideAgent && !finalExpectedAmountCents) {
+    if (!isAgentOrigin && !isNoFeeDeal && !finalExpectedAmountCents) {
       toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
       return;
     }
@@ -968,6 +995,7 @@ export function ReferralDeals({
           propertyCity: propertyCity.trim() || null,
           propertyState: propertyState.trim().toUpperCase() || null,
           closingDate: closingDateToSend,
+          underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : new Date().toISOString(),
           agentId: agentId || null,
           usedAfc: isAgentOrigin ? false : usedAfc,
           usedAssignedAgent: isAgentOrigin ? true : usedAssignedAgent,
@@ -996,6 +1024,7 @@ export function ReferralDeals({
           propertyCity: propertyCity.trim() || null,
           propertyState: propertyState.trim().toUpperCase() || null,
           closingDate: closingDateToSend,
+          underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : new Date().toISOString(),
           agent: agentId ? { id: agentId, name: agents.find((option) => option.id === agentId)?.name ?? null } : null,
           agentId: agentId || null,
           usedAfc: isAgentOrigin ? false : usedAfc,
@@ -1226,7 +1255,7 @@ export function ReferralDeals({
                   onChange={(event) => setCommissionPercentage(event.target.value)}
                   className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                   placeholder="0.00"
-                  disabled={submitting || !usedAssignedAgent}
+                  disabled={submitting || !usedAssignedAgent || isAgitDeal}
                 />
               </label>
               <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -1240,7 +1269,7 @@ export function ReferralDeals({
                   onChange={(event) => setReferralFeePercentage(event.target.value)}
                   className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                   placeholder="0.00"
-                  disabled={submitting || !usedAssignedAgent}
+                  disabled={submitting || !usedAssignedAgent || isAgitDeal}
                 />
               </label>
               <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -1258,7 +1287,7 @@ export function ReferralDeals({
                   }}
                   className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                   placeholder="0.00"
-                  disabled={submitting || !usedAssignedAgent}
+                  disabled={submitting || !usedAssignedAgent || isAgitDeal}
                 />
               </label>
               <label className="space-y-1 text-sm font-medium text-slate-700">
@@ -1272,7 +1301,7 @@ export function ReferralDeals({
                   onChange={(event) => setNetReferralFeePaid(event.target.value)}
                   className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                   placeholder="0.00"
-                  disabled={submitting || !usedAssignedAgent}
+                  disabled={submitting || !usedAssignedAgent || isAgitDeal}
                 />
               </label>
             </>
@@ -1314,6 +1343,16 @@ export function ReferralDeals({
                 </select>
               </label>
             )}
+            <label className="space-y-1 text-sm font-medium text-slate-700">
+              <span>Under contract date</span>
+              <input
+                type="date"
+                value={underContractDate}
+                onChange={(event) => setUnderContractDate(event.target.value)}
+                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                disabled={submitting}
+              />
+            </label>
             <label className="space-y-1 text-sm font-medium text-slate-700">
               <span>Closing date</span>
               <input
@@ -1421,9 +1460,11 @@ export function ReferralDeals({
               />
               Used Agent
             </label>
-            {!isAgentOrigin && !usedAssignedAgent && (
+            {!isAgentOrigin && (!usedAssignedAgent || isAgitDeal) && (
               <p className="text-xs text-slate-500">
-                Outside-agent deal selected: commission/referral fee fields are disabled and owed amount is forced to $0.
+                {isAgitDeal
+                  ? 'AGIT agent deal: no referral fee is collected. Commission/referral fee fields are disabled and owed amount is forced to $0.'
+                  : 'Outside-agent deal selected: commission/referral fee fields are disabled and owed amount is forced to $0.'}
               </p>
             )}
             <label className="flex items-center gap-2 text-slate-700">
@@ -1484,6 +1525,7 @@ export function ReferralDeals({
                 agentsLoading={agentsLoading}
                 canManage={canManage}
                 isAgentOrigin={isAgentOrigin}
+                isAgitDeal={isAgitDeal}
                 statusUpdating={statusUpdating[deal._id]}
                 deleting={deleting[deal._id]}
                 onStatusChange={handleStatusChange}

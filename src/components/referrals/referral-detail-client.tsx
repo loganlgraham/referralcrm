@@ -28,6 +28,7 @@ interface ReferralContact {
   name?: string | null;
   email?: string | null;
   phone?: string | null;
+  ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
 }
 
 interface ReferralDetailNote {
@@ -1535,6 +1536,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         referralOrigin={referral.origin}
         feeBreakdownAutoSendEnabled={referral.feeBreakdownAutoSendEnabled as boolean | undefined}
         hiddenOutsideAgentCount={hiddenOutsideAgentCount}
+        assignedAgentDesignation={referral.assignedAgent?.ahaDesignation}
       />
       <ReferralTimeline referralId={referralId} />
       {canDelete && (

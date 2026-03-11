@@ -33,7 +33,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   await connectMongo();
   const referral = await Referral.findById(params.id)
-    .populate('assignedAgent', 'userId')
+    .populate('assignedAgent', 'userId ahaDesignation')
     .populate('buySideAgent', 'userId')
     .populate('sellSideAgent', 'userId')
     .populate('lender', 'userId');
@@ -59,7 +59,17 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const amountCents = Math.round(parsed.data.amount * 100);
   referral.preApprovalAmountCents = amountCents;
 
-  if (!['Under Contract', 'Closed', 'Terminated', 'Lost'].includes(referral.status as string)) {
+  const isAgentOrigin = referral.origin === 'agent';
+  const isAgitDeal = (referral.assignedAgent as any)?.ahaDesignation === 'AGIT';
+  const isNoFeeDeal = isAgentOrigin || isAgitDeal;
+
+  if (isNoFeeDeal) {
+    referral.referralFeeDueCents = 0;
+    await Payment.updateMany(
+      { referralId: referral._id },
+      { $set: { expectedAmountCents: 0 } }
+    );
+  } else if (!['Under Contract', 'Closed', 'Terminated', 'Lost'].includes(referral.status as string)) {
     const commissionBasisPoints = referral.commissionBasisPoints || DEFAULT_AGENT_COMMISSION_BPS;
     const referralFeeBasisPoints = referral.referralFeeBasisPoints || DEFAULT_REFERRAL_FEE_BPS;
     referral.referralFeeDueCents = calculateReferralFeeDue(
