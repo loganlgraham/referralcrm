@@ -12,6 +12,7 @@ export interface ReferralPayment {
   usedAfc?: boolean;
   usedAssignedAgent?: boolean;
   commissionBasisPoints?: number | null;
+  commissionFlatFeeCents?: number | null;
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
   contractPriceCents?: number | null;

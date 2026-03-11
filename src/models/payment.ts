@@ -30,6 +30,7 @@ const paymentSchema = new Schema(
     propertyCity: { type: String, default: null },
     propertyState: { type: String, default: null },
     commissionBasisPoints: { type: Number, default: null },
+    commissionFlatFeeCents: { type: Number, default: null },
     referralFeeBasisPoints: { type: Number, default: null },
     side: {
       type: String,
