@@ -45,6 +45,7 @@ type DealUpdatePayload = {
   propertyState: string | null;
   agentId: string | null;
   closingDate: string | null;
+  underContractDate: string | null;
   side: 'buy' | 'sell';
   usedAfc: boolean;
   usedAssignedAgent: boolean;
@@ -145,6 +146,7 @@ function DealCard({
   const [propertyCity, setPropertyCity] = useState(deal.propertyCity ?? '');
   const [propertyState, setPropertyState] = useState(deal.propertyState ?? '');
   const [closingDate, setClosingDate] = useState(deal.closingDate ? deal.closingDate.slice(0, 10) : '');
+  const [underContractDate, setUnderContractDate] = useState(deal.underContractDate ? deal.underContractDate.slice(0, 10) : '');
   const [agentId, setAgentId] = useState(deal.agentId ?? deal.agent?.id ?? '');
   const [side, setSide] = useState<'buy' | 'sell'>(deal.side ?? 'buy');
   const [usedAfc, setUsedAfc] = useState(Boolean(deal.usedAfc));
@@ -170,6 +172,7 @@ function DealCard({
     setPropertyCity(deal.propertyCity ?? '');
     setPropertyState(deal.propertyState ?? '');
     setClosingDate(deal.closingDate ? deal.closingDate.slice(0, 10) : '');
+    setUnderContractDate(deal.underContractDate ? deal.underContractDate.slice(0, 10) : '');
     // Properly handle agentId from either deal.agentId or deal.agent?.id
     const dealAgentId = deal.agentId ?? deal.agent?.id ?? null;
     setAgentId(dealAgentId ?? '');
@@ -310,6 +313,7 @@ function DealCard({
       propertyCity: propertyCity.trim() || null,
       propertyState: propertyState.trim().toUpperCase() || null,
       closingDate: closingDateToSend,
+      underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : null,
       // Always include agentId, even if empty (will be converted to null)
       agentId: agentId.trim() || null,
       side,
@@ -350,6 +354,9 @@ function DealCard({
             <p className="text-xs uppercase text-slate-500">Status</p>
             <p className="text-sm font-semibold text-slate-900">{statusLabel}</p>
             <p className="text-xs text-slate-500">Created {formatDateMST(deal.createdAt)}</p>
+            <p className="text-xs text-slate-500">
+              Under contract: {deal.underContractDate ? formatDateMST(deal.underContractDate) : '—'}
+            </p>
             <p className="text-xs text-slate-500">
               Closing date: {deal.closingDate ? formatDateMST(deal.closingDate) : '—'}
             </p>
@@ -628,6 +635,16 @@ function DealCard({
               </label>
             )}
             <label className="space-y-1 text-sm font-medium text-slate-700">
+              <span>Under contract date</span>
+              <input
+                type="date"
+                value={underContractDate}
+                onChange={(event) => setUnderContractDate(event.target.value)}
+                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                disabled={saving}
+              />
+            </label>
+            <label className="space-y-1 text-sm font-medium text-slate-700">
               <span>Closing date</span>
               <input
                 type="date"
@@ -812,6 +829,7 @@ export function ReferralDeals({
   const [propertyCity, setPropertyCity] = useState('');
   const [propertyState, setPropertyState] = useState('');
   const [closingDate, setClosingDate] = useState('');
+  const [underContractDate, setUnderContractDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [agentId, setAgentId] = useState('');
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [usedAfc, setUsedAfc] = useState(false);
@@ -977,6 +995,7 @@ export function ReferralDeals({
           propertyCity: propertyCity.trim() || null,
           propertyState: propertyState.trim().toUpperCase() || null,
           closingDate: closingDateToSend,
+          underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : new Date().toISOString(),
           agentId: agentId || null,
           usedAfc: isAgentOrigin ? false : usedAfc,
           usedAssignedAgent: isAgentOrigin ? true : usedAssignedAgent,
@@ -1005,6 +1024,7 @@ export function ReferralDeals({
           propertyCity: propertyCity.trim() || null,
           propertyState: propertyState.trim().toUpperCase() || null,
           closingDate: closingDateToSend,
+          underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : new Date().toISOString(),
           agent: agentId ? { id: agentId, name: agents.find((option) => option.id === agentId)?.name ?? null } : null,
           agentId: agentId || null,
           usedAfc: isAgentOrigin ? false : usedAfc,
@@ -1323,6 +1343,16 @@ export function ReferralDeals({
                 </select>
               </label>
             )}
+            <label className="space-y-1 text-sm font-medium text-slate-700">
+              <span>Under contract date</span>
+              <input
+                type="date"
+                value={underContractDate}
+                onChange={(event) => setUnderContractDate(event.target.value)}
+                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                disabled={submitting}
+              />
+            </label>
             <label className="space-y-1 text-sm font-medium text-slate-700">
               <span>Closing date</span>
               <input

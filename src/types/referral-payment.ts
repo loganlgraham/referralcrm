@@ -20,6 +20,7 @@ export interface ReferralPayment {
   propertyCity?: string | null;
   propertyState?: string | null;
   closingDate?: string | null;
+  underContractDate?: string | null;
   agent?: { id: string; name: string | null } | null;
   agentId?: string | null;
   feeBreakdownEmailSentAt?: string | null;

@@ -680,6 +680,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       isAgentOrigin || isOutsideAgent ? 0 : parsed.data.netReferralFeePaidCents ?? null,
     propertyAddress: parsed.data.propertyAddress ?? null,
     closingDate: parsed.data.closingDate ?? null,
+    underContractDate: parsed.data.underContractDate ?? new Date(),
     invoiceDate: parsed.data.invoiceDate,
     paidDate: parsed.data.paidDate,
     notes: parsed.data.notes,
