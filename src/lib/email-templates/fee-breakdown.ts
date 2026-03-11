@@ -15,7 +15,8 @@ export interface FeeBreakdownEmailData {
   deal: {
     closingDate: string;
     contractPriceCents: number;
-    commissionBasisPoints: number;
+    commissionBasisPoints: number | null;
+    commissionFlatFeeCents?: number | null;
     referralFeeBasisPoints: number;
     side: 'buy' | 'sell';
     usedAfc: boolean;
@@ -25,7 +26,7 @@ export interface FeeBreakdownEmailData {
 
 interface CalculatedAmounts {
   contractPrice: string;
-  commissionPercent: string;
+  commissionLabel: string;
   commissionAmount: string;
   referralFeePercent: string;
   referralFeeAmount: string;
@@ -35,20 +36,28 @@ interface CalculatedAmounts {
 function calculateAmounts(data: FeeBreakdownEmailData): CalculatedAmounts {
   const contractPrice = data.deal.contractPriceCents;
   const commissionBps = data.deal.commissionBasisPoints;
+  const flatFeeCents = data.deal.commissionFlatFeeCents;
   const referralFeeBps = data.deal.referralFeeBasisPoints;
 
-  // Calculate commission amount
-  const commissionAmountCents = Math.round((contractPrice * commissionBps) / 10000);
-  
+  // Determine commission amount: flat fee takes precedence over basis points
+  const isFlatFee = flatFeeCents != null && flatFeeCents > 0;
+  const commissionAmountCents = isFlatFee
+    ? flatFeeCents
+    : Math.round((contractPrice * (commissionBps ?? 0)) / 10000);
+
   // Calculate referral fee amount
   const referralFeeAmountCents = Math.round((commissionAmountCents * referralFeeBps) / 10000);
-  
+
   // Calculate net commission
   const netCommissionCents = commissionAmountCents - referralFeeAmountCents;
 
+  const commissionLabel = isFlatFee
+    ? 'Flat Fee'
+    : `${((commissionBps ?? 0) / 100).toFixed(2)}%`;
+
   return {
     contractPrice: formatCurrency(contractPrice),
-    commissionPercent: `${(commissionBps / 100).toFixed(2)}%`,
+    commissionLabel,
     commissionAmount: formatCurrency(commissionAmountCents),
     referralFeePercent: `${(referralFeeBps / 100).toFixed(2)}%`,
     referralFeeAmount: formatCurrency(referralFeeAmountCents),
@@ -282,7 +291,7 @@ export function generateFeeBreakdownEmailHTML(data: FeeBreakdownEmailData): { ht
         </div>
         
         <div class="financial-row">
-          <span class="financial-label">Agent Commission (${amounts.commissionPercent}):</span>
+          <span class="financial-label">Agent Commission (${amounts.commissionLabel}):</span>
           <span class="financial-value">${amounts.commissionAmount}</span>
         </div>
         
@@ -368,7 +377,7 @@ FINANCIAL BREAKDOWN
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Contract Price:                    ${amounts.contractPrice}
-Agent Commission (${amounts.commissionPercent}):           ${amounts.commissionAmount}
+Agent Commission (${amounts.commissionLabel}):           ${amounts.commissionAmount}
 Referral Fee (${amounts.referralFeePercent}):              -${amounts.referralFeeAmount}
 ─────────────────────────────────────────────
 Net Commission to Agent:            ${amounts.netCommission}

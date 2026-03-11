@@ -60,6 +60,7 @@ interface AggregatedPayment {
   expectedAmountCents: number;
   receivedAmountCents: number;
   contractPriceCents?: number | null;
+  commissionFlatFeeCents?: number | null;
   closingDate?: Date | null;
   terminatedReason?: 'inspection' | 'appraisal' | 'financing' | 'changed_mind' | null;
   paidDate?: Date | null;
@@ -867,6 +868,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         expectedAmountCents: 1,
         receivedAmountCents: 1,
         contractPriceCents: 1,
+        commissionFlatFeeCents: 1,
         closingDate: 1,
         terminatedReason: 1,
         paidDate: 1,
@@ -1968,21 +1970,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           referralFeePercent = (referralFeeCents / contractPriceCents) * 100;
         }
         const commissionBasisPoints = payment.referral?.commissionBasisPoints ?? 0;
+        const flatFeeCents = payment.commissionFlatFeeCents ?? 0;
         const commissionPercent = commissionBasisPoints / 100;
-        const commissionCents = (contractPriceCents * commissionBasisPoints) / 10000;
-        
+        const commissionCents = flatFeeCents > 0
+          ? flatFeeCents
+          : (contractPriceCents * commissionBasisPoints) / 10000;
+
         if (commissionPercent > 0) {
           current.commissionPercentages.push(commissionPercent);
-          if (commissionCents > 0) {
-            current.commissionCents.push(commissionCents);
-          }
+        }
+        if (commissionCents > 0) {
+          current.commissionCents.push(commissionCents);
         }
         if (referralFeePercent && referralFeePercent > 0) {
           current.referralFeePercentages.push(referralFeePercent);
         }
-        
+
         // Net commission = commission earned - referral fee paid (only for paid deals)
-        if (payment.status === 'paid' && commissionBasisPoints > 0) {
+        if (payment.status === 'paid' && commissionCents > 0) {
           const paidReferralFeeCents = payment.receivedAmountCents ?? referralFeeCents;
           current.netCommissionCents += commissionCents - paidReferralFeeCents;
         }
@@ -2237,8 +2242,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           if (payment.usedAfc) current.afcAttachedDeals += 1;
           if (payment.status === 'paid') {
             const commissionBps = payment.referral?.commissionBasisPoints ?? 0;
-            if (commissionBps > 0 && contractPriceCents > 0) {
-              const commissionCents = (contractPriceCents * commissionBps) / 10000;
+            const flatFee = payment.commissionFlatFeeCents ?? 0;
+            const commissionCents = flatFee > 0
+              ? flatFee
+              : contractPriceCents > 0 ? (contractPriceCents * commissionBps) / 10000 : 0;
+            if (commissionCents > 0) {
               const referralFeePaid = payment.receivedAmountCents ?? payment.referral?.referralFeeDueCents ?? 0;
               current.netCommissionCents += commissionCents - referralFeePaid;
             }

@@ -20,6 +20,7 @@ interface PaymentLean {
   referralId?: Types.ObjectId | { _id: Types.ObjectId; borrower?: { name?: string | null } | null; propertyAddress?: string | null; loanFileNumber?: string | null } | null;
   contractPriceCents?: number | null;
   commissionBasisPoints?: number | null;
+  commissionFlatFeeCents?: number | null;
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
   usedAfc?: boolean | null;
@@ -81,7 +82,10 @@ export async function POST(
       return NextResponse.json({ error: 'Payment has no agent assigned' }, { status: 400 });
     }
 
-    if (!payment.contractPriceCents || !payment.commissionBasisPoints || !payment.referralFeeBasisPoints) {
+    const hasCommission =
+      (payment.commissionBasisPoints != null && payment.commissionBasisPoints > 0) ||
+      (payment.commissionFlatFeeCents != null && payment.commissionFlatFeeCents > 0);
+    if (!payment.contractPriceCents || !hasCommission || !payment.referralFeeBasisPoints) {
       return NextResponse.json({ error: 'Payment missing required financial data' }, { status: 400 });
     }
 
@@ -129,7 +133,8 @@ export async function POST(
       deal: {
         closingDate: payment.closingDate.toISOString(),
         contractPriceCents: payment.contractPriceCents,
-        commissionBasisPoints: payment.commissionBasisPoints,
+        commissionBasisPoints: payment.commissionBasisPoints ?? null,
+        commissionFlatFeeCents: payment.commissionFlatFeeCents ?? null,
         referralFeeBasisPoints: payment.referralFeeBasisPoints,
         side: payment.side || 'buy',
         usedAfc: Boolean(payment.usedAfc),

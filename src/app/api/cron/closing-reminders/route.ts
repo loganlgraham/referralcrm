@@ -92,7 +92,10 @@ export async function GET(request: NextRequest) {
       feeBreakdownEmailSentAt: null,
       agentId: agentIdFilter,
       contractPriceCents: { $ne: null, $gt: 0 },
-      commissionBasisPoints: { $ne: null, $gt: 0 },
+      $or: [
+        { commissionBasisPoints: { $ne: null, $gt: 0 } },
+        { commissionFlatFeeCents: { $ne: null, $gt: 0 } },
+      ],
       referralFeeBasisPoints: { $ne: null, $gt: 0 },
     })
       .select('_id closingDate status agentId contractPriceCents')

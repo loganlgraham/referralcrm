@@ -62,6 +62,8 @@ type PaymentWithReferral = {
   status: string;
   expectedAmountCents?: number | null;
   receivedAmountCents?: number | null;
+  commissionFlatFeeCents?: number | null;
+  contractPriceCents?: number | null;
   paidDate?: Date | null;
   invoiceDate?: Date | null;
   closingDate?: Date | null;
@@ -143,6 +145,8 @@ export async function computeAgentMetrics(
           status: 1,
           expectedAmountCents: 1,
           receivedAmountCents: 1,
+          commissionFlatFeeCents: 1,
+          contractPriceCents: 1,
           paidDate: 1,
           invoiceDate: 1,
           closingDate: 1,
@@ -253,11 +257,16 @@ export async function computeAgentMetrics(
       }
 
       const commissionBasisPoints = referral.commissionBasisPoints ?? 0;
+      const flatFeeCents = payment.commissionFlatFeeCents ?? 0;
       const priceCents =
-        referral.closedPriceCents && referral.closedPriceCents > 0
-          ? referral.closedPriceCents
-          : referral.estPurchasePriceCents ?? 0;
-      const commissionCents = Math.round((priceCents * commissionBasisPoints) / 10000);
+        payment.contractPriceCents && payment.contractPriceCents > 0
+          ? payment.contractPriceCents
+          : referral.closedPriceCents && referral.closedPriceCents > 0
+            ? referral.closedPriceCents
+            : referral.estPurchasePriceCents ?? 0;
+      const commissionCents = flatFeeCents > 0
+        ? flatFeeCents
+        : Math.round((priceCents * commissionBasisPoints) / 10000);
 
       if (commissionBasisPoints > 0) {
         commissionPercentSum += commissionBasisPoints / 100;
