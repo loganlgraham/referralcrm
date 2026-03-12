@@ -1,6 +1,8 @@
 import {
   differenceInDays,
   endOfDay,
+  endOfMonth,
+  endOfWeek,
   startOfDay,
   startOfMonth,
   startOfWeek,
@@ -177,9 +179,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         break;
       case 'week':
         timeframeStart = startOfWeek(now, { weekStartsOn: 1 });
+        timeframeEnd = endOfWeek(now, { weekStartsOn: 1 });
         break;
       case 'month':
         timeframeStart = startOfMonth(now);
+        timeframeEnd = endOfMonth(now);
         break;
       case 'year':
         timeframeStart = subYears(now, 1);
