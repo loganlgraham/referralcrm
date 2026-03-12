@@ -174,7 +174,7 @@ export const AHA_PRE_UC_RULES: TaskRuleDefinition[] = [
     ruleKey: 'aha_customer_care_buyer_agent_connected',
     title: 'Customer care call: Buyer and Agent Connected?',
     category: 'communication',
-    dueOffsetDays: 1,
+    dueOffsetDays: 2,
     statuses: ['New Lead', 'Paired', 'In Communication', 'Active Lead'],
     cycleType: 'once',
   },
