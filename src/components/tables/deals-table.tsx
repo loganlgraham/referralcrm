@@ -178,7 +178,8 @@ export function DealsTable() {
     if (customRange.end) apiParams.set('end', customRange.end);
   }
   if (search) apiParams.set('search', search);
-  if (statusFilters.length > 0) apiParams.set('status', statusFilters.join(','));
+  // When a closing-date timeframe is active, do not send status so the API returns all deals by closing date.
+  if (timeframe === 'all' && statusFilters.length > 0) apiParams.set('status', statusFilters.join(','));
   if (designationFilters.length > 0) apiParams.set('designation', designationFilters.join(','));
   if (usedAgentFilter !== 'all') apiParams.set('usedAgent', usedAgentFilter);
   if (usedAfcFilter !== 'all') apiParams.set('usedAfc', usedAfcFilter);
@@ -297,16 +298,26 @@ export function DealsTable() {
     [router, searchParamsString, startTransition]
   );
 
-  const handlePresetSelect = useCallback((preset: TimeframePreset) => {
-    setTimeframe(preset);
-    setCustomRange(getPresetRange(preset === 'all' ? 'month' : preset));
-  }, []);
+  const handlePresetSelect = useCallback(
+    (preset: TimeframePreset) => {
+      setTimeframe(preset);
+      setCustomRange(getPresetRange(preset === 'all' ? 'month' : preset));
+      if (preset !== 'all') {
+        updateParams({ status: '' });
+      }
+    },
+    [updateParams]
+  );
 
-  const handleCustomRangeSelect = useCallback((range: DateRange) => {
-    if (!isDateRangeValid(range)) return;
-    setCustomRange(range);
-    setTimeframe('custom');
-  }, []);
+  const handleCustomRangeSelect = useCallback(
+    (range: DateRange) => {
+      if (!isDateRangeValid(range)) return;
+      setCustomRange(range);
+      setTimeframe('custom');
+      updateParams({ status: '' });
+    },
+    [updateParams]
+  );
 
   useEffect(() => {
     if (timeframe === 'custom') return;
@@ -1173,8 +1184,8 @@ export function DealsTable() {
           />
         </label>
         {isAdminView && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            <div ref={statusMenuRef} className="relative flex flex-col text-xs font-semibold uppercase text-slate-500">
+          <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div ref={statusMenuRef} className="relative min-w-0 flex flex-col text-xs font-semibold uppercase text-slate-500">
               Status
               <div className="relative mt-1">
                 <button
@@ -1228,7 +1239,7 @@ export function DealsTable() {
                 )}
               </div>
             </div>
-            <div ref={designationMenuRef} className="relative flex flex-col text-xs font-semibold uppercase text-slate-500">
+            <div ref={designationMenuRef} className="relative min-w-0 flex flex-col text-xs font-semibold uppercase text-slate-500">
               Agent Designation
               <div className="relative mt-1">
                 <button
@@ -1282,7 +1293,7 @@ export function DealsTable() {
                 )}
               </div>
             </div>
-            <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+            <label className="flex min-w-0 flex-col text-xs font-semibold uppercase text-slate-500">
               Used Agent
               <select
                 value={usedAgentFilter}
@@ -1297,7 +1308,7 @@ export function DealsTable() {
                 <option value="false">No</option>
               </select>
             </label>
-            <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+            <label className="flex min-w-0 flex-col text-xs font-semibold uppercase text-slate-500">
               Used AFC
               <select
                 value={usedAfcFilter}

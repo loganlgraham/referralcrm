@@ -170,13 +170,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let timeframeStart: Date | null = null;
   let timeframeEnd: Date = endOfDay(now);
 
-  // Add status filter if provided (can be comma-separated)
-  if (statusList.length === 1) {
-    filter.status = statusList[0];
-  } else if (statusList.length > 1) {
-    filter.status = { $in: statusList };
-  }
-
   if (timeframeParam && timeframeParam !== 'all') {
     switch (timeframeParam) {
       case 'day':
@@ -201,7 +194,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Keep closingDate filtering for table rows.
+  // When filtering by timeframe, show all deals with closing date in range (ignore status).
+  // When timeframeStart is set, status is intentionally not applied so the list is purely by closing date.
+  // Only apply status filter when no timeframe is selected.
+  if (statusList.length === 1 && !timeframeStart) {
+    filter.status = statusList[0];
+  } else if (statusList.length > 1 && !timeframeStart) {
+    filter.status = { $in: statusList };
+  }
+
+  // Closing-date filter for table rows (timeframe = closing date only).
   if (timeframeStart) {
     filter.closingDate = { $gte: timeframeStart, $lte: timeframeEnd };
   }
