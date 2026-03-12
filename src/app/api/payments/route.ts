@@ -394,10 +394,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   if (statusAllowsPaid) {
     const receivedRevenueFilter: Record<string, unknown> = { ...filter, status: 'paid' };
-    delete receivedRevenueFilter.closingDate;
-    if (timeframeStart) {
-      receivedRevenueFilter.paidDate = { $gte: timeframeStart, $lte: timeframeEnd };
-    }
+    // Timeframe is closing-date only: keep filter.closingDate when set; do not use paidDate.
 
     if (search) {
       const summaryPipeline: PipelineStage[] = [
