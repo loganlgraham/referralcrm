@@ -178,7 +178,8 @@ export function DealsTable() {
     if (customRange.end) apiParams.set('end', customRange.end);
   }
   if (search) apiParams.set('search', search);
-  if (statusFilters.length > 0) apiParams.set('status', statusFilters.join(','));
+  // When a closing-date timeframe is active, do not send status so the API returns all deals by closing date.
+  if (timeframe === 'all' && statusFilters.length > 0) apiParams.set('status', statusFilters.join(','));
   if (designationFilters.length > 0) apiParams.set('designation', designationFilters.join(','));
   if (usedAgentFilter !== 'all') apiParams.set('usedAgent', usedAgentFilter);
   if (usedAfcFilter !== 'all') apiParams.set('usedAfc', usedAfcFilter);
@@ -297,16 +298,26 @@ export function DealsTable() {
     [router, searchParamsString, startTransition]
   );
 
-  const handlePresetSelect = useCallback((preset: TimeframePreset) => {
-    setTimeframe(preset);
-    setCustomRange(getPresetRange(preset === 'all' ? 'month' : preset));
-  }, []);
+  const handlePresetSelect = useCallback(
+    (preset: TimeframePreset) => {
+      setTimeframe(preset);
+      setCustomRange(getPresetRange(preset === 'all' ? 'month' : preset));
+      if (preset !== 'all') {
+        updateParams({ status: '' });
+      }
+    },
+    [updateParams]
+  );
 
-  const handleCustomRangeSelect = useCallback((range: DateRange) => {
-    if (!isDateRangeValid(range)) return;
-    setCustomRange(range);
-    setTimeframe('custom');
-  }, []);
+  const handleCustomRangeSelect = useCallback(
+    (range: DateRange) => {
+      if (!isDateRangeValid(range)) return;
+      setCustomRange(range);
+      setTimeframe('custom');
+      updateParams({ status: '' });
+    },
+    [updateParams]
+  );
 
   useEffect(() => {
     if (timeframe === 'custom') return;
@@ -1161,161 +1172,159 @@ export function DealsTable() {
           </div>
         )}
       </div>
-      <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end">
-          <label className="block flex-1 text-xs font-semibold text-slate-600">
-            Search
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(event) => handleSearchInput(event.target.value)}
-              className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder="Borrower, address, loan #, agent"
-            />
-          </label>
-          {isAdminView && (
-            <>
-              <div className="md:w-80" ref={statusMenuRef}>
-                <span className="block text-xs font-semibold text-slate-600">Status</span>
-                <div className="relative mt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsStatusMenuOpen((open) => !open)}
-                    disabled={isPending}
-                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <span className="truncate">
-                      {statusFilters.length > 0
-                        ? `${statusFilters.length} status${statusFilters.length > 1 ? 'es' : ''} selected`
-                        : 'All statuses'}
-                    </span>
-                    <span className="text-xs text-slate-500">{isStatusMenuOpen ? '▲' : '▼'}</span>
-                  </button>
-                  {isStatusMenuOpen && (
-                    <div className="absolute left-0 right-0 z-30 mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
-                      <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600">
-                        <span>Filter statuses</span>
-                        <button
-                          type="button"
-                          className="text-brand hover:text-brand/80"
-                          onClick={() => updateParams({ status: '' })}
-                        >
-                          Clear
-                        </button>
-                      </div>
-                      <div className="max-h-60 space-y-2 overflow-auto pr-1">
-                        {STATUS_FILTER_OPTIONS.map(({ value, label }) => (
-                          <label
-                            key={value}
-                            className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                          >
-                            <span className="text-slate-700">{label}</span>
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-                              checked={statusFilters.includes(value as DealStatus)}
-                              onChange={(event) => {
-                                const checked = event.target.checked;
-                                const newFilters = checked
-                                  ? [...statusFilters, value as DealStatus]
-                                  : statusFilters.filter((status) => status !== value);
-                                updateParams({ status: newFilters.length > 0 ? newFilters.join(',') : '' });
-                              }}
-                            />
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="md:w-80" ref={designationMenuRef}>
-                <span className="block text-xs font-semibold text-slate-600">Agent Designation</span>
-                <div className="relative mt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsDesignationMenuOpen((open) => !open)}
-                    disabled={isPending}
-                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <span className="truncate">
-                      {designationFilters.length > 0
-                        ? `${designationFilters.length} designation${designationFilters.length > 1 ? 's' : ''} selected`
-                        : 'All designations'}
-                    </span>
-                    <span className="text-xs text-slate-500">{isDesignationMenuOpen ? '▲' : '▼'}</span>
-                  </button>
-                  {isDesignationMenuOpen && (
-                    <div className="absolute left-0 right-0 z-30 mt-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
-                      <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600">
-                        <span>Filter by designation</span>
-                        <button
-                          type="button"
-                          className="text-brand hover:text-brand/80"
-                          onClick={() => updateParams({ designation: '' })}
-                        >
-                          Clear
-                        </button>
-                      </div>
-                      <div className="max-h-60 space-y-2 overflow-auto pr-1">
-                        {DESIGNATION_FILTER_OPTIONS.map(({ value, label }) => (
-                          <label
-                            key={value}
-                            className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                          >
-                            <span className="text-slate-700">{label}</span>
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-                              checked={designationFilters.includes(value)}
-                              onChange={(event) => {
-                                const checked = event.target.checked;
-                                const newFilters = checked
-                                  ? [...designationFilters, value]
-                                  : designationFilters.filter((d) => d !== value);
-                                updateParams({ designation: newFilters.length > 0 ? newFilters.join(',') : '' });
-                              }}
-                            />
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <label className="md:w-44">
-                <span className="block text-xs font-semibold text-slate-600">Used Agent</span>
-                <select
-                  value={usedAgentFilter}
-                  onChange={(event) =>
-                    updateParams({ usedAgent: event.target.value as TriStateFilterValue })
-                  }
-                  className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
+      <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+        <label className="flex flex-col text-xs font-semibold text-slate-600">
+          Search
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(event) => handleSearchInput(event.target.value)}
+            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+            placeholder="Borrower, address, loan #, agent"
+          />
+        </label>
+        {isAdminView && (
+          <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div ref={statusMenuRef} className="relative min-w-0 flex flex-col text-xs font-semibold uppercase text-slate-500">
+              Status
+              <div className="relative mt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsStatusMenuOpen((open) => !open)}
                   disabled={isPending}
+                  className="flex w-full items-center justify-between gap-2 rounded border border-slate-200 bg-white px-3 py-2 text-left text-sm normal-case text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <option value="all">All</option>
-                  <option value="true">Yes</option>
-                  <option value="false">No</option>
-                </select>
-              </label>
-              <label className="md:w-44">
-                <span className="block text-xs font-semibold text-slate-600">Used AFC</span>
-                <select
-                  value={usedAfcFilter}
-                  onChange={(event) =>
-                    updateParams({ usedAfc: event.target.value as TriStateFilterValue })
-                  }
-                  className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
+                  <span className="truncate">
+                    {statusFilters.length > 0
+                      ? `${statusFilters.length} status${statusFilters.length > 1 ? 'es' : ''} selected`
+                      : 'All statuses'}
+                  </span>
+                  <span className="text-slate-400">&#9662;</span>
+                </button>
+                {isStatusMenuOpen && (
+                  <div className="absolute left-0 right-0 z-30 mt-1 max-h-60 w-full overflow-y-auto rounded border border-slate-200 bg-white py-1 shadow-lg">
+                    <div className="mb-2 flex items-center justify-between px-3 pt-1 text-xs font-semibold text-slate-600">
+                      <span>Filter statuses</span>
+                      <button
+                        type="button"
+                        className="text-brand hover:text-brand/80"
+                        onClick={() => updateParams({ status: '' })}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div className="max-h-60 space-y-2 overflow-auto px-2 pb-2">
+                      {STATUS_FILTER_OPTIONS.map(({ value, label }) => (
+                        <label
+                          key={value}
+                          className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          <span className="text-slate-700">{label}</span>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                            checked={statusFilters.includes(value as DealStatus)}
+                            onChange={(event) => {
+                              const checked = event.target.checked;
+                              const newFilters = checked
+                                ? [...statusFilters, value as DealStatus]
+                                : statusFilters.filter((status) => status !== value);
+                              updateParams({ status: newFilters.length > 0 ? newFilters.join(',') : '' });
+                            }}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div ref={designationMenuRef} className="relative min-w-0 flex flex-col text-xs font-semibold uppercase text-slate-500">
+              Agent Designation
+              <div className="relative mt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsDesignationMenuOpen((open) => !open)}
                   disabled={isPending}
+                  className="flex w-full items-center justify-between gap-2 rounded border border-slate-200 bg-white px-3 py-2 text-left text-sm normal-case text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <option value="all">All</option>
-                  <option value="true">Yes</option>
-                  <option value="false">No</option>
-                </select>
-              </label>
-            </>
-          )}
-        </div>
+                  <span className="truncate">
+                    {designationFilters.length > 0
+                      ? `${designationFilters.length} designation${designationFilters.length > 1 ? 's' : ''} selected`
+                      : 'All designations'}
+                  </span>
+                  <span className="text-slate-400">&#9662;</span>
+                </button>
+                {isDesignationMenuOpen && (
+                  <div className="absolute left-0 right-0 z-30 mt-1 max-h-60 w-full overflow-y-auto rounded border border-slate-200 bg-white py-1 shadow-lg">
+                    <div className="mb-2 flex items-center justify-between px-3 pt-1 text-xs font-semibold text-slate-600">
+                      <span>Filter by designation</span>
+                      <button
+                        type="button"
+                        className="text-brand hover:text-brand/80"
+                        onClick={() => updateParams({ designation: '' })}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div className="max-h-60 space-y-2 overflow-auto px-2 pb-2">
+                      {DESIGNATION_FILTER_OPTIONS.map(({ value, label }) => (
+                        <label
+                          key={value}
+                          className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          <span className="text-slate-700">{label}</span>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                            checked={designationFilters.includes(value)}
+                            onChange={(event) => {
+                              const checked = event.target.checked;
+                              const newFilters = checked
+                                ? [...designationFilters, value]
+                                : designationFilters.filter((d) => d !== value);
+                              updateParams({ designation: newFilters.length > 0 ? newFilters.join(',') : '' });
+                            }}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <label className="flex min-w-0 flex-col text-xs font-semibold uppercase text-slate-500">
+              Used Agent
+              <select
+                value={usedAgentFilter}
+                onChange={(event) =>
+                  updateParams({ usedAgent: event.target.value as TriStateFilterValue })
+                }
+                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={isPending}
+              >
+                <option value="all">All</option>
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+              </select>
+            </label>
+            <label className="flex min-w-0 flex-col text-xs font-semibold uppercase text-slate-500">
+              Used AFC
+              <select
+                value={usedAfcFilter}
+                onChange={(event) =>
+                  updateParams({ usedAfc: event.target.value as TriStateFilterValue })
+                }
+                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={isPending}
+              >
+                <option value="all">All</option>
+                <option value="true">Yes</option>
+                <option value="false">No</option>
+              </select>
+            </label>
+          </div>
+        )}
       </div>
       {summarySection}
       {deals.length === 0 ? (

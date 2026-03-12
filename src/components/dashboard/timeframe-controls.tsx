@@ -87,7 +87,8 @@ export function getPresetRange(preset: TimeframePreset): DateRange {
     }
     case 'week': {
       const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-      return { start: formatDateInput(weekStart), end };
+      const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+      return { start: formatDateInput(weekStart), end: formatDateInput(weekEnd) };
     }
     case 'all': {
       const epochStart = startOfDay(new Date(0));
@@ -104,7 +105,8 @@ export function getPresetRange(preset: TimeframePreset): DateRange {
     case 'month':
     default: {
       const start = startOfMonth(now);
-      return { start: formatDateInput(start), end };
+      const monthEnd = endOfMonth(now);
+      return { start: formatDateInput(start), end: formatDateInput(monthEnd) };
     }
   }
 }
