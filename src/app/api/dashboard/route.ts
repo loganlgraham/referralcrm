@@ -15,6 +15,7 @@ import {
   startOfWeek,
   startOfYear,
   subMonths,
+  subWeeks,
   subYears
 } from 'date-fns';
 import { connectMongo } from '@/lib/mongoose';
@@ -634,6 +635,62 @@ function isWithinTimeframe(date: Date | null | undefined, timeframe: TimeframeIn
   return true;
 }
 
+function getPreviousPeriodRange(timeframe: TimeframeInfo): { start: Date; end: Date } | null {
+  const currentStart = timeframe.start;
+  const currentEnd = timeframe.end;
+  if (!currentStart || !currentEnd || currentStart.getTime() >= currentEnd.getTime()) {
+    return null;
+  }
+
+  switch (timeframe.key) {
+    case 'all':
+      return null;
+    case 'day': {
+      const previousDay = addDays(startOfDay(currentStart), -1);
+      return {
+        start: startOfDay(previousDay),
+        end: endOfDay(previousDay)
+      };
+    }
+    case 'week': {
+      const currentWeekStart = startOfWeek(currentStart, { weekStartsOn: 1 });
+      const previousWeekStart = startOfWeek(subWeeks(currentWeekStart, 1), { weekStartsOn: 1 });
+      return {
+        start: startOfDay(previousWeekStart),
+        end: endOfDay(addDays(previousWeekStart, 6))
+      };
+    }
+    case 'month': {
+      const currentMonthStart = startOfMonth(currentStart);
+      const previousMonthStart = startOfMonth(subMonths(currentMonthStart, 1));
+      return {
+        start: previousMonthStart,
+        end: endOfMonth(previousMonthStart)
+      };
+    }
+    case 'custom': {
+      const periodMs = currentEnd.getTime() - currentStart.getTime();
+      const previousEnd = new Date(currentStart.getTime() - 1);
+      const previousStart = new Date(previousEnd.getTime() - periodMs);
+      return {
+        start: previousStart,
+        end: previousEnd
+      };
+    }
+    case 'year':
+    case 'ytd':
+    default: {
+      const periodMs = currentEnd.getTime() - currentStart.getTime();
+      const previousEnd = new Date(currentStart.getTime() - 1);
+      const previousStart = new Date(previousEnd.getTime() - periodMs);
+      return {
+        start: previousStart,
+        end: previousEnd
+      };
+    }
+  }
+}
+
 function getSlaMetricDate(
   referral: AggregatedPayment['referral'] | DashboardReferral,
   fallback: Date | null = null
@@ -1179,11 +1236,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     })
     .map((r) => r._id.toString());
   const glennBeckReferralIdsSet = new Set(glennBeckReferralIdsForExclusion);
+  const isRevenueEligiblePayment = (payment: AggregatedPayment) =>
+    payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+    !glennBeckReferralIdsSet.has(payment.referral._id.toString());
 
-  const revenueEligiblePayments = filteredPaymentsByNetwork.filter(
-    (payment) => 
-      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
-      !glennBeckReferralIdsSet.has(payment.referral._id.toString())
+  const revenueEligiblePayments = filteredPaymentsByNetwork.filter((payment) =>
+    isRevenueEligiblePayment(payment)
   );
 
   const closedOrPaidStatuses = new Set(['closed', 'paid']);
@@ -2749,29 +2807,33 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     };
   });
 
-  // Period-over-period: previous period of same length ending at timeframe.start
+  // Period-over-period: compare against prior matching period per timeframe.
   let periodOverPeriod: {
     previous: { totalReferrals: number; dealsClosed: number; realizedRevenueCents: number; closeRate: number };
     current: { totalReferrals: number; dealsClosed: number; realizedRevenueCents: number; closeRate: number };
   } | null = null;
-  if (timeframeStart && timeframeEnd && timeframeStart.getTime() < timeframeEnd.getTime()) {
-    const periodMs = timeframeEnd.getTime() - timeframeStart.getTime();
-    const previousEnd = new Date(timeframeStart.getTime() - 1);
-    const previousStart = new Date(previousEnd.getTime() - periodMs);
+  const previousPeriodRange = getPreviousPeriodRange(timeframe);
+  if (previousPeriodRange) {
+    const { start: previousStart, end: previousEnd } = previousPeriodRange;
     const prevReferrals = referralsByNetwork.filter((r) => {
       const created = r.createdAt ? new Date(r.createdAt) : null;
       if (!created) return false;
       return created >= previousStart && created <= previousEnd;
     });
-    const prevReferralIds = new Set(prevReferrals.map((r) => r._id.toString()));
-    const prevDealsClosed = paymentsByNetwork.filter(
-      (p) =>
-        p.agentAttribution !== 'OUTSIDE_AGENT' &&
-        p.usedAssignedAgent === true &&
-        (p.status === 'closed' || p.status === 'paid') &&
-        prevReferralIds.has(p.referral._id.toString())
-    );
-    const prevRealized = prevDealsClosed.reduce((sum, p) => sum + (p.receivedAmountCents ?? 0), 0);
+    const prevDealsClosed = paymentsByNetwork.filter((payment) => {
+      const metricDate = payment.metricDate ?? resolveMetricDate(payment);
+      if (metricDate < previousStart || metricDate > previousEnd) return false;
+      if (payment.agentAttribution === 'OUTSIDE_AGENT') return false;
+      if (payment.usedAssignedAgent !== true) return false;
+      if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return false;
+      return true;
+    });
+    const prevRealized = paymentsByNetwork.reduce((sum, payment) => {
+      const metricDate = payment.metricDate ?? resolveMetricDate(payment);
+      if (metricDate < previousStart || metricDate > previousEnd) return sum;
+      if (!isRevenueEligiblePayment(payment)) return sum;
+      return sum + (payment.receivedAmountCents ?? 0);
+    }, 0);
     periodOverPeriod = {
       previous: {
         totalReferrals: prevReferrals.length,
