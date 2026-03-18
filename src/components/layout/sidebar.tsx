@@ -58,18 +58,18 @@ export function Sidebar({ session, className }: { session: Session; className?: 
   };
 
   return (
-    <aside className={clsx('fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-lg', className)}>
-      <div className="flex h-16 items-center justify-between border-b px-6">
+    <aside className={clsx('fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-slate-900', className)}>
+      <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-700/50 px-6">
         <div>
-          <p className="text-sm font-semibold text-brand">AFC · AHA</p>
-          <p className="text-xs text-slate-500">Referral CRM</p>
+          <p className="text-sm font-semibold text-white">AFC · AHA</p>
+          <p className="text-xs text-slate-400">Referral CRM</p>
         </div>
         <NotificationBell session={session} />
       </div>
-      <nav className="flex flex-col space-y-1 p-4">
+      <nav className="flex flex-1 flex-col space-y-0.5 overflow-y-auto p-3">
         {compactNavItems.map((item, index) => {
           if (item.type === 'divider') {
-            return <div key={`divider-${index}`} className="my-1 border-t border-slate-200" />;
+            return <div key={`divider-${index}`} className="my-2 border-t border-slate-700/50" />;
           }
 
           const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -82,10 +82,10 @@ export function Sidebar({ session, className }: { session: Session; className?: 
               key={item.href}
               href={item.href}
               className={clsx(
-                'rounded-md px-4 py-2 text-sm font-medium transition',
+                'relative flex items-center rounded-md px-3 py-2 text-sm font-medium transition',
                 active
-                  ? 'bg-brand text-white hover:bg-brand-dark hover:text-white'
-                  : 'hover:bg-slate-100'
+                  ? 'bg-brand/15 text-brand-light before:absolute before:left-0 before:top-1/2 before:h-5 before:-translate-y-1/2 before:w-0.5 before:rounded-r before:bg-brand-light before:content-[\'\']'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white'
               )}
             >
               {item.label}
@@ -93,11 +93,11 @@ export function Sidebar({ session, className }: { session: Session; className?: 
           );
         })}
       </nav>
-      <div className="mt-auto p-4">
+      <div className="shrink-0 border-t border-slate-700/50 p-3">
         <button
           type="button"
           onClick={handleSignOut}
-          className="flex w-full items-center justify-center gap-2 rounded-md bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-300"
+          className="flex w-full items-center justify-center gap-2 rounded-md bg-white/5 px-4 py-2 text-sm font-medium text-slate-400 transition hover:bg-white/10 hover:text-white"
         >
           <LogOutIcon className="h-4 w-4" />
           Sign out

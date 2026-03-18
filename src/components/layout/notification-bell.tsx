@@ -49,7 +49,7 @@ export function NotificationBell({ session }: NotificationBellProps) {
       <button
         type="button"
         onClick={handleToggle}
-        className="relative rounded-md p-2 text-slate-600 transition hover:bg-slate-100 focus:outline-none"
+        className="relative rounded-md p-2 text-slate-400 transition hover:bg-white/10 hover:text-white focus:outline-none"
         aria-label="Notifications"
       >
         <Bell className="h-5 w-5" />

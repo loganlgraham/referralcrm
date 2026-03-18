@@ -245,7 +245,7 @@ function NoteComposer({ referralId }: { referralId: string }) {
           type="button"
           onClick={handleSubmit}
           disabled={saving}
-          className="inline-flex items-center rounded bg-brand px-3 py-1 font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+          className="inline-flex items-center rounded-lg bg-brand px-3 py-1 font-semibold text-white shadow-sm transition hover:bg-brand-light disabled:cursor-not-allowed disabled:opacity-70"
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
@@ -253,7 +253,7 @@ function NoteComposer({ referralId }: { referralId: string }) {
           type="button"
           onClick={reset}
           disabled={saving}
-          className="inline-flex items-center rounded border border-slate-200 px-3 py-1 font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
+          className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1 font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
         >
           Cancel
         </button>
@@ -670,15 +670,15 @@ export function ReferralTable({ data, mode, showAgentOriginIndicator, hideAgentC
   });
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-xl border border-slate-200/70 bg-white shadow">
       <table className="min-w-full divide-y divide-slate-200">
-        <thead className="bg-slate-50">
+        <thead className="bg-zinc-50">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
                 <th
                   key={header.id}
-                  className={`px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 ${
+                  className={`px-4 py-3 text-xs font-semibold text-slate-500 ${
                     header.column.id === 'actions' ? 'text-right' : 'text-left'
                   }`}
                 >
@@ -690,7 +690,7 @@ export function ReferralTable({ data, mode, showAgentOriginIndicator, hideAgentC
         </thead>
         <tbody className="divide-y divide-slate-100">
           {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} className="hover:bg-slate-50">
+            <tr key={row.id} className="hover:bg-zinc-50">
               {row.getVisibleCells().map((cell) => (
                 <td
                   key={cell.id}
@@ -765,11 +765,11 @@ export function ReferralSummary({
   const columnClass = mode === 'agent' ? 'md:grid-cols-4' : 'md:grid-cols-3';
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="card">
       <dl className={clsx('grid gap-4', columnClass)}>
         {metrics.map((metric) => (
           <div key={metric.label}>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{metric.label}</dt>
+            <dt className="text-xs font-semibold text-slate-500">{metric.label}</dt>
             <dd className="mt-1 text-2xl font-semibold text-slate-900">{metric.value}</dd>
           </div>
         ))}

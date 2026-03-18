@@ -392,14 +392,14 @@ function SummaryCard({
   const isInteractive = Boolean(drillDownHref ?? onClick);
   const content = (
     <>
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+      <p className="text-xs font-semibold text-slate-500">{title}</p>
       <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
       {helper ? <p className="mt-1 text-xs text-slate-500">{helper}</p> : null}
       {extraStats?.length ? (
         <dl className="mt-3 grid grid-cols-2 gap-2">
           {extraStats.map((stat) => (
-            <div key={`${title}-${stat.label}`} className="rounded-lg bg-slate-50 px-2 py-1">
-              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{stat.label}</dt>
+            <div key={`${title}-${stat.label}`} className="rounded-lg bg-zinc-50 px-2 py-1">
+              <dt className="text-xs font-semibold text-slate-500">{stat.label}</dt>
               <dd className="text-sm font-semibold text-slate-900">{stat.value}</dd>
             </div>
           ))}
@@ -407,7 +407,7 @@ function SummaryCard({
       ) : null}
     </>
   );
-  const className = `rounded-xl border border-slate-200 bg-white p-4 shadow-sm block w-full text-left transition${isInteractive ? ' cursor-pointer hover:border-sky-300 hover:shadow-md' : ''}`;
+  const className = `card block w-full text-left transition${isInteractive ? ' cursor-pointer hover:border-brand/30 hover:shadow-md' : ''}`;
   if (drillDownHref) {
     return (
       <Link href={drillDownHref} className={className}>
@@ -433,8 +433,8 @@ function MetricGroupCard({
   metrics: { label: string; value: string; helper?: string; onHelperClick?: () => void }[];
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+    <div className="card">
+      <p className="text-xs font-semibold text-slate-500">{title}</p>
       <dl className="mt-3 divide-y divide-slate-100">
         {metrics.map((metric, index) => (
           <div key={`${title}-${metric.label}`} className="space-y-0.5 py-2.5 first:pt-0 last:pb-0">
@@ -550,10 +550,10 @@ function LineChartCard({
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="card">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+          <p className="text-xs font-semibold text-slate-500">{title}</p>
           {helper ? <p className="text-xs text-slate-500">{helper}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -751,10 +751,10 @@ function MultiLineChartCard({
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="card">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+          <p className="text-xs font-semibold text-slate-500">{title}</p>
           {helper ? <p className="text-xs text-slate-500">{helper}</p> : null}
         </div>
         <div className="flex items-center gap-4">
@@ -896,10 +896,10 @@ function PieChartCard({
   let currentAngle = -Math.PI / 2;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="card">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+          <p className="text-xs font-semibold text-slate-500">{title}</p>
           {helper ? <p className="text-xs text-slate-500">{helper}</p> : null}
         </div>
         <p className="text-xs font-semibold text-slate-700">{total > 0 ? `${formatNumber(total)} deals` : '—'}</p>
@@ -967,10 +967,10 @@ function TerminatedDealsList({
   const displayedDeals = showAll ? deals : deals.slice(0, LIST_PREVIEW_LIMIT);
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="card">
       <div className="flex items-baseline justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Terminated deals</p>
+          <p className="text-xs font-semibold text-slate-500">Terminated deals</p>
           <p className="mt-2 text-2xl font-semibold text-slate-900">{formatCurrency(totalLostReferralFeeCents)}</p>
           <p className="text-xs text-slate-500">{formatNumber(totalDeals)} lost deals</p>
         </div>
@@ -1023,8 +1023,8 @@ function ConversionFunnelCard({
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Conversion funnel</p>
+    <div className="card">
+      <p className="text-xs font-semibold text-slate-500">Conversion funnel</p>
       <p className="mt-1 text-xs text-slate-500">Referrals by stage — click any row to view list</p>
       <div className="mt-4 space-y-1.5">
         {stages.length ? (
@@ -1074,8 +1074,8 @@ function RankedList({
   const maxValue = items.length > 0 ? Math.max(...items.map((i) => i.value), 1) : 1;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+    <div className="card">
+      <p className="text-xs font-semibold text-slate-500">{title}</p>
       <div className="mt-4 space-y-3">
         <ul className="space-y-2.5">
           {items.length ? (
@@ -1129,9 +1129,9 @@ function LeaderboardTable({
   const displayedEntries = showAll ? entries : entries.slice(0, LIST_PREVIEW_LIMIT);
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="card">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+        <p className="text-xs font-semibold text-slate-500">{title}</p>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
       <table className="mt-4 w-full text-sm">
@@ -1319,10 +1319,10 @@ function PreApprovalConversionSection({
   };
 
   return (
-    <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="card space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Pre-approval conversion</p>
+          <p className="text-xs font-semibold text-slate-500">Pre-approval conversion</p>
           <p className="text-xs text-slate-500">
             Track how referral volume compares with AHA and AHA OOS pre-approvals issued each month.
           </p>
@@ -1360,7 +1360,7 @@ function PreApprovalConversionSection({
             </label>
             <button
               type="submit"
-              className="rounded bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-lg bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand-light disabled:cursor-not-allowed disabled:opacity-60 transition"
               disabled={status === 'saving'}
             >
               {status === 'saving' ? 'Saving…' : 'Save entry'}
@@ -1788,8 +1788,8 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+    <div className="card">
+      <p className="text-xs font-semibold text-slate-500">{title}</p>
       {data.rankedAgents.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-500">No agents with data for this period.</p>
       ) : (
@@ -1851,7 +1851,7 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
               </span>
             </div>
             <div>
-              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-400">KPI Breakdown</p>
+              <p className="mb-3 text-xs font-semibold text-slate-400">KPI Breakdown</p>
               <div className="space-y-3">
                 {selectedAgent.kpis.map((kpi) => (
                   <div key={kpi.key}>
@@ -2134,21 +2134,21 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
         {data.referralRows.length === 0 ? (
           <p className="text-sm text-slate-500">No AGIT referrals in this timeframe.</p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-hidden rounded-xl border border-slate-200/70 bg-white shadow">
             <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
+              <thead className="bg-zinc-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Borrower</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">MC</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Created</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Last Updated</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Borrower</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Agent</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">MC</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Created</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Last Updated</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {data.referralRows.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50">
+                  <tr key={row.id} className="hover:bg-zinc-50">
                     <td className="px-4 py-3 text-sm text-slate-700">
                       <div className="flex flex-col">
                         <Link
@@ -2250,23 +2250,23 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
         {data.dealRows.length === 0 ? (
           <p className="text-sm text-slate-500">No deals for AGIT referrals in this timeframe.</p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-hidden rounded-xl border border-slate-200/70 bg-white shadow">
             <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
+              <thead className="bg-zinc-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Expected</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Received</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">MC</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Closing Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Used AFC</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Referral</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Expected</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Received</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Agent</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">MC</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Closing Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500">Used AFC</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {data.dealRows.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50">
+                  <tr key={row.id} className="hover:bg-zinc-50">
                     <td className="px-4 py-3 text-sm text-slate-700">
                       <Link
                         prefetch={false}
@@ -2464,7 +2464,7 @@ export function DashboardTabs() {
             maxDate={maxSelectableDate}
           />
           <div className="flex flex-col items-end gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Network</span>
+            <span className="text-xs font-semibold text-slate-500">Network</span>
             <NetworkFilterButtons
               value={activeNetworkFilter}
               onChange={(value) => handleNetworkFilterChange(activeTab, value)}
