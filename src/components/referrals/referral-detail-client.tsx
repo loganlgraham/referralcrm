@@ -350,6 +350,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const [referral, setReferral] = useState<ReferralDetail>(initialReferral);
   const origin = referral.origin ?? initialReferral.origin ?? null;
   const isAgentOrigin = origin === 'agent';
+  const canViewSourceAndEndorser = viewerRole === 'admin';
+  const canEditSourceAndEndorser = canViewSourceAndEndorser && !isAgentOrigin;
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [detailsDraft, setDetailsDraft] = useState<DetailDraft>(() => createDetailDraft(initialReferral));
   const [savingDetails, setSavingDetails] = useState(false);
@@ -826,7 +828,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       toast.error('Loan file number is required.');
       return;
     }
-    if (!isAgentOrigin && !normalizedDraft.endorser) {
+    if (canEditSourceAndEndorser && !normalizedDraft.endorser) {
       toast.error('Endorser is required.');
       return;
     }
@@ -877,7 +879,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       payload.lookingInZip = parsedZips[0];
     }
 
-    if (isAgentOrigin) {
+    if (!canEditSourceAndEndorser) {
       delete payload.source;
       delete payload.endorser;
     }
@@ -1322,7 +1324,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   />
                 </div>
               </label>
-              {!isAgentOrigin && (
+              {canViewSourceAndEndorser && (
                 <>
                   <label className="space-y-1 text-sm font-medium text-slate-600">
                     <span>Source</span>
@@ -1330,7 +1332,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                       name="source"
                       value={detailsDraft.source}
                       onChange={handleDetailInputChange('source')}
-                      disabled={savingDetails}
+                      disabled={savingDetails || !canEditSourceAndEndorser}
                       className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                     />
                   </label>
@@ -1340,7 +1342,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                       name="endorser"
                       value={detailsDraft.endorser}
                       onChange={handleDetailInputChange('endorser')}
-                      disabled={savingDetails}
+                      disabled={savingDetails || !canEditSourceAndEndorser}
                       className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                     />
                   </label>
@@ -1459,7 +1461,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                 {referral.preApprovalAmountCents ? formatCurrency(referral.preApprovalAmountCents) : '—'}
               </dd>
             </div>
-            {!isAgentOrigin && (
+            {canViewSourceAndEndorser && (
               <>
                 <div className="space-y-1">
                   <dt className="text-xs uppercase text-slate-500">Source</dt>
