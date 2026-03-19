@@ -7,6 +7,7 @@ import { createActivitySchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { canViewReferral } from '@/lib/rbac';
 import { Referral } from '@/models/referral';
+import { User } from '@/models/user';
 import { resolveActivityActor } from '@/lib/server/activities';
 import { createAdminNotifications } from '@/lib/server/notifications';
 
@@ -23,6 +24,12 @@ type LeanActivity = {
   content: string;
   createdAt: Date;
   updatedAt: Date;
+};
+
+type LeanUser = {
+  _id: Types.ObjectId;
+  name?: string | null;
+  email?: string | null;
 };
 
 type LeanReferralAccess = {
@@ -86,11 +93,15 @@ const matchesHiddenNoteActivity = (
   );
 };
 
-const serializeActivity = (activity: LeanActivity) => ({
+const serializeActivity = (
+  activity: LeanActivity,
+  actorNameById: Map<string, string>
+) => ({
   ...activity,
   _id: activity._id.toString(),
   referralId: activity.referralId.toString(),
-  actorId: activity.actorId ? activity.actorId.toString() : null
+  actorId: activity.actorId ? activity.actorId.toString() : null,
+  actorName: activity.actorId ? actorNameById.get(activity.actorId.toString()) ?? activity.actor : activity.actor,
 });
 
 export async function GET(_: NextRequest, { params }: Params): Promise<NextResponse> {
@@ -143,7 +154,26 @@ export async function GET(_: NextRequest, { params }: Params): Promise<NextRespo
       ? activities
       : activities.filter((activity) => !hiddenNotes.some((note) => matchesHiddenNoteActivity(activity, note)));
 
-  return NextResponse.json(visibleActivities.map(serializeActivity));
+  const actorIds = Array.from(
+    new Set(
+      visibleActivities
+        .map((activity) => activity.actorId?.toString())
+        .filter((actorId): actorId is string => Boolean(actorId))
+    )
+  );
+  const actors = actorIds.length
+    ? await User.find({ _id: { $in: actorIds } })
+        .select('name email')
+        .lean<LeanUser[]>()
+    : [];
+  const actorNameById = new Map(
+    actors.map((actor) => [
+      actor._id.toString(),
+      actor.name?.trim() || actor.email?.trim() || 'Team Member',
+    ])
+  );
+
+  return NextResponse.json(visibleActivities.map((activity) => serializeActivity(activity, actorNameById)));
 }
 
 export async function POST(request: NextRequest, { params }: Params): Promise<NextResponse> {

@@ -23,6 +23,7 @@ interface StoredReferralNote {
 interface ActivityFeedItem {
   _id: string;
   actor: string;
+  actorName?: string;
   channel: string;
   content: string;
   createdAt: string;
@@ -81,6 +82,19 @@ const normalizeRoleToActivityActor = (role: string) => {
     return 'MC';
   }
   return role;
+};
+
+const formatActivityAuthorRole = (actor: string) => {
+  if (actor === 'Agent') {
+    return 'agent';
+  }
+  if (actor === 'MC') {
+    return 'mc';
+  }
+  if (actor === 'Admin') {
+    return 'admin';
+  }
+  return actor.toLowerCase();
 };
 
 const NOTE_ACTIVITY_DEDUPE_WINDOW_MS = 15_000;
@@ -194,8 +208,8 @@ export function ReferralNotes({
         })
         .map((activity) => ({
           id: activity._id,
-          authorName: activity.actor,
-          authorRole: 'Timeline',
+          authorName: activity.actorName || activity.actor,
+          authorRole: formatActivityAuthorRole(activity.actor),
           content: activity.content,
           createdAt: activity.createdAt,
           source: 'activity-note',
@@ -422,8 +436,7 @@ export function ReferralNotes({
       isStoredNote && viewerRole === 'admin' && (note.hiddenFromAgent || note.hiddenFromMc);
     const showEmailBadge =
       isStoredNote && Array.isArray(note.emailedTargets) && note.emailedTargets.length > 0;
-    const showTimelineBadge = note.source === 'activity-note';
-    const showBadges = showVisibilityBadge || showEmailBadge || showTimelineBadge;
+    const showBadges = showVisibilityBadge || showEmailBadge;
     const canDelete = isStoredNote && canControlVisibility;
     const isDeleting = isStoredNote ? deletingNotes.has(note.id) : false;
     const isEditing = isStoredNote && editingNoteId === note.id;
@@ -532,11 +545,6 @@ export function ReferralNotes({
                         return 'Admin';
                       })
                       .join(' & ')}`}
-                  </span>
-                )}
-                {showTimelineBadge && (
-                  <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-indigo-700">
-                    Timeline note
                   </span>
                 )}
               </div>
