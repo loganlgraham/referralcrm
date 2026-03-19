@@ -183,7 +183,7 @@ export function ReferralForm() {
 
     const loanFileNumber = result.data.loanFileNumber?.trim() ?? '';
 
-    if (!isAgent) {
+    if (isAdmin) {
       if (!result.data.source?.trim()) {
         toast.error('Add a referral source');
         return;
@@ -192,6 +192,9 @@ export function ReferralForm() {
         toast.error('Add an endorser');
         return;
       }
+    }
+
+    if (!isAgent) {
       if (!loanFileNumber) {
         toast.error('Add a loan file number');
         return;
@@ -210,7 +213,7 @@ export function ReferralForm() {
       stageOnTransfer: result.data.stageOnTransfer,
     };
 
-    if (!isAgent) {
+    if (isAdmin) {
       body.source = result.data.source?.trim() ?? '';
       body.endorser = result.data.endorser?.trim() ?? '';
     }
@@ -360,7 +363,7 @@ export function ReferralForm() {
               Referral details
             </legend>
             <div className="grid gap-4 md:grid-cols-2">
-              {!isAgent && (
+              {isAdmin && (
                 <>
                   <label className={labelClasses}>
                     Source
