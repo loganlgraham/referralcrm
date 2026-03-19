@@ -42,8 +42,48 @@ type LeanReferralAccess = {
         _id?: Types.ObjectId | string | null;
         userId?: Types.ObjectId | string | null;
       };
+  notes?: {
+    authorRole?: string | null;
+    content?: string | null;
+    createdAt?: Date | string | null;
+    hiddenFromAgent?: boolean;
+    hiddenFromMc?: boolean;
+  }[];
   org: 'AFC' | 'AHA';
   deletedAt?: Date | null;
+};
+
+const NOTE_ACTIVITY_DEDUPE_WINDOW_MS = 15_000;
+
+const normalizeRoleToActivityActor = (role: string | null | undefined) => {
+  if (role === 'agent') {
+    return 'Agent';
+  }
+  if (role === 'admin') {
+    return 'Admin';
+  }
+  if (role === 'mc' || role === 'manager') {
+    return 'MC';
+  }
+  return 'System';
+};
+
+const matchesHiddenNoteActivity = (
+  activity: LeanActivity,
+  note: NonNullable<LeanReferralAccess['notes']>[number]
+) => {
+  const noteCreatedAt =
+    note.createdAt instanceof Date ? note.createdAt.getTime() : new Date(note.createdAt ?? '').getTime();
+  if (!Number.isFinite(noteCreatedAt)) {
+    return false;
+  }
+
+  return (
+    activity.channel === 'note' &&
+    activity.content.trim() === (note.content ?? '').trim() &&
+    activity.actor === normalizeRoleToActivityActor(note.authorRole) &&
+    Math.abs(activity.createdAt.getTime() - noteCreatedAt) <= NOTE_ACTIVITY_DEDUPE_WINDOW_MS
+  );
 };
 
 const serializeActivity = (activity: LeanActivity) => ({
@@ -60,7 +100,7 @@ export async function GET(_: NextRequest, { params }: Params): Promise<NextRespo
   }
   await connectMongo();
   const referral = await Referral.findById(params.id)
-    .select('assignedAgent buySideAgent sellSideAgent lender org deletedAt')
+    .select('assignedAgent buySideAgent sellSideAgent lender notes org deletedAt')
     .populate('assignedAgent', 'userId')
     .populate('buySideAgent', 'userId')
     .populate('sellSideAgent', 'userId')
@@ -85,7 +125,25 @@ export async function GET(_: NextRequest, { params }: Params): Promise<NextRespo
   const activities = await Activity.find({ referralId: params.id })
     .sort({ createdAt: -1 })
     .lean<LeanActivity[]>(); // array of LeanActivity
-  return NextResponse.json(activities.map(serializeActivity));
+
+  const hiddenNotes = Array.isArray(referral.notes)
+    ? referral.notes.filter((note) => {
+        if (session.user.role === 'agent') {
+          return Boolean(note.hiddenFromAgent);
+        }
+        if (session.user.role === 'mc') {
+          return Boolean(note.hiddenFromMc);
+        }
+        return false;
+      })
+    : [];
+
+  const visibleActivities =
+    hiddenNotes.length === 0
+      ? activities
+      : activities.filter((activity) => !hiddenNotes.some((note) => matchesHiddenNoteActivity(activity, note)));
+
+  return NextResponse.json(visibleActivities.map(serializeActivity));
 }
 
 export async function POST(request: NextRequest, { params }: Params): Promise<NextResponse> {
