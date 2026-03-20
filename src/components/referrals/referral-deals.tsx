@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/constants/deals';
+import type { ReferralStatus } from '@/constants/referrals';
 import { formatCurrency, formatDateMST, formatDateTimeMST } from '@/utils/formatters';
 import type { ReferralPayment } from '@/types/referral-payment';
 
@@ -13,7 +14,10 @@ interface ReferralDealsProps {
   referralId: string;
   deals: ReferralPayment[];
   onDealCreated: (deal: ReferralPayment) => void;
-  onDealUpdated?: (deal: ReferralPayment) => void;
+  onDealUpdated?: (
+    deal: ReferralPayment,
+    snapshot?: { referralStatus?: ReferralStatus | null; referralStatusLastUpdated?: string | null }
+  ) => void;
   onDealDeleted?: (id: string) => void;
   viewerRole?: string;
   referralOrigin?: 'agent' | 'admin' | 'mc' | null;
@@ -52,6 +56,12 @@ type DealUpdatePayload = {
   usedAssignedAgent: boolean;
   receivedAmountCents?: number;
   terminatedReason?: TerminatedReason | null;
+};
+
+type PaymentPatchResponse = {
+  id: string;
+  referralStatus?: ReferralStatus | null;
+  referralStatusLastUpdated?: string | null;
 };
 
 const toCents = (value: string): number => {
@@ -350,7 +360,7 @@ function DealCard({
       usedAfc,
       usedAssignedAgent,
       receivedAmountCents: netReferralFeePaidCents,
-      terminatedReason: statusToSend === 'terminated' ? terminatedReason : null,
+      terminatedReason: statusToSend === 'terminated' ? terminatedReason : undefined,
     });
 
     if (success) {
@@ -1093,7 +1103,7 @@ export function ReferralDeals({
           usedAssignedAgent: isAgentOrigin ? true : usedAssignedAgent,
           agentAttribution: isOutsideAgent ? 'OUTSIDE_AGENT' : null,
           side,
-          terminatedReason: statusToSend === 'terminated' ? terminatedReason : null,
+          terminatedReason: statusToSend === 'terminated' ? terminatedReason : undefined,
         }),
       });
 
@@ -1123,7 +1133,7 @@ export function ReferralDeals({
           usedAfc: isAgentOrigin ? false : usedAfc,
           usedAssignedAgent: isAgentOrigin ? true : usedAssignedAgent,
           side,
-          terminatedReason: statusToSend === 'terminated' ? terminatedReason : null,
+          terminatedReason: statusToSend === 'terminated' ? terminatedReason : undefined,
           createdAt: payload.createdAt ?? new Date().toISOString(),
           updatedAt: payload.createdAt ?? new Date().toISOString(),
           paidDate: null,
@@ -1179,24 +1189,29 @@ export function ReferralDeals({
             deal.expectedAmountCents ??
             0
           : undefined;
+      const patchPayload: Record<string, unknown> = {
+        id: deal._id,
+        status: nextStatus,
+        closingDate,
+        receivedAmountCents: fallbackPaidCents,
+        netReferralFeePaidCents: fallbackPaidCents,
+        sendClosedEmails,
+      };
+      if (nextStatus === 'terminated') {
+        patchPayload.terminatedReason = terminationReason ?? null;
+      }
+
       const response = await fetch('/api/payments', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: deal._id,
-          status: nextStatus,
-          terminatedReason: nextStatus === 'terminated' ? terminationReason : null,
-          closingDate,
-          receivedAmountCents: fallbackPaidCents,
-          netReferralFeePaidCents: fallbackPaidCents,
-          sendClosedEmails,
-        }),
+        body: JSON.stringify(patchPayload),
       });
 
       if (!response.ok) {
         toast.error('Unable to update deal stage');
         return;
       }
+      const patchResult = (await response.json()) as PaymentPatchResponse;
 
       onDealUpdated?.({
         ...deal,
@@ -1204,6 +1219,9 @@ export function ReferralDeals({
         terminatedReason: nextStatus === 'terminated' ? terminationReason ?? null : null,
         closingDate: closingDate ?? deal.closingDate ?? null,
         updatedAt: new Date().toISOString(),
+      }, {
+        referralStatus: patchResult.referralStatus,
+        referralStatusLastUpdated: patchResult.referralStatusLastUpdated,
       });
       toast.success('Deal stage updated');
     } catch (error) {
@@ -1261,6 +1279,7 @@ export function ReferralDeals({
         toast.error('Unable to update deal');
         return false;
       }
+      const patchResult = (await response.json()) as PaymentPatchResponse;
 
       // Preserve agentId - payload always includes it (even if null to unassign)
       const updatedAgentId = payload.agentId ?? null;
@@ -1291,6 +1310,9 @@ export function ReferralDeals({
         usedAssignedAgent: payload.usedAssignedAgent,
         terminatedReason: payload.terminatedReason ?? null,
         updatedAt: new Date().toISOString(),
+      }, {
+        referralStatus: patchResult.referralStatus,
+        referralStatusLastUpdated: patchResult.referralStatusLastUpdated,
       });
       toast.success('Deal updated');
       return true;

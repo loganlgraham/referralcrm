@@ -514,7 +514,7 @@ function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps)
           </div>
         </div>
       )}
-      {dealStatusLabel && dealStatusLabel !== status && (
+      {dealStatusLabel && dealStatusLabel !== status && dealStatusLabel !== 'Terminated' && (
         <p className="text-xs text-slate-500">Deal stage: {dealStatusLabel}</p>
       )}
     </div>

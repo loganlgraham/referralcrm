@@ -992,6 +992,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     return new NextResponse('Not found', { status: 404 });
   }
 
+  let referralStatusSnapshot: string | null = null;
+  let referralStatusLastUpdatedSnapshot: string | null = null;
+
   if (referral) {
     if (isAgentOrigin) {
       referral.referralFeeDueCents = 0;
@@ -1049,7 +1052,11 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       parsed.data.status !== previousStatus &&
       isAgentAttributedDeal(nextUsedAssignedAgent, nextAgentAttribution)
     ) {
-      const nextReferralStatus = mapDealStatusToReferralStatus(parsed.data.status as DealStatus);
+      const isReactivatedFromTerminated =
+        previousStatus === 'terminated' && parsed.data.status !== 'terminated';
+      const nextReferralStatus = isReactivatedFromTerminated
+        ? 'Active Lead'
+        : mapDealStatusToReferralStatus(parsed.data.status as DealStatus);
       if (previousReferralStatus !== nextReferralStatus) {
         const auditEntry: Record<string, unknown> = {
           actorRole: session.user.role,
@@ -1169,6 +1176,10 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     }
 
     await referral.save();
+    referralStatusSnapshot = referral.status ?? null;
+    referralStatusLastUpdatedSnapshot = referral.statusLastUpdated
+      ? referral.statusLastUpdated.toISOString()
+      : null;
 
     if (parsed.data.status && parsed.data.status !== previousStatus) {
       const actorName = session.user.name || session.user.email || 'A team member';
@@ -1332,7 +1343,11 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  return NextResponse.json({ id: payment._id.toString() });
+  return NextResponse.json({
+    id: payment._id.toString(),
+    referralStatus: referralStatusSnapshot,
+    referralStatusLastUpdated: referralStatusLastUpdatedSnapshot,
+  });
 }
 
 export async function DELETE(request: NextRequest): Promise<NextResponse> {

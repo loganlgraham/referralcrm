@@ -555,7 +555,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     });
     void mutate(activityFeedKey);
   }, [activityFeedKey, mutate]);
-  const handleDealUpdated = useCallback((deal: ReferralPayment) => {
+  const handleDealUpdated = useCallback((
+    deal: ReferralPayment,
+    snapshot?: { referralStatus?: ReferralStatus | null; referralStatusLastUpdated?: string | null }
+  ) => {
     if (!deal?._id) {
       return;
     }
@@ -569,6 +572,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       return {
         ...previous,
         payments: updatedPayments,
+        status:
+          snapshot?.referralStatus && snapshot.referralStatus !== previous.status
+            ? snapshot.referralStatus
+            : previous.status,
+        statusLastUpdated:
+          snapshot?.referralStatusLastUpdated !== undefined
+            ? snapshot.referralStatusLastUpdated
+            : previous.statusLastUpdated,
       };
     });
   }, []);

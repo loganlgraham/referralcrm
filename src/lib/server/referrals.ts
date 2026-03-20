@@ -484,13 +484,20 @@ export async function getReferrals(params: GetReferralsParams) {
       const agent = resolveAgent(item);
       const dealRecord = dealStatusMap.get(item._id.toString());
       const dealStatus = dealRecord?.primary ?? dealRecord?.fallback ?? null;
-      const dealStatusLabel = dealStatus
+      const normalizedStatus = normalizeReferralStatus(item.status) ?? item.status;
+      const hideTerminatedDealPresentationForAgent =
+        session?.user?.role === 'agent' &&
+        dealStatus === 'terminated' &&
+        normalizedStatus !== 'Terminated';
+      const dealStatusLabel = hideTerminatedDealPresentationForAgent
+        ? null
+        : dealStatus
         ? DEAL_STATUS_LABELS[dealStatus as keyof typeof DEAL_STATUS_LABELS] ?? null
         : null;
-
-      const normalizedStatus = normalizeReferralStatus(item.status) ?? item.status;
       const effectiveStatus = dealStatus
-        ? mapDealStatusToReferralStatus(dealStatus as DealStatus)
+        ? hideTerminatedDealPresentationForAgent
+          ? normalizedStatus
+          : mapDealStatusToReferralStatus(dealStatus as DealStatus)
         : normalizedStatus;
 
       // Compute hasAhaOosAgentAttached: check if any attached agent has ahaDesignation === 'AHA_OOS'

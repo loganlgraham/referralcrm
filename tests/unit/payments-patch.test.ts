@@ -103,6 +103,7 @@ const mockedReferralFindById = Referral.findById as jest.Mock;
 const mockedCreateAdminNotifications = createAdminNotifications as jest.MockedFunction<
   typeof createAdminNotifications
 >;
+let referralDoc: any;
 
 const makeRequest = (body: Record<string, unknown>) =>
   ({
@@ -136,7 +137,7 @@ describe('Payments PATCH outside-agent normalization', () => {
       updatedAt: new Date('2026-03-05T10:00:00.000Z'),
       closingDate: null,
     });
-    mockedReferralFindById.mockReturnValue({
+    referralDoc = {
       populate: jest.fn().mockReturnThis(),
       save: jest.fn().mockResolvedValue(undefined),
       markModified: jest.fn(),
@@ -145,7 +146,8 @@ describe('Payments PATCH outside-agent normalization', () => {
       sla: {},
       audit: [],
       autoUpdateRemindersEnabled: false,
-    });
+    };
+    mockedReferralFindById.mockReturnValue(referralDoc);
     mockedPaymentFindByIdAndUpdate.mockResolvedValue({
       _id: { toString: () => 'pay-1' },
       status: 'under_contract',
@@ -213,5 +215,52 @@ describe('Payments PATCH outside-agent normalization', () => {
 
     expect(response.status).toBe(422);
     expect(mockedPaymentFindByIdAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('reactivates a terminated referral back to Active Lead when deal leaves terminated', async () => {
+    mockedPaymentFindById.mockResolvedValueOnce({
+      _id: { toString: () => 'pay-1' },
+      referralId: 'ref-1',
+      status: 'terminated',
+      expectedAmountCents: 50000,
+      receivedAmountCents: 0,
+      commissionBasisPoints: 300,
+      referralFeeBasisPoints: 25,
+      usedAssignedAgent: true,
+      agentAttribution: 'AHA',
+      side: 'buy',
+      usedAfc: true,
+      createdAt: new Date('2026-03-05T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T10:00:00.000Z'),
+      closingDate: null,
+    });
+    referralDoc.status = 'Terminated';
+    mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
+      _id: { toString: () => 'pay-1' },
+      status: 'under_contract',
+      usedAssignedAgent: true,
+      createdAt: new Date('2026-03-05T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T10:02:00.000Z'),
+      closingDate: null,
+    });
+
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        status: 'under_contract',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(referralDoc.status).toBe('Active Lead');
+    expect(referralDoc.audit).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: 'status',
+          previousValue: 'Terminated',
+          newValue: 'Active Lead',
+        }),
+      ])
+    );
   });
 });

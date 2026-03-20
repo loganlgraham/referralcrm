@@ -79,4 +79,29 @@ describe('ReferralTable agent status actions', () => {
     expect(promptSpy).not.toHaveBeenCalled();
     promptSpy.mockRestore();
   });
+
+  it('hides terminated deal-stage label on agent table when referral is active', () => {
+    render(
+      <ReferralTable
+        mode="agent"
+        data={[
+          {
+            _id: 'ref-3',
+            createdAt: new Date().toISOString(),
+            borrowerName: 'Test Borrower 3',
+            borrowerEmail: 'borrower3@example.com',
+            borrowerPhone: '1234567890',
+            clientType: 'Buyer',
+            lookingInZip: '80014',
+            loanFileNumber: 'L-3',
+            status: 'Active Lead',
+            dealStatusLabel: 'Terminated',
+          },
+        ]}
+      />
+    );
+
+    expect(screen.queryByText('Deal stage: Terminated')).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue('Active Lead')).toBeInTheDocument();
+  });
 });

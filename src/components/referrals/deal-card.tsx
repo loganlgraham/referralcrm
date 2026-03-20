@@ -767,7 +767,6 @@ export function DealCard({
         setReasonMap((prev) => ({ ...prev, [deal._id]: reason }));
       } else if (expectedAmountCents > 0) {
         payload.expectedAmountCents = expectedAmountCents;
-        payload.terminatedReason = null;
         setReasonMap((prev) => {
           if (!(deal._id in prev)) {
             return prev;
