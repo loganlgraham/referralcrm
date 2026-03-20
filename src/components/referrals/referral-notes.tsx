@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useSWRConfig } from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import { toast } from 'sonner';
 import { Trash2, Pencil } from 'lucide-react';
 import { formatInTimeZone } from 'date-fns-tz';
+
+import { fetcher } from '@/utils/fetcher';
 import { SLA_TIME_ZONE } from '@/utils/sla-insights';
 
-interface ReferralNote {
+interface StoredReferralNote {
   id: string;
   authorName: string;
   authorRole: string;
@@ -18,9 +20,31 @@ interface ReferralNote {
   emailedTargets?: ('agent' | 'mc' | 'admin')[];
 }
 
+interface ActivityFeedItem {
+  _id: string;
+  actor: string;
+  actorName?: string;
+  channel: string;
+  content: string;
+  createdAt: string;
+}
+
+interface ActivityNote {
+  id: string;
+  authorName: string;
+  authorRole: string;
+  content: string;
+  createdAt: string;
+  source: 'activity-note';
+}
+
+type DisplayNote =
+  | (StoredReferralNote & { source: 'referral-note' })
+  | ActivityNote;
+
 type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknown';
 
-interface ReferralNoteResponse extends ReferralNote {
+interface ReferralNoteResponse extends StoredReferralNote {
   deliveryFailed?: boolean;
   deliveryFailureReason?: DeliveryFailureReason;
 }
@@ -29,7 +53,7 @@ type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
 
 interface Props {
   referralId: string;
-  initialNotes: ReferralNote[];
+  initialNotes: StoredReferralNote[];
   viewerRole: ViewerRole;
   agentContact?: { name?: string | null; email?: string | null } | null;
   mcContact?: { name?: string | null; email?: string | null } | null;
@@ -43,6 +67,37 @@ const formatTimestamp = (value: string) => {
     return value;
   }
 };
+
+const isNoteActivitySummary = (content: string) =>
+  content.startsWith('Edited note by ') || content.startsWith('Deleted note by ');
+
+const normalizeRoleToActivityActor = (role: string) => {
+  if (role === 'agent') {
+    return 'Agent';
+  }
+  if (role === 'admin') {
+    return 'Admin';
+  }
+  if (role === 'mc' || role === 'manager') {
+    return 'MC';
+  }
+  return role;
+};
+
+const formatActivityAuthorRole = (actor: string) => {
+  if (actor === 'Agent') {
+    return 'agent';
+  }
+  if (actor === 'MC') {
+    return 'mc';
+  }
+  if (actor === 'Admin') {
+    return 'admin';
+  }
+  return actor.toLowerCase();
+};
+
+const NOTE_ACTIVITY_DEDUPE_WINDOW_MS = 15_000;
 
 interface ToggleControlProps {
   label: string;
@@ -94,7 +149,7 @@ export function ReferralNotes({
   mcContact,
   adminContacts,
 }: Props) {
-  const [notes, setNotes] = useState<ReferralNote[]>(() => [...initialNotes]);
+  const [notes, setNotes] = useState<StoredReferralNote[]>(() => [...initialNotes]);
   const [content, setContent] = useState('');
   const [hiddenFromAgent, setHiddenFromAgent] = useState(false);
   const [hiddenFromMc, setHiddenFromMc] = useState(false);
@@ -112,6 +167,9 @@ export function ReferralNotes({
   const { mutate } = useSWRConfig();
 
   const activityFeedKey = `/api/referrals/${referralId}/activities`;
+  const { data: activityFeed } = useSWR<ActivityFeedItem[]>(activityFeedKey, fetcher, {
+    refreshInterval: 60_000,
+  });
 
   const canControlVisibility = viewerRole === 'admin' || viewerRole === 'manager';
   const hasAgentEmail = Boolean(agentContact?.email);
@@ -123,10 +181,45 @@ export function ReferralNotes({
   const mcEmailDisabled = saving || hiddenFromMc || !hasMcEmail;
   const adminEmailDisabled = saving || !hasAdminEmails;
 
+  useEffect(() => {
+    setNotes([...initialNotes]);
+  }, [initialNotes]);
+
   const sortedNotes = useMemo(
-    () =>
-      [...notes].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-    [notes]
+    () => {
+      const persistedNotes: DisplayNote[] = notes.map((note) => ({
+        ...note,
+        source: 'referral-note',
+      }));
+
+      const activityNotes: DisplayNote[] = (activityFeed ?? [])
+        .filter((activity) => activity.channel === 'note')
+        .filter((activity) => !isNoteActivitySummary(activity.content))
+        .filter((activity) => {
+          const activityCreatedAt = new Date(activity.createdAt).getTime();
+          return !notes.some((note) => {
+            const noteCreatedAt = new Date(note.createdAt).getTime();
+            return (
+              note.content.trim() === activity.content.trim() &&
+              normalizeRoleToActivityActor(note.authorRole) === activity.actor &&
+              Math.abs(noteCreatedAt - activityCreatedAt) <= NOTE_ACTIVITY_DEDUPE_WINDOW_MS
+            );
+          });
+        })
+        .map((activity) => ({
+          id: activity._id,
+          authorName: activity.actorName || activity.actor,
+          authorRole: formatActivityAuthorRole(activity.actor),
+          content: activity.content,
+          createdAt: activity.createdAt,
+          source: 'activity-note',
+        }));
+
+      return [...persistedNotes, ...activityNotes].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+    },
+    [activityFeed, notes]
   );
 
   const previewNotes = useMemo(() => sortedNotes.slice(0, 2), [sortedNotes]);
@@ -187,7 +280,7 @@ export function ReferralNotes({
     }
   };
 
-  const handleEditStart = (note: ReferralNote) => {
+  const handleEditStart = (note: StoredReferralNote) => {
     setEditingNoteId(note.id);
     setEditContent(note.content);
     setEditHiddenFromAgent(note.hiddenFromAgent || false);
@@ -222,7 +315,7 @@ export function ReferralNotes({
       if (!response.ok) {
         throw new Error('Unable to update note');
       }
-      const updated = (await response.json()) as ReferralNote;
+      const updated = (await response.json()) as StoredReferralNote;
       setNotes((previous) =>
         previous.map((note) =>
           note.id === noteId
@@ -337,14 +430,17 @@ export function ReferralNotes({
     }
   };
 
-  const renderNoteCard = (note: ReferralNote) => {
-    const showVisibilityBadge = viewerRole === 'admin' && (note.hiddenFromAgent || note.hiddenFromMc);
-    const showEmailBadge = Array.isArray(note.emailedTargets) && note.emailedTargets.length > 0;
+  const renderNoteCard = (note: DisplayNote) => {
+    const isStoredNote = note.source === 'referral-note';
+    const showVisibilityBadge =
+      isStoredNote && viewerRole === 'admin' && (note.hiddenFromAgent || note.hiddenFromMc);
+    const showEmailBadge =
+      isStoredNote && Array.isArray(note.emailedTargets) && note.emailedTargets.length > 0;
     const showBadges = showVisibilityBadge || showEmailBadge;
-    const canDelete = canControlVisibility;
-    const isDeleting = deletingNotes.has(note.id);
-    const isEditing = editingNoteId === note.id;
-    const isEditingNote = editingNotes.has(note.id);
+    const canDelete = isStoredNote && canControlVisibility;
+    const isDeleting = isStoredNote ? deletingNotes.has(note.id) : false;
+    const isEditing = isStoredNote && editingNoteId === note.id;
+    const isEditingNote = isStoredNote ? editingNotes.has(note.id) : false;
 
     return (
       <div key={note.id} className="rounded border border-slate-200 bg-white px-3 py-3">
@@ -354,7 +450,7 @@ export function ReferralNotes({
           </span>
           <div className="flex items-center gap-2">
             <span className="text-slate-400">{formatTimestamp(note.createdAt)}</span>
-            {!isEditing && (
+            {!isEditing && isStoredNote && (
               <>
                 <button
                   type="button"
@@ -379,7 +475,7 @@ export function ReferralNotes({
             )}
           </div>
         </div>
-        {isEditing ? (
+        {isEditing && isStoredNote ? (
           <div className="mt-2 space-y-3">
             <textarea
               value={editContent}
