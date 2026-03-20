@@ -738,16 +738,18 @@ export function DealCard({
     let sendClosedEmails = false;
     if (nextStatus === 'closed') {
       const usedAssignedAgent = deal.usedAssignedAgent ?? false;
-      
-      if (usedAssignedAgent) {
+
+      if (viewerRole === 'admin' && usedAssignedAgent) {
         const emailMessage = 'Send a congratulations email to the referral to rate their agent?';
         const confirmed = window.confirm(emailMessage);
         sendClosedEmails = confirmed;
         if (confirmed) {
           toast.success('A referral rating email will be sent to the referral.');
         }
-      } else {
+      } else if (viewerRole === 'admin') {
         toast.warning('Referral rating email will not be sent. Please ensure the assigned agent is marked as used.');
+      } else if (viewerRole === 'agent') {
+        sendClosedEmails = usedAssignedAgent;
       }
     }
 

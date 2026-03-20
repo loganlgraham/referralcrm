@@ -1203,23 +1203,22 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    // Send congratulatory emails with NPS survey links when deal is closed
+    // Send congratulatory emails when a deal is marked closed
     // Skip all automated emails if AGIT agent is attached
     const shouldSendClosedEmails = parsed.data.sendClosedEmails ?? false;
     if (isClosingNow && shouldSendClosedEmails && !hasAgitAgent && isTransactionalEmailConfigured()) {
-      const usedAfc = payment.usedAfc ?? existingPayment.usedAfc ?? false;
       const usedAssignedAgent = payment.usedAssignedAgent ?? existingPayment.usedAssignedAgent ?? false;
       const origin = getReferralAppBaseUrl();
 
       try {
-        // Email to referral (borrower) - only if usedAssignedAgent is true
+        // Send closure emails only when the assigned agent handled the deal.
         if (usedAssignedAgent && referral.assignedAgent && referral.borrower?.email) {
           const borrowerEmail = referral.borrower.email;
           const borrowerFirstName = referral.borrower.firstName || 
             (referral.borrower.name ? referral.borrower.name.split(' ')[0] : null) ||
             'there';
           
-          const agent = referral.assignedAgent as { _id?: any; name?: string } | null;
+          const agent = referral.assignedAgent as { _id?: any; name?: string; email?: string } | null;
           const agentId = agent?._id?.toString();
           
           if (agentId) {
@@ -1260,18 +1259,23 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
               `,
               text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your new home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best in your new place!\n\nRate your agent: ${agentSurveyUrl}`,
             });
-          }
-        }
 
-        if (isClosingNow) {
-          console.log('Closed deal notifications are borrower-only; agent emails are disabled.', {
-            paymentId: existingPayment._id.toString(),
-            referralId: referral._id.toString(),
-            usedAfc,
-            usedAssignedAgent,
-            hasAssignedAgent: !!referral.assignedAgent,
-            assignedAgentDesignation,
-          });
+            if (agent?.email) {
+              const agentFirstName = agentFullName.split(' ')[0] || 'there';
+              const borrowerDisplayName = referral.borrower.name || referral.borrower.firstName || 'your client';
+              await sendTransactionalEmail({
+                to: [agent.email],
+                subject: 'Congratulations on Your Closed Deal!',
+                html: `
+                  <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
+                    <p>Hi ${agentFirstName},</p>
+                    <p>Congratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.</p>
+                  </div>
+                `,
+                text: `Hi ${agentFirstName},\n\nCongratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.`,
+              });
+            }
+          }
         }
       } catch (error) {
         console.error('Failed to send congratulatory emails:', error);

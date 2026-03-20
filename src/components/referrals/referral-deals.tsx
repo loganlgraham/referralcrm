@@ -1004,7 +1004,8 @@ export function ReferralDeals({
     }),
     [deals]
   );
-  const showAgentLostOnlyState = viewerRole === 'agent' && sortedDeals.length === 0 && hiddenOutsideAgentCount > 0;
+  const shouldHideAgentEmptyState =
+    viewerRole === 'agent' && sortedDeals.length === 0 && hiddenOutsideAgentCount > 0;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1153,16 +1154,18 @@ export function ReferralDeals({
     let sendClosedEmails = false;
     if (nextStatus === 'closed') {
       const usedAssignedAgent = deal.usedAssignedAgent ?? false;
-      
-      if (usedAssignedAgent) {
+
+      if (viewerRole === 'admin' && usedAssignedAgent) {
         const emailMessage = 'Send a congratulations email to the referral to rate their agent?';
         const confirmed = window.confirm(emailMessage);
         sendClosedEmails = confirmed;
         if (confirmed) {
           toast.success('A referral rating email will be sent to the referral.');
         }
-      } else {
+      } else if (viewerRole === 'admin') {
         toast.warning('Referral rating email will not be sent. Please ensure the assigned agent is marked as used.');
+      } else if (viewerRole === 'agent') {
+        sendClosedEmails = usedAssignedAgent;
       }
     }
     
@@ -1628,23 +1631,12 @@ export function ReferralDeals({
       )}
 
       <div className="space-y-3">
-        {showAgentLostOnlyState ? (
-          <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3">
-            <p className="text-sm font-semibold text-rose-700">Outcome: Lost</p>
-            <p className="text-xs text-rose-600">No visible deals for this referral.</p>
-          </div>
-        ) : sortedDeals.length === 0 ? (
+        {sortedDeals.length === 0 ? (
+          shouldHideAgentEmptyState ? null : (
           <p className="text-sm text-slate-600">No deals have been added yet.</p>
+          )
         ) : (
           <>
-            {viewerRole === 'agent' && hiddenOutsideAgentCount > 0 && (
-              <div className="rounded-md border border-rose-200 bg-rose-50 px-4 py-3">
-                <p className="text-sm font-semibold text-rose-700">Outcome: Lost</p>
-                <p className="text-xs text-rose-600">
-                  Some outside-agent deals are hidden from agent view.
-                </p>
-              </div>
-            )}
             {sortedDeals.map((deal) => (
               <DealCard
                 key={deal._id}

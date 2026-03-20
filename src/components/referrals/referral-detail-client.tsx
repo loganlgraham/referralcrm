@@ -1188,21 +1188,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     }
   };
 
-  const headerReferral = {
-    ...referral,
-    status: financials.status,
-    preApprovalAmountCents: financials.preApprovalAmountCents,
-    estPurchasePriceCents: financials.contractPriceCents,
-    referralFeeDueCents: financials.referralFeeDueCents,
-    commissionBasisPoints: financials.commissionBasisPoints,
-    referralFeeBasisPoints: financials.referralFeeBasisPoints,
-    propertyAddress: financials.propertyAddress ?? referral.propertyAddress,
-    propertyCity: financials.propertyCity ?? referral.propertyCity,
-    propertyState: financials.propertyState ?? referral.propertyState,
-    propertyPostalCode: financials.propertyPostalCode ?? referral.propertyPostalCode,
-    dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
-  };
-
   const referralDeals = useMemo(
     () =>
       Array.isArray(referral.payments)
@@ -1218,6 +1203,24 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     () => getReferralDealsVisibility(referralDeals, viewerRole),
     [referralDeals, viewerRole]
   );
+  const effectiveHeaderStatus: ReferralStatus =
+    viewerRole === 'agent' && hiddenOutsideAgentCount > 0 && visibleReferralDeals.length === 0
+      ? 'Lost'
+      : financials.status;
+  const headerReferral = {
+    ...referral,
+    status: effectiveHeaderStatus,
+    preApprovalAmountCents: financials.preApprovalAmountCents,
+    estPurchasePriceCents: financials.contractPriceCents,
+    referralFeeDueCents: financials.referralFeeDueCents,
+    commissionBasisPoints: financials.commissionBasisPoints,
+    referralFeeBasisPoints: financials.referralFeeBasisPoints,
+    propertyAddress: financials.propertyAddress ?? referral.propertyAddress,
+    propertyCity: financials.propertyCity ?? referral.propertyCity,
+    propertyState: financials.propertyState ?? referral.propertyState,
+    propertyPostalCode: financials.propertyPostalCode ?? referral.propertyPostalCode,
+    dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
+  };
 
   const showNav = (viewerRole === 'admin' || viewerRole === 'manager') && (prevReferralId || nextReferralId);
   const buildNavHref = (id: string) => listParams ? `/referrals/${id}?${listParams}` : `/referrals/${id}`;

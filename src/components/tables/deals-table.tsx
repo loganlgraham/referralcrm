@@ -1091,7 +1091,7 @@ export function DealsTable() {
             const referralFee = isTerminated
               ? 0
               : deal.expectedAmountCents ?? deal.referral?.referralFeeDueCents ?? 0;
-            const netCommission = isTerminated ? 0 : commission - paidAmount;
+            const netCommission = isTerminated ? 0 : commission - referralFee;
             const outcome = (() => {
               if (isTerminated) {
                 return 'Lost';
