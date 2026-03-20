@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useMemo, useState, useTransition, useCallback } from 'react';
+import { ReactNode, useMemo, useState, useTransition, useCallback, useEffect } from 'react';
 import {
   ColumnDef,
   flexRender,
