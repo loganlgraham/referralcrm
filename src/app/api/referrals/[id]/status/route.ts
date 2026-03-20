@@ -75,6 +75,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const requestedStatus = parsed.data.status;
   const nextStatus = requestedStatus === 'Showing Homes' ? 'Active Lead' : requestedStatus;
   const createNewDeal = Boolean(parsed.data.createNewDeal);
+  const dealOnlyStatusUpdate =
+    session.user.role === 'agent' &&
+    parsed.data.source === 'referral_table' &&
+    (nextStatus === 'Closed' || nextStatus === 'Terminated');
+  const shouldPersistReferralStatus = !dealOnlyStatusUpdate;
   const previousStatusRaw = referral.status;
   const previousStatus = previousStatusRaw === 'Showing Homes' ? 'Active Lead' : previousStatusRaw;
   const previousStatusUpdatedAt =
@@ -83,30 +88,32 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       : referral.statusLastUpdated
       ? new Date(referral.statusLastUpdated)
       : null;
-  referral.status = nextStatus;
-  referral.statusLastUpdated = now;
-  referral.audit = referral.audit || [];
-  const auditEntry: Record<string, unknown> = {
-    actorRole: session.user.role,
-    field: 'status',
-    previousValue: previousStatus,
-    newValue: nextStatus,
-    timestamp: now
-  };
-
   const actorId = resolveAuditActorId(session.user.id);
-  if (actorId) {
-    auditEntry.actorId = actorId;
-  }
+  if (shouldPersistReferralStatus) {
+    referral.status = nextStatus;
+    referral.statusLastUpdated = now;
+    referral.audit = referral.audit || [];
+    const auditEntry: Record<string, unknown> = {
+      actorRole: session.user.role,
+      field: 'status',
+      previousValue: previousStatus,
+      newValue: nextStatus,
+      timestamp: now
+    };
 
-  referral.audit.push(auditEntry as any);
+    if (actorId) {
+      auditEntry.actorId = actorId;
+    }
+
+    referral.audit.push(auditEntry as any);
+  }
 
   let createdDeal: any = null;
   let syncedDeal: any = null;
   const sla = (referral.sla ??= {} as any);
   let slaModified = false;
 
-  if (!isAgentOrigin) {
+  if (shouldPersistReferralStatus && !isAgentOrigin) {
     if (nextStatus === 'Under Contract') {
       if (sla.contractToCloseMinutes != null) {
         sla.previousContractToCloseMinutes = sla.contractToCloseMinutes;
@@ -209,7 +216,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     }
   }
 
-  if (parsed.data.status === 'Under Contract') {
+  if (shouldPersistReferralStatus && parsed.data.status === 'Under Contract') {
     const details = parsed.data.contractDetails;
 
     if (details) {
@@ -295,7 +302,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       });
       createdDeal = newDeal.toObject();
     }
-  } else if (parsed.data.status === 'Terminated' || parsed.data.status === 'Lost') {
+  } else if (shouldPersistReferralStatus && (parsed.data.status === 'Terminated' || parsed.data.status === 'Lost')) {
     referral.estPurchasePriceCents = 0;
     referral.referralFeeDueCents = 0;
     await Payment.updateMany(
@@ -325,7 +332,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         content: 'Automated update reminders disabled (referral lost)',
       });
     }
-  } else if (parsed.data.status !== 'Closed') {
+  } else if (shouldPersistReferralStatus && parsed.data.status !== 'Closed') {
     const hasActiveDeal = await Payment.exists({
       referralId: referral._id,
       status: {
@@ -387,10 +394,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   if (slaModified) {
     referral.markModified('sla');
   }
+  if (shouldPersistReferralStatus || slaModified) {
+    await referral.save();
+  }
 
-  await referral.save();
-
-  if (previousStatus !== referral.status) {
+  if (shouldPersistReferralStatus && previousStatus !== referral.status) {
     await logReferralActivity({
       referralId: referral._id,
       actorRole: session.user.role,
@@ -442,7 +450,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   return NextResponse.json({
     id: referral._id.toString(),
-    status: referral.status,
+    status: shouldPersistReferralStatus ? referral.status : previousStatus,
     contractDetails:
       parsed.data.status === 'Under Contract'
         ? {

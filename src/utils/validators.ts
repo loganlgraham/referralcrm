@@ -69,6 +69,7 @@ export const assignLenderSchema = z.object({
 
 export const updateStatusSchema = z.object({
   status: z.enum(REFERRAL_STATUS_VALUES),
+  source: z.enum(['referral_table', 'referral_detail']).optional(),
   terminatedReason: z.enum(TERMINATED_REASON_VALUES).nullable().optional(),
   contractDetails: z
     .object({

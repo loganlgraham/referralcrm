@@ -382,6 +382,7 @@ function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps)
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 status: 'Under Contract',
+                source: 'referral_table',
                 contractDetails,
                 createNewDeal: false,
               }),
@@ -412,6 +413,7 @@ function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps)
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: nextStatus,
+          source: 'referral_table',
           terminatedReason: null,
         })
       });
@@ -479,6 +481,7 @@ function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps)
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       status: 'Terminated',
+                      source: 'referral_table',
                       terminatedReason,
                     }),
                   });
