@@ -219,11 +219,6 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
             toast.error('Referral fee % is required.');
             return;
           }
-          if (status === 'terminated' && !terminatedReason) {
-            toast.error('Select a termination reason.');
-            return;
-          }
-
           const contractPriceCents = toCents(contractPrice);
           const isFlatFeeMode = commissionMode === '$';
           const commissionBasisPoints = isFlatFeeMode
@@ -275,7 +270,7 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
                 usedAfc,
                 usedAssignedAgent,
                 side,
-                terminatedReason: statusToSend === 'terminated' ? terminatedReason : null,
+                terminatedReason: null,
               },
               contractDetails: {
                 propertyAddress: propertyAddress.trim(),
