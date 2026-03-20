@@ -2,6 +2,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { connectMongo } from '@/lib/mongoose';
 import { Payment } from '@/models/payment';
 import { Referral } from '@/models/referral';
+import { createAdminNotifications } from '@/lib/server/notifications';
 
 let patchHandler: typeof import('@/app/api/payments/route').PATCH;
 
@@ -81,6 +82,10 @@ jest.mock('@/lib/server/audit', () => ({
   resolveAuditActorId: jest.fn(),
 }));
 
+jest.mock('@/lib/server/notifications', () => ({
+  createAdminNotifications: jest.fn(),
+}));
+
 jest.mock('@/lib/referral-links', () => ({
   buildReferralLink: jest.fn(),
   getReferralAppBaseUrl: jest.fn(),
@@ -95,6 +100,9 @@ const mockedConnectMongo = connectMongo as jest.MockedFunction<typeof connectMon
 const mockedPaymentFindById = Payment.findById as jest.Mock;
 const mockedPaymentFindByIdAndUpdate = Payment.findByIdAndUpdate as jest.Mock;
 const mockedReferralFindById = Referral.findById as jest.Mock;
+const mockedCreateAdminNotifications = createAdminNotifications as jest.MockedFunction<
+  typeof createAdminNotifications
+>;
 
 const makeRequest = (body: Record<string, unknown>) =>
   ({
@@ -172,6 +180,27 @@ describe('Payments PATCH outside-agent normalization', () => {
       }),
       { new: true }
     );
+  });
+
+  it('notifies admins when deal status changes', async () => {
+    mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
+      _id: { toString: () => 'pay-1' },
+      status: 'closed',
+      usedAssignedAgent: true,
+      createdAt: new Date('2026-03-05T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T10:01:00.000Z'),
+      closingDate: new Date('2026-03-05T10:01:00.000Z'),
+    });
+
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        status: 'closed',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedCreateAdminNotifications).toHaveBeenCalled();
   });
 
   it('rejects terminated status updates without terminatedReason', async () => {

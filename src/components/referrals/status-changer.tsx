@@ -79,17 +79,6 @@ const formatCurrencyInputDisplay = (value: string) => {
   return `${formattedInteger}.${decimalPart}`;
 };
 
-const promptForTerminatedReason = (): TerminatedReason | null => {
-  const validReasons = new Set(TERMINATED_REASON_OPTIONS.map((option) => option.value));
-  const optionsText = TERMINATED_REASON_OPTIONS.map((option) => `${option.value} (${option.label})`).join(', ');
-  const input = window.prompt(`Termination reason is required. Enter one of: ${optionsText}`);
-  const normalized = input?.trim().toLowerCase().replace(/\s+/g, '_') as TerminatedReason | undefined;
-  if (!normalized || !validReasons.has(normalized)) {
-    return null;
-  }
-  return normalized;
-};
-
 export function StatusChanger({
   referralId,
   status,
@@ -108,6 +97,8 @@ export function StatusChanger({
   const [preApprovalDirty, setPreApprovalDirty] = useState(false);
   const [preApprovalSaving, setPreApprovalSaving] = useState(false);
   const [editingPreApproval, setEditingPreApproval] = useState(false);
+  const [pendingTerminatedSelection, setPendingTerminatedSelection] = useState(false);
+  const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | ''>('');
 
   useEffect(() => {
     setCurrentStatus(normalizedStatus);
@@ -156,6 +147,10 @@ export function StatusChanger({
       const resolvedStatus = (body.status as ReferralStatus | undefined) ?? nextStatus;
       setCurrentStatus(resolvedStatus);
       setPersistedStatus(resolvedStatus);
+      if (resolvedStatus !== 'Terminated') {
+        setTerminatedReason('');
+      }
+      setPendingTerminatedSelection(false);
       router.refresh();
 
       onStatusChanged?.(resolvedStatus, { ...body, previousStatus });
@@ -171,19 +166,15 @@ export function StatusChanger({
 
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const nextStatus = event.target.value as ReferralStatus;
-    let terminatedReason: TerminatedReason | null = null;
     if (nextStatus === 'Terminated') {
-      terminatedReason = promptForTerminatedReason();
-      if (!terminatedReason) {
-        toast.error('Termination reason is required.');
-        setCurrentStatus(persistedStatus);
-        return;
-      }
+      setCurrentStatus(nextStatus);
+      setPendingTerminatedSelection(true);
+      return;
     }
 
     setCurrentStatus(nextStatus);
     onUnderContractIntentChange?.(nextStatus === 'Under Contract');
-    void submitStatus(nextStatus, persistedStatus, terminatedReason);
+    void submitStatus(nextStatus, persistedStatus, null);
   };
 
   const handlePreApprovalChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -252,6 +243,55 @@ export function StatusChanger({
               </option>
             ))}
           </select>
+          {pendingTerminatedSelection && (
+            <div className="space-y-2 rounded border border-slate-200 bg-slate-50 p-2">
+              <label className="block text-xs font-semibold text-slate-600">
+                Termination reason
+                <select
+                  value={terminatedReason}
+                  onChange={(event) => setTerminatedReason(event.target.value as TerminatedReason | '')}
+                  className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs shadow-sm focus:border-brand focus:outline-none"
+                  disabled={loading}
+                >
+                  <option value="">Select reason</option>
+                  {TERMINATED_REASON_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="rounded bg-slate-900 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
+                  disabled={loading}
+                  onClick={() => {
+                    if (!terminatedReason) {
+                      toast.error('Termination reason is required.');
+                      return;
+                    }
+                    setPendingTerminatedSelection(false);
+                    void submitStatus('Terminated', persistedStatus, terminatedReason);
+                  }}
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600"
+                  disabled={loading}
+                  onClick={() => {
+                    setPendingTerminatedSelection(false);
+                    setTerminatedReason('');
+                    setCurrentStatus(persistedStatus);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="space-y-1">

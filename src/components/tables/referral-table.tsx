@@ -9,13 +9,17 @@ import {
 } from '@tanstack/react-table';
 import Link from 'next/link';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import { Clock } from 'lucide-react';
 
 import { REFERRAL_STATUSES, ReferralStatus, type ReferralTimeline } from '@/constants/referrals';
-import { TERMINATED_REASON_OPTIONS, type TerminatedReason } from '@/constants/deals';
+import {
+  DEAL_STATUS_OPTIONS,
+  type DealStatus,
+  TERMINATED_REASON_OPTIONS,
+  type TerminatedReason,
+} from '@/constants/deals';
 import { formatCurrency, formatNumber, formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { calculateTimelineDaysRemaining, formatTimelineCountdown } from '@/utils/timeline-countdown';
@@ -74,35 +78,358 @@ interface StatusSelectProps {
   dealStatusLabel?: string | null;
 }
 
-const promptForTerminatedReason = (): TerminatedReason | null => {
-  const validReasons = new Set(TERMINATED_REASON_OPTIONS.map((option) => option.value));
-  const optionsText = TERMINATED_REASON_OPTIONS.map((option) => `${option.value} (${option.label})`).join(', ');
-  const input = window.prompt(`Termination reason is required. Enter one of: ${optionsText}`);
-  const normalized = input?.trim().toLowerCase().replace(/\s+/g, '_') as TerminatedReason | undefined;
-  if (!normalized || !validReasons.has(normalized)) {
-    return null;
+const toCents = (value: string): number => {
+  const numeric = Number.parseFloat(value.replace(/[^0-9.\-]/g, ''));
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return 0;
   }
-  return normalized;
+  return Math.round(numeric * 100);
 };
+
+const dateStringToLocalISO = (dateString: string): string => {
+  if (!dateString) return '';
+  if (dateString.includes('T')) return dateString;
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day).toISOString();
+};
+
+interface UnderContractDealToastProps {
+  onClose: () => void;
+  onSubmit: (payload: {
+    paymentPayload: Record<string, unknown>;
+    contractDetails: {
+      propertyAddress: string;
+      propertyCity: string;
+      propertyState: string;
+      propertyPostalCode: string;
+      contractPrice: number;
+      agentCommissionPercentage: number;
+      referralFeePercentage: number;
+      dealSide: 'buy' | 'sell';
+    };
+  }) => Promise<void>;
+}
+
+function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastProps) {
+  const [status, setStatus] = useState<DealStatus>('under_contract');
+  const [markPaid, setMarkPaid] = useState(false);
+  const [expectedAmount, setExpectedAmount] = useState('');
+  const [expectedManuallyEdited, setExpectedManuallyEdited] = useState(false);
+  const [netReferralFeePaid, setNetReferralFeePaid] = useState('');
+  const [contractPrice, setContractPrice] = useState('');
+  const [commissionMode, setCommissionMode] = useState<'%' | '$'>('%');
+  const [commissionPercentage, setCommissionPercentage] = useState('');
+  const [commissionFlat, setCommissionFlat] = useState('');
+  const [referralFeePercentage, setReferralFeePercentage] = useState('');
+  const [propertyAddress, setPropertyAddress] = useState('');
+  const [propertyCity, setPropertyCity] = useState('');
+  const [propertyState, setPropertyState] = useState('');
+  const [propertyPostalCode, setPropertyPostalCode] = useState('');
+  const [closingDate, setClosingDate] = useState('');
+  const [underContractDate, setUnderContractDate] = useState('');
+  const [agentId, setAgentId] = useState('');
+  const [side, setSide] = useState<'buy' | 'sell'>('buy');
+  const [usedAfc, setUsedAfc] = useState(false);
+  const [usedAssignedAgent, setUsedAssignedAgent] = useState(true);
+  const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | null>(null);
+  const [agents, setAgents] = useState<Array<{ id: string; name: string }>>([]);
+  const [agentsLoading, setAgentsLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setAgentsLoading(true);
+    fetch('/api/agents?minimal=true&all=true', { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('Unable to load agents');
+        return response.json() as Promise<{ items: { _id: string; name?: string | null }[] }>;
+      })
+      .then((data) => {
+        const options = data.items || [];
+        setAgents(
+          options
+            .filter((option) => option?._id)
+            .map((option) => ({ id: option._id, name: option.name ?? 'Unnamed agent' }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+        );
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          console.error(error);
+        }
+      })
+      .finally(() => setAgentsLoading(false));
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (expectedManuallyEdited) return;
+    const referral = Number.parseFloat(referralFeePercentage);
+    if (!Number.isFinite(referral)) return;
+    if (commissionMode === '$') {
+      const flatFee = Number.parseFloat(commissionFlat);
+      if (Number.isFinite(flatFee)) {
+        const computed = flatFee * (referral / 100);
+        if (Number.isFinite(computed)) {
+          setExpectedAmount(computed.toFixed(2));
+        }
+      }
+      return;
+    }
+    const contract = Number.parseFloat(contractPrice);
+    const commission = Number.parseFloat(commissionPercentage);
+    if (Number.isFinite(contract) && Number.isFinite(commission)) {
+      const computed = ((contract * commission) / 100) * (referral / 100);
+      if (Number.isFinite(computed)) {
+        setExpectedAmount(computed.toFixed(2));
+      }
+    }
+  }, [commissionFlat, commissionMode, commissionPercentage, contractPrice, expectedManuallyEdited, referralFeePercentage]);
+
+  return (
+    <div className="w-[min(96vw,40rem)] rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
+      <h3 className="text-sm font-semibold text-slate-900">Add Deal Details</h3>
+      <p className="mt-1 text-xs text-slate-500">Enter full deal info before moving referral to Under Contract.</p>
+      <form
+        className="mt-3 grid gap-3 sm:grid-cols-2"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          if (submitting) return;
+          if (status !== 'under_contract') {
+            toast.error('This action only supports under contract deals.');
+            return;
+          }
+          if (!propertyAddress.trim() || !propertyCity.trim()) {
+            toast.error('Property address and city are required.');
+            return;
+          }
+          if (!/^[A-Za-z]{2}$/.test(propertyState.trim())) {
+            toast.error('Property state must be a 2-letter code.');
+            return;
+          }
+          if (!/^\d{5}(?:-\d{4})?$/.test(propertyPostalCode.trim())) {
+            toast.error('Enter a valid property ZIP code.');
+            return;
+          }
+          if (!contractPrice || Number.parseFloat(contractPrice) <= 0) {
+            toast.error('Contract price is required.');
+            return;
+          }
+          if (!referralFeePercentage || Number.parseFloat(referralFeePercentage) <= 0) {
+            toast.error('Referral fee % is required.');
+            return;
+          }
+          if (status === 'terminated' && !terminatedReason) {
+            toast.error('Select a termination reason.');
+            return;
+          }
+
+          const contractPriceCents = toCents(contractPrice);
+          const isFlatFeeMode = commissionMode === '$';
+          const commissionBasisPoints = isFlatFeeMode
+            ? null
+            : commissionPercentage
+            ? Math.round(Number.parseFloat(commissionPercentage) * 100)
+            : null;
+          const commissionFlatFeeCents = isFlatFeeMode
+            ? (commissionFlat ? toCents(commissionFlat) : null)
+            : null;
+          const referralFeeBasisPoints = referralFeePercentage
+            ? Math.round(Number.parseFloat(referralFeePercentage) * 100)
+            : null;
+          const expectedAmountCents = toCents(expectedAmount);
+          const computedExpectedAmountCents =
+            !expectedAmountCents && referralFeeBasisPoints
+              ? isFlatFeeMode
+                ? Math.round(((commissionFlatFeeCents ?? 0) * referralFeeBasisPoints) / 10_000)
+                : Math.round((contractPriceCents * (commissionBasisPoints ?? 0) * referralFeeBasisPoints) / 100_000_000)
+              : expectedAmountCents;
+          const finalExpectedAmountCents = computedExpectedAmountCents;
+
+          const agentCommissionPercentage = isFlatFeeMode
+            ? commissionFlatFeeCents != null && contractPriceCents > 0
+              ? (commissionFlatFeeCents / contractPriceCents) * 100
+              : 0
+            : (commissionBasisPoints ?? 0) / 100;
+          const referralFeePercentageValue = (referralFeeBasisPoints ?? 0) / 100;
+          const statusToSend = markPaid ? 'paid' : status;
+
+          setSubmitting(true);
+          try {
+            await onSubmit({
+              paymentPayload: {
+                status: statusToSend,
+                expectedAmountCents: finalExpectedAmountCents,
+                receivedAmountCents: toCents(netReferralFeePaid),
+                netReferralFeePaidCents: toCents(netReferralFeePaid),
+                contractPriceCents,
+                commissionBasisPoints,
+                commissionFlatFeeCents,
+                referralFeeBasisPoints,
+                propertyAddress: propertyAddress.trim(),
+                propertyCity: propertyCity.trim(),
+                propertyState: propertyState.trim().toUpperCase(),
+                closingDate: closingDate ? dateStringToLocalISO(closingDate) : null,
+                underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : new Date().toISOString(),
+                agentId: agentId || null,
+                usedAfc,
+                usedAssignedAgent,
+                side,
+                terminatedReason: statusToSend === 'terminated' ? terminatedReason : null,
+              },
+              contractDetails: {
+                propertyAddress: propertyAddress.trim(),
+                propertyCity: propertyCity.trim(),
+                propertyState: propertyState.trim().toUpperCase(),
+                propertyPostalCode: propertyPostalCode.trim(),
+                contractPrice: contractPriceCents / 100,
+                agentCommissionPercentage,
+                referralFeePercentage: referralFeePercentageValue,
+                dealSide: side,
+              },
+            });
+          } finally {
+            setSubmitting(false);
+          }
+        }}
+      >
+        <label className="text-xs font-medium text-slate-700">Contract price
+          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={contractPrice} onChange={(e) => setContractPrice(e.target.value)} />
+        </label>
+        <label className="text-xs font-medium text-slate-700">Status
+          <select className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={status} onChange={(e) => setStatus(e.target.value as DealStatus)}>
+            {DEAL_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <div className="text-xs font-medium text-slate-700">
+          <span>Commission</span>
+          <div className="mt-1 flex gap-2">
+            <button type="button" className="rounded border px-2 py-1 text-xs" onClick={() => setCommissionMode('%')}>%</button>
+            <button type="button" className="rounded border px-2 py-1 text-xs" onClick={() => setCommissionMode('$')}>$</button>
+            <input
+              className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
+              value={commissionMode === '%' ? commissionPercentage : commissionFlat}
+              onChange={(event) => commissionMode === '%' ? setCommissionPercentage(event.target.value) : setCommissionFlat(event.target.value)}
+            />
+          </div>
+        </div>
+        <label className="text-xs font-medium text-slate-700">Referral fee %
+          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={referralFeePercentage} onChange={(e) => setReferralFeePercentage(e.target.value)} />
+        </label>
+        <label className="text-xs font-medium text-slate-700">Expected amount
+          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={expectedAmount} onChange={(e) => { setExpectedManuallyEdited(Boolean(e.target.value)); setExpectedAmount(e.target.value); }} />
+        </label>
+        <label className="text-xs font-medium text-slate-700">Net referral fee paid
+          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={netReferralFeePaid} onChange={(e) => setNetReferralFeePaid(e.target.value)} />
+        </label>
+        <label className="text-xs font-medium text-slate-700">Under contract date
+          <input type="date" className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={underContractDate} onChange={(e) => setUnderContractDate(e.target.value)} />
+        </label>
+        <label className="text-xs font-medium text-slate-700">Closing date
+          <input type="date" className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={closingDate} onChange={(e) => setClosingDate(e.target.value)} />
+        </label>
+        <label className="text-xs font-medium text-slate-700 sm:col-span-2">Property address
+          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={propertyAddress} onChange={(e) => setPropertyAddress(e.target.value)} />
+        </label>
+        <label className="text-xs font-medium text-slate-700">Property city
+          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={propertyCity} onChange={(e) => setPropertyCity(e.target.value)} />
+        </label>
+        <label className="text-xs font-medium text-slate-700">Property state
+          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm uppercase" maxLength={2} value={propertyState} onChange={(e) => setPropertyState(e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2))} />
+        </label>
+        <label className="text-xs font-medium text-slate-700">Property ZIP
+          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={propertyPostalCode} onChange={(e) => setPropertyPostalCode(e.target.value)} />
+        </label>
+        <label className="text-xs font-medium text-slate-700">Agent
+          <select className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={agentId} onChange={(e) => setAgentId(e.target.value)} disabled={agentsLoading}>
+            <option value="">Unassigned</option>
+            {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
+          </select>
+        </label>
+        <label className="text-xs font-medium text-slate-700">Deal side
+          <select className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={side} onChange={(e) => setSide(e.target.value as 'buy' | 'sell')}>
+            <option value="buy">Buy-side</option>
+            <option value="sell">Sell-side</option>
+          </select>
+        </label>
+        {status === 'terminated' && (
+          <label className="text-xs font-medium text-slate-700">Termination reason
+            <select className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={terminatedReason ?? ''} onChange={(e) => setTerminatedReason(e.target.value ? (e.target.value as TerminatedReason) : null)}>
+              <option value="">Select reason</option>
+              {TERMINATED_REASON_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+        )}
+        <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+          <input type="checkbox" checked={usedAfc} onChange={(e) => setUsedAfc(e.target.checked)} />
+          Used AFC
+        </label>
+        <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+          <input type="checkbox" checked={usedAssignedAgent} onChange={(e) => setUsedAssignedAgent(e.target.checked)} />
+          Used Agent
+        </label>
+        <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+          <input type="checkbox" checked={markPaid || status === 'paid'} onChange={(e) => { const checked = e.target.checked; setMarkPaid(checked); if (checked) setStatus('paid'); }} />
+          Paid
+        </label>
+        <div className="sm:col-span-2 flex justify-end gap-2">
+          <button type="button" className="rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button type="submit" className="rounded bg-brand px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60" disabled={submitting}>{submitting ? 'Saving…' : 'Save deal & move status'}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
 
 function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps) {
   const [status, setStatus] = useState<ReferralStatus>(value);
   const [loading, setLoading] = useState(false);
+  const [pendingTerminatedSelection, setPendingTerminatedSelection] = useState(false);
+  const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | ''>('');
 
   const handleChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     const nextStatus = event.target.value as ReferralStatus;
-    let terminatedReason: TerminatedReason | null = null;
     if (nextStatus === 'Under Contract') {
-      toast.info('Open the referral to record contract details before marking it Under Contract.');
+      const toastId = toast.custom((t) => (
+        <UnderContractDealToast
+          onClose={() => toast.dismiss(t)}
+          onSubmit={async ({ paymentPayload, contractDetails }) => {
+            const paymentResponse = await fetch('/api/payments', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                referralId,
+                ...paymentPayload,
+              }),
+            });
+            if (!paymentResponse.ok) {
+              throw new Error('Unable to save deal details');
+            }
+            const statusResponse = await fetch(`/api/referrals/${referralId}/status`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                status: 'Under Contract',
+                contractDetails,
+                createNewDeal: false,
+              }),
+            });
+            if (!statusResponse.ok) {
+              throw new Error('Unable to move referral to Under Contract');
+            }
+            setStatus('Under Contract');
+            toast.dismiss(t);
+            toast.success('Deal saved and referral moved to Under Contract');
+          }}
+        />
+      ), { duration: Infinity });
+      void toastId;
       return;
     }
     if (nextStatus === 'Terminated') {
-      terminatedReason = promptForTerminatedReason();
-      if (!terminatedReason) {
-        toast.error('Termination reason is required.');
-        setStatus(value);
-        return;
-      }
+      setStatus(nextStatus);
+      setPendingTerminatedSelection(true);
+      return;
     }
     setStatus(nextStatus);
     setLoading(true);
@@ -113,7 +440,7 @@ function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps)
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: nextStatus,
-          terminatedReason: nextStatus === 'Terminated' ? terminatedReason : null,
+          terminatedReason: null,
         })
       });
 
@@ -145,6 +472,76 @@ function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps)
           </option>
         ))}
       </select>
+      {pendingTerminatedSelection && (
+        <div className="space-y-2 rounded border border-slate-200 bg-slate-50 p-2">
+          <label className="block text-xs font-semibold text-slate-600">
+            Termination reason
+            <select
+              value={terminatedReason}
+              onChange={(event) => setTerminatedReason(event.target.value as TerminatedReason | '')}
+              className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs shadow-sm focus:border-brand focus:outline-none"
+              disabled={loading}
+            >
+              <option value="">Select reason</option>
+              {TERMINATED_REASON_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="rounded bg-slate-900 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
+              disabled={loading}
+              onClick={async () => {
+                if (!terminatedReason) {
+                  toast.error('Termination reason is required.');
+                  return;
+                }
+                setLoading(true);
+                try {
+                  const response = await fetch(`/api/referrals/${referralId}/status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      status: 'Terminated',
+                      terminatedReason,
+                    }),
+                  });
+                  if (!response.ok) {
+                    throw new Error('Failed to update status');
+                  }
+                  setPendingTerminatedSelection(false);
+                  setTerminatedReason('');
+                  toast.success('Referral status updated');
+                } catch (error) {
+                  console.error(error);
+                  toast.error('Unable to update status');
+                  setStatus(value);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              Confirm
+            </button>
+            <button
+              type="button"
+              className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600"
+              disabled={loading}
+              onClick={() => {
+                setPendingTerminatedSelection(false);
+                setTerminatedReason('');
+                setStatus(value);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       {dealStatusLabel && dealStatusLabel !== status && (
         <p className="text-xs text-slate-500">Deal stage: {dealStatusLabel}</p>
       )}

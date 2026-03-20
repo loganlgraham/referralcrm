@@ -24,6 +24,7 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
 import { createNPSToken } from '@/lib/server/nps';
+import { createAdminNotifications } from '@/lib/server/notifications';
 import { mapDealStatusToReferralStatus } from '@/lib/server/referral-deal-status-mapper';
 import { type DealStatus } from '@/constants/deals';
 
@@ -1168,6 +1169,19 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     }
 
     await referral.save();
+
+    if (parsed.data.status && parsed.data.status !== previousStatus) {
+      const actorName = session.user.name || session.user.email || 'A team member';
+      const borrowerName = referral.borrower?.name || 'a referral';
+      await createAdminNotifications({
+        type: 'status_change',
+        referralId: referral._id,
+        borrowerName,
+        actorRole: session.user.role,
+        actorName,
+        content: `${actorName} changed deal status from ${previousStatus} to ${payment.status} for ${borrowerName}`,
+      });
+    }
 
     if (autoRemindersDisabledForDeal) {
       await logReferralActivity({

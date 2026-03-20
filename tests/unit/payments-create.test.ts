@@ -82,6 +82,10 @@ jest.mock('@/lib/server/audit', () => ({
   resolveAuditActorId: jest.fn(),
 }));
 
+jest.mock('@/lib/server/notifications', () => ({
+  createAdminNotifications: jest.fn(),
+}));
+
 jest.mock('@/lib/referral-links', () => ({
   buildReferralLink: jest.fn(),
   getReferralAppBaseUrl: jest.fn(),
