@@ -126,6 +126,14 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
   const [usedAfc, setUsedAfc] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const handleDateInputClick = useCallback((event: React.MouseEvent<HTMLInputElement>) => {
+    try {
+      event.currentTarget.showPicker?.();
+    } catch {
+      // Fallback to native date input behavior for browsers without showPicker support.
+    }
+  }, []);
+
   useEffect(() => {
     if (expectedManuallyEdited) return;
     const referral = Number.parseFloat(referralFeePercentage);
@@ -289,10 +297,22 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
           <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={expectedAmount} onChange={(e) => { setExpectedManuallyEdited(Boolean(e.target.value)); setExpectedAmount(e.target.value); }} />
         </label>
         <label className="text-xs font-medium text-slate-700">Under contract date
-          <input type="date" className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={underContractDate} onChange={(e) => setUnderContractDate(e.target.value)} />
+          <input
+            type="date"
+            className="mt-1 w-full cursor-pointer rounded border border-slate-300 px-2 py-1 text-sm"
+            value={underContractDate}
+            onClick={handleDateInputClick}
+            onChange={(e) => setUnderContractDate(e.target.value)}
+          />
         </label>
         <label className="text-xs font-medium text-slate-700">Closing date
-          <input type="date" className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={closingDate} onChange={(e) => setClosingDate(e.target.value)} />
+          <input
+            type="date"
+            className="mt-1 w-full cursor-pointer rounded border border-slate-300 px-2 py-1 text-sm"
+            value={closingDate}
+            onClick={handleDateInputClick}
+            onChange={(e) => setClosingDate(e.target.value)}
+          />
         </label>
         <label className="text-xs font-medium text-slate-700 sm:col-span-2">Property address
           <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={propertyAddress} onChange={(e) => setPropertyAddress(e.target.value)} />
@@ -312,10 +332,18 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
             <option value="sell">Sell-side</option>
           </select>
         </label>
-        <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
-          <input type="checkbox" checked={usedAfc} onChange={(e) => setUsedAfc(e.target.checked)} />
-          Used AFC
-        </label>
+        <div className="rounded border border-brand/40 bg-brand/5 px-3 py-2 sm:col-span-2">
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-brand"
+              checked={usedAfc}
+              onChange={(e) => setUsedAfc(e.target.checked)}
+            />
+            Used AFC
+          </label>
+          <p className="mt-1 text-xs text-slate-600">Check this when AFC handled this deal.</p>
+        </div>
         <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
           <button type="button" className="w-full rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 sm:w-auto" onClick={onClose} disabled={submitting}>Cancel</button>
           <button type="submit" className="w-full rounded bg-brand px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 sm:w-auto" disabled={submitting}>{submitting ? 'Saving…' : 'Save deal & move status'}</button>
