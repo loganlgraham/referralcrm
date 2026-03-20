@@ -212,4 +212,22 @@ describe('Payments POST outside-agent handling', () => {
     expect(mockedPaymentUpdateMany).not.toHaveBeenCalled();
     expect(mockedLogReferralActivity).not.toHaveBeenCalled();
   });
+
+  it('rejects terminated status without terminatedReason', async () => {
+    const referralDoc = makeReferralDoc();
+    mockedReferralFindById.mockResolvedValue(referralDoc);
+
+    const response = await postHandler(
+      makeRequest({
+        referralId: '507f1f77bcf86cd799439011',
+        status: 'terminated',
+        expectedAmountCents: 0,
+        usedAssignedAgent: true,
+        usedAfc: true,
+      })
+    );
+
+    expect(response.status).toBe(422);
+    expect(mockedPaymentCreate).not.toHaveBeenCalled();
+  });
 });

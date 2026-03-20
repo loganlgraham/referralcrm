@@ -15,6 +15,7 @@ import clsx from 'clsx';
 import { Clock } from 'lucide-react';
 
 import { REFERRAL_STATUSES, ReferralStatus, type ReferralTimeline } from '@/constants/referrals';
+import { TERMINATED_REASON_OPTIONS, type TerminatedReason } from '@/constants/deals';
 import { formatCurrency, formatNumber, formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { calculateTimelineDaysRemaining, formatTimelineCountdown } from '@/utils/timeline-countdown';
@@ -73,15 +74,35 @@ interface StatusSelectProps {
   dealStatusLabel?: string | null;
 }
 
+const promptForTerminatedReason = (): TerminatedReason | null => {
+  const validReasons = new Set(TERMINATED_REASON_OPTIONS.map((option) => option.value));
+  const optionsText = TERMINATED_REASON_OPTIONS.map((option) => `${option.value} (${option.label})`).join(', ');
+  const input = window.prompt(`Termination reason is required. Enter one of: ${optionsText}`);
+  const normalized = input?.trim().toLowerCase().replace(/\s+/g, '_') as TerminatedReason | undefined;
+  if (!normalized || !validReasons.has(normalized)) {
+    return null;
+  }
+  return normalized;
+};
+
 function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps) {
   const [status, setStatus] = useState<ReferralStatus>(value);
   const [loading, setLoading] = useState(false);
 
   const handleChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     const nextStatus = event.target.value as ReferralStatus;
+    let terminatedReason: TerminatedReason | null = null;
     if (nextStatus === 'Under Contract') {
       toast.info('Open the referral to record contract details before marking it Under Contract.');
       return;
+    }
+    if (nextStatus === 'Terminated') {
+      terminatedReason = promptForTerminatedReason();
+      if (!terminatedReason) {
+        toast.error('Termination reason is required.');
+        setStatus(value);
+        return;
+      }
     }
     setStatus(nextStatus);
     setLoading(true);
@@ -90,7 +111,10 @@ function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps)
       const response = await fetch(`/api/referrals/${referralId}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus })
+        body: JSON.stringify({
+          status: nextStatus,
+          terminatedReason: nextStatus === 'Terminated' ? terminatedReason : null,
+        })
       });
 
       if (!response.ok) {

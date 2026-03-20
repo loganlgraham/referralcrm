@@ -17,6 +17,8 @@ import { createAdminNotifications } from '@/lib/server/notifications';
 import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
 import { hasAhaOosAgentAttached } from '@/lib/server/auto-update-reminders';
 import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
+import { mapReferralStatusToDealStatus } from '@/lib/server/referral-deal-status-mapper';
+import { type ReferralStatus } from '@/constants/referrals';
 
 interface Params {
   params: { id: string };
@@ -100,6 +102,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   referral.audit.push(auditEntry as any);
 
   let createdDeal: any = null;
+  let syncedDeal: any = null;
   const sla = (referral.sla ??= {} as any);
   let slaModified = false;
 
@@ -361,6 +364,26 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       }
     }
   }
+
+  const mappedDealStatus = mapReferralStatusToDealStatus(nextStatus as ReferralStatus);
+  if (mappedDealStatus && parsed.data.status !== 'Under Contract') {
+    const latestAttributedDeal = await Payment.findOne({
+      referralId: referral._id,
+      usedAssignedAgent: true,
+      agentAttribution: { $ne: 'OUTSIDE_AGENT' },
+    }).sort({ createdAt: -1 });
+
+    if (latestAttributedDeal) {
+      latestAttributedDeal.status = mappedDealStatus;
+      if (mappedDealStatus === 'terminated') {
+        latestAttributedDeal.terminatedReason = parsed.data.terminatedReason ?? latestAttributedDeal.terminatedReason;
+      } else {
+        latestAttributedDeal.terminatedReason = null;
+      }
+      await latestAttributedDeal.save();
+      syncedDeal = latestAttributedDeal.toObject();
+    }
+  }
   if (slaModified) {
     referral.markModified('sla');
   }
@@ -438,29 +461,29 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
           }
         : undefined,
     deal:
-      createdDeal
+      createdDeal || syncedDeal
         ? {
-            _id: createdDeal._id?.toString?.() ?? '',
-            status: createdDeal.status ?? 'under_contract',
-            expectedAmountCents: createdDeal.expectedAmountCents ?? 0,
-            receivedAmountCents: createdDeal.receivedAmountCents ?? 0,
-            terminatedReason: createdDeal.terminatedReason ?? null,
-            agentAttribution: createdDeal.agentAttribution ?? null,
-            usedAfc: Boolean(createdDeal.usedAfc),
-            usedAssignedAgent: Boolean(createdDeal.usedAssignedAgent),
-            commissionBasisPoints: createdDeal.commissionBasisPoints ?? null,
-            referralFeeBasisPoints: createdDeal.referralFeeBasisPoints ?? null,
-            side: createdDeal.side ?? null,
-            contractPriceCents: createdDeal.contractPriceCents ?? null,
-            createdAt: createdDeal.createdAt instanceof Date
-              ? createdDeal.createdAt.toISOString()
-              : createdDeal.createdAt ?? null,
-            updatedAt: createdDeal.updatedAt instanceof Date
-              ? createdDeal.updatedAt.toISOString()
-              : createdDeal.updatedAt ?? null,
-            paidDate: createdDeal.paidDate instanceof Date
-              ? createdDeal.paidDate.toISOString()
-              : createdDeal.paidDate ?? null,
+            _id: (createdDeal ?? syncedDeal)._id?.toString?.() ?? '',
+            status: (createdDeal ?? syncedDeal).status ?? 'under_contract',
+            expectedAmountCents: (createdDeal ?? syncedDeal).expectedAmountCents ?? 0,
+            receivedAmountCents: (createdDeal ?? syncedDeal).receivedAmountCents ?? 0,
+            terminatedReason: (createdDeal ?? syncedDeal).terminatedReason ?? null,
+            agentAttribution: (createdDeal ?? syncedDeal).agentAttribution ?? null,
+            usedAfc: Boolean((createdDeal ?? syncedDeal).usedAfc),
+            usedAssignedAgent: Boolean((createdDeal ?? syncedDeal).usedAssignedAgent),
+            commissionBasisPoints: (createdDeal ?? syncedDeal).commissionBasisPoints ?? null,
+            referralFeeBasisPoints: (createdDeal ?? syncedDeal).referralFeeBasisPoints ?? null,
+            side: (createdDeal ?? syncedDeal).side ?? null,
+            contractPriceCents: (createdDeal ?? syncedDeal).contractPriceCents ?? null,
+            createdAt: (createdDeal ?? syncedDeal).createdAt instanceof Date
+              ? (createdDeal ?? syncedDeal).createdAt.toISOString()
+              : (createdDeal ?? syncedDeal).createdAt ?? null,
+            updatedAt: (createdDeal ?? syncedDeal).updatedAt instanceof Date
+              ? (createdDeal ?? syncedDeal).updatedAt.toISOString()
+              : (createdDeal ?? syncedDeal).updatedAt ?? null,
+            paidDate: (createdDeal ?? syncedDeal).paidDate instanceof Date
+              ? (createdDeal ?? syncedDeal).paidDate.toISOString()
+              : (createdDeal ?? syncedDeal).paidDate ?? null,
           }
         : undefined,
     preApprovalAmountCents: referral.preApprovalAmountCents ?? 0,

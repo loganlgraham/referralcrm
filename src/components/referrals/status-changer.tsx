@@ -6,6 +6,7 @@ import { Pencil } from 'lucide-react';
 import { normalizeReferralStatus } from '@/constants/referrals';
 import { ReferralStatus } from '@/models/referral';
 import { toast } from 'sonner';
+import { TERMINATED_REASON_OPTIONS, type TerminatedReason } from '@/constants/deals';
 
 interface Props {
   referralId: string;
@@ -78,6 +79,17 @@ const formatCurrencyInputDisplay = (value: string) => {
   return `${formattedInteger}.${decimalPart}`;
 };
 
+const promptForTerminatedReason = (): TerminatedReason | null => {
+  const validReasons = new Set(TERMINATED_REASON_OPTIONS.map((option) => option.value));
+  const optionsText = TERMINATED_REASON_OPTIONS.map((option) => `${option.value} (${option.label})`).join(', ');
+  const input = window.prompt(`Termination reason is required. Enter one of: ${optionsText}`);
+  const normalized = input?.trim().toLowerCase().replace(/\s+/g, '_') as TerminatedReason | undefined;
+  if (!normalized || !validReasons.has(normalized)) {
+    return null;
+  }
+  return normalized;
+};
+
 export function StatusChanger({
   referralId,
   status,
@@ -120,13 +132,20 @@ export function StatusChanger({
     return filtered;
   }, [statuses, currentStatus]);
 
-  const submitStatus = async (nextStatus: ReferralStatus, previousStatus: ReferralStatus) => {
+  const submitStatus = async (
+    nextStatus: ReferralStatus,
+    previousStatus: ReferralStatus,
+    terminatedReason?: TerminatedReason | null
+  ) => {
     setLoading(true);
     try {
       const res = await fetch(`/api/referrals/${referralId}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus }),
+        body: JSON.stringify({
+          status: nextStatus,
+          terminatedReason: nextStatus === 'Terminated' ? terminatedReason ?? null : null,
+        }),
       });
 
       if (!res.ok) {
@@ -152,10 +171,19 @@ export function StatusChanger({
 
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const nextStatus = event.target.value as ReferralStatus;
+    let terminatedReason: TerminatedReason | null = null;
+    if (nextStatus === 'Terminated') {
+      terminatedReason = promptForTerminatedReason();
+      if (!terminatedReason) {
+        toast.error('Termination reason is required.');
+        setCurrentStatus(persistedStatus);
+        return;
+      }
+    }
 
     setCurrentStatus(nextStatus);
     onUnderContractIntentChange?.(nextStatus === 'Under Contract');
-    void submitStatus(nextStatus, persistedStatus);
+    void submitStatus(nextStatus, persistedStatus, terminatedReason);
   };
 
   const handlePreApprovalChange = (event: ChangeEvent<HTMLInputElement>) => {

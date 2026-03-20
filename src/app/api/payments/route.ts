@@ -24,6 +24,8 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
 import { createNPSToken } from '@/lib/server/nps';
+import { mapDealStatusToReferralStatus } from '@/lib/server/referral-deal-status-mapper';
+import { type DealStatus } from '@/constants/deals';
 
 type ReferralSummary = {
   _id: Types.ObjectId;
@@ -96,6 +98,11 @@ const minutesBetweenDates = (start: Date | null, end: Date | null): number | nul
 
   return Math.round(diff / 60000);
 };
+
+const isAgentAttributedDeal = (
+  usedAssignedAgent: boolean | null | undefined,
+  agentAttribution: string | null | undefined
+): boolean => usedAssignedAgent === true && agentAttribution !== 'OUTSIDE_AGENT';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const session = await getCurrentSession();
@@ -643,6 +650,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   }
+  if (parsed.data.status === 'terminated' && !parsed.data.terminatedReason) {
+    return NextResponse.json(
+      { error: { fieldErrors: { terminatedReason: ['Terminated reason is required when status is terminated.'] } } },
+      { status: 422 }
+    );
+  }
 
   await connectMongo();
   const referralForCreate = await Referral.findById(parsed.data.referralId);
@@ -709,6 +722,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (parsed.data.propertyState !== undefined) {
       referralForCreate.propertyState = parsed.data.propertyState ?? '';
       referralUpdated = true;
+    }
+
+    if (
+      isAgentAttributedDeal(isAgentOrigin ? true : normalizedUsedAssignedAgent, normalizedAgentAttribution) &&
+      parsed.data.status
+    ) {
+      const nextReferralStatus = mapDealStatusToReferralStatus(parsed.data.status as DealStatus);
+      if (referralForCreate.status !== nextReferralStatus) {
+        referralForCreate.status = nextReferralStatus;
+        referralForCreate.statusLastUpdated = new Date();
+        referralUpdated = true;
+      }
     }
 
     if (isOutsideAgent) {
@@ -794,6 +819,12 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const hasTerminationUpdate = isTerminating || parsed.data.terminatedReason !== undefined;
   if (hasTerminationUpdate && role !== 'admin' && role !== 'agent') {
     return new NextResponse('Forbidden', { status: 403 });
+  }
+  if (isTerminating && !parsed.data.terminatedReason) {
+    return NextResponse.json(
+      { error: { fieldErrors: { terminatedReason: ['Terminated reason is required when status is terminated.'] } } },
+      { status: 422 }
+    );
   }
 
   await connectMongo();
@@ -1010,6 +1041,33 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         { referralId: referral._id },
         { $set: { expectedAmountCents: 0, receivedAmountCents: 0 } }
       );
+    }
+
+    if (
+      parsed.data.status &&
+      parsed.data.status !== previousStatus &&
+      isAgentAttributedDeal(nextUsedAssignedAgent, nextAgentAttribution)
+    ) {
+      const nextReferralStatus = mapDealStatusToReferralStatus(parsed.data.status as DealStatus);
+      if (previousReferralStatus !== nextReferralStatus) {
+        const auditEntry: Record<string, unknown> = {
+          actorRole: session.user.role,
+          field: 'status',
+          previousValue: previousReferralStatus,
+          newValue: nextReferralStatus,
+          timestamp: now,
+        };
+        const actorId = resolveAuditActorId(session.user.id);
+        if (actorId) {
+          auditEntry.actorId = actorId;
+        }
+        referral.status = nextReferralStatus;
+        referral.statusLastUpdated = now;
+        referral.audit = Array.isArray(referral.audit) ? referral.audit : [];
+        referral.audit.push(auditEntry as any);
+        referral.markModified('audit');
+        referralStatusChanged = true;
+      }
     }
 
     if (parsed.data.status && parsed.data.status !== previousStatus && !isAgentOrigin) {

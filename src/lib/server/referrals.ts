@@ -16,6 +16,8 @@ import { User } from '@/models/user';
 import { DEAL_STATUS_LABELS } from '@/constants/deals';
 import { Zip } from '@/models/zip';
 import { buildDealStatusMap } from '@/lib/server/referral-deal-status';
+import { mapDealStatusToReferralStatus } from '@/lib/server/referral-deal-status-mapper';
+import { type DealStatus } from '@/constants/deals';
 
 interface GetReferralsParams {
   session: Session | null;
@@ -487,6 +489,9 @@ export async function getReferrals(params: GetReferralsParams) {
         : null;
 
       const normalizedStatus = normalizeReferralStatus(item.status) ?? item.status;
+      const effectiveStatus = dealStatus
+        ? mapDealStatusToReferralStatus(dealStatus as DealStatus)
+        : normalizedStatus;
 
       // Compute hasAhaOosAgentAttached: check if any attached agent has ahaDesignation === 'AHA_OOS'
       const hasAhaOosAgentAttached = Boolean(
@@ -529,7 +534,7 @@ export async function getReferrals(params: GetReferralsParams) {
         stageOnTransfer: item.stageOnTransfer,
         initialNotes: item.initialNotes,
         loanFileNumber: item.loanFileNumber,
-        status: normalizedStatus,
+        status: effectiveStatus,
         statusLastUpdated: item.statusLastUpdated ? item.statusLastUpdated.toISOString() : null,
         daysInStatus: differenceInDays(new Date(), item.statusLastUpdated ?? item.createdAt),
         assignedAgentName: agent?.name,

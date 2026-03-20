@@ -173,4 +173,16 @@ describe('Payments PATCH outside-agent normalization', () => {
       { new: true }
     );
   });
+
+  it('rejects terminated status updates without terminatedReason', async () => {
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        status: 'terminated',
+      })
+    );
+
+    expect(response.status).toBe(422);
+    expect(mockedPaymentFindByIdAndUpdate).not.toHaveBeenCalled();
+  });
 });

@@ -1,4 +1,8 @@
 import { buildDealStatusMap, isAgentAttributedDeal } from '@/lib/server/referral-deal-status';
+import {
+  mapDealStatusToReferralStatus,
+  mapReferralStatusToDealStatus,
+} from '@/lib/server/referral-deal-status-mapper';
 
 describe('referral deal status mapping', () => {
   it('treats only used-assigned-agent deals as agent-attributed', () => {
@@ -51,5 +55,22 @@ describe('referral deal status mapping', () => {
       primary: 'under_contract',
       fallback: 'under_contract',
     });
+  });
+
+  it('maps referral statuses to synced deal statuses', () => {
+    expect(mapReferralStatusToDealStatus('Under Contract')).toBe('under_contract');
+    expect(mapReferralStatusToDealStatus('Closed')).toBe('closed');
+    expect(mapReferralStatusToDealStatus('Terminated')).toBe('terminated');
+    expect(mapReferralStatusToDealStatus('Active Lead')).toBeNull();
+  });
+
+  it('maps deal pipeline statuses back to referral statuses', () => {
+    expect(mapDealStatusToReferralStatus('under_contract')).toBe('Under Contract');
+    expect(mapDealStatusToReferralStatus('past_inspection')).toBe('Under Contract');
+    expect(mapDealStatusToReferralStatus('clear_to_close')).toBe('Under Contract');
+    expect(mapDealStatusToReferralStatus('closed')).toBe('Closed');
+    expect(mapDealStatusToReferralStatus('payment_sent')).toBe('Closed');
+    expect(mapDealStatusToReferralStatus('paid')).toBe('Closed');
+    expect(mapDealStatusToReferralStatus('terminated')).toBe('Terminated');
   });
 });
