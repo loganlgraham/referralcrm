@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useMemo, useState, useTransition, useCallback, useEffect } from 'react';
+import { ReactNode, useMemo, useState, useTransition, useCallback } from 'react';
 import {
   ColumnDef,
   flexRender,
@@ -15,8 +15,6 @@ import { Clock } from 'lucide-react';
 
 import { REFERRAL_STATUSES, ReferralStatus, type ReferralTimeline } from '@/constants/referrals';
 import {
-  DEAL_STATUS_OPTIONS,
-  type DealStatus,
   TERMINATED_REASON_OPTIONS,
   type TerminatedReason,
 } from '@/constants/deals';
@@ -111,11 +109,8 @@ interface UnderContractDealToastProps {
 }
 
 function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastProps) {
-  const [status, setStatus] = useState<DealStatus>('under_contract');
-  const [markPaid, setMarkPaid] = useState(false);
   const [expectedAmount, setExpectedAmount] = useState('');
   const [expectedManuallyEdited, setExpectedManuallyEdited] = useState(false);
-  const [netReferralFeePaid, setNetReferralFeePaid] = useState('');
   const [contractPrice, setContractPrice] = useState('');
   const [commissionMode, setCommissionMode] = useState<'%' | '$'>('%');
   const [commissionPercentage, setCommissionPercentage] = useState('');
@@ -127,39 +122,9 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
   const [propertyPostalCode, setPropertyPostalCode] = useState('');
   const [closingDate, setClosingDate] = useState('');
   const [underContractDate, setUnderContractDate] = useState('');
-  const [agentId, setAgentId] = useState('');
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [usedAfc, setUsedAfc] = useState(false);
-  const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | null>(null);
-  const [agents, setAgents] = useState<Array<{ id: string; name: string }>>([]);
-  const [agentsLoading, setAgentsLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setAgentsLoading(true);
-    fetch('/api/agents?minimal=true&all=true', { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error('Unable to load agents');
-        return response.json() as Promise<{ items: { _id: string; name?: string | null }[] }>;
-      })
-      .then((data) => {
-        const options = data.items || [];
-        setAgents(
-          options
-            .filter((option) => option?._id)
-            .map((option) => ({ id: option._id, name: option.name ?? 'Unnamed agent' }))
-            .sort((a, b) => a.name.localeCompare(b.name))
-        );
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) {
-          console.error(error);
-        }
-      })
-      .finally(() => setAgentsLoading(false));
-    return () => controller.abort();
-  }, []);
 
   useEffect(() => {
     if (expectedManuallyEdited) return;
@@ -194,10 +159,6 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
         onSubmit={async (event) => {
           event.preventDefault();
           if (submitting) return;
-          if (status !== 'under_contract') {
-            toast.error('This action only supports under contract deals.');
-            return;
-          }
           if (!propertyAddress.trim() || !propertyCity.trim()) {
             toast.error('Property address and city are required.');
             return;
@@ -246,16 +207,15 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
               : 0
             : (commissionBasisPoints ?? 0) / 100;
           const referralFeePercentageValue = (referralFeeBasisPoints ?? 0) / 100;
-          const statusToSend = markPaid ? 'paid' : status;
 
           setSubmitting(true);
           try {
             await onSubmit({
               paymentPayload: {
-                status: statusToSend,
+                status: 'under_contract',
                 expectedAmountCents: finalExpectedAmountCents,
-                receivedAmountCents: toCents(netReferralFeePaid),
-                netReferralFeePaidCents: toCents(netReferralFeePaid),
+                receivedAmountCents: 0,
+                netReferralFeePaidCents: 0,
                 contractPriceCents,
                 commissionBasisPoints,
                 commissionFlatFeeCents,
@@ -265,7 +225,6 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
                 propertyState: propertyState.trim().toUpperCase(),
                 closingDate: closingDate ? dateStringToLocalISO(closingDate) : null,
                 underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : new Date().toISOString(),
-                agentId: agentId || null,
                 usedAfc,
                 // Agent-entered deals always use the assigned agent.
                 usedAssignedAgent: true,
@@ -291,16 +250,31 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
         <label className="text-xs font-medium text-slate-700">Contract price
           <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={contractPrice} onChange={(e) => setContractPrice(e.target.value)} />
         </label>
-        <label className="text-xs font-medium text-slate-700">Status
-          <select className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={status} onChange={(e) => setStatus(e.target.value as DealStatus)}>
-            {DEAL_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </label>
         <div className="text-xs font-medium text-slate-700">
           <span>Commission</span>
           <div className="mt-1 flex flex-wrap gap-2">
-            <button type="button" className="rounded border px-2 py-1 text-xs" onClick={() => setCommissionMode('%')}>%</button>
-            <button type="button" className="rounded border px-2 py-1 text-xs" onClick={() => setCommissionMode('$')}>$</button>
+            <button
+              type="button"
+              className={`rounded border px-2 py-1 text-xs font-semibold transition ${
+                commissionMode === '%'
+                  ? 'border-brand bg-brand text-white'
+                  : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+              onClick={() => setCommissionMode('%')}
+            >
+              %
+            </button>
+            <button
+              type="button"
+              className={`rounded border px-2 py-1 text-xs font-semibold transition ${
+                commissionMode === '$'
+                  ? 'border-brand bg-brand text-white'
+                  : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+              onClick={() => setCommissionMode('$')}
+            >
+              $
+            </button>
             <input
               className="w-full rounded border border-slate-300 px-2 py-1 text-sm sm:flex-1"
               value={commissionMode === '%' ? commissionPercentage : commissionFlat}
@@ -313,9 +287,6 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
         </label>
         <label className="text-xs font-medium text-slate-700">Expected amount
           <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={expectedAmount} onChange={(e) => { setExpectedManuallyEdited(Boolean(e.target.value)); setExpectedAmount(e.target.value); }} />
-        </label>
-        <label className="text-xs font-medium text-slate-700">Net referral fee paid
-          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={netReferralFeePaid} onChange={(e) => setNetReferralFeePaid(e.target.value)} />
         </label>
         <label className="text-xs font-medium text-slate-700">Under contract date
           <input type="date" className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={underContractDate} onChange={(e) => setUnderContractDate(e.target.value)} />
@@ -335,33 +306,15 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
         <label className="text-xs font-medium text-slate-700">Property ZIP
           <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={propertyPostalCode} onChange={(e) => setPropertyPostalCode(e.target.value)} />
         </label>
-        <label className="text-xs font-medium text-slate-700">Agent
-          <select className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={agentId} onChange={(e) => setAgentId(e.target.value)} disabled={agentsLoading}>
-            <option value="">Unassigned</option>
-            {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
-          </select>
-        </label>
         <label className="text-xs font-medium text-slate-700">Deal side
           <select className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={side} onChange={(e) => setSide(e.target.value as 'buy' | 'sell')}>
             <option value="buy">Buy-side</option>
             <option value="sell">Sell-side</option>
           </select>
         </label>
-        {status === 'terminated' && (
-          <label className="text-xs font-medium text-slate-700">Termination reason
-            <select className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={terminatedReason ?? ''} onChange={(e) => setTerminatedReason(e.target.value ? (e.target.value as TerminatedReason) : null)}>
-              <option value="">Select reason</option>
-              {TERMINATED_REASON_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-        )}
         <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
           <input type="checkbox" checked={usedAfc} onChange={(e) => setUsedAfc(e.target.checked)} />
           Used AFC
-        </label>
-        <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
-          <input type="checkbox" checked={markPaid || status === 'paid'} onChange={(e) => { const checked = e.target.checked; setMarkPaid(checked); if (checked) setStatus('paid'); }} />
-          Paid
         </label>
         <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
           <button type="button" className="w-full rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 sm:w-auto" onClick={onClose} disabled={submitting}>Cancel</button>
