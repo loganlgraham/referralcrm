@@ -130,7 +130,6 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
   const [agentId, setAgentId] = useState('');
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [usedAfc, setUsedAfc] = useState(false);
-  const [usedAssignedAgent, setUsedAssignedAgent] = useState(true);
   const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | null>(null);
   const [agents, setAgents] = useState<Array<{ id: string; name: string }>>([]);
   const [agentsLoading, setAgentsLoading] = useState(true);
@@ -187,11 +186,11 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
   }, [commissionFlat, commissionMode, commissionPercentage, contractPrice, expectedManuallyEdited, referralFeePercentage]);
 
   return (
-    <div className="w-[min(96vw,40rem)] rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
+    <div className="w-[min(calc(100vw-1rem),40rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
       <h3 className="text-sm font-semibold text-slate-900">Add Deal Details</h3>
       <p className="mt-1 text-xs text-slate-500">Enter full deal info before moving referral to Under Contract.</p>
       <form
-        className="mt-3 grid gap-3 sm:grid-cols-2"
+        className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"
         onSubmit={async (event) => {
           event.preventDefault();
           if (submitting) return;
@@ -268,7 +267,8 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
                 underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : new Date().toISOString(),
                 agentId: agentId || null,
                 usedAfc,
-                usedAssignedAgent,
+                // Agent-entered deals always use the assigned agent.
+                usedAssignedAgent: true,
                 side,
                 terminatedReason: null,
               },
@@ -298,11 +298,11 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
         </label>
         <div className="text-xs font-medium text-slate-700">
           <span>Commission</span>
-          <div className="mt-1 flex gap-2">
+          <div className="mt-1 flex flex-wrap gap-2">
             <button type="button" className="rounded border px-2 py-1 text-xs" onClick={() => setCommissionMode('%')}>%</button>
             <button type="button" className="rounded border px-2 py-1 text-xs" onClick={() => setCommissionMode('$')}>$</button>
             <input
-              className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
+              className="w-full rounded border border-slate-300 px-2 py-1 text-sm sm:flex-1"
               value={commissionMode === '%' ? commissionPercentage : commissionFlat}
               onChange={(event) => commissionMode === '%' ? setCommissionPercentage(event.target.value) : setCommissionFlat(event.target.value)}
             />
@@ -360,16 +360,12 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
           Used AFC
         </label>
         <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
-          <input type="checkbox" checked={usedAssignedAgent} onChange={(e) => setUsedAssignedAgent(e.target.checked)} />
-          Used Agent
-        </label>
-        <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
           <input type="checkbox" checked={markPaid || status === 'paid'} onChange={(e) => { const checked = e.target.checked; setMarkPaid(checked); if (checked) setStatus('paid'); }} />
           Paid
         </label>
-        <div className="sm:col-span-2 flex justify-end gap-2">
-          <button type="button" className="rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600" onClick={onClose} disabled={submitting}>Cancel</button>
-          <button type="submit" className="rounded bg-brand px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60" disabled={submitting}>{submitting ? 'Saving…' : 'Save deal & move status'}</button>
+        <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
+          <button type="button" className="w-full rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 sm:w-auto" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button type="submit" className="w-full rounded bg-brand px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 sm:w-auto" disabled={submitting}>{submitting ? 'Saving…' : 'Save deal & move status'}</button>
         </div>
       </form>
     </div>
@@ -417,7 +413,7 @@ function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps)
             toast.success('Deal saved and referral moved to Under Contract');
           }}
         />
-      ), { duration: Infinity });
+      ), { duration: Infinity, position: 'top-center' });
       void toastId;
       return;
     }
