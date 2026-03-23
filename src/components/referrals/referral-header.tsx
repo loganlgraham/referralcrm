@@ -377,6 +377,7 @@ export function ReferralHeader({
       : propertyAddress ?? referral.propertyAddress;
 
   const isAgentView = viewerRole === 'agent';
+  const showSlaWidget = viewerRole !== 'agent' && referral.origin !== 'agent';
   const canAssignAgent =
     viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'mc' || viewerRole === 'agent';
   const canAssignMc = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'agent';
@@ -884,9 +885,8 @@ export function ReferralHeader({
 
   return (
     <div className="space-y-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
-      <div className="grid gap-4 rounded-xl bg-gradient-to-r from-brand/5 via-white to-slate-50 p-5 lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-center">
-        <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand">Borrower</p>
+      <div className="grid gap-5 rounded-xl bg-gradient-to-r from-slate-50 via-white to-slate-50 p-5 lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-start">
+        <div className="space-y-3 lg:pt-10">
           <div>
             <div className="flex items-center gap-1.5">
               <h1 className="text-2xl font-semibold text-slate-900 lg:text-3xl">{borrowerName}</h1>
@@ -928,21 +928,21 @@ export function ReferralHeader({
               <p className="mt-1 text-sm text-slate-600">Contact information pending</p>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-brand/70">
-            <span className="rounded-full bg-brand/10 px-3 py-1 text-brand">{status}</span>
-            <span className="rounded-full bg-slate-900/5 px-3 py-1 text-slate-500">{propertyLabel}</span>
-            <span className="rounded-full bg-amber-500/10 px-3 py-1 text-amber-600">{daysInStatus} days in stage</span>
+          <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-600">
+            <span className="rounded-full bg-brand/15 px-3 py-1 text-brand">{status}</span>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">{propertyLabel}</span>
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-700">{daysInStatus} days in stage</span>
           </div>
         </div>
         <div
-          className={`flex flex-col items-stretch gap-3 sm:flex-row sm:justify-end ${
-            isAgentView ? 'lg:justify-end' : ''
+          className={`flex flex-col items-stretch gap-3 ${
+            isAgentView ? 'lg:justify-start' : ''
           }`}
         >
-          <section className="h-full min-w-[280px] w-full max-w-xl rounded-lg border border-slate-200 bg-white/80 p-3 shadow-sm sm:max-w-md lg:max-w-[440px]">
+          <section className="w-full rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-700">Status &amp; progress</h2>
-              <span className="text-[11px] uppercase tracking-wide text-slate-400">Pipeline</span>
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-700">Status &amp; progress</h2>
+              <span className="text-xs uppercase tracking-wide text-slate-500">Pipeline</span>
             </div>
             <div className="mt-2">
               <StatusChanger
@@ -980,10 +980,16 @@ export function ReferralHeader({
           )}
         </div>
       </div>
-      {referral.origin !== 'agent' && <SLAWidget referral={{ ...referral, status, audit: auditEntries }} />}
+      {showSlaWidget && <SLAWidget referral={{ ...referral, status, audit: auditEntries }} />}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr),minmax(280px,1fr)]">
-        <AdminTasksCard referralId={String(referral._id)} viewerRole={viewerRole} />
+      <div
+        className={
+          viewerRole === 'admin'
+            ? 'grid gap-6 lg:grid-cols-[minmax(0,1fr),minmax(280px,1fr)]'
+            : 'grid gap-6'
+        }
+      >
+        {viewerRole === 'admin' && <AdminTasksCard referralId={String(referral._id)} viewerRole={viewerRole} />}
         <section className="space-y-4 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
           <div className="space-y-1">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Team assignments</h2>

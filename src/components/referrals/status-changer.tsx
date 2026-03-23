@@ -227,14 +227,14 @@ export function StatusChanger({
   };
 
   return (
-    <div className="space-y-3 rounded-lg border border-slate-200 p-3">
-      <div className="space-y-3">
+    <div className="space-y-4">
+      <div className="space-y-4">
         <div className="space-y-1">
-          <p className="text-[11px] uppercase tracking-wide text-slate-400">Pipeline Status</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Pipeline Status</p>
           <select
             value={currentStatus}
             onChange={handleChange}
-            className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand focus:outline-none"
             disabled={loading}
           >
             {pipelineOptions.map((item) => (
@@ -295,7 +295,7 @@ export function StatusChanger({
         </div>
 
         <div className="space-y-1">
-          <div className="text-[11px] uppercase tracking-wide text-slate-400">Pre-approval</div>
+          <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Pre-approval</div>
           {editingPreApproval ? (
             <div className="space-y-2">
               <input
@@ -303,7 +303,7 @@ export function StatusChanger({
                 inputMode="decimal"
                 value={formatCurrencyInputDisplay(preApproval)}
                 onChange={handlePreApprovalChange}
-                className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand focus:outline-none"
                 placeholder="300,000"
                 disabled={preApprovalSaving || loading}
               />
@@ -327,7 +327,7 @@ export function StatusChanger({
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-between rounded border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
+            <div className="flex items-center justify-between rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm">
               <span>{formattedPreApprovalDisplay}</span>
               <button
                 type="button"

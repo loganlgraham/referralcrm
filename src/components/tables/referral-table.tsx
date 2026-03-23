@@ -215,6 +215,9 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
               : 0
             : (commissionBasisPoints ?? 0) / 100;
           const referralFeePercentageValue = (referralFeeBasisPoints ?? 0) / 100;
+          const resolvedUnderContractDate = underContractDate
+            ? dateStringToLocalISO(underContractDate)
+            : new Date().toISOString();
 
           setSubmitting(true);
           try {
@@ -232,7 +235,7 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
                 propertyCity: propertyCity.trim(),
                 propertyState: propertyState.trim().toUpperCase(),
                 closingDate: closingDate ? dateStringToLocalISO(closingDate) : null,
-                underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : new Date().toISOString(),
+                underContractDate: resolvedUnderContractDate,
                 usedAfc,
                 // Agent-entered deals always use the assigned agent.
                 usedAssignedAgent: true,

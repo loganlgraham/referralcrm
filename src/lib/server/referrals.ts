@@ -733,7 +733,7 @@ export async function getReferralById(id: string) {
         sentByStr && sentByStr !== 'cron' && sentByStr !== 'system'
           ? sentByUserMap.get(sentByStr) ?? null
           : null;
-      return {
+      const serializedPayment = {
         _id: payment._id.toString(),
         status: payment.status,
         expectedAmountCents: payment.expectedAmountCents ?? 0,
@@ -742,6 +742,7 @@ export async function getReferralById(id: string) {
         invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
         paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
         closingDate: payment.closingDate ? payment.closingDate.toISOString() : null,
+        underContractDate: payment.underContractDate ? payment.underContractDate.toISOString() : null,
         createdAt: payment.createdAt ? payment.createdAt.toISOString() : null,
         updatedAt: payment.updatedAt ? payment.updatedAt.toISOString() : null,
         terminatedReason: payment.terminatedReason ?? null,
@@ -782,6 +783,7 @@ export async function getReferralById(id: string) {
         feeBreakdownEmailSentBy: sentByStr,
         feeBreakdownEmailSentByUser: sentByUser,
       };
+      return serializedPayment;
     }),
     preApprovalAmountCents: typeof referral.preApprovalAmountCents === 'number' ? referral.preApprovalAmountCents : 0,
     estPurchasePriceCents: typeof referral.estPurchasePriceCents === 'number' ? referral.estPurchasePriceCents : 0,
