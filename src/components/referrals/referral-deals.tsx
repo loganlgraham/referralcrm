@@ -131,8 +131,9 @@ function DealCard({
   onStatusChange: (
     deal: ReferralPayment,
     status: DealStatus,
-    terminationReason?: TerminatedReason | null
-  ) => void;
+    terminationReason?: TerminatedReason | null,
+    paidAmountCents?: number
+  ) => Promise<boolean> | boolean;
   onDelete: (deal: ReferralPayment) => void;
   onUpdate: (deal: ReferralPayment, payload: DealUpdatePayload) => Promise<boolean>;
   viewerRole?: string;
@@ -383,6 +384,73 @@ function DealCard({
     ? TERMINATED_REASON_OPTIONS.find((option) => option.value === terminatedReason)?.label ??
       terminatedReason
     : null;
+  const defaultPaidAmountDisplay = centsToDisplay(
+    deal.expectedAmountCents ??
+      deal.netReferralFeePaidCents ??
+      deal.receivedAmountCents ??
+      0
+  );
+
+  const handleMarkPaidClick = () => {
+    let amountDraft = defaultPaidAmountDisplay || '0.00';
+
+    toast.custom(
+      (toastInstance) => (
+        <form
+          className="w-[320px] rounded-lg border border-slate-200 bg-white p-4 shadow-lg"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            const trimmedValue = amountDraft.trim();
+            const parsedAmount = Number.parseFloat(trimmedValue.replace(/[^0-9.]/g, ''));
+            if (!trimmedValue || !Number.isFinite(parsedAmount) || parsedAmount < 0) {
+              toast.error('Enter a valid paid amount');
+              return;
+            }
+
+            const paidAmountCents = Math.round(parsedAmount * 100);
+            const updated = await onStatusChange(deal, 'paid', undefined, paidAmountCents);
+            if (updated) {
+              toast.dismiss(toastInstance);
+            }
+          }}
+        >
+          <p className="text-sm font-semibold text-slate-900">Mark deal as paid</p>
+          <p className="mt-1 text-xs text-slate-500">Confirm the amount paid for this deal.</p>
+          <label className="mt-3 block text-xs font-semibold text-slate-600">
+            Amount paid
+            <input
+              autoFocus
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              defaultValue={amountDraft}
+              onChange={(event) => {
+                amountDraft = event.target.value;
+              }}
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+            />
+          </label>
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => toast.dismiss(toastInstance)}
+              className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-dark"
+            >
+              Save
+            </button>
+          </div>
+        </form>
+      ),
+      { duration: Infinity, position: 'top-center' }
+    );
+  };
 
   return (
     <div
@@ -497,7 +565,7 @@ function DealCard({
           <div className="flex flex-col gap-2 sm:w-44">
             <button
               type="button"
-              onClick={() => onStatusChange(deal, 'paid')}
+              onClick={handleMarkPaidClick}
               disabled={statusUpdating}
               className="rounded border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
             >
@@ -1152,12 +1220,13 @@ export function ReferralDeals({
   const handleStatusChange = async (
     deal: ReferralPayment,
     nextStatus: DealStatus,
-    terminationReason?: TerminatedReason | null
-  ) => {
-    if (statusUpdating[deal._id]) return;
+    terminationReason?: TerminatedReason | null,
+    paidAmountCents?: number
+  ): Promise<boolean> => {
+    if (statusUpdating[deal._id]) return false;
     if (nextStatus === 'terminated' && !terminationReason) {
       toast.error('Select a termination reason before marking the deal terminated');
-      return;
+      return false;
     }
     
     // Check survey email readiness when closing deal
@@ -1184,7 +1253,8 @@ export function ReferralDeals({
       const closingDate = nextStatus === 'closed' ? new Date().toISOString() : undefined;
       const fallbackPaidCents =
         nextStatus === 'paid'
-          ? deal.netReferralFeePaidCents ??
+          ? paidAmountCents ??
+            deal.netReferralFeePaidCents ??
             deal.receivedAmountCents ??
             deal.expectedAmountCents ??
             0
@@ -1209,7 +1279,7 @@ export function ReferralDeals({
 
       if (!response.ok) {
         toast.error('Unable to update deal stage');
-        return;
+        return false;
       }
       const patchResult = (await response.json()) as PaymentPatchResponse;
 
@@ -1224,9 +1294,11 @@ export function ReferralDeals({
         referralStatusLastUpdated: patchResult.referralStatusLastUpdated,
       });
       toast.success('Deal stage updated');
+      return true;
     } catch (error) {
       console.error(error);
       toast.error('Something went wrong while updating the deal');
+      return false;
     } finally {
       setStatusUpdating((previous) => {
         const next = { ...previous };
