@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentSession } from '@/lib/auth';
 import { connectMongo } from '@/lib/mongoose';
-import { deleteNotification } from '@/lib/server/notifications';
+import { markNotificationAsRead } from '@/lib/server/notifications';
 
 interface Params {
   params: { id: string };
 }
 
-export async function DELETE(request: NextRequest, { params }: Params): Promise<NextResponse> {
+export async function PATCH(request: NextRequest, { params }: Params): Promise<NextResponse> {
   const session = await getCurrentSession();
   
   if (!session) {
@@ -20,9 +20,9 @@ export async function DELETE(request: NextRequest, { params }: Params): Promise<
 
   await connectMongo();
 
-  const deleted = await deleteNotification(params.id, session.user.id);
+  const updated = await markNotificationAsRead(params.id, session.user.id);
 
-  if (!deleted) {
+  if (!updated) {
     return new NextResponse('Notification not found', { status: 404 });
   }
 

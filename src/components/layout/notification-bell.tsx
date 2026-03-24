@@ -39,8 +39,8 @@ export function NotificationBell({ session }: NotificationBellProps) {
     setIsOpen(false);
   };
 
-  const handleNotificationDeleted = () => {
-    // Refresh data when a notification is deleted
+  const handleNotificationsChanged = () => {
+    // Refresh data when notification read state changes
     mutate();
   };
 
@@ -64,7 +64,7 @@ export function NotificationBell({ session }: NotificationBellProps) {
         <NotificationDropdown
           notifications={data?.notifications || []}
           onClose={handleClose}
-          onNotificationDeleted={handleNotificationDeleted}
+          onNotificationsChanged={handleNotificationsChanged}
         />
       )}
     </div>

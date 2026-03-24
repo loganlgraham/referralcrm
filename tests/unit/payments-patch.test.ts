@@ -2,6 +2,9 @@ import { getCurrentSession } from '@/lib/auth';
 import { connectMongo } from '@/lib/mongoose';
 import { Payment } from '@/models/payment';
 import { Referral } from '@/models/referral';
+import { Agent } from '@/models/agent';
+import { createNPSToken } from '@/lib/server/nps';
+import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { createAdminNotifications } from '@/lib/server/notifications';
 
 let patchHandler: typeof import('@/app/api/payments/route').PATCH;
@@ -60,6 +63,7 @@ jest.mock('@/models/payment', () => ({
 jest.mock('@/models/agent', () => ({
   Agent: {
     findOne: jest.fn(),
+    findById: jest.fn(),
   },
 }));
 
@@ -100,6 +104,12 @@ const mockedConnectMongo = connectMongo as jest.MockedFunction<typeof connectMon
 const mockedPaymentFindById = Payment.findById as jest.Mock;
 const mockedPaymentFindByIdAndUpdate = Payment.findByIdAndUpdate as jest.Mock;
 const mockedReferralFindById = Referral.findById as jest.Mock;
+const mockedAgentFindById = Agent.findById as jest.Mock;
+const mockedCreateNPSToken = createNPSToken as jest.MockedFunction<typeof createNPSToken>;
+const mockedIsTransactionalEmailConfigured = isTransactionalEmailConfigured as jest.MockedFunction<
+  typeof isTransactionalEmailConfigured
+>;
+const mockedSendTransactionalEmail = sendTransactionalEmail as jest.MockedFunction<typeof sendTransactionalEmail>;
 const mockedCreateAdminNotifications = createAdminNotifications as jest.MockedFunction<
   typeof createAdminNotifications
 >;
@@ -143,11 +153,29 @@ describe('Payments PATCH outside-agent normalization', () => {
       markModified: jest.fn(),
       origin: 'admin',
       status: 'Under Contract',
+      borrower: {
+        name: 'Referral One',
+        firstName: 'Referral',
+        email: 'borrower@example.com',
+      },
+      assignedAgent: {
+        _id: { toString: () => 'agent-1' },
+        name: 'Assigned Agent',
+        email: 'agent@example.com',
+      },
       sla: {},
       audit: [],
       autoUpdateRemindersEnabled: false,
     };
     mockedReferralFindById.mockReturnValue(referralDoc);
+    mockedAgentFindById.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ name: 'Assigned Agent Full' }),
+      }),
+    });
+    mockedCreateNPSToken.mockResolvedValue('nps-token-1');
+    mockedIsTransactionalEmailConfigured.mockReturnValue(false);
+    mockedSendTransactionalEmail.mockResolvedValue(undefined as any);
     mockedPaymentFindByIdAndUpdate.mockResolvedValue({
       _id: { toString: () => 'pay-1' },
       status: 'under_contract',
@@ -184,7 +212,31 @@ describe('Payments PATCH outside-agent normalization', () => {
     );
   });
 
-  it('notifies admins when deal status changes', async () => {
+  it('does not notify admins for admin-driven deal status changes', async () => {
+    mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
+      _id: { toString: () => 'pay-1' },
+      status: 'closed',
+      usedAssignedAgent: true,
+      createdAt: new Date('2026-03-05T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T10:01:00.000Z'),
+      closingDate: new Date('2026-03-05T10:01:00.000Z'),
+    });
+
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        status: 'closed',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedCreateAdminNotifications).not.toHaveBeenCalled();
+  });
+
+  it('notifies admins for agent-driven deal status changes', async () => {
+    mockedGetCurrentSession.mockResolvedValueOnce({
+      user: { id: 'agent-1', role: 'agent', name: 'Agent User' },
+    } as any);
     mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
       _id: { toString: () => 'pay-1' },
       status: 'closed',
@@ -203,6 +255,101 @@ describe('Payments PATCH outside-agent normalization', () => {
 
     expect(response.status).toBe(200);
     expect(mockedCreateAdminNotifications).toHaveBeenCalled();
+  });
+
+  it('notifies admins for MC-driven deal status changes', async () => {
+    mockedGetCurrentSession.mockResolvedValueOnce({
+      user: { id: 'mc-1', role: 'mc', name: 'MC User' },
+    } as any);
+    mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
+      _id: { toString: () => 'pay-1' },
+      status: 'closed',
+      usedAssignedAgent: true,
+      createdAt: new Date('2026-03-05T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T10:01:00.000Z'),
+      closingDate: new Date('2026-03-05T10:01:00.000Z'),
+    });
+
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        status: 'closed',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedCreateAdminNotifications).toHaveBeenCalled();
+  });
+
+  it('does not send agent close email when usedAfc is false', async () => {
+    mockedIsTransactionalEmailConfigured.mockReturnValueOnce(true);
+    mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
+      _id: { toString: () => 'pay-1' },
+      status: 'closed',
+      usedAssignedAgent: true,
+      usedAfc: false,
+      createdAt: new Date('2026-03-05T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T10:01:00.000Z'),
+      closingDate: new Date('2026-03-05T10:01:00.000Z'),
+    });
+
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        status: 'closed',
+        sendClosedEmails: true,
+        usedAfc: false,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedSendTransactionalEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: ['borrower@example.com'],
+        subject: 'Congrats on Your New Home!',
+      })
+    );
+    expect(mockedSendTransactionalEmail).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: ['agent@example.com'],
+      })
+    );
+  });
+
+  it('still sends agent close email when usedAfc is true', async () => {
+    mockedIsTransactionalEmailConfigured.mockReturnValueOnce(true);
+    mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
+      _id: { toString: () => 'pay-1' },
+      status: 'closed',
+      usedAssignedAgent: true,
+      usedAfc: true,
+      createdAt: new Date('2026-03-05T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T10:01:00.000Z'),
+      closingDate: new Date('2026-03-05T10:01:00.000Z'),
+    });
+
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        status: 'closed',
+        sendClosedEmails: true,
+        usedAfc: true,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedSendTransactionalEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: ['borrower@example.com'],
+        subject: 'Congrats on Your New Home!',
+      })
+    );
+    expect(mockedSendTransactionalEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: ['agent@example.com'],
+        subject: 'Congratulations on Your Closed Deal!',
+      })
+    );
   });
 
   it('rejects terminated status updates without terminatedReason', async () => {

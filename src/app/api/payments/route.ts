@@ -1,4 +1,5 @@
 import {
+  addMonths,
   differenceInDays,
   endOfDay,
   endOfMonth,
@@ -193,6 +194,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         timeframeStart = startOfMonth(now);
         timeframeEnd = endOfMonth(now);
         break;
+      case 'next_month': {
+        const nextMonth = addMonths(now, 1);
+        timeframeStart = startOfMonth(nextMonth);
+        timeframeEnd = endOfMonth(nextMonth);
+        break;
+      }
       case 'year':
         timeframeStart = subYears(now, 1);
         break;
@@ -1181,7 +1188,11 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       ? referral.statusLastUpdated.toISOString()
       : null;
 
-    if (parsed.data.status && parsed.data.status !== previousStatus) {
+    if (
+      (session.user.role === 'agent' || session.user.role === 'mc') &&
+      parsed.data.status &&
+      parsed.data.status !== previousStatus
+    ) {
       const actorName = session.user.name || session.user.email || 'A team member';
       const borrowerName = referral.borrower?.name || 'a referral';
       await createAdminNotifications({
@@ -1219,6 +1230,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     const shouldSendClosedEmails = parsed.data.sendClosedEmails ?? false;
     if (isClosingNow && shouldSendClosedEmails && !hasAgitAgent && isTransactionalEmailConfigured()) {
       const usedAssignedAgent = payment.usedAssignedAgent ?? existingPayment.usedAssignedAgent ?? false;
+      const usedAfcForClosedEmail = payment.usedAfc ?? existingPayment.usedAfc ?? true;
       const origin = getReferralAppBaseUrl();
 
       try {
@@ -1271,7 +1283,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
               text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your new home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best in your new place!\n\nRate your agent: ${agentSurveyUrl}`,
             });
 
-            if (agent?.email) {
+            if (agent?.email && usedAfcForClosedEmail) {
               const agentFirstName = agentFullName.split(' ')[0] || 'there';
               const borrowerDisplayName = referral.borrower.name || referral.borrower.firstName || 'your client';
               await sendTransactionalEmail({

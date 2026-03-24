@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  addMonths,
   endOfDay,
+  endOfMonth,
   format,
   parseISO,
   startOfDay,
@@ -17,7 +19,7 @@ import { Payment } from '@/models/payment';
 import { Agent } from '@/models/agent';
 import { DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
 
-type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd' | 'all' | 'custom';
+type TimeframeKey = 'day' | 'week' | 'month' | 'next_month' | 'year' | 'ytd' | 'all' | 'custom';
 
 interface TimeframeInfo {
   key: TimeframeKey;
@@ -26,10 +28,13 @@ interface TimeframeInfo {
   end: Date;
 }
 
+const CLOSED_DEAL_STATUSES = new Set(['closed', 'payment_sent', 'paid']);
+
 const TIMEFRAME_LABELS: Record<Exclude<TimeframeKey, 'custom'>, string> = {
   day: 'Today',
   week: 'This week',
   month: 'This month',
+  next_month: 'Next month',
   year: 'Last 12 months',
   ytd: 'Year to date',
   all: 'All time'
@@ -56,6 +61,7 @@ function parseTimeframe(request: NextRequest): TimeframeInfo {
     timeframeParam === 'day' ||
     timeframeParam === 'week' ||
     timeframeParam === 'month' ||
+    timeframeParam === 'next_month' ||
     timeframeParam === 'year' ||
     timeframeParam === 'ytd' ||
     timeframeParam === 'all' ||
@@ -94,6 +100,15 @@ function parseTimeframe(request: NextRequest): TimeframeInfo {
         start: startOfDay(subYears(now, 1)),
         end: endOfDay(now)
       };
+    case 'next_month': {
+      const nextMonth = addMonths(now, 1);
+      return {
+        key: 'next_month',
+        label: TIMEFRAME_LABELS.next_month,
+        start: startOfMonth(nextMonth),
+        end: endOfMonth(nextMonth)
+      };
+    }
     case 'ytd':
       return {
         key: 'ytd',
@@ -114,7 +129,7 @@ function parseTimeframe(request: NextRequest): TimeframeInfo {
         key: 'month',
         label: TIMEFRAME_LABELS.month,
         start: startOfMonth(now),
-        end: endOfDay(now)
+        end: endOfMonth(now)
       };
   }
 }
@@ -223,7 +238,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .filter((payment) => payment.metricDate >= timeframe.start && payment.metricDate <= timeframe.end);
 
   const totalReferrals = referrals.length;
-  const dealsClosed = paymentsWithMetric.filter((payment) => payment.status === 'closed' || payment.status === 'paid');
+  const dealsClosed = paymentsWithMetric.filter((payment) => CLOSED_DEAL_STATUSES.has(payment.status));
   const dealsUnderContract = paymentsWithMetric.filter((payment) =>
     [
       'under_contract',

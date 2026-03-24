@@ -407,16 +407,18 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       content: `Status changed from ${previousStatus} to ${referral.status}`,
     });
 
-    const actorName = session.user.name || session.user.email || 'A team member';
-    const borrowerName = referral.borrower?.name || 'a referral';
-    await createAdminNotifications({
-      type: 'status_change',
-      referralId: referral._id,
-      borrowerName,
-      actorRole: session.user.role,
-      actorName,
-      content: `${actorName} changed status from ${previousStatus} to ${referral.status} for ${borrowerName}`,
-    });
+    if (session.user.role === 'agent' || session.user.role === 'mc') {
+      const actorName = session.user.name || session.user.email || 'A team member';
+      const borrowerName = referral.borrower?.name || 'a referral';
+      await createAdminNotifications({
+        type: 'status_change',
+        referralId: referral._id,
+        borrowerName,
+        actorRole: session.user.role,
+        actorName,
+        content: `${actorName} changed status from ${previousStatus} to ${referral.status} for ${borrowerName}`,
+      });
+    }
 
     // Check if this agent action should trigger an update request response notification
     if (session.user.role === 'agent') {

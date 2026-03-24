@@ -3,6 +3,7 @@ import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
 import { logReferralActivity } from '@/lib/server/activities';
+import { createAdminNotifications } from '@/lib/server/notifications';
 
 let postHandler: typeof import('@/app/api/referrals/[id]/status/route').POST;
 
@@ -75,7 +76,7 @@ jest.mock('@/lib/server/update-request-response', () => ({
 }));
 
 jest.mock('@/lib/server/admin-task-reconciler', () => ({
-  generateAndReconcileAdminTasks: jest.fn(),
+  generateAndReconcileAdminTasks: jest.fn(() => Promise.resolve()),
 }));
 
 jest.mock('@/lib/server/auto-update-reminders', () => ({
@@ -88,6 +89,9 @@ const mockedReferralFindById = Referral.findById as jest.Mock;
 const mockedPaymentFindOne = Payment.findOne as jest.Mock;
 const mockedPaymentUpdateMany = Payment.updateMany as jest.Mock;
 const mockedLogReferralActivity = logReferralActivity as jest.MockedFunction<typeof logReferralActivity>;
+const mockedCreateAdminNotifications = createAdminNotifications as jest.MockedFunction<
+  typeof createAdminNotifications
+>;
 
 const makeRequest = (body: Record<string, unknown>) =>
   ({
@@ -194,5 +198,56 @@ describe('Referral status route deal-only updates', () => {
     expect(latestDeal.status).toBe('terminated');
     expect(latestDeal.terminatedReason).toBe('inspection');
     expect(latestDeal.save).toHaveBeenCalled();
+  });
+
+  it('notifies admins when an agent persists a referral status change', async () => {
+    const referralDoc = makeReferralDoc();
+    mockedReferralFindById.mockReturnValue(referralDoc);
+    mockedPaymentFindOne.mockReturnValue({
+      sort: jest.fn().mockResolvedValue(null),
+    });
+
+    const response: any = await postHandler(makeRequest({ status: 'Lost' }), {
+      params: { id: 'ref-1' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockedCreateAdminNotifications).toHaveBeenCalled();
+  });
+
+  it('does not notify admins when an admin persists a referral status change', async () => {
+    mockedGetCurrentSession.mockResolvedValueOnce({
+      user: { id: 'admin-1', role: 'admin', name: 'Admin User', email: 'admin@example.com' },
+    } as any);
+    const referralDoc = makeReferralDoc();
+    mockedReferralFindById.mockReturnValue(referralDoc);
+    mockedPaymentFindOne.mockReturnValue({
+      sort: jest.fn().mockResolvedValue(null),
+    });
+
+    const response: any = await postHandler(makeRequest({ status: 'Lost' }), {
+      params: { id: 'ref-1' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockedCreateAdminNotifications).not.toHaveBeenCalled();
+  });
+
+  it('notifies admins when an MC persists a referral status change', async () => {
+    mockedGetCurrentSession.mockResolvedValueOnce({
+      user: { id: 'mc-1', role: 'mc', name: 'MC User', email: 'mc@example.com' },
+    } as any);
+    const referralDoc = makeReferralDoc();
+    mockedReferralFindById.mockReturnValue(referralDoc);
+    mockedPaymentFindOne.mockReturnValue({
+      sort: jest.fn().mockResolvedValue(null),
+    });
+
+    const response: any = await postHandler(makeRequest({ status: 'Lost' }), {
+      params: { id: 'ref-1' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockedCreateAdminNotifications).toHaveBeenCalled();
   });
 });

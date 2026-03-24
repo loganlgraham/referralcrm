@@ -32,6 +32,8 @@ type ReportPayload = {
 
 type DateRange = { start?: Date; end?: Date };
 
+const CLOSED_DEAL_STATUSES = new Set(['closed', 'payment_sent', 'paid']);
+
 function resolveDateRange(payload: ReportPayload): DateRange {
   const now = new Date();
   switch (payload.reportTimeframe) {
@@ -117,7 +119,7 @@ async function computeMetrics(range: DateRange) {
   ).length;
 
   const closedOrPaidPayments = payments.filter(
-    (p) => (p.status === 'closed' || p.status === 'paid') && p.agentAttribution !== 'OUTSIDE_AGENT'
+    (p) => CLOSED_DEAL_STATUSES.has(p.status) && p.agentAttribution !== 'OUTSIDE_AGENT'
   );
   const attachRate = closedOrPaidPayments.length === 0
     ? 0
