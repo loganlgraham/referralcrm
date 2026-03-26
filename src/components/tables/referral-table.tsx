@@ -31,6 +31,9 @@ export interface ReferralRow {
   endorser?: string;
   clientType: 'Seller' | 'Buyer' | 'Both';
   dealSide?: 'buy' | 'sell' | null;
+  buyStatus?: ReferralStatus | null;
+  sellStatus?: ReferralStatus | null;
+  viewerAssignedSide?: 'buy' | 'sell' | null;
   lookingInZip: string;
   lookingInZips?: string[];
   borrowerCurrentAddress?: string;
@@ -74,6 +77,9 @@ interface StatusSelectProps {
   referralId: string;
   value: ReferralStatus;
   dealStatusLabel?: string | null;
+  defaultSide?: 'buy' | 'sell';
+  side?: 'buy' | 'sell';
+  compact?: boolean;
 }
 
 const toCents = (value: string): number => {
@@ -92,6 +98,7 @@ const dateStringToLocalISO = (dateString: string): string => {
 };
 
 interface UnderContractDealToastProps {
+  defaultSide?: 'buy' | 'sell';
   onClose: () => void;
   onSubmit: (payload: {
     paymentPayload: Record<string, unknown>;
@@ -108,7 +115,7 @@ interface UnderContractDealToastProps {
   }) => Promise<void>;
 }
 
-function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastProps) {
+function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: UnderContractDealToastProps) {
   const [expectedAmount, setExpectedAmount] = useState('');
   const [expectedManuallyEdited, setExpectedManuallyEdited] = useState(false);
   const [contractPrice, setContractPrice] = useState('');
@@ -122,7 +129,7 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
   const [propertyPostalCode, setPropertyPostalCode] = useState('');
   const [closingDate, setClosingDate] = useState('');
   const [underContractDate, setUnderContractDate] = useState('');
-  const [side, setSide] = useState<'buy' | 'sell'>('buy');
+  const [side, setSide] = useState<'buy' | 'sell'>(defaultSide);
   const [usedAfc, setUsedAfc] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -356,50 +363,63 @@ function UnderContractDealToast({ onClose, onSubmit }: UnderContractDealToastPro
   );
 }
 
-function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps) {
+function StatusSelect({
+  referralId,
+  value,
+  dealStatusLabel,
+  defaultSide = 'buy',
+  side,
+  compact = false,
+}: StatusSelectProps) {
   const [status, setStatus] = useState<ReferralStatus>(value);
   const [loading, setLoading] = useState(false);
   const [pendingTerminatedSelection, setPendingTerminatedSelection] = useState(false);
   const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | ''>('');
 
+  const openUnderContractDealModal = () => {
+    const toastId = toast.custom((t) => (
+      <UnderContractDealToast
+        defaultSide={defaultSide}
+        onClose={() => toast.dismiss(t)}
+        onSubmit={async ({ paymentPayload, contractDetails }) => {
+          const paymentResponse = await fetch('/api/payments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              referralId,
+              ...paymentPayload,
+            }),
+          });
+          if (!paymentResponse.ok) {
+            throw new Error('Unable to save deal details');
+          }
+          const statusResponse = await fetch(`/api/referrals/${referralId}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: 'Under Contract',
+              source: 'referral_table',
+              side: contractDetails.dealSide,
+              contractDetails,
+              createNewDeal: false,
+            }),
+          });
+          if (!statusResponse.ok) {
+            throw new Error('Unable to move referral to Under Contract');
+          }
+          setStatus('Under Contract');
+          toast.dismiss(t);
+          toast.success('Deal saved and referral moved to Under Contract');
+        }}
+      />
+    ), { duration: Infinity, position: 'top-center' });
+    void toastId;
+  };
+
   const handleChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     const nextStatus = event.target.value as ReferralStatus;
     if (nextStatus === 'Under Contract') {
-      const toastId = toast.custom((t) => (
-        <UnderContractDealToast
-          onClose={() => toast.dismiss(t)}
-          onSubmit={async ({ paymentPayload, contractDetails }) => {
-            const paymentResponse = await fetch('/api/payments', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                referralId,
-                ...paymentPayload,
-              }),
-            });
-            if (!paymentResponse.ok) {
-              throw new Error('Unable to save deal details');
-            }
-            const statusResponse = await fetch(`/api/referrals/${referralId}/status`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                status: 'Under Contract',
-                source: 'referral_table',
-                contractDetails,
-                createNewDeal: false,
-              }),
-            });
-            if (!statusResponse.ok) {
-              throw new Error('Unable to move referral to Under Contract');
-            }
-            setStatus('Under Contract');
-            toast.dismiss(t);
-            toast.success('Deal saved and referral moved to Under Contract');
-          }}
-        />
-      ), { duration: Infinity, position: 'top-center' });
-      void toastId;
+      openUnderContractDealModal();
       return;
     }
     if (nextStatus === 'Terminated') {
@@ -417,6 +437,7 @@ function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps)
         body: JSON.stringify({
           status: nextStatus,
           source: 'referral_table',
+          side,
           terminatedReason: null,
         })
       });
@@ -485,6 +506,7 @@ function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps)
                     body: JSON.stringify({
                       status: 'Terminated',
                       source: 'referral_table',
+                      side,
                       terminatedReason,
                     }),
                   });
@@ -523,6 +545,51 @@ function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps)
       {dealStatusLabel && dealStatusLabel !== status && dealStatusLabel !== 'Terminated' && (
         <p className="text-xs text-slate-500">Deal stage: {dealStatusLabel}</p>
       )}
+      {status === 'Under Contract' && (
+        <button
+          type="button"
+          onClick={openUnderContractDealModal}
+          className="text-xs font-medium text-brand hover:underline"
+          disabled={loading}
+        >
+          {compact ? 'Add deal details' : 'Add/update under-contract deal details'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SideStatusPill({ label, status }: { label: string; status?: ReferralStatus | null }) {
+  return (
+    <div className="rounded border border-slate-200 bg-slate-50 px-2 py-1">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="text-xs font-medium text-slate-700">{status ?? '—'}</p>
+    </div>
+  );
+}
+
+function AgentBothStatusCell({ row }: { row: ReferralRow }) {
+  const assignedSide = row.viewerAssignedSide ?? 'buy';
+  const assignedStatus = assignedSide === 'sell' ? row.sellStatus ?? row.status : row.buyStatus ?? row.status;
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <SideStatusPill label="Buy" status={row.buyStatus ?? row.status} />
+        <SideStatusPill label="Sell" status={row.sellStatus ?? row.status} />
+      </div>
+      <div className="rounded border border-brand/20 bg-brand/5 p-2">
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-brand">
+          My side: {assignedSide}
+        </p>
+        <StatusSelect
+          referralId={row._id}
+          value={assignedStatus}
+          defaultSide={assignedSide}
+          side={assignedSide}
+          compact
+        />
+      </div>
     </div>
   );
 }
@@ -832,13 +899,21 @@ function buildColumns(
       {
         header: sortableHeader('Status', 'status', currentSortBy, currentSortDirection, onSortChange),
         accessorKey: 'status',
-        cell: ({ row }) => (
-          <StatusSelect
-            referralId={row.original._id}
-            value={row.original.status}
-            dealStatusLabel={row.original.dealStatusLabel ?? null}
-          />
-        ),
+        cell: ({ row }) => {
+          if (row.original.clientType === 'Both') {
+            return <AgentBothStatusCell row={row.original} />;
+          }
+
+          return (
+            <StatusSelect
+              referralId={row.original._id}
+              value={row.original.status}
+              dealStatusLabel={row.original.dealStatusLabel ?? null}
+              side={row.original.viewerAssignedSide ?? undefined}
+              defaultSide={row.original.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
+            />
+          );
+        },
       },
       {
         header: 'Notes',

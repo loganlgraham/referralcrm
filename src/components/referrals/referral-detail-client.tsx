@@ -61,6 +61,9 @@ interface ReferralDetail {
     phone: string;
   };
   status: ReferralStatus;
+  buyStatus?: ReferralStatus | null;
+  sellStatus?: ReferralStatus | null;
+  viewerAssignedSide?: 'buy' | 'sell' | null;
   preApprovalAmountCents?: number;
   estPurchasePriceCents?: number;
   referralFeeDueCents?: number;
@@ -1553,6 +1556,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         feeBreakdownAutoSendEnabled={referral.feeBreakdownAutoSendEnabled as boolean | undefined}
         hiddenOutsideAgentCount={hiddenOutsideAgentCount}
         assignedAgentDesignation={referral.assignedAgent?.ahaDesignation}
+        defaultSide={referral.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
       />
       <ReferralTimeline referralId={referralId} />
       {canDelete && (

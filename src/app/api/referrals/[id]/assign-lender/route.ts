@@ -56,6 +56,13 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   const previousLenderValue = (referral.lender as any)?._id ?? referral.lender ?? null;
   const previousLender = previousLenderValue ? previousLenderValue.toString() : null;
+  if (
+    session.user.role === 'agent' &&
+    previousLender &&
+    previousLender !== parsed.data.lenderId
+  ) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
   referral.lender = parsed.data.lenderId as any;
   referral.audit = referral.audit || [];
   const auditEntry: Record<string, unknown> = {

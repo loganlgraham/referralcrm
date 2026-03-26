@@ -12,6 +12,8 @@ interface Props {
   referralId: string;
   status: ReferralStatus;
   statuses: readonly ReferralStatus[];
+  side?: 'buy' | 'sell';
+  statusLabel?: string;
   preApprovalAmountCents?: number;
   onStatusChanged?: (status: ReferralStatus, payload?: Record<string, unknown>) => void;
   onPreApprovalSaved?: (details: { preApprovalAmountCents: number; referralFeeDueCents: number }) => void;
@@ -83,6 +85,8 @@ export function StatusChanger({
   referralId,
   status,
   statuses,
+  side,
+  statusLabel = 'Pipeline Status',
   preApprovalAmountCents,
   onStatusChanged,
   onPreApprovalSaved,
@@ -135,6 +139,8 @@ export function StatusChanger({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: nextStatus,
+          source: 'referral_detail',
+          side,
           terminatedReason: nextStatus === 'Terminated' ? terminatedReason ?? null : null,
         }),
       });
@@ -230,7 +236,7 @@ export function StatusChanger({
     <div className="space-y-4">
       <div className="space-y-4">
         <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Pipeline Status</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{statusLabel}</p>
           <select
             value={currentStatus}
             onChange={handleChange}

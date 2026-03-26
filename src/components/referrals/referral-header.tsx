@@ -194,6 +194,12 @@ export function ReferralHeader({
   const isAgentOrigin = referral.origin === 'agent';
   const normalizedStatus = normalizeReferralStatus(referral.status) ?? 'New Lead';
   const [status, setStatus] = useState<ReferralStatus>(normalizedStatus);
+  const [buyStatus, setBuyStatus] = useState<ReferralStatus>(
+    normalizeReferralStatus(referral.buyStatus) ?? normalizedStatus
+  );
+  const [sellStatus, setSellStatus] = useState<ReferralStatus>(
+    normalizeReferralStatus(referral.sellStatus) ?? normalizedStatus
+  );
   const [preApprovalAmountCents, setPreApprovalAmountCents] = useState<number>(
     referral.preApprovalAmountCents ?? 0
   );
@@ -242,6 +248,12 @@ export function ReferralHeader({
       setStatus(nextStatus);
     }
   }, [referral.status]);
+
+  useEffect(() => {
+    const summaryStatus = normalizeReferralStatus(referral.status) ?? 'New Lead';
+    setBuyStatus(normalizeReferralStatus(referral.buyStatus) ?? summaryStatus);
+    setSellStatus(normalizeReferralStatus(referral.sellStatus) ?? summaryStatus);
+  }, [referral.buyStatus, referral.sellStatus, referral.status]);
 
   useEffect(() => {
     setPreApprovalAmountCents(referral.preApprovalAmountCents ?? 0);
@@ -378,9 +390,6 @@ export function ReferralHeader({
 
   const isAgentView = viewerRole === 'agent';
   const showSlaWidget = viewerRole !== 'agent' && referral.origin !== 'agent';
-  const canAssignAgent =
-    viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'mc' || viewerRole === 'agent';
-  const canAssignMc = viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'agent';
   const fallbackAgentContact: Contact | null = referral.assignedAgent
     ? {
         id: referral.assignedAgent._id ?? referral.assignedAgent.id ?? null,
@@ -458,6 +467,22 @@ export function ReferralHeader({
     (canUseAssignedForSellSide ? fallbackAgentContact : null);
   const effectiveAgentContact = primarySide === 'sell' ? effectiveSellSideContact : effectiveBuySideContact;
   const effectiveMcContact = mcContact ?? fallbackMcContact;
+  const nonAgentRolesCanAssignReferralAgent =
+    viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'mc';
+  const canAssignBuyAgent =
+    nonAgentRolesCanAssignReferralAgent ||
+    (viewerRole === 'agent' && !fallbackBuySideContact);
+  const canAssignSellAgent =
+    nonAgentRolesCanAssignReferralAgent ||
+    (viewerRole === 'agent' && !fallbackSellSideContact);
+  const canAssignPrimaryAgent =
+    nonAgentRolesCanAssignReferralAgent ||
+    (viewerRole === 'agent' &&
+      (primarySide === 'buy' ? !fallbackBuySideContact : !fallbackSellSideContact));
+  const canAssignMc =
+    viewerRole === 'admin' ||
+    viewerRole === 'manager' ||
+    (viewerRole === 'agent' && !fallbackMcContact);
   const canEditBucket = viewerRole === 'admin' || viewerRole === 'manager';
   const showBucketSummary =
     viewerRole !== 'agent' && viewerRole !== 'admin' && viewerRole !== 'mc';
@@ -689,12 +714,34 @@ export function ReferralHeader({
     });
   }, [handleContractDraftChangeInternal, handleContractSaved, onContractHandlersReady]);
 
-  const handleStatusChanged = (nextStatus: ReferralStatus, payload?: Record<string, unknown>) => {
+  const handleStatusChanged = (
+    nextStatus: ReferralStatus,
+    payload?: Record<string, unknown>,
+    sideOverride?: 'buy' | 'sell'
+  ) => {
     const previousStatusValue =
       typeof payload?.previousStatus === 'string'
         ? (payload.previousStatus as ReferralStatus)
         : status;
-    setStatus(nextStatus);
+    const payloadSummaryStatus = normalizeReferralStatus(payload?.status);
+    const resolvedSummaryStatus = payloadSummaryStatus ?? nextStatus;
+    const payloadBuyStatus = normalizeReferralStatus(payload?.buyStatus);
+    const payloadSellStatus = normalizeReferralStatus(payload?.sellStatus);
+    const resolvedSide =
+      sideOverride ??
+      (payload?.side === 'sell' || payload?.side === 'buy' ? (payload.side as 'buy' | 'sell') : undefined);
+
+    setStatus(resolvedSummaryStatus);
+    setBuyStatus((previous) => {
+      if (payloadBuyStatus) return payloadBuyStatus;
+      if (resolvedSide === 'buy') return nextStatus;
+      return previous;
+    });
+    setSellStatus((previous) => {
+      if (payloadSellStatus) return payloadSellStatus;
+      if (resolvedSide === 'sell') return nextStatus;
+      return previous;
+    });
     let nextPreApproval = preApprovalAmountCents ?? 0;
     let nextContractPrice = contractPriceCents;
     let nextReferralFeeDue = referralFeeDueCents ?? 0;
@@ -783,13 +830,13 @@ export function ReferralHeader({
         ? Number(payload.daysInStatus)
         : differenceInDays(new Date(), statusUpdatedAt);
 
-    if (nextStatus !== previousStatusValue) {
+    if (resolvedSummaryStatus !== previousStatusValue) {
       setDaysInStatus(computedDaysInStatus);
       setAuditEntries((previous) => [
         ...(Array.isArray(previous) ? previous : []),
         {
           field: 'status',
-          newValue: nextStatus,
+          newValue: resolvedSummaryStatus,
           timestamp: statusUpdatedAt.toISOString(),
         },
       ]);
@@ -798,7 +845,7 @@ export function ReferralHeader({
     }
 
     onFinancialsChange?.({
-      status: nextStatus,
+      status: resolvedSummaryStatus,
       preApprovalAmountCents: nextPreApproval,
       contractPriceCents: nextContractPrice,
       referralFeeDueCents: nextReferralFeeDue,
@@ -810,6 +857,7 @@ export function ReferralHeader({
       propertyPostalCode: nextPropertyPostal || undefined,
       statusLastUpdated: statusUpdatedAt.toISOString(),
       daysInStatus: computedDaysInStatus,
+      dealSide: resolvedSide ?? dealSide,
     });
 
     const referralIdStr = String(referral._id);
@@ -882,14 +930,29 @@ export function ReferralHeader({
   const bucketDescription = canEditBucket
     ? 'Label whether this referral belongs to the AHA or AHA OOS agent bucket.'
     : 'Agent bucket indicates where this referral sits for reporting.';
+  const isBothClientType = referral.clientType === 'Both';
+  const isBuyerClientType = referral.clientType === 'Buyer';
+  const buyStatusLabel: ReferralStatus = buyStatus;
+  const sellStatusLabel: ReferralStatus = sellStatus;
+  const viewerAssignedSide =
+    referral.viewerAssignedSide === 'sell' || referral.viewerAssignedSide === 'buy'
+      ? referral.viewerAssignedSide
+      : primarySide;
+  const viewerAssignedStatus = viewerAssignedSide === 'sell' ? sellStatusLabel : buyStatusLabel;
+  const oppositeSide = viewerAssignedSide === 'sell' ? 'buy' : 'sell';
+  const oppositeSideStatus = oppositeSide === 'sell' ? sellStatusLabel : buyStatusLabel;
+  const assignmentGridClassName =
+    isBothClientType || isBuyerClientType
+      ? 'grid items-start gap-2.5 md:grid-cols-2'
+      : 'grid items-start gap-2.5';
 
   return (
-    <div className="space-y-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
-      <div className="grid gap-5 rounded-xl bg-gradient-to-r from-slate-50 via-white to-slate-50 p-5 lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-start">
-        <div className="space-y-3 lg:pt-10">
+    <div className="space-y-5 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100 sm:p-5">
+      <div className="grid gap-4 rounded-xl bg-gradient-to-r from-slate-50 via-white to-slate-50 p-4 lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-start">
+        <div className={`space-y-2 ${isAgentView ? 'lg:self-center' : ''}`}>
           <div>
             <div className="flex items-center gap-1.5">
-              <h1 className="text-2xl font-semibold text-slate-900 lg:text-3xl">{borrowerName}</h1>
+              <h1 className="text-2xl font-semibold text-slate-900">{borrowerName}</h1>
               <CopyButton value={borrowerName} label="Copy name" />
             </div>
             {hasBorrowerContact ? (
@@ -930,30 +993,66 @@ export function ReferralHeader({
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-600">
             <span className="rounded-full bg-brand/15 px-3 py-1 text-brand">{status}</span>
+            {isBothClientType && (
+              <>
+                <span className="rounded-full bg-sky-100 px-3 py-1 text-sky-700">Buy: {buyStatusLabel}</span>
+                <span className="rounded-full bg-indigo-100 px-3 py-1 text-indigo-700">Sell: {sellStatusLabel}</span>
+              </>
+            )}
             <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">{propertyLabel}</span>
             <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-700">{daysInStatus} days in stage</span>
           </div>
         </div>
         <div
-          className={`flex flex-col items-stretch gap-3 ${
+          className={`flex flex-col items-stretch gap-2.5 ${
             isAgentView ? 'lg:justify-start' : ''
           }`}
         >
-          <section className="w-full rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <section className="w-full rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-700">Status &amp; progress</h2>
               <span className="text-xs uppercase tracking-wide text-slate-500">Pipeline</span>
             </div>
-            <div className="mt-2">
-              <StatusChanger
-                referralId={referral._id}
-                status={status}
-                statuses={REFERRAL_STATUSES}
-                preApprovalAmountCents={preApprovalAmountCents}
-                onStatusChanged={handleStatusChanged}
-                onPreApprovalSaved={handlePreApprovalSaved}
-                onUnderContractIntentChange={onUnderContractIntentChange}
-              />
+            <div className="mt-1.5">
+              {isBothClientType && viewerRole === 'agent' ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <span className="rounded-full bg-sky-100 px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-sky-700">
+                      Buy: {buyStatusLabel}
+                    </span>
+                    <span className="rounded-full bg-indigo-100 px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+                      Sell: {sellStatusLabel}
+                    </span>
+                  </div>
+                  <StatusChanger
+                    referralId={referral._id}
+                    status={viewerAssignedStatus}
+                    statuses={REFERRAL_STATUSES}
+                    side={viewerAssignedSide}
+                    statusLabel={`My side (${viewerAssignedSide})`}
+                    preApprovalAmountCents={preApprovalAmountCents}
+                    onStatusChanged={(next, payload) =>
+                      handleStatusChanged(next, payload, viewerAssignedSide)
+                    }
+                    onPreApprovalSaved={handlePreApprovalSaved}
+                    onUnderContractIntentChange={onUnderContractIntentChange}
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    {oppositeSide.toUpperCase()} side status: {oppositeSideStatus}
+                  </p>
+                </div>
+              ) : (
+                <StatusChanger
+                  referralId={referral._id}
+                  status={status}
+                  statuses={REFERRAL_STATUSES}
+                  side={dealSide}
+                  preApprovalAmountCents={preApprovalAmountCents}
+                  onStatusChanged={handleStatusChanged}
+                  onPreApprovalSaved={handlePreApprovalSaved}
+                  onUnderContractIntentChange={onUnderContractIntentChange}
+                />
+              )}
             </div>
           </section>
           {showBucketSummary && (
@@ -985,58 +1084,61 @@ export function ReferralHeader({
       <div
         className={
           viewerRole === 'admin'
-            ? 'grid gap-6 lg:grid-cols-[minmax(0,1fr),minmax(280px,1fr)]'
-            : 'grid gap-6'
+            ? 'grid gap-4 lg:grid-cols-[minmax(0,1fr),minmax(280px,1fr)]'
+            : 'grid gap-4'
         }
       >
         {viewerRole === 'admin' && <AdminTasksCard referralId={String(referral._id)} viewerRole={viewerRole} />}
-        <section className="space-y-4 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+        <section className="space-y-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm">
           <div className="space-y-1">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Team assignments</h2>
             <p className="text-xs text-slate-500">Keep the right partners aligned on this referral.</p>
           </div>
-          {referral.clientType === 'Both' ? (
-            <>
+          <div className={assignmentGridClassName}>
+            {isBothClientType ? (
+              <>
+                <ContactAssignment
+                  referralId={referral._id}
+                  type="agent"
+                  side="buy"
+                  contact={effectiveBuySideContact}
+                  canAssign={canAssignBuyAgent}
+                  onContactChange={onBuySideAgentContactChange}
+                />
+                <ContactAssignment
+                  referralId={referral._id}
+                  type="agent"
+                  side="sell"
+                  contact={effectiveSellSideContact}
+                  canAssign={canAssignSellAgent}
+                  onContactChange={onSellSideAgentContactChange}
+                />
+              </>
+            ) : (
               <ContactAssignment
                 referralId={referral._id}
                 type="agent"
-                side="buy"
-                contact={effectiveBuySideContact}
-                canAssign={canAssignAgent}
-                onContactChange={onBuySideAgentContactChange}
+                side={primarySide}
+                contact={effectiveAgentContact}
+                canAssign={canAssignPrimaryAgent}
+                onContactChange={
+                  primarySide === 'sell'
+                    ? onSellSideAgentContactChange
+                    : onBuySideAgentContactChange
+                }
               />
+            )}
+            {referral.clientType !== 'Seller' && (
               <ContactAssignment
                 referralId={referral._id}
-                type="agent"
-                side="sell"
-                contact={effectiveSellSideContact}
-                canAssign={canAssignAgent}
-                onContactChange={onSellSideAgentContactChange}
+                type="mc"
+                contact={effectiveMcContact}
+                canAssign={canAssignMc}
+                onContactChange={onMcContactChange}
+                className={isBothClientType ? 'md:col-span-2' : undefined}
               />
-            </>
-          ) : (
-            <ContactAssignment
-              referralId={referral._id}
-              type="agent"
-              side={primarySide}
-              contact={effectiveAgentContact}
-              canAssign={canAssignAgent}
-              onContactChange={
-                primarySide === 'sell'
-                  ? onSellSideAgentContactChange
-                  : onBuySideAgentContactChange
-              }
-            />
-          )}
-          {referral.clientType !== 'Seller' && (
-            <ContactAssignment
-              referralId={referral._id}
-              type="mc"
-              contact={effectiveMcContact}
-              canAssign={canAssignMc}
-              onContactChange={onMcContactChange}
-            />
-          )}
+            )}
+          </div>
           {viewerRole === 'admin' && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
               <div className="flex flex-wrap items-center justify-between gap-3">

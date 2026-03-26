@@ -24,6 +24,7 @@ interface ReferralDealsProps {
   feeBreakdownAutoSendEnabled?: boolean;
   hiddenOutsideAgentCount?: number;
   assignedAgentDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
+  defaultSide?: 'buy' | 'sell';
 }
 
 type AgentOption = { id: string; name: string };
@@ -962,6 +963,7 @@ export function ReferralDeals({
   feeBreakdownAutoSendEnabled,
   hiddenOutsideAgentCount = 0,
   assignedAgentDesignation,
+  defaultSide = 'buy',
 }: ReferralDealsProps) {
   const [status, setStatus] = useState<DealStatus>('under_contract');
   const [markPaid, setMarkPaid] = useState(false);
@@ -979,7 +981,7 @@ export function ReferralDeals({
   const [closingDate, setClosingDate] = useState('');
   const [underContractDate, setUnderContractDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [agentId, setAgentId] = useState('');
-  const [side, setSide] = useState<'buy' | 'sell'>('buy');
+  const [side, setSide] = useState<'buy' | 'sell'>(defaultSide);
   const [usedAfc, setUsedAfc] = useState(false);
   const [usedAssignedAgent, setUsedAssignedAgent] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -994,6 +996,10 @@ export function ReferralDeals({
   const isAgitDeal = assignedAgentDesignation === 'AGIT';
 
   const canManage = viewerRole !== 'viewer';
+
+  useEffect(() => {
+    setSide(defaultSide);
+  }, [defaultSide]);
 
   useEffect(() => {
     if (!canManage) {

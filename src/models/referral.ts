@@ -147,6 +147,16 @@ const referralSchema = new Schema(
       default: 'New Lead',
       index: true
     },
+    buyStatus: {
+      type: String,
+      enum: REFERRAL_STATUS_VALUES,
+      default: 'New Lead',
+    },
+    sellStatus: {
+      type: String,
+      enum: REFERRAL_STATUS_VALUES,
+      default: 'New Lead',
+    },
     statusLastUpdated: { type: Date, default: Date.now },
     loanType: String,
     preApprovalAmountCents: { type: Number, default: 0 },
@@ -277,6 +287,8 @@ export interface ReferralDocument {
   buySideAgent?: Types.ObjectId | null;
   sellSideAgent?: Types.ObjectId | null;
   status: ReferralStatus;
+  buyStatus?: ReferralStatus;
+  sellStatus?: ReferralStatus;
   statusLastUpdated?: Date;
   loanType?: string;
   preApprovalAmountCents?: number;

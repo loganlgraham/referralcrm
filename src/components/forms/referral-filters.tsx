@@ -208,7 +208,13 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
           placeholder="Name, email, phone, loan #"
         />
       </label>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div
+        className={
+          isAgentMode
+            ? 'grid grid-cols-1 gap-4 sm:grid-cols-3'
+            : 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6'
+        }
+      >
         <StatusMultiSelect
           selected={searchParams.get('status')?.split(',').filter(Boolean) ?? []}
           onChange={(statuses) => handleChange('status', statuses.join(','))}

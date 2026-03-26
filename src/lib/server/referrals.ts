@@ -18,6 +18,7 @@ import { Zip } from '@/models/zip';
 import { buildDealStatusMap } from '@/lib/server/referral-deal-status';
 import { mapDealStatusToReferralStatus } from '@/lib/server/referral-deal-status-mapper';
 import { type DealStatus } from '@/constants/deals';
+import { resolveAgentSideForReferral, pickPrimarySideForReferral } from '@/lib/server/referral-sides';
 
 interface GetReferralsParams {
   session: Session | null;
@@ -100,6 +101,9 @@ interface ReferralListItem {
   hasAhaAgentAttached?: boolean;
   urgentTaskCount?: number;
   autoUpdateRemindersEnabled?: boolean;
+  buyStatus?: string | null;
+  sellStatus?: string | null;
+  viewerAssignedSide?: 'buy' | 'sell' | null;
 }
 
 /**
@@ -369,6 +373,11 @@ export async function getReferrals(params: GetReferralsParams) {
   }
 
   const sortObject = getSortObject(sortBy, sortDirection);
+  let viewerAgentId: string | null = null;
+  if (session?.user?.role === 'agent') {
+    const viewerAgent = await Agent.findOne({ userId: session.user.id }).select('_id').lean<{ _id: Types.ObjectId } | null>();
+    viewerAgentId = viewerAgent?._id ? viewerAgent._id.toString() : null;
+  }
 
   const referralQuery = Referral.find(query)
       .populate<{ assignedAgent: PopulatedAgent }>('assignedAgent', 'name email phone ahaDesignation')
@@ -500,6 +509,25 @@ export async function getReferrals(params: GetReferralsParams) {
           : mapDealStatusToReferralStatus(dealStatus as DealStatus)
         : normalizedStatus;
 
+      const viewerAssignedSide = viewerAgentId
+        ? resolveAgentSideForReferral(
+            {
+              buySideAgent: item.buySideAgent?._id?.toString?.() ?? null,
+              sellSideAgent: item.sellSideAgent?._id?.toString?.() ?? null,
+              assignedAgent: item.assignedAgent?._id?.toString?.() ?? null,
+              dealSide: item.dealSide ?? null,
+              clientType: item.clientType,
+            },
+            viewerAgentId
+          ) ?? pickPrimarySideForReferral({
+            buySideAgent: item.buySideAgent?._id?.toString?.() ?? null,
+            sellSideAgent: item.sellSideAgent?._id?.toString?.() ?? null,
+            assignedAgent: item.assignedAgent?._id?.toString?.() ?? null,
+            dealSide: item.dealSide ?? null,
+            clientType: item.clientType,
+          })
+        : null;
+
       // Compute hasAhaOosAgentAttached: check if any attached agent has ahaDesignation === 'AHA_OOS'
       const hasAhaOosAgentAttached = Boolean(
         item.assignedAgent?.ahaDesignation === 'AHA_OOS' ||
@@ -567,7 +595,10 @@ export async function getReferrals(params: GetReferralsParams) {
         hasAhaDesignatedAgentAttached,
         hasAhaAgentAttached,
         urgentTaskCount: urgentTaskCountMap.get(item._id.toString()) ?? 0,
-        autoUpdateRemindersEnabled: item.autoUpdateRemindersEnabled ?? false
+        autoUpdateRemindersEnabled: item.autoUpdateRemindersEnabled ?? false,
+        buyStatus: item.buyStatus ?? 'New Lead',
+        sellStatus: item.sellStatus ?? 'New Lead',
+        viewerAssignedSide,
       } as ReferralListItem;
     }),
     total,
@@ -613,6 +644,11 @@ export async function getReferralById(id: string) {
   const daysInStatus = differenceInDays(new Date(), referral.statusLastUpdated ?? referral.createdAt);
 
   const viewerRole = session?.user?.role ?? 'viewer';
+  let viewerAgentIdForDetail: string | null = null;
+  if (viewerRole === 'agent' && session?.user?.id) {
+    const viewerAgent = await Agent.findOne({ userId: session.user.id }).select('_id').lean<{ _id: Types.ObjectId } | null>();
+    viewerAgentIdForDetail = viewerAgent?._id ? viewerAgent._id.toString() : null;
+  }
   const adminUsers = (await User.find({ role: 'admin', email: { $ne: null } })
     .select('name email')
     .lean()) as Array<{ name?: string | null; email?: string | null }>;
@@ -791,6 +827,27 @@ export async function getReferralById(id: string) {
     commissionBasisPoints: typeof referral.commissionBasisPoints === 'number' ? referral.commissionBasisPoints : 0,
     referralFeeBasisPoints: typeof referral.referralFeeBasisPoints === 'number' ? referral.referralFeeBasisPoints : 0,
     dealSide: referral.dealSide ?? 'buy',
+    buyStatus: referral.buyStatus ?? 'New Lead',
+    sellStatus: referral.sellStatus ?? 'New Lead',
+    viewerAssignedSide:
+      viewerRole === 'agent' && viewerAgentIdForDetail
+        ? resolveAgentSideForReferral(
+            {
+              buySideAgent: (referral.buySideAgent as any)?._id?.toString?.() ?? null,
+              sellSideAgent: (referral.sellSideAgent as any)?._id?.toString?.() ?? null,
+              assignedAgent: (referral.assignedAgent as any)?._id?.toString?.() ?? null,
+              dealSide: referral.dealSide ?? null,
+              clientType: referral.clientType,
+            },
+            viewerAgentIdForDetail
+          ) ?? pickPrimarySideForReferral({
+            buySideAgent: (referral.buySideAgent as any)?._id?.toString?.() ?? null,
+            sellSideAgent: (referral.sellSideAgent as any)?._id?.toString?.() ?? null,
+            assignedAgent: (referral.assignedAgent as any)?._id?.toString?.() ?? null,
+            dealSide: referral.dealSide ?? null,
+            clientType: referral.clientType,
+          })
+        : null,
     lookingInZips: Array.isArray(referral.lookingInZips)
       ? referral.lookingInZips
       : referral.lookingInZip

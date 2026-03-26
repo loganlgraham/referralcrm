@@ -27,6 +27,8 @@ export const createReferralSchema = z.object({
 
 export const updateReferralSchema = z.object({
   status: z.enum(REFERRAL_STATUS_VALUES).optional(),
+  buyStatus: z.enum(REFERRAL_STATUS_VALUES).optional(),
+  sellStatus: z.enum(REFERRAL_STATUS_VALUES).optional(),
   terminatedReason: z.enum(TERMINATED_REASON_VALUES).nullable().optional(),
   assignedAgent: z.string().optional(),
   referralFeeBasisPoints: z.number().int().min(0).optional(),
@@ -69,6 +71,7 @@ export const assignLenderSchema = z.object({
 
 export const updateStatusSchema = z.object({
   status: z.enum(REFERRAL_STATUS_VALUES),
+  side: z.enum(['buy', 'sell']).optional(),
   source: z.enum(['referral_table', 'referral_detail']).optional(),
   terminatedReason: z.enum(TERMINATED_REASON_VALUES).nullable().optional(),
   contractDetails: z

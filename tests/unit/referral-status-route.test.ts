@@ -2,6 +2,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
+import { Agent } from '@/models/agent';
 import { logReferralActivity } from '@/lib/server/activities';
 import { createAdminNotifications } from '@/lib/server/notifications';
 
@@ -51,6 +52,12 @@ jest.mock('@/models/payment', () => ({
   },
 }));
 
+jest.mock('@/models/agent', () => ({
+  Agent: {
+    findOne: jest.fn(),
+  },
+}));
+
 jest.mock('@/lib/rbac', () => ({
   canManageReferral: jest.fn(() => true),
 }));
@@ -88,6 +95,8 @@ const mockedConnectMongo = connectMongo as jest.MockedFunction<typeof connectMon
 const mockedReferralFindById = Referral.findById as jest.Mock;
 const mockedPaymentFindOne = Payment.findOne as jest.Mock;
 const mockedPaymentUpdateMany = Payment.updateMany as jest.Mock;
+const mockedPaymentCreate = Payment.create as jest.Mock;
+const mockedAgentFindOne = Agent.findOne as jest.Mock;
 const mockedLogReferralActivity = logReferralActivity as jest.MockedFunction<typeof logReferralActivity>;
 const mockedCreateAdminNotifications = createAdminNotifications as jest.MockedFunction<
   typeof createAdminNotifications
@@ -137,6 +146,14 @@ const makeLatestDealDoc = () => ({
   },
 });
 
+const mockCurrentAgent = (agentId: string | null) => {
+  mockedAgentFindOne.mockReturnValue({
+    select: jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue(agentId ? { _id: agentId } : null),
+    }),
+  });
+};
+
 describe('Referral status route deal-only updates', () => {
   beforeAll(async () => {
     ({ POST: postHandler } = await import('@/app/api/referrals/[id]/status/route'));
@@ -148,6 +165,7 @@ describe('Referral status route deal-only updates', () => {
     mockedGetCurrentSession.mockResolvedValue({
       user: { id: 'agent-1', role: 'agent', name: 'Agent User', email: 'agent@example.com' },
     } as any);
+    mockCurrentAgent('agent-db-1');
   });
 
   it('keeps referral status unchanged but updates latest deal to closed for agent table source', async () => {
@@ -168,6 +186,13 @@ describe('Referral status route deal-only updates', () => {
     expect(referralDoc.status).toBe('Active Lead');
     expect(referralDoc.save).not.toHaveBeenCalled();
     expect(mockedPaymentUpdateMany).not.toHaveBeenCalled();
+    expect(mockedPaymentFindOne).toHaveBeenCalledWith({
+      referralId: referralDoc._id,
+      usedAssignedAgent: true,
+      agentAttribution: { $ne: 'OUTSIDE_AGENT' },
+      agentId: 'agent-db-1',
+      side: 'buy',
+    });
     expect(latestDeal.status).toBe('closed');
     expect(latestDeal.save).toHaveBeenCalled();
     expect(mockedLogReferralActivity).not.toHaveBeenCalled();
@@ -198,6 +223,47 @@ describe('Referral status route deal-only updates', () => {
     expect(latestDeal.status).toBe('terminated');
     expect(latestDeal.terminatedReason).toBe('inspection');
     expect(latestDeal.save).toHaveBeenCalled();
+  });
+
+  it('updates only the current agent-owned deal when multiple deals exist', async () => {
+    const referralDoc = makeReferralDoc();
+    mockedReferralFindById.mockReturnValue(referralDoc);
+
+    const agentOwnedDeal = { ...makeLatestDealDoc(), _id: { toString: () => 'pay-agent' } };
+    const otherAgentDeal = { ...makeLatestDealDoc(), _id: { toString: () => 'pay-other' } };
+    mockedPaymentFindOne.mockImplementation((query: any) => ({
+      sort: jest.fn().mockResolvedValue(query.agentId === 'agent-db-1' ? agentOwnedDeal : otherAgentDeal),
+    }));
+
+    const response: any = await postHandler(makeRequest({ status: 'Closed', source: 'referral_table' }), {
+      params: { id: 'ref-1' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(agentOwnedDeal.status).toBe('closed');
+    expect(agentOwnedDeal.save).toHaveBeenCalled();
+    expect(otherAgentDeal.status).toBe('under_contract');
+    expect(otherAgentDeal.save).not.toHaveBeenCalled();
+  });
+
+  it('does not sync any deal when agent has no mapped agent record', async () => {
+    const referralDoc = makeReferralDoc();
+    mockedReferralFindById.mockReturnValue(referralDoc);
+    mockCurrentAgent(null);
+
+    const latestDeal = makeLatestDealDoc();
+    mockedPaymentFindOne.mockReturnValue({
+      sort: jest.fn().mockResolvedValue(latestDeal),
+    });
+
+    const response: any = await postHandler(makeRequest({ status: 'Closed', source: 'referral_table' }), {
+      params: { id: 'ref-1' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockedPaymentFindOne).not.toHaveBeenCalled();
+    expect(latestDeal.status).toBe('under_contract');
+    expect(latestDeal.save).not.toHaveBeenCalled();
   });
 
   it('notifies admins when an agent persists a referral status change', async () => {
@@ -249,5 +315,56 @@ describe('Referral status route deal-only updates', () => {
 
     expect(response.status).toBe(200);
     expect(mockedCreateAdminNotifications).toHaveBeenCalled();
+  });
+
+  it('creates a side-scoped under-contract deal using the side agent', async () => {
+    const referralDoc = makeReferralDoc();
+    referralDoc.buySideAgent = { _id: 'buy-agent-db' };
+    referralDoc.sellSideAgent = { _id: 'sell-agent-db' };
+    mockedReferralFindById.mockReturnValue(referralDoc);
+    mockedPaymentUpdateMany.mockResolvedValue({ acknowledged: true });
+    mockedPaymentFindOne.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue(null),
+      }),
+    });
+    mockedPaymentCreate.mockResolvedValue({
+      _id: { toString: () => 'pay-created-1' },
+      status: 'under_contract',
+      expectedAmountCents: 1000,
+      toObject: () => ({ _id: 'pay-created-1', status: 'under_contract', expectedAmountCents: 1000 }),
+    });
+
+    const response: any = await postHandler(
+      makeRequest({
+        status: 'Under Contract',
+        source: 'referral_table',
+        side: 'sell',
+        contractDetails: {
+          propertyAddress: '123 Main St',
+          propertyCity: 'Denver',
+          propertyState: 'CO',
+          propertyPostalCode: '80014',
+          contractPrice: 450000,
+          agentCommissionPercentage: 3,
+          referralFeePercentage: 25,
+          dealSide: 'sell',
+        },
+        createNewDeal: false,
+      }),
+      { params: { id: 'ref-1' } }
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedPaymentUpdateMany).toHaveBeenCalledWith(
+      { referralId: referralDoc._id, status: 'under_contract', side: 'sell' },
+      expect.any(Object)
+    );
+    expect(mockedPaymentCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        side: 'sell',
+        agentId: 'sell-agent-db',
+      })
+    );
   });
 });

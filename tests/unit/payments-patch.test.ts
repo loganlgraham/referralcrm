@@ -148,6 +148,7 @@ describe('Payments PATCH outside-agent normalization', () => {
       closingDate: null,
     });
     referralDoc = {
+      _id: { toString: () => 'ref-1' },
       populate: jest.fn().mockReturnThis(),
       save: jest.fn().mockResolvedValue(undefined),
       markModified: jest.fn(),
