@@ -47,6 +47,9 @@ const formatFullAddress = (
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
 
+const asNullableString = (value: unknown): string | null | undefined =>
+  typeof value === 'string' || value == null ? value : undefined;
+
 const extractFirstName = (name?: string | null, fallback = ''): string => {
   if (typeof name !== 'string') return fallback;
   const trimmed = name.trim();
@@ -723,10 +726,10 @@ export function ReferralHeader({
       typeof payload?.previousStatus === 'string'
         ? (payload.previousStatus as ReferralStatus)
         : status;
-    const payloadSummaryStatus = normalizeReferralStatus(payload?.status);
+    const payloadSummaryStatus = normalizeReferralStatus(asNullableString(payload?.status));
     const resolvedSummaryStatus = payloadSummaryStatus ?? nextStatus;
-    const payloadBuyStatus = normalizeReferralStatus(payload?.buyStatus);
-    const payloadSellStatus = normalizeReferralStatus(payload?.sellStatus);
+    const payloadBuyStatus = normalizeReferralStatus(asNullableString(payload?.buyStatus));
+    const payloadSellStatus = normalizeReferralStatus(asNullableString(payload?.sellStatus));
     const resolvedSide =
       sideOverride ??
       (payload?.side === 'sell' || payload?.side === 'buy' ? (payload.side as 'buy' | 'sell') : undefined);
