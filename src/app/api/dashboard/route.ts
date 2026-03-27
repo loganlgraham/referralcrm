@@ -28,6 +28,10 @@ import { LenderMC } from '@/models/lender';
 import { PreApprovalMetric } from '@/models/pre-approval-metric';
 import { AdminTask, getEffectiveDueDate, type AdminTaskLean } from '@/models/admin-task';
 import { Activity } from '@/models/activity';
+import {
+  isAfcEligibleDeal,
+  resolveDealSideForMetrics,
+} from '@/lib/server/referral-sides';
 
 type TimeframeKey = 'day' | 'week' | 'month' | 'next_month' | 'year' | 'ytd' | 'all' | 'custom';
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
@@ -49,6 +53,7 @@ interface DashboardRequestContext {
 interface AggregatedPayment {
   _id: Types.ObjectId;
   agentId?: Types.ObjectId | null;
+  side?: 'buy' | 'sell' | null;
   status:
     | 'under_contract'
     | 'past_inspection'
@@ -78,6 +83,10 @@ interface AggregatedPayment {
     endorser?: string;
     origin?: 'agent' | 'mc' | 'admin' | '';
     org?: 'AFC' | 'AHA';
+    clientType?: 'Seller' | 'Buyer' | 'Both' | null;
+    dealSide?: 'buy' | 'sell' | null;
+    buyStatus?: string | null;
+    sellStatus?: string | null;
     lookingInZip?: string;
     lookingInZips?: string[] | null;
     propertyAddress?: string;
@@ -137,6 +146,9 @@ interface DashboardReferral {
   assignedAgent?: Types.ObjectId | null;
   buySideAgent?: Types.ObjectId | null;
   sellSideAgent?: Types.ObjectId | null;
+  dealSide?: 'buy' | 'sell' | null;
+  buyStatus?: string | null;
+  sellStatus?: string | null;
   lender?: Types.ObjectId | null;
   status?: string;
   preApprovalAmountCents?: number;
@@ -953,6 +965,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       $project: {
         _id: 1,
         agentId: 1,
+        side: 1,
         status: 1,
         expectedAmountCents: 1,
         receivedAmountCents: 1,
@@ -974,6 +987,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           endorser: '$referral.endorser',
           origin: '$referral.origin',
           org: '$referral.org',
+          clientType: '$referral.clientType',
+          dealSide: '$referral.dealSide',
+          buyStatus: '$referral.buyStatus',
+          sellStatus: '$referral.sellStatus',
           lookingInZip: '$referral.lookingInZip',
           lookingInZips: '$referral.lookingInZips',
           propertyAddress: '$referral.propertyAddress',
@@ -1203,7 +1220,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return true;
   });
   
-  const lostReferrals = filteredReferrals.filter((referral) => referral.status === 'Lost');
+  const lostReferrals = referralsByNetwork.filter((referral) => {
+    if (referral.status !== 'Lost') {
+      return false;
+    }
+    return isWithinTimeframe(referral.statusLastUpdated ?? referral.updatedAt ?? referral.createdAt);
+  });
   const endOfToday = endOfDay(new Date());
   const startOfCurrentMonth = startOfMonth(new Date());
   const endOfCurrentMonth = endOfMonth(new Date());
@@ -1819,8 +1841,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const attachClosedDealsInTimeframe = attachClosedDeals.filter((payment) => closedInTimeframe(payment));
 
   const afcRelevant = attachClosedDealsInTimeframe.filter(
-    (payment) =>
-      payment.referral?.org === 'AFC'
+    (payment) => {
+      const dealSide = resolveDealSideForMetrics(
+        payment.side,
+        payment.referral?.dealSide,
+        payment.referral?.clientType ?? null
+      );
+      return isAfcEligibleDeal(payment.referral?.org ?? null, dealSide);
+    }
   );
   const afcDealsLost = afcRelevant.filter((payment) => !payment.usedAfc).length;
   const afcAttachRate = afcRelevant.length
@@ -1903,7 +1931,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           const isAfcEligible =
             isClosedDealStatus &&
             inTimeframe &&
-            inspectedDeal.referral?.org === 'AFC';
+            isAfcEligibleDeal(
+              inspectedDeal.referral?.org ?? null,
+              resolveDealSideForMetrics(
+                inspectedDeal.side,
+                inspectedDeal.referral?.dealSide,
+                inspectedDeal.referral?.clientType ?? null
+              )
+            );
           const isAhaEligible =
             isClosedDealStatus &&
             inTimeframe &&
@@ -2348,7 +2383,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     bucketReferrals.forEach((r) => {
       const key = r.assignedAgent?.toString() ?? 'unassigned';
       referralCountMap.set(key, (referralCountMap.get(key) ?? 0) + 1);
-      if (r.status === 'Lost') {
+      const lostAt = r.statusLastUpdated ?? r.updatedAt ?? r.createdAt;
+      if (r.status === 'Lost' && isWithinTimeframe(lostAt)) {
         lostDealsMap.set(key, (lostDealsMap.get(key) ?? 0) + 1);
       }
       if ((r.status ?? '').trim() === 'Under Contract') {
@@ -2411,8 +2447,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           const contractPriceCents =
             payment.contractPriceCents ?? payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
           if (contractPriceCents > 0) current.closedVolumeCents += contractPriceCents;
-          current.afcEligibleDeals += 1;
-          if (payment.usedAfc) current.afcAttachedDeals += 1;
+          const dealSide = resolveDealSideForMetrics(
+            payment.side,
+            payment.referral?.dealSide,
+            payment.referral?.clientType ?? null
+          );
+          if (dealSide === 'buy') {
+            current.afcEligibleDeals += 1;
+            if (payment.usedAfc) current.afcAttachedDeals += 1;
+          }
           if (payment.status === 'paid') {
             const commissionBps = payment.referral?.commissionBasisPoints ?? 0;
             const flatFee = payment.commissionFlatFeeCents ?? 0;
@@ -2863,7 +2906,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const agitClosedOrPaidPayments = agitFilteredPayments.filter(
     (payment) =>
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
-      CLOSED_DEAL_STATUSES.has(payment.status)
+      CLOSED_DEAL_STATUSES.has(payment.status) &&
+      resolveDealSideForMetrics(
+        payment.side,
+        payment.referral?.dealSide,
+        payment.referral?.clientType ?? null
+      ) === 'buy'
   );
 
   const agitUsedAfcCount = agitClosedOrPaidPayments.filter((payment) => payment.usedAfc).length;

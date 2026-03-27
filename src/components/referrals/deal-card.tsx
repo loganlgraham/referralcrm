@@ -161,7 +161,7 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
         terminatedReason: (deal.terminatedReason as TerminatedReason | undefined) ?? null,
         agentAttribution: (deal.agentAttribution as AgentSelectValue | undefined) ?? '',
         usedAssignedAgent: deal.usedAssignedAgent ?? null,
-        usedAfc: deal.usedAfc ?? false,
+        usedAfc: deal.side === 'sell' ? false : (deal.usedAfc ?? false),
         commissionBasisPoints: deal.commissionBasisPoints ?? null,
         commissionFlatFeeCents: deal.commissionFlatFeeCents ?? null,
         referralFeeBasisPoints: deal.referralFeeBasisPoints ?? null,
@@ -248,7 +248,7 @@ export function DealCard({
   const initialAfcMap = useMemo(() => {
     const snapshot: Record<string, boolean> = {};
     deals.forEach((deal) => {
-      snapshot[deal._id] = Boolean(deal.usedAfc);
+      snapshot[deal._id] = deal.side === 'sell' ? false : Boolean(deal.usedAfc);
     });
     return snapshot;
   }, [deals]);
@@ -1035,6 +1035,10 @@ export function DealCard({
   };
 
   const handleAfcToggle = (deal: DealRecord) => async (event: ChangeEvent<HTMLInputElement>) => {
+    if (deal.side === 'sell') {
+      setAfcMap((prev) => ({ ...prev, [deal._id]: false }));
+      return;
+    }
     const nextChecked = event.target.checked;
     const previousChecked = afcMap[deal._id] ?? false;
 
@@ -1141,7 +1145,8 @@ export function DealCard({
     const agentSelection = agentMap[deal._id] ?? '';
     const agentOutcomeSelection = agentSelection === 'OUTSIDE_AGENT' ? 'OUTSIDE_AGENT' : 'USED_AGENT';
     const isOutsideAgentSelected = agentOutcomeSelection === 'OUTSIDE_AGENT';
-    const usedAfc = afcMap[deal._id] ?? false;
+    const isSellSideDeal = deal.side === 'sell';
+    const usedAfc = isSellSideDeal ? false : (afcMap[deal._id] ?? false);
     const assignedBucket = referral.ahaBucket ?? null;
     const matchesAssigned =
       !assignedBucket || agentSelection === assignedBucket || agentSelection === '';
@@ -1527,18 +1532,24 @@ export function DealCard({
               </div>
               <div className="rounded border border-slate-200 bg-slate-50 p-3">
                 <p className="text-xs uppercase text-slate-400">Mortgage Company</p>
-                <label className="mt-2 inline-flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
-                    checked={usedAfc}
-                    onChange={handleAfcToggle(deal)}
-                    disabled={isSaving}
-                  />
-                  Used AFC
-                </label>
-                {!usedAfc && (
-                  <p className="mt-2 text-xs text-slate-500">Track whether AFC handled this deal.</p>
+                {isSellSideDeal ? (
+                  <p className="mt-2 text-sm text-slate-600">N/A for sell-side deals.</p>
+                ) : (
+                  <>
+                    <label className="mt-2 inline-flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                        checked={usedAfc}
+                        onChange={handleAfcToggle(deal)}
+                        disabled={isSaving}
+                      />
+                      Used AFC
+                    </label>
+                    {!usedAfc && (
+                      <p className="mt-2 text-xs text-slate-500">Track whether AFC handled this deal.</p>
+                    )}
+                  </>
                 )}
               </div>
             </div>

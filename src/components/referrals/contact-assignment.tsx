@@ -252,17 +252,17 @@ export function ContactAssignment({
                   {currentContact?.id ? (
                     <Link
                       href={type === 'agent' ? `/agents/${currentContact.id}` : `/lenders/${currentContact.id}`}
-                      className="truncate font-medium text-brand hover:underline"
+                      className="font-medium text-brand break-words hover:underline"
                     >
                       {formattedContact.name}
                     </Link>
                   ) : (
-                    <p className="truncate font-medium text-slate-900">{formattedContact.name}</p>
+                    <p className="font-medium text-slate-900 break-words">{formattedContact.name}</p>
                   )}
                   <CopyButton value={formattedContact.name} label="Copy name" />
                 </div>
                 {formattedContact.email && (
-                  <p className="truncate text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 break-all">
                     Email:{' '}
                     <EmailActivityLink
                       referralId={referralId}
@@ -277,7 +277,7 @@ export function ContactAssignment({
                   </p>
                 )}
                 {formattedContact.phone && (
-                  <p className="truncate text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 break-all">
                     Phone:{' '}
                     <PhoneActivityLink
                       referralId={referralId}

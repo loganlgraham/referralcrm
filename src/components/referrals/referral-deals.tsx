@@ -20,6 +20,7 @@ interface ReferralDealsProps {
   ) => void;
   onDealDeleted?: (id: string) => void;
   viewerRole?: string;
+  viewerAssignedSide?: 'buy' | 'sell' | null;
   referralOrigin?: 'agent' | 'admin' | 'mc' | null;
   feeBreakdownAutoSendEnabled?: boolean;
   hiddenOutsideAgentCount?: number;
@@ -120,6 +121,7 @@ function DealCard({
   onUpdate,
   viewerRole,
   feeBreakdownAutoSendEnabled,
+  isCrossSideReadOnly = false,
 }: {
   deal: ReferralPayment;
   agents: AgentOption[];
@@ -139,6 +141,7 @@ function DealCard({
   onUpdate: (deal: ReferralPayment, payload: DealUpdatePayload) => Promise<boolean>;
   viewerRole?: string;
   feeBreakdownAutoSendEnabled?: boolean;
+  isCrossSideReadOnly?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -177,6 +180,13 @@ function DealCard({
   const agentCreatedReferral = Boolean(isAgentOrigin);
   const isOutsideAgent = !agentCreatedReferral && !usedAssignedAgent;
   const isNoFeeDeal = Boolean(isAgitDeal) || isOutsideAgent;
+  const statusOptions = useMemo(
+    () =>
+      viewerRole === 'agent'
+        ? DEAL_STATUS_OPTIONS.filter((option) => option.value !== 'paid')
+        : DEAL_STATUS_OPTIONS,
+    [viewerRole]
+  );
   const router = useRouter();
 
   const populateFromDeal = useCallback(() => {
@@ -281,6 +291,12 @@ function DealCard({
     setNetReferralFeePaid('');
   }, [isNoFeeDeal]);
 
+  useEffect(() => {
+    if (side === 'sell' && usedAfc) {
+      setUsedAfc(false);
+    }
+  }, [side, usedAfc]);
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canManage || saving) return;
@@ -328,7 +344,7 @@ function DealCard({
     }
 
     setSaving(true);
-    const statusToSend = markPaid ? 'paid' : status;
+    const statusToSend = viewerRole === 'admin' && markPaid ? 'paid' : status;
     if (statusToSend === 'terminated' && !terminatedReason) {
       toast.error('Select a termination reason');
       setSaving(false);
@@ -359,7 +375,7 @@ function DealCard({
       // Always include agentId, even if empty (will be converted to null)
       agentId: agentId.trim() || null,
       side,
-      usedAfc,
+      usedAfc: side === 'sell' ? false : usedAfc,
       usedAssignedAgent,
       receivedAmountCents: netReferralFeePaidCents,
       terminatedReason: statusToSend === 'terminated' ? terminatedReason : undefined,
@@ -475,28 +491,30 @@ function DealCard({
               </p>
             )}
           </div>
-          <label className="block text-xs font-semibold text-slate-600">
-            <span className="mr-2">Update stage</span>
-            <select
-              value={(deal.status as DealStatus | undefined) ?? 'under_contract'}
-              onChange={(event) =>
-                onStatusChange(
-                  deal,
-                  event.target.value as DealStatus,
-                  event.target.value === 'terminated' ? terminatedReason : null
-                )
-              }
-              disabled={!canManage || statusUpdating}
-              className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs shadow-sm focus:border-brand focus:outline-none"
-            >
-              {DEAL_STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {canManage && (
+          {!isCrossSideReadOnly && (
+            <label className="block text-xs font-semibold text-slate-600">
+              <span className="mr-2">Update stage</span>
+              <select
+                value={(deal.status as DealStatus | undefined) ?? 'under_contract'}
+                onChange={(event) =>
+                  onStatusChange(
+                    deal,
+                    event.target.value as DealStatus,
+                    event.target.value === 'terminated' ? terminatedReason : null
+                  )
+                }
+                disabled={!canManage || statusUpdating}
+                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs shadow-sm focus:border-brand focus:outline-none"
+              >
+                {statusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {canManage && !isCrossSideReadOnly && (
             <label className="block text-xs font-semibold text-slate-600">
               <span className="mr-2">Termination reason</span>
               <select
@@ -519,40 +537,46 @@ function DealCard({
             </label>
           )}
         </div>
-        <div className="space-y-1">
-          <p className="text-xs uppercase text-slate-500">Expected</p>
-          <p className="text-sm font-semibold text-slate-900">{expected}</p>
-          <p className="text-xs text-slate-500">Net paid: {netPaid}</p>
-        </div>
+        {!isCrossSideReadOnly && (
+          <div className="space-y-1">
+            <p className="text-xs uppercase text-slate-500">Expected</p>
+            <p className="text-sm font-semibold text-slate-900">{expected}</p>
+            <p className="text-xs text-slate-500">Net paid: {netPaid}</p>
+          </div>
+        )}
         <div className="space-y-1 text-sm text-slate-700">
           <p>
             <span className="text-xs uppercase text-slate-500">Contract price: </span>
             <span className="font-semibold">{contractPriceValue}</span>
           </p>
-          <p>
-            <span className="text-xs uppercase text-slate-500">Commission: </span>
-            <span className="font-semibold">
-              {deal.commissionFlatFeeCents
-                ? formatCurrency(deal.commissionFlatFeeCents)
-                : formatPercent(deal.commissionBasisPoints)}
-            </span>
-          </p>
-          <p>
-            <span className="text-xs uppercase text-slate-500">Referral fee: </span>
-            <span className="font-semibold">{formatPercent(deal.referralFeeBasisPoints)}</span>
-          </p>
-          <p>
-            <span className="text-xs uppercase text-slate-500">Side: </span>
-            <span className="font-semibold">{dealSide}</span>
-          </p>
-          <p>
-            <span className="text-xs uppercase text-slate-500">Used AFC: </span>
-            <span className="font-semibold">{deal.usedAfc ? 'Yes' : 'No'}</span>
-          </p>
-          <p>
-            <span className="text-xs uppercase text-slate-500">Used Agent: </span>
-            <span className="font-semibold">{deal.usedAssignedAgent ? 'Yes' : 'No'}</span>
-          </p>
+          {!isCrossSideReadOnly && (
+            <>
+              <p>
+                <span className="text-xs uppercase text-slate-500">Commission: </span>
+                <span className="font-semibold">
+                  {deal.commissionFlatFeeCents
+                    ? formatCurrency(deal.commissionFlatFeeCents)
+                    : formatPercent(deal.commissionBasisPoints)}
+                </span>
+              </p>
+              <p>
+                <span className="text-xs uppercase text-slate-500">Referral fee: </span>
+                <span className="font-semibold">{formatPercent(deal.referralFeeBasisPoints)}</span>
+              </p>
+              <p>
+                <span className="text-xs uppercase text-slate-500">Side: </span>
+                <span className="font-semibold">{dealSide}</span>
+              </p>
+              <p>
+                <span className="text-xs uppercase text-slate-500">Used AFC: </span>
+                <span className="font-semibold">{deal.side === 'sell' ? 'N/A' : deal.usedAfc ? 'Yes' : 'No'}</span>
+              </p>
+              <p>
+                <span className="text-xs uppercase text-slate-500">Used Agent: </span>
+                <span className="font-semibold">{deal.usedAssignedAgent ? 'Yes' : 'No'}</span>
+              </p>
+            </>
+          )}
           <p>
             <span className="text-xs uppercase text-slate-500">Address: </span>
             <span className="font-semibold">{deal.propertyAddress?.trim() || '—'}</span>
@@ -564,14 +588,26 @@ function DealCard({
         </div>
         {canManage && (
           <div className="flex flex-col gap-2 sm:w-44">
-            <button
-              type="button"
-              onClick={handleMarkPaidClick}
-              disabled={statusUpdating}
-              className="rounded border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              Mark Paid
-            </button>
+            {viewerRole === 'admin' && (
+              <button
+                type="button"
+                onClick={handleMarkPaidClick}
+                disabled={statusUpdating}
+                className="rounded border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                Mark Paid
+              </button>
+            )}
+            {viewerRole === 'agent' && (
+              <button
+                type="button"
+                onClick={() => void onStatusChange(deal, 'payment_sent')}
+                disabled={statusUpdating || deal.status === 'payment_sent' || deal.status === 'paid'}
+                className="rounded border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                Payment Sent
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setEditing((previous) => !previous)}
@@ -752,7 +788,7 @@ function DealCard({
                 className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                 disabled={saving}
               >
-                {DEAL_STATUS_OPTIONS.map((option) => (
+                {statusOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -878,16 +914,18 @@ function DealCard({
             </select>
           </label>
           <div className="flex flex-col justify-center gap-2 rounded border border-slate-200 p-3 text-sm sm:col-span-2 lg:col-span-4">
-            <label className="flex items-center gap-2 text-slate-700">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-slate-300"
-                checked={usedAfc}
-                onChange={(event) => setUsedAfc(event.target.checked)}
-                disabled={saving}
-              />
-              Used AFC
-            </label>
+            {side !== 'sell' && (
+              <label className="flex items-center gap-2 text-slate-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300"
+                  checked={usedAfc}
+                  onChange={(event) => setUsedAfc(event.target.checked)}
+                  disabled={saving}
+                />
+                Used AFC
+              </label>
+            )}
             <label className="flex items-center gap-2 text-slate-700">
               <input
                 type="checkbox"
@@ -905,25 +943,27 @@ function DealCard({
                   : 'Outside-agent deal selected: commission/referral fee fields are disabled and owed amount is forced to $0.'}
               </p>
             )}
-            <label className="flex items-center gap-2 text-slate-700">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-slate-300"
-                checked={markPaid || status === 'paid'}
-                onChange={(event) => {
-                  const checked = event.target.checked;
-                  setMarkPaid(checked);
-                  if (checked) {
-                    setStatus('paid');
-                    if (!netReferralFeePaid) {
-                      setNetReferralFeePaid(expectedAmount);
+            {viewerRole === 'admin' && (
+              <label className="flex items-center gap-2 text-slate-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300"
+                  checked={markPaid || status === 'paid'}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setMarkPaid(checked);
+                    if (checked) {
+                      setStatus('paid');
+                      if (!netReferralFeePaid) {
+                        setNetReferralFeePaid(expectedAmount);
+                      }
                     }
-                  }
-                }}
-                disabled={saving}
-              />
-              Paid
-            </label>
+                  }}
+                  disabled={saving}
+                />
+                Paid
+              </label>
+            )}
           </div>
           <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-4">
             <button
@@ -959,6 +999,7 @@ export function ReferralDeals({
   onDealUpdated,
   onDealDeleted,
   viewerRole,
+  viewerAssignedSide,
   referralOrigin,
   feeBreakdownAutoSendEnabled,
   hiddenOutsideAgentCount = 0,
@@ -994,12 +1035,30 @@ export function ReferralDeals({
   const [showForm, setShowForm] = useState(false);
   const isAgentOrigin = referralOrigin === 'agent';
   const isAgitDeal = assignedAgentDesignation === 'AGIT';
+  const statusOptions = useMemo(
+    () =>
+      viewerRole === 'agent'
+        ? DEAL_STATUS_OPTIONS.filter((option) => option.value !== 'paid')
+        : DEAL_STATUS_OPTIONS,
+    [viewerRole]
+  );
 
   const canManage = viewerRole !== 'viewer';
+  const canCreateForViewer = !(viewerRole === 'agent' && !viewerAssignedSide);
+  const effectiveCreateSide: 'buy' | 'sell' =
+    viewerRole === 'agent' && (viewerAssignedSide === 'buy' || viewerAssignedSide === 'sell')
+      ? viewerAssignedSide
+      : side;
 
   useEffect(() => {
     setSide(defaultSide);
   }, [defaultSide]);
+
+  useEffect(() => {
+    if (viewerRole === 'agent' && (viewerAssignedSide === 'buy' || viewerAssignedSide === 'sell')) {
+      setSide(viewerAssignedSide);
+    }
+  }, [viewerRole, viewerAssignedSide]);
 
   useEffect(() => {
     if (!canManage) {
@@ -1080,6 +1139,12 @@ export function ReferralDeals({
     setNetReferralFeePaid('');
   }, [isAgentOrigin, usedAssignedAgent, isAgitDeal]);
 
+  useEffect(() => {
+    if (side === 'sell' && usedAfc) {
+      setUsedAfc(false);
+    }
+  }, [side, usedAfc]);
+
   const sortedDeals = useMemo(
     () => [...deals].sort((a, b) => {
       const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -1093,7 +1158,7 @@ export function ReferralDeals({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canManage || submitting) return;
+    if (!canManage || !canCreateForViewer || submitting) return;
 
     const isOutsideAgent = !isAgentOrigin && !usedAssignedAgent;
     const isNoFeeDeal = isAgitDeal || isOutsideAgent;
@@ -1147,7 +1212,7 @@ export function ReferralDeals({
 
       setSubmitting(true);
       try {
-        const statusToSend = markPaid ? 'paid' : status;
+        const statusToSend = viewerRole === 'admin' && markPaid ? 'paid' : status;
         const closingDateToSend =
           statusToSend === 'closed'
             ? new Date().toISOString()
@@ -1173,10 +1238,10 @@ export function ReferralDeals({
           closingDate: closingDateToSend,
           underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : new Date().toISOString(),
           agentId: agentId || null,
-          usedAfc: isAgentOrigin ? false : usedAfc,
+          usedAfc: isAgentOrigin ? false : effectiveCreateSide === 'sell' ? false : usedAfc,
           usedAssignedAgent: isAgentOrigin ? true : usedAssignedAgent,
           agentAttribution: isOutsideAgent ? 'OUTSIDE_AGENT' : null,
-          side,
+          side: effectiveCreateSide,
           terminatedReason: statusToSend === 'terminated' ? terminatedReason : undefined,
         }),
       });
@@ -1204,9 +1269,9 @@ export function ReferralDeals({
           underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : new Date().toISOString(),
           agent: agentId ? { id: agentId, name: agents.find((option) => option.id === agentId)?.name ?? null } : null,
           agentId: agentId || null,
-          usedAfc: isAgentOrigin ? false : usedAfc,
+          usedAfc: isAgentOrigin ? false : effectiveCreateSide === 'sell' ? false : usedAfc,
           usedAssignedAgent: isAgentOrigin ? true : usedAssignedAgent,
-          side,
+          side: effectiveCreateSide,
           terminatedReason: statusToSend === 'terminated' ? terminatedReason : undefined,
           createdAt: payload.createdAt ?? new Date().toISOString(),
           updatedAt: payload.createdAt ?? new Date().toISOString(),
@@ -1384,7 +1449,7 @@ export function ReferralDeals({
           ? { id: updatedAgentId, name: agentName }
           : null,
         side: payload.side ?? deal.side,
-        usedAfc: payload.usedAfc,
+        usedAfc: (payload.side ?? deal.side) === 'sell' ? false : payload.usedAfc,
         usedAssignedAgent: payload.usedAssignedAgent,
         terminatedReason: payload.terminatedReason ?? null,
         updatedAt: new Date().toISOString(),
@@ -1408,7 +1473,7 @@ export function ReferralDeals({
           <p className="text-xs uppercase text-slate-500">Deals</p>
           <h2 className="text-lg font-semibold text-slate-900">Referral deals</h2>
         </div>
-        {canManage && (
+        {canManage && canCreateForViewer && (
           <button
             type="button"
             onClick={() => setShowForm((previous) => !previous)}
@@ -1420,7 +1485,7 @@ export function ReferralDeals({
         )}
       </div>
 
-      {canManage && showForm && (
+      {canManage && canCreateForViewer && showForm && (
         <form
           onSubmit={handleSubmit}
           className="grid gap-4 rounded-md border border-slate-200 p-4 sm:grid-cols-2 lg:grid-cols-4"
@@ -1545,7 +1610,7 @@ export function ReferralDeals({
                 className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                 disabled={submitting}
               >
-                {DEAL_STATUS_OPTIONS.map((option) => (
+                {statusOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -1658,29 +1723,33 @@ export function ReferralDeals({
               )}
             </select>
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
-            <span>Deal side</span>
-            <select
-              value={side}
-              onChange={(event) => setSide(event.target.value as 'buy' | 'sell')}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-              disabled={submitting}
-            >
-              <option value="buy">Buy-side</option>
-              <option value="sell">Sell-side</option>
-            </select>
-          </label>
-          <div className="flex flex-col justify-center gap-2 rounded border border-slate-200 p-3 text-sm sm:col-span-2 lg:col-span-4">
-            <label className="flex items-center gap-2 text-slate-700">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-slate-300"
-                checked={usedAfc}
-                onChange={(event) => setUsedAfc(event.target.checked)}
+          {!(viewerRole === 'agent' && (viewerAssignedSide === 'buy' || viewerAssignedSide === 'sell')) && (
+            <label className="space-y-1 text-sm font-medium text-slate-700">
+              <span>Deal side</span>
+              <select
+                value={side}
+                onChange={(event) => setSide(event.target.value as 'buy' | 'sell')}
+                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
                 disabled={submitting}
-              />
-              Used AFC
+              >
+                <option value="buy">Buy-side</option>
+                <option value="sell">Sell-side</option>
+              </select>
             </label>
+          )}
+          <div className="flex flex-col justify-center gap-2 rounded border border-slate-200 p-3 text-sm sm:col-span-2 lg:col-span-4">
+            {effectiveCreateSide !== 'sell' && (
+              <label className="flex items-center gap-2 text-slate-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300"
+                  checked={usedAfc}
+                  onChange={(event) => setUsedAfc(event.target.checked)}
+                  disabled={submitting}
+                />
+                Used AFC
+              </label>
+            )}
             <label className="flex items-center gap-2 text-slate-700">
               <input
                 type="checkbox"
@@ -1698,25 +1767,27 @@ export function ReferralDeals({
                   : 'Outside-agent deal selected: commission/referral fee fields are disabled and owed amount is forced to $0.'}
               </p>
             )}
-            <label className="flex items-center gap-2 text-slate-700">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-slate-300"
-                checked={markPaid || status === 'paid'}
-                onChange={(event) => {
-                  const checked = event.target.checked;
-                  setMarkPaid(checked);
-                  if (checked) {
-                    setStatus('paid');
-                    if (!netReferralFeePaid) {
-                      setNetReferralFeePaid(expectedAmount);
+            {viewerRole === 'admin' && (
+              <label className="flex items-center gap-2 text-slate-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300"
+                  checked={markPaid || status === 'paid'}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setMarkPaid(checked);
+                    if (checked) {
+                      setStatus('paid');
+                      if (!netReferralFeePaid) {
+                        setNetReferralFeePaid(expectedAmount);
+                      }
                     }
-                  }
-                }}
-                disabled={submitting}
-              />
-              Paid
-            </label>
+                  }}
+                  disabled={submitting}
+                />
+                Paid
+              </label>
+            )}
           </div>
           <div className="flex items-end">
             <button
@@ -1743,7 +1814,23 @@ export function ReferralDeals({
                 deal={deal}
                 agents={agents}
                 agentsLoading={agentsLoading}
-                canManage={canManage}
+                canManage={
+                  canManage &&
+                  !(
+                    viewerRole === 'agent' &&
+                    (deal.isCrossSideReadOnly === true ||
+                      ((viewerAssignedSide === 'buy' || viewerAssignedSide === 'sell') &&
+                        (deal.side === 'buy' || deal.side === 'sell') &&
+                        deal.side !== viewerAssignedSide))
+                  )
+                }
+                isCrossSideReadOnly={
+                  viewerRole === 'agent' &&
+                  (deal.isCrossSideReadOnly === true ||
+                    ((viewerAssignedSide === 'buy' || viewerAssignedSide === 'sell') &&
+                      (deal.side === 'buy' || deal.side === 'sell') &&
+                      deal.side !== viewerAssignedSide))
+                }
                 isAgentOrigin={isAgentOrigin}
                 isAgitDeal={isAgitDeal}
                 statusUpdating={statusUpdating[deal._id]}

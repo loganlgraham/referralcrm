@@ -94,6 +94,7 @@ const mockedGetCurrentSession = getCurrentSession as jest.MockedFunction<typeof 
 const mockedConnectMongo = connectMongo as jest.MockedFunction<typeof connectMongo>;
 const mockedReferralFindById = Referral.findById as jest.Mock;
 const mockedPaymentFindOne = Payment.findOne as jest.Mock;
+const mockedPaymentExists = Payment.exists as jest.Mock;
 const mockedPaymentUpdateMany = Payment.updateMany as jest.Mock;
 const mockedPaymentCreate = Payment.create as jest.Mock;
 const mockedAgentFindOne = Agent.findOne as jest.Mock;
@@ -146,6 +147,25 @@ const makeLatestDealDoc = () => ({
   },
 });
 
+/** Matches Payment.findOne().sort().select().lean(), .sort().lean(), and await .sort() */
+function mockPaymentFindOneChain(latestDealForAwaitOnSort: unknown) {
+  mockedPaymentFindOne.mockReturnValue({
+    sort: jest.fn(() => {
+      const afterSort: Record<string, unknown> = {
+        select: jest.fn(() => ({
+          lean: jest.fn(() => Promise.resolve(null)),
+        })),
+        lean: jest.fn(() => Promise.resolve(null)),
+      };
+      afterSort.then = (onFulfilled: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) =>
+        Promise.resolve(latestDealForAwaitOnSort).then(onFulfilled, onRejected);
+      afterSort.catch = (onRejected: (e: unknown) => unknown) =>
+        Promise.resolve(latestDealForAwaitOnSort).catch(onRejected);
+      return afterSort;
+    }),
+  });
+}
+
 const mockCurrentAgent = (agentId: string | null) => {
   mockedAgentFindOne.mockReturnValue({
     select: jest.fn().mockReturnValue({
@@ -166,6 +186,7 @@ describe('Referral status route deal-only updates', () => {
       user: { id: 'agent-1', role: 'agent', name: 'Agent User', email: 'agent@example.com' },
     } as any);
     mockCurrentAgent('agent-db-1');
+    mockedPaymentExists.mockResolvedValue(true);
   });
 
   it('keeps referral status unchanged but updates latest deal to closed for agent table source', async () => {
@@ -173,9 +194,7 @@ describe('Referral status route deal-only updates', () => {
     mockedReferralFindById.mockReturnValue(referralDoc);
 
     const latestDeal = makeLatestDealDoc();
-    mockedPaymentFindOne.mockReturnValue({
-      sort: jest.fn().mockResolvedValue(latestDeal),
-    });
+    mockPaymentFindOneChain(latestDeal);
 
     const response: any = await postHandler(makeRequest({ status: 'Closed', source: 'referral_table' }), {
       params: { id: 'ref-1' },
@@ -203,9 +222,7 @@ describe('Referral status route deal-only updates', () => {
     mockedReferralFindById.mockReturnValue(referralDoc);
 
     const latestDeal = makeLatestDealDoc();
-    mockedPaymentFindOne.mockReturnValue({
-      sort: jest.fn().mockResolvedValue(latestDeal),
-    });
+    mockPaymentFindOneChain(latestDeal);
 
     const response: any = await postHandler(
       makeRequest({
@@ -231,9 +248,22 @@ describe('Referral status route deal-only updates', () => {
 
     const agentOwnedDeal = { ...makeLatestDealDoc(), _id: { toString: () => 'pay-agent' } };
     const otherAgentDeal = { ...makeLatestDealDoc(), _id: { toString: () => 'pay-other' } };
-    mockedPaymentFindOne.mockImplementation((query: any) => ({
-      sort: jest.fn().mockResolvedValue(query.agentId === 'agent-db-1' ? agentOwnedDeal : otherAgentDeal),
-    }));
+    mockedPaymentFindOne.mockImplementation((query: any) => {
+      const deal = query.agentId === 'agent-db-1' ? agentOwnedDeal : otherAgentDeal;
+      return {
+        sort: jest.fn(() => {
+          const afterSort: Record<string, unknown> = {
+            select: jest.fn(() => ({
+              lean: jest.fn(() => Promise.resolve(null)),
+            })),
+            lean: jest.fn(() => Promise.resolve(null)),
+          };
+          afterSort.then = (onFulfilled: (v: unknown) => unknown) => Promise.resolve(deal).then(onFulfilled);
+          afterSort.catch = (onRejected: (e: unknown) => unknown) => Promise.resolve(deal).catch(onRejected);
+          return afterSort;
+        }),
+      };
+    });
 
     const response: any = await postHandler(makeRequest({ status: 'Closed', source: 'referral_table' }), {
       params: { id: 'ref-1' },
@@ -252,9 +282,6 @@ describe('Referral status route deal-only updates', () => {
     mockCurrentAgent(null);
 
     const latestDeal = makeLatestDealDoc();
-    mockedPaymentFindOne.mockReturnValue({
-      sort: jest.fn().mockResolvedValue(latestDeal),
-    });
 
     const response: any = await postHandler(makeRequest({ status: 'Closed', source: 'referral_table' }), {
       params: { id: 'ref-1' },
@@ -268,10 +295,9 @@ describe('Referral status route deal-only updates', () => {
 
   it('notifies admins when an agent persists a referral status change', async () => {
     const referralDoc = makeReferralDoc();
+    referralDoc.clientType = 'Buyer';
     mockedReferralFindById.mockReturnValue(referralDoc);
-    mockedPaymentFindOne.mockReturnValue({
-      sort: jest.fn().mockResolvedValue(null),
-    });
+    mockPaymentFindOneChain(null);
 
     const response: any = await postHandler(makeRequest({ status: 'Lost' }), {
       params: { id: 'ref-1' },
@@ -286,10 +312,9 @@ describe('Referral status route deal-only updates', () => {
       user: { id: 'admin-1', role: 'admin', name: 'Admin User', email: 'admin@example.com' },
     } as any);
     const referralDoc = makeReferralDoc();
+    referralDoc.clientType = 'Buyer';
     mockedReferralFindById.mockReturnValue(referralDoc);
-    mockedPaymentFindOne.mockReturnValue({
-      sort: jest.fn().mockResolvedValue(null),
-    });
+    mockPaymentFindOneChain(null);
 
     const response: any = await postHandler(makeRequest({ status: 'Lost' }), {
       params: { id: 'ref-1' },
@@ -299,15 +324,101 @@ describe('Referral status route deal-only updates', () => {
     expect(mockedCreateAdminNotifications).not.toHaveBeenCalled();
   });
 
+  it('allows admin to set referral status to Closed', async () => {
+    mockedGetCurrentSession.mockResolvedValueOnce({
+      user: { id: 'admin-1', role: 'admin', name: 'Admin User', email: 'admin@example.com' },
+    } as any);
+    const referralDoc = makeReferralDoc();
+    referralDoc.clientType = 'Buyer';
+    mockedReferralFindById.mockReturnValue(referralDoc);
+    mockPaymentFindOneChain(null);
+
+    const response: any = await postHandler(makeRequest({ status: 'Closed', source: 'referral_detail' }), {
+      params: { id: 'ref-1' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('Closed');
+    expect(referralDoc.buyStatus).toBe('Closed');
+    expect(referralDoc.status).toBe('Closed');
+    expect(referralDoc.save).toHaveBeenCalled();
+  });
+
+  it('allows admin to set referral status to Terminated', async () => {
+    mockedGetCurrentSession.mockResolvedValueOnce({
+      user: { id: 'admin-1', role: 'admin', name: 'Admin User', email: 'admin@example.com' },
+    } as any);
+    const referralDoc = makeReferralDoc();
+    referralDoc.clientType = 'Buyer';
+    mockedReferralFindById.mockReturnValue(referralDoc);
+    mockPaymentFindOneChain(null);
+
+    const response: any = await postHandler(
+      makeRequest({ status: 'Terminated', source: 'referral_detail', terminatedReason: 'inspection' }),
+      { params: { id: 'ref-1' } }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('Terminated');
+    expect(referralDoc.buyStatus).toBe('Terminated');
+    expect(referralDoc.status).toBe('Terminated');
+    expect(referralDoc.save).toHaveBeenCalled();
+  });
+
+  it('notifies admins when an admin moves a referral to Under Contract', async () => {
+    mockedGetCurrentSession.mockResolvedValueOnce({
+      user: { id: 'admin-1', role: 'admin', name: 'Admin User', email: 'admin@example.com' },
+    } as any);
+    const referralDoc = makeReferralDoc();
+    referralDoc.borrower = { name: 'Jane Borrower' };
+    mockedReferralFindById.mockReturnValue(referralDoc);
+    mockedPaymentUpdateMany.mockResolvedValue({ acknowledged: true });
+    mockPaymentFindOneChain(null);
+    mockedPaymentCreate.mockResolvedValue({
+      _id: { toString: () => 'pay-created-1' },
+      status: 'under_contract',
+      expectedAmountCents: 1000,
+      toObject: () => ({ _id: 'pay-created-1', status: 'under_contract', expectedAmountCents: 1000 }),
+    });
+
+    const response: any = await postHandler(
+      makeRequest({
+        status: 'Under Contract',
+        source: 'referral_table',
+        side: 'buy',
+        contractDetails: {
+          propertyAddress: '123 Main St',
+          propertyCity: 'Denver',
+          propertyState: 'CO',
+          propertyPostalCode: '80014',
+          contractPrice: 450000,
+          agentCommissionPercentage: 3,
+          referralFeePercentage: 25,
+          dealSide: 'buy',
+        },
+        createNewDeal: false,
+      }),
+      { params: { id: 'ref-1' } }
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedCreateAdminNotifications).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'status_change',
+        borrowerName: 'Jane Borrower',
+        content: expect.stringContaining('Under Contract'),
+      })
+    );
+  });
+
   it('notifies admins when an MC persists a referral status change', async () => {
     mockedGetCurrentSession.mockResolvedValueOnce({
       user: { id: 'mc-1', role: 'mc', name: 'MC User', email: 'mc@example.com' },
     } as any);
     const referralDoc = makeReferralDoc();
+    referralDoc.clientType = 'Buyer';
     mockedReferralFindById.mockReturnValue(referralDoc);
-    mockedPaymentFindOne.mockReturnValue({
-      sort: jest.fn().mockResolvedValue(null),
-    });
+    mockPaymentFindOneChain(null);
 
     const response: any = await postHandler(makeRequest({ status: 'Lost' }), {
       params: { id: 'ref-1' },
@@ -323,11 +434,7 @@ describe('Referral status route deal-only updates', () => {
     referralDoc.sellSideAgent = { _id: 'sell-agent-db' };
     mockedReferralFindById.mockReturnValue(referralDoc);
     mockedPaymentUpdateMany.mockResolvedValue({ acknowledged: true });
-    mockedPaymentFindOne.mockReturnValue({
-      sort: jest.fn().mockReturnValue({
-        lean: jest.fn().mockResolvedValue(null),
-      }),
-    });
+    mockPaymentFindOneChain(null);
     mockedPaymentCreate.mockResolvedValue({
       _id: { toString: () => 'pay-created-1' },
       status: 'under_contract',

@@ -17,6 +17,7 @@ type ReferralSideSource = {
 };
 
 export type ReferralSide = 'buy' | 'sell';
+export type ReferralClientType = 'Seller' | 'Buyer' | 'Both';
 
 const ACTIVE_PROGRESS_ORDER: ReferralStatus[] = [
   'Closed',
@@ -48,6 +49,49 @@ const toId = (value: ReferralAgentRef): string | null => {
   }
   return null;
 };
+
+export const isReferralSide = (value: unknown): value is ReferralSide =>
+  value === 'buy' || value === 'sell';
+
+export const isSellSide = (side: ReferralSide | null | undefined): boolean => side === 'sell';
+
+export const isSellSideExclusiveReferral = (
+  clientType: string | null | undefined,
+  side: ReferralSide | null | undefined
+): boolean => {
+  if (clientType === 'Both') {
+    return false;
+  }
+  if (clientType === 'Seller') {
+    return true;
+  }
+  return side === 'sell';
+};
+
+export const resolveDealSideForMetrics = (
+  paymentSide: unknown,
+  referralDealSide: unknown,
+  referralClientType?: string | null
+): ReferralSide | null => {
+  if (isReferralSide(paymentSide)) {
+    return paymentSide;
+  }
+  if (isReferralSide(referralDealSide)) {
+    return referralDealSide;
+  }
+  if (referralClientType === 'Seller') {
+    return 'sell';
+  }
+  if (referralClientType === 'Buyer') {
+    return 'buy';
+  }
+  return null;
+};
+
+export const isAfcEligibleDeal = (
+  referralOrg: string | null | undefined,
+  side: ReferralSide | null | undefined
+): boolean => referralOrg === 'AFC' && side === 'buy';
 
 export const resolveAgentSideForReferral = (
   referral: ReferralSideSource,

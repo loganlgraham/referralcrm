@@ -920,6 +920,7 @@ export function DealsTable() {
         <tbody className="divide-y divide-slate-100">
           {deals.map((deal) => {
             const isTerminated = deal.status === 'terminated';
+            const isSellSideDeal = deal.side === 'sell' || deal.referral?.dealSide === 'sell';
             const referralFee = isTerminated
               ? 0
               : deal.expectedAmountCents ?? deal.referral?.referralFeeDueCents ?? 0;
@@ -998,13 +999,15 @@ export function DealsTable() {
                 <td className="px-4 py-3 text-sm text-slate-700">
                   {isTerminated ? (
                     '—'
+                  ) : isSellSideDeal ? (
+                    'N/A'
                   ) : (
                     <div className="flex items-center gap-2">
                       <ToggleSwitch
                         label="Mark referral as using AFC"
                         checked={usedAfc}
                         onChange={(nextValue) => handleAfcUsageChange(deal, nextValue)}
-                        disabled={isUpdating}
+                        disabled={isUpdating || isSellSideDeal}
                       />
                       <span className="text-sm text-slate-700">{usedAfc ? 'Yes' : 'No'}</span>
                     </div>
@@ -1083,6 +1086,7 @@ export function DealsTable() {
           {deals.map((deal) => {
             const commission = calculateCommission(deal);
             const isTerminated = deal.status === 'terminated';
+            const isSellSideDeal = deal.side === 'sell' || deal.referral?.dealSide === 'sell';
             const paidAmount = isTerminated
               ? 0
               : deal.status === 'paid'
@@ -1096,6 +1100,9 @@ export function DealsTable() {
               if (isTerminated) {
                 return 'Lost';
               }
+              if (isMcView && isSellSideDeal) {
+                return 'N/A';
+              }
               const basis = isMcView ? deal.usedAfc : deal.usedAssignedAgent;
               if (basis === null || basis === undefined) {
                 return 'Pending';
@@ -1107,6 +1114,8 @@ export function DealsTable() {
                 ? 'text-slate-800'
                 : outcome === 'Lost'
                   ? 'text-rose-600'
+                  : outcome === 'N/A'
+                    ? 'text-slate-500'
                   : 'text-slate-500';
 
             return (

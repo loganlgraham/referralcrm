@@ -234,6 +234,48 @@ describe('Payments PATCH outside-agent normalization', () => {
     expect(mockedCreateAdminNotifications).not.toHaveBeenCalled();
   });
 
+  it('notifies admins when an admin moves a deal to under contract', async () => {
+    mockedPaymentFindById.mockResolvedValueOnce({
+      _id: { toString: () => 'pay-1' },
+      referralId: 'ref-1',
+      status: 'past_inspection',
+      expectedAmountCents: 50000,
+      receivedAmountCents: 10000,
+      commissionBasisPoints: 300,
+      referralFeeBasisPoints: 25,
+      usedAssignedAgent: true,
+      agentAttribution: 'AHA',
+      side: 'buy',
+      usedAfc: true,
+      createdAt: new Date('2026-03-05T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T10:00:00.000Z'),
+      closingDate: null,
+    });
+    mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
+      _id: { toString: () => 'pay-1' },
+      status: 'under_contract',
+      usedAssignedAgent: true,
+      createdAt: new Date('2026-03-05T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T10:01:00.000Z'),
+      closingDate: null,
+    });
+
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        status: 'under_contract',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedCreateAdminNotifications).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'status_change',
+        content: expect.stringContaining('under_contract'),
+      })
+    );
+  });
+
   it('notifies admins for agent-driven deal status changes', async () => {
     mockedGetCurrentSession.mockResolvedValueOnce({
       user: { id: 'agent-1', role: 'agent', name: 'Agent User' },

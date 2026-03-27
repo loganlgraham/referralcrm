@@ -165,6 +165,12 @@ function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: Unde
     }
   }, [commissionFlat, commissionMode, commissionPercentage, contractPrice, expectedManuallyEdited, referralFeePercentage]);
 
+  useEffect(() => {
+    if (side === 'sell' && usedAfc) {
+      setUsedAfc(false);
+    }
+  }, [side, usedAfc]);
+
   return (
     <div className="w-[min(calc(100vw-1rem),40rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
       <h3 className="text-sm font-semibold text-slate-900">Add Deal Details</h3>
@@ -243,7 +249,7 @@ function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: Unde
                 propertyState: propertyState.trim().toUpperCase(),
                 closingDate: closingDate ? dateStringToLocalISO(closingDate) : null,
                 underContractDate: resolvedUnderContractDate,
-                usedAfc,
+                usedAfc: side === 'sell' ? false : usedAfc,
                 // Agent-entered deals always use the assigned agent.
                 usedAssignedAgent: true,
                 side,
@@ -342,18 +348,20 @@ function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: Unde
             <option value="sell">Sell-side</option>
           </select>
         </label>
-        <div className="rounded border border-brand/40 bg-brand/5 px-3 py-2 sm:col-span-2">
-          <label className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-            <input
-              type="checkbox"
-              className="h-4 w-4 accent-brand"
-              checked={usedAfc}
-              onChange={(e) => setUsedAfc(e.target.checked)}
-            />
-            Used AFC
-          </label>
-          <p className="mt-1 text-xs text-slate-600">Check this when AFC handled this deal.</p>
-        </div>
+        {side !== 'sell' && (
+          <div className="rounded border border-brand/40 bg-brand/5 px-3 py-2 sm:col-span-2">
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-brand"
+                checked={usedAfc}
+                onChange={(e) => setUsedAfc(e.target.checked)}
+              />
+              Used AFC
+            </label>
+            <p className="mt-1 text-xs text-slate-600">Check this when AFC handled this deal.</p>
+          </div>
+        )}
         <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
           <button type="button" className="w-full rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 sm:w-auto" onClick={onClose} disabled={submitting}>Cancel</button>
           <button type="submit" className="w-full rounded bg-brand px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 sm:w-auto" disabled={submitting}>{submitting ? 'Saving…' : 'Save deal & move status'}</button>
@@ -544,16 +552,6 @@ function StatusSelect({
       )}
       {dealStatusLabel && dealStatusLabel !== status && dealStatusLabel !== 'Terminated' && (
         <p className="text-xs text-slate-500">Deal stage: {dealStatusLabel}</p>
-      )}
-      {status === 'Under Contract' && (
-        <button
-          type="button"
-          onClick={openUnderContractDealModal}
-          className="text-xs font-medium text-brand hover:underline"
-          disabled={loading}
-        >
-          {compact ? 'Add deal details' : 'Add/update under-contract deal details'}
-        </button>
       )}
     </div>
   );

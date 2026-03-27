@@ -13,6 +13,7 @@ import type { Contact } from '@/components/referrals/contact-assignment';
 import { normalizeReferralStatus, type ReferralStatus, REFERRAL_TIMELINE_OPTIONS, REFERRAL_TIMELINE_VALUES } from '@/constants/referrals';
 import { ReferralDeals } from '@/components/referrals/referral-deals';
 import { getReferralDealsVisibility } from '@/components/referrals/deal-visibility';
+import { getLatestDealReferralStatuses } from '@/lib/latest-deal-referral-status';
 import type { ReferralPayment } from '@/types/referral-payment';
 import { formatCurrency, formatDateMST } from '@/utils/formatters';
 import Link from 'next/link';
@@ -1214,8 +1215,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     [referral.payments]
   );
   const { visibleDeals: visibleReferralDeals, hiddenOutsideAgentCount } = useMemo(
-    () => getReferralDealsVisibility(referralDeals, viewerRole),
-    [referralDeals, viewerRole]
+    () => getReferralDealsVisibility(referralDeals, viewerRole, referral.viewerAssignedSide ?? null),
+    [referral.viewerAssignedSide, referralDeals, viewerRole]
+  );
+  const latestDealReferralStatuses = useMemo(
+    () => getLatestDealReferralStatuses(referralDeals),
+    [referralDeals]
   );
   const effectiveHeaderStatus: ReferralStatus =
     viewerRole === 'agent' && hiddenOutsideAgentCount > 0 && visibleReferralDeals.length === 0
@@ -1276,6 +1281,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       <ReferralHeader
         referral={headerReferral}
         viewerRole={viewerRole}
+        latestDealStatus={latestDealReferralStatuses.overall}
+        latestBuyDealStatus={latestDealReferralStatuses.buy}
+        latestSellDealStatus={latestDealReferralStatuses.sell}
         onFinancialsChange={handleFinancialsChange}
         buySideAgentContact={buySideAgentContact}
         sellSideAgentContact={sellSideAgentContact}
@@ -1552,6 +1560,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         onDealUpdated={handleDealUpdated}
         onDealDeleted={handleDealDeleted}
         viewerRole={viewerRole}
+        viewerAssignedSide={referral.viewerAssignedSide ?? null}
         referralOrigin={referral.origin}
         feeBreakdownAutoSendEnabled={referral.feeBreakdownAutoSendEnabled as boolean | undefined}
         hiddenOutsideAgentCount={hiddenOutsideAgentCount}

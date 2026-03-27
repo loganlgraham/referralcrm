@@ -31,6 +31,7 @@ import { type DealStatus } from '@/constants/deals';
 import {
   deriveReferralStatusFromSides,
   getAgentIdForSide,
+  isSellSide,
   pickPrimarySideForReferral,
   resolveAgentSideForReferral,
   type ReferralSide,
@@ -261,6 +262,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   if (usedAfcParam === 'true' || usedAfcParam === 'false') {
     filter.usedAfc = usedAfcParam === 'true';
+    filter.side = 'buy';
   }
 
   if (role === 'agent') {
@@ -586,7 +588,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       terminatedReason: payment.terminatedReason ?? null,
       closingDate: payment.closingDate ? payment.closingDate.toISOString() : null,
       agentAttribution: payment.agentAttribution ?? null,
-      usedAfc: Boolean(payment.usedAfc),
+      usedAfc: payment.side === 'sell' ? false : Boolean(payment.usedAfc),
       usedAssignedAgent: Boolean(payment.usedAssignedAgent),
       invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
       paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
@@ -728,6 +730,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const normalizedUsedAssignedAgent = isOutsideAgent ? false : requestedUsedAssignedAgent;
   const normalizedAgentAttribution = isOutsideAgent ? 'OUTSIDE_AGENT' : requestedAgentAttribution;
   let defaultAgentId: Types.ObjectId | string | null = null;
+  const usedAfcForCreate = isSellSide(resolvedSide) ? false : (parsed.data.usedAfc ?? true);
 
   if (session.user.role === 'agent') {
     defaultAgentId =
@@ -749,7 +752,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     receivedAmountCents: isAgentOrigin || isOutsideAgent ? 0 : parsed.data.receivedAmountCents,
     terminatedReason: parsed.data.terminatedReason ?? null,
     agentAttribution: isAgentOrigin ? null : normalizedAgentAttribution,
-    usedAfc: parsed.data.usedAfc ?? true,
+    usedAfc: usedAfcForCreate,
     usedAssignedAgent: isAgentOrigin ? true : normalizedUsedAssignedAgent,
     netReferralFeePaidCents:
       isAgentOrigin || isOutsideAgent ? 0 : parsed.data.netReferralFeePaidCents ?? null,
@@ -1077,7 +1080,13 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   if (isAgentOrigin) {
     updatePayload.netReferralFeePaidCents = 0;
     updatePayload.usedAssignedAgent = true;
-    updatePayload.usedAfc = existingPayment.usedAfc ?? true;
+    updatePayload.usedAfc = isSellSide(effectiveSide) ? false : (existingPayment.usedAfc ?? true);
+  }
+
+  if (isSellSide(effectiveSide)) {
+    updatePayload.usedAfc = false;
+  } else if (Object.prototype.hasOwnProperty.call(parsed.data, 'usedAfc')) {
+    updatePayload.usedAfc = Boolean(parsed.data.usedAfc);
   }
 
   const payment = await Payment.findByIdAndUpdate(body.id, updatePayload, { new: true });
@@ -1295,10 +1304,15 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       ? referral.statusLastUpdated.toISOString()
       : null;
 
+    const transitionedDealToUnderContract =
+      parsed.data.status === 'under_contract' && previousStatus !== 'under_contract';
+
     if (
-      (session.user.role === 'agent' || session.user.role === 'mc') &&
       parsed.data.status &&
-      parsed.data.status !== previousStatus
+      parsed.data.status !== previousStatus &&
+      (session.user.role === 'agent' ||
+        session.user.role === 'mc' ||
+        transitionedDealToUnderContract)
     ) {
       const actorName = session.user.name || session.user.email || 'A team member';
       const borrowerName = referral.borrower?.name || 'a referral';

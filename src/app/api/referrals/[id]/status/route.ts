@@ -23,6 +23,7 @@ import { type ReferralStatus } from '@/constants/referrals';
 import {
   deriveReferralStatusFromSides,
   getAgentIdForSide,
+  isSellSide,
   pickPrimarySideForReferral,
   resolveAgentSideForReferral,
   type ReferralSide,
@@ -86,6 +87,22 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     currentAgentId = currentAgent?._id ? String(currentAgent._id) : null;
   }
 
+  let sideFromAssignedDeal: ReferralSide | null = null;
+  if (session.user.role === 'agent' && currentAgentId) {
+    const assignedDeal = await Payment.findOne({
+      referralId: referral._id,
+      agentId: currentAgentId,
+      usedAssignedAgent: true,
+      agentAttribution: { $ne: 'OUTSIDE_AGENT' },
+    })
+      .sort({ createdAt: -1 })
+      .select('side')
+      .lean<{ side?: 'buy' | 'sell' | null } | null>();
+    if (assignedDeal?.side === 'buy' || assignedDeal?.side === 'sell') {
+      sideFromAssignedDeal = assignedDeal.side;
+    }
+  }
+
   const sideFromAgent = resolveAgentSideForReferral(
     {
       buySideAgent: referral.buySideAgent as any,
@@ -96,10 +113,14 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     },
     currentAgentId
   );
+  const preferredAgentSideForRequest =
+    session.user.role === 'agent' && parsed.data.status === 'Lost'
+      ? sideFromAssignedDeal ?? sideFromAgent
+      : sideFromAgent;
   const requestSide: ReferralSide =
     parsed.data.side ??
     parsed.data.contractDetails?.dealSide ??
-    sideFromAgent ??
+    preferredAgentSideForRequest ??
     pickPrimarySideForReferral({
       buySideAgent: referral.buySideAgent as any,
       sellSideAgent: referral.sellSideAgent as any,
@@ -277,6 +298,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   if (shouldPersistReferralStatus && parsed.data.status === 'Under Contract') {
     const details = parsed.data.contractDetails;
     const underContractSide: ReferralSide = details?.dealSide ?? requestSide;
+    const underContractUsedAfc = !isSellSide(underContractSide);
 
     if (details) {
       const propertyAddress = details.propertyAddress.trim();
@@ -324,6 +346,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             referralFeeBasisPoints: isNoFeeDeal ? null : referral.referralFeeBasisPoints ?? null,
             side: underContractSide,
             contractPriceCents: referral.estPurchasePriceCents ?? null,
+            usedAfc: underContractUsedAfc,
           },
         }
       );
@@ -342,7 +365,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
           side: underContractSide,
           contractPriceCents: referral.estPurchasePriceCents ?? null,
           usedAssignedAgent: true,
-          usedAfc: true,
+          usedAfc: underContractUsedAfc,
           underContractDate: new Date(),
           agentId: sideAgentId,
         });
@@ -358,7 +381,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         side: underContractSide,
         contractPriceCents: referral.estPurchasePriceCents ?? null,
         usedAssignedAgent: true,
-        usedAfc: true,
+        usedAfc: underContractUsedAfc,
         underContractDate: new Date(),
         agentId: sideAgentId,
       });
@@ -481,7 +504,14 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       content: `Status changed from ${previousStatus} to ${referral.status}`,
     });
 
-    if (session.user.role === 'agent' || session.user.role === 'mc') {
+    const transitionedToUnderContract =
+      referral.status === 'Under Contract' && previousStatus !== 'Under Contract';
+
+    if (
+      session.user.role === 'agent' ||
+      session.user.role === 'mc' ||
+      transitionedToUnderContract
+    ) {
       const actorName = session.user.name || session.user.email || 'A team member';
       const borrowerName = referral.borrower?.name || 'a referral';
       await createAdminNotifications({

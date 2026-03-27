@@ -190,8 +190,10 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   await connectMongo();
   const referral = await Referral.findById(params.id)
-    .select('assignedAgent lender org deletedAt borrower')
+    .select('assignedAgent buySideAgent sellSideAgent lender org deletedAt borrower')
     .populate('assignedAgent', 'userId')
+    .populate('buySideAgent', 'userId')
+    .populate('sellSideAgent', 'userId')
     .populate('lender', 'userId')
     .lean<LeanReferralAccess & { borrower?: { name?: string } }>();
   if (!referral) {
@@ -202,10 +204,13 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
   const accessScope = {
     assignedAgent: referral.assignedAgent,
+    buySideAgent: referral.buySideAgent,
+    sellSideAgent: referral.sellSideAgent,
     lender: referral.lender,
     org: referral.org
   };
-  if (!canViewReferral(session, accessScope)) {
+  const canView = canViewReferral(session, accessScope);
+  if (!canView) {
     return new NextResponse('Forbidden', { status: 403 });
   }
   const activity = await Activity.create({

@@ -407,7 +407,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
                   {
                     $and: [
                       { $eq: ['$referral.org', 'AFC'] },
-                      { $ne: ['$usedAfc', true] }
+                      { $ne: ['$usedAfc', true] },
+                      { $ne: ['$side', 'sell'] },
+                      { $ne: ['$referral.dealSide', 'sell'] },
+                      { $ne: ['$referral.clientType', 'Seller'] }
                     ]
                   },
                   1,
