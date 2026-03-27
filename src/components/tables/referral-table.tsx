@@ -1,6 +1,14 @@
 'use client';
 
-import { ReactNode, useMemo, useState, useTransition, useCallback, useEffect } from 'react';
+import {
+  ReactNode,
+  useMemo,
+  useState,
+  useTransition,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+} from 'react';
 import {
   ColumnDef,
   flexRender,
@@ -71,6 +79,8 @@ type ReferralTableProps = {
   mode: TableMode;
   showAgentOriginIndicator?: boolean;
   hideAgentColumn?: boolean;
+  /** Below `md`, render stacked cards instead of a horizontal-scroll table (single subtree; no duplicate controls). */
+  stackOnMobile?: boolean;
 };
 
 interface StatusSelectProps {
@@ -1076,7 +1086,255 @@ function buildColumns(
   return adminColumns;
 }
 
-export function ReferralTable({ data, mode, showAgentOriginIndicator, hideAgentColumn }: ReferralTableProps) {
+const MD_MIN_WIDTH_QUERY = '(min-width: 768px)';
+
+function referralDetailHref(row: ReferralRow, listParams: string) {
+  return listParams ? `/referrals/${row._id}?${listParams}` : `/referrals/${row._id}`;
+}
+
+function MobileField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <div className="text-sm text-slate-800">{children}</div>
+    </div>
+  );
+}
+
+function ReferralMobileStack({
+  rows,
+  mode,
+  listParams,
+  showAgentOriginIndicator,
+  hideAgentColumn,
+}: {
+  rows: ReferralRow[];
+  mode: TableMode;
+  listParams: string;
+  showAgentOriginIndicator?: boolean;
+  hideAgentColumn?: boolean;
+}) {
+  const showOrigin = showAgentOriginIndicator ?? false;
+  const hideAgent = hideAgentColumn ?? false;
+
+  return (
+    <div className="space-y-3">
+      {rows.map((row) => {
+        const timelineText = formatTimelineCountdown(
+          calculateTimelineDaysRemaining(row.timeline, row.createdAt),
+          row.timeline
+        );
+        const href = referralDetailHref(row, listParams);
+
+        return (
+          <div
+            key={row._id}
+            className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm space-y-3"
+          >
+            <MobileField label="Borrower">
+              <div className="flex flex-col gap-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  {showOrigin && row.origin === 'agent' ? (
+                    <span
+                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-slate-700"
+                      aria-label="Agent-created referral"
+                      title="Agent-created referral"
+                    />
+                  ) : null}
+                  <Link href={href} className="font-medium text-brand break-words">
+                    {row.borrowerName}
+                  </Link>
+                  {mode === 'admin' && (row.urgentTaskCount ?? 0) > 0 ? (
+                    <span
+                      className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800"
+                      title={`${row.urgentTaskCount} overdue or due today`}
+                    >
+                      {row.urgentTaskCount}
+                    </span>
+                  ) : null}
+                </div>
+                {row.borrowerEmail ? (
+                  <a
+                    href={buildGmailComposeUrl(row.borrowerEmail)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-brand hover:underline w-fit"
+                  >
+                    Email
+                  </a>
+                ) : null}
+                {row.borrowerPhone ? (
+                  <a
+                    href={`tel:${row.borrowerPhone.replace(/[^0-9+]/g, '')}`}
+                    className="text-xs text-brand hover:underline w-fit"
+                  >
+                    {formatPhoneNumber(row.borrowerPhone)}
+                  </a>
+                ) : (
+                  <span className="text-xs text-slate-400">—</span>
+                )}
+              </div>
+            </MobileField>
+
+            <MobileField label="Loan file #">{row.loanFileNumber}</MobileField>
+            <MobileField label="Timeline">{timelineText}</MobileField>
+
+            {mode === 'agent' ? (
+              <>
+                <MobileField label="Pre-approval">
+                  {row.preApprovalAmountCents ? formatCurrency(row.preApprovalAmountCents) : '—'}
+                </MobileField>
+                <MobileField label="Status">
+                  {row.clientType === 'Both' ? (
+                    <AgentBothStatusCell row={row} />
+                  ) : (
+                    <StatusSelect
+                      referralId={row._id}
+                      value={row.status}
+                      dealStatusLabel={row.dealStatusLabel ?? null}
+                      side={row.viewerAssignedSide ?? undefined}
+                      defaultSide={row.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
+                    />
+                  )}
+                </MobileField>
+                <MobileField label="Notes">
+                  <NoteComposer referralId={row._id} />
+                </MobileField>
+                <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
+              </>
+            ) : null}
+
+            {mode === 'mc' ? (
+              <>
+                <MobileField label="Agent contact">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-medium text-slate-700">
+                        {row.assignedAgentName || 'Unassigned'}
+                      </span>
+                      {row.autoUpdateRemindersEnabled ? (
+                        <span title="Auto reminders enabled">
+                          <Clock className="h-3.5 w-3.5 text-slate-400" aria-label="Auto reminders enabled" />
+                        </span>
+                      ) : null}
+                    </div>
+                    {row.assignedAgentEmail ? (
+                      <a
+                        href={buildGmailComposeUrl(row.assignedAgentEmail)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-brand hover:underline w-fit"
+                      >
+                        Email
+                      </a>
+                    ) : null}
+                    {row.assignedAgentPhone ? (
+                      <a
+                        href={`tel:${row.assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
+                        className="text-xs text-brand hover:underline w-fit"
+                      >
+                        {formatPhoneNumber(row.assignedAgentPhone)}
+                      </a>
+                    ) : null}
+                  </div>
+                </MobileField>
+                <MobileField label="Status">
+                  <StatusBadge status={row.dealStatusLabel ?? row.status} />
+                </MobileField>
+                <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
+              </>
+            ) : null}
+
+            {mode === 'admin' ? (
+              <>
+                <MobileField label="Status">
+                  <StatusBadge status={row.dealStatusLabel ?? row.status} />
+                </MobileField>
+                {!hideAgent ? (
+                  <MobileField label="Agent">
+                    {!row.assignedAgentName && !row.assignedAgentPhone && !row.assignedAgentEmail ? (
+                      'Unassigned'
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-medium text-slate-700">
+                            {row.assignedAgentName || 'Unassigned'}
+                          </span>
+                          {row.autoUpdateRemindersEnabled ? (
+                            <span title="Auto reminders enabled">
+                              <Clock className="h-3.5 w-3.5 text-slate-400" aria-label="Auto reminders enabled" />
+                            </span>
+                          ) : null}
+                        </div>
+                        {row.assignedAgentEmail ? (
+                          <a
+                            href={buildGmailComposeUrl(row.assignedAgentEmail)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-brand hover:underline w-fit"
+                          >
+                            Email
+                          </a>
+                        ) : null}
+                        {row.assignedAgentPhone ? (
+                          <a
+                            href={`tel:${row.assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
+                            className="text-xs text-brand hover:underline w-fit"
+                          >
+                            {formatPhoneNumber(row.assignedAgentPhone)}
+                          </a>
+                        ) : null}
+                      </div>
+                    )}
+                  </MobileField>
+                ) : null}
+                <MobileField label="Lender / MC">
+                  {!row.lenderName && !row.lenderPhone && !row.lenderEmail ? (
+                    '—'
+                  ) : (
+                    <div className="flex flex-col gap-1">
+                      <span className="font-medium text-slate-700">{row.lenderName || 'Unassigned'}</span>
+                      {row.lenderEmail ? (
+                        <a
+                          href={buildGmailComposeUrl(row.lenderEmail)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-brand hover:underline w-fit"
+                        >
+                          Email
+                        </a>
+                      ) : null}
+                      {row.lenderPhone ? (
+                        <a
+                          href={`tel:${row.lenderPhone.replace(/[^0-9+]/g, '')}`}
+                          className="text-xs text-brand hover:underline w-fit"
+                        >
+                          {formatPhoneNumber(row.lenderPhone)}
+                        </a>
+                      ) : null}
+                    </div>
+                  )}
+                </MobileField>
+                <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
+                <MobileField label="Last updated">
+                  {row.updatedAt ? new Date(row.updatedAt).toLocaleDateString() : '—'}
+                </MobileField>
+              </>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function ReferralTable({
+  data,
+  mode,
+  showAgentOriginIndicator,
+  hideAgentColumn,
+  stackOnMobile = false,
+}: ReferralTableProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -1140,6 +1398,31 @@ export function ReferralTable({ data, mode, showAgentOriginIndicator, hideAgentC
     columns,
     getCoreRowModel: getCoreRowModel(),
   });
+
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!stackOnMobile || typeof window === 'undefined') {
+      return;
+    }
+    const mq = window.matchMedia(MD_MIN_WIDTH_QUERY);
+    const apply = () => setIsDesktop(mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, [stackOnMobile]);
+
+  if (stackOnMobile && !isDesktop) {
+    return (
+      <ReferralMobileStack
+        rows={safeData}
+        mode={mode}
+        listParams={listParams}
+        showAgentOriginIndicator={showAgentOriginIndicator}
+        hideAgentColumn={hideAgentColumn}
+      />
+    );
+  }
 
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">

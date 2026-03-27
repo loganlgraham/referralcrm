@@ -160,6 +160,7 @@ export default async function AgentDetailPage({ params, searchParams }: AgentDet
                     data={referralItems}
                     mode={isAdmin ? 'admin' : isAgent ? 'agent' : 'mc'}
                     hideAgentColumn
+                    stackOnMobile
                   />
                   <Pagination
                     currentPage={referralsData?.page ?? 1}
