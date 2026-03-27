@@ -32,23 +32,20 @@ type LeanUser = {
   email?: string | null;
 };
 
+type LeanAgentRef =
+  | Types.ObjectId
+  | string
+  | null
+  | {
+      _id?: Types.ObjectId | string | null;
+      userId?: Types.ObjectId | string | null;
+    };
+
 type LeanReferralAccess = {
-  assignedAgent?:
-    | Types.ObjectId
-    | string
-    | null
-    | {
-        _id?: Types.ObjectId | string | null;
-        userId?: Types.ObjectId | string | null;
-      };
-  lender?:
-    | Types.ObjectId
-    | string
-    | null
-    | {
-        _id?: Types.ObjectId | string | null;
-        userId?: Types.ObjectId | string | null;
-      };
+  assignedAgent?: LeanAgentRef;
+  buySideAgent?: LeanAgentRef;
+  sellSideAgent?: LeanAgentRef;
+  lender?: LeanAgentRef;
   notes?: {
     authorRole?: string | null;
     content?: string | null;
@@ -116,7 +113,7 @@ export async function GET(_: NextRequest, { params }: Params): Promise<NextRespo
     .populate('buySideAgent', 'userId')
     .populate('sellSideAgent', 'userId')
     .populate('lender', 'userId')
-    .lean<LeanReferralAccess & { buySideAgent?: unknown; sellSideAgent?: unknown }>();
+    .lean<LeanReferralAccess>();
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
   }
@@ -125,8 +122,8 @@ export async function GET(_: NextRequest, { params }: Params): Promise<NextRespo
   }
   const accessScope = {
     assignedAgent: referral.assignedAgent,
-    buySideAgent: (referral as any).buySideAgent,
-    sellSideAgent: (referral as any).sellSideAgent,
+    buySideAgent: referral.buySideAgent,
+    sellSideAgent: referral.sellSideAgent,
     lender: referral.lender,
     org: referral.org
   };
