@@ -19,13 +19,13 @@ interface Notification {
 interface NotificationDropdownProps {
   notifications: Notification[];
   onClose: () => void;
-  onNotificationDeleted?: () => void;
+  onNotificationsChanged?: () => void;
 }
 
 export function NotificationDropdown({
   notifications: initialNotifications,
   onClose,
-  onNotificationDeleted,
+  onNotificationsChanged,
 }: NotificationDropdownProps) {
   const router = useRouter();
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -35,25 +35,6 @@ export function NotificationDropdown({
   useEffect(() => {
     setNotifications(initialNotifications);
   }, [initialNotifications]);
-
-  // Mark notifications as read when dropdown opens (this removes the red dot)
-  useEffect(() => {
-    const markAsRead = async () => {
-      try {
-        await fetch('/api/admin/notifications/read', {
-          method: 'POST',
-        });
-        // Refresh notification list after marking as read to update the count
-        if (onNotificationDeleted) {
-          onNotificationDeleted();
-        }
-      } catch (error) {
-        console.error('Failed to mark notifications as read:', error);
-      }
-    };
-
-    markAsRead();
-  }, [onNotificationDeleted]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -68,33 +49,39 @@ export function NotificationDropdown({
   }, [onClose]);
 
   const handleNotificationClick = async (notificationId: string, referralId: string) => {
-    // Optimistically remove the notification from the list
-    const deletedNotification = notifications.find((n) => n._id === notificationId);
-    setNotifications((prev) => prev.filter((n) => n._id !== notificationId));
-    
-    // Delete the notification when clicked
+    const clickedNotification = notifications.find((notification) => notification._id === notificationId);
+    const shouldMarkAsRead = clickedNotification?.readAt === null;
+    const previousNotifications = notifications;
+    if (shouldMarkAsRead) {
+      setNotifications((prev) =>
+        prev.map((notification) =>
+          notification._id === notificationId
+            ? { ...notification, readAt: new Date().toISOString() }
+            : notification
+        )
+      );
+    }
+
+    // Mark clicked notification as read
     try {
-      await fetch(`/api/admin/notifications/${notificationId}`, {
-        method: 'DELETE',
-      });
-      // Refresh notification list to update the count
-      if (onNotificationDeleted) {
-        onNotificationDeleted();
+      if (shouldMarkAsRead) {
+        const response = await fetch(`/api/admin/notifications/${notificationId}`, {
+          method: 'PATCH',
+        });
+        if (!response.ok) {
+          throw new Error('Failed to mark notification as read');
+        }
+        if (onNotificationsChanged) {
+          onNotificationsChanged();
+        }
       }
     } catch (error) {
-      console.error('Failed to delete notification:', error);
-      // If deletion failed, restore the notification
-      if (deletedNotification) {
-        setNotifications((prev) => 
-          [...prev, deletedNotification].sort((a, b) => 
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          )
-        );
-      } else {
-        // If we can't restore, refresh from server
-        if (onNotificationDeleted) {
-          onNotificationDeleted();
-        }
+      console.error('Failed to mark notification as read:', error);
+      if (shouldMarkAsRead) {
+        setNotifications(previousNotifications);
+      }
+      if (onNotificationsChanged) {
+        onNotificationsChanged();
       }
     }
     
@@ -117,9 +104,10 @@ export function NotificationDropdown({
         return '⭐';
       case 'checkin_no_response_48h':
         return '⚠️';
-      default:
-        return '🔔';
     }
+
+    const exhaustiveCheck: never = type;
+    return exhaustiveCheck;
   };
 
   return (
@@ -148,11 +136,21 @@ export function NotificationDropdown({
                 <div className="flex items-start gap-3">
                   <span className="text-xl">{getNotificationIcon(notification.type)}</span>
                   <div className="flex-1 overflow-hidden">
-                    <p className="text-sm font-semibold text-brand hover:underline">
-                      {notification.borrowerName}
+                    <div className="flex items-center gap-2">
+                      {notification.readAt === null && (
+                        <span
+                          className="inline-block h-2 w-2 rounded-full bg-red-500"
+                          aria-label="Unread notification"
+                        />
+                      )}
+                      <p className={`text-sm font-semibold hover:underline ${notification.readAt === null ? 'text-brand' : 'text-slate-600'}`}>
+                        {notification.borrowerName}
+                      </p>
+                    </div>
+                    <p className={`mt-1 text-sm ${notification.readAt === null ? 'text-slate-900' : 'text-slate-500'}`}>
+                      {notification.content}
                     </p>
-                    <p className="mt-1 text-sm text-slate-900">{notification.content}</p>
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className={`mt-1 text-xs ${notification.readAt === null ? 'text-slate-500' : 'text-slate-400'}`}>
                       {formatDistanceToNow(new Date(notification.createdAt), {
                         addSuffix: true,
                       })}

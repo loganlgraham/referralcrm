@@ -1,6 +1,14 @@
 'use client';
 
-import { ReactNode, useMemo, useState, useTransition, useCallback, useEffect } from 'react';
+import {
+  ReactNode,
+  useMemo,
+  useState,
+  useTransition,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+} from 'react';
 import {
   ColumnDef,
   flexRender,
@@ -9,12 +17,15 @@ import {
 } from '@tanstack/react-table';
 import Link from 'next/link';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import { Clock } from 'lucide-react';
 
 import { REFERRAL_STATUSES, ReferralStatus, type ReferralTimeline } from '@/constants/referrals';
+import {
+  TERMINATED_REASON_OPTIONS,
+  type TerminatedReason,
+} from '@/constants/deals';
 import { formatCurrency, formatNumber, formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { calculateTimelineDaysRemaining, formatTimelineCountdown } from '@/utils/timeline-countdown';
@@ -28,6 +39,9 @@ export interface ReferralRow {
   endorser?: string;
   clientType: 'Seller' | 'Buyer' | 'Both';
   dealSide?: 'buy' | 'sell' | null;
+  buyStatus?: ReferralStatus | null;
+  sellStatus?: ReferralStatus | null;
+  viewerAssignedSide?: 'buy' | 'sell' | null;
   lookingInZip: string;
   lookingInZips?: string[];
   borrowerCurrentAddress?: string;
@@ -65,22 +79,370 @@ type ReferralTableProps = {
   mode: TableMode;
   showAgentOriginIndicator?: boolean;
   hideAgentColumn?: boolean;
+  /** Below `md`, render stacked cards instead of a horizontal-scroll table (single subtree; no duplicate controls). */
+  stackOnMobile?: boolean;
 };
 
 interface StatusSelectProps {
   referralId: string;
   value: ReferralStatus;
   dealStatusLabel?: string | null;
+  defaultSide?: 'buy' | 'sell';
+  side?: 'buy' | 'sell';
+  compact?: boolean;
 }
 
-function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps) {
+const toCents = (value: string): number => {
+  const numeric = Number.parseFloat(value.replace(/[^0-9.\-]/g, ''));
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return 0;
+  }
+  return Math.round(numeric * 100);
+};
+
+const dateStringToLocalISO = (dateString: string): string => {
+  if (!dateString) return '';
+  if (dateString.includes('T')) return dateString;
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day).toISOString();
+};
+
+interface UnderContractDealToastProps {
+  defaultSide?: 'buy' | 'sell';
+  onClose: () => void;
+  onSubmit: (payload: {
+    paymentPayload: Record<string, unknown>;
+    contractDetails: {
+      propertyAddress: string;
+      propertyCity: string;
+      propertyState: string;
+      propertyPostalCode: string;
+      contractPrice: number;
+      agentCommissionPercentage: number;
+      referralFeePercentage: number;
+      dealSide: 'buy' | 'sell';
+    };
+  }) => Promise<void>;
+}
+
+function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: UnderContractDealToastProps) {
+  const [expectedAmount, setExpectedAmount] = useState('');
+  const [expectedManuallyEdited, setExpectedManuallyEdited] = useState(false);
+  const [contractPrice, setContractPrice] = useState('');
+  const [commissionMode, setCommissionMode] = useState<'%' | '$'>('%');
+  const [commissionPercentage, setCommissionPercentage] = useState('');
+  const [commissionFlat, setCommissionFlat] = useState('');
+  const [referralFeePercentage, setReferralFeePercentage] = useState('');
+  const [propertyAddress, setPropertyAddress] = useState('');
+  const [propertyCity, setPropertyCity] = useState('');
+  const [propertyState, setPropertyState] = useState('');
+  const [propertyPostalCode, setPropertyPostalCode] = useState('');
+  const [closingDate, setClosingDate] = useState('');
+  const [underContractDate, setUnderContractDate] = useState('');
+  const [side, setSide] = useState<'buy' | 'sell'>(defaultSide);
+  const [usedAfc, setUsedAfc] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleDateInputClick = useCallback((event: React.MouseEvent<HTMLInputElement>) => {
+    try {
+      event.currentTarget.showPicker?.();
+    } catch {
+      // Fallback to native date input behavior for browsers without showPicker support.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (expectedManuallyEdited) return;
+    const referral = Number.parseFloat(referralFeePercentage);
+    if (!Number.isFinite(referral)) return;
+    if (commissionMode === '$') {
+      const flatFee = Number.parseFloat(commissionFlat);
+      if (Number.isFinite(flatFee)) {
+        const computed = flatFee * (referral / 100);
+        if (Number.isFinite(computed)) {
+          setExpectedAmount(computed.toFixed(2));
+        }
+      }
+      return;
+    }
+    const contract = Number.parseFloat(contractPrice);
+    const commission = Number.parseFloat(commissionPercentage);
+    if (Number.isFinite(contract) && Number.isFinite(commission)) {
+      const computed = ((contract * commission) / 100) * (referral / 100);
+      if (Number.isFinite(computed)) {
+        setExpectedAmount(computed.toFixed(2));
+      }
+    }
+  }, [commissionFlat, commissionMode, commissionPercentage, contractPrice, expectedManuallyEdited, referralFeePercentage]);
+
+  useEffect(() => {
+    if (side === 'sell' && usedAfc) {
+      setUsedAfc(false);
+    }
+  }, [side, usedAfc]);
+
+  return (
+    <div className="w-[min(calc(100vw-1rem),40rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
+      <h3 className="text-sm font-semibold text-slate-900">Add Deal Details</h3>
+      <p className="mt-1 text-xs text-slate-500">Enter full deal info before moving referral to Under Contract.</p>
+      <form
+        className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          if (submitting) return;
+          if (!propertyAddress.trim() || !propertyCity.trim()) {
+            toast.error('Property address and city are required.');
+            return;
+          }
+          if (!/^[A-Za-z]{2}$/.test(propertyState.trim())) {
+            toast.error('Property state must be a 2-letter code.');
+            return;
+          }
+          if (!/^\d{5}(?:-\d{4})?$/.test(propertyPostalCode.trim())) {
+            toast.error('Enter a valid property ZIP code.');
+            return;
+          }
+          if (!contractPrice || Number.parseFloat(contractPrice) <= 0) {
+            toast.error('Contract price is required.');
+            return;
+          }
+          if (!referralFeePercentage || Number.parseFloat(referralFeePercentage) <= 0) {
+            toast.error('Referral fee % is required.');
+            return;
+          }
+          const contractPriceCents = toCents(contractPrice);
+          const isFlatFeeMode = commissionMode === '$';
+          const commissionBasisPoints = isFlatFeeMode
+            ? null
+            : commissionPercentage
+            ? Math.round(Number.parseFloat(commissionPercentage) * 100)
+            : null;
+          const commissionFlatFeeCents = isFlatFeeMode
+            ? (commissionFlat ? toCents(commissionFlat) : null)
+            : null;
+          const referralFeeBasisPoints = referralFeePercentage
+            ? Math.round(Number.parseFloat(referralFeePercentage) * 100)
+            : null;
+          const expectedAmountCents = toCents(expectedAmount);
+          const computedExpectedAmountCents =
+            !expectedAmountCents && referralFeeBasisPoints
+              ? isFlatFeeMode
+                ? Math.round(((commissionFlatFeeCents ?? 0) * referralFeeBasisPoints) / 10_000)
+                : Math.round((contractPriceCents * (commissionBasisPoints ?? 0) * referralFeeBasisPoints) / 100_000_000)
+              : expectedAmountCents;
+          const finalExpectedAmountCents = computedExpectedAmountCents;
+
+          const agentCommissionPercentage = isFlatFeeMode
+            ? commissionFlatFeeCents != null && contractPriceCents > 0
+              ? (commissionFlatFeeCents / contractPriceCents) * 100
+              : 0
+            : (commissionBasisPoints ?? 0) / 100;
+          const referralFeePercentageValue = (referralFeeBasisPoints ?? 0) / 100;
+          const resolvedUnderContractDate = underContractDate
+            ? dateStringToLocalISO(underContractDate)
+            : new Date().toISOString();
+
+          setSubmitting(true);
+          try {
+            await onSubmit({
+              paymentPayload: {
+                status: 'under_contract',
+                expectedAmountCents: finalExpectedAmountCents,
+                receivedAmountCents: 0,
+                netReferralFeePaidCents: 0,
+                contractPriceCents,
+                commissionBasisPoints,
+                commissionFlatFeeCents,
+                referralFeeBasisPoints,
+                propertyAddress: propertyAddress.trim(),
+                propertyCity: propertyCity.trim(),
+                propertyState: propertyState.trim().toUpperCase(),
+                closingDate: closingDate ? dateStringToLocalISO(closingDate) : null,
+                underContractDate: resolvedUnderContractDate,
+                usedAfc: side === 'sell' ? false : usedAfc,
+                // Agent-entered deals always use the assigned agent.
+                usedAssignedAgent: true,
+                side,
+                terminatedReason: null,
+              },
+              contractDetails: {
+                propertyAddress: propertyAddress.trim(),
+                propertyCity: propertyCity.trim(),
+                propertyState: propertyState.trim().toUpperCase(),
+                propertyPostalCode: propertyPostalCode.trim(),
+                contractPrice: contractPriceCents / 100,
+                agentCommissionPercentage,
+                referralFeePercentage: referralFeePercentageValue,
+                dealSide: side,
+              },
+            });
+          } finally {
+            setSubmitting(false);
+          }
+        }}
+      >
+        <label className="text-xs font-medium text-slate-700">Contract price
+          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={contractPrice} onChange={(e) => setContractPrice(e.target.value)} />
+        </label>
+        <div className="text-xs font-medium text-slate-700">
+          <span>Commission</span>
+          <div className="mt-1 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={`rounded border px-2 py-1 text-xs font-semibold transition ${
+                commissionMode === '%'
+                  ? 'border-brand bg-brand text-white'
+                  : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+              onClick={() => setCommissionMode('%')}
+            >
+              %
+            </button>
+            <button
+              type="button"
+              className={`rounded border px-2 py-1 text-xs font-semibold transition ${
+                commissionMode === '$'
+                  ? 'border-brand bg-brand text-white'
+                  : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+              onClick={() => setCommissionMode('$')}
+            >
+              $
+            </button>
+            <input
+              className="w-full rounded border border-slate-300 px-2 py-1 text-sm sm:flex-1"
+              value={commissionMode === '%' ? commissionPercentage : commissionFlat}
+              onChange={(event) => commissionMode === '%' ? setCommissionPercentage(event.target.value) : setCommissionFlat(event.target.value)}
+            />
+          </div>
+        </div>
+        <label className="text-xs font-medium text-slate-700">Referral fee %
+          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={referralFeePercentage} onChange={(e) => setReferralFeePercentage(e.target.value)} />
+        </label>
+        <label className="text-xs font-medium text-slate-700">Expected amount
+          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={expectedAmount} onChange={(e) => { setExpectedManuallyEdited(Boolean(e.target.value)); setExpectedAmount(e.target.value); }} />
+        </label>
+        <label className="text-xs font-medium text-slate-700">Under contract date
+          <input
+            type="date"
+            className="mt-1 w-full cursor-pointer rounded border border-slate-300 px-2 py-1 text-sm"
+            value={underContractDate}
+            onClick={handleDateInputClick}
+            onChange={(e) => setUnderContractDate(e.target.value)}
+          />
+        </label>
+        <label className="text-xs font-medium text-slate-700">Closing date
+          <input
+            type="date"
+            className="mt-1 w-full cursor-pointer rounded border border-slate-300 px-2 py-1 text-sm"
+            value={closingDate}
+            onClick={handleDateInputClick}
+            onChange={(e) => setClosingDate(e.target.value)}
+          />
+        </label>
+        <label className="text-xs font-medium text-slate-700 sm:col-span-2">Property address
+          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={propertyAddress} onChange={(e) => setPropertyAddress(e.target.value)} />
+        </label>
+        <label className="text-xs font-medium text-slate-700">Property city
+          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={propertyCity} onChange={(e) => setPropertyCity(e.target.value)} />
+        </label>
+        <label className="text-xs font-medium text-slate-700">Property state
+          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm uppercase" maxLength={2} value={propertyState} onChange={(e) => setPropertyState(e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2))} />
+        </label>
+        <label className="text-xs font-medium text-slate-700">Property ZIP
+          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={propertyPostalCode} onChange={(e) => setPropertyPostalCode(e.target.value)} />
+        </label>
+        <label className="text-xs font-medium text-slate-700">Deal side
+          <select className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={side} onChange={(e) => setSide(e.target.value as 'buy' | 'sell')}>
+            <option value="buy">Buy-side</option>
+            <option value="sell">Sell-side</option>
+          </select>
+        </label>
+        {side !== 'sell' && (
+          <div className="rounded border border-brand/40 bg-brand/5 px-3 py-2 sm:col-span-2">
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-brand"
+                checked={usedAfc}
+                onChange={(e) => setUsedAfc(e.target.checked)}
+              />
+              Used AFC
+            </label>
+            <p className="mt-1 text-xs text-slate-600">Check this when AFC handled this deal.</p>
+          </div>
+        )}
+        <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
+          <button type="button" className="w-full rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 sm:w-auto" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button type="submit" className="w-full rounded bg-brand px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 sm:w-auto" disabled={submitting}>{submitting ? 'Saving…' : 'Save deal & move status'}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function StatusSelect({
+  referralId,
+  value,
+  dealStatusLabel,
+  defaultSide = 'buy',
+  side,
+  compact = false,
+}: StatusSelectProps) {
   const [status, setStatus] = useState<ReferralStatus>(value);
   const [loading, setLoading] = useState(false);
+  const [pendingTerminatedSelection, setPendingTerminatedSelection] = useState(false);
+  const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | ''>('');
+
+  const openUnderContractDealModal = () => {
+    const toastId = toast.custom((t) => (
+      <UnderContractDealToast
+        defaultSide={defaultSide}
+        onClose={() => toast.dismiss(t)}
+        onSubmit={async ({ paymentPayload, contractDetails }) => {
+          const paymentResponse = await fetch('/api/payments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              referralId,
+              ...paymentPayload,
+            }),
+          });
+          if (!paymentResponse.ok) {
+            throw new Error('Unable to save deal details');
+          }
+          const statusResponse = await fetch(`/api/referrals/${referralId}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: 'Under Contract',
+              source: 'referral_table',
+              side: contractDetails.dealSide,
+              contractDetails,
+              createNewDeal: false,
+            }),
+          });
+          if (!statusResponse.ok) {
+            throw new Error('Unable to move referral to Under Contract');
+          }
+          setStatus('Under Contract');
+          toast.dismiss(t);
+          toast.success('Deal saved and referral moved to Under Contract');
+        }}
+      />
+    ), { duration: Infinity, position: 'top-center' });
+    void toastId;
+  };
 
   const handleChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     const nextStatus = event.target.value as ReferralStatus;
     if (nextStatus === 'Under Contract') {
-      toast.info('Open the referral to record contract details before marking it Under Contract.');
+      openUnderContractDealModal();
+      return;
+    }
+    if (nextStatus === 'Terminated') {
+      setStatus(nextStatus);
+      setPendingTerminatedSelection(true);
       return;
     }
     setStatus(nextStatus);
@@ -90,7 +452,12 @@ function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps)
       const response = await fetch(`/api/referrals/${referralId}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus })
+        body: JSON.stringify({
+          status: nextStatus,
+          source: 'referral_table',
+          side,
+          terminatedReason: null,
+        })
       });
 
       if (!response.ok) {
@@ -121,9 +488,116 @@ function StatusSelect({ referralId, value, dealStatusLabel }: StatusSelectProps)
           </option>
         ))}
       </select>
-      {dealStatusLabel && dealStatusLabel !== status && (
+      {pendingTerminatedSelection && (
+        <div className="space-y-2 rounded border border-slate-200 bg-slate-50 p-2">
+          <label className="block text-xs font-semibold text-slate-600">
+            Termination reason
+            <select
+              value={terminatedReason}
+              onChange={(event) => setTerminatedReason(event.target.value as TerminatedReason | '')}
+              className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs shadow-sm focus:border-brand focus:outline-none"
+              disabled={loading}
+            >
+              <option value="">Select reason</option>
+              {TERMINATED_REASON_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="rounded bg-slate-900 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
+              disabled={loading}
+              onClick={async () => {
+                if (!terminatedReason) {
+                  toast.error('Termination reason is required.');
+                  return;
+                }
+                setLoading(true);
+                try {
+                  const response = await fetch(`/api/referrals/${referralId}/status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      status: 'Terminated',
+                      source: 'referral_table',
+                      side,
+                      terminatedReason,
+                    }),
+                  });
+                  if (!response.ok) {
+                    throw new Error('Failed to update status');
+                  }
+                  setPendingTerminatedSelection(false);
+                  setTerminatedReason('');
+                  toast.success('Referral status updated');
+                } catch (error) {
+                  console.error(error);
+                  toast.error('Unable to update status');
+                  setStatus(value);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              Confirm
+            </button>
+            <button
+              type="button"
+              className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600"
+              disabled={loading}
+              onClick={() => {
+                setPendingTerminatedSelection(false);
+                setTerminatedReason('');
+                setStatus(value);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {dealStatusLabel && dealStatusLabel !== status && dealStatusLabel !== 'Terminated' && (
         <p className="text-xs text-slate-500">Deal stage: {dealStatusLabel}</p>
       )}
+    </div>
+  );
+}
+
+function SideStatusPill({ label, status }: { label: string; status?: ReferralStatus | null }) {
+  return (
+    <div className="rounded border border-slate-200 bg-slate-50 px-2 py-1">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="text-xs font-medium text-slate-700">{status ?? '—'}</p>
+    </div>
+  );
+}
+
+function AgentBothStatusCell({ row }: { row: ReferralRow }) {
+  const assignedSide = row.viewerAssignedSide ?? 'buy';
+  const assignedStatus = assignedSide === 'sell' ? row.sellStatus ?? row.status : row.buyStatus ?? row.status;
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
+        <SideStatusPill label="Buy" status={row.buyStatus ?? row.status} />
+        <SideStatusPill label="Sell" status={row.sellStatus ?? row.status} />
+      </div>
+      <div className="rounded border border-brand/20 bg-brand/5 p-2">
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-brand">
+          My side: {assignedSide}
+        </p>
+        <StatusSelect
+          referralId={row._id}
+          value={assignedStatus}
+          defaultSide={assignedSide}
+          side={assignedSide}
+          compact
+        />
+      </div>
     </div>
   );
 }
@@ -433,13 +907,21 @@ function buildColumns(
       {
         header: sortableHeader('Status', 'status', currentSortBy, currentSortDirection, onSortChange),
         accessorKey: 'status',
-        cell: ({ row }) => (
-          <StatusSelect
-            referralId={row.original._id}
-            value={row.original.status}
-            dealStatusLabel={row.original.dealStatusLabel ?? null}
-          />
-        ),
+        cell: ({ row }) => {
+          if (row.original.clientType === 'Both') {
+            return <AgentBothStatusCell row={row.original} />;
+          }
+
+          return (
+            <StatusSelect
+              referralId={row.original._id}
+              value={row.original.status}
+              dealStatusLabel={row.original.dealStatusLabel ?? null}
+              side={row.original.viewerAssignedSide ?? undefined}
+              defaultSide={row.original.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
+            />
+          );
+        },
       },
       {
         header: 'Notes',
@@ -604,7 +1086,255 @@ function buildColumns(
   return adminColumns;
 }
 
-export function ReferralTable({ data, mode, showAgentOriginIndicator, hideAgentColumn }: ReferralTableProps) {
+const MD_MIN_WIDTH_QUERY = '(min-width: 768px)';
+
+function referralDetailHref(row: ReferralRow, listParams: string) {
+  return listParams ? `/referrals/${row._id}?${listParams}` : `/referrals/${row._id}`;
+}
+
+function MobileField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <div className="text-sm text-slate-800">{children}</div>
+    </div>
+  );
+}
+
+function ReferralMobileStack({
+  rows,
+  mode,
+  listParams,
+  showAgentOriginIndicator,
+  hideAgentColumn,
+}: {
+  rows: ReferralRow[];
+  mode: TableMode;
+  listParams: string;
+  showAgentOriginIndicator?: boolean;
+  hideAgentColumn?: boolean;
+}) {
+  const showOrigin = showAgentOriginIndicator ?? false;
+  const hideAgent = hideAgentColumn ?? false;
+
+  return (
+    <div className="space-y-3">
+      {rows.map((row) => {
+        const timelineText = formatTimelineCountdown(
+          calculateTimelineDaysRemaining(row.timeline, row.createdAt),
+          row.timeline
+        );
+        const href = referralDetailHref(row, listParams);
+
+        return (
+          <div
+            key={row._id}
+            className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm space-y-3"
+          >
+            <MobileField label="Borrower">
+              <div className="flex flex-col gap-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  {showOrigin && row.origin === 'agent' ? (
+                    <span
+                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-slate-700"
+                      aria-label="Agent-created referral"
+                      title="Agent-created referral"
+                    />
+                  ) : null}
+                  <Link href={href} className="font-medium text-brand break-words">
+                    {row.borrowerName}
+                  </Link>
+                  {mode === 'admin' && (row.urgentTaskCount ?? 0) > 0 ? (
+                    <span
+                      className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800"
+                      title={`${row.urgentTaskCount} overdue or due today`}
+                    >
+                      {row.urgentTaskCount}
+                    </span>
+                  ) : null}
+                </div>
+                {row.borrowerEmail ? (
+                  <a
+                    href={buildGmailComposeUrl(row.borrowerEmail)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-brand hover:underline w-fit"
+                  >
+                    Email
+                  </a>
+                ) : null}
+                {row.borrowerPhone ? (
+                  <a
+                    href={`tel:${row.borrowerPhone.replace(/[^0-9+]/g, '')}`}
+                    className="text-xs text-brand hover:underline w-fit"
+                  >
+                    {formatPhoneNumber(row.borrowerPhone)}
+                  </a>
+                ) : (
+                  <span className="text-xs text-slate-400">—</span>
+                )}
+              </div>
+            </MobileField>
+
+            <MobileField label="Loan file #">{row.loanFileNumber}</MobileField>
+            <MobileField label="Timeline">{timelineText}</MobileField>
+
+            {mode === 'agent' ? (
+              <>
+                <MobileField label="Pre-approval">
+                  {row.preApprovalAmountCents ? formatCurrency(row.preApprovalAmountCents) : '—'}
+                </MobileField>
+                <MobileField label="Status">
+                  {row.clientType === 'Both' ? (
+                    <AgentBothStatusCell row={row} />
+                  ) : (
+                    <StatusSelect
+                      referralId={row._id}
+                      value={row.status}
+                      dealStatusLabel={row.dealStatusLabel ?? null}
+                      side={row.viewerAssignedSide ?? undefined}
+                      defaultSide={row.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
+                    />
+                  )}
+                </MobileField>
+                <MobileField label="Notes">
+                  <NoteComposer referralId={row._id} />
+                </MobileField>
+                <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
+              </>
+            ) : null}
+
+            {mode === 'mc' ? (
+              <>
+                <MobileField label="Agent contact">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-medium text-slate-700">
+                        {row.assignedAgentName || 'Unassigned'}
+                      </span>
+                      {row.autoUpdateRemindersEnabled ? (
+                        <span title="Auto reminders enabled">
+                          <Clock className="h-3.5 w-3.5 text-slate-400" aria-label="Auto reminders enabled" />
+                        </span>
+                      ) : null}
+                    </div>
+                    {row.assignedAgentEmail ? (
+                      <a
+                        href={buildGmailComposeUrl(row.assignedAgentEmail)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-brand hover:underline w-fit"
+                      >
+                        Email
+                      </a>
+                    ) : null}
+                    {row.assignedAgentPhone ? (
+                      <a
+                        href={`tel:${row.assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
+                        className="text-xs text-brand hover:underline w-fit"
+                      >
+                        {formatPhoneNumber(row.assignedAgentPhone)}
+                      </a>
+                    ) : null}
+                  </div>
+                </MobileField>
+                <MobileField label="Status">
+                  <StatusBadge status={row.dealStatusLabel ?? row.status} />
+                </MobileField>
+                <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
+              </>
+            ) : null}
+
+            {mode === 'admin' ? (
+              <>
+                <MobileField label="Status">
+                  <StatusBadge status={row.dealStatusLabel ?? row.status} />
+                </MobileField>
+                {!hideAgent ? (
+                  <MobileField label="Agent">
+                    {!row.assignedAgentName && !row.assignedAgentPhone && !row.assignedAgentEmail ? (
+                      'Unassigned'
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-medium text-slate-700">
+                            {row.assignedAgentName || 'Unassigned'}
+                          </span>
+                          {row.autoUpdateRemindersEnabled ? (
+                            <span title="Auto reminders enabled">
+                              <Clock className="h-3.5 w-3.5 text-slate-400" aria-label="Auto reminders enabled" />
+                            </span>
+                          ) : null}
+                        </div>
+                        {row.assignedAgentEmail ? (
+                          <a
+                            href={buildGmailComposeUrl(row.assignedAgentEmail)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-brand hover:underline w-fit"
+                          >
+                            Email
+                          </a>
+                        ) : null}
+                        {row.assignedAgentPhone ? (
+                          <a
+                            href={`tel:${row.assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
+                            className="text-xs text-brand hover:underline w-fit"
+                          >
+                            {formatPhoneNumber(row.assignedAgentPhone)}
+                          </a>
+                        ) : null}
+                      </div>
+                    )}
+                  </MobileField>
+                ) : null}
+                <MobileField label="Lender / MC">
+                  {!row.lenderName && !row.lenderPhone && !row.lenderEmail ? (
+                    '—'
+                  ) : (
+                    <div className="flex flex-col gap-1">
+                      <span className="font-medium text-slate-700">{row.lenderName || 'Unassigned'}</span>
+                      {row.lenderEmail ? (
+                        <a
+                          href={buildGmailComposeUrl(row.lenderEmail)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-brand hover:underline w-fit"
+                        >
+                          Email
+                        </a>
+                      ) : null}
+                      {row.lenderPhone ? (
+                        <a
+                          href={`tel:${row.lenderPhone.replace(/[^0-9+]/g, '')}`}
+                          className="text-xs text-brand hover:underline w-fit"
+                        >
+                          {formatPhoneNumber(row.lenderPhone)}
+                        </a>
+                      ) : null}
+                    </div>
+                  )}
+                </MobileField>
+                <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
+                <MobileField label="Last updated">
+                  {row.updatedAt ? new Date(row.updatedAt).toLocaleDateString() : '—'}
+                </MobileField>
+              </>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function ReferralTable({
+  data,
+  mode,
+  showAgentOriginIndicator,
+  hideAgentColumn,
+  stackOnMobile = false,
+}: ReferralTableProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -668,6 +1398,31 @@ export function ReferralTable({ data, mode, showAgentOriginIndicator, hideAgentC
     columns,
     getCoreRowModel: getCoreRowModel(),
   });
+
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!stackOnMobile || typeof window === 'undefined') {
+      return;
+    }
+    const mq = window.matchMedia(MD_MIN_WIDTH_QUERY);
+    const apply = () => setIsDesktop(mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, [stackOnMobile]);
+
+  if (stackOnMobile && !isDesktop) {
+    return (
+      <ReferralMobileStack
+        rows={safeData}
+        mode={mode}
+        listParams={listParams}
+        showAgentOriginIndicator={showAgentOriginIndicator}
+        hideAgentColumn={hideAgentColumn}
+      />
+    );
+  }
 
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">

@@ -66,37 +66,29 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
   const showAgentColumn = context === 'mc' && deals.some((deal) => deal.agent?.id);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <table className="min-w-full divide-y divide-slate-200">
-        <thead className="bg-slate-50">
-          <tr>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Outcome</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Expected</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Received</th>
-            {showAgentColumn && (
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
-            )}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {deals.map((deal) => {
-            const outcome = computeOutcome(deal, context);
-            const outcomeColor = outcomeClassName(outcome);
-            const expectedCents = deal.expectedAmountCents ?? 0;
-            const receivedCents = deal.receivedAmountCents ?? 0;
-            const label = deal.borrowerName?.trim() || 'Referral';
-            const detail = deal.propertyAddress?.trim()
-              ? deal.propertyAddress
-              : deal.loanFileNumber
+    <>
+      <div className="space-y-3 md:hidden">
+        {deals.map((deal) => {
+          const outcome = computeOutcome(deal, context);
+          const outcomeColor = outcomeClassName(outcome);
+          const expectedCents = deal.expectedAmountCents ?? 0;
+          const receivedCents = deal.receivedAmountCents ?? 0;
+          const label = deal.borrowerName?.trim() || 'Referral';
+          const detail = deal.propertyAddress?.trim()
+            ? deal.propertyAddress
+            : deal.loanFileNumber
               ? `Loan # ${deal.loanFileNumber}`
               : 'Loan # —';
 
-            return (
-              <tr key={deal.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  <div className="flex flex-col">
+          return (
+            <div
+              key={deal.id}
+              className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+            >
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</p>
+                <div className="text-sm text-slate-700">
+                  <div className="flex flex-col gap-0.5 break-words">
                     {deal.referralId ? (
                       <Link
                         prefetch={false}
@@ -110,31 +102,128 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
                     )}
                     <span className="text-xs text-slate-500">{detail}</span>
                   </div>
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-700">{getStatusLabel(deal.status)}</td>
-                <td className={`px-4 py-3 text-sm font-medium ${outcomeColor}`}>{outcome}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">{formatCurrency(expectedCents)}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">{formatCurrency(receivedCents)}</td>
-                {showAgentColumn && (
-                  <td className="px-4 py-3 text-sm text-slate-700">
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
+                <p className="text-sm text-slate-700">{getStatusLabel(deal.status)}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Outcome</p>
+                <p className={`text-sm font-medium ${outcomeColor}`}>{outcome}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Expected</p>
+                <p className="text-sm text-slate-700">{formatCurrency(expectedCents)}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Received</p>
+                <p className="text-sm text-slate-700">{formatCurrency(receivedCents)}</p>
+              </div>
+              {showAgentColumn ? (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</p>
+                  <div className="text-sm text-slate-700">
                     {deal.agent?.id ? (
                       <Link
                         prefetch={false}
                         href={`/agents/${deal.agent.id}`}
-                        className="text-brand transition hover:text-brand-dark hover:underline"
+                        className="text-brand transition hover:text-brand-dark hover:underline break-words"
                       >
                         {deal.agent.name || 'Agent'}
                       </Link>
                     ) : (
                       <span className="text-slate-500">Unassigned</span>
                     )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+      <div className="hidden overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm md:block">
+        <table className="min-w-full divide-y divide-slate-200">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Referral
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Status
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Outcome
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Expected
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Received
+              </th>
+              {showAgentColumn && (
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Agent
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {deals.map((deal) => {
+              const outcome = computeOutcome(deal, context);
+              const outcomeColor = outcomeClassName(outcome);
+              const expectedCents = deal.expectedAmountCents ?? 0;
+              const receivedCents = deal.receivedAmountCents ?? 0;
+              const label = deal.borrowerName?.trim() || 'Referral';
+              const detail = deal.propertyAddress?.trim()
+                ? deal.propertyAddress
+                : deal.loanFileNumber
+                  ? `Loan # ${deal.loanFileNumber}`
+                  : 'Loan # —';
+
+              return (
+                <tr key={deal.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    <div className="flex flex-col">
+                      {deal.referralId ? (
+                        <Link
+                          prefetch={false}
+                          href={`/referrals/${deal.referralId}`}
+                          className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+                        >
+                          {label}
+                        </Link>
+                      ) : (
+                        <span className="font-medium text-slate-900">{label}</span>
+                      )}
+                      <span className="text-xs text-slate-500">{detail}</span>
+                    </div>
                   </td>
-                )}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                  <td className="px-4 py-3 text-sm text-slate-700">{getStatusLabel(deal.status)}</td>
+                  <td className={`px-4 py-3 text-sm font-medium ${outcomeColor}`}>{outcome}</td>
+                  <td className="px-4 py-3 text-sm text-slate-700">{formatCurrency(expectedCents)}</td>
+                  <td className="px-4 py-3 text-sm text-slate-700">{formatCurrency(receivedCents)}</td>
+                  {showAgentColumn && (
+                    <td className="px-4 py-3 text-sm text-slate-700">
+                      {deal.agent?.id ? (
+                        <Link
+                          prefetch={false}
+                          href={`/agents/${deal.agent.id}`}
+                          className="text-brand transition hover:text-brand-dark hover:underline"
+                        >
+                          {deal.agent.name || 'Agent'}
+                        </Link>
+                      ) : (
+                        <span className="text-slate-500">Unassigned</span>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

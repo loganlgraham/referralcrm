@@ -2,6 +2,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { connectMongo } from '@/lib/mongoose';
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
+import { Agent } from '@/models/agent';
 import { Payment } from '@/models/payment';
 import { Referral } from '@/models/referral';
 
@@ -82,6 +83,10 @@ jest.mock('@/lib/server/audit', () => ({
   resolveAuditActorId: jest.fn(),
 }));
 
+jest.mock('@/lib/server/notifications', () => ({
+  createAdminNotifications: jest.fn(),
+}));
+
 jest.mock('@/lib/referral-links', () => ({
   buildReferralLink: jest.fn(),
   getReferralAppBaseUrl: jest.fn(),
@@ -96,6 +101,7 @@ const mockedConnectMongo = connectMongo as jest.MockedFunction<typeof connectMon
 const mockedReferralFindById = Referral.findById as jest.Mock;
 const mockedPaymentCreate = Payment.create as jest.Mock;
 const mockedPaymentUpdateMany = Payment.updateMany as jest.Mock;
+const mockedAgentFindOne = Agent.findOne as jest.Mock;
 const mockedLogReferralActivity = logReferralActivity as jest.MockedFunction<typeof logReferralActivity>;
 const mockedResolveAuditActorId = resolveAuditActorId as jest.MockedFunction<typeof resolveAuditActorId>;
 
@@ -133,6 +139,11 @@ describe('Payments POST outside-agent handling', () => {
       user: { id: 'user-1', role: 'admin', name: 'Admin User' },
     } as any);
     mockedResolveAuditActorId.mockReturnValue('audit-actor-1' as any);
+    mockedAgentFindOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ _id: 'agent-db-1' }),
+      }),
+    });
     mockedPaymentCreate.mockResolvedValue({
       _id: { toString: () => 'pay-1' },
       createdAt: new Date('2026-03-03T12:00:00.000Z'),
@@ -211,5 +222,81 @@ describe('Payments POST outside-agent handling', () => {
     expect(referralDoc.status).toBe('Under Contract');
     expect(mockedPaymentUpdateMany).not.toHaveBeenCalled();
     expect(mockedLogReferralActivity).not.toHaveBeenCalled();
+  });
+
+  it('rejects terminated status without terminatedReason', async () => {
+    const referralDoc = makeReferralDoc();
+    mockedReferralFindById.mockResolvedValue(referralDoc);
+
+    const response = await postHandler(
+      makeRequest({
+        referralId: '507f1f77bcf86cd799439011',
+        status: 'terminated',
+        expectedAmountCents: 0,
+        usedAssignedAgent: true,
+        usedAfc: true,
+      })
+    );
+
+    expect(response.status).toBe(422);
+    expect(mockedPaymentCreate).not.toHaveBeenCalled();
+  });
+
+  it('defaults deal side to the creator assigned side for agent users', async () => {
+    mockedGetCurrentSession.mockResolvedValueOnce({
+      user: { id: 'agent-user-1', role: 'agent', name: 'Agent User' },
+    } as any);
+    const referralDoc = makeReferralDoc({
+      assignedAgent: 'buy-agent-id',
+      buySideAgent: 'buy-agent-id',
+      sellSideAgent: 'agent-db-1',
+      dealSide: 'buy',
+    });
+    mockedReferralFindById.mockResolvedValue(referralDoc);
+
+    const response = await postHandler(
+      makeRequest({
+        referralId: '507f1f77bcf86cd799439011',
+        status: 'under_contract',
+        expectedAmountCents: 190000,
+        usedAssignedAgent: true,
+        usedAfc: true,
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(mockedPaymentCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        side: 'sell',
+        agentId: 'agent-db-1',
+      })
+    );
+  });
+
+  it('blocks agent from creating a deal on the opposite side', async () => {
+    mockedGetCurrentSession.mockResolvedValueOnce({
+      user: { id: 'agent-user-1', role: 'agent', name: 'Agent User' },
+    } as any);
+    const referralDoc = makeReferralDoc({
+      assignedAgent: 'buy-agent-id',
+      buySideAgent: 'agent-db-1',
+      sellSideAgent: 'sell-agent-id',
+      dealSide: 'buy',
+    });
+    mockedReferralFindById.mockResolvedValue(referralDoc);
+
+    const response = await postHandler(
+      makeRequest({
+        referralId: '507f1f77bcf86cd799439011',
+        status: 'under_contract',
+        expectedAmountCents: 190000,
+        side: 'sell',
+        usedAssignedAgent: true,
+        usedAfc: true,
+      })
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockedPaymentCreate).not.toHaveBeenCalled();
   });
 });

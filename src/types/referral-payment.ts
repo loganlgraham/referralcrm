@@ -27,4 +27,5 @@ export interface ReferralPayment {
   feeBreakdownEmailSentAt?: string | null;
   feeBreakdownEmailSentBy?: string | null;
   feeBreakdownEmailSentByUser?: { id: string; name: string | null; email: string | null } | null;
+  isCrossSideReadOnly?: boolean;
 }

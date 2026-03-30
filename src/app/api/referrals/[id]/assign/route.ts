@@ -10,6 +10,7 @@ import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
 import { Agent } from '@/models/agent';
 import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
+import { deriveReferralStatusFromSides } from '@/lib/server/referral-sides';
 
 interface Params {
   params: { id: string };
@@ -79,12 +80,31 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   })();
   const previousAgent = previousAgentValue ? previousAgentValue.toString() : null;
   const previousAgentObjectId = previousAgentValue ? new Types.ObjectId(previousAgentValue) : null;
+  if (
+    session.user.role === 'agent' &&
+    previousAgent &&
+    previousAgent !== parsed.data.agentId
+  ) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
   if (assignmentSide === 'sell') {
     referral.sellSideAgent = parsed.data.agentId as any;
   } else {
     referral.buySideAgent = parsed.data.agentId as any;
   }
+  referral.dealSide = assignmentSide;
+  if (!referral.buyStatus) {
+    referral.buyStatus = referral.status;
+  }
+  if (!referral.sellStatus) {
+    referral.sellStatus = referral.status;
+  }
   referral.assignedAgent = referral.buySideAgent ?? referral.sellSideAgent ?? null;
+  referral.status = deriveReferralStatusFromSides(
+    referral.buyStatus,
+    referral.sellStatus,
+    referral.clientType ?? null
+  );
   const sla = (referral.sla ??= {} as any);
   const createdAt = referral.createdAt instanceof Date ? referral.createdAt : new Date(referral.createdAt ?? Date.now());
   if (!Number.isNaN(createdAt.getTime()) && sla.timeToAssignmentHours == null) {

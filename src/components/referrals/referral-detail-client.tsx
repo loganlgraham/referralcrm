@@ -13,6 +13,7 @@ import type { Contact } from '@/components/referrals/contact-assignment';
 import { normalizeReferralStatus, type ReferralStatus, REFERRAL_TIMELINE_OPTIONS, REFERRAL_TIMELINE_VALUES } from '@/constants/referrals';
 import { ReferralDeals } from '@/components/referrals/referral-deals';
 import { getReferralDealsVisibility } from '@/components/referrals/deal-visibility';
+import { getLatestDealReferralStatuses } from '@/lib/latest-deal-referral-status';
 import type { ReferralPayment } from '@/types/referral-payment';
 import { formatCurrency, formatDateMST } from '@/utils/formatters';
 import Link from 'next/link';
@@ -61,6 +62,9 @@ interface ReferralDetail {
     phone: string;
   };
   status: ReferralStatus;
+  buyStatus?: ReferralStatus | null;
+  sellStatus?: ReferralStatus | null;
+  viewerAssignedSide?: 'buy' | 'sell' | null;
   preApprovalAmountCents?: number;
   estPurchasePriceCents?: number;
   referralFeeDueCents?: number;
@@ -555,7 +559,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     });
     void mutate(activityFeedKey);
   }, [activityFeedKey, mutate]);
-  const handleDealUpdated = useCallback((deal: ReferralPayment) => {
+  const handleDealUpdated = useCallback((
+    deal: ReferralPayment,
+    snapshot?: { referralStatus?: ReferralStatus | null; referralStatusLastUpdated?: string | null }
+  ) => {
     if (!deal?._id) {
       return;
     }
@@ -569,6 +576,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       return {
         ...previous,
         payments: updatedPayments,
+        status:
+          snapshot?.referralStatus && snapshot.referralStatus !== previous.status
+            ? snapshot.referralStatus
+            : previous.status,
+        statusLastUpdated:
+          snapshot?.referralStatusLastUpdated !== undefined
+            ? snapshot.referralStatusLastUpdated
+            : previous.statusLastUpdated,
       };
     });
   }, []);
@@ -1188,21 +1203,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     }
   };
 
-  const headerReferral = {
-    ...referral,
-    status: financials.status,
-    preApprovalAmountCents: financials.preApprovalAmountCents,
-    estPurchasePriceCents: financials.contractPriceCents,
-    referralFeeDueCents: financials.referralFeeDueCents,
-    commissionBasisPoints: financials.commissionBasisPoints,
-    referralFeeBasisPoints: financials.referralFeeBasisPoints,
-    propertyAddress: financials.propertyAddress ?? referral.propertyAddress,
-    propertyCity: financials.propertyCity ?? referral.propertyCity,
-    propertyState: financials.propertyState ?? referral.propertyState,
-    propertyPostalCode: financials.propertyPostalCode ?? referral.propertyPostalCode,
-    dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
-  };
-
   const referralDeals = useMemo(
     () =>
       Array.isArray(referral.payments)
@@ -1215,9 +1215,31 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     [referral.payments]
   );
   const { visibleDeals: visibleReferralDeals, hiddenOutsideAgentCount } = useMemo(
-    () => getReferralDealsVisibility(referralDeals, viewerRole),
-    [referralDeals, viewerRole]
+    () => getReferralDealsVisibility(referralDeals, viewerRole, referral.viewerAssignedSide ?? null),
+    [referral.viewerAssignedSide, referralDeals, viewerRole]
   );
+  const latestDealReferralStatuses = useMemo(
+    () => getLatestDealReferralStatuses(referralDeals),
+    [referralDeals]
+  );
+  const effectiveHeaderStatus: ReferralStatus =
+    viewerRole === 'agent' && hiddenOutsideAgentCount > 0 && visibleReferralDeals.length === 0
+      ? 'Lost'
+      : financials.status;
+  const headerReferral = {
+    ...referral,
+    status: effectiveHeaderStatus,
+    preApprovalAmountCents: financials.preApprovalAmountCents,
+    estPurchasePriceCents: financials.contractPriceCents,
+    referralFeeDueCents: financials.referralFeeDueCents,
+    commissionBasisPoints: financials.commissionBasisPoints,
+    referralFeeBasisPoints: financials.referralFeeBasisPoints,
+    propertyAddress: financials.propertyAddress ?? referral.propertyAddress,
+    propertyCity: financials.propertyCity ?? referral.propertyCity,
+    propertyState: financials.propertyState ?? referral.propertyState,
+    propertyPostalCode: financials.propertyPostalCode ?? referral.propertyPostalCode,
+    dealSide: financials.dealSide ?? referral.dealSide ?? 'buy',
+  };
 
   const showNav = (viewerRole === 'admin' || viewerRole === 'manager') && (prevReferralId || nextReferralId);
   const buildNavHref = (id: string) => listParams ? `/referrals/${id}?${listParams}` : `/referrals/${id}`;
@@ -1259,6 +1281,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       <ReferralHeader
         referral={headerReferral}
         viewerRole={viewerRole}
+        latestDealStatus={latestDealReferralStatuses.overall}
+        latestBuyDealStatus={latestDealReferralStatuses.buy}
+        latestSellDealStatus={latestDealReferralStatuses.sell}
         onFinancialsChange={handleFinancialsChange}
         buySideAgentContact={buySideAgentContact}
         sellSideAgentContact={sellSideAgentContact}
@@ -1535,10 +1560,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         onDealUpdated={handleDealUpdated}
         onDealDeleted={handleDealDeleted}
         viewerRole={viewerRole}
+        viewerAssignedSide={referral.viewerAssignedSide ?? null}
         referralOrigin={referral.origin}
         feeBreakdownAutoSendEnabled={referral.feeBreakdownAutoSendEnabled as boolean | undefined}
         hiddenOutsideAgentCount={hiddenOutsideAgentCount}
         assignedAgentDesignation={referral.assignedAgent?.ahaDesignation}
+        defaultSide={referral.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
       />
       <ReferralTimeline referralId={referralId} />
       {canDelete && (

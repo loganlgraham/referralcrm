@@ -194,6 +194,160 @@ describe('Dashboard Metrics - Network Filtering', () => {
 });
 
 describe('Dashboard Metrics - Attach Rate Calculations', () => {
+  const CLOSED_DEAL_STATUSES = new Set(['closed', 'payment_sent', 'paid']);
+
+  const closedInTimeframe = (closingDateIso: string, startIso: string, endIso: string) => {
+    const closingDate = new Date(closingDateIso);
+    const start = new Date(startIso);
+    const end = new Date(endIso);
+    return closingDate >= start && closingDate <= end;
+  };
+
+  type AttachPayment = {
+    status: string;
+    usedAfc?: boolean;
+    usedAssignedAgent?: boolean;
+    referralOrg?: 'AFC' | 'AHA';
+    side?: 'buy' | 'sell' | null;
+    referralDealSide?: 'buy' | 'sell' | null;
+    referralClientType?: 'Buyer' | 'Seller' | 'Both' | null;
+    designation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
+    closingDateIso: string;
+  };
+
+  const computeAttachRates = (payments: AttachPayment[], startIso: string, endIso: string) => {
+    const closedDealsInTimeframe = payments.filter(
+      (payment) =>
+        CLOSED_DEAL_STATUSES.has(payment.status) &&
+        closedInTimeframe(payment.closingDateIso, startIso, endIso)
+    );
+
+    const resolveSide = (payment: AttachPayment): 'buy' | 'sell' | null => {
+      if (payment.side === 'buy' || payment.side === 'sell') return payment.side;
+      if (payment.referralDealSide === 'buy' || payment.referralDealSide === 'sell') return payment.referralDealSide;
+      if (payment.referralClientType === 'Seller') return 'sell';
+      if (payment.referralClientType === 'Buyer') return 'buy';
+      return null;
+    };
+
+    const afcRelevant = closedDealsInTimeframe.filter(
+      (payment) => payment.referralOrg === 'AFC' && resolveSide(payment) === 'buy'
+    );
+    const afcAttached = afcRelevant.filter((payment) => Boolean(payment.usedAfc));
+
+    const ahaRelevant = closedDealsInTimeframe.filter((payment) => payment.designation === 'AHA');
+    const ahaAttached = ahaRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
+
+    const ahaOosRelevant = closedDealsInTimeframe.filter((payment) => payment.designation === 'AHA_OOS');
+    const ahaOosAttached = ahaOosRelevant.filter((payment) => Boolean(payment.usedAssignedAgent));
+
+    return {
+      afcAttachRate: afcRelevant.length ? (afcAttached.length / afcRelevant.length) * 100 : 0,
+      ahaAttachRate: ahaRelevant.length ? (ahaAttached.length / ahaRelevant.length) * 100 : 0,
+      ahaOosAttachRate: ahaOosRelevant.length ? (ahaOosAttached.length / ahaOosRelevant.length) * 100 : 0,
+      afcDealsLost: afcRelevant.length - afcAttached.length,
+      ahaDealsLost: ahaRelevant.length - ahaAttached.length,
+      ahaOosDealsLost: ahaOosRelevant.length - ahaOosAttached.length,
+    };
+  };
+
+  it('treats closed, payment sent, and paid as closed deals', () => {
+    const dealStatuses = ['closed', 'payment_sent', 'paid', 'under_contract'];
+
+    const closedDeals = dealStatuses.filter((status) => CLOSED_DEAL_STATUSES.has(status));
+    expect(closedDeals).toEqual(['closed', 'payment_sent', 'paid']);
+  });
+
+  it('uses closing date window for attach-rate inclusion', () => {
+    const rates = computeAttachRates(
+      [
+        {
+          status: 'closed',
+          usedAfc: true,
+          usedAssignedAgent: true,
+          referralOrg: 'AFC',
+          side: 'buy',
+          designation: 'AHA',
+          closingDateIso: '2026-03-12T12:00:00.000Z',
+        },
+        {
+          status: 'closed',
+          usedAfc: true,
+          usedAssignedAgent: true,
+          referralOrg: 'AFC',
+          side: 'buy',
+          designation: 'AHA',
+          closingDateIso: '2026-01-12T12:00:00.000Z',
+        },
+      ],
+      '2026-03-01T00:00:00.000Z',
+      '2026-03-31T23:59:59.999Z'
+    );
+
+    expect(rates.afcAttachRate).toBe(100);
+    expect(rates.ahaAttachRate).toBe(100);
+  });
+
+  it('keeps AFC split based on referral org', () => {
+    const rates = computeAttachRates(
+      [
+        {
+          status: 'paid',
+          usedAfc: true,
+          usedAssignedAgent: true,
+          referralOrg: 'AFC',
+          side: 'buy',
+          designation: 'AHA',
+          closingDateIso: '2026-03-10T12:00:00.000Z',
+        },
+        {
+          status: 'paid',
+          usedAfc: true,
+          usedAssignedAgent: true,
+          referralOrg: 'AHA',
+          designation: 'AHA',
+          closingDateIso: '2026-03-10T12:00:00.000Z',
+        },
+      ],
+      '2026-03-01T00:00:00.000Z',
+      '2026-03-31T23:59:59.999Z'
+    );
+
+    expect(rates.afcAttachRate).toBe(100);
+    expect(rates.ahaAttachRate).toBe(100);
+    expect(rates.ahaDealsLost).toBe(0);
+  });
+
+  it('computes all attach-rate buckets from same closed-deal set', () => {
+    const rates = computeAttachRates(
+      [
+        {
+          status: 'closed',
+          usedAfc: true,
+          usedAssignedAgent: false,
+          referralOrg: 'AFC',
+          side: 'buy',
+          designation: 'AHA',
+          closingDateIso: '2026-03-14T12:00:00.000Z',
+        },
+        {
+          status: 'payment_sent',
+          usedAfc: false,
+          usedAssignedAgent: true,
+          referralOrg: 'AHA',
+          designation: 'AHA_OOS',
+          closingDateIso: '2026-03-14T12:00:00.000Z',
+        },
+      ],
+      '2026-03-01T00:00:00.000Z',
+      '2026-03-31T23:59:59.999Z'
+    );
+
+    expect(rates.afcAttachRate).toBe(100);
+    expect(rates.ahaAttachRate).toBe(0);
+    expect(rates.ahaOosAttachRate).toBe(100);
+  });
+
   it('calculates AFC attach rate correctly', () => {
     const afcRelevant = [
       { usedAfc: true },
@@ -209,6 +363,32 @@ describe('Dashboard Metrics - Attach Rate Calculations', () => {
     
     expect(afcDealsLost).toBe(1);
     expect(afcAttachRate).toBe(75);
+  });
+
+  it('excludes sell-side deals from AFC attach rate and lost counts', () => {
+    const rates = computeAttachRates(
+      [
+        {
+          status: 'closed',
+          usedAfc: true,
+          referralOrg: 'AFC',
+          side: 'buy',
+          closingDateIso: '2026-03-12T12:00:00.000Z',
+        },
+        {
+          status: 'paid',
+          usedAfc: false,
+          referralOrg: 'AFC',
+          side: 'sell',
+          closingDateIso: '2026-03-12T12:00:00.000Z',
+        },
+      ],
+      '2026-03-01T00:00:00.000Z',
+      '2026-03-31T23:59:59.999Z'
+    );
+
+    expect(rates.afcAttachRate).toBe(100);
+    expect(rates.afcDealsLost).toBe(0);
   });
 
   it('calculates AHA attach rate correctly', () => {

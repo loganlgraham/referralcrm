@@ -122,6 +122,15 @@ const formatContactLines = (contact: BasicContact | null, label: string) => {
   return lines.filter(Boolean) as string[];
 };
 
+const formatContactTextLines = (contact: BasicContact | null, label: string) => {
+  if (!contact) return [] as string[];
+  return [
+    `${label}: ${contact.name ?? 'Not provided'}`,
+    `Email: ${contact.email ?? 'Not provided'}`,
+    `Phone: ${contact.phone ?? 'Not provided'}`,
+  ];
+};
+
 const extractBorrowerContact = (referral: any): BasicContact => {
   const borrower = referral?.borrower ?? {};
   const normalizedName = buildBorrowerName(borrower);
@@ -256,7 +265,6 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const borrowerName = borrowerContact.name || buildBorrowerName(borrower);
   const borrowerFirstName = buildBorrowerFirstName(borrower);
   const loanFileNumber = referral.loanFileNumber?.trim() || 'N/A';
-  const agentFirstName = firstNameFromContact(primaryAgent, 'your agent');
   const lenderFirstName = firstNameFromContact(lenderContact, 'your mortgage consultant');
   const borrowerEmail = borrowerContact.email ?? null;
   const borrowerPhone = borrowerContact.phone;
@@ -278,79 +286,118 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const isSellerOnly = referral.clientType === 'Seller';
   const agentEmailSubject =
     session.user.role === 'admin' ? 'American Home Agents - New Referral!' : `New referral for ${borrowerName}`;
-  const agentIntroCopy = isSellerOnly
-    ? session.user.role === 'admin'
-      ? `Thanks for partnering with the American Home Agents Concierge Service to help our referral, ${borrowerName}, sell their home. We're excited to help them through this process!`
-      : `Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName} sell their home. We're excited to help them through this process!`
-    : session.user.role === 'admin'
-    ? `Thanks for partnering with the American Home Agents Concierge Service to help our referral, ${borrowerName}. We're excited to get them in their new home!`
-    : `Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName}. We're excited to get them in their new home!`;
+  const buildAgentIntroCopy = (side: 'buy' | 'sell') => {
+    if (side === 'sell' || isSellerOnly) {
+      return session.user.role === 'admin'
+        ? `Thanks for partnering with the American Home Agents Concierge Service to help our referral, ${borrowerName}, sell their home!`
+        : `Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName} sell their home!`;
+    }
+
+    return session.user.role === 'admin'
+      ? `Thanks for partnering with the American Home Agents Concierge Service to help our referral, ${borrowerName}. We're excited to get them in their new home!`
+      : `Thanks for partnering with the American Home Agents Concierge Service to help ${borrowerName}. We're excited to get them in their new home!`;
+  };
 
   if (shouldEmailAgent) {
     const notesHtmlLine = notes ? `<br><b>Notes:</b> ${notes.replace(/\n/g, '<br>')}` : '';
     const notesTextLine = notes ? `Notes: ${notes}` : null;
+    const agentTargets: Array<{ label: string; side: 'buy' | 'sell'; contact: BasicContact | null }> = [];
 
-    const mcInfoHtml = isSellerOnly
-      ? null
-      : lenderContact
-      ? `<p><b>Mortgage Consultant at American Financing:</b> ${lenderContact.name ?? 'Not provided'}<br><b>Email:</b> ${
-          lenderContact.email ?? 'Not provided'
-        }<br><b>Phone:</b> ${lenderContact.phone ?? 'Not provided'}<br><b>Loan File Number:</b> ${loanFileNumber}</p>`
-      : `<p><b>Mortgage Consultant at American Financing:</b> Not provided<br><b>Loan File Number:</b> ${loanFileNumber}</p>`;
+    if (referral.clientType === 'Both') {
+      if (buySideContact) {
+        agentTargets.push({ label: 'agent-buy', side: 'buy', contact: buySideContact });
+      }
+      if (sellSideContact) {
+        agentTargets.push({ label: 'agent-sell', side: 'sell', contact: sellSideContact });
+      }
+    } else if (isSellerOnly) {
+      agentTargets.push({ label: 'agent', side: 'sell', contact: sellSideContact || primaryAgent });
+    } else {
+      agentTargets.push({ label: 'agent', side: 'buy', contact: buySideContact || primaryAgent });
+    }
 
-    const mcInfoText = isSellerOnly
-      ? null
-      : lenderContact
-      ? `Mortgage Consultant at American Financing: ${lenderContact.name ?? 'Not provided'} | Email: ${
-          lenderContact.email ?? 'Not provided'
-        } | Phone: ${lenderContact.phone ?? 'Not provided'} | Loan File Number: ${loanFileNumber}`
-      : `Mortgage Consultant at American Financing: Not provided | Loan File Number: ${loanFileNumber}`;
+    if (agentTargets.length === 0 && primaryAgent) {
+      agentTargets.push({ label: 'agent', side: 'buy', contact: primaryAgent });
+    }
 
-    await trySendEmail(
-      primaryAgent?.email ?? null,
-      agentEmailSubject,
-      [
-        `<p>Hi ${agentFirstName},</p>`,
-        `<p>${agentIntroCopy}</p>`,
-        '<p>Here are the key details so you can reach out confidently:</p>',
-        `<p><b>Client Name:</b> ${borrowerName}<br><b>Email:</b> ${borrowerEmail ?? 'Not provided'}<br><b>Phone:</b> ${
-          borrowerPhone ?? 'Not provided'
-        }${notesHtmlLine}</p>`,
-        mcInfoHtml,
-        contactMadeLink && contactAttemptedLink
-          ? `<p>Please select one of the following after attempting to contact ${borrowerFirstName}: </p>`
-          : null,
-        contactMadeLink && contactAttemptedLink
-          ? `<p><a href="${contactMadeLink}">Made Contact</a><br><a href="${contactAttemptedLink}">Unable to reach after first attempt</a></p>`
-          : null,
-        referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
-        `<p>Thank you for taking great care of ${borrowerFirstName}!</p>`,
-      ],
-      [
-        `Hi ${agentFirstName},`,
-        agentIntroCopy,
-        'Here are the key details so you can reach out confidently:',
-        `Client Name: ${borrowerName}`,
-        `Email: ${borrowerEmail ?? 'Not provided'}`,
-        `Phone: ${borrowerPhone ?? 'Not provided'}`,
-        notesTextLine,
-        mcInfoText,
-        contactMadeLink && contactAttemptedLink
-          ? `Please select one of the following after attempting to contact ${borrowerFirstName}:`
-          : null,
-        contactMadeLink && contactAttemptedLink
-          ? `Made Contact: ${contactMadeLink}`
-          : null,
-        contactMadeLink && contactAttemptedLink
-          ? `Unable to reach after first attempt: ${contactAttemptedLink}`
-          : null,
-        referralLink ? `Referral workspace: ${referralLink}` : null,
-        `Thank you for taking great care of ${borrowerFirstName}!`,
-      ],
-      'agent',
-      result,
-      introEmailCC
-    );
+    for (const { label, side, contact } of agentTargets) {
+      const agentFirstName = firstNameFromContact(contact, 'your agent');
+      const oppositeAgentContact = side === 'buy' ? sellSideContact : buySideContact;
+      const oppositeAgentLabel =
+        side === 'buy'
+          ? 'Selling Agent at American Home Agents'
+          : 'Buying Agent';
+      const oppositeAgentHtmlLines = formatContactLines(oppositeAgentContact, oppositeAgentLabel);
+      const oppositeAgentTextLines = formatContactTextLines(oppositeAgentContact, oppositeAgentLabel);
+
+      const oppositeAgentInfoHtml =
+        oppositeAgentHtmlLines.length > 0 ? `<p>${oppositeAgentHtmlLines.join('<br>')}</p>` : null;
+
+      const mcInfoHtml = isSellerOnly
+        ? null
+        : lenderContact
+        ? `<p><b>Mortgage Consultant at American Financing:</b> ${lenderContact.name ?? 'Not provided'}<br><b>Email:</b> ${
+            lenderContact.email ?? 'Not provided'
+          }<br><b>Phone:</b> ${lenderContact.phone ?? 'Not provided'}<br><b>Loan File Number:</b> ${loanFileNumber}</p>`
+        : `<p><b>Mortgage Consultant at American Financing:</b> Not provided<br><b>Loan File Number:</b> ${loanFileNumber}</p>`;
+
+      const mcInfoText = isSellerOnly
+        ? null
+        : lenderContact
+        ? `Mortgage Consultant at American Financing: ${lenderContact.name ?? 'Not provided'} | Email: ${
+            lenderContact.email ?? 'Not provided'
+          } | Phone: ${lenderContact.phone ?? 'Not provided'} | Loan File Number: ${loanFileNumber}`
+        : `Mortgage Consultant at American Financing: Not provided | Loan File Number: ${loanFileNumber}`;
+
+      await trySendEmail(
+        contact?.email ?? null,
+        agentEmailSubject,
+        [
+          `<p>Hi ${agentFirstName},</p>`,
+          `<p>${buildAgentIntroCopy(side)}</p>`,
+          '<p>Here are the key details so you can reach out confidently:</p>',
+          `<p><b>Client Name:</b> ${borrowerName}<br><b>Email:</b> ${borrowerEmail ?? 'Not provided'}<br><b>Phone:</b> ${
+            borrowerPhone ?? 'Not provided'
+          }${notesHtmlLine}</p>`,
+          oppositeAgentInfoHtml,
+          mcInfoHtml,
+          contactMadeLink && contactAttemptedLink
+            ? `<p>Please select one of the following after attempting to contact ${borrowerFirstName}: </p>`
+            : null,
+          contactMadeLink && contactAttemptedLink
+            ? `<p><a href="${contactMadeLink}">Made Contact</a><br><a href="${contactAttemptedLink}">Unable to reach after first attempt</a></p>`
+            : null,
+          referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
+          `<p>Thank you for taking great care of ${borrowerFirstName}!</p>`,
+        ],
+        [
+          `Hi ${agentFirstName},`,
+          buildAgentIntroCopy(side),
+          'Here are the key details so you can reach out confidently:',
+          `Client Name: ${borrowerName}`,
+          `Email: ${borrowerEmail ?? 'Not provided'}`,
+          `Phone: ${borrowerPhone ?? 'Not provided'}`,
+          notesTextLine,
+          ...oppositeAgentTextLines,
+          oppositeAgentTextLines.length > 0 ? '' : null,
+          mcInfoText,
+          contactMadeLink && contactAttemptedLink
+            ? `Please select one of the following after attempting to contact ${borrowerFirstName}:`
+            : null,
+          contactMadeLink && contactAttemptedLink
+            ? `Made Contact: ${contactMadeLink}`
+            : null,
+          contactMadeLink && contactAttemptedLink
+            ? `Unable to reach after first attempt: ${contactAttemptedLink}`
+            : null,
+          referralLink ? `Referral workspace: ${referralLink}` : null,
+          `Thank you for taking great care of ${borrowerFirstName}!`,
+        ],
+        label,
+        result,
+        introEmailCC
+      );
+    }
   }
 
   const mcAgentContacts: Array<{ label: string; contact: BasicContact }> = [];

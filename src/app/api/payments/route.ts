@@ -1,4 +1,5 @@
 import {
+  addMonths,
   differenceInDays,
   endOfDay,
   endOfMonth,
@@ -24,6 +25,17 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
 import { createNPSToken } from '@/lib/server/nps';
+import { createAdminNotifications } from '@/lib/server/notifications';
+import { mapDealStatusToReferralStatus } from '@/lib/server/referral-deal-status-mapper';
+import { type DealStatus } from '@/constants/deals';
+import {
+  deriveReferralStatusFromSides,
+  getAgentIdForSide,
+  isSellSide,
+  pickPrimarySideForReferral,
+  resolveAgentSideForReferral,
+  type ReferralSide,
+} from '@/lib/server/referral-sides';
 
 type ReferralSummary = {
   _id: Types.ObjectId;
@@ -39,6 +51,8 @@ type ReferralSummary = {
   referralFeeDueCents?: number | null;
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
   dealSide?: 'buy' | 'sell' | null;
+  buySideAgent?: Types.ObjectId | string | null;
+  sellSideAgent?: Types.ObjectId | string | null;
 };
 
 type AgentSummary = {
@@ -96,6 +110,11 @@ const minutesBetweenDates = (start: Date | null, end: Date | null): number | nul
 
   return Math.round(diff / 60000);
 };
+
+const isAgentAttributedDeal = (
+  usedAssignedAgent: boolean | null | undefined,
+  agentAttribution: string | null | undefined
+): boolean => usedAssignedAgent === true && agentAttribution !== 'OUTSIDE_AGENT';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const session = await getCurrentSession();
@@ -185,6 +204,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         timeframeStart = startOfMonth(now);
         timeframeEnd = endOfMonth(now);
         break;
+      case 'next_month': {
+        const nextMonth = addMonths(now, 1);
+        timeframeStart = startOfMonth(nextMonth);
+        timeframeEnd = endOfMonth(nextMonth);
+        break;
+      }
       case 'year':
         timeframeStart = subYears(now, 1);
         break;
@@ -237,6 +262,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   if (usedAfcParam === 'true' || usedAfcParam === 'false') {
     filter.usedAfc = usedAfcParam === 'true';
+    filter.side = 'buy';
   }
 
   if (role === 'agent') {
@@ -562,7 +588,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       terminatedReason: payment.terminatedReason ?? null,
       closingDate: payment.closingDate ? payment.closingDate.toISOString() : null,
       agentAttribution: payment.agentAttribution ?? null,
-      usedAfc: Boolean(payment.usedAfc),
+      usedAfc: payment.side === 'sell' ? false : Boolean(payment.usedAfc),
       usedAssignedAgent: Boolean(payment.usedAssignedAgent),
       invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
       paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
@@ -643,6 +669,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
   }
+  if (parsed.data.status === 'terminated' && !parsed.data.terminatedReason) {
+    return NextResponse.json(
+      { error: { fieldErrors: { terminatedReason: ['Terminated reason is required when status is terminated.'] } } },
+      { status: 422 }
+    );
+  }
 
   await connectMongo();
   const referralForCreate = await Referral.findById(parsed.data.referralId);
@@ -651,7 +683,45 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const isAgentOrigin = referralForCreate.origin === 'agent';
-  const fallbackSide = referralForCreate.dealSide === 'sell' ? 'sell' : 'buy';
+  let sessionAgentId: Types.ObjectId | string | null = null;
+  if (session.user.role === 'agent') {
+    const agentRecord = await Agent.findOne({ userId: session.user.id })
+      .select('_id')
+      .lean<{ _id: Types.ObjectId } | null>();
+    sessionAgentId = agentRecord?._id ?? null;
+  }
+
+  const creatorSide = resolveAgentSideForReferral(
+    {
+      buySideAgent: referralForCreate.buySideAgent as Types.ObjectId | null,
+      sellSideAgent: referralForCreate.sellSideAgent as Types.ObjectId | null,
+      assignedAgent: referralForCreate.assignedAgent as Types.ObjectId | null,
+      dealSide: referralForCreate.dealSide ?? null,
+      clientType: referralForCreate.clientType ?? null,
+    },
+    typeof sessionAgentId === 'string' ? sessionAgentId : sessionAgentId?.toString()
+  );
+  const fallbackSide = pickPrimarySideForReferral({
+    buySideAgent: referralForCreate.buySideAgent as Types.ObjectId | null,
+    sellSideAgent: referralForCreate.sellSideAgent as Types.ObjectId | null,
+    assignedAgent: referralForCreate.assignedAgent as Types.ObjectId | null,
+    dealSide: referralForCreate.dealSide ?? null,
+    clientType: referralForCreate.clientType ?? null,
+  });
+  const resolvedSide = (parsed.data.side ?? creatorSide ?? fallbackSide) as ReferralSide;
+
+  if (
+    session.user.role === 'agent' &&
+    parsed.data.side &&
+    creatorSide &&
+    parsed.data.side !== creatorSide
+  ) {
+    return NextResponse.json(
+      { error: { side: ['Agents can only create deals for their assigned side.'] } },
+      { status: 403 }
+    );
+  }
+
   const requestedUsedAssignedAgent = parsed.data.usedAssignedAgent ?? true;
   const requestedAgentAttribution = parsed.data.agentAttribution ?? null;
   const isOutsideAgent =
@@ -660,14 +730,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const normalizedUsedAssignedAgent = isOutsideAgent ? false : requestedUsedAssignedAgent;
   const normalizedAgentAttribution = isOutsideAgent ? 'OUTSIDE_AGENT' : requestedAgentAttribution;
   let defaultAgentId: Types.ObjectId | string | null = null;
+  const usedAfcForCreate = isSellSide(resolvedSide) ? false : (parsed.data.usedAfc ?? true);
 
-  if (session.user.role === 'agent' && referralForCreate.assignedAgent) {
-    defaultAgentId = referralForCreate.assignedAgent as Types.ObjectId;
-  } else if (session.user.role === 'agent') {
-    const agentRecord = await Agent.findOne({ userId: session.user.id })
-      .select('_id')
-      .lean<{ _id: Types.ObjectId } | null>();
-    defaultAgentId = agentRecord?._id ?? null;
+  if (session.user.role === 'agent') {
+    defaultAgentId =
+      sessionAgentId ??
+      getAgentIdForSide(
+        {
+          buySideAgent: referralForCreate.buySideAgent as Types.ObjectId | null,
+          sellSideAgent: referralForCreate.sellSideAgent as Types.ObjectId | null,
+          assignedAgent: referralForCreate.assignedAgent as Types.ObjectId | null,
+        },
+        resolvedSide
+      );
   }
 
   const payment = await Payment.create({
@@ -677,7 +752,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     receivedAmountCents: isAgentOrigin || isOutsideAgent ? 0 : parsed.data.receivedAmountCents,
     terminatedReason: parsed.data.terminatedReason ?? null,
     agentAttribution: isAgentOrigin ? null : normalizedAgentAttribution,
-    usedAfc: parsed.data.usedAfc ?? true,
+    usedAfc: usedAfcForCreate,
     usedAssignedAgent: isAgentOrigin ? true : normalizedUsedAssignedAgent,
     netReferralFeePaidCents:
       isAgentOrigin || isOutsideAgent ? 0 : parsed.data.netReferralFeePaidCents ?? null,
@@ -689,7 +764,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     notes: parsed.data.notes,
     commissionBasisPoints: parsed.data.commissionBasisPoints ?? null,
     referralFeeBasisPoints: isAgentOrigin ? null : parsed.data.referralFeeBasisPoints ?? null,
-    side: parsed.data.side ?? fallbackSide,
+    side: resolvedSide,
     contractPriceCents: parsed.data.contractPriceCents ?? null,
     agentId: parsed.data.agentId ?? defaultAgentId,
     propertyCity: parsed.data.propertyCity ?? null,
@@ -711,6 +786,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       referralUpdated = true;
     }
 
+    if (resolvedSide) {
+      referralForCreate.dealSide = resolvedSide;
+    }
+
+    if (
+      isAgentAttributedDeal(isAgentOrigin ? true : normalizedUsedAssignedAgent, normalizedAgentAttribution) &&
+      parsed.data.status
+    ) {
+      const nextReferralStatus = mapDealStatusToReferralStatus(parsed.data.status as DealStatus);
+      if (resolvedSide === 'sell') {
+        referralForCreate.sellStatus = nextReferralStatus;
+      } else {
+        referralForCreate.buyStatus = nextReferralStatus;
+      }
+      const derivedStatus = deriveReferralStatusFromSides(
+        referralForCreate.buyStatus ?? referralForCreate.status,
+        referralForCreate.sellStatus ?? referralForCreate.status,
+        referralForCreate.clientType ?? null
+      );
+      if (referralForCreate.status !== derivedStatus) {
+        referralForCreate.status = derivedStatus;
+      }
+      referralForCreate.statusLastUpdated = new Date();
+      referralUpdated = true;
+    }
+
     if (isOutsideAgent) {
       const previousReferralStatus = referralForCreate.status ?? null;
       const now = new Date();
@@ -718,7 +819,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
       referralForCreate.estPurchasePriceCents = 0;
       referralForCreate.referralFeeDueCents = 0;
-      referralForCreate.status = 'Lost';
+      if (resolvedSide === 'sell') {
+        referralForCreate.sellStatus = 'Lost';
+      } else {
+        referralForCreate.buyStatus = 'Lost';
+      }
+      referralForCreate.status = deriveReferralStatusFromSides(
+        referralForCreate.buyStatus ?? 'Lost',
+        referralForCreate.sellStatus ?? 'Lost',
+        referralForCreate.clientType ?? null
+      );
       referralForCreate.statusLastUpdated = now;
       referralForCreate.audit = Array.isArray(referralForCreate.audit) ? referralForCreate.audit : [];
 
@@ -795,6 +905,12 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   if (hasTerminationUpdate && role !== 'admin' && role !== 'agent') {
     return new NextResponse('Forbidden', { status: 403 });
   }
+  if (isTerminating && !parsed.data.terminatedReason) {
+    return NextResponse.json(
+      { error: { fieldErrors: { terminatedReason: ['Terminated reason is required when status is terminated.'] } } },
+      { status: 422 }
+    );
+  }
 
   await connectMongo();
   const existingPayment = await Payment.findById(body.id);
@@ -829,6 +945,18 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       : existingPayment.referralFeeBasisPoints ?? null;
   const nextSide =
     parsed.data.side !== undefined ? parsed.data.side ?? existingPayment.side : existingPayment.side;
+  const effectiveSide: ReferralSide =
+    nextSide === 'sell'
+      ? 'sell'
+      : nextSide === 'buy'
+      ? 'buy'
+      : pickPrimarySideForReferral({
+          buySideAgent: referral?.buySideAgent as Types.ObjectId | null,
+          sellSideAgent: referral?.sellSideAgent as Types.ObjectId | null,
+          assignedAgent: referral?.assignedAgent as Types.ObjectId | null,
+          dealSide: referral?.dealSide ?? null,
+          clientType: referral?.clientType ?? null,
+        });
 
   let nextExpectedAmountCents = isAgentOrigin ? 0 : existingPayment.expectedAmountCents ?? 0;
   let nextReceivedAmountCents = isAgentOrigin ? 0 : existingPayment.receivedAmountCents ?? 0;
@@ -952,13 +1080,22 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   if (isAgentOrigin) {
     updatePayload.netReferralFeePaidCents = 0;
     updatePayload.usedAssignedAgent = true;
-    updatePayload.usedAfc = existingPayment.usedAfc ?? true;
+    updatePayload.usedAfc = isSellSide(effectiveSide) ? false : (existingPayment.usedAfc ?? true);
+  }
+
+  if (isSellSide(effectiveSide)) {
+    updatePayload.usedAfc = false;
+  } else if (Object.prototype.hasOwnProperty.call(parsed.data, 'usedAfc')) {
+    updatePayload.usedAfc = Boolean(parsed.data.usedAfc);
   }
 
   const payment = await Payment.findByIdAndUpdate(body.id, updatePayload, { new: true });
   if (!payment) {
     return new NextResponse('Not found', { status: 404 });
   }
+
+  let referralStatusSnapshot: string | null = null;
+  let referralStatusLastUpdatedSnapshot: string | null = null;
 
   if (referral) {
     if (isAgentOrigin) {
@@ -985,12 +1122,24 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         slaChanged = true;
       }
 
-      if (previousReferralStatus !== 'Lost') {
+      if (effectiveSide === 'sell') {
+        referral.sellStatus = 'Lost';
+      } else {
+        referral.buyStatus = 'Lost';
+      }
+
+      const nextDerivedLostStatus = deriveReferralStatusFromSides(
+        referral.buyStatus ?? referral.status,
+        referral.sellStatus ?? referral.status,
+        referral.clientType ?? null
+      );
+
+      if (previousReferralStatus !== nextDerivedLostStatus) {
         const auditEntry: Record<string, unknown> = {
           actorRole: session.user.role,
           field: 'status',
           previousValue: previousReferralStatus,
-          newValue: 'Lost',
+          newValue: nextDerivedLostStatus,
           timestamp: now,
         };
         const actorId = resolveAuditActorId(session.user.id);
@@ -998,7 +1147,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
           auditEntry.actorId = actorId;
         }
 
-        referral.status = 'Lost';
+        referral.status = nextDerivedLostStatus;
         referral.statusLastUpdated = now;
         referral.audit = Array.isArray(referral.audit) ? referral.audit : [];
         referral.audit.push(auditEntry as any);
@@ -1010,6 +1159,48 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         { referralId: referral._id },
         { $set: { expectedAmountCents: 0, receivedAmountCents: 0 } }
       );
+    }
+
+    if (
+      parsed.data.status &&
+      parsed.data.status !== previousStatus &&
+      isAgentAttributedDeal(nextUsedAssignedAgent, nextAgentAttribution)
+    ) {
+      const isReactivatedFromTerminated =
+        previousStatus === 'terminated' && parsed.data.status !== 'terminated';
+      const nextReferralStatus = isReactivatedFromTerminated
+        ? 'Active Lead'
+        : mapDealStatusToReferralStatus(parsed.data.status as DealStatus);
+      if (effectiveSide === 'sell') {
+        referral.sellStatus = nextReferralStatus;
+      } else {
+        referral.buyStatus = nextReferralStatus;
+      }
+      const nextSummaryStatus = deriveReferralStatusFromSides(
+        referral.buyStatus ?? referral.status,
+        referral.sellStatus ?? referral.status,
+        referral.clientType ?? null
+      );
+
+      if (previousReferralStatus !== nextSummaryStatus) {
+        const auditEntry: Record<string, unknown> = {
+          actorRole: session.user.role,
+          field: 'status',
+          previousValue: previousReferralStatus,
+          newValue: nextSummaryStatus,
+          timestamp: now,
+        };
+        const actorId = resolveAuditActorId(session.user.id);
+        if (actorId) {
+          auditEntry.actorId = actorId;
+        }
+        referral.status = nextSummaryStatus;
+        referral.statusLastUpdated = now;
+        referral.audit = Array.isArray(referral.audit) ? referral.audit : [];
+        referral.audit.push(auditEntry as any);
+        referral.markModified('audit');
+        referralStatusChanged = true;
+      }
     }
 
     if (parsed.data.status && parsed.data.status !== previousStatus && !isAgentOrigin) {
@@ -1071,9 +1262,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     if (nextReferralFeeBasisPoints != null) {
       referral.referralFeeBasisPoints = nextReferralFeeBasisPoints;
     }
-    if (nextSide) {
-      referral.dealSide = nextSide;
-    }
+    referral.dealSide = effectiveSide;
     if (parsed.data.propertyAddress !== undefined) {
       referral.propertyAddress = parsed.data.propertyAddress ?? '';
     }
@@ -1110,6 +1299,32 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     }
 
     await referral.save();
+    referralStatusSnapshot = referral.status ?? null;
+    referralStatusLastUpdatedSnapshot = referral.statusLastUpdated
+      ? referral.statusLastUpdated.toISOString()
+      : null;
+
+    const transitionedDealToUnderContract =
+      parsed.data.status === 'under_contract' && previousStatus !== 'under_contract';
+
+    if (
+      parsed.data.status &&
+      parsed.data.status !== previousStatus &&
+      (session.user.role === 'agent' ||
+        session.user.role === 'mc' ||
+        transitionedDealToUnderContract)
+    ) {
+      const actorName = session.user.name || session.user.email || 'A team member';
+      const borrowerName = referral.borrower?.name || 'a referral';
+      await createAdminNotifications({
+        type: 'status_change',
+        referralId: referral._id,
+        borrowerName,
+        actorRole: session.user.role,
+        actorName,
+        content: `${actorName} changed deal status from ${previousStatus} to ${payment.status} for ${borrowerName}`,
+      });
+    }
 
     if (autoRemindersDisabledForDeal) {
       await logReferralActivity({
@@ -1131,23 +1346,23 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    // Send congratulatory emails with NPS survey links when deal is closed
+    // Send congratulatory emails when a deal is marked closed
     // Skip all automated emails if AGIT agent is attached
     const shouldSendClosedEmails = parsed.data.sendClosedEmails ?? false;
     if (isClosingNow && shouldSendClosedEmails && !hasAgitAgent && isTransactionalEmailConfigured()) {
-      const usedAfc = payment.usedAfc ?? existingPayment.usedAfc ?? false;
       const usedAssignedAgent = payment.usedAssignedAgent ?? existingPayment.usedAssignedAgent ?? false;
+      const usedAfcForClosedEmail = payment.usedAfc ?? existingPayment.usedAfc ?? true;
       const origin = getReferralAppBaseUrl();
 
       try {
-        // Email to referral (borrower) - only if usedAssignedAgent is true
+        // Send closure emails only when the assigned agent handled the deal.
         if (usedAssignedAgent && referral.assignedAgent && referral.borrower?.email) {
           const borrowerEmail = referral.borrower.email;
           const borrowerFirstName = referral.borrower.firstName || 
             (referral.borrower.name ? referral.borrower.name.split(' ')[0] : null) ||
             'there';
           
-          const agent = referral.assignedAgent as { _id?: any; name?: string } | null;
+          const agent = referral.assignedAgent as { _id?: any; name?: string; email?: string } | null;
           const agentId = agent?._id?.toString();
           
           if (agentId) {
@@ -1188,18 +1403,23 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
               `,
               text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your new home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best in your new place!\n\nRate your agent: ${agentSurveyUrl}`,
             });
-          }
-        }
 
-        if (isClosingNow) {
-          console.log('Closed deal notifications are borrower-only; agent emails are disabled.', {
-            paymentId: existingPayment._id.toString(),
-            referralId: referral._id.toString(),
-            usedAfc,
-            usedAssignedAgent,
-            hasAssignedAgent: !!referral.assignedAgent,
-            assignedAgentDesignation,
-          });
+            if (agent?.email && usedAfcForClosedEmail) {
+              const agentFirstName = agentFullName.split(' ')[0] || 'there';
+              const borrowerDisplayName = referral.borrower.name || referral.borrower.firstName || 'your client';
+              await sendTransactionalEmail({
+                to: [agent.email],
+                subject: 'Congratulations on Your Closed Deal!',
+                html: `
+                  <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
+                    <p>Hi ${agentFirstName},</p>
+                    <p>Congratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.</p>
+                  </div>
+                `,
+                text: `Hi ${agentFirstName},\n\nCongratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.`,
+              });
+            }
+          }
         }
       } catch (error) {
         console.error('Failed to send congratulatory emails:', error);
@@ -1256,7 +1476,11 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  return NextResponse.json({ id: payment._id.toString() });
+  return NextResponse.json({
+    id: payment._id.toString(),
+    referralStatus: referralStatusSnapshot,
+    referralStatusLastUpdated: referralStatusLastUpdatedSnapshot,
+  });
 }
 
 export async function DELETE(request: NextRequest): Promise<NextResponse> {

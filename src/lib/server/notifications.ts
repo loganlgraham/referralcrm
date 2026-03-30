@@ -212,17 +212,19 @@ export async function markNotificationsAsRead(userId: string): Promise<number> {
 }
 
 /**
- * Delete a single notification by ID
+ * Mark a single notification as read by ID
  */
-export async function deleteNotification(notificationId: string, userId: string): Promise<boolean> {
+export async function markNotificationAsRead(notificationId: string, userId: string): Promise<boolean> {
   try {
-    const result = await Notification.deleteOne({
+    const result = await Notification.updateOne({
       _id: new Types.ObjectId(notificationId),
       userId: new Types.ObjectId(userId),
+    }, {
+      $set: { readAt: new Date() },
     });
-    return result.deletedCount === 1;
+    return result.matchedCount === 1;
   } catch (error) {
-    console.error('Failed to delete notification:', error);
+    console.error('Failed to mark notification as read:', error);
     return false;
   }
 }

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { REFERRAL_STATUSES, REFERRAL_STATUS_VALUES, REFERRAL_TIMELINE_VALUES } from '@/constants/referrals';
+import { DEAL_STATUS_VALUES, TERMINATED_REASON_VALUES } from '@/constants/deals';
 
 const zipArraySchema = z
   .array(z.string().trim().regex(/^\d{5}$/))
@@ -26,6 +27,9 @@ export const createReferralSchema = z.object({
 
 export const updateReferralSchema = z.object({
   status: z.enum(REFERRAL_STATUS_VALUES).optional(),
+  buyStatus: z.enum(REFERRAL_STATUS_VALUES).optional(),
+  sellStatus: z.enum(REFERRAL_STATUS_VALUES).optional(),
+  terminatedReason: z.enum(TERMINATED_REASON_VALUES).nullable().optional(),
   assignedAgent: z.string().optional(),
   referralFeeBasisPoints: z.number().int().min(0).optional(),
   ahaBucket: z.enum(['AHA', 'AHA_OOS']).nullable().optional(),
@@ -41,6 +45,14 @@ export const updateReferralSchema = z.object({
   preApprovalAmount: z.number().min(0).optional(),
   timeline: z.enum(REFERRAL_TIMELINE_VALUES).optional(),
   referralDate: z.union([z.string().datetime(), z.null()]).optional(),
+}).superRefine((data, ctx) => {
+  if (data.status === 'Terminated' && !data.terminatedReason) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Terminated reason is required when status is Terminated.',
+      path: ['terminatedReason'],
+    });
+  }
 });
 
 export const createActivitySchema = z.object({
@@ -59,6 +71,9 @@ export const assignLenderSchema = z.object({
 
 export const updateStatusSchema = z.object({
   status: z.enum(REFERRAL_STATUS_VALUES),
+  side: z.enum(['buy', 'sell']).optional(),
+  source: z.enum(['referral_table', 'referral_detail']).optional(),
+  terminatedReason: z.enum(TERMINATED_REASON_VALUES).nullable().optional(),
   contractDetails: z
     .object({
       propertyAddress: z.string().min(1),
@@ -77,6 +92,14 @@ export const updateStatusSchema = z.object({
     })
     .optional(),
   createNewDeal: z.boolean().optional()
+}).superRefine((data, ctx) => {
+  if (data.status === 'Terminated' && !data.terminatedReason) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Terminated reason is required when status is Terminated.',
+      path: ['terminatedReason'],
+    });
+  }
 });
 
 export const createReferralNoteSchema = z.object({
@@ -102,24 +125,10 @@ export const createLenderNoteSchema = z.object({
 
 export const paymentSchema = z.object({
   referralId: z.string().min(1),
-  status: z
-    .enum([
-      'under_contract',
-      'past_inspection',
-      'past_appraisal',
-      'clear_to_close',
-      'closed',
-      'payment_sent',
-      'paid',
-      'terminated',
-    ])
-    .default('under_contract'),
+  status: z.enum(DEAL_STATUS_VALUES).default('under_contract'),
   expectedAmountCents: z.number().int().min(0),
   receivedAmountCents: z.number().int().min(0).optional(),
-  terminatedReason: z
-    .enum(['inspection', 'appraisal', 'financing', 'changed_mind'])
-    .nullable()
-    .optional(),
+  terminatedReason: z.enum(TERMINATED_REASON_VALUES).nullable().optional(),
   agentAttribution: z.enum(['AHA', 'AHA_OOS', 'OUTSIDE_AGENT']).nullable().optional(),
   agentId: z
     .union([z.string().trim().regex(/^[0-9a-fA-F]{24}$/), z.literal(null)])

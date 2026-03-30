@@ -26,6 +26,8 @@ type CandidateAgent = {
   npsScore?: number | null;
 };
 
+const CLOSED_DEAL_STATUSES = ['closed', 'payment_sent', 'paid'] as const;
+
 const normalizeAgentId = (value: unknown): string => {
   if (typeof value === 'string') return value;
   if (value instanceof Types.ObjectId) return value.toString();
@@ -186,7 +188,10 @@ export async function GET(request: Request, { params }: Params) {
       $match: {
         _id: { $in: candidateIds },
         $or: [
-          { 'payments.status': { $in: ['closed', 'paid'] }, 'payments.agentAttribution': { $ne: 'OUTSIDE_AGENT' } },
+          {
+            'payments.status': { $in: CLOSED_DEAL_STATUSES },
+            'payments.agentAttribution': { $ne: 'OUTSIDE_AGENT' }
+          },
           { 'referral.assignedAgent': { $in: candidateIds } },
         ],
       },

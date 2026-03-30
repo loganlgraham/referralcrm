@@ -28,8 +28,12 @@ import { LenderMC } from '@/models/lender';
 import { PreApprovalMetric } from '@/models/pre-approval-metric';
 import { AdminTask, getEffectiveDueDate, type AdminTaskLean } from '@/models/admin-task';
 import { Activity } from '@/models/activity';
+import {
+  isAfcEligibleDeal,
+  resolveDealSideForMetrics,
+} from '@/lib/server/referral-sides';
 
-type TimeframeKey = 'day' | 'week' | 'month' | 'year' | 'ytd' | 'all' | 'custom';
+type TimeframeKey = 'day' | 'week' | 'month' | 'next_month' | 'year' | 'ytd' | 'all' | 'custom';
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
 
 interface TimeframeInfo {
@@ -49,6 +53,7 @@ interface DashboardRequestContext {
 interface AggregatedPayment {
   _id: Types.ObjectId;
   agentId?: Types.ObjectId | null;
+  side?: 'buy' | 'sell' | null;
   status:
     | 'under_contract'
     | 'past_inspection'
@@ -78,6 +83,10 @@ interface AggregatedPayment {
     endorser?: string;
     origin?: 'agent' | 'mc' | 'admin' | '';
     org?: 'AFC' | 'AHA';
+    clientType?: 'Seller' | 'Buyer' | 'Both' | null;
+    dealSide?: 'buy' | 'sell' | null;
+    buyStatus?: string | null;
+    sellStatus?: string | null;
     lookingInZip?: string;
     lookingInZips?: string[] | null;
     propertyAddress?: string;
@@ -137,6 +146,9 @@ interface DashboardReferral {
   assignedAgent?: Types.ObjectId | null;
   buySideAgent?: Types.ObjectId | null;
   sellSideAgent?: Types.ObjectId | null;
+  dealSide?: 'buy' | 'sell' | null;
+  buyStatus?: string | null;
+  sellStatus?: string | null;
   lender?: Types.ObjectId | null;
   status?: string;
   preApprovalAmountCents?: number;
@@ -181,6 +193,7 @@ const TIMEFRAME_LABELS: Record<TimeframeKey, string> = {
   day: 'Today',
   week: 'This Week',
   month: 'This Month',
+  next_month: 'Next Month',
   year: 'Last 12 Months',
   ytd: 'Year to Date',
   all: 'All time',
@@ -198,6 +211,12 @@ const EXPECTED_REVENUE_STATUSES = new Set<AggregatedPayment['status']>([
   ...UNDER_CONTRACT_STATUSES,
   'closed',
   'payment_sent'
+]);
+
+const CLOSED_DEAL_STATUSES = new Set<AggregatedPayment['status']>([
+  'closed',
+  'payment_sent',
+  'paid'
 ]);
 
 function parseDateOnly(value: string | null): Date | null {
@@ -219,6 +238,7 @@ function parseTimeframe(
     value === 'day' ||
     value === 'week' ||
     value === 'month' ||
+    value === 'next_month' ||
     value === 'year' ||
     value === 'ytd' ||
     value === 'all' ||
@@ -276,6 +296,15 @@ function parseTimeframe(
         start: subYears(now, 1),
         end: endOfDay(now)
       };
+    case 'next_month': {
+      const nextMonth = addMonths(now, 1);
+      return {
+        key: 'next_month',
+        label: TIMEFRAME_LABELS.next_month,
+        start: startOfMonth(nextMonth),
+        end: endOfMonth(nextMonth)
+      };
+    }
     case 'ytd':
       return {
         key: 'ytd',
@@ -295,7 +324,7 @@ function parseTimeframe(
         key: 'month',
         label: TIMEFRAME_LABELS.month,
         start: startOfMonth(now),
-        end: endOfDay(now)
+        end: endOfMonth(now)
       };
   }
 }
@@ -472,7 +501,8 @@ function groupTrendByTimeframe(dates: Date[], timeframe: TimeframeInfo): TrendPo
         sortValue = dayStart.getTime();
         break;
       }
-      case 'month': {
+      case 'month':
+      case 'next_month': {
         const weekStart = startOfWeek(d, { weekStartsOn: 1 });
         key = `${format(weekStart, 'yyyy')}-W${format(weekStart, 'II')}`;
         label = `${format(weekStart, 'MMM d')}`;
@@ -561,7 +591,8 @@ function buildTimeframeBuckets(timeframe: TimeframeInfo): TimeframeBucket[] {
       }
       break;
     }
-    case 'month': {
+    case 'month':
+    case 'next_month': {
       cursor = startOfWeek(rangeStart, { weekStartsOn: 1 });
       const endWeek = startOfWeek(rangeEnd, { weekStartsOn: 1 });
       while (cursor <= endWeek) {
@@ -612,6 +643,7 @@ function getTimeframeBucketKey(date: Date, timeframe: TimeframeInfo): string {
     case 'week':
       return format(startOfDay(d), 'yyyy-MM-dd');
     case 'month':
+    case 'next_month':
       return `${format(startOfWeek(d, { weekStartsOn: 1 }), 'yyyy')}-W${format(startOfWeek(d, { weekStartsOn: 1 }), 'II')}`;
     case 'year':
     case 'ytd':
@@ -661,6 +693,14 @@ function getPreviousPeriodRange(timeframe: TimeframeInfo): { start: Date; end: D
       };
     }
     case 'month': {
+      const currentMonthStart = startOfMonth(currentStart);
+      const previousMonthStart = startOfMonth(subMonths(currentMonthStart, 1));
+      return {
+        start: previousMonthStart,
+        end: endOfMonth(previousMonthStart)
+      };
+    }
+    case 'next_month': {
       const currentMonthStart = startOfMonth(currentStart);
       const previousMonthStart = startOfMonth(subMonths(currentMonthStart, 1));
       return {
@@ -722,6 +762,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
+
+  const attachDebugEnabled =
+    request.nextUrl.searchParams.get('attachDebug') === '1' && session.user?.role === 'admin';
+  const attachDebugDealId = request.nextUrl.searchParams.get('attachDealId')?.trim() || null;
 
   const context = createDashboardContext(request);
   const { referralMatch, timeframe } = context;
@@ -921,6 +965,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       $project: {
         _id: 1,
         agentId: 1,
+        side: 1,
         status: 1,
         expectedAmountCents: 1,
         receivedAmountCents: 1,
@@ -942,6 +987,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           endorser: '$referral.endorser',
           origin: '$referral.origin',
           org: '$referral.org',
+          clientType: '$referral.clientType',
+          dealSide: '$referral.dealSide',
+          buyStatus: '$referral.buyStatus',
+          sellStatus: '$referral.sellStatus',
           lookingInZip: '$referral.lookingInZip',
           lookingInZips: '$referral.lookingInZips',
           propertyAddress: '$referral.propertyAddress',
@@ -1154,7 +1203,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     (payment) =>
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
       payment.usedAssignedAgent === true &&
-      (payment.status === 'closed' || payment.status === 'paid') &&
+      CLOSED_DEAL_STATUSES.has(payment.status) &&
       filteredReferralIds.has(payment.referral._id.toString())
   );
 
@@ -1167,11 +1216,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (timeframeEnd && metricDate > timeframeEnd) return false;
     if (payment.agentAttribution === 'OUTSIDE_AGENT') return false;
     if (payment.usedAssignedAgent !== true) return false;
-    if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return false;
+    if (!CLOSED_DEAL_STATUSES.has(payment.status)) return false;
     return true;
   });
   
-  const lostReferrals = filteredReferrals.filter((referral) => referral.status === 'Lost');
+  const lostReferrals = referralsByNetwork.filter((referral) => {
+    if (referral.status !== 'Lost') {
+      return false;
+    }
+    return isWithinTimeframe(referral.statusLastUpdated ?? referral.updatedAt ?? referral.createdAt);
+  });
   const endOfToday = endOfDay(new Date());
   const startOfCurrentMonth = startOfMonth(new Date());
   const endOfCurrentMonth = endOfMonth(new Date());
@@ -1243,8 +1297,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const revenueEligiblePayments = filteredPaymentsByNetwork.filter((payment) =>
     isRevenueEligiblePayment(payment)
   );
-
-  const closedOrPaidStatuses = new Set(['closed', 'paid']);
 
   const expectedRevenueCents = revenueEligiblePayments.reduce(
     (sum, payment) => sum + calculateOutstandingExpected(payment),
@@ -1359,7 +1411,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   );
 
   const revenueContributingClosedDeals = revenueEligiblePayments.filter(
-    (payment) => payment.status === 'closed' || payment.status === 'paid'
+    (payment) => CLOSED_DEAL_STATUSES.has(payment.status)
   );
   const closedDealPrices = revenueContributingClosedDeals
     .map((payment) =>
@@ -1561,7 +1613,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const closingDate = resolveClosingDate(payment);
     if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
     if (payment.usedAssignedAgent !== true) return;
-    if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return;
+    if (!CLOSED_DEAL_STATUSES.has(payment.status)) return;
 
     const expectedCents = Math.max(payment.expectedAmountCents ?? 0, 0);
     const receivedCents = payment.receivedAmountCents ?? 0;
@@ -1580,12 +1632,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   // Close Rate: cohort-based (deals from referrals created in month X / referrals in month X)
-  // Use closed/paid only (not payment_sent) to match card close rate
+  // Count closed, payment sent, and paid deals for a consistent closed-deal definition.
   const dealsFromCohort = new Map<string, number>();
   paymentsByNetwork.forEach((payment) => {
     if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
     if (payment.usedAssignedAgent !== true) return;
-    if (payment.status !== 'closed' && payment.status !== 'paid') return;
+    if (!CLOSED_DEAL_STATUSES.has(payment.status)) return;
 
     const referralCreatedAt = payment.referral?.createdAt ? new Date(payment.referral.createdAt) : null;
     if (!referralCreatedAt) return;
@@ -1620,7 +1672,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const closingDate = resolveClosingDate(payment);
     if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
     if (payment.usedAssignedAgent !== true) return;
-    if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return;
+    if (!CLOSED_DEAL_STATUSES.has(payment.status)) return;
 
     const expectedCents = Math.max(payment.expectedAmountCents ?? 0, 0);
     const receivedCents = payment.receivedAmountCents ?? 0;
@@ -1641,14 +1693,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   });
 
-  // Close rate per bucket: deals (closed/paid) whose referral was created in that bucket
+  // Close rate per bucket: deals whose referral was created in that bucket.
   // Use paymentsByNetwork (all payments) to count deals from referrals created in each bucket,
   // regardless of when the deal closed (cohort-based calculation)
   const dealsClosedByReferralBucket = new Map<string, number>();
   paymentsByNetwork.forEach((payment) => {
     if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
     if (payment.usedAssignedAgent !== true) return;
-    if (payment.status !== 'closed' && payment.status !== 'paid') return;
+    if (!CLOSED_DEAL_STATUSES.has(payment.status)) return;
     const createdAt = payment.referral?.createdAt;
     if (!createdAt) return;
     const key = getTimeframeBucketKey(new Date(createdAt), context.timeframe);
@@ -1785,20 +1837,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return true;
   };
 
-  const afcRelevant = paymentsByNetwork.filter(
-    (payment) =>
-      payment.referral?.org === 'AFC' &&
-      closedOrPaidStatuses.has(payment.status) &&
-      closedInTimeframe(payment)
+  const attachClosedDeals = paymentsWithMetric.filter((payment) => CLOSED_DEAL_STATUSES.has(payment.status));
+  const attachClosedDealsInTimeframe = attachClosedDeals.filter((payment) => closedInTimeframe(payment));
+
+  const afcRelevant = attachClosedDealsInTimeframe.filter(
+    (payment) => {
+      const dealSide = resolveDealSideForMetrics(
+        payment.side,
+        payment.referral?.dealSide,
+        payment.referral?.clientType ?? null
+      );
+      return isAfcEligibleDeal(payment.referral?.org ?? null, dealSide);
+    }
   );
   const afcDealsLost = afcRelevant.filter((payment) => !payment.usedAfc).length;
   const afcAttachRate = afcRelevant.length
     ? (afcRelevant.filter((payment) => Boolean(payment.usedAfc)).length / afcRelevant.length) * 100
     : 0;
 
-  const ahaRelevant = paymentsByNetwork.filter((payment) => {
-    if (!closedOrPaidStatuses.has(payment.status)) return false;
-    if (!closedInTimeframe(payment)) return false;
+  const ahaRelevant = attachClosedDealsInTimeframe.filter((payment) => {
     const designation = getAgentDesignation(payment);
     return designation === 'AHA';
   });
@@ -1806,9 +1863,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const ahaDealsLost = ahaRelevant.length - ahaAttached.length;
   const ahaAttachRate = ahaRelevant.length ? (ahaAttached.length / ahaRelevant.length) * 100 : 0;
 
-  const ahaOosRelevant = paymentsByNetwork.filter((payment) => {
-    if (!closedOrPaidStatuses.has(payment.status)) return false;
-    if (!closedInTimeframe(payment)) return false;
+  const ahaOosRelevant = attachClosedDealsInTimeframe.filter((payment) => {
     const designation = getAgentDesignation(payment);
     return designation === 'AHA_OOS';
   });
@@ -1846,6 +1901,101 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const ahaOosDealsLostList = ahaOosRelevant
     .filter((payment) => !payment.usedAssignedAgent)
     .map(serializeLostDeal);
+
+  const attachRateDebug = (() => {
+    if (!attachDebugEnabled) return undefined;
+
+    const designationCounts = attachClosedDealsInTimeframe.reduce(
+      (acc, payment) => {
+        const designation = getAgentDesignation(payment);
+        if (designation === 'AHA') acc.aha += 1;
+        else if (designation === 'AHA_OOS') acc.ahaOos += 1;
+        else if (designation === 'AGIT') acc.agit += 1;
+        else acc.unmapped += 1;
+        return acc;
+      },
+      { aha: 0, ahaOos: 0, agit: 0, unmapped: 0 }
+    );
+
+    const inspectedDeal =
+      attachDebugDealId != null
+        ? paymentsWithMetric.find((payment) => payment._id.toString() === attachDebugDealId)
+        : null;
+
+    const inspectedDealDebug = inspectedDeal
+      ? (() => {
+          const designation = getAgentDesignation(inspectedDeal);
+          const closingDate = resolveClosingDate(inspectedDeal);
+          const inTimeframe = closedInTimeframe(inspectedDeal);
+          const isClosedDealStatus = CLOSED_DEAL_STATUSES.has(inspectedDeal.status);
+          const isAfcEligible =
+            isClosedDealStatus &&
+            inTimeframe &&
+            isAfcEligibleDeal(
+              inspectedDeal.referral?.org ?? null,
+              resolveDealSideForMetrics(
+                inspectedDeal.side,
+                inspectedDeal.referral?.dealSide,
+                inspectedDeal.referral?.clientType ?? null
+              )
+            );
+          const isAhaEligible =
+            isClosedDealStatus &&
+            inTimeframe &&
+            designation === 'AHA';
+          const isAhaOosEligible =
+            isClosedDealStatus &&
+            inTimeframe &&
+            designation === 'AHA_OOS';
+          return {
+            id: inspectedDeal._id.toString(),
+            status: inspectedDeal.status,
+            referralOrg: inspectedDeal.referral?.org ?? null,
+            usedAfc: Boolean(inspectedDeal.usedAfc),
+            usedAssignedAgent: Boolean(inspectedDeal.usedAssignedAgent),
+            agentAttribution: inspectedDeal.agentAttribution ?? null,
+            designation,
+            closingDate: closingDate?.toISOString() ?? null,
+            metricDate: (inspectedDeal.metricDate ?? resolveMetricDate(inspectedDeal)).toISOString(),
+            inTimeframe,
+            isClosedDealStatus,
+            isAfcEligible,
+            isAhaEligible,
+            isAhaOosEligible
+          };
+        })()
+      : null;
+
+    return {
+      networkFilter: context.networkFilter,
+      timeframe: {
+        start: timeframeStart?.toISOString() ?? null,
+        end: timeframeEnd?.toISOString() ?? null
+      },
+      sourceCounts: {
+        paymentsWithMetric: paymentsWithMetric.length,
+        closedDealStatuses: attachClosedDeals.length,
+        closedDealStatusesInTimeframe: attachClosedDealsInTimeframe.length
+      },
+      designationCounts,
+      afc: {
+        eligible: afcRelevant.length,
+        attached: afcRelevant.filter((payment) => Boolean(payment.usedAfc)).length,
+        lost: afcDealsLost
+      },
+      aha: {
+        eligible: ahaRelevant.length,
+        attached: ahaAttached.length,
+        lost: ahaDealsLost
+      },
+      ahaOos: {
+        eligible: ahaOosRelevant.length,
+        attached: ahaOosAttached.length,
+        lost: ahaOosDealsLost
+      },
+      inspectedDeal: inspectedDealDebug
+    };
+  })();
 
   // MC Leaderboard: Build leaderboard from referral counts by MC
   // Sorts by referral count descending and returns top 10
@@ -1903,14 +2053,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       current.revenue += payment.receivedAmountCents ?? 0;
       current.expected += calculateOutstandingExpected(payment);
     }
-    if (!isOutsideAgentDeal && (payment.status === 'closed' || payment.status === 'paid')) {
+    if (!isOutsideAgentDeal && CLOSED_DEAL_STATUSES.has(payment.status)) {
       current.closed += 1;
     }
     current.totalReferrals = referralByMcMap.get(key) ?? current.totalReferrals;
     mcRevenueMap.set(key, current);
 
     const closeStats = mcCloseRateMap.get(key) ?? { closed: 0, total: referralByMcMap.get(key) ?? 0 };
-    if (!isOutsideAgentDeal && (payment.status === 'closed' || payment.status === 'paid')) {
+    if (!isOutsideAgentDeal && CLOSED_DEAL_STATUSES.has(payment.status)) {
       closeStats.closed += 1;
     }
     closeStats.total = referralByMcMap.get(key) ?? closeStats.total;
@@ -2011,7 +2161,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       current.expected += calculateOutstandingExpected(payment);
     }
     
-    if (payment.status === 'closed' || payment.status === 'paid') {
+    if (CLOSED_DEAL_STATUSES.has(payment.status)) {
       if (!isOutsideAgentDeal) {
         current.closed += 1;
         if (contractPriceCents > 0) {
@@ -2233,7 +2383,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     bucketReferrals.forEach((r) => {
       const key = r.assignedAgent?.toString() ?? 'unassigned';
       referralCountMap.set(key, (referralCountMap.get(key) ?? 0) + 1);
-      if (r.status === 'Lost') {
+      const lostAt = r.statusLastUpdated ?? r.updatedAt ?? r.createdAt;
+      if (r.status === 'Lost' && isWithinTimeframe(lostAt)) {
         lostDealsMap.set(key, (lostDealsMap.get(key) ?? 0) + 1);
       }
       if ((r.status ?? '').trim() === 'Under Contract') {
@@ -2291,13 +2442,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const isOutside = payment.agentAttribution === 'OUTSIDE_AGENT';
       if (!isOutside) {
         current.revenue += payment.receivedAmountCents ?? 0;
-        if (payment.status === 'closed' || payment.status === 'paid') {
+        if (CLOSED_DEAL_STATUSES.has(payment.status)) {
           current.closed += 1;
           const contractPriceCents =
             payment.contractPriceCents ?? payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
           if (contractPriceCents > 0) current.closedVolumeCents += contractPriceCents;
-          current.afcEligibleDeals += 1;
-          if (payment.usedAfc) current.afcAttachedDeals += 1;
+          const dealSide = resolveDealSideForMetrics(
+            payment.side,
+            payment.referral?.dealSide,
+            payment.referral?.clientType ?? null
+          );
+          if (dealSide === 'buy') {
+            current.afcEligibleDeals += 1;
+            if (payment.usedAfc) current.afcAttachedDeals += 1;
+          }
           if (payment.status === 'paid') {
             const commissionBps = payment.referral?.commissionBasisPoints ?? 0;
             const flatFee = payment.commissionFlatFeeCents ?? 0;
@@ -2737,7 +2895,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const agitDealsClosed = agitFilteredPayments.filter(
     (payment) =>
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
-      (payment.status === 'closed' || payment.status === 'paid')
+      CLOSED_DEAL_STATUSES.has(payment.status)
   ).length;
 
   // Close rate
@@ -2748,7 +2906,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const agitClosedOrPaidPayments = agitFilteredPayments.filter(
     (payment) =>
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
-      (payment.status === 'closed' || payment.status === 'paid')
+      CLOSED_DEAL_STATUSES.has(payment.status) &&
+      resolveDealSideForMetrics(
+        payment.side,
+        payment.referral?.dealSide,
+        payment.referral?.clientType ?? null
+      ) === 'buy'
   );
 
   const agitUsedAfcCount = agitClosedOrPaidPayments.filter((payment) => payment.usedAfc).length;
@@ -2825,7 +2988,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       if (metricDate < previousStart || metricDate > previousEnd) return false;
       if (payment.agentAttribution === 'OUTSIDE_AGENT') return false;
       if (payment.usedAssignedAgent !== true) return false;
-      if (!['closed', 'payment_sent', 'paid'].includes(payment.status)) return false;
+      if (!CLOSED_DEAL_STATUSES.has(payment.status)) return false;
       return true;
     });
     const prevRealized = paymentsByNetwork.reduce((sum, payment) => {
@@ -2866,6 +3029,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     main: {
       funnel: { stages: funnelStages },
       periodOverPeriod,
+      ...(attachRateDebug ? { attachRateDebug } : {}),
       summary: {
         totalReferrals,
         dealsClosed: dealsClosedForSummary,

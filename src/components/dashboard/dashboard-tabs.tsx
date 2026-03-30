@@ -1557,9 +1557,9 @@ function MainDashboard({
     { label: 'Active pipeline', value: formatNumber(summary.activePipeline) },
     { label: 'Lost referrals', value: formatNumber(summary.lostReferrals) },
     {
-      label: 'AFC attach rate',
+      label: 'AFC attach rate (buy-side)',
       value: `${summary.afcAttachRate.toFixed(1)}%`,
-      helper: `${formatNumber(summary.afcDealsLost)} deals lost`,
+      helper: `${formatNumber(summary.afcDealsLost)} buy-side deals lost`,
       onHelperClick: summary.afcDealsLost > 0 ? () => setDealsLostModal('afc') : undefined
     },
     { label: 'AHA attach rate', value: `${summary.ahaAttachRate.toFixed(1)}%` },
@@ -2114,7 +2114,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
           value={formatNumber(data.dealsClosed)}
         />
         <SummaryCard
-          title="Used AFC (Attach Rate)"
+          title="Used AFC (Buy-side Attach Rate)"
           value={`${data.usedAfcRate.toFixed(1)}%`}
           helper={`${formatNumber(data.usedAfcCount)} went to another lender`}
         />
