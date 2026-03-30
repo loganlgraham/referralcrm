@@ -96,6 +96,7 @@ export default async function ReferralsPage({
             data={items}
             mode={tableMode}
             showAgentOriginIndicator={showAgentOriginIndicator}
+            stackOnMobile={tableMode !== 'admin'}
           />
           <Pagination
             currentPage={data?.page ?? 1}

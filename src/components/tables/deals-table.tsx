@@ -1051,96 +1051,165 @@ export function DealsTable() {
     </div>
   );
 
-  const renderDefaultTable = () => (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-      <table className="min-w-full divide-y divide-slate-200">
-        <thead className="bg-slate-50">
-          <tr>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <SortableHeader label="Referral" sortKey="referral" />
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <SortableHeader label="Status" sortKey="status" />
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <SortableHeader label="Closing date" sortKey="closingDate" />
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <SortableHeader label="Outcome" sortKey="outcome" />
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <SortableHeader label="Referral Fee" sortKey="referralFee" />
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <SortableHeader label={isAgentView ? 'Referral Fee Paid' : 'Paid'} sortKey="receivedAmount" />
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <SortableHeader label="Commission" sortKey="commission" />
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <SortableHeader label="Net Commission" sortKey="netCommission" />
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {deals.map((deal) => {
-            const commission = calculateCommission(deal);
-            const isTerminated = deal.status === 'terminated';
-            const isSellSideDeal = deal.side === 'sell' || deal.referral?.dealSide === 'sell';
-            const paidAmount = isTerminated
-              ? 0
-              : deal.status === 'paid'
-                ? deal.receivedAmountCents || deal.expectedAmountCents || 0
-                : deal.receivedAmountCents || 0;
-            const referralFee = isTerminated
-              ? 0
-              : deal.expectedAmountCents ?? deal.referral?.referralFeeDueCents ?? 0;
-            const netCommission = isTerminated ? 0 : commission - referralFee;
-            const outcome = (() => {
-              if (isTerminated) {
-                return 'Lost';
-              }
-              if (isMcView && isSellSideDeal) {
-                return 'N/A';
-              }
-              const basis = isMcView ? deal.usedAfc : deal.usedAssignedAgent;
-              if (basis === null || basis === undefined) {
-                return 'Pending';
-              }
-              return basis ? 'Won' : 'Lost';
-            })();
-            const outcomeColor =
-              outcome === 'Won'
-                ? 'text-slate-800'
-                : outcome === 'Lost'
-                  ? 'text-rose-600'
-                  : outcome === 'N/A'
-                    ? 'text-slate-500'
-                  : 'text-slate-500';
+  const defaultDealRowModels = isAdminView
+    ? []
+    : deals.map((deal) => {
+        const commission = calculateCommission(deal);
+        const isTerminated = deal.status === 'terminated';
+        const isSellSideDeal = deal.side === 'sell' || deal.referral?.dealSide === 'sell';
+        const paidAmount = isTerminated
+          ? 0
+          : deal.status === 'paid'
+            ? deal.receivedAmountCents || deal.expectedAmountCents || 0
+            : deal.receivedAmountCents || 0;
+        const referralFee = isTerminated
+          ? 0
+          : deal.expectedAmountCents ?? deal.referral?.referralFeeDueCents ?? 0;
+        const netCommission = isTerminated ? 0 : commission - referralFee;
+        const outcome = (() => {
+          if (isTerminated) {
+            return 'Lost';
+          }
+          if (isMcView && isSellSideDeal) {
+            return 'N/A';
+          }
+          const basis = isMcView ? deal.usedAfc : deal.usedAssignedAgent;
+          if (basis === null || basis === undefined) {
+            return 'Pending';
+          }
+          return basis ? 'Won' : 'Lost';
+        })();
+        const outcomeColor =
+          outcome === 'Won'
+            ? 'text-slate-800'
+            : outcome === 'Lost'
+              ? 'text-rose-600'
+              : outcome === 'N/A'
+                ? 'text-slate-500'
+                : 'text-slate-500';
 
-            return (
-              <tr key={deal._id} className="even:bg-slate-50/50 hover:bg-slate-100">
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  <div className="flex flex-col">
+        return {
+          deal,
+          commission,
+          isTerminated,
+          paidAmount,
+          referralFee,
+          netCommission,
+          outcome,
+          outcomeColor,
+        };
+      });
+
+  const renderDefaultTable = () => (
+    <>
+      <div className="space-y-3 md:hidden">
+        {defaultDealRowModels.map(
+          ({ deal, commission, isTerminated, paidAmount, referralFee, netCommission, outcome, outcomeColor }) => (
+            <div
+              key={deal._id}
+              className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+            >
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</p>
+                <div className="text-sm text-slate-800">
+                  <div className="flex flex-col gap-0.5 break-words">
                     {renderReferralLink(deal)}
                     <span className="text-xs text-slate-500">
                       {getDealAddress(deal) || `Loan # ${deal.referral?.loanFileNumber || '—'}`}
                     </span>
                   </div>
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-700">{renderStatusControl(deal)}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">{renderClosingDate(deal.closingDate)}</td>
-                <td className={`px-4 py-3 text-sm font-medium ${outcomeColor}`}>{outcome}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(paidAmount)}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(commission)}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(netCommission)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
+                <div className="text-sm text-slate-800">{renderStatusControl(deal)}</div>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Closing date</p>
+                <p className="text-sm text-slate-800">{renderClosingDate(deal.closingDate)}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Outcome</p>
+                <p className={`text-sm font-medium ${outcomeColor}`}>{outcome}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Referral fee</p>
+                <p className="text-sm text-slate-800">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {isAgentView ? 'Referral fee paid' : 'Paid'}
+                </p>
+                <p className="text-sm text-slate-800">{isTerminated ? '—' : formatCurrency(paidAmount)}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Commission</p>
+                <p className="text-sm text-slate-800">{isTerminated ? '—' : formatCurrency(commission)}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Net commission</p>
+                <p className="text-sm text-slate-800">{isTerminated ? '—' : formatCurrency(netCommission)}</p>
+              </div>
+            </div>
+          )
+        )}
+      </div>
+      <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm md:block">
+        <table className="min-w-full divide-y divide-slate-200">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="Referral" sortKey="referral" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="Status" sortKey="status" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="Closing date" sortKey="closingDate" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="Outcome" sortKey="outcome" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="Referral Fee" sortKey="referralFee" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label={isAgentView ? 'Referral Fee Paid' : 'Paid'} sortKey="receivedAmount" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="Commission" sortKey="commission" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <SortableHeader label="Net Commission" sortKey="netCommission" />
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {defaultDealRowModels.map(
+              ({ deal, commission, isTerminated, paidAmount, referralFee, netCommission, outcome, outcomeColor }) => (
+                <tr key={deal._id} className="even:bg-slate-50/50 hover:bg-slate-100">
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    <div className="flex flex-col">
+                      {renderReferralLink(deal)}
+                      <span className="text-xs text-slate-500">
+                        {getDealAddress(deal) || `Loan # ${deal.referral?.loanFileNumber || '—'}`}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-700">{renderStatusControl(deal)}</td>
+                  <td className="px-4 py-3 text-sm text-slate-700">{renderClosingDate(deal.closingDate)}</td>
+                  <td className={`px-4 py-3 text-sm font-medium ${outcomeColor}`}>{outcome}</td>
+                  <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</td>
+                  <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(paidAmount)}</td>
+                  <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(commission)}</td>
+                  <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(netCommission)}</td>
+                </tr>
+              )
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 
   if (isLoading) {
