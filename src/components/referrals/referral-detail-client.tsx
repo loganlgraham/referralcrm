@@ -567,25 +567,41 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       return;
     }
 
+    let nextStatusForHeader: ReferralStatus | undefined;
+
     setReferral((previous) => {
       const existingPayments = Array.isArray(previous.payments) ? previous.payments : [];
       const updatedPayments = existingPayments.map((payment) =>
         payment._id === deal._id ? { ...payment, ...deal } : payment
       );
 
+      const nextStatus =
+        snapshot?.referralStatus && snapshot.referralStatus !== previous.status
+          ? snapshot.referralStatus
+          : previous.status;
+      nextStatusForHeader = nextStatus;
+
       return {
         ...previous,
         payments: updatedPayments,
-        status:
-          snapshot?.referralStatus && snapshot.referralStatus !== previous.status
-            ? snapshot.referralStatus
-            : previous.status,
+        status: nextStatus,
         statusLastUpdated:
           snapshot?.referralStatusLastUpdated !== undefined
             ? snapshot.referralStatusLastUpdated
             : previous.statusLastUpdated,
       };
     });
+
+    // Keep financials.status in sync: header uses it for pipeline status; stale financials + header
+    // onFinancialsChange previously caused a status ping-pong with referral.status after deal updates.
+    if (nextStatusForHeader !== undefined) {
+      setFinancials((f) => {
+        if (f.status === nextStatusForHeader) {
+          return f;
+        }
+        return { ...f, status: nextStatusForHeader! };
+      });
+    }
   }, []);
 
   const handleDealDeleted = useCallback((id: string) => {
