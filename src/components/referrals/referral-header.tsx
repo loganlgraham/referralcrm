@@ -1,6 +1,6 @@
 'use client';
 
-import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { type ChangeEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSWRConfig } from 'swr';
 import { differenceInDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
@@ -250,15 +250,20 @@ export function ReferralHeader({
   const [ahaBucket, setAhaBucket] = useState<AhaBucketValue>((referral.ahaBucket as AhaBucketValue) ?? '');
   const [savingBucket, setSavingBucket] = useState(false);
   const activityFeedKey = `/api/referrals/${referral._id}/activities`;
+  const onFinancialsChangeRef = useRef(onFinancialsChange);
+  onFinancialsChangeRef.current = onFinancialsChange;
 
-  useEffect(() => {
+  // Only status + side pipeline labels: layout sync so local `status` matches `referral.status` before the
+  // useEffect below calls onFinancialsChange (avoids pushing stale status after parent updates from deal PATCH).
+  // Do not layout-sync money/address here — that caused maximum update depth with onFinancialsChange → setFinancials.
+  useLayoutEffect(() => {
     const nextStatus = normalizeReferralStatus(referral.status);
     if (nextStatus) {
       setStatus(nextStatus);
     }
   }, [referral.status]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const summaryStatus = normalizeReferralStatus(referral.status) ?? 'New Lead';
     setBuyStatus(normalizeReferralStatus(referral.buyStatus) ?? summaryStatus);
     setSellStatus(normalizeReferralStatus(referral.sellStatus) ?? summaryStatus);
@@ -324,7 +329,7 @@ export function ReferralHeader({
       : referral.propertyState
       ? String(referral.propertyState).toUpperCase()
       : '';
-    onFinancialsChange?.({
+    onFinancialsChangeRef.current?.({
       status,
       preApprovalAmountCents: preApprovalAmountCents ?? 0,
       contractPriceCents,
@@ -340,7 +345,6 @@ export function ReferralHeader({
   }, [
     commissionBasisPoints,
     contractPriceCents,
-    onFinancialsChange,
     preApprovalAmountCents,
     propertyAddress,
     propertyCity,
