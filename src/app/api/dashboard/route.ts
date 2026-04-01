@@ -26,7 +26,13 @@ import { Payment } from '@/models/payment';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { PreApprovalMetric } from '@/models/pre-approval-metric';
-import { AdminTask, getEffectiveDueDate, type AdminTaskLean } from '@/models/admin-task';
+import {
+  AdminTask,
+  getEffectiveDueDate,
+  getTaskResolvedAt,
+  wasTaskResolvedOnOrBeforeDueDate,
+  type AdminTaskLean
+} from '@/models/admin-task';
 import { Activity } from '@/models/activity';
 import {
   isAfcEligibleDeal,
@@ -900,6 +906,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         overdueTaskCount: 0,
         dueTodayTaskCount: 0,
         completedInTimeframeCount: 0,
+        onTimeTaskCompletionCount: 0,
+        onTimeTaskCompletionSampleSize: 0,
         totalOpenTasks: 0,
         taskActivityTrend: {
           outstanding: [],
@@ -2674,13 +2682,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   const completedInTimeframeCount = adminTasks.filter((task) => {
-    const at = task.completedAt ?? task.dismissedAt;
+    const at = getTaskResolvedAt(task);
     if (!at) return false;
-    const d = new Date(at);
-    if (timeframeStart && d < timeframeStart) return false;
-    if (timeframeEnd && d > timeframeEnd) return false;
+    if (timeframeStart && at < timeframeStart) return false;
+    if (timeframeEnd && at > timeframeEnd) return false;
     return true;
   }).length;
+
+  const resolvedTasksInTimeframe = adminTasks.filter((task) => {
+    const resolvedAt = getTaskResolvedAt(task);
+    if (!resolvedAt) return false;
+    if (timeframeStart && resolvedAt < timeframeStart) return false;
+    if (timeframeEnd && resolvedAt > timeframeEnd) return false;
+    return true;
+  });
+
+  const resolvedTasksWithDueDateInTimeframe = resolvedTasksInTimeframe.filter(
+    (task) => getEffectiveDueDate(task, getTaskResolvedAt(task) ?? now) != null
+  );
+
+  const onTimeTaskCompletionCount = resolvedTasksWithDueDateInTimeframe.filter(
+    (task) => wasTaskResolvedOnOrBeforeDueDate(task) === true
+  ).length;
+  const onTimeTaskCompletionSampleSize = resolvedTasksWithDueDateInTimeframe.length;
 
   // 30-day task activity trend: one point per day
   const taskTrendDays = 30;
@@ -3135,6 +3159,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       overdueTaskCount,
       dueTodayTaskCount,
       completedInTimeframeCount,
+      onTimeTaskCompletionCount,
+      onTimeTaskCompletionSampleSize,
       totalOpenTasks,
       taskActivityTrend,
       stalePipelineCount: staleReferrals.length,

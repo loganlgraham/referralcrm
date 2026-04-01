@@ -1,4 +1,10 @@
 import { Schema, model, models, Types } from 'mongoose';
+export {
+  getEffectiveDueDate,
+  getTaskResolvedAt,
+  wasTaskResolvedOnOrBeforeDueDate,
+  type AdminTaskTimingFields
+} from '@/lib/admin-task-timeliness';
 
 export type AdminTaskStatus = 'open' | 'completed' | 'dismissed';
 
@@ -78,16 +84,6 @@ adminTaskSchema.index(
     partialFilterExpression: { ruleKey: { $exists: true, $ne: null } },
   }
 );
-
-export function getEffectiveDueDate(task: AdminTaskLean): Date | null {
-  if (task.snoozedUntil && task.snoozedUntil > new Date()) {
-    return task.snoozedUntil;
-  }
-  if (task.dueAtOverride) {
-    return task.dueAtOverride;
-  }
-  return task.dueAt ?? null;
-}
 
 export const AdminTask =
   models.AdminTask || model<AdminTaskDocument>('AdminTask', adminTaskSchema);

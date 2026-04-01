@@ -50,6 +50,7 @@ Typical flow:
 - **Data**: MongoDB + Mongoose
 - **Auth**: NextAuth
 - **UI**: Tailwind CSS, Radix UI primitives, custom components
+- **Observability (Vercel)**: `@vercel/analytics`, `@vercel/speed-insights` in the app shell; `@vercel/functions` for Mongo connection pooling on Vercel
 - **Testing**: Jest (unit/API), Playwright (E2E)
 - **Email and Integrations**: Resend, optional SMTP, optional OpenAI/GCP helpers
 
@@ -81,17 +82,33 @@ tests/
 
 ## Getting Started
 
+### Quick start
+
+1. Use **Node.js 20+** (recommended; aligns with repo tooling). Node 18+ may still work with Next.js 14.
+2. Install [pnpm](https://pnpm.io) if needed: `npm install -g pnpm`
+3. `cp .env.example .env.local` and set at least the [minimum local environment](#minimum-local-environment) variables.
+4. `pnpm install`
+5. Optional: start local MongoDB with Docker (see [Start MongoDB](#4-start-mongodb-optional-local-docker)) and set `MONGODB_URI` if you are not using the dev default.
+6. `pnpm dev` → [http://localhost:3000](http://localhost:3000)
+7. Create a user at [http://localhost:3000/signup](http://localhost:3000/signup)
+
+### Minimum local environment
+
+Set these in `.env.local` to run the app locally. See [Environment Variables](#environment-variables) for the full list and optional integrations.
+
+| Variable | Notes |
+| --- | --- |
+| `NEXTAUTH_URL` | e.g. `http://localhost:3000` |
+| `NEXTAUTH_SECRET` | Required for sessions and JWT stability |
+| `MONGODB_URI` | Optional in development: if omitted, the app uses `mongodb://localhost:27017/referralcrm` |
+
+Add `ADMIN_SIGNUP_SECRET` if you need the `admin` role at signup. Email, cron, inbound webhooks, and other keys are only required when you use those features.
+
 ### 1) Prerequisites
 
-- Node.js 18+
+- Node.js 20+ (recommended) or 18+
 - pnpm (recommended for this repo's scripts)
-- MongoDB (local or Atlas)
-
-Install pnpm if needed:
-
-```bash
-npm install -g pnpm
-```
+- MongoDB (local, Docker, or Atlas)
 
 ### 2) Install Dependencies
 
@@ -105,7 +122,7 @@ pnpm install
 cp .env.example .env.local
 ```
 
-Then set required values in `.env.local` (see [Environment Variables](#environment-variables)).
+Fill in values in `.env.local`. The [`.env.example`](.env.example) template uses comments for optional and alternate variables; the sections below document the same keys in more detail.
 
 ### 4) Start MongoDB (optional local Docker)
 
@@ -142,7 +159,7 @@ App URL: [http://localhost:3000](http://localhost:3000)
 
 ## Environment Variables
 
-Source template: `.env.example`
+Source template: [`.env.example`](.env.example) (kept in sync with the sections below; optional keys may appear commented there).
 
 ### Core (required)
 
@@ -267,27 +284,15 @@ Uses `jest.api.config.ts` with `NODE_ENV=test`.
 
 ### E2E Tests
 
-```bash
-pnpm test:e2e
-```
+Uses Playwright (`playwright.config.ts`). On startup, the config loads **`.env.test.local`** if it exists—use it for `PLAYWRIGHT_BASE_URL` or other test-only values without changing `.env.local`.
 
-Uses Playwright config from `playwright.config.ts`.
-
-Important:
-
-- Base URL defaults to `http://localhost:3000`.
-- Playwright does not auto-start the app server in config.
-- Start the app yourself before running E2E:
-
-```bash
-pnpm dev
-```
-
-In another terminal:
+Playwright does **not** start the Next.js server. In one terminal run `pnpm dev`, then in another:
 
 ```bash
 pnpm test:e2e
 ```
+
+Base URL defaults to `http://localhost:3000`, or `PLAYWRIGHT_BASE_URL` when set (including from `.env.test.local`).
 
 ## API Overview
 
@@ -328,7 +333,7 @@ Configured schedules:
 - `0 15 * * *` -> `/api/cron/auto-update-reminders`
 - `0 6 * * *` -> `/api/daily-market-brief`
 
-Both cron endpoints require:
+Each scheduled route requires:
 
 ```http
 Authorization: Bearer <CRON_SECRET>
@@ -368,7 +373,8 @@ Authorization: Bearer <CRON_SECRET>
 
 ### E2E tests fail to connect
 
-- Verify app is running at `PLAYWRIGHT_BASE_URL` or `http://localhost:3000`.
+- Ensure `pnpm dev` is running.
+- Verify the base URL: `PLAYWRIGHT_BASE_URL` (or `.env.test.local`) or default `http://localhost:3000`.
 
 ## Contributing
 
