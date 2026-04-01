@@ -1338,6 +1338,9 @@ export function ReferralDeals({
         netReferralFeePaidCents: fallbackPaidCents,
         sendClosedEmails,
       };
+      if (nextStatus === 'closed') {
+        patchPayload.usedAfc = deal.side === 'sell' ? false : Boolean(deal.usedAfc);
+      }
       if (nextStatus === 'terminated') {
         patchPayload.terminatedReason = terminationReason ?? null;
       }

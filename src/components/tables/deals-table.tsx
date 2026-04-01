@@ -1104,54 +1104,117 @@ export function DealsTable() {
     <>
       <div className="space-y-3 md:hidden">
         {defaultDealRowModels.map(
-          ({ deal, commission, isTerminated, paidAmount, referralFee, netCommission, outcome, outcomeColor }) => (
-            <div
-              key={deal._id}
-              className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
-            >
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</p>
-                <div className="text-sm text-slate-800">
-                  <div className="flex flex-col gap-0.5 break-words">
-                    {renderReferralLink(deal)}
-                    <span className="text-xs text-slate-500">
+          ({ deal, commission, isTerminated, paidAmount, referralFee, netCommission, outcome, outcomeColor }) =>
+            isAgentView ? (
+              <div
+                key={deal._id}
+                className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+              >
+                {/* Header zone */}
+                <div className="flex items-start justify-between gap-3 bg-slate-50 px-4 pt-4 pb-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-base font-semibold text-slate-900 break-words">
+                      {renderReferralLink(deal)}
+                    </div>
+                    <p className="mt-0.5 text-xs text-slate-500">
                       {getDealAddress(deal) || `Loan # ${deal.referral?.loanFileNumber || '—'}`}
-                    </span>
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
+                      outcome === 'Won'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : outcome === 'Lost'
+                          ? 'bg-rose-100 text-rose-700'
+                          : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {outcome}
+                  </span>
+                </div>
+
+                {/* Status + closing date row */}
+                <div className="px-4 py-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
+                      <div className="text-sm text-slate-800">{renderStatusControl(deal)}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Closing date</p>
+                      <p className="text-sm text-slate-800">{renderClosingDate(deal.closingDate)}</p>
+                    </div>
+                  </div>
+
+                  {/* Financial section */}
+                  <div className="rounded-md bg-slate-50 p-3">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Referral fee</p>
+                        <p className="text-sm font-semibold text-slate-900">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Fee paid</p>
+                        <p className="text-sm font-semibold text-slate-900">{isTerminated ? '—' : formatCurrency(paidAmount)}</p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Commission</p>
+                        <p className="text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(commission)}</p>
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Net commission</p>
+                        <p className="text-sm font-semibold text-slate-900">{isTerminated ? '—' : formatCurrency(netCommission)}</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
-                <div className="text-sm text-slate-800">{renderStatusControl(deal)}</div>
+            ) : (
+              <div
+                key={deal._id}
+                className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+              >
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</p>
+                  <div className="text-sm text-slate-800">
+                    <div className="flex flex-col gap-0.5 break-words">
+                      {renderReferralLink(deal)}
+                      <span className="text-xs text-slate-500">
+                        {getDealAddress(deal) || `Loan # ${deal.referral?.loanFileNumber || '—'}`}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
+                  <div className="text-sm text-slate-800">{renderStatusControl(deal)}</div>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Closing date</p>
+                  <p className="text-sm text-slate-800">{renderClosingDate(deal.closingDate)}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Outcome</p>
+                  <p className={`text-sm font-medium ${outcomeColor}`}>{outcome}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Referral fee</p>
+                  <p className="text-sm text-slate-800">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Paid</p>
+                  <p className="text-sm text-slate-800">{isTerminated ? '—' : formatCurrency(paidAmount)}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Commission</p>
+                  <p className="text-sm text-slate-800">{isTerminated ? '—' : formatCurrency(commission)}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Net commission</p>
+                  <p className="text-sm text-slate-800">{isTerminated ? '—' : formatCurrency(netCommission)}</p>
+                </div>
               </div>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Closing date</p>
-                <p className="text-sm text-slate-800">{renderClosingDate(deal.closingDate)}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Outcome</p>
-                <p className={`text-sm font-medium ${outcomeColor}`}>{outcome}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Referral fee</p>
-                <p className="text-sm text-slate-800">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {isAgentView ? 'Referral fee paid' : 'Paid'}
-                </p>
-                <p className="text-sm text-slate-800">{isTerminated ? '—' : formatCurrency(paidAmount)}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Commission</p>
-                <p className="text-sm text-slate-800">{isTerminated ? '—' : formatCurrency(commission)}</p>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Net commission</p>
-                <p className="text-sm text-slate-800">{isTerminated ? '—' : formatCurrency(netCommission)}</p>
-              </div>
-            </div>
-          )
+            )
         )}
       </div>
       <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm md:block">

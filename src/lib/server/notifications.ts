@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import { formatNotificationContent } from '@/lib/format-notification-content';
 import { Notification } from '@/models/notification';
 import { User } from '@/models/user';
 
@@ -183,6 +184,7 @@ export async function getNotifications(
       _id: notification._id.toString(),
       userId: notification.userId.toString(),
       referralId: notification.referralId.toString(),
+      content: formatNotificationContent(notification.content),
     }));
   } catch (error) {
     console.error('Failed to get notifications:', error);

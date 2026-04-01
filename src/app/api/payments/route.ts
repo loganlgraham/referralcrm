@@ -25,6 +25,7 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
 import { createNPSToken } from '@/lib/server/nps';
+import { dealStatusToDisplay } from '@/lib/format-notification-content';
 import { createAdminNotifications } from '@/lib/server/notifications';
 import { mapDealStatusToReferralStatus } from '@/lib/server/referral-deal-status-mapper';
 import { type DealStatus } from '@/constants/deals';
@@ -1322,7 +1323,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         borrowerName,
         actorRole: session.user.role,
         actorName,
-        content: `${actorName} changed deal status from ${previousStatus} to ${payment.status} for ${borrowerName}`,
+        content: `${actorName} changed deal status from ${dealStatusToDisplay(previousStatus)} to ${dealStatusToDisplay(payment.status)} for ${borrowerName}`,
       });
     }
 
@@ -1351,7 +1352,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     const shouldSendClosedEmails = parsed.data.sendClosedEmails ?? false;
     if (isClosingNow && shouldSendClosedEmails && !hasAgitAgent && isTransactionalEmailConfigured()) {
       const usedAssignedAgent = payment.usedAssignedAgent ?? existingPayment.usedAssignedAgent ?? false;
-      const usedAfcForClosedEmail = payment.usedAfc ?? existingPayment.usedAfc ?? true;
+      const sendAgentClosedCongrats = payment.usedAfc === true;
       const origin = getReferralAppBaseUrl();
 
       try {
@@ -1393,7 +1394,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
               html: `
                 <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
                   <p>Hi ${borrowerFirstName},</p>
-                  <p>Congratulations on closing on your new home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best in your new place!</p>
+                  <p>Congratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best!</p>
                   <p style="margin: 20px 0 0 0;">
                     <a href="${agentSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
                       Rate Your Agent
@@ -1401,22 +1402,62 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
                   </p>
                 </div>
               `,
-              text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your new home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best in your new place!\n\nRate your agent: ${agentSurveyUrl}`,
+              text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best!\n\nRate your agent: ${agentSurveyUrl}`,
             });
 
-            if (agent?.email && usedAfcForClosedEmail) {
+            if (agent?.email && sendAgentClosedCongrats) {
               const agentFirstName = agentFullName.split(' ')[0] || 'there';
               const borrowerDisplayName = referral.borrower.name || referral.borrower.firstName || 'your client';
+              const lenderRef = referral.lender as { _id?: unknown } | null | undefined;
+              const lenderRawId = lenderRef?._id;
+              const lenderIdStr =
+                lenderRawId == null
+                  ? null
+                  : typeof lenderRawId === 'string'
+                    ? lenderRawId
+                    : typeof (lenderRawId as { toString?: () => string }).toString === 'function'
+                      ? (lenderRawId as { toString: () => string }).toString()
+                      : null;
+
+              let lenderSurveyUrl: string | null = null;
+              if (lenderIdStr) {
+                const lenderSurveyToken = await createNPSToken({
+                  paymentId: existingPayment._id.toString(),
+                  referralId: referral._id.toString(),
+                  type: 'lender',
+                  targetId: lenderIdStr,
+                  recipientEmail: agent.email,
+                  recipientName: agentFullName,
+                });
+                lenderSurveyUrl = `${origin}/nps/lender?token=${lenderSurveyToken}`;
+              }
+
+              const mcQuestion =
+                'If you have a quick moment: on a scale of 0-10, how likely are you to recommend American Financing to a client or colleague?';
+              const mcBlockHtml = lenderSurveyUrl
+                ? `
+                    <p style="margin: 20px 0 0 0;">${mcQuestion}</p>
+                    <p style="margin: 20px 0 0 0;">
+                      <a href="${lenderSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
+                        Rate Your Mortgage Consultant
+                      </a>
+                    </p>
+                  `
+                : '';
+              const mcBlockText = lenderSurveyUrl
+                ? `\n\n${mcQuestion}\n\nRate your mortgage consultant: ${lenderSurveyUrl}`
+                : '';
+
               await sendTransactionalEmail({
                 to: [agent.email],
                 subject: 'Congratulations on Your Closed Deal!',
                 html: `
                   <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
                     <p>Hi ${agentFirstName},</p>
-                    <p>Congratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.</p>
+                    <p>Congratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.</p>${mcBlockHtml}
                   </div>
                 `,
-                text: `Hi ${agentFirstName},\n\nCongratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.`,
+                text: `Hi ${agentFirstName},\n\nCongratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.${mcBlockText}`,
               });
             }
           }

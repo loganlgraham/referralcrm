@@ -30,6 +30,9 @@ export function NotificationDropdown({
   const router = useRouter();
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
+  const [markingAllRead, setMarkingAllRead] = useState(false);
+
+  const unreadCount = notifications.filter((n) => n.readAt == null).length;
 
   // Update local state when initialNotifications changes
   useEffect(() => {
@@ -50,7 +53,7 @@ export function NotificationDropdown({
 
   const handleNotificationClick = async (notificationId: string, referralId: string) => {
     const clickedNotification = notifications.find((notification) => notification._id === notificationId);
-    const shouldMarkAsRead = clickedNotification?.readAt === null;
+    const shouldMarkAsRead = clickedNotification?.readAt == null;
     const previousNotifications = notifications;
     if (shouldMarkAsRead) {
       setNotifications((prev) =>
@@ -90,6 +93,37 @@ export function NotificationDropdown({
     onClose();
   };
 
+  const handleMarkAllRead = async (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (unreadCount === 0 || markingAllRead) {
+      return;
+    }
+
+    const previousNotifications = notifications;
+    const readAt = new Date().toISOString();
+    setMarkingAllRead(true);
+    setNotifications((prev) =>
+      prev.map((notification) =>
+        notification.readAt == null ? { ...notification, readAt } : notification
+      )
+    );
+
+    try {
+      const response = await fetch('/api/admin/notifications/read', { method: 'POST' });
+      if (!response.ok) {
+        throw new Error('Failed to mark all notifications as read');
+      }
+      onNotificationsChanged?.();
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error);
+      setNotifications(previousNotifications);
+      onNotificationsChanged?.();
+    } finally {
+      setMarkingAllRead(false);
+    }
+  };
+
   const getNotificationIcon = (type: Notification['type']) => {
     switch (type) {
       case 'note':
@@ -115,8 +149,18 @@ export function NotificationDropdown({
       ref={dropdownRef}
       className="absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border border-slate-200 bg-white shadow-lg sm:w-80 md:left-full md:right-auto md:ml-2 md:w-96"
     >
-      <div className="border-b border-slate-200 px-4 py-3">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
         <h3 className="text-sm font-semibold text-slate-900">Notifications</h3>
+        {notifications.length > 0 && unreadCount > 0 ? (
+          <button
+            type="button"
+            onClick={handleMarkAllRead}
+            disabled={markingAllRead}
+            className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Mark all as read
+          </button>
+        ) : null}
       </div>
 
       <div className="max-h-96 overflow-y-auto">
@@ -137,20 +181,20 @@ export function NotificationDropdown({
                   <span className="text-xl">{getNotificationIcon(notification.type)}</span>
                   <div className="flex-1 overflow-hidden">
                     <div className="flex items-center gap-2">
-                      {notification.readAt === null && (
+                      {notification.readAt == null && (
                         <span
                           className="inline-block h-2 w-2 rounded-full bg-red-500"
                           aria-label="Unread notification"
                         />
                       )}
-                      <p className={`text-sm font-semibold hover:underline ${notification.readAt === null ? 'text-brand' : 'text-slate-600'}`}>
+                      <p className={`text-sm font-semibold hover:underline ${notification.readAt == null ? 'text-brand' : 'text-slate-600'}`}>
                         {notification.borrowerName}
                       </p>
                     </div>
-                    <p className={`mt-1 text-sm ${notification.readAt === null ? 'text-slate-900' : 'text-slate-500'}`}>
+                    <p className={`mt-1 text-sm ${notification.readAt == null ? 'text-slate-900' : 'text-slate-500'}`}>
                       {notification.content}
                     </p>
-                    <p className={`mt-1 text-xs ${notification.readAt === null ? 'text-slate-500' : 'text-slate-400'}`}>
+                    <p className={`mt-1 text-xs ${notification.readAt == null ? 'text-slate-500' : 'text-slate-400'}`}>
                       {formatDistanceToNow(new Date(notification.createdAt), {
                         addSuffix: true,
                       })}
