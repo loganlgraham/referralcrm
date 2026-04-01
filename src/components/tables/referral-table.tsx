@@ -1126,6 +1126,89 @@ function ReferralMobileStack({
         );
         const href = referralDetailHref(row, listParams);
 
+        if (mode === 'agent') {
+          return (
+            <div
+              key={row._id}
+              className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+            >
+              {/* Header zone */}
+              <div className={`bg-slate-50 px-4 pt-4 ${row.clientType === 'Both' ? 'pb-3' : 'pb-3'}`}>
+                <div className={`flex ${row.clientType === 'Both' ? 'flex-col gap-3' : 'items-start justify-between gap-3'}`}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      {showOrigin && row.origin === 'agent' ? (
+                        <span
+                          className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-slate-700"
+                          aria-label="Agent-created referral"
+                          title="Agent-created referral"
+                        />
+                      ) : null}
+                      <Link href={href} className="text-base font-semibold text-slate-900 break-words hover:text-brand">
+                        {row.borrowerName}
+                      </Link>
+                    </div>
+                    <div className="mt-1 flex items-center gap-3">
+                      {row.borrowerEmail ? (
+                        <a
+                          href={buildGmailComposeUrl(row.borrowerEmail)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-brand hover:underline"
+                        >
+                          Email
+                        </a>
+                      ) : null}
+                      {row.borrowerPhone ? (
+                        <a
+                          href={`tel:${row.borrowerPhone.replace(/[^0-9+]/g, '')}`}
+                          className="text-xs text-brand hover:underline"
+                        >
+                          {formatPhoneNumber(row.borrowerPhone)}
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className={row.clientType === 'Both' ? '' : 'shrink-0'}>
+                    {row.clientType === 'Both' ? (
+                      <AgentBothStatusCell row={row} />
+                    ) : (
+                      <StatusSelect
+                        referralId={row._id}
+                        value={row.status}
+                        dealStatusLabel={row.dealStatusLabel ?? null}
+                        side={row.viewerAssignedSide ?? undefined}
+                        defaultSide={row.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Details zone */}
+              <div className="px-4 py-3 space-y-3">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                  <MobileField label="Loan file #">{row.loanFileNumber}</MobileField>
+                  <MobileField label="Timeline">{timelineText}</MobileField>
+                  <MobileField label="Pre-approval">
+                    {row.preApprovalAmountCents ? (
+                      <span className="font-semibold text-slate-900">{formatCurrency(row.preApprovalAmountCents)}</span>
+                    ) : '—'}
+                  </MobileField>
+                  <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
+                </div>
+
+                {/* Notes zone */}
+                <div className="border-t border-slate-100 pt-3">
+                  <MobileField label="Notes">
+                    <NoteComposer referralId={row._id} />
+                  </MobileField>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
         return (
           <div
             key={row._id}
@@ -1178,31 +1261,6 @@ function ReferralMobileStack({
 
             <MobileField label="Loan file #">{row.loanFileNumber}</MobileField>
             <MobileField label="Timeline">{timelineText}</MobileField>
-
-            {mode === 'agent' ? (
-              <>
-                <MobileField label="Pre-approval">
-                  {row.preApprovalAmountCents ? formatCurrency(row.preApprovalAmountCents) : '—'}
-                </MobileField>
-                <MobileField label="Status">
-                  {row.clientType === 'Both' ? (
-                    <AgentBothStatusCell row={row} />
-                  ) : (
-                    <StatusSelect
-                      referralId={row._id}
-                      value={row.status}
-                      dealStatusLabel={row.dealStatusLabel ?? null}
-                      side={row.viewerAssignedSide ?? undefined}
-                      defaultSide={row.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
-                    />
-                  )}
-                </MobileField>
-                <MobileField label="Notes">
-                  <NoteComposer referralId={row._id} />
-                </MobileField>
-                <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
-              </>
-            ) : null}
 
             {mode === 'mc' ? (
               <>

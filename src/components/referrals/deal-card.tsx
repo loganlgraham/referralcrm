@@ -759,6 +759,11 @@ export function DealCard({
     try {
       const payload: Record<string, unknown> = { id: deal._id, status: nextStatus, sendClosedEmails };
 
+      if (nextStatus === 'closed') {
+        payload.usedAfc =
+          deal.side === 'sell' ? false : (afcMap[deal._id] ?? Boolean(deal.usedAfc));
+      }
+
       if (nextStatus === 'terminated') {
         payload.expectedAmountCents = 0;
         payload.receivedAmountCents = 0;

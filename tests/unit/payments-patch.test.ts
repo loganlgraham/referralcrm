@@ -6,6 +6,7 @@ import { Agent } from '@/models/agent';
 import { createNPSToken } from '@/lib/server/nps';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { createAdminNotifications } from '@/lib/server/notifications';
+import { getReferralAppBaseUrl } from '@/lib/referral-links';
 
 let patchHandler: typeof import('@/app/api/payments/route').PATCH;
 
@@ -113,6 +114,7 @@ const mockedSendTransactionalEmail = sendTransactionalEmail as jest.MockedFuncti
 const mockedCreateAdminNotifications = createAdminNotifications as jest.MockedFunction<
   typeof createAdminNotifications
 >;
+const mockedGetReferralAppBaseUrl = getReferralAppBaseUrl as jest.MockedFunction<typeof getReferralAppBaseUrl>;
 let referralDoc: any;
 
 const makeRequest = (body: Record<string, unknown>) =>
@@ -127,6 +129,7 @@ describe('Payments PATCH outside-agent normalization', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockedGetReferralAppBaseUrl.mockReturnValue('https://app.test');
     mockedConnectMongo.mockResolvedValue(undefined as any);
     mockedGetCurrentSession.mockResolvedValue({
       user: { id: 'admin-1', role: 'admin', name: 'Admin User' },
@@ -271,7 +274,7 @@ describe('Payments PATCH outside-agent normalization', () => {
     expect(mockedCreateAdminNotifications).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'status_change',
-        content: expect.stringContaining('under_contract'),
+        content: expect.stringContaining('Under Contract'),
       })
     );
   });
@@ -359,8 +362,42 @@ describe('Payments PATCH outside-agent normalization', () => {
     );
   });
 
+  it('does not send agent close email when updated payment omits usedAfc', async () => {
+    mockedIsTransactionalEmailConfigured.mockReturnValueOnce(true);
+    mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
+      _id: { toString: () => 'pay-1' },
+      status: 'closed',
+      usedAssignedAgent: true,
+      createdAt: new Date('2026-03-05T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T10:01:00.000Z'),
+      closingDate: new Date('2026-03-05T10:01:00.000Z'),
+    });
+
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        status: 'closed',
+        sendClosedEmails: true,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedSendTransactionalEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: ['borrower@example.com'],
+        subject: 'Congrats on Your New Home!',
+      })
+    );
+    expect(mockedSendTransactionalEmail).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: ['agent@example.com'],
+      })
+    );
+  });
+
   it('still sends agent close email when usedAfc is true', async () => {
     mockedIsTransactionalEmailConfigured.mockReturnValueOnce(true);
+    mockedCreateNPSToken.mockResolvedValueOnce('nps-agent-token');
     mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
       _id: { toString: () => 'pay-1' },
       status: 'closed',
@@ -393,6 +430,58 @@ describe('Payments PATCH outside-agent normalization', () => {
         subject: 'Congratulations on Your Closed Deal!',
       })
     );
+    expect(mockedCreateNPSToken).toHaveBeenCalledTimes(1);
+    const agentEmailCall = mockedSendTransactionalEmail.mock.calls.find(
+      (call) => call[0]?.to?.includes?.('agent@example.com')
+    );
+    expect(agentEmailCall?.[0]?.html).toBeDefined();
+    expect(String(agentEmailCall?.[0]?.html)).not.toContain('/nps/lender');
+  });
+
+  it('includes MC NPS link in agent close email when lender is set and usedAfc is true', async () => {
+    referralDoc.lender = {
+      _id: { toString: () => 'lender-1' },
+      name: 'MC One',
+      email: 'mc@example.com',
+    };
+    mockedIsTransactionalEmailConfigured.mockReturnValueOnce(true);
+    mockedCreateNPSToken.mockResolvedValueOnce('nps-agent-token').mockResolvedValueOnce('nps-lender-token');
+    mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
+      _id: { toString: () => 'pay-1' },
+      status: 'closed',
+      usedAssignedAgent: true,
+      usedAfc: true,
+      createdAt: new Date('2026-03-05T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T10:01:00.000Z'),
+      closingDate: new Date('2026-03-05T10:01:00.000Z'),
+    });
+
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        status: 'closed',
+        sendClosedEmails: true,
+        usedAfc: true,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedCreateNPSToken).toHaveBeenCalledTimes(2);
+    expect(mockedCreateNPSToken).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        type: 'lender',
+        targetId: 'lender-1',
+        recipientEmail: 'agent@example.com',
+      })
+    );
+    const agentEmailCall = mockedSendTransactionalEmail.mock.calls.find(
+      (call) => call[0]?.to?.includes?.('agent@example.com')
+    );
+    expect(String(agentEmailCall?.[0]?.html)).toContain(
+      'https://app.test/nps/lender?token=nps-lender-token'
+    );
+    expect(String(agentEmailCall?.[0]?.text)).toContain('/nps/lender?token=nps-lender-token');
   });
 
   it('rejects terminated status updates without terminatedReason', async () => {
