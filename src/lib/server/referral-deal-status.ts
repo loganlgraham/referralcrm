@@ -6,7 +6,7 @@ type DealStatusSource = {
 };
 
 export const isAgentAttributedDeal = (payment: DealStatusSource): boolean =>
-  payment.usedAssignedAgent === true && payment.agentAttribution !== 'OUTSIDE_AGENT';
+  payment.usedAssignedAgent !== false && payment.agentAttribution !== 'OUTSIDE_AGENT';
 
 export const buildDealStatusMap = (payments: DealStatusSource[]) => {
   const dealStatusMap = new Map<string, { primary?: string; fallback?: string }>();

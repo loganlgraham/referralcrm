@@ -132,6 +132,82 @@ function getSortObject(sortBy: string | null | undefined, sortDirection: 'asc' |
   return sortMap[sortBy] || defaultSort;
 }
 
+const buildPaymentMatchFromQuery = (query: Record<string, unknown>) => {
+  const paymentMatch: Record<string, unknown> = {};
+  Object.entries(query).forEach(([key, value]) => {
+    if (key === '$or' && Array.isArray(value)) {
+      paymentMatch.$or = value.map((clause) => {
+        const scoped = Object.entries(clause).map(([innerKey, innerValue]) => [
+          `referral.${innerKey}`,
+          innerValue,
+        ]);
+        return Object.fromEntries(scoped);
+      });
+      return;
+    }
+    if (key === '$and' && Array.isArray(value)) {
+      paymentMatch.$and = value.map((clause) => {
+        if (clause && typeof clause === 'object' && '$or' in (clause as Record<string, unknown>)) {
+          const innerOr = (clause as any).$or as Record<string, unknown>[];
+          return {
+            $or: innerOr.map((innerClause) => {
+              const scoped = Object.entries(innerClause).map(([innerKey, innerValue]) => [
+                `referral.${innerKey}`,
+                innerValue,
+              ]);
+              return Object.fromEntries(scoped);
+            })
+          };
+        }
+        const scoped = Object.entries(clause as Record<string, unknown>).map(([innerKey, innerValue]) => [
+          `referral.${innerKey}`,
+          innerValue,
+        ]);
+        return Object.fromEntries(scoped);
+      });
+      return;
+    }
+    paymentMatch[`referral.${key}`] = value;
+  });
+  return paymentMatch;
+};
+
+export const mergeClosedStatusQuery = (
+  baseQuery: Record<string, unknown>,
+  statusFilter: unknown,
+  closedDealReferralIds: Array<string | Types.ObjectId>
+): Record<string, unknown> => {
+  if (!statusFilter || closedDealReferralIds.length === 0) {
+    return baseQuery;
+  }
+
+  const andConditions: Record<string, unknown>[] = [];
+  Object.entries(baseQuery).forEach(([key, value]) => {
+    if (key === '$and' && Array.isArray(value)) {
+      andConditions.push(...value);
+      return;
+    }
+    if (key === '$or' && Array.isArray(value)) {
+      andConditions.push({ $or: value });
+      return;
+    }
+    andConditions.push({ [key]: value });
+  });
+
+  andConditions.push({
+    $or: [
+      { status: statusFilter },
+      { _id: { $in: closedDealReferralIds } }
+    ]
+  });
+
+  if (andConditions.length === 1) {
+    return andConditions[0];
+  }
+
+  return { $and: andConditions };
+};
+
 interface FilterQueryParams {
   session: Session | null;
   status?: string | null;
@@ -329,42 +405,51 @@ export async function getReferrals(params: GetReferralsParams) {
     };
   }
 
-  const paymentMatch: Record<string, unknown> = {};
-  Object.entries(query).forEach(([key, value]) => {
-    if (key === '$or' && Array.isArray(value)) {
-      paymentMatch.$or = value.map((clause) => {
-        const scoped = Object.entries(clause).map(([innerKey, innerValue]) => [
-          `referral.${innerKey}`,
-          innerValue,
-        ]);
-        return Object.fromEntries(scoped);
-      });
-      return;
-    }
-    if (key === '$and' && Array.isArray(value)) {
-      paymentMatch.$and = value.map((clause) => {
-        if (clause && typeof clause === 'object' && '$or' in (clause as Record<string, unknown>)) {
-          const innerOr = (clause as any).$or as Record<string, unknown>[];
-          return {
-            $or: innerOr.map((innerClause) => {
-              const scoped = Object.entries(innerClause).map(([innerKey, innerValue]) => [
-                `referral.${innerKey}`,
-                innerValue,
-              ]);
-              return Object.fromEntries(scoped);
-            })
-          };
+  const statusFilters = status
+    ? status.split(',').map((value) => value.trim()).filter(Boolean)
+    : [];
+  const includesClosedStatus = statusFilters.includes('Closed');
+
+  const paymentMatch = buildPaymentMatchFromQuery(query);
+  let closedDealPaymentMatch = paymentMatch;
+  let referralQueryFilter: Record<string, unknown> = query;
+
+  if (includesClosedStatus) {
+    const statusFilterValue = query.status;
+    const baseQueryForClosedDeals: Record<string, unknown> = { ...query };
+    delete baseQueryForClosedDeals.status;
+    closedDealPaymentMatch = buildPaymentMatchFromQuery(baseQueryForClosedDeals);
+
+    const closedDealIdAggregation = await Payment.aggregate([
+      {
+        $lookup: {
+          from: 'referrals',
+          localField: 'referralId',
+          foreignField: '_id',
+          as: 'referral'
         }
-        const scoped = Object.entries(clause as Record<string, unknown>).map(([innerKey, innerValue]) => [
-          `referral.${innerKey}`,
-          innerValue,
-        ]);
-        return Object.fromEntries(scoped);
-      });
-      return;
+      },
+      { $unwind: '$referral' },
+      {
+        $match: {
+          ...closedDealPaymentMatch,
+          status: { $in: ['closed', 'payment_sent', 'paid'] },
+          agentAttribution: { $ne: 'OUTSIDE_AGENT' },
+          usedAssignedAgent: { $ne: false }
+        }
+      },
+      { $group: { _id: '$referralId' } }
+    ]);
+
+    const closedDealReferralIds = closedDealIdAggregation.map((entry) => entry._id);
+    if (closedDealReferralIds.length > 0) {
+      referralQueryFilter = mergeClosedStatusQuery(
+        baseQueryForClosedDeals,
+        statusFilterValue,
+        closedDealReferralIds
+      );
     }
-    paymentMatch[`referral.${key}`] = value;
-  });
+  }
 
   const activeQuery: Record<string, unknown> = { ...query };
 
@@ -379,7 +464,7 @@ export async function getReferrals(params: GetReferralsParams) {
     viewerAgentId = viewerAgent?._id ? viewerAgent._id.toString() : null;
   }
 
-  const referralQuery = Referral.find(query)
+  const referralQuery = Referral.find(referralQueryFilter)
       .populate<{ assignedAgent: PopulatedAgent }>('assignedAgent', 'name email phone ahaDesignation')
       .populate<{ buySideAgent: PopulatedAgent }>('buySideAgent', 'name email phone ahaDesignation')
       .populate<{ sellSideAgent: PopulatedAgent }>('sellSideAgent', 'name email phone ahaDesignation')
@@ -392,7 +477,7 @@ export async function getReferrals(params: GetReferralsParams) {
 
   const [items, total, closedDealAggregation, activeReferrals] = await Promise.all([
     referralQuery.lean<PopulatedReferral[]>(),
-    Referral.countDocuments(query),
+    Referral.countDocuments(referralQueryFilter),
     Payment.aggregate([
       {
         $lookup: {
@@ -405,8 +490,10 @@ export async function getReferrals(params: GetReferralsParams) {
       { $unwind: '$referral' },
       {
         $match: {
-          ...paymentMatch,
-          status: { $in: ['closed', 'payment_sent', 'paid'] }
+          ...closedDealPaymentMatch,
+          status: { $in: ['closed', 'payment_sent', 'paid'] },
+          agentAttribution: { $ne: 'OUTSIDE_AGENT' },
+          usedAssignedAgent: { $ne: false }
         }
       },
       { $group: { _id: '$referralId' } },

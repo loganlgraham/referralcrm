@@ -39,6 +39,26 @@ describe('Dashboard Metrics - Close Rate Calculation', () => {
   });
 });
 
+describe('Dashboard Metrics - Closed Deal Eligibility', () => {
+  it('counts closed-like deals, excludes outside agent, and allows null usedAssignedAgent', () => {
+    const payments = [
+      { status: 'closed', agentAttribution: 'AHA', usedAssignedAgent: true },
+      { status: 'payment_sent', agentAttribution: 'AHA', usedAssignedAgent: null },
+      { status: 'paid', agentAttribution: 'AHA_OOS', usedAssignedAgent: undefined },
+      { status: 'paid', agentAttribution: 'OUTSIDE_AGENT', usedAssignedAgent: true },
+      { status: 'closed', agentAttribution: 'AHA', usedAssignedAgent: false },
+    ];
+
+    const isClosedEligible = (payment: (typeof payments)[number]) =>
+      ['closed', 'payment_sent', 'paid'].includes(payment.status) &&
+      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+      payment.usedAssignedAgent !== false;
+
+    const closedCount = payments.filter(isClosedEligible).length;
+    expect(closedCount).toBe(3);
+  });
+});
+
 describe('Dashboard Metrics - Revenue Calculations', () => {
   it('calculates realized revenue from received amounts', () => {
     const payments = [
@@ -601,4 +621,3 @@ describe('Dashboard Metrics - Pre-Approval Conversion', () => {
     expect(ahaOosConversionRate).toBe(30.0);
   });
 });
-

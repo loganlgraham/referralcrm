@@ -219,6 +219,11 @@ const CLOSED_DEAL_STATUSES = new Set<AggregatedPayment['status']>([
   'paid'
 ]);
 
+const isClosedDealEligible = (payment: AggregatedPayment): boolean =>
+  CLOSED_DEAL_STATUSES.has(payment.status) &&
+  payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+  payment.usedAssignedAgent !== false;
+
 function parseDateOnly(value: string | null): Date | null {
   if (!value) return null;
   const parsed = new Date(value);
@@ -1201,9 +1206,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   
   const dealsClosedForCloseRate = paymentsByNetwork.filter(
     (payment) =>
-      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
-      payment.usedAssignedAgent === true &&
-      CLOSED_DEAL_STATUSES.has(payment.status) &&
+      isClosedDealEligible(payment) &&
       filteredReferralIds.has(payment.referral._id.toString())
   );
 
@@ -1214,11 +1217,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!metricDate) return false;
     if (timeframeStart && metricDate < timeframeStart) return false;
     if (timeframeEnd && metricDate > timeframeEnd) return false;
-    if (payment.agentAttribution === 'OUTSIDE_AGENT') return false;
-    if (payment.usedAssignedAgent !== true) return false;
-    if (!CLOSED_DEAL_STATUSES.has(payment.status)) return false;
+    if (!isClosedDealEligible(payment)) return false;
     return true;
   });
+
+  const closedDealReferralIds = new Set(
+    dealsClosedForCloseRate.map((payment) => payment.referral._id.toString())
+  );
   
   const lostReferrals = referralsByNetwork.filter((referral) => {
     if (referral.status !== 'Lost') {
@@ -1411,7 +1416,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   );
 
   const revenueContributingClosedDeals = revenueEligiblePayments.filter(
-    (payment) => CLOSED_DEAL_STATUSES.has(payment.status)
+    (payment) => isClosedDealEligible(payment)
   );
   const closedDealPrices = revenueContributingClosedDeals
     .map((payment) =>
@@ -1491,7 +1496,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   FUNNEL_ORDER.forEach((s) => funnelCountByStatus.set(s, 0));
   const funnelDaysInStageByStatus = new Map<string, number[]>();
   filteredReferrals.forEach((referral) => {
-    const status = normalizeFunnelStatus(referral.status);
+    let status = normalizeFunnelStatus(referral.status);
+    if (status !== 'Closed' && closedDealReferralIds.has(referral._id.toString())) {
+      status = 'Closed';
+    }
     funnelCountByStatus.set(status, (funnelCountByStatus.get(status) ?? 0) + 1);
     const statusLastUpdated = referral.statusLastUpdated ?? referral.createdAt;
     if (statusLastUpdated) {
@@ -1611,9 +1619,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   paymentsByNetwork.forEach((payment) => {
     const metricDate = payment.metricDate ?? resolveMetricDate(payment);
     const closingDate = resolveClosingDate(payment);
-    if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
-    if (payment.usedAssignedAgent !== true) return;
-    if (!CLOSED_DEAL_STATUSES.has(payment.status)) return;
+    if (!isClosedDealEligible(payment)) return;
 
     const expectedCents = Math.max(payment.expectedAmountCents ?? 0, 0);
     const receivedCents = payment.receivedAmountCents ?? 0;
@@ -1635,9 +1641,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // Count closed, payment sent, and paid deals for a consistent closed-deal definition.
   const dealsFromCohort = new Map<string, number>();
   paymentsByNetwork.forEach((payment) => {
-    if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
-    if (payment.usedAssignedAgent !== true) return;
-    if (!CLOSED_DEAL_STATUSES.has(payment.status)) return;
+    if (!isClosedDealEligible(payment)) return;
 
     const referralCreatedAt = payment.referral?.createdAt ? new Date(payment.referral.createdAt) : null;
     if (!referralCreatedAt) return;
@@ -1670,9 +1674,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   filteredPaymentsByNetwork.forEach((payment) => {
     const metricDate = payment.metricDate ?? resolveMetricDate(payment);
     const closingDate = resolveClosingDate(payment);
-    if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
-    if (payment.usedAssignedAgent !== true) return;
-    if (!CLOSED_DEAL_STATUSES.has(payment.status)) return;
+    if (!isClosedDealEligible(payment)) return;
 
     const expectedCents = Math.max(payment.expectedAmountCents ?? 0, 0);
     const receivedCents = payment.receivedAmountCents ?? 0;
@@ -1698,9 +1700,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // regardless of when the deal closed (cohort-based calculation)
   const dealsClosedByReferralBucket = new Map<string, number>();
   paymentsByNetwork.forEach((payment) => {
-    if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
-    if (payment.usedAssignedAgent !== true) return;
-    if (!CLOSED_DEAL_STATUSES.has(payment.status)) return;
+    if (!isClosedDealEligible(payment)) return;
     const createdAt = payment.referral?.createdAt;
     if (!createdAt) return;
     const key = getTimeframeBucketKey(new Date(createdAt), context.timeframe);
@@ -2986,9 +2986,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const prevDealsClosed = paymentsByNetwork.filter((payment) => {
       const metricDate = payment.metricDate ?? resolveMetricDate(payment);
       if (metricDate < previousStart || metricDate > previousEnd) return false;
-      if (payment.agentAttribution === 'OUTSIDE_AGENT') return false;
-      if (payment.usedAssignedAgent !== true) return false;
-      if (!CLOSED_DEAL_STATUSES.has(payment.status)) return false;
+      if (!isClosedDealEligible(payment)) return false;
       return true;
     });
     const prevRealized = paymentsByNetwork.reduce((sum, payment) => {
