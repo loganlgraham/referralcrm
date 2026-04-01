@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -43,9 +44,9 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       onClick={onClose}
@@ -54,7 +55,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
       aria-labelledby={title ? 'modal-title' : undefined}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" aria-hidden="true" />
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" aria-hidden="true" />
 
       {/* Modal Content */}
       <div
@@ -71,7 +72,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
           <button
             type="button"
             onClick={onClose}
-            className={`rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand ${title ? 'ml-auto' : 'ml-auto'}`}
+            className="ml-auto rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand"
             aria-label="Close modal"
           >
             <X className="h-5 w-5" />
@@ -79,8 +80,9 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
         </div>
 
         {/* Body */}
-        <div className="overflow-y-auto max-h-[calc(90vh-4rem)]">{children}</div>
+        <div className="max-h-[calc(90vh-4rem)] overflow-y-auto">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

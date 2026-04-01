@@ -245,6 +245,8 @@ interface DashboardResponse {
     overdueTaskCount: number;
     dueTodayTaskCount: number;
     completedInTimeframeCount: number;
+    onTimeTaskCompletionCount: number;
+    onTimeTaskCompletionSampleSize: number;
     totalOpenTasks: number;
     taskActivityTrend: {
       outstanding: TrendPoint[];
@@ -1998,6 +2000,9 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
   const firstContactHelper = data.firstContactSampleSize
     ? `${formatNumber(data.firstContactWithin24HoursCount)} of ${formatNumber(data.firstContactSampleSize)} contacts`
     : 'No contact records available';
+  const onTimeTaskCompletionRate = data.onTimeTaskCompletionSampleSize
+    ? (data.onTimeTaskCompletionCount / data.onTimeTaskCompletionSampleSize) * 100
+    : null;
 
   const cards = [
     {
@@ -2042,17 +2047,12 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
       helper: 'Tasks completed or dismissed in period'
     },
     {
-      title: 'Task completion rate',
-      value: (() => {
-        const total = data.totalOpenTasks + data.completedInTimeframeCount;
-        return total > 0
-          ? `${((data.completedInTimeframeCount / total) * 100).toFixed(1)}%`
-          : '—';
-      })(),
+      title: 'On Time Task Completion',
+      value: onTimeTaskCompletionRate != null ? `${onTimeTaskCompletionRate.toFixed(1)}%` : '—',
       helper:
-        data.totalOpenTasks + data.completedInTimeframeCount > 0
-          ? `${formatNumber(data.completedInTimeframeCount)} completed, ${formatNumber(data.totalOpenTasks)} still open`
-          : 'No actionable tasks in period'
+        data.onTimeTaskCompletionSampleSize > 0
+          ? `${formatNumber(data.onTimeTaskCompletionCount)} of ${formatNumber(data.onTimeTaskCompletionSampleSize)} resolved on or before due date`
+          : 'No resolved tasks with due dates in period'
     }
   ];
 

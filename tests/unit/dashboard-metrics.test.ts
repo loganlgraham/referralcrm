@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
+import { wasTaskResolvedOnOrBeforeDueDate } from '@/lib/admin-task-timeliness';
 
 describe('Dashboard Metrics - Close Rate Calculation', () => {
   it('calculates close rate correctly when referrals and deals are in same timeframe', () => {
@@ -619,5 +620,43 @@ describe('Dashboard Metrics - Pre-Approval Conversion', () => {
     
     expect(ahaConversionRate).toBe(20.0);
     expect(ahaOosConversionRate).toBe(30.0);
+  });
+});
+
+describe('Dashboard Metrics - On Time Task Completion', () => {
+  it('counts a resolved task completed on the due date as on time', () => {
+    const task = {
+      dueAt: new Date('2026-04-10T09:00:00.000Z'),
+      dueAtOverride: undefined,
+      snoozedUntil: undefined,
+      completedAt: new Date('2026-04-10T18:30:00.000Z'),
+      dismissedAt: undefined,
+    } satisfies Parameters<typeof wasTaskResolvedOnOrBeforeDueDate>[0];
+
+    expect(wasTaskResolvedOnOrBeforeDueDate(task)).toBe(true);
+  });
+
+  it('uses an active snooze date when evaluating on-time completion', () => {
+    const task = {
+      dueAt: new Date('2026-04-01T09:00:00.000Z'),
+      dueAtOverride: undefined,
+      snoozedUntil: new Date('2026-04-05T09:00:00.000Z'),
+      completedAt: new Date('2026-04-04T12:00:00.000Z'),
+      dismissedAt: undefined,
+    } satisfies Parameters<typeof wasTaskResolvedOnOrBeforeDueDate>[0];
+
+    expect(wasTaskResolvedOnOrBeforeDueDate(task)).toBe(true);
+  });
+
+  it('returns null when a resolved task has no due date to evaluate against', () => {
+    const task = {
+      dueAt: undefined,
+      dueAtOverride: undefined,
+      snoozedUntil: undefined,
+      completedAt: new Date('2026-04-04T12:00:00.000Z'),
+      dismissedAt: undefined,
+    } satisfies Parameters<typeof wasTaskResolvedOnOrBeforeDueDate>[0];
+
+    expect(wasTaskResolvedOnOrBeforeDueDate(task)).toBeNull();
   });
 });
