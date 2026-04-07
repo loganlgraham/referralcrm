@@ -3,6 +3,8 @@ export const dynamic = 'force-dynamic';
 import { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { getCurrentSession } from '@/lib/auth';
+import { connectMongo } from '@/lib/mongoose';
+import { AdminTask, getEffectiveDueDate, type AdminTaskLean } from '@/models/admin-task';
 import { AdminTaskBoard } from '@/components/admin/admin-task-board';
 
 export const metadata: Metadata = {
@@ -15,6 +17,34 @@ export default async function AdminTasksPage() {
     redirect('/referrals');
   }
 
+  await connectMongo();
+  const tasks = await AdminTask.find({ status: 'open' })
+    .select('dueAt dueAtOverride snoozedUntil status')
+    .lean<AdminTaskLean[]>();
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const { dueTodayCount, overdueCount } = tasks.reduce((acc, task) => {
+    const effectiveDue = getEffectiveDueDate(task);
+    if (!effectiveDue) return acc;
+
+    const dueDate = new Date(
+      effectiveDue.getFullYear(),
+      effectiveDue.getMonth(),
+      effectiveDue.getDate()
+    );
+    const dueTime = dueDate.getTime();
+    const todayTime = today.getTime();
+
+    if (dueTime === todayTime) {
+      acc.dueTodayCount += 1;
+    } else if (dueTime < todayTime) {
+      acc.overdueCount += 1;
+    }
+
+    return acc;
+  }, { dueTodayCount: 0, overdueCount: 0 });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -23,6 +53,14 @@ export default async function AdminTasksPage() {
           <p className="text-sm text-slate-500">
             Shared tasks across all referrals. All admins see the same task state.
           </p>
+        </div>
+        <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 shadow-sm">
+            Due today: {dueTodayCount}
+          </span>
+          <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-rose-700 shadow-sm">
+            Overdue: {overdueCount}
+          </span>
         </div>
       </div>
       <AdminTaskBoard />

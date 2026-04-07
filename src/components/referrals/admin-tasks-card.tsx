@@ -180,6 +180,10 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
       toast.error('Add a task name before saving.');
       return;
     }
+    if (!manualDueAt) {
+      toast.error('Add a due date before saving.');
+      return;
+    }
     try {
       const res = await fetch('/api/admin/tasks', {
         method: 'POST',
@@ -187,7 +191,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
         body: JSON.stringify({
           referralId,
           title,
-          dueAt: manualDueAt ? new Date(manualDueAt).toISOString() : undefined,
+          dueAt: new Date(manualDueAt).toISOString(),
         }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -236,12 +240,14 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
             onChange={(e) => setManualTitle(e.target.value)}
             placeholder="Task name"
             className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            required
           />
           <input
             type="datetime-local"
             value={manualDueAt}
             onChange={(e) => setManualDueAt(e.target.value)}
             className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            required
           />
           <div className="flex gap-2">
             <button

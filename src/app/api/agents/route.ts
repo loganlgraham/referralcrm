@@ -44,7 +44,7 @@ const createAgentSchema = z.object({
   specialties: z.array(z.string().trim().min(1)).optional().default([]),
   languages: z.array(z.string().trim().min(1)).optional().default([]),
   ahaDesignation: z.enum(['AHA', 'AHA_OOS', 'AGIT']),
-  source: z.string().trim().optional(),
+  source: z.string().trim().min(1),
 });
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -319,7 +319,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ...normalizedCoverageLocations.flatMap((location) => location.zipCodes),
   ]);
 
-  const providedSource = parsed.data.source?.trim() ?? '';
+  const providedSource = parsed.data.source.trim();
 
   let agent: AgentDocument;
   try {
@@ -377,13 +377,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // Save source to metadata collection (admin only)
-  if (session.user.role === 'admin' && providedSource) {
-    const trimmedSource = providedSource.trim();
+  if (session.user.role === 'admin') {
     try {
       // Find existing entry case-insensitively
       const existing = await ReferralMetadata.findOne({
         type: 'agent_source',
-        value: { $regex: new RegExp(`^${trimmedSource.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+        value: { $regex: new RegExp(`^${providedSource.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
       });
 
       if (existing) {
@@ -395,7 +394,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         // Create new entry
         await ReferralMetadata.create({
           type: 'agent_source',
-          value: trimmedSource,
+          value: providedSource,
           usageCount: 1,
           lastUsedAt: new Date()
         });

@@ -347,6 +347,12 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
       toast.error('AHA classification is required');
       return;
     }
+
+    const trimmedSource = form.source.trim();
+    if (isAdmin && !trimmedSource) {
+      toast.error('Source is required');
+      return;
+    }
     
     setSaving(true);
 
@@ -380,8 +386,8 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
         ahaDesignation: form.ahaDesignation as 'AHA' | 'AHA_OOS' | 'AGIT',
       };
 
-      if (isAdmin && form.source.trim()) {
-        body.source = form.source.trim();
+      if (isAdmin) {
+        body.source = trimmedSource;
       }
 
       const response = await fetch('/api/agents', {
@@ -558,6 +564,7 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
                 placeholder="Where did we recruit this agent from?"
                 disabled={formDisabled}
                 list={sourceHistory.length > 0 ? 'agent-source-history' : undefined}
+                required
               />
               {sourceHistory.length > 0 && (
                 <datalist id="agent-source-history">
