@@ -71,11 +71,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const description = body.description?.trim();
   const category = body.category;
   const priority = body.priority ?? 'medium';
-  const dueAt = body.dueAt ? new Date(body.dueAt) : undefined;
+  const dueAt = body.dueAt ? new Date(body.dueAt) : null;
 
   if (!referralId || !title) {
     return NextResponse.json(
       { error: 'referralId and title are required' },
+      { status: 400 }
+    );
+  }
+
+  if (!dueAt || Number.isNaN(dueAt.getTime())) {
+    return NextResponse.json(
+      { error: 'dueAt is required and must be a valid date' },
       { status: 400 }
     );
   }
@@ -87,7 +94,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     category: category || undefined,
     priority: priority || 'medium',
     status: 'open',
-    dueAt: dueAt ?? undefined,
+    dueAt,
     ruleKey: null,
     cycleKey: 'once',
     createdBy: session.user.id,

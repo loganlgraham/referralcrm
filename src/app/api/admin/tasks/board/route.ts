@@ -13,6 +13,7 @@ const NO_CACHE_HEADERS = {
 type TaskBucket = 'overdue' | 'today' | 'upcoming' | 'completed';
 type BoardGroupBy = 'due' | 'agent' | 'similar';
 type BoardView = 'urgent' | 'upcoming';
+type DateParts = { year: number; month: number; day: number };
 
 interface TaskWithEffective {
   _id: string;
@@ -107,6 +108,34 @@ function getFocalTask(card: ReferralTaskCard, view: BoardView): TaskWithEffectiv
   return card.overdueTasks[0] ?? card.todayTasks[0] ?? card.upcomingTasks[0] ?? card.completedTasks[0] ?? null;
 }
 
+function parseDueDateParam(dueDateParam: string | null): DateParts | null {
+  if (!dueDateParam) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dueDateParam);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+  const isValid = (
+    parsed.getFullYear() === year &&
+    parsed.getMonth() === month - 1 &&
+    parsed.getDate() === day
+  );
+  if (!isValid) return null;
+
+  return { year, month, day };
+}
+
+function isTaskDueOnSelectedDay(task: TaskWithEffective, selectedDay: DateParts): boolean {
+  if (!task.effectiveDue) return false;
+  return (
+    task.effectiveDue.getFullYear() === selectedDay.year &&
+    task.effectiveDue.getMonth() === selectedDay.month - 1 &&
+    task.effectiveDue.getDate() === selectedDay.day
+  );
+}
+
 export interface ReferralTaskCard {
   referralId: string;
   borrower: { name: string; email: string; phone: string };
@@ -145,6 +174,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const viewParam = searchParams.get('view');
   const view: BoardView = viewParam === 'upcoming' || viewParam === 'urgent' ? viewParam : 'urgent';
+  const selectedDay = parseDueDateParam(searchParams.get('dueDate'));
 
   const tasks = await AdminTask.find({ status: { $in: ['open', 'completed'] } })
     .sort({ dueAt: 1, createdAt: 1 })
@@ -290,9 +320,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const cardSorter = view === 'upcoming'
     ? (a: ReferralTaskCard, b: ReferralTaskCard) => getEarliestUpcomingDue(a) - getEarliestUpcomingDue(b)
     : (a: ReferralTaskCard, b: ReferralTaskCard) => getEarliestUrgentDue(a) - getEarliestUrgentDue(b);
+  const selectedDayFilter = (card: ReferralTaskCard) => {
+    const tasks = [
+      ...card.overdueTasks,
+      ...card.todayTasks,
+      ...card.upcomingTasks,
+      ...card.completedTasks,
+    ];
+    return tasks.some((task) => isTaskDueOnSelectedDay(task, selectedDay!));
+  };
+  const visibleCards = referralCards
+    .filter(selectedDay ? selectedDayFilter : cardFilter)
+    .sort(cardSorter);
 
   if (groupBy === 'agent') {
-    const visibleCards = referralCards.filter(cardFilter);
     const byAgent = new Map<string, ReferralTaskCard[]>();
 
     for (const card of visibleCards) {
@@ -317,7 +358,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   if (groupBy === 'similar') {
-    const visibleCards = referralCards.filter(cardFilter);
     const bySimilarTask = new Map<string, { label: string; cards: ReferralTaskCard[] }>();
 
     for (const card of visibleCards) {
@@ -344,6 +384,5 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(payload, { headers: NO_CACHE_HEADERS });
   }
 
-  const visibleCards = referralCards.filter(cardFilter).sort(cardSorter);
   return NextResponse.json(visibleCards, { headers: NO_CACHE_HEADERS });
 }

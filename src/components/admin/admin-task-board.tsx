@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
+import { Calendar, X } from 'lucide-react';
 
 import { ReferralTaskCard } from './referral-task-card';
 import type { ReferralTaskCard as ReferralTaskCardData } from '@/app/api/admin/tasks/board/route';
@@ -20,8 +21,14 @@ type ViewMode = 'urgent' | 'upcoming';
 export function AdminTaskBoard() {
   const [groupBy, setGroupBy] = useState<GroupByMode>('due');
   const [view, setView] = useState<ViewMode>('urgent');
+  const [selectedDate, setSelectedDate] = useState('');
 
-  const boardUrl = `/api/admin/tasks/board?groupBy=${groupBy}&view=${view}`;
+  const params = new URLSearchParams({ groupBy, view });
+  if (selectedDate) {
+    params.set('dueDate', selectedDate);
+  }
+
+  const boardUrl = `/api/admin/tasks/board?${params.toString()}`;
   const { data, mutate } = useSWR<ReferralTaskCardData[] | AgentGroup[]>(boardUrl, fetcher);
 
   const isGroupedMode = groupBy === 'agent' || groupBy === 'similar';
@@ -32,9 +39,18 @@ export function AdminTaskBoard() {
 
   const groupedSections = isGroupedMode ? (data as AgentGroup[] | undefined) ?? [] : [];
 
-  const emptyLabel = view === 'upcoming'
-    ? 'No referrals with upcoming tasks'
-    : 'No referrals with urgent tasks';
+  const formattedSelectedDate = selectedDate
+    ? new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }).format(new Date(`${selectedDate}T00:00:00`))
+    : null;
+  const emptyLabel = selectedDate
+    ? `No tasks due on ${formattedSelectedDate}`
+    : view === 'upcoming'
+      ? 'No referrals with upcoming tasks'
+      : 'No referrals with urgent tasks';
 
   return (
     <div className="space-y-6">
@@ -100,6 +116,31 @@ export function AdminTaskBoard() {
           >
             Group by similar task
           </button>
+        </div>
+
+        <div className="h-6 w-px bg-slate-200" />
+
+        <div className="flex items-center gap-2">
+          <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600">
+            <Calendar className="h-4 w-4" />
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-transparent text-sm text-slate-700 outline-none"
+              aria-label="Filter tasks by due date"
+            />
+          </label>
+          {selectedDate && (
+            <button
+              type="button"
+              onClick={() => setSelectedDate('')}
+              className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+            >
+              <X className="h-3.5 w-3.5" />
+              Clear
+            </button>
+          )}
         </div>
       </div>
 

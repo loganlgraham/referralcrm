@@ -121,6 +121,10 @@ export function ReferralTaskCard({ card, view = 'urgent', onMutate }: ReferralTa
       toast.error('Add a task name before saving.');
       return;
     }
+    if (!addDueAt) {
+      toast.error('Add a due date before saving.');
+      return;
+    }
     try {
       const res = await fetch('/api/admin/tasks', {
         method: 'POST',
@@ -128,7 +132,7 @@ export function ReferralTaskCard({ card, view = 'urgent', onMutate }: ReferralTa
         body: JSON.stringify({
           referralId: card.referralId,
           title,
-          dueAt: addDueAt ? new Date(addDueAt).toISOString() : undefined,
+          dueAt: new Date(addDueAt).toISOString(),
         }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -246,6 +250,7 @@ export function ReferralTaskCard({ card, view = 'urgent', onMutate }: ReferralTa
             value={addDueAt}
             onChange={(e) => setAddDueAt(e.target.value)}
             className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            required
           />
           <div className="flex gap-2">
             <button
