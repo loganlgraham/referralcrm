@@ -14,19 +14,23 @@ interface AgentGroup {
   referralCards: ReferralTaskCardData[];
 }
 
+type GroupByMode = 'due' | 'agent' | 'similar';
+type ViewMode = 'urgent' | 'upcoming';
+
 export function AdminTaskBoard() {
-  const [groupBy, setGroupBy] = useState<'due' | 'agent'>('due');
-  const [view, setView] = useState<'urgent' | 'upcoming'>('urgent');
+  const [groupBy, setGroupBy] = useState<GroupByMode>('due');
+  const [view, setView] = useState<ViewMode>('urgent');
 
   const boardUrl = `/api/admin/tasks/board?groupBy=${groupBy}&view=${view}`;
   const { data, mutate } = useSWR<ReferralTaskCardData[] | AgentGroup[]>(boardUrl, fetcher);
 
+  const isGroupedMode = groupBy === 'agent' || groupBy === 'similar';
   const referralCards: ReferralTaskCardData[] =
-    groupBy === 'agent'
+    isGroupedMode
       ? (data as AgentGroup[] | undefined)?.flatMap((g) => g.referralCards ?? []) ?? []
       : (data as ReferralTaskCardData[] | undefined) ?? [];
 
-  const agentGroups = groupBy === 'agent' ? (data as AgentGroup[] | undefined) ?? [] : [];
+  const groupedSections = isGroupedMode ? (data as AgentGroup[] | undefined) ?? [] : [];
 
   const emptyLabel = view === 'upcoming'
     ? 'No referrals with upcoming tasks'
@@ -85,6 +89,17 @@ export function AdminTaskBoard() {
           >
             Group by agent
           </button>
+          <button
+            type="button"
+            onClick={() => setGroupBy('similar')}
+            className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
+              groupBy === 'similar'
+                ? 'bg-brand text-white'
+                : 'border border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            Group by similar task
+          </button>
         </div>
       </div>
 
@@ -100,13 +115,13 @@ export function AdminTaskBoard() {
             ))}
           </div>
         )
-      ) : agentGroups.length === 0 ? (
+      ) : groupedSections.length === 0 ? (
         <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
           {emptyLabel}
         </div>
       ) : (
         <div className="space-y-6">
-          {agentGroups.map((group) => (
+          {groupedSections.map((group) => (
             <section
               key={group.groupKey}
               className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"

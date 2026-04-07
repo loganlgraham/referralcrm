@@ -11,6 +11,8 @@ const NO_CACHE_HEADERS = {
 };
 
 type TaskBucket = 'overdue' | 'today' | 'upcoming' | 'completed';
+type BoardGroupBy = 'due' | 'agent' | 'similar';
+type BoardView = 'urgent' | 'upcoming';
 
 interface TaskWithEffective {
   _id: string;
@@ -32,6 +34,53 @@ interface TaskWithEffective {
   createdBy: string;
 }
 
+interface GroupSection {
+  groupKey: string;
+  groupLabel: string;
+  referralCards: ReferralTaskCard[];
+}
+
+const TITLE_STOP_WORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'at',
+  'for',
+  'from',
+  'in',
+  'of',
+  'on',
+  'or',
+  'the',
+  'to',
+  'with',
+]);
+
+function toTitleCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function deriveSimilarTaskGroup(title?: string | null): { key: string; label: string } {
+  const normalized = (title ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalized) return { key: 'other', label: 'Other' };
+
+  const tokens = normalized.split(' ').filter(Boolean);
+  const significant = tokens.filter((token) => !TITLE_STOP_WORDS.has(token));
+  const baseTokens = (significant.length > 0 ? significant : tokens).slice(0, 3);
+
+  if (baseTokens.length === 0) return { key: 'other', label: 'Other' };
+
+  return {
+    key: baseTokens.join('-'),
+    label: baseTokens.map(toTitleCase).join(' '),
+  };
+}
+
 function getTaskBucket(effectiveDue: Date | null, status: string): TaskBucket {
   if (status === 'completed') return 'completed';
   if (!effectiveDue) return 'upcoming';
@@ -48,6 +97,14 @@ function getTaskBucket(effectiveDue: Date | null, status: string): TaskBucket {
   if (diffDays < 0) return 'overdue';
   if (diffDays === 0) return 'today';
   return 'upcoming';
+}
+
+function getFocalTask(card: ReferralTaskCard, view: BoardView): TaskWithEffective | null {
+  if (view === 'upcoming') {
+    return card.upcomingTasks[0] ?? card.todayTasks[0] ?? card.overdueTasks[0] ?? card.completedTasks[0] ?? null;
+  }
+
+  return card.overdueTasks[0] ?? card.todayTasks[0] ?? card.upcomingTasks[0] ?? card.completedTasks[0] ?? null;
 }
 
 export interface ReferralTaskCard {
@@ -80,8 +137,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   await connectMongo();
 
   const { searchParams } = new URL(request.url);
-  const groupBy = searchParams.get('groupBy') ?? 'due';
-  const view = searchParams.get('view') ?? 'urgent';
+  const groupByParam = searchParams.get('groupBy');
+  const groupBy: BoardGroupBy =
+    groupByParam === 'agent' || groupByParam === 'similar' || groupByParam === 'due'
+      ? groupByParam
+      : 'due';
+
+  const viewParam = searchParams.get('view');
+  const view: BoardView = viewParam === 'upcoming' || viewParam === 'urgent' ? viewParam : 'urgent';
 
   const tasks = await AdminTask.find({ status: { $in: ['open', 'completed'] } })
     .sort({ dueAt: 1, createdAt: 1 })
@@ -113,8 +176,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const referralIds = [...new Set(tasksWithEffective.map((t) => t.referralId))];
   if (referralIds.length === 0) {
-    const payload = groupBy === 'agent' ? [] : [];
-    return NextResponse.json(payload, { headers: NO_CACHE_HEADERS });
+    return NextResponse.json([], { headers: NO_CACHE_HEADERS });
   }
 
   const referrals = await Referral.find({ _id: { $in: referralIds } })
@@ -250,6 +312,34 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       groupLabel: agentName,
       referralCards: byAgent.get(agentName)!.sort(cardSorter),
     }));
+
+    return NextResponse.json(payload, { headers: NO_CACHE_HEADERS });
+  }
+
+  if (groupBy === 'similar') {
+    const visibleCards = referralCards.filter(cardFilter);
+    const bySimilarTask = new Map<string, { label: string; cards: ReferralTaskCard[] }>();
+
+    for (const card of visibleCards) {
+      const focalTask = getFocalTask(card, view);
+      const { key, label } = deriveSimilarTaskGroup(focalTask?.title);
+      if (!bySimilarTask.has(key)) {
+        bySimilarTask.set(key, { label, cards: [] });
+      }
+      bySimilarTask.get(key)!.cards.push(card);
+    }
+
+    const payload: GroupSection[] = [...bySimilarTask.entries()]
+      .sort((a, b) => {
+        const countDiff = b[1].cards.length - a[1].cards.length;
+        if (countDiff !== 0) return countDiff;
+        return a[1].label.localeCompare(b[1].label);
+      })
+      .map(([groupKey, groupData]) => ({
+        groupKey,
+        groupLabel: groupData.label,
+        referralCards: groupData.cards.sort(cardSorter),
+      }));
 
     return NextResponse.json(payload, { headers: NO_CACHE_HEADERS });
   }
