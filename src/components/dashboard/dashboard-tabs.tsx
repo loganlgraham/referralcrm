@@ -53,7 +53,12 @@ interface AhaRankedAgent {
   id: string;
   name: string;
   score: number;
+  baseScore: number;
+  reliabilityFactor: number;
   rank: number;
+  qualified: boolean;
+  referralCount: number;
+  netCommissionCents: number;
   kpis: {
     label: string;
     key: string;
@@ -61,6 +66,7 @@ interface AhaRankedAgent {
     displayValue: string;
     normalizedScore: number;
     weight: 'high' | 'medium' | 'low';
+    neutralFilled: boolean;
   }[];
 }
 
@@ -1786,6 +1792,10 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+      <p className="mt-1 text-xs text-slate-500">
+        Composite score blends weighted KPIs. Agents with fewer than 5 referrals are marked provisional and receive a
+        reliability adjustment.
+      </p>
       {data.rankedAgents.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-500">No agents with data for this period.</p>
       ) : (
@@ -1811,6 +1821,15 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
                       >
                         {agent.name}
                       </button>
+                      {!agent.qualified ? (
+                        <span className="ml-2 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                          Provisional
+                        </span>
+                      ) : (
+                        <span className="ml-2 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                          Qualified
+                        </span>
+                      )}
                     </td>
                     <td className="py-2 text-right">
                       <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${getScoreStyle(agent.score)}`}>
@@ -1839,6 +1858,20 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
                 {selectedAgent.score.toFixed(1)} / 100
               </span>
             </div>
+            <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <p>
+                Base score: <span className="font-semibold text-slate-900">{selectedAgent.baseScore.toFixed(1)}</span>
+                {' '}· Reliability factor:{' '}
+                <span className="font-semibold text-slate-900">{selectedAgent.reliabilityFactor.toFixed(3)}</span>
+                {' '}· Referrals:{' '}
+                <span className="font-semibold text-slate-900">{formatNumber(selectedAgent.referralCount)}</span>
+              </p>
+              {!selectedAgent.qualified ? (
+                <p className="mt-1">
+                  Provisional ranking: fewer than 5 referrals in selected timeframe.
+                </p>
+              ) : null}
+            </div>
             <div>
               <p className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-400">KPI Breakdown</p>
               <div className="space-y-3">
@@ -1850,6 +1883,11 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
                         <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getWeightBadge(kpi.weight)}`}>
                           {getWeightLabel(kpi.weight)}
                         </span>
+                        {kpi.neutralFilled ? (
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                            Neutral
+                          </span>
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-3 text-sm">
                         <span className="text-slate-500">{kpi.displayValue}</span>
