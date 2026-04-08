@@ -38,6 +38,89 @@ describe('Dashboard Metrics - Close Rate Calculation', () => {
     
     expect(closeRate).toBe(60);
   });
+
+  it('uses cohort-matched closed deals for MC close rate leaderboard', () => {
+    const referralByMcMap = new Map([['mcA', 1]]);
+    const filteredReferralIds = new Set(['new-referral']);
+
+    const paymentsByNetwork = [
+      {
+        status: 'closed',
+        agentAttribution: 'AHA',
+        usedAssignedAgent: true,
+        referral: { _id: 'old-referral', lender: 'mcA' }
+      }
+    ];
+
+    const isClosedDealEligible = (payment: (typeof paymentsByNetwork)[number]) =>
+      ['closed', 'payment_sent', 'paid'].includes(payment.status) &&
+      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+      payment.usedAssignedAgent !== false;
+
+    const cohortClosedByMc = new Map<string, number>();
+    paymentsByNetwork
+      .filter(
+        (payment) =>
+          isClosedDealEligible(payment) &&
+          filteredReferralIds.has(payment.referral._id)
+      )
+      .forEach((payment) => {
+        const mcKey = payment.referral.lender ?? 'unassigned';
+        cohortClosedByMc.set(mcKey, (cohortClosedByMc.get(mcKey) ?? 0) + 1);
+      });
+
+    const dealsClosed = cohortClosedByMc.get('mcA') ?? 0;
+    const totalReferrals = referralByMcMap.get('mcA') ?? 0;
+    const closeRate = totalReferrals === 0 ? 0 : (dealsClosed / totalReferrals) * 100;
+
+    expect(dealsClosed).toBe(0);
+    expect(closeRate).toBe(0);
+  });
+
+  it('prevents impossible agent close rates with cohort-based numerator', () => {
+    const agentReferralCount = new Map([['agentA', 1]]);
+    const filteredReferralIds = new Set(['new-referral']);
+
+    const paymentsByNetwork = [
+      {
+        status: 'closed',
+        agentAttribution: 'AHA',
+        usedAssignedAgent: true,
+        referral: { _id: 'old-referral', assignedAgent: 'agentA' }
+      },
+      {
+        status: 'paid',
+        agentAttribution: 'AHA',
+        usedAssignedAgent: true,
+        referral: { _id: 'old-referral-2', assignedAgent: 'agentA' }
+      }
+    ];
+
+    const isClosedDealEligible = (payment: (typeof paymentsByNetwork)[number]) =>
+      ['closed', 'payment_sent', 'paid'].includes(payment.status) &&
+      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+      payment.usedAssignedAgent !== false;
+
+    const cohortClosedByAgent = new Map<string, number>();
+    paymentsByNetwork
+      .filter(
+        (payment) =>
+          isClosedDealEligible(payment) &&
+          filteredReferralIds.has(payment.referral._id)
+      )
+      .forEach((payment) => {
+        const agentKey = payment.referral.assignedAgent ?? 'unassigned';
+        cohortClosedByAgent.set(agentKey, (cohortClosedByAgent.get(agentKey) ?? 0) + 1);
+      });
+
+    const dealsClosed = cohortClosedByAgent.get('agentA') ?? 0;
+    const totalReferrals = agentReferralCount.get('agentA') ?? 0;
+    const closeRate = totalReferrals === 0 ? 0 : (dealsClosed / totalReferrals) * 100;
+
+    expect(dealsClosed).toBe(0);
+    expect(closeRate).toBeLessThanOrEqual(100);
+    expect(closeRate).toBe(0);
+  });
 });
 
 describe('Dashboard Metrics - Closed Deal Eligibility', () => {

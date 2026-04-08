@@ -2017,11 +2017,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .sort((a, b) => b.referrals - a.referrals)
       .slice(0, 10);
 
-  // MC Revenue and Close Rate tracking
+  // MC Revenue tracking
   // Revenue map tracks: realized revenue, expected revenue, closed deals, and total referrals per MC
-  // Close rate map tracks: closed deals and total referrals for calculating close rate percentage
   const mcRevenueMap = new Map<string, { revenue: number; expected: number; closed: number; totalReferrals: number }>();
-  const mcCloseRateMap = new Map<string, { closed: number; total: number }>();
 
   const referralByMcMap = new Map<string, number>();
   const referralByMcAhaMap = new Map<string, number>();
@@ -2052,7 +2050,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const referralsTrend = groupTrendByTimeframe(allReferralDates, timeframe);
 
   // Aggregate MC metrics from payments
-  // Excludes deals attributed to outside agents from revenue/close rate calculations
+  // Excludes deals attributed to outside agents from revenue calculations.
+  // Close-rate leaderboards are computed below from cohort-matched deals.
   filteredPaymentsByNetwork.forEach((payment) => {
     const key = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     const current = mcRevenueMap.get(key) ?? { revenue: 0, expected: 0, closed: 0, totalReferrals: referralByMcMap.get(key) ?? 0 };
@@ -2066,13 +2065,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
     current.totalReferrals = referralByMcMap.get(key) ?? current.totalReferrals;
     mcRevenueMap.set(key, current);
+  });
 
-    const closeStats = mcCloseRateMap.get(key) ?? { closed: 0, total: referralByMcMap.get(key) ?? 0 };
-    if (!isOutsideAgentDeal && CLOSED_DEAL_STATUSES.has(payment.status)) {
-      closeStats.closed += 1;
-    }
-    closeStats.total = referralByMcMap.get(key) ?? closeStats.total;
-    mcCloseRateMap.set(key, closeStats);
+  // Close-rate leaderboards must use the same cohort semantics as Main close rate:
+  // referrals created in timeframe (denominator) and those same referrals that reached closed-like statuses (numerator).
+  const cohortClosedByMcMap = new Map<string, number>();
+  const cohortClosedByAgentMap = new Map<string, number>();
+  dealsClosedForCloseRate.forEach((payment) => {
+    const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
+    cohortClosedByMcMap.set(mcKey, (cohortClosedByMcMap.get(mcKey) ?? 0) + 1);
+
+    const agentKey = payment.referral?.assignedAgent ? payment.referral.assignedAgent.toString() : 'unassigned';
+    cohortClosedByAgentMap.set(agentKey, (cohortClosedByAgentMap.get(agentKey) ?? 0) + 1);
   });
 
   const mcRevenueLeaderboard = Array.from(mcRevenueMap.entries())
@@ -2085,14 +2089,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .sort((a, b) => b.revenueCents - a.revenueCents)
     .slice(0, 10);
 
-  const mcCloseRateLeaderboard = Array.from(mcCloseRateMap.entries())
-    .map(([key, value]) => ({
+  const mcCloseRateLeaderboard = Array.from(referralByMcMap.entries())
+    .map(([key, totalReferrals]) => {
+      const dealsClosed = cohortClosedByMcMap.get(key) ?? 0;
+      return {
       id: key,
       name: key === 'unassigned' ? 'Unassigned MC' : lenderNameMap.get(key) ?? 'Unknown MC',
-      closeRate: value.total === 0 ? 0 : (value.closed / value.total) * 100,
-      dealsClosed: value.closed,
-      totalReferrals: value.total
-    }))
+      closeRate: totalReferrals === 0 ? 0 : (dealsClosed / totalReferrals) * 100,
+      dealsClosed,
+      totalReferrals
+      };
+    })
     .sort((a, b) => b.closeRate - a.closeRate)
     .slice(0, 10);
 
@@ -2222,14 +2229,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .sort((a, b) => b.referrals - a.referrals)
     .slice(0, 10);
 
-  const agentCloseRateLeaderboard = Array.from(agentRevenueMap.entries())
-    .map(([key, value]) => ({
+  const agentCloseRateLeaderboard = Array.from(agentReferralCount.entries())
+    .map(([key, totalReferrals]) => {
+      const dealsClosed = cohortClosedByAgentMap.get(key) ?? 0;
+      return {
       id: key,
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
-      closeRate: value.totalReferrals === 0 ? 0 : (value.closed / value.totalReferrals) * 100,
-      dealsClosed: value.closed,
-      totalReferrals: value.totalReferrals
-    }))
+      closeRate: totalReferrals === 0 ? 0 : (dealsClosed / totalReferrals) * 100,
+      dealsClosed,
+      totalReferrals
+      };
+    })
     .sort((a, b) => b.closeRate - a.closeRate)
     .slice(0, 10);
 
