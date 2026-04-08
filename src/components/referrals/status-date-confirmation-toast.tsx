@@ -1,0 +1,237 @@
+'use client';
+
+import { toast } from 'sonner';
+
+type CloseStatusConfirmationOptions = {
+  initialDateIso?: string | null;
+  canSendClosedEmails: boolean;
+  defaultSendClosedEmails?: boolean;
+  canSendAgentNpsEmail?: boolean;
+  defaultSendAgentNpsEmail?: boolean;
+  showEmailPreference?: boolean;
+};
+
+type PaidStatusConfirmationOptions = {
+  initialDateIso?: string | null;
+};
+
+export type CloseStatusConfirmationResult = {
+  confirmed: boolean;
+  closingDateIso?: string;
+  sendClosedEmails: boolean;
+  sendAgentNpsEmail: boolean;
+};
+
+export type PaidStatusConfirmationResult = {
+  confirmed: boolean;
+  paidDateIso?: string;
+};
+
+type ConfirmationKind = 'closed' | 'paid';
+
+const toDateInputValue = (sourceIso?: string | null): string => {
+  if (typeof sourceIso === 'string' && sourceIso.length >= 10) {
+    return sourceIso.slice(0, 10);
+  }
+
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const dateInputToIso = (dateValue: string): string => {
+  const [year, month, day] = dateValue.split('-').map(Number);
+  return new Date(year, month - 1, day).toISOString();
+};
+
+const openDateConfirmationToast = (options: {
+  kind: ConfirmationKind;
+  initialDateIso?: string | null;
+  canSendClosedEmails?: boolean;
+  defaultSendClosedEmails?: boolean;
+  showEmailPreference?: boolean;
+  canSendAgentNpsEmail?: boolean;
+  defaultSendAgentNpsEmail?: boolean;
+}): Promise<{
+  confirmed: boolean;
+  dateIso?: string;
+  sendClosedEmails: boolean;
+  sendAgentNpsEmail: boolean;
+}> =>
+  new Promise((resolve) => {
+    let selectedDate = toDateInputValue(options.initialDateIso);
+    let sendClosedEmails = options.defaultSendClosedEmails ?? false;
+    let sendAgentNpsEmail = options.defaultSendAgentNpsEmail ?? false;
+    let settled = false;
+
+    const finalize = (result: {
+      confirmed: boolean;
+      dateIso?: string;
+      sendClosedEmails: boolean;
+      sendAgentNpsEmail: boolean;
+    }) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(result);
+      toast.dismiss(toastId);
+    };
+
+    const isClose = options.kind === 'closed';
+    const showEmailPreference = options.showEmailPreference ?? true;
+    const title = isClose ? 'Confirm close date' : 'Confirm paid date';
+    const description = isClose
+      ? 'Select the closing date before marking this deal as closed.'
+      : 'Select the paid date before marking this deal as paid.';
+
+    const toastId = toast.custom(
+      () => (
+        <form
+          className="w-[360px] rounded-lg border border-slate-200 bg-white p-4 shadow-lg"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!selectedDate) {
+              toast.error('Select a date to continue.');
+              return;
+            }
+
+            finalize({
+              confirmed: true,
+              dateIso: dateInputToIso(selectedDate),
+              sendClosedEmails: isClose ? sendClosedEmails : false,
+              sendAgentNpsEmail: isClose ? sendAgentNpsEmail : false,
+            });
+          }}
+        >
+          <p className="text-sm font-semibold text-slate-900">{title}</p>
+          <p className="mt-1 text-xs text-slate-500">{description}</p>
+
+          <label className="mt-3 block text-xs font-semibold text-slate-600">
+            {isClose ? 'Closing date' : 'Paid date'}
+            <input
+              autoFocus
+              type="date"
+              defaultValue={selectedDate}
+              onChange={(event) => {
+                selectedDate = event.target.value;
+              }}
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+            />
+          </label>
+
+          {isClose && showEmailPreference && options.canSendClosedEmails ? (
+            <label className="mt-3 flex items-start gap-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
+              <input
+                type="checkbox"
+                defaultChecked={sendClosedEmails}
+                onChange={(event) => {
+                  sendClosedEmails = event.target.checked;
+                }}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+              />
+              <span>Send a congratulations email to the referral to rate their agent.</span>
+            </label>
+          ) : null}
+
+          {isClose && showEmailPreference && !options.canSendClosedEmails ? (
+            <p className="mt-3 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+              Referral rating email will not be sent because the assigned agent is not marked as used.
+            </p>
+          ) : null}
+
+          {isClose && showEmailPreference && options.canSendAgentNpsEmail ? (
+            <label className="mt-3 flex items-start gap-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
+              <input
+                type="checkbox"
+                defaultChecked={sendAgentNpsEmail}
+                onChange={(event) => {
+                  sendAgentNpsEmail = event.target.checked;
+                }}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+              />
+              <span>Send MC NPS email to the agent.</span>
+            </label>
+          ) : null}
+
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                finalize({ confirmed: false, sendClosedEmails: false, sendAgentNpsEmail: false })
+              }
+              className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="rounded bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-dark"
+            >
+              Confirm
+            </button>
+          </div>
+        </form>
+      ),
+      {
+        duration: Infinity,
+        position: 'top-center',
+        closeButton: false,
+        onDismiss: () => {
+          if (!settled) {
+            resolve({ confirmed: false, sendClosedEmails: false, sendAgentNpsEmail: false });
+            settled = true;
+          }
+        },
+        onAutoClose: () => {
+          if (!settled) {
+            resolve({ confirmed: false, sendClosedEmails: false, sendAgentNpsEmail: false });
+            settled = true;
+          }
+        },
+      }
+    );
+
+  });
+
+export const confirmCloseStatusDate = async (
+  options: CloseStatusConfirmationOptions
+): Promise<CloseStatusConfirmationResult> => {
+  const showEmailPreference = options.showEmailPreference ?? true;
+  const result = await openDateConfirmationToast({
+    kind: 'closed',
+    initialDateIso: options.initialDateIso,
+    canSendClosedEmails: showEmailPreference ? options.canSendClosedEmails : false,
+    defaultSendClosedEmails: showEmailPreference
+      ? options.defaultSendClosedEmails ?? options.canSendClosedEmails
+      : false,
+    canSendAgentNpsEmail: showEmailPreference ? options.canSendAgentNpsEmail : false,
+    defaultSendAgentNpsEmail: showEmailPreference
+      ? options.defaultSendAgentNpsEmail ?? options.canSendAgentNpsEmail
+      : false,
+    showEmailPreference,
+  });
+
+  return {
+    confirmed: result.confirmed,
+    closingDateIso: result.dateIso,
+    sendClosedEmails: result.sendClosedEmails,
+    sendAgentNpsEmail: result.sendAgentNpsEmail,
+  };
+};
+
+export const confirmPaidStatusDate = async (
+  options: PaidStatusConfirmationOptions
+): Promise<PaidStatusConfirmationResult> => {
+  const result = await openDateConfirmationToast({
+    kind: 'paid',
+    initialDateIso: options.initialDateIso,
+  });
+
+  return {
+    confirmed: result.confirmed,
+    paidDateIso: result.dateIso,
+  };
+};

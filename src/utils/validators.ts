@@ -74,6 +74,9 @@ export const updateStatusSchema = z.object({
   side: z.enum(['buy', 'sell']).optional(),
   source: z.enum(['referral_table', 'referral_detail']).optional(),
   terminatedReason: z.enum(TERMINATED_REASON_VALUES).nullable().optional(),
+  closingDate: z.string().optional(),
+  sendClosedEmails: z.boolean().optional(),
+  sendAgentNpsEmail: z.boolean().optional(),
   contractDetails: z
     .object({
       propertyAddress: z.string().min(1),
@@ -158,5 +161,6 @@ export const paymentSchema = z.object({
       z.null()
     ])
     .optional(),
-  sendClosedEmails: z.boolean().optional()
+  sendClosedEmails: z.boolean().optional(),
+  sendAgentNpsEmail: z.boolean().optional()
 });

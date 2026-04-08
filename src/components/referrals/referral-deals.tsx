@@ -9,6 +9,7 @@ import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/cons
 import type { ReferralStatus } from '@/constants/referrals';
 import { formatCurrency, formatDateMST, formatDateTimeMST } from '@/utils/formatters';
 import type { ReferralPayment } from '@/types/referral-payment';
+import { confirmCloseStatusDate, confirmPaidStatusDate } from '@/components/referrals/status-date-confirmation-toast';
 
 interface ReferralDealsProps {
   referralId: string;
@@ -107,6 +108,17 @@ const dateStringToLocalISO = (dateString: string): string => {
   return localDate.toISOString();
 };
 
+const toDateInputValue = (sourceIso?: string | null): string => {
+  if (typeof sourceIso === 'string' && sourceIso.length >= 10) {
+    return sourceIso.slice(0, 10);
+  }
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 function DealCard({
   deal,
   agents,
@@ -135,7 +147,8 @@ function DealCard({
     deal: ReferralPayment,
     status: DealStatus,
     terminationReason?: TerminatedReason | null,
-    paidAmountCents?: number
+    paidAmountCents?: number,
+    paidDateIso?: string
   ) => Promise<boolean> | boolean;
   onDelete: (deal: ReferralPayment) => void;
   onUpdate: (deal: ReferralPayment, payload: DealUpdatePayload) => Promise<boolean>;
@@ -410,11 +423,12 @@ function DealCard({
 
   const handleMarkPaidClick = () => {
     let amountDraft = defaultPaidAmountDisplay || '0.00';
+    let paidDateDraft = toDateInputValue(deal.paidDate);
 
     toast.custom(
       (toastInstance) => (
         <form
-          className="w-[320px] rounded-lg border border-slate-200 bg-white p-4 shadow-lg"
+          className="w-[360px] rounded-lg border border-slate-200 bg-white p-4 shadow-lg"
           onSubmit={async (event) => {
             event.preventDefault();
             const trimmedValue = amountDraft.trim();
@@ -423,9 +437,14 @@ function DealCard({
               toast.error('Enter a valid paid amount');
               return;
             }
+            if (!paidDateDraft) {
+              toast.error('Select a paid date');
+              return;
+            }
 
             const paidAmountCents = Math.round(parsedAmount * 100);
-            const updated = await onStatusChange(deal, 'paid', undefined, paidAmountCents);
+            const paidDateIso = dateStringToLocalISO(paidDateDraft);
+            const updated = await onStatusChange(deal, 'paid', undefined, paidAmountCents, paidDateIso);
             if (updated) {
               toast.dismiss(toastInstance);
             }
@@ -444,6 +463,17 @@ function DealCard({
               defaultValue={amountDraft}
               onChange={(event) => {
                 amountDraft = event.target.value;
+              }}
+              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+            />
+          </label>
+          <label className="mt-3 block text-xs font-semibold text-slate-600">
+            Paid date
+            <input
+              type="date"
+              defaultValue={paidDateDraft}
+              onChange={(event) => {
+                paidDateDraft = event.target.value;
               }}
               className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
             />
@@ -1292,7 +1322,8 @@ export function ReferralDeals({
     deal: ReferralPayment,
     nextStatus: DealStatus,
     terminationReason?: TerminatedReason | null,
-    paidAmountCents?: number
+    paidAmountCents?: number,
+    paidDateFromAction?: string
   ): Promise<boolean> => {
     if (statusUpdating[deal._id]) return false;
     if (nextStatus === 'terminated' && !terminationReason) {
@@ -1300,28 +1331,60 @@ export function ReferralDeals({
       return false;
     }
     
-    // Check survey email readiness when closing deal
+    let closingDate: string | undefined;
+    let paidDate: string | undefined;
     let sendClosedEmails = false;
+    let sendAgentNpsEmail = false;
+
     if (nextStatus === 'closed') {
       const usedAssignedAgent = deal.usedAssignedAgent ?? false;
+      const closeUsedAfc = deal.side === 'sell' ? false : Boolean(deal.usedAfc);
 
-      if (viewerRole === 'admin' && usedAssignedAgent) {
-        const emailMessage = 'Send a congratulations email to the referral to rate their agent?';
-        const confirmed = window.confirm(emailMessage);
-        sendClosedEmails = confirmed;
-        if (confirmed) {
+      if (viewerRole === 'admin' || viewerRole === 'agent') {
+        const confirmation = await confirmCloseStatusDate({
+          initialDateIso: deal.closingDate ?? null,
+          canSendClosedEmails: viewerRole === 'admin' ? usedAssignedAgent : false,
+          defaultSendClosedEmails: viewerRole === 'admin' ? usedAssignedAgent : false,
+          canSendAgentNpsEmail: viewerRole === 'admin' ? closeUsedAfc : false,
+          defaultSendAgentNpsEmail: viewerRole === 'admin' ? closeUsedAfc : false,
+          showEmailPreference: viewerRole === 'admin',
+        });
+
+        if (!confirmation.confirmed) {
+          return false;
+        }
+
+        closingDate = confirmation.closingDateIso;
+        sendClosedEmails =
+          viewerRole === 'admin' ? confirmation.sendClosedEmails : true;
+        sendAgentNpsEmail =
+          viewerRole === 'admin' ? confirmation.sendAgentNpsEmail : true;
+
+        if (sendClosedEmails) {
           toast.success('A referral rating email will be sent to the referral.');
         }
-      } else if (viewerRole === 'admin') {
-        toast.warning('Referral rating email will not be sent. Please ensure the assigned agent is marked as used.');
-      } else if (viewerRole === 'agent') {
-        sendClosedEmails = usedAssignedAgent;
+        if (sendAgentNpsEmail) {
+          toast.success('An MC NPS email will be sent to the agent.');
+        }
+      }
+    }
+
+    if (nextStatus === 'paid' && viewerRole === 'admin') {
+      if (paidDateFromAction) {
+        paidDate = paidDateFromAction;
+      } else {
+        const confirmation = await confirmPaidStatusDate({
+          initialDateIso: deal.paidDate ?? null,
+        });
+        if (!confirmation.confirmed) {
+          return false;
+        }
+        paidDate = confirmation.paidDateIso;
       }
     }
     
     setStatusUpdating((previous) => ({ ...previous, [deal._id]: true }));
     try {
-      const closingDate = nextStatus === 'closed' ? new Date().toISOString() : undefined;
       const fallbackPaidCents =
         nextStatus === 'paid'
           ? paidAmountCents ??
@@ -1334,9 +1397,11 @@ export function ReferralDeals({
         id: deal._id,
         status: nextStatus,
         closingDate,
+        paidDate,
         receivedAmountCents: fallbackPaidCents,
         netReferralFeePaidCents: fallbackPaidCents,
         sendClosedEmails,
+        sendAgentNpsEmail,
       };
       if (nextStatus === 'closed') {
         patchPayload.usedAfc = deal.side === 'sell' ? false : Boolean(deal.usedAfc);
@@ -1362,6 +1427,7 @@ export function ReferralDeals({
         status: nextStatus,
         terminatedReason: nextStatus === 'terminated' ? terminationReason ?? null : null,
         closingDate: closingDate ?? deal.closingDate ?? null,
+        paidDate: paidDate ?? deal.paidDate ?? null,
         updatedAt: new Date().toISOString(),
       }, {
         referralStatus: patchResult.referralStatus,

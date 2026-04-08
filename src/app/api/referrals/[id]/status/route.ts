@@ -20,6 +20,9 @@ import { hasAhaOosAgentAttached } from '@/lib/server/auto-update-reminders';
 import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
 import { mapReferralStatusToDealStatus } from '@/lib/server/referral-deal-status-mapper';
 import { type ReferralStatus } from '@/constants/referrals';
+import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
+import { getReferralAppBaseUrl } from '@/lib/referral-links';
+import { createNPSToken } from '@/lib/server/nps';
 import {
   deriveReferralStatusFromSides,
   getAgentIdForSide,
@@ -479,6 +482,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
     if (latestAttributedDeal) {
       latestAttributedDeal.status = mappedDealStatus;
+      if (mappedDealStatus === 'closed') {
+        latestAttributedDeal.closingDate = parsed.data.closingDate
+          ? new Date(parsed.data.closingDate)
+          : latestAttributedDeal.closingDate ?? now;
+      }
       if (mappedDealStatus === 'terminated') {
         latestAttributedDeal.terminatedReason = parsed.data.terminatedReason ?? latestAttributedDeal.terminatedReason;
       } else {
@@ -486,6 +494,115 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       }
       await latestAttributedDeal.save();
       syncedDeal = latestAttributedDeal.toObject();
+
+      if (mappedDealStatus === 'closed' && !isAgitDeal && isTransactionalEmailConfigured()) {
+        const shouldSendClosedEmails = parsed.data.sendClosedEmails ?? false;
+        const shouldSendAgentNpsEmail = parsed.data.sendAgentNpsEmail ?? false;
+        const sendAgentClosedCongrats = latestAttributedDeal.usedAfc === true;
+        const origin = getReferralAppBaseUrl();
+
+        if (shouldSendClosedEmails || (shouldSendAgentNpsEmail && sendAgentClosedCongrats)) {
+          try {
+            const assignedAgentRef = referral.assignedAgent as { _id?: unknown } | null | undefined;
+            const assignedAgentId = assignedAgentRef?._id ? String(assignedAgentRef._id) : null;
+            const assignedAgent = assignedAgentId
+              ? await Agent.findById(assignedAgentId)
+                .select('name email')
+                .lean<{ _id: unknown; name?: string | null; email?: string | null } | null>()
+              : null;
+            const agentId = assignedAgent?._id ? String(assignedAgent._id) : null;
+            const agentName = assignedAgent?.name ?? 'this agent';
+            const agentEmail = assignedAgent?.email ?? null;
+            const borrowerEmail = referral.borrower?.email ?? null;
+            const borrowerName = referral.borrower?.name || referral.borrower?.firstName || 'Client';
+            const borrowerFirstName =
+              referral.borrower?.firstName ||
+              (referral.borrower?.name ? referral.borrower.name.split(' ')[0] : null) ||
+              'there';
+
+            if (shouldSendClosedEmails && borrowerEmail && agentId) {
+              const agentSurveyToken = await createNPSToken({
+                paymentId: latestAttributedDeal._id.toString(),
+                referralId: referral._id.toString(),
+                type: 'agent',
+                targetId: agentId,
+                recipientEmail: borrowerEmail,
+                recipientName: borrowerName,
+                agentName,
+              });
+              const agentSurveyUrl = `${origin}/nps/agent?token=${agentSurveyToken}`;
+
+              await sendTransactionalEmail({
+                to: [borrowerEmail],
+                subject: 'Congrats on Your New Home!',
+                html: `
+                  <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
+                    <p>Hi ${borrowerFirstName},</p>
+                    <p>Congratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentName}—your feedback means a lot and helps others tremendously. Wishing you all the best!</p>
+                    <p style="margin: 20px 0 0 0;">
+                      <a href="${agentSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
+                        Rate Your Agent
+                      </a>
+                    </p>
+                  </div>
+                `,
+                text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentName}—your feedback means a lot and helps others tremendously. Wishing you all the best!\n\nRate your agent: ${agentSurveyUrl}`,
+              });
+            }
+
+            if (shouldSendAgentNpsEmail && sendAgentClosedCongrats && agentEmail) {
+              const lenderRef = referral.lender as { _id?: unknown } | null | undefined;
+              const lenderId = lenderRef?._id ? String(lenderRef._id) : null;
+              let lenderSurveyUrl: string | null = null;
+
+              if (lenderId) {
+                const lenderSurveyToken = await createNPSToken({
+                  paymentId: latestAttributedDeal._id.toString(),
+                  referralId: referral._id.toString(),
+                  type: 'lender',
+                  targetId: lenderId,
+                  recipientEmail: agentEmail,
+                  recipientName: agentName,
+                });
+                lenderSurveyUrl = `${origin}/nps/lender?token=${lenderSurveyToken}`;
+              }
+
+              const agentFirstName = agentName.split(' ')[0] || 'there';
+              const borrowerDisplayName =
+                referral.borrower?.name || referral.borrower?.firstName || 'your client';
+              const mcQuestion =
+                'If you have a quick moment: on a scale of 0-10, how likely are you to recommend American Financing to a client or colleague?';
+              const mcBlockHtml = lenderSurveyUrl
+                ? `
+                    <p style="margin: 20px 0 0 0;">${mcQuestion}</p>
+                    <p style="margin: 20px 0 0 0;">
+                      <a href="${lenderSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
+                        Rate Your Mortgage Consultant
+                      </a>
+                    </p>
+                  `
+                : '';
+              const mcBlockText = lenderSurveyUrl
+                ? `\n\n${mcQuestion}\n\nRate your mortgage consultant: ${lenderSurveyUrl}`
+                : '';
+
+              await sendTransactionalEmail({
+                to: [agentEmail],
+                subject: 'Congratulations on Your Closed Deal!',
+                html: `
+                  <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
+                    <p>Hi ${agentFirstName},</p>
+                    <p>Congratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.</p>${mcBlockHtml}
+                  </div>
+                `,
+                text: `Hi ${agentFirstName},\n\nCongratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.${mcBlockText}`,
+              });
+            }
+          } catch (emailError) {
+            console.error('Failed to send close-status NPS emails:', emailError);
+          }
+        }
+      }
     }
   }
   if (slaModified) {
@@ -592,6 +709,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             updatedAt: (createdDeal ?? syncedDeal).updatedAt instanceof Date
               ? (createdDeal ?? syncedDeal).updatedAt.toISOString()
               : (createdDeal ?? syncedDeal).updatedAt ?? null,
+            closingDate: (createdDeal ?? syncedDeal).closingDate instanceof Date
+              ? (createdDeal ?? syncedDeal).closingDate.toISOString()
+              : (createdDeal ?? syncedDeal).closingDate ?? null,
             paidDate: (createdDeal ?? syncedDeal).paidDate instanceof Date
               ? (createdDeal ?? syncedDeal).paidDate.toISOString()
               : (createdDeal ?? syncedDeal).paidDate ?? null,

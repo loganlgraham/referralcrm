@@ -29,6 +29,7 @@ import {
 import { formatCurrency, formatNumber, formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { calculateTimelineDaysRemaining, formatTimelineCountdown } from '@/utils/timeline-countdown';
+import { confirmCloseStatusDate } from '@/components/referrals/status-date-confirmation-toast';
 export interface ReferralRow {
   _id: string;
   createdAt: string;
@@ -90,6 +91,7 @@ interface StatusSelectProps {
   defaultSide?: 'buy' | 'sell';
   side?: 'buy' | 'sell';
   compact?: boolean;
+  roleMode?: TableMode;
 }
 
 const toCents = (value: string): number => {
@@ -388,6 +390,7 @@ function StatusSelect({
   defaultSide = 'buy',
   side,
   compact = false,
+  roleMode,
 }: StatusSelectProps) {
   const [status, setStatus] = useState<ReferralStatus>(value);
   const [loading, setLoading] = useState(false);
@@ -436,6 +439,8 @@ function StatusSelect({
 
   const handleChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     const nextStatus = event.target.value as ReferralStatus;
+    let closingDateIso: string | undefined;
+
     if (nextStatus === 'Under Contract') {
       openUnderContractDealModal();
       return;
@@ -445,6 +450,23 @@ function StatusSelect({
       setPendingTerminatedSelection(true);
       return;
     }
+
+    if (nextStatus === 'Closed' && roleMode === 'agent') {
+      const confirmation = await confirmCloseStatusDate({
+        initialDateIso: null,
+        canSendClosedEmails: false,
+        defaultSendClosedEmails: false,
+        canSendAgentNpsEmail: false,
+        defaultSendAgentNpsEmail: false,
+        showEmailPreference: false,
+      });
+      if (!confirmation.confirmed) {
+        setStatus(value);
+        return;
+      }
+      closingDateIso = confirmation.closingDateIso;
+    }
+
     setStatus(nextStatus);
     setLoading(true);
 
@@ -457,6 +479,9 @@ function StatusSelect({
           source: 'referral_table',
           side,
           terminatedReason: null,
+          closingDate: closingDateIso,
+          sendClosedEmails: nextStatus === 'Closed' && roleMode === 'agent',
+          sendAgentNpsEmail: nextStatus === 'Closed' && roleMode === 'agent',
         })
       });
 
@@ -596,6 +621,7 @@ function AgentBothStatusCell({ row }: { row: ReferralRow }) {
           defaultSide={assignedSide}
           side={assignedSide}
           compact
+          roleMode="agent"
         />
       </div>
     </div>
@@ -919,6 +945,7 @@ function buildColumns(
               dealStatusLabel={row.original.dealStatusLabel ?? null}
               side={row.original.viewerAssignedSide ?? undefined}
               defaultSide={row.original.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
+              roleMode="agent"
             />
           );
         },
@@ -1179,6 +1206,7 @@ function ReferralMobileStack({
                         dealStatusLabel={row.dealStatusLabel ?? null}
                         side={row.viewerAssignedSide ?? undefined}
                         defaultSide={row.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
+                        roleMode="agent"
                       />
                     )}
                   </div>
