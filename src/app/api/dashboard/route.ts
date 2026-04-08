@@ -2347,7 +2347,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }[];
   };
   type AhaLeaderboardsResult = { rankedAgents: AhaRankedAgent[] };
-  const AHA_MIN_REFERRALS_FOR_RANK = 5;
+  const AHA_MIN_REFERRALS_FOR_RANK = 3;
   const AHA_MIN_CLOSED_DEALS_FOR_DEAL_SIZE = 3;
 
   const AHA_KPI_WEIGHTS: Record<string, number> = {

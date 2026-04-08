@@ -1793,7 +1793,7 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
       <p className="mt-1 text-xs text-slate-500">
-        Composite score blends weighted KPIs. Agents with fewer than 5 referrals are marked provisional and receive a
+        Composite score blends weighted KPIs. Agents with fewer than 3 referrals are marked provisional and receive a
         reliability adjustment.
       </p>
       {data.rankedAgents.length === 0 ? (
@@ -1868,7 +1868,7 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
               </p>
               {!selectedAgent.qualified ? (
                 <p className="mt-1">
-                  Provisional ranking: fewer than 5 referrals in selected timeframe.
+                  Provisional ranking: fewer than 3 referrals in selected timeframe.
                 </p>
               ) : null}
             </div>
