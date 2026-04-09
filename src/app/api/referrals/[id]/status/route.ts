@@ -147,11 +147,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const requestedStatus = parsed.data.status;
   const nextStatus = requestedStatus === 'Showing Homes' ? 'Active Lead' : requestedStatus;
   const createNewDeal = Boolean(parsed.data.createNewDeal);
-  const dealOnlyStatusUpdate =
+  const dealMappedStatusUpdateFromTable =
     session.user.role === 'agent' &&
     parsed.data.source === 'referral_table' &&
     (nextStatus === 'Closed' || nextStatus === 'Terminated');
-  const shouldPersistReferralStatus = !dealOnlyStatusUpdate;
+  let shouldPersistReferralStatus = true;
   const previousStatusRaw = referral.status;
   const previousStatus = previousStatusRaw === 'Showing Homes' ? 'Active Lead' : previousStatusRaw;
   const previousStatusUpdatedAt =
@@ -192,6 +192,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   let createdDeal: any = null;
   let syncedDeal: any = null;
+  let syncError: { code: 'agent_record_missing' | 'deal_unassigned' | 'deal_missing'; message: string } | null = null;
   const sla = (referral.sla ??= {} as any);
   let slaModified = false;
 
@@ -470,12 +471,14 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     };
     let canSyncDealStatus = true;
 
-    if (session.user.role === 'agent') {
-      if (currentAgentId) {
-        dealQuery.agentId = currentAgentId;
-      } else {
-        canSyncDealStatus = false;
-      }
+    if (session.user.role === 'agent' && !currentAgentId) {
+      canSyncDealStatus = false;
+      syncError = {
+        code: 'agent_record_missing',
+        message: 'Unable to sync deal status because your agent profile could not be resolved.',
+      };
+    } else if (session.user.role === 'agent' && currentAgentId) {
+      dealQuery.agentId = currentAgentId;
     }
 
     const latestAttributedDeal = canSyncDealStatus ? await Payment.findOne(dealQuery).sort({ createdAt: -1 }) : null;
@@ -603,6 +606,52 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
           }
         }
       }
+    } else if (dealMappedStatusUpdateFromTable && session.user.role === 'agent' && currentAgentId) {
+      const unassignedDealQuery: Record<string, unknown> = {
+        referralId: referral._id,
+        side: requestSide,
+        $or: [{ usedAssignedAgent: false }, { agentAttribution: 'OUTSIDE_AGENT' }],
+      };
+      if (currentAgentId) {
+        unassignedDealQuery.agentId = currentAgentId;
+      }
+      const latestUnassignedDeal = await Payment.findOne(unassignedDealQuery).sort({ createdAt: -1 });
+
+      if (latestUnassignedDeal) {
+        if (requestSide === 'sell') {
+          referral.sellStatus = 'Lost';
+        } else {
+          referral.buyStatus = 'Lost';
+        }
+        if (referral.status !== 'Lost') {
+          const auditEntry: Record<string, unknown> = {
+            actorRole: session.user.role,
+            field: 'status',
+            previousValue: referral.status,
+            newValue: 'Lost',
+            timestamp: now,
+          };
+          if (actorId) {
+            auditEntry.actorId = actorId;
+          }
+          referral.audit = referral.audit || [];
+          referral.audit.push(auditEntry as any);
+          referral.status = 'Lost';
+          referral.statusLastUpdated = now;
+        }
+        shouldPersistReferralStatus = true;
+        syncError = {
+          code: 'deal_unassigned',
+          message:
+            'This referral is tied to an unassigned/outside-agent deal. We moved your referral status to Lost.',
+        };
+      } else {
+        syncError = {
+          code: 'deal_missing',
+          message:
+            'No attributed deal was found for this referral side, so the status could not be synced to a deal.',
+        };
+      }
     }
   }
   if (slaModified) {
@@ -670,6 +719,24 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   const statusLastUpdated = referral.statusLastUpdated ?? new Date();
   const daysInStatus = differenceInDays(new Date(), statusLastUpdated);
+
+  if (syncError) {
+    const sideStatus =
+      requestSide === 'sell'
+        ? (referral.sellStatus as ReferralStatus | undefined)
+        : (referral.buyStatus as ReferralStatus | undefined);
+    return NextResponse.json(
+      {
+        error: {
+          message: syncError.message,
+          status: [syncError.message],
+          code: syncError.code,
+        },
+        currentStatus: sideStatus ?? referral.status ?? previousStatus,
+      },
+      { status: 409 }
+    );
+  }
 
   return NextResponse.json({
     id: referral._id.toString(),

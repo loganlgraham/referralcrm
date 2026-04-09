@@ -24,11 +24,13 @@ import { Clock } from 'lucide-react';
 import { REFERRAL_STATUSES, ReferralStatus, type ReferralTimeline } from '@/constants/referrals';
 import {
   TERMINATED_REASON_OPTIONS,
+  type DealStatus,
   type TerminatedReason,
 } from '@/constants/deals';
 import { formatCurrency, formatNumber, formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { calculateTimelineDaysRemaining, formatTimelineCountdown } from '@/utils/timeline-countdown';
+import { mapDealStatusToReferralStatusDisplay } from '@/lib/latest-deal-referral-status';
 import { confirmCloseStatusDate } from '@/components/referrals/status-date-confirmation-toast';
 export interface ReferralRow {
   _id: string;
@@ -92,14 +94,69 @@ interface StatusSelectProps {
   side?: 'buy' | 'sell';
   compact?: boolean;
   roleMode?: TableMode;
+  onStatusResolved?: (nextStatus: ReferralStatus) => void;
 }
 
-const toCents = (value: string): number => {
+type StatusUpdateResponse = {
+  status?: ReferralStatus | null;
+  currentStatus?: ReferralStatus | null;
+  deal?: {
+    status?: DealStatus | null;
+  } | null;
+  error?:
+    | string
+    | {
+        message?: string;
+        general?: string[];
+        status?: string[];
+      };
+};
+
+const isReferralStatus = (value: unknown): value is ReferralStatus =>
+  typeof value === 'string' && REFERRAL_STATUSES.includes(value as ReferralStatus);
+
+const extractStatusErrorMessage = (payload: StatusUpdateResponse | null): string => {
+  if (!payload?.error) {
+    return 'Unable to update status';
+  }
+
+  if (typeof payload.error === 'string') {
+    return payload.error;
+  }
+
+  const firstFieldError = payload.error.status?.[0] ?? payload.error.general?.[0];
+  return payload.error.message ?? firstFieldError ?? 'Unable to update status';
+};
+
+const parseNumericInput = (value: string): number => {
   const numeric = Number.parseFloat(value.replace(/[^0-9.\-]/g, ''));
+  return Number.isFinite(numeric) ? numeric : Number.NaN;
+};
+
+const toCents = (value: string): number => {
+  const numeric = parseNumericInput(value);
   if (!Number.isFinite(numeric) || numeric <= 0) {
     return 0;
   }
   return Math.round(numeric * 100);
+};
+
+const formatCurrencyInput = (value: string): string => {
+  const sanitized = value.replace(/[^0-9.]/g, '');
+  if (!sanitized) {
+    return '';
+  }
+
+  const [wholeRaw, ...fractionSegments] = sanitized.split('.');
+  const normalizedWhole = wholeRaw.replace(/^0+(?=\d)/, '');
+  const wholeDigits = normalizedWhole || '0';
+  const groupedWhole = wholeDigits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  if (fractionSegments.length === 0) {
+    return groupedWhole;
+  }
+
+  const fraction = fractionSegments.join('').slice(0, 2);
+  return `${groupedWhole}.${fraction}`;
 };
 
 const dateStringToLocalISO = (dateString: string): string => {
@@ -155,10 +212,10 @@ function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: Unde
 
   useEffect(() => {
     if (expectedManuallyEdited) return;
-    const referral = Number.parseFloat(referralFeePercentage);
+    const referral = parseNumericInput(referralFeePercentage);
     if (!Number.isFinite(referral)) return;
     if (commissionMode === '$') {
-      const flatFee = Number.parseFloat(commissionFlat);
+      const flatFee = parseNumericInput(commissionFlat);
       if (Number.isFinite(flatFee)) {
         const computed = flatFee * (referral / 100);
         if (Number.isFinite(computed)) {
@@ -167,8 +224,8 @@ function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: Unde
       }
       return;
     }
-    const contract = Number.parseFloat(contractPrice);
-    const commission = Number.parseFloat(commissionPercentage);
+    const contract = parseNumericInput(contractPrice);
+    const commission = parseNumericInput(commissionPercentage);
     if (Number.isFinite(contract) && Number.isFinite(commission)) {
       const computed = ((contract * commission) / 100) * (referral / 100);
       if (Number.isFinite(computed)) {
@@ -204,11 +261,11 @@ function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: Unde
             toast.error('Enter a valid property ZIP code.');
             return;
           }
-          if (!contractPrice || Number.parseFloat(contractPrice) <= 0) {
+          if (!contractPrice || parseNumericInput(contractPrice) <= 0) {
             toast.error('Contract price is required.');
             return;
           }
-          if (!referralFeePercentage || Number.parseFloat(referralFeePercentage) <= 0) {
+          if (!referralFeePercentage || parseNumericInput(referralFeePercentage) <= 0) {
             toast.error('Referral fee % is required.');
             return;
           }
@@ -217,13 +274,13 @@ function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: Unde
           const commissionBasisPoints = isFlatFeeMode
             ? null
             : commissionPercentage
-            ? Math.round(Number.parseFloat(commissionPercentage) * 100)
+            ? Math.round(parseNumericInput(commissionPercentage) * 100)
             : null;
           const commissionFlatFeeCents = isFlatFeeMode
             ? (commissionFlat ? toCents(commissionFlat) : null)
             : null;
           const referralFeeBasisPoints = referralFeePercentage
-            ? Math.round(Number.parseFloat(referralFeePercentage) * 100)
+            ? Math.round(parseNumericInput(referralFeePercentage) * 100)
             : null;
           const expectedAmountCents = toCents(expectedAmount);
           const computedExpectedAmountCents =
@@ -284,7 +341,15 @@ function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: Unde
         }}
       >
         <label className="text-xs font-medium text-slate-700">Contract price
-          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={contractPrice} onChange={(e) => setContractPrice(e.target.value)} />
+          <div className="relative mt-1">
+            <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-sm text-slate-500">$</span>
+            <input
+              className="w-full rounded border border-slate-300 py-1 pl-6 pr-2 text-sm"
+              inputMode="decimal"
+              value={contractPrice}
+              onChange={(e) => setContractPrice(formatCurrencyInput(e.target.value))}
+            />
+          </div>
         </label>
         <div className="text-xs font-medium text-slate-700">
           <span>Commission</span>
@@ -391,11 +456,25 @@ function StatusSelect({
   side,
   compact = false,
   roleMode,
+  onStatusResolved,
 }: StatusSelectProps) {
+  const router = useRouter();
   const [status, setStatus] = useState<ReferralStatus>(value);
   const [loading, setLoading] = useState(false);
   const [pendingTerminatedSelection, setPendingTerminatedSelection] = useState(false);
   const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | ''>('');
+
+  useEffect(() => {
+    setStatus(value);
+  }, [value]);
+
+  const applyResolvedStatus = useCallback(
+    (nextStatus: ReferralStatus) => {
+      setStatus(nextStatus);
+      onStatusResolved?.(nextStatus);
+    },
+    [onStatusResolved]
+  );
 
   const openUnderContractDealModal = () => {
     const toastId = toast.custom((t) => (
@@ -428,7 +507,8 @@ function StatusSelect({
           if (!statusResponse.ok) {
             throw new Error('Unable to move referral to Under Contract');
           }
-          setStatus('Under Contract');
+          applyResolvedStatus('Under Contract');
+          router.refresh();
           toast.dismiss(t);
           toast.success('Deal saved and referral moved to Under Contract');
         }}
@@ -446,7 +526,7 @@ function StatusSelect({
       return;
     }
     if (nextStatus === 'Terminated') {
-      setStatus(nextStatus);
+      applyResolvedStatus(nextStatus);
       setPendingTerminatedSelection(true);
       return;
     }
@@ -461,13 +541,13 @@ function StatusSelect({
         showEmailPreference: false,
       });
       if (!confirmation.confirmed) {
-        setStatus(value);
+        applyResolvedStatus(value);
         return;
       }
       closingDateIso = confirmation.closingDateIso;
     }
 
-    setStatus(nextStatus);
+    applyResolvedStatus(nextStatus);
     setLoading(true);
 
     try {
@@ -485,15 +565,32 @@ function StatusSelect({
         })
       });
 
+      const payload = (await response.json().catch(() => null)) as StatusUpdateResponse | null;
       if (!response.ok) {
-        throw new Error('Failed to update status');
+        if (isReferralStatus(payload?.currentStatus)) {
+          applyResolvedStatus(payload.currentStatus);
+        } else {
+          applyResolvedStatus(value);
+        }
+        toast.error(extractStatusErrorMessage(payload));
+        router.refresh();
+        return;
       }
 
+      const dealMappedStatus = mapDealStatusToReferralStatusDisplay(payload?.deal?.status);
+      if (dealMappedStatus) {
+        applyResolvedStatus(dealMappedStatus);
+      } else if (isReferralStatus(payload?.status)) {
+        applyResolvedStatus(payload.status);
+      } else {
+        applyResolvedStatus(nextStatus);
+      }
       toast.success('Referral status updated');
+      router.refresh();
     } catch (error) {
       console.error(error);
       toast.error('Unable to update status');
-      setStatus(value);
+      applyResolvedStatus(value);
     } finally {
       setLoading(false);
     }
@@ -558,11 +655,12 @@ function StatusSelect({
                   }
                   setPendingTerminatedSelection(false);
                   setTerminatedReason('');
+                  applyResolvedStatus('Terminated');
                   toast.success('Referral status updated');
                 } catch (error) {
                   console.error(error);
                   toast.error('Unable to update status');
-                  setStatus(value);
+                  applyResolvedStatus(value);
                 } finally {
                   setLoading(false);
                 }
@@ -577,7 +675,7 @@ function StatusSelect({
               onClick={() => {
                 setPendingTerminatedSelection(false);
                 setTerminatedReason('');
-                setStatus(value);
+                applyResolvedStatus(value);
               }}
             >
               Cancel
@@ -603,13 +701,21 @@ function SideStatusPill({ label, status }: { label: string; status?: ReferralSta
 
 function AgentBothStatusCell({ row }: { row: ReferralRow }) {
   const assignedSide = row.viewerAssignedSide ?? 'buy';
-  const assignedStatus = assignedSide === 'sell' ? row.sellStatus ?? row.status : row.buyStatus ?? row.status;
+  const [buyStatus, setBuyStatus] = useState<ReferralStatus>(row.buyStatus ?? row.status);
+  const [sellStatus, setSellStatus] = useState<ReferralStatus>(row.sellStatus ?? row.status);
+
+  useEffect(() => {
+    setBuyStatus(row.buyStatus ?? row.status);
+    setSellStatus(row.sellStatus ?? row.status);
+  }, [row.buyStatus, row.sellStatus, row.status, row._id]);
+
+  const assignedStatus = assignedSide === 'sell' ? sellStatus : buyStatus;
 
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        <SideStatusPill label="Buy" status={row.buyStatus ?? row.status} />
-        <SideStatusPill label="Sell" status={row.sellStatus ?? row.status} />
+        <SideStatusPill label="Buy" status={buyStatus} />
+        <SideStatusPill label="Sell" status={sellStatus} />
       </div>
       <div className="rounded border border-brand/20 bg-brand/5 p-2">
         <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-brand">
@@ -622,6 +728,13 @@ function AgentBothStatusCell({ row }: { row: ReferralRow }) {
           side={assignedSide}
           compact
           roleMode="agent"
+          onStatusResolved={(nextStatus) => {
+            if (assignedSide === 'sell') {
+              setSellStatus(nextStatus);
+              return;
+            }
+            setBuyStatus(nextStatus);
+          }}
         />
       </div>
     </div>

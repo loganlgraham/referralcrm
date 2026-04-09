@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from 'react';
 import useSWR from 'swr';
-import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { TaskItem, type TaskItemData } from '@/components/admin/task-item';
@@ -32,6 +32,55 @@ interface AdminTasksCardProps {
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
+const CALENDAR_WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+
+function padNumber(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function toDayKey(value: string | Date): string {
+  const date = typeof value === 'string' ? new Date(value) : value;
+  return `${date.getFullYear()}-${padNumber(date.getMonth() + 1)}-${padNumber(date.getDate())}`;
+}
+
+function parseDayKey(dayKey: string): Date | null {
+  const [year, month, day] = dayKey.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  const parsed = new Date(year, month - 1, day);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function formatSelectedDay(dayKey: string): string {
+  const parsed = parseDayKey(dayKey);
+  if (!parsed) return dayKey;
+  return parsed.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function startOfMonth(value: Date): Date {
+  return new Date(value.getFullYear(), value.getMonth(), 1);
+}
+
+function shiftMonth(value: Date, amount: number): Date {
+  return new Date(value.getFullYear(), value.getMonth() + amount, 1);
+}
+
+function toDateTimeLocal(date: Date): string {
+  return `${date.getFullYear()}-${padNumber(date.getMonth() + 1)}-${padNumber(date.getDate())}T${padNumber(date.getHours())}:${padNumber(date.getMinutes())}`;
+}
+
+function getDefaultDueAtForDay(dayKey: string): string {
+  const parsed = parseDayKey(dayKey);
+  if (!parsed) return '';
+  parsed.setHours(9, 0, 0, 0);
+  return toDateTimeLocal(parsed);
+}
+
 function getDueBucket(effectiveDue: string | null | undefined): number {
   if (!effectiveDue) return 4;
   const now = new Date();
@@ -47,19 +96,22 @@ function getDueBucket(effectiveDue: string | null | undefined): number {
 }
 
 export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) {
-  if (viewerRole !== 'admin') {
-    return null;
-  }
+  const isAdmin = viewerRole === 'admin';
 
   const [statusFilter, setStatusFilter] = useState<'open' | 'completed'>('open');
   const [showUpcoming, setShowUpcoming] = useState(false);
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualTitle, setManualTitle] = useState('');
   const [manualDueAt, setManualDueAt] = useState('');
+  const [showDayManualForm, setShowDayManualForm] = useState(false);
+  const [dayManualTitle, setDayManualTitle] = useState('');
+  const [dayManualDueAt, setDayManualDueAt] = useState('');
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState<Date>(() => startOfMonth(new Date()));
 
   const tasksUrl = `/api/admin/tasks?referralId=${referralId}&status=${statusFilter}`;
-  const { data: tasks = [], mutate } = useSWR<AdminTask[]>(tasksUrl, fetcher);
+  const { data: tasks = [], mutate } = useSWR<AdminTask[]>(isAdmin ? tasksUrl : null, fetcher);
 
   const sortedTasks = useMemo(() => {
     return [...tasks].sort((a, b) => {
@@ -85,6 +137,46 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
     }
     return { overdueAndToday, upcoming };
   }, [sortedTasks]);
+
+  const tasksByDay = useMemo(() => {
+    const byDay = new Map<string, AdminTask[]>();
+    for (const task of sortedTasks) {
+      const dateValue = task.effectiveDueAt ?? task.dueAt;
+      if (!dateValue) continue;
+      const dayKey = toDayKey(dateValue);
+      const existing = byDay.get(dayKey);
+      if (existing) {
+        existing.push(task);
+      } else {
+        byDay.set(dayKey, [task]);
+      }
+    }
+    return byDay;
+  }, [sortedTasks]);
+
+  const calendarCells = useMemo(() => {
+    const firstDay = startOfMonth(calendarMonth);
+    const year = firstDay.getFullYear();
+    const month = firstDay.getMonth();
+    const firstWeekday = firstDay.getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const totalCells = Math.ceil((firstWeekday + daysInMonth) / 7) * 7;
+
+    return Array.from({ length: totalCells }, (_, idx) => {
+      const dayNumber = idx - firstWeekday + 1;
+      if (dayNumber < 1 || dayNumber > daysInMonth) {
+        return { dayKey: null, label: null };
+      }
+
+      const dayKey = `${year}-${padNumber(month + 1)}-${padNumber(dayNumber)}`;
+      return { dayKey, label: dayNumber };
+    });
+  }, [calendarMonth]);
+
+  const selectedDayTasks = useMemo(() => {
+    if (!selectedDay) return [];
+    return tasksByDay.get(selectedDay) ?? [];
+  }, [selectedDay, tasksByDay]);
 
   const handleComplete = async (taskId: string) => {
     try {
@@ -169,21 +261,46 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
     }
   };
 
+  const handleEdit = async (
+    taskId: string,
+    updates: {
+      title?: string;
+      dueAt?: string | null;
+    }
+  ) => {
+    try {
+      const res = await fetch(`/api/admin/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'edit',
+          ...updates,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success('Task updated');
+      void mutate();
+      setExpandedTaskId(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update task');
+    }
+  };
+
   const handleToggleExpand = (taskId: string) => {
     setExpandedTaskId((prev) => (prev === taskId ? null : taskId));
   };
 
-  const handleManualSubmit = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const title = manualTitle.trim();
+  const createManualTask = async (titleValue: string, dueAtValue: string): Promise<boolean> => {
+    const title = titleValue.trim();
     if (!title) {
       toast.error('Add a task name before saving.');
-      return;
+      return false;
     }
-    if (!manualDueAt) {
+    if (!dueAtValue) {
       toast.error('Add a due date before saving.');
-      return;
+      return false;
     }
+
     try {
       const res = await fetch('/api/admin/tasks', {
         method: 'POST',
@@ -191,19 +308,49 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
         body: JSON.stringify({
           referralId,
           title,
-          dueAt: new Date(manualDueAt).toISOString(),
+          dueAt: new Date(dueAtValue).toISOString(),
         }),
       });
       if (!res.ok) throw new Error(await res.text());
       toast.success('Task created');
       void mutate();
-      setManualTitle('');
-      setManualDueAt('');
-      setShowManualForm(false);
+      return true;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create task');
+      return false;
     }
   };
+
+  const handleManualSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const created = await createManualTask(manualTitle, manualDueAt);
+    if (!created) return;
+    setManualTitle('');
+    setManualDueAt('');
+    setShowManualForm(false);
+  };
+
+  const handleDayManualSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const created = await createManualTask(dayManualTitle, dayManualDueAt);
+    if (!created) return;
+    setDayManualTitle('');
+    if (selectedDay) {
+      setDayManualDueAt(getDefaultDueAtForDay(selectedDay));
+    }
+    setShowDayManualForm(false);
+  };
+
+  const handleCalendarDaySelect = (dayKey: string) => {
+    setSelectedDay(dayKey);
+    setShowDayManualForm(false);
+    setDayManualTitle('');
+    setDayManualDueAt(getDefaultDueAtForDay(dayKey));
+  };
+
+  if (!isAdmin) {
+    return null;
+  }
 
   return (
     <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -271,81 +418,245 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
         </form>
       )}
 
-      <ul className="space-y-2">
-        {statusFilter === 'open' ? (
-          overdueAndToday.length === 0 && upcoming.length === 0 ? (
-            <li className="py-4 text-center text-sm text-slate-500">No open tasks</li>
-          ) : (
-            <>
-              {overdueAndToday.map((task) => (
-                <TaskItem
-                  key={task._id}
-                  task={task as TaskItemData}
-                  showAsCompleted={false}
-                  onComplete={handleComplete}
-                  onDismiss={handleDismiss}
-                  onSnooze={handleSnooze}
-                  onUnsnooze={handleUnsnooze}
-                  onSetDueOverride={handleSetDueOverride}
-                  expandedTaskId={expandedTaskId}
-                  onToggleExpand={handleToggleExpand}
-                />
-              ))}
-              {upcoming.length > 0 && (
-                <li className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowUpcoming(!showUpcoming)}
-                    className="flex items-center gap-1 text-sm font-semibold text-slate-700 hover:text-slate-900"
-                  >
-                    {showUpcoming ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
+      <div className="h-[10rem] overflow-y-auto pr-1">
+        <ul className="space-y-2">
+          {statusFilter === 'open' ? (
+            overdueAndToday.length === 0 && upcoming.length === 0 ? (
+              <li className="py-4 text-center text-sm text-slate-500">No open tasks</li>
+            ) : (
+              <>
+                {overdueAndToday.map((task) => (
+                  <TaskItem
+                    key={task._id}
+                    task={task as TaskItemData}
+                    showAsCompleted={false}
+                    onComplete={handleComplete}
+                    onDismiss={handleDismiss}
+                    onSnooze={handleSnooze}
+                    onUnsnooze={handleUnsnooze}
+                    onSetDueOverride={handleSetDueOverride}
+                    onEdit={handleEdit}
+                    expandedTaskId={expandedTaskId}
+                    onToggleExpand={handleToggleExpand}
+                  />
+                ))}
+                {upcoming.length > 0 && (
+                  <li className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowUpcoming(!showUpcoming)}
+                      className="flex items-center gap-1 text-sm font-semibold text-slate-700 hover:text-slate-900"
+                    >
+                      {showUpcoming ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                      Upcoming tasks ({upcoming.length})
+                    </button>
+                    {showUpcoming && (
+                      <ul className="mt-2 space-y-2">
+                        {upcoming.map((task) => (
+                          <TaskItem
+                            key={task._id}
+                            task={task as TaskItemData}
+                            showAsCompleted={false}
+                            onComplete={handleComplete}
+                            onDismiss={handleDismiss}
+                            onSnooze={handleSnooze}
+                            onUnsnooze={handleUnsnooze}
+                            onSetDueOverride={handleSetDueOverride}
+                            onEdit={handleEdit}
+                            expandedTaskId={expandedTaskId}
+                            onToggleExpand={handleToggleExpand}
+                          />
+                        ))}
+                      </ul>
                     )}
-                    Upcoming tasks ({upcoming.length})
-                  </button>
-                  {showUpcoming && (
-                    <ul className="mt-2 space-y-2">
-                      {upcoming.map((task) => (
-                        <TaskItem
-                          key={task._id}
-                          task={task as TaskItemData}
-                          showAsCompleted={false}
-                          onComplete={handleComplete}
-                          onDismiss={handleDismiss}
-                          onSnooze={handleSnooze}
-                          onUnsnooze={handleUnsnooze}
-                          onSetDueOverride={handleSetDueOverride}
-                          expandedTaskId={expandedTaskId}
-                          onToggleExpand={handleToggleExpand}
-                        />
-                      ))}
-                    </ul>
+                  </li>
+                )}
+              </>
+            )
+          ) : sortedTasks.length === 0 ? (
+            <li className="py-4 text-center text-sm text-slate-500">No completed tasks</li>
+          ) : (
+            sortedTasks.map((task) => (
+              <TaskItem
+                key={task._id}
+                task={task as TaskItemData}
+                showAsCompleted
+                onComplete={handleComplete}
+                onDismiss={handleDismiss}
+                onSnooze={handleSnooze}
+                onUnsnooze={handleUnsnooze}
+                onSetDueOverride={handleSetDueOverride}
+                onEdit={handleEdit}
+                expandedTaskId={null}
+                onToggleExpand={() => {}}
+              />
+            ))
+          )}
+        </ul>
+      </div>
+
+      <div className="space-y-3 border-t border-slate-200 pt-4">
+        <div className="flex items-center justify-between">
+          <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <CalendarDays className="h-4 w-4" />
+            Calendar
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setCalendarMonth((prev) => shiftMonth(prev, -1))}
+              className="rounded border border-slate-200 p-1 text-slate-600 transition hover:bg-slate-100"
+              aria-label="Previous month"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <p className="min-w-[8rem] text-center text-xs font-medium text-slate-600">
+              {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </p>
+            <button
+              type="button"
+              onClick={() => setCalendarMonth((prev) => shiftMonth(prev, 1))}
+              className="rounded border border-slate-200 p-1 text-slate-600 transition hover:bg-slate-100"
+              aria-label="Next month"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium uppercase tracking-wide text-slate-500">
+          {CALENDAR_WEEK_DAYS.map((day) => (
+            <span key={day}>{day}</span>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-7 gap-1">
+          {calendarCells.map((cell, idx) => {
+            if (!cell.dayKey || !cell.label) {
+              return <div key={`empty-${idx}`} className="h-10 rounded-md bg-slate-50/40" aria-hidden />;
+            }
+            const hasTasks = tasksByDay.has(cell.dayKey);
+            const isSelected = selectedDay === cell.dayKey;
+
+            return (
+              <button
+                key={cell.dayKey}
+                type="button"
+                onClick={() => handleCalendarDaySelect(cell.dayKey)}
+                className={`relative h-10 rounded-md border text-sm transition ${
+                  isSelected
+                    ? 'border-brand bg-brand/10 text-brand'
+                    : hasTasks
+                      ? 'border-slate-300 bg-slate-50 text-slate-800 hover:bg-slate-100'
+                      : 'border-slate-100 text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                {cell.label}
+                {hasTasks && (
+                  <span className="absolute bottom-1 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-brand" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          {!selectedDay ? (
+            <p className="text-sm text-slate-500">Select a day to view and manage tasks.</p>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-slate-700">{formatSelectedDay(selectedDay)}</p>
+                <p className="text-xs text-slate-500">{selectedDayTasks.length} task(s)</p>
+              </div>
+              {selectedDayTasks.length === 0 ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-slate-500">No tasks due on this day.</p>
+                  {statusFilter === 'open' && !showDayManualForm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowDayManualForm(true);
+                        if (!dayManualDueAt && selectedDay) {
+                          setDayManualDueAt(getDefaultDueAtForDay(selectedDay));
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md bg-brand px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-dark"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add task for this day
+                    </button>
                   )}
-                </li>
+                  {statusFilter === 'open' && showDayManualForm && (
+                    <form
+                      onSubmit={handleDayManualSubmit}
+                      className="space-y-2 rounded-lg border border-slate-200 bg-white p-2.5"
+                    >
+                      <input
+                        type="text"
+                        value={dayManualTitle}
+                        onChange={(e) => setDayManualTitle(e.target.value)}
+                        placeholder="Task name"
+                        className="w-full rounded border border-slate-200 px-2 py-1.5 text-sm"
+                        required
+                      />
+                      <input
+                        type="datetime-local"
+                        value={dayManualDueAt}
+                        onChange={(e) => setDayManualDueAt(e.target.value)}
+                        className="w-full rounded border border-slate-200 px-2 py-1.5 text-sm"
+                        required
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="submit"
+                          className="rounded bg-brand px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand-dark"
+                        >
+                          Create
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowDayManualForm(false);
+                            setDayManualTitle('');
+                            if (selectedDay) {
+                              setDayManualDueAt(getDefaultDueAtForDay(selectedDay));
+                            }
+                          }}
+                          className="rounded border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              ) : (
+                <ul className="max-h-60 space-y-2 overflow-y-auto pr-1">
+                  {selectedDayTasks.map((task) => (
+                    <TaskItem
+                      key={`day-${task._id}`}
+                      task={task as TaskItemData}
+                      showAsCompleted={statusFilter === 'completed'}
+                      onComplete={handleComplete}
+                      onDismiss={handleDismiss}
+                      onSnooze={handleSnooze}
+                      onUnsnooze={handleUnsnooze}
+                      onSetDueOverride={handleSetDueOverride}
+                      onEdit={handleEdit}
+                      expandedTaskId={expandedTaskId}
+                      onToggleExpand={handleToggleExpand}
+                    />
+                  ))}
+                </ul>
               )}
-            </>
-          )
-        ) : sortedTasks.length === 0 ? (
-          <li className="py-4 text-center text-sm text-slate-500">No completed tasks</li>
-        ) : (
-          sortedTasks.map((task) => (
-            <TaskItem
-              key={task._id}
-              task={task as TaskItemData}
-              showAsCompleted
-              onComplete={handleComplete}
-              onDismiss={handleDismiss}
-              onSnooze={handleSnooze}
-              onUnsnooze={handleUnsnooze}
-              onSetDueOverride={handleSetDueOverride}
-              expandedTaskId={null}
-              onToggleExpand={() => {}}
-            />
-          ))
-        )}
-      </ul>
+            </div>
+          )}
+        </div>
+      </div>
     </section>
   );
 }

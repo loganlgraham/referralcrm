@@ -78,6 +78,10 @@ jest.mock('@/lib/server/notifications', () => ({
   createAdminNotifications: jest.fn(),
 }));
 
+jest.mock('@/lib/server/nps', () => ({
+  createNPSToken: jest.fn(),
+}));
+
 jest.mock('@/lib/server/update-request-response', () => ({
   maybeNotifyAdminsOnUpdateRequestResponse: jest.fn(),
 }));
@@ -174,7 +178,7 @@ const mockCurrentAgent = (agentId: string | null) => {
   });
 };
 
-describe('Referral status route deal-only updates', () => {
+describe('Referral status route table-driven deal status sync', () => {
   beforeAll(async () => {
     ({ POST: postHandler } = await import('@/app/api/referrals/[id]/status/route'));
   });
@@ -189,7 +193,7 @@ describe('Referral status route deal-only updates', () => {
     mockedPaymentExists.mockResolvedValue(true);
   });
 
-  it('keeps referral status unchanged but updates latest deal to closed for agent table source', async () => {
+  it('persists referral status and updates latest deal to closed for agent table source', async () => {
     const referralDoc = makeReferralDoc();
     mockedReferralFindById.mockReturnValue(referralDoc);
 
@@ -201,9 +205,10 @@ describe('Referral status route deal-only updates', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.body.status).toBe('Active Lead');
-    expect(referralDoc.status).toBe('Active Lead');
-    expect(referralDoc.save).not.toHaveBeenCalled();
+    expect(response.body.status).toBe('Closed');
+    expect(referralDoc.buyStatus).toBe('Closed');
+    expect(referralDoc.status).toBe('Closed');
+    expect(referralDoc.save).toHaveBeenCalled();
     expect(mockedPaymentUpdateMany).not.toHaveBeenCalled();
     expect(mockedPaymentFindOne).toHaveBeenCalledWith({
       referralId: referralDoc._id,
@@ -214,10 +219,10 @@ describe('Referral status route deal-only updates', () => {
     });
     expect(latestDeal.status).toBe('closed');
     expect(latestDeal.save).toHaveBeenCalled();
-    expect(mockedLogReferralActivity).not.toHaveBeenCalled();
+    expect(mockedLogReferralActivity).toHaveBeenCalled();
   });
 
-  it('passes terminatedReason to latest deal and keeps referral status unchanged', async () => {
+  it('passes terminatedReason to latest deal and persists referral status', async () => {
     const referralDoc = makeReferralDoc();
     mockedReferralFindById.mockReturnValue(referralDoc);
 
@@ -235,8 +240,9 @@ describe('Referral status route deal-only updates', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.status).toBe('Active Lead');
-    expect(referralDoc.status).toBe('Active Lead');
-    expect(referralDoc.save).not.toHaveBeenCalled();
+    expect(referralDoc.buyStatus).toBe('Terminated');
+    expect(referralDoc.status).toBe('Terminated');
+    expect(referralDoc.save).toHaveBeenCalled();
     expect(latestDeal.status).toBe('terminated');
     expect(latestDeal.terminatedReason).toBe('inspection');
     expect(latestDeal.save).toHaveBeenCalled();
@@ -276,7 +282,7 @@ describe('Referral status route deal-only updates', () => {
     expect(otherAgentDeal.save).not.toHaveBeenCalled();
   });
 
-  it('does not sync any deal when agent has no mapped agent record', async () => {
+  it('returns an error when close is requested and agent has no mapped agent record', async () => {
     const referralDoc = makeReferralDoc();
     mockedReferralFindById.mockReturnValue(referralDoc);
     mockCurrentAgent(null);
@@ -287,10 +293,54 @@ describe('Referral status route deal-only updates', () => {
       params: { id: 'ref-1' },
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(409);
     expect(mockedPaymentFindOne).not.toHaveBeenCalled();
+    expect(response.body.currentStatus).toBe('Closed');
+    expect(response.body.error.message).toContain('agent profile could not be resolved');
     expect(latestDeal.status).toBe('under_contract');
     expect(latestDeal.save).not.toHaveBeenCalled();
+  });
+
+  it('moves referral to Lost and returns error when only unassigned/outside-agent deal is found', async () => {
+    const referralDoc = makeReferralDoc();
+    mockedReferralFindById.mockReturnValue(referralDoc);
+
+    const unassignedDeal = {
+      ...makeLatestDealDoc(),
+      usedAssignedAgent: false,
+      agentAttribution: 'OUTSIDE_AGENT',
+    };
+
+    mockedPaymentFindOne.mockImplementation((query: any) => {
+      const responseForAwait =
+        Array.isArray(query?.$or) && query.$or.length > 0 ? unassignedDeal : null;
+      return {
+        sort: jest.fn(() => {
+          const afterSort: Record<string, unknown> = {
+            select: jest.fn(() => ({
+              lean: jest.fn(() => Promise.resolve(null)),
+            })),
+            lean: jest.fn(() => Promise.resolve(null)),
+          };
+          afterSort.then = (onFulfilled: (v: unknown) => unknown) =>
+            Promise.resolve(responseForAwait).then(onFulfilled);
+          afterSort.catch = (onRejected: (e: unknown) => unknown) =>
+            Promise.resolve(responseForAwait).catch(onRejected);
+          return afterSort;
+        }),
+      };
+    });
+
+    const response: any = await postHandler(makeRequest({ status: 'Closed', source: 'referral_table' }), {
+      params: { id: 'ref-1' },
+    });
+
+    expect(response.status).toBe(409);
+    expect(response.body.currentStatus).toBe('Lost');
+    expect(response.body.error.code).toBe('deal_unassigned');
+    expect(referralDoc.buyStatus).toBe('Lost');
+    expect(referralDoc.status).toBe('Lost');
+    expect(referralDoc.save).toHaveBeenCalled();
   });
 
   it('notifies admins when an agent persists a referral status change', async () => {
