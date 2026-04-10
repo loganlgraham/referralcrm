@@ -46,8 +46,23 @@ interface TaskItemProps {
   onSnooze: (taskId: string, until: Date) => void | Promise<void>;
   onUnsnooze: (taskId: string) => void | Promise<void>;
   onSetDueOverride: (taskId: string, overrideValue: string | null) => void | Promise<void>;
+  onEdit?: (
+    taskId: string,
+    updates: {
+      title?: string;
+      dueAt?: string | null;
+    }
+  ) => void | Promise<void>;
   expandedTaskId: string | null;
   onToggleExpand: (taskId: string) => void;
+}
+
+function toDateTimeLocalValue(value: string | null | undefined): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 export function TaskItem({
@@ -58,10 +73,14 @@ export function TaskItem({
   onSnooze,
   onUnsnooze,
   onSetDueOverride,
+  onEdit,
   expandedTaskId,
   onToggleExpand,
 }: TaskItemProps) {
   const [dueOverride, setDueOverride] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(task.title);
+  const [editDueAt, setEditDueAt] = useState(toDateTimeLocalValue(task.dueAt));
   const isExpanded = expandedTaskId === task._id;
   const isSnoozed = task.snoozedUntil && new Date(task.snoozedUntil) > new Date();
 
@@ -90,6 +109,27 @@ export function TaskItem({
   const handleResetReschedule = () => {
     void onSetDueOverride(task._id, null);
     setDueOverride('');
+    onToggleExpand(task._id);
+  };
+
+  const handleEditSave = async () => {
+    if (!onEdit) return;
+    const title = editTitle.trim();
+    if (!title) {
+      toast.error('Task name is required');
+      return;
+    }
+    const dueAt = editDueAt ? new Date(editDueAt) : null;
+    if (dueAt && Number.isNaN(dueAt.getTime())) {
+      toast.error('Invalid due date');
+      return;
+    }
+
+    await onEdit(task._id, {
+      title,
+      dueAt: dueAt ? dueAt.toISOString() : null,
+    });
+    setIsEditing(false);
     onToggleExpand(task._id);
   };
 
@@ -123,6 +163,49 @@ export function TaskItem({
               >
                 Dismiss
               </button>
+            )}
+            {onEdit && (
+              <button
+                type="button"
+                onClick={() =>
+                  setIsEditing((prev) => {
+                    if (!prev) {
+                      setEditTitle(task.title);
+                      setEditDueAt(toDateTimeLocalValue(task.dueAt));
+                    }
+                    return !prev;
+                  })
+                }
+                className="block text-xs font-semibold text-slate-700 hover:underline"
+              >
+                {isEditing ? 'Cancel edit' : 'Edit task'}
+              </button>
+            )}
+            {isEditing && onEdit && (
+              <div className="space-y-2 rounded-md border border-slate-200 bg-white p-2">
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full rounded border border-slate-200 px-2 py-1 text-xs"
+                  placeholder="Task name"
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="datetime-local"
+                    value={editDueAt}
+                    onChange={(e) => setEditDueAt(e.target.value)}
+                    className="rounded border border-slate-200 px-2 py-1 text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleEditSave}
+                    className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
             )}
             {isSnoozed ? (
               <button

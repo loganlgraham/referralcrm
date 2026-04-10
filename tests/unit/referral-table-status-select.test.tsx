@@ -1,14 +1,15 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ReferralTable } from '@/components/tables/referral-table';
 import { TERMINATED_REASON_OPTIONS } from '@/constants/deals';
 
 const mockReplace = jest.fn();
+const mockRefresh = jest.fn();
 const mockToastCustom = jest.fn();
 const mockToastError = jest.fn();
 const mockFetch = jest.fn();
 
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: mockReplace }),
+  useRouter: () => ({ replace: mockReplace, refresh: mockRefresh }),
   usePathname: () => '/referrals',
   useSearchParams: () => ({
     toString: () => '',
@@ -26,17 +27,25 @@ jest.mock('sonner', () => ({
   },
 }));
 
+jest.mock('@/components/referrals/status-date-confirmation-toast', () => ({
+  confirmCloseStatusDate: jest.fn(async () => ({
+    confirmed: true,
+    closingDateIso: null,
+  })),
+}));
+
 describe('ReferralTable agent status actions', () => {
   beforeEach(() => {
     mockFetch.mockResolvedValue({
       ok: true,
-      json: async () => ({}),
+      json: async () => ({ deal: { status: 'closed' } }),
     });
     (global as any).fetch = mockFetch;
   });
 
   afterEach(() => {
     mockFetch.mockReset();
+    mockRefresh.mockReset();
   });
 
   it('opens Under Contract toast card from agent table status select', () => {
@@ -63,6 +72,136 @@ describe('ReferralTable agent status actions', () => {
     fireEvent.change(statusSelect, { target: { value: 'Under Contract' } });
 
     expect(mockToastCustom).toHaveBeenCalled();
+  });
+
+  it('formats contract price and preserves numeric value when submitting under-contract details', async () => {
+    render(
+      <ReferralTable
+        mode="agent"
+        data={[
+          {
+            _id: 'ref-price-format',
+            createdAt: new Date().toISOString(),
+            borrowerName: 'Price Borrower',
+            borrowerEmail: 'price@example.com',
+            borrowerPhone: '1234567890',
+            clientType: 'Buyer',
+            lookingInZip: '80014',
+            loanFileNumber: 'L-price',
+            status: 'Active Lead',
+          },
+        ]}
+      />
+    );
+
+    fireEvent.change(screen.getByDisplayValue('Active Lead'), { target: { value: 'Under Contract' } });
+
+    const toastRenderer = mockToastCustom.mock.calls.at(-1)?.[0] as ((toastRef: unknown) => JSX.Element) | undefined;
+    expect(toastRenderer).toBeDefined();
+    if (!toastRenderer) {
+      return;
+    }
+    render(toastRenderer({ id: 'toast-price' }));
+
+    const contractPriceField = screen.getByText('Contract price').closest('label')?.querySelector('input');
+    expect(contractPriceField).toBeTruthy();
+    if (!contractPriceField) {
+      return;
+    }
+    const contractPriceInput = contractPriceField as HTMLInputElement;
+    fireEvent.change(contractPriceInput, { target: { value: '450000' } });
+    expect(contractPriceInput).toHaveValue('450,000');
+
+    fireEvent.change(screen.getByLabelText('Referral fee %'), { target: { value: '25' } });
+    fireEvent.change(screen.getByLabelText('Property address'), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText('Property city'), { target: { value: 'Denver' } });
+    fireEvent.change(screen.getByLabelText('Property state'), { target: { value: 'CO' } });
+    fireEvent.change(screen.getByLabelText('Property ZIP'), { target: { value: '80014' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save deal & move status' }));
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/referrals/ref-price-format/status',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+    });
+
+    const statusRequestCall = mockFetch.mock.calls.find(
+      (call) => call[0] === '/api/referrals/ref-price-format/status'
+    );
+    expect(statusRequestCall).toBeDefined();
+    const statusRequestBody = JSON.parse(String(statusRequestCall?.[1]?.body));
+    expect(statusRequestBody.contractDetails.contractPrice).toBe(450000);
+  });
+
+  it('updates both-side status pill immediately after under-contract save', async () => {
+    render(
+      <ReferralTable
+        mode="agent"
+        data={[
+          {
+            _id: 'ref-both-under-contract',
+            createdAt: new Date().toISOString(),
+            borrowerName: 'Both Borrower',
+            borrowerEmail: 'both@example.com',
+            borrowerPhone: '1234567890',
+            clientType: 'Both',
+            viewerAssignedSide: 'buy',
+            buyStatus: 'Active Lead',
+            sellStatus: 'Under Contract',
+            lookingInZip: '80014',
+            loanFileNumber: 'L-both',
+            status: 'Active Lead',
+          },
+        ]}
+      />
+    );
+
+    const buyLabel = screen.getByText('Buy');
+    const buyPill = buyLabel.closest('div');
+    expect(buyPill).toBeTruthy();
+    if (!buyPill) {
+      return;
+    }
+
+    expect(within(buyPill).getByText('Active Lead')).toBeInTheDocument();
+    fireEvent.change(screen.getByDisplayValue('Active Lead'), { target: { value: 'Under Contract' } });
+
+    const toastRenderer = mockToastCustom.mock.calls.at(-1)?.[0] as ((toastRef: unknown) => JSX.Element) | undefined;
+    expect(toastRenderer).toBeDefined();
+    if (!toastRenderer) {
+      return;
+    }
+    render(toastRenderer({ id: 'toast-both-under-contract' }));
+
+    const contractPriceField = screen.getByText('Contract price').closest('label')?.querySelector('input');
+    expect(contractPriceField).toBeTruthy();
+    if (!contractPriceField) {
+      return;
+    }
+    fireEvent.change(contractPriceField, { target: { value: '450000' } });
+    fireEvent.change(screen.getByLabelText('Referral fee %'), { target: { value: '25' } });
+    fireEvent.change(screen.getByLabelText('Property address'), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText('Property city'), { target: { value: 'Denver' } });
+    fireEvent.change(screen.getByLabelText('Property state'), { target: { value: 'CO' } });
+    fireEvent.change(screen.getByLabelText('Property ZIP'), { target: { value: '80014' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save deal & move status' }));
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/referrals/ref-both-under-contract/status',
+        expect.objectContaining({
+          method: 'POST',
+        })
+      );
+    });
+
+    expect(within(buyPill).getByText('Under Contract')).toBeInTheDocument();
   });
 
   it('uses dropdown flow for terminated reason instead of prompt', () => {
@@ -152,9 +291,40 @@ describe('ReferralTable agent status actions', () => {
             status: 'Paired',
             source: 'referral_table',
             terminatedReason: null,
+            sendClosedEmails: false,
+            sendAgentNpsEmail: false,
           }),
         })
       );
+    });
+  });
+
+  it('reconciles status from deal response when closing from agent table', async () => {
+    render(
+      <ReferralTable
+        mode="agent"
+        data={[
+          {
+            _id: 'ref-closed-sync',
+            createdAt: new Date().toISOString(),
+            borrowerName: 'Closed Sync Borrower',
+            borrowerEmail: 'sync@example.com',
+            borrowerPhone: '1234567890',
+            clientType: 'Buyer',
+            lookingInZip: '80014',
+            loanFileNumber: 'L-closed',
+            status: 'Active Lead',
+            dealStatusLabel: 'Under Contract',
+          },
+        ]}
+      />
+    );
+
+    fireEvent.change(screen.getByDisplayValue('Active Lead'), { target: { value: 'Closed' } });
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Closed')).toBeInTheDocument();
+      expect(mockRefresh).toHaveBeenCalled();
     });
   });
 

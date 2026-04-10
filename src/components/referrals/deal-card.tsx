@@ -9,6 +9,7 @@ import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/cons
 import { formatCurrency, formatDateTimeMST } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { useAgentOptions } from '@/hooks/use-agent-options';
+import { confirmCloseStatusDate, confirmPaidStatusDate } from '@/components/referrals/status-date-confirmation-toast';
 export type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
 export type AgentSelectValue = '' | 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT';
 
@@ -734,23 +735,57 @@ export function DealCard({
       return;
     }
     
-    // Check survey email readiness when closing deal
+    let closingDateIso: string | undefined;
+    let paidDateIso: string | undefined;
     let sendClosedEmails = false;
+    let sendAgentNpsEmail = false;
+
     if (nextStatus === 'closed') {
       const usedAssignedAgent = deal.usedAssignedAgent ?? false;
+      const closeUsedAfc =
+        deal.side === 'sell' ? false : (afcMap[deal._id] ?? Boolean(deal.usedAfc));
 
-      if (viewerRole === 'admin' && usedAssignedAgent) {
-        const emailMessage = 'Send a congratulations email to the referral to rate their agent?';
-        const confirmed = window.confirm(emailMessage);
-        sendClosedEmails = confirmed;
-        if (confirmed) {
+      if (viewerRole === 'admin' || viewerRole === 'agent') {
+        const confirmation = await confirmCloseStatusDate({
+          initialDateIso: deal.closingDate ?? null,
+          canSendClosedEmails: viewerRole === 'admin' ? usedAssignedAgent : false,
+          defaultSendClosedEmails: viewerRole === 'admin' ? usedAssignedAgent : false,
+          canSendAgentNpsEmail: viewerRole === 'admin' ? closeUsedAfc : false,
+          defaultSendAgentNpsEmail: viewerRole === 'admin' ? closeUsedAfc : false,
+          showEmailPreference: viewerRole === 'admin',
+        });
+
+        if (!confirmation.confirmed) {
+          selectEl.value = previousStatus;
+          return;
+        }
+
+        closingDateIso = confirmation.closingDateIso;
+        sendClosedEmails =
+          viewerRole === 'admin' ? confirmation.sendClosedEmails : true;
+        sendAgentNpsEmail =
+          viewerRole === 'admin' ? confirmation.sendAgentNpsEmail : true;
+
+        if (sendClosedEmails) {
           toast.success('A referral rating email will be sent to the referral.');
         }
-      } else if (viewerRole === 'admin') {
-        toast.warning('Referral rating email will not be sent. Please ensure the assigned agent is marked as used.');
-      } else if (viewerRole === 'agent') {
-        sendClosedEmails = usedAssignedAgent;
+        if (sendAgentNpsEmail) {
+          toast.success('An MC NPS email will be sent to the agent.');
+        }
       }
+    }
+
+    if (nextStatus === 'paid' && viewerRole === 'admin') {
+      const confirmation = await confirmPaidStatusDate({
+        initialDateIso: deal.paidDate ?? null,
+      });
+
+      if (!confirmation.confirmed) {
+        selectEl.value = previousStatus;
+        return;
+      }
+
+      paidDateIso = confirmation.paidDateIso;
     }
 
     setStatusMap((prev) => ({ ...prev, [deal._id]: nextStatus }));
@@ -762,6 +797,14 @@ export function DealCard({
       if (nextStatus === 'closed') {
         payload.usedAfc =
           deal.side === 'sell' ? false : (afcMap[deal._id] ?? Boolean(deal.usedAfc));
+        payload.sendAgentNpsEmail = sendAgentNpsEmail;
+        if (closingDateIso) {
+          payload.closingDate = closingDateIso;
+        }
+      }
+
+      if (nextStatus === 'paid' && paidDateIso) {
+        payload.paidDate = paidDateIso;
       }
 
       if (nextStatus === 'terminated') {
@@ -808,6 +851,9 @@ export function DealCard({
             nextStatus === 'terminated'
               ? 0
               : (payload.expectedAmountCents as number | undefined) ?? expectedAmountCents;
+          const nextClosingDate =
+            nextStatus === 'closed' ? closingDateIso ?? item.closingDate ?? null : item.closingDate;
+          const nextPaidDate = nextStatus === 'paid' ? paidDateIso ?? item.paidDate ?? null : item.paidDate;
 
           return {
             ...item,
@@ -815,6 +861,8 @@ export function DealCard({
             expectedAmountCents: nextExpectedAmount,
             receivedAmountCents: nextStatus === 'terminated' ? 0 : item.receivedAmountCents,
             terminatedReason: nextTerminatedReason,
+            closingDate: nextClosingDate,
+            paidDate: nextPaidDate,
             updatedAt,
           };
         });

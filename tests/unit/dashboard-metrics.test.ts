@@ -10,6 +10,12 @@
 
 import { describe, it, expect } from '@jest/globals';
 import { wasTaskResolvedOnOrBeforeDueDate } from '@/lib/admin-task-timeliness';
+import {
+  AHA_NEUTRAL_SCORE,
+  compareAhaRankedAgents,
+  computeAhaReliabilityFactor,
+  normalizeAhaKpiMap
+} from '@/lib/server/aha-leaderboard-scoring';
 
 describe('Dashboard Metrics - Close Rate Calculation', () => {
   it('calculates close rate correctly when referrals and deals are in same timeframe', () => {
@@ -37,6 +43,89 @@ describe('Dashboard Metrics - Close Rate Calculation', () => {
     const closeRate = totalReferrals === 0 ? 0 : (dealsClosed / totalReferrals) * 100;
     
     expect(closeRate).toBe(60);
+  });
+
+  it('uses cohort-matched closed deals for MC close rate leaderboard', () => {
+    const referralByMcMap = new Map([['mcA', 1]]);
+    const filteredReferralIds = new Set(['new-referral']);
+
+    const paymentsByNetwork = [
+      {
+        status: 'closed',
+        agentAttribution: 'AHA',
+        usedAssignedAgent: true,
+        referral: { _id: 'old-referral', lender: 'mcA' }
+      }
+    ];
+
+    const isClosedDealEligible = (payment: (typeof paymentsByNetwork)[number]) =>
+      ['closed', 'payment_sent', 'paid'].includes(payment.status) &&
+      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+      payment.usedAssignedAgent !== false;
+
+    const cohortClosedByMc = new Map<string, number>();
+    paymentsByNetwork
+      .filter(
+        (payment) =>
+          isClosedDealEligible(payment) &&
+          filteredReferralIds.has(payment.referral._id)
+      )
+      .forEach((payment) => {
+        const mcKey = payment.referral.lender ?? 'unassigned';
+        cohortClosedByMc.set(mcKey, (cohortClosedByMc.get(mcKey) ?? 0) + 1);
+      });
+
+    const dealsClosed = cohortClosedByMc.get('mcA') ?? 0;
+    const totalReferrals = referralByMcMap.get('mcA') ?? 0;
+    const closeRate = totalReferrals === 0 ? 0 : (dealsClosed / totalReferrals) * 100;
+
+    expect(dealsClosed).toBe(0);
+    expect(closeRate).toBe(0);
+  });
+
+  it('prevents impossible agent close rates with cohort-based numerator', () => {
+    const agentReferralCount = new Map([['agentA', 1]]);
+    const filteredReferralIds = new Set(['new-referral']);
+
+    const paymentsByNetwork = [
+      {
+        status: 'closed',
+        agentAttribution: 'AHA',
+        usedAssignedAgent: true,
+        referral: { _id: 'old-referral', assignedAgent: 'agentA' }
+      },
+      {
+        status: 'paid',
+        agentAttribution: 'AHA',
+        usedAssignedAgent: true,
+        referral: { _id: 'old-referral-2', assignedAgent: 'agentA' }
+      }
+    ];
+
+    const isClosedDealEligible = (payment: (typeof paymentsByNetwork)[number]) =>
+      ['closed', 'payment_sent', 'paid'].includes(payment.status) &&
+      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+      payment.usedAssignedAgent !== false;
+
+    const cohortClosedByAgent = new Map<string, number>();
+    paymentsByNetwork
+      .filter(
+        (payment) =>
+          isClosedDealEligible(payment) &&
+          filteredReferralIds.has(payment.referral._id)
+      )
+      .forEach((payment) => {
+        const agentKey = payment.referral.assignedAgent ?? 'unassigned';
+        cohortClosedByAgent.set(agentKey, (cohortClosedByAgent.get(agentKey) ?? 0) + 1);
+      });
+
+    const dealsClosed = cohortClosedByAgent.get('agentA') ?? 0;
+    const totalReferrals = agentReferralCount.get('agentA') ?? 0;
+    const closeRate = totalReferrals === 0 ? 0 : (dealsClosed / totalReferrals) * 100;
+
+    expect(dealsClosed).toBe(0);
+    expect(closeRate).toBeLessThanOrEqual(100);
+    expect(closeRate).toBe(0);
   });
 });
 
@@ -506,6 +595,65 @@ describe('Dashboard Metrics - Leaderboard Calculations', () => {
     // When close rates are tied, higher expected revenue should rank first
     expect(leaderboard[0].id).toBe('agent2');
     expect(leaderboard[1].id).toBe('agent1');
+  });
+});
+
+describe('Dashboard Metrics - AHA Composite Scoring', () => {
+  it('uses neutral score when KPI values have no variance', () => {
+    const rawMap = new Map([
+      ['agent-a', 8],
+      ['agent-b', 8],
+      ['agent-c', 8]
+    ]);
+
+    const normalized = normalizeAhaKpiMap(rawMap, false);
+
+    expect(normalized.get('agent-a')).toBe(AHA_NEUTRAL_SCORE);
+    expect(normalized.get('agent-b')).toBe(AHA_NEUTRAL_SCORE);
+    expect(normalized.get('agent-c')).toBe(AHA_NEUTRAL_SCORE);
+  });
+
+  it('applies neutral fill for missing KPI values while keeping fixed denominator', () => {
+    const normalizedCloseRate = new Map([
+      ['agent-a', 100],
+      ['agent-b', 0]
+    ]);
+
+    const closeRateWeight = 5;
+    const npsWeight = 3;
+    const totalWeight = closeRateWeight + npsWeight;
+
+    const scoreForAgentA = ((normalizedCloseRate.get('agent-a') ?? AHA_NEUTRAL_SCORE) * closeRateWeight + AHA_NEUTRAL_SCORE * npsWeight) / totalWeight;
+    const scoreForAgentB = ((normalizedCloseRate.get('agent-b') ?? AHA_NEUTRAL_SCORE) * closeRateWeight + AHA_NEUTRAL_SCORE * npsWeight) / totalWeight;
+
+    expect(scoreForAgentA).toBeCloseTo(81.25, 2);
+    expect(scoreForAgentB).toBeCloseTo(18.75, 2);
+  });
+
+  it('dampens low-volume agents using reliability factor', () => {
+    const minReferrals = 5;
+    const baseScore = 80;
+
+    const lowVolumeReliability = computeAhaReliabilityFactor(1, minReferrals);
+    const qualifiedReliability = computeAhaReliabilityFactor(5, minReferrals);
+
+    const lowVolumeScore = baseScore * lowVolumeReliability;
+    const qualifiedScore = baseScore * qualifiedReliability;
+
+    expect(lowVolumeReliability).toBeCloseTo(Math.sqrt(1 / 5), 5);
+    expect(qualifiedReliability).toBe(1);
+    expect(lowVolumeScore).toBeLessThan(qualifiedScore);
+  });
+
+  it('sorts ties deterministically by referrals, net commission, then id', () => {
+    const ranked = [
+      { id: 'b-agent', score: 72.5, referralCount: 6, netCommissionCents: 150000 },
+      { id: 'a-agent', score: 72.5, referralCount: 6, netCommissionCents: 150000 },
+      { id: 'c-agent', score: 72.5, referralCount: 4, netCommissionCents: 200000 },
+      { id: 'd-agent', score: 72.5, referralCount: 6, netCommissionCents: 100000 }
+    ].sort(compareAhaRankedAgents);
+
+    expect(ranked.map((agent) => agent.id)).toEqual(['a-agent', 'b-agent', 'd-agent', 'c-agent']);
   });
 });
 

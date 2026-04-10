@@ -1350,19 +1350,20 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     // Send congratulatory emails when a deal is marked closed
     // Skip all automated emails if AGIT agent is attached
     const shouldSendClosedEmails = parsed.data.sendClosedEmails ?? false;
-    if (isClosingNow && shouldSendClosedEmails && !hasAgitAgent && isTransactionalEmailConfigured()) {
+    const sendAgentClosedCongrats = payment.usedAfc === true;
+    const shouldSendAgentNpsEmail = parsed.data.sendAgentNpsEmail ?? sendAgentClosedCongrats;
+    if (
+      isClosingNow &&
+      (shouldSendClosedEmails || shouldSendAgentNpsEmail) &&
+      !hasAgitAgent &&
+      isTransactionalEmailConfigured()
+    ) {
       const usedAssignedAgent = payment.usedAssignedAgent ?? existingPayment.usedAssignedAgent ?? false;
-      const sendAgentClosedCongrats = payment.usedAfc === true;
       const origin = getReferralAppBaseUrl();
 
       try {
         // Send closure emails only when the assigned agent handled the deal.
-        if (usedAssignedAgent && referral.assignedAgent && referral.borrower?.email) {
-          const borrowerEmail = referral.borrower.email;
-          const borrowerFirstName = referral.borrower.firstName || 
-            (referral.borrower.name ? referral.borrower.name.split(' ')[0] : null) ||
-            'there';
-          
+        if (usedAssignedAgent && referral.assignedAgent) {
           const agent = referral.assignedAgent as { _id?: any; name?: string; email?: string } | null;
           const agentId = agent?._id?.toString();
           
@@ -1373,39 +1374,46 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
               .select('name')
               .lean<{ name?: string } | null>();
             const agentFullName = agentDoc?.name || agent?.name || 'this agent';
-            const borrowerName = referral.borrower.name || referral.borrower.firstName || 'Client';
+            const borrowerEmail = referral.borrower?.email ?? null;
 
-            // Generate NPS token for agent survey
-            const agentSurveyToken = await createNPSToken({
-              paymentId: existingPayment._id.toString(),
-              referralId: referral._id.toString(),
-              type: 'agent',
-              targetId: agentId,
-              recipientEmail: borrowerEmail,
-              recipientName: borrowerName,
-              agentName: agentFullName,
-            });
+            if (shouldSendClosedEmails && borrowerEmail) {
+              const borrowerFirstName = referral.borrower.firstName ||
+                (referral.borrower.name ? referral.borrower.name.split(' ')[0] : null) ||
+                'there';
+              const borrowerName = referral.borrower.name || referral.borrower.firstName || 'Client';
 
-            const agentSurveyUrl = `${origin}/nps/agent?token=${agentSurveyToken}`;
+              // Generate NPS token for agent survey
+              const agentSurveyToken = await createNPSToken({
+                paymentId: existingPayment._id.toString(),
+                referralId: referral._id.toString(),
+                type: 'agent',
+                targetId: agentId,
+                recipientEmail: borrowerEmail,
+                recipientName: borrowerName,
+                agentName: agentFullName,
+              });
 
-            await sendTransactionalEmail({
-              to: [borrowerEmail],
-              subject: 'Congrats on Your New Home!',
-              html: `
-                <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
-                  <p>Hi ${borrowerFirstName},</p>
-                  <p>Congratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best!</p>
-                  <p style="margin: 20px 0 0 0;">
-                    <a href="${agentSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
-                      Rate Your Agent
-                    </a>
-                  </p>
-                </div>
-              `,
-              text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best!\n\nRate your agent: ${agentSurveyUrl}`,
-            });
+              const agentSurveyUrl = `${origin}/nps/agent?token=${agentSurveyToken}`;
 
-            if (agent?.email && sendAgentClosedCongrats) {
+              await sendTransactionalEmail({
+                to: [borrowerEmail],
+                subject: 'Congrats on Your New Home!',
+                html: `
+                  <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
+                    <p>Hi ${borrowerFirstName},</p>
+                    <p>Congratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best!</p>
+                    <p style="margin: 20px 0 0 0;">
+                      <a href="${agentSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
+                        Rate Your Agent
+                      </a>
+                    </p>
+                  </div>
+                `,
+                text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best!\n\nRate your agent: ${agentSurveyUrl}`,
+              });
+            }
+
+            if (agent?.email && sendAgentClosedCongrats && shouldSendAgentNpsEmail) {
               const agentFirstName = agentFullName.split(' ')[0] || 'there';
               const borrowerDisplayName = referral.borrower.name || referral.borrower.firstName || 'your client';
               const lenderRef = referral.lender as { _id?: unknown } | null | undefined;

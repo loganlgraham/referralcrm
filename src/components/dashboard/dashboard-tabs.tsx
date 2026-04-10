@@ -53,7 +53,12 @@ interface AhaRankedAgent {
   id: string;
   name: string;
   score: number;
+  baseScore: number;
+  reliabilityFactor: number;
   rank: number;
+  qualified: boolean;
+  referralCount: number;
+  netCommissionCents: number;
   kpis: {
     label: string;
     key: string;
@@ -61,10 +66,16 @@ interface AhaRankedAgent {
     displayValue: string;
     normalizedScore: number;
     weight: 'high' | 'medium' | 'low';
+    neutralFilled: boolean;
   }[];
 }
 
-const LIST_PREVIEW_LIMIT = 5;
+/** Target visible rows for scrollable dashboard lists (matches former collapsed preview). */
+const LIST_SCROLL_VISIBLE_ROWS = 5;
+const LEADERBOARD_ROW_HEIGHT_REM = 2.5;
+const LEADERBOARD_HEADER_HEIGHT_REM = 1.75;
+const TERMINATED_DEAL_ROW_HEIGHT_REM = 4;
+const RANKED_LIST_ROW_HEIGHT_REM = 3.25;
 
 interface LostDealEntry {
   id: string;
@@ -965,8 +976,7 @@ function TerminatedDealsList({
   totalLostReferralFeeCents: number;
   totalDeals: number;
 }) {
-  const [showAll, setShowAll] = useState(false);
-  const displayedDeals = showAll ? deals : deals.slice(0, LIST_PREVIEW_LIMIT);
+  const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * TERMINATED_DEAL_ROW_HEIGHT_REM}rem`;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -978,32 +988,29 @@ function TerminatedDealsList({
         </div>
       </div>
 
-      <div className="mt-4 divide-y divide-slate-100">
+      <div className="mt-4">
         {deals.length ? (
-          displayedDeals.map((deal) => (
-            <div key={deal.id} className="flex items-start justify-between gap-3 py-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-900">{deal.mcName}, {deal.agentName}</p>
-                <p className="text-xs text-slate-500">{deal.reasonLabel}</p>
+          <div
+            className="divide-y divide-slate-100 overflow-y-auto"
+            style={{ maxHeight: scrollMaxHeight }}
+            aria-label="Scrollable list: terminated deals"
+          >
+            {deals.map((deal) => (
+              <div key={deal.id} className="flex items-start justify-between gap-3 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-900">{deal.mcName}, {deal.agentName}</p>
+                  <p className="text-xs text-slate-500">{deal.reasonLabel}</p>
+                </div>
+                <p className="whitespace-nowrap text-sm font-semibold text-rose-600">
+                  {formatCurrency(deal.lostReferralFeeCents)}
+                </p>
               </div>
-              <p className="whitespace-nowrap text-sm font-semibold text-rose-600">
-                {formatCurrency(deal.lostReferralFeeCents)}
-              </p>
-            </div>
-          ))
+            ))}
+          </div>
         ) : (
           <p className="py-6 text-center text-sm text-slate-500">No terminated deals this period.</p>
         )}
       </div>
-      {deals.length > LIST_PREVIEW_LIMIT ? (
-        <button
-          type="button"
-          className="mt-3 text-sm font-semibold text-sky-600 hover:text-sky-800"
-          onClick={() => setShowAll((prev) => !prev)}
-        >
-          {showAll ? 'Show less' : 'Show more'}
-        </button>
-      ) : null}
     </div>
   );
 }
@@ -1071,46 +1078,42 @@ function RankedList({
   formatValue?: (value: number) => string;
   emptyMessage?: string;
 }) {
-  const [showAll, setShowAll] = useState(false);
-  const displayedItems = showAll ? items : items.slice(0, LIST_PREVIEW_LIMIT);
   const maxValue = items.length > 0 ? Math.max(...items.map((i) => i.value), 1) : 1;
+  const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * RANKED_LIST_ROW_HEIGHT_REM}rem`;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
-      <div className="mt-4 space-y-3">
-        <ul className="space-y-2.5">
-          {items.length ? (
-            displayedItems.map((item) => {
-              const barPct = Math.max((item.value / maxValue) * 100, item.value > 0 ? 2 : 0);
-              return (
-                <li key={item.label}>
-                  <div className="flex items-center justify-between text-sm text-slate-700">
-                    <span className="font-medium text-slate-900">{item.label}</span>
-                    <span className="text-slate-600">{formatValue(item.value)}</span>
-                  </div>
-                  <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full bg-sky-400"
-                      style={{ width: `${barPct}%` }}
-                    />
-                  </div>
-                </li>
-              );
-            })
-          ) : (
-            <li className="text-sm text-slate-500">{emptyMessage}</li>
-          )}
-        </ul>
-        {items.length > LIST_PREVIEW_LIMIT ? (
-          <button
-            type="button"
-            className="text-sm font-semibold text-sky-600 hover:text-sky-800"
-            onClick={() => setShowAll((prev) => !prev)}
-          >
-            {showAll ? 'Show less' : 'Show more'}
-          </button>
-        ) : null}
+      <div className="mt-4">
+        <div
+          className={items.length ? 'overflow-y-auto' : undefined}
+          style={items.length ? { maxHeight: scrollMaxHeight } : undefined}
+          aria-label={items.length ? `Scrollable list: ${title}` : undefined}
+        >
+          <ul className="space-y-2.5">
+            {items.length ? (
+              items.map((item) => {
+                const barPct = Math.max((item.value / maxValue) * 100, item.value > 0 ? 2 : 0);
+                return (
+                  <li key={item.label}>
+                    <div className="flex items-center justify-between text-sm text-slate-700">
+                      <span className="font-medium text-slate-900">{item.label}</span>
+                      <span className="text-slate-600">{formatValue(item.value)}</span>
+                    </div>
+                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full bg-sky-400"
+                        style={{ width: `${barPct}%` }}
+                      />
+                    </div>
+                  </li>
+                );
+              })
+            ) : (
+              <li className="text-sm text-slate-500">{emptyMessage}</li>
+            )}
+          </ul>
+        </div>
       </div>
     </div>
   );
@@ -1127,8 +1130,7 @@ function LeaderboardTable({
   valueLabel: string;
   actions?: ReactNode;
 }) {
-  const [showAll, setShowAll] = useState(false);
-  const displayedEntries = showAll ? entries : entries.slice(0, LIST_PREVIEW_LIMIT);
+  const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -1136,53 +1138,50 @@ function LeaderboardTable({
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
-      <table className="mt-4 w-full text-sm">
-        <thead>
-          <tr className="text-left text-xs text-slate-500">
-            <th className="py-1 font-medium">Rank</th>
-            <th className="py-1 font-medium">Name</th>
-            <th className="py-1 font-medium text-right">{valueLabel}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {entries.length ? (
-            displayedEntries.map((entry, index) => (
-              <tr key={`${entry.id}-${index}`} className="border-t border-slate-100 text-slate-700">
-                <td className="py-2 text-slate-400">#{index + 1}</td>
-                <td className="py-2 font-medium text-slate-900">{entry.name}</td>
-                <td className="py-2 text-right">
-                  {entry.revenueCents != null
-                    ? formatCurrency(entry.revenueCents)
-                    : entry.expectedRevenueCents != null
-                      ? formatCurrency(entry.expectedRevenueCents)
-                      : entry.closeRate != null
-                        ? `${entry.closeRate.toFixed(1)}%`
-                        : entry.referrals != null
-                          ? formatNumber(entry.referrals)
-                          : entry.dealsClosed != null
-                            ? `${formatNumber(entry.dealsClosed)} / ${formatNumber(entry.totalReferrals ?? 0)}`
-                            : '—'}
+      <div
+        className="mt-4 overflow-y-auto"
+        style={entries.length ? { maxHeight: scrollMaxHeight } : undefined}
+        aria-label={entries.length ? `Scrollable list: ${title}` : undefined}
+      >
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 z-[1] bg-white shadow-[inset_0_-1px_0_0_rgb(241_245_249)]">
+            <tr className="text-left text-xs text-slate-500">
+              <th className="py-1 font-medium">Rank</th>
+              <th className="py-1 font-medium">Name</th>
+              <th className="py-1 font-medium text-right">{valueLabel}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.length ? (
+              entries.map((entry, index) => (
+                <tr key={`${entry.id}-${index}`} className="border-t border-slate-100 text-slate-700">
+                  <td className="py-2 text-slate-400">#{index + 1}</td>
+                  <td className="py-2 font-medium text-slate-900">{entry.name}</td>
+                  <td className="py-2 text-right">
+                    {entry.revenueCents != null
+                      ? formatCurrency(entry.revenueCents)
+                      : entry.expectedRevenueCents != null
+                        ? formatCurrency(entry.expectedRevenueCents)
+                        : entry.closeRate != null
+                          ? `${entry.closeRate.toFixed(1)}%`
+                          : entry.referrals != null
+                            ? formatNumber(entry.referrals)
+                            : entry.dealsClosed != null
+                              ? `${formatNumber(entry.dealsClosed)} / ${formatNumber(entry.totalReferrals ?? 0)}`
+                              : '—'}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={3} className="py-6 text-center text-sm text-slate-500">
+                  Nothing to display for this period.
                 </td>
               </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan={3} className="py-6 text-center text-sm text-slate-500">
-                Nothing to display for this period.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-      {entries.length > LIST_PREVIEW_LIMIT ? (
-        <button
-          type="button"
-          className="mt-3 text-sm font-semibold text-sky-600 hover:text-sky-800"
-          onClick={() => setShowAll((prev) => !prev)}
-        >
-          {showAll ? 'Show less' : 'Show more'}
-        </button>
-      ) : null}
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -1793,6 +1792,10 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+      <p className="mt-1 text-xs text-slate-500">
+        Composite score blends weighted KPIs. Agents with fewer than 3 referrals are marked provisional and receive a
+        reliability adjustment.
+      </p>
       {data.rankedAgents.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-500">No agents with data for this period.</p>
       ) : (
@@ -1818,6 +1821,15 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
                       >
                         {agent.name}
                       </button>
+                      {!agent.qualified ? (
+                        <span className="ml-2 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                          Provisional
+                        </span>
+                      ) : (
+                        <span className="ml-2 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                          Qualified
+                        </span>
+                      )}
                     </td>
                     <td className="py-2 text-right">
                       <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${getScoreStyle(agent.score)}`}>
@@ -1846,6 +1858,20 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
                 {selectedAgent.score.toFixed(1)} / 100
               </span>
             </div>
+            <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <p>
+                Base score: <span className="font-semibold text-slate-900">{selectedAgent.baseScore.toFixed(1)}</span>
+                {' '}· Reliability factor:{' '}
+                <span className="font-semibold text-slate-900">{selectedAgent.reliabilityFactor.toFixed(3)}</span>
+                {' '}· Referrals:{' '}
+                <span className="font-semibold text-slate-900">{formatNumber(selectedAgent.referralCount)}</span>
+              </p>
+              {!selectedAgent.qualified ? (
+                <p className="mt-1">
+                  Provisional ranking: fewer than 3 referrals in selected timeframe.
+                </p>
+              ) : null}
+            </div>
             <div>
               <p className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-400">KPI Breakdown</p>
               <div className="space-y-3">
@@ -1857,6 +1883,11 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
                         <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getWeightBadge(kpi.weight)}`}>
                           {getWeightLabel(kpi.weight)}
                         </span>
+                        {kpi.neutralFilled ? (
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                            Neutral
+                          </span>
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-3 text-sm">
                         <span className="text-slate-500">{kpi.displayValue}</span>
