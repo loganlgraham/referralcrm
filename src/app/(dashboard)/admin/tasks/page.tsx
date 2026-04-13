@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { getCurrentSession } from '@/lib/auth';
+import { classifyDueDayBucket } from '@/lib/admin-task-day';
 import { connectMongo } from '@/lib/mongoose';
 import { AdminTask, getEffectiveDueDate, type AdminTaskLean } from '@/models/admin-task';
 import { AdminTaskBoard } from '@/components/admin/admin-task-board';
@@ -22,23 +23,14 @@ export default async function AdminTasksPage() {
     .select('dueAt dueAtOverride snoozedUntil status')
     .lean<AdminTaskLean[]>();
 
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const { dueTodayCount, overdueCount } = tasks.reduce((acc, task) => {
     const effectiveDue = getEffectiveDueDate(task);
     if (!effectiveDue) return acc;
 
-    const dueDate = new Date(
-      effectiveDue.getFullYear(),
-      effectiveDue.getMonth(),
-      effectiveDue.getDate()
-    );
-    const dueTime = dueDate.getTime();
-    const todayTime = today.getTime();
-
-    if (dueTime === todayTime) {
+    const bucket = classifyDueDayBucket(effectiveDue);
+    if (bucket === 'today') {
       acc.dueTodayCount += 1;
-    } else if (dueTime < todayTime) {
+    } else if (bucket === 'overdue') {
       acc.overdueCount += 1;
     }
 

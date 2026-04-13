@@ -506,16 +506,26 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
         if (shouldSendClosedEmails || (shouldSendAgentNpsEmail && sendAgentClosedCongrats)) {
           try {
+            const dealAgentId = latestAttributedDeal.agentId ? String(latestAttributedDeal.agentId) : null;
+            const sideSpecificAgentId = getAgentIdForSide(
+              {
+                buySideAgent: referral.buySideAgent as any,
+                sellSideAgent: referral.sellSideAgent as any,
+                assignedAgent: referral.assignedAgent as any,
+              },
+              requestSide
+            );
             const assignedAgentRef = referral.assignedAgent as { _id?: unknown } | null | undefined;
-            const assignedAgentId = assignedAgentRef?._id ? String(assignedAgentRef._id) : null;
-            const assignedAgent = assignedAgentId
-              ? await Agent.findById(assignedAgentId)
+            const fallbackAssignedAgentId = assignedAgentRef?._id ? String(assignedAgentRef._id) : null;
+            const resolvedAgentId = dealAgentId ?? sideSpecificAgentId ?? fallbackAssignedAgentId;
+            const resolvedAgent = resolvedAgentId
+              ? await Agent.findById(resolvedAgentId)
                 .select('name email')
                 .lean<{ _id: unknown; name?: string | null; email?: string | null } | null>()
               : null;
-            const agentId = assignedAgent?._id ? String(assignedAgent._id) : null;
-            const agentName = assignedAgent?.name ?? 'this agent';
-            const agentEmail = assignedAgent?.email ?? null;
+            const agentId = resolvedAgentId ?? (resolvedAgent?._id ? String(resolvedAgent._id) : null);
+            const agentName = resolvedAgent?.name ?? 'this agent';
+            const agentEmail = resolvedAgent?.email ?? null;
             const borrowerEmail = referral.borrower?.email ?? null;
             const borrowerName = referral.borrower?.name || referral.borrower?.firstName || 'Client';
             const borrowerFirstName =
@@ -612,9 +622,6 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         side: requestSide,
         $or: [{ usedAssignedAgent: false }, { agentAttribution: 'OUTSIDE_AGENT' }],
       };
-      if (currentAgentId) {
-        unassignedDealQuery.agentId = currentAgentId;
-      }
       const latestUnassignedDeal = await Payment.findOne(unassignedDealQuery).sort({ createdAt: -1 });
 
       if (latestUnassignedDeal) {

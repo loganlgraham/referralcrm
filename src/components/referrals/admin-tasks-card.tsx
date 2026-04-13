@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { getEightAmMountainDateTimeLocalForDay, getTodayEightAmMountainDateTimeLocal } from '@/lib/admin-task-day';
 import { TaskItem, type TaskItemData } from '@/components/admin/task-item';
 
 interface AdminTask {
@@ -70,15 +71,8 @@ function shiftMonth(value: Date, amount: number): Date {
   return new Date(value.getFullYear(), value.getMonth() + amount, 1);
 }
 
-function toDateTimeLocal(date: Date): string {
-  return `${date.getFullYear()}-${padNumber(date.getMonth() + 1)}-${padNumber(date.getDate())}T${padNumber(date.getHours())}:${padNumber(date.getMinutes())}`;
-}
-
 function getDefaultDueAtForDay(dayKey: string): string {
-  const parsed = parseDayKey(dayKey);
-  if (!parsed) return '';
-  parsed.setHours(9, 0, 0, 0);
-  return toDateTimeLocal(parsed);
+  return getEightAmMountainDateTimeLocalForDay(dayKey);
 }
 
 function getDueBucket(effectiveDue: string | null | undefined): number {
@@ -102,7 +96,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
   const [showUpcoming, setShowUpcoming] = useState(false);
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualTitle, setManualTitle] = useState('');
-  const [manualDueAt, setManualDueAt] = useState('');
+  const [manualDueAt, setManualDueAt] = useState(() => getTodayEightAmMountainDateTimeLocal());
   const [showDayManualForm, setShowDayManualForm] = useState(false);
   const [dayManualTitle, setDayManualTitle] = useState('');
   const [dayManualDueAt, setDayManualDueAt] = useState('');
@@ -326,7 +320,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
     const created = await createManualTask(manualTitle, manualDueAt);
     if (!created) return;
     setManualTitle('');
-    setManualDueAt('');
+    setManualDueAt(getTodayEightAmMountainDateTimeLocal());
     setShowManualForm(false);
   };
 
@@ -408,7 +402,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
               onClick={() => {
                 setShowManualForm(false);
                 setManualTitle('');
-                setManualDueAt('');
+                setManualDueAt(getTodayEightAmMountainDateTimeLocal());
               }}
               className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
             >
