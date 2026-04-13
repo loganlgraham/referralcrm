@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { connectMongo } from '@/lib/mongoose';
 import { requireAdmin } from '@/lib/auth';
+import { classifyDueDayBucket } from '@/lib/admin-task-day';
 import { AdminTask, getEffectiveDueDate, type AdminTaskLean } from '@/models/admin-task';
 import { Referral } from '@/models/referral';
 
@@ -85,19 +86,7 @@ function deriveSimilarTaskGroup(title?: string | null): { key: string; label: st
 function getTaskBucket(effectiveDue: Date | null, status: string): TaskBucket {
   if (status === 'completed') return 'completed';
   if (!effectiveDue) return 'upcoming';
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dueDate = new Date(
-    effectiveDue.getFullYear(),
-    effectiveDue.getMonth(),
-    effectiveDue.getDate()
-  );
-  const diffMs = dueDate.getTime() - today.getTime();
-  const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-
-  if (diffDays < 0) return 'overdue';
-  if (diffDays === 0) return 'today';
-  return 'upcoming';
+  return classifyDueDayBucket(effectiveDue);
 }
 
 function getFocalTask(card: ReferralTaskCard, view: BoardView): TaskWithEffective | null {

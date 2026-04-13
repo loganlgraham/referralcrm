@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { getTodayEightAmMountainDateTimeLocal } from '@/lib/admin-task-day';
 import { TaskItem, type TaskItemData } from './task-item';
 import type { ReferralTaskCard as ReferralTaskCardType } from '@/app/api/admin/tasks/board/route';
 
@@ -19,7 +20,7 @@ interface ReferralTaskCardProps {
 export function ReferralTaskCard({ card, view = 'urgent', onMutate }: ReferralTaskCardProps) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [addTitle, setAddTitle] = useState('');
-  const [addDueAt, setAddDueAt] = useState('');
+  const [addDueAt, setAddDueAt] = useState(() => getTodayEightAmMountainDateTimeLocal());
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [showUpcoming, setShowUpcoming] = useState(false);
   const [showOverdueToday, setShowOverdueToday] = useState(false);
@@ -139,7 +140,7 @@ export function ReferralTaskCard({ card, view = 'urgent', onMutate }: ReferralTa
       toast.success('Task created');
       onMutate();
       setAddTitle('');
-      setAddDueAt('');
+      setAddDueAt(getTodayEightAmMountainDateTimeLocal());
       setShowAddForm(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create task');
@@ -264,7 +265,7 @@ export function ReferralTaskCard({ card, view = 'urgent', onMutate }: ReferralTa
               onClick={() => {
                 setShowAddForm(false);
                 setAddTitle('');
-                setAddDueAt('');
+                setAddDueAt(getTodayEightAmMountainDateTimeLocal());
               }}
               className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
             >
