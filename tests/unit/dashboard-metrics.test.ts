@@ -792,6 +792,28 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
 
     expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
   });
+
+  it('penalizes higher financing-termination rates as a high-tier negative KPI', () => {
+    const normalizedFinancingTerminationRate = new Map([
+      ['mc-a', 100],
+      ['mc-b', 0]
+    ]);
+    const financingTerminationWeight = 3;
+    const baselineWeight = 3;
+    const baselineNormalizedScore = 50;
+    const totalWeight = financingTerminationWeight + baselineWeight;
+
+    const scoreForMcA =
+      ((normalizedFinancingTerminationRate.get('mc-a') ?? AHA_NEUTRAL_SCORE) * financingTerminationWeight +
+        baselineNormalizedScore * baselineWeight) /
+      totalWeight;
+    const scoreForMcB =
+      ((normalizedFinancingTerminationRate.get('mc-b') ?? AHA_NEUTRAL_SCORE) * financingTerminationWeight +
+        baselineNormalizedScore * baselineWeight) /
+      totalWeight;
+
+    expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
+  });
 });
 
 describe('Dashboard Metrics - MC AFC Risk Call List', () => {

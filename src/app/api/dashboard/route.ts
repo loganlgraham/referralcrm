@@ -2281,6 +2281,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     | 'referralCount'
     | 'noAfcCloseRate'
     | 'noAssignedAgentCloseRate'
+    | 'financingTerminationRate'
     | 'agingPipelineRisk'
     | 'terminationSignal'
     | 'sourceQualityIndex'
@@ -2337,6 +2338,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     referralCount: 3,
     noAfcCloseRate: 3,
     noAssignedAgentCloseRate: 3,
+    financingTerminationRate: 3,
     agingPipelineRisk: 2,
     terminationSignal: 2,
     sourceQualityIndex: 2,
@@ -2351,6 +2353,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     referralCount: 'high',
     noAfcCloseRate: 'high',
     noAssignedAgentCloseRate: 'high',
+    financingTerminationRate: 'high',
     agingPipelineRisk: 'medium',
     terminationSignal: 'medium',
     sourceQualityIndex: 'medium',
@@ -2365,6 +2368,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     referralCount: 'Referral Count',
     noAfcCloseRate: 'Closes Without AFC',
     noAssignedAgentCloseRate: 'Closes Without Assigned Agent',
+    financingTerminationRate: 'Financing Terminations',
     agingPipelineRisk: 'Aging Pipeline Risk',
     terminationSignal: 'Termination Signal',
     sourceQualityIndex: 'Source Quality Index',
@@ -2379,6 +2383,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     'referralCount',
     'noAfcCloseRate',
     'noAssignedAgentCloseRate',
+    'financingTerminationRate',
     'npsScore',
     'afcCaptureRate',
     'agingPipelineRisk',
@@ -2531,6 +2536,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     referralCount: new Map(),
     noAfcCloseRate: new Map(),
     noAssignedAgentCloseRate: new Map(),
+    financingTerminationRate: new Map(),
     agingPipelineRisk: new Map(),
     terminationSignal: new Map(),
     sourceQualityIndex: new Map(),
@@ -2545,6 +2551,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     referralCount: new Map(),
     noAfcCloseRate: new Map(),
     noAssignedAgentCloseRate: new Map(),
+    financingTerminationRate: new Map(),
     agingPipelineRisk: new Map(),
     terminationSignal: new Map(),
     sourceQualityIndex: new Map(),
@@ -2604,6 +2611,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const terminated = mcTerminatedMap.get(id);
     const closedDeals = mcTotalClosedDealsMap.get(id) ?? 0;
     const outcomeCount = (terminated?.total ?? 0) + closedDeals;
+    if (outcomeCount > 0) {
+      const financingTerminationCount = terminated?.reasons.financing ?? 0;
+      const financingTerminationRate = (financingTerminationCount / outcomeCount) * 100;
+      mcKpiRaw.financingTerminationRate.set(id, financingTerminationRate);
+      mcKpiDisplayMap.financingTerminationRate.set(
+        id,
+        `${financingTerminationRate.toFixed(1)}% (${financingTerminationCount})`
+      );
+    }
     if (terminated && outcomeCount > 0) {
       const terminationRate = (terminated.total / outcomeCount) * 100;
       const severityScore =
@@ -2671,6 +2687,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     referralCount: normalizeAhaKpiMap(mcKpiRaw.referralCount, false),
     noAfcCloseRate: normalizeAhaKpiMap(mcKpiRaw.noAfcCloseRate, true),
     noAssignedAgentCloseRate: normalizeAhaKpiMap(mcKpiRaw.noAssignedAgentCloseRate, true),
+    financingTerminationRate: normalizeAhaKpiMap(mcKpiRaw.financingTerminationRate, true),
     agingPipelineRisk: normalizeAhaKpiMap(mcKpiRaw.agingPipelineRisk, true),
     terminationSignal: normalizeAhaKpiMap(mcKpiRaw.terminationSignal, true),
     sourceQualityIndex: normalizeAhaKpiMap(mcKpiRaw.sourceQualityIndex, false),

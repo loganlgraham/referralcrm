@@ -1932,8 +1932,8 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
       <p className="mt-1 text-xs text-slate-500">
         Composite score blends weighted MC KPIs. Referral volume and NPS are top-tier factors, and closes without AFC
-        or without the assigned agent are high-weight penalties. MCs with fewer than 3 referrals are marked provisional
-        and receive a reliability adjustment.
+        or without the assigned agent are high-weight penalties. Financing-related terminations also count against MC
+        score. MCs with fewer than 3 referrals are marked provisional and receive a reliability adjustment.
       </p>
       {entries.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-500">No MCs with data for this period.</p>
