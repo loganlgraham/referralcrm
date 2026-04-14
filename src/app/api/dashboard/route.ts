@@ -2370,7 +2370,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     | 'noAssignedAgentCloseRate'
     | 'financingTerminationRate'
     | 'agingPipelineRisk'
-    | 'terminationSignal'
     | 'sourceQualityIndex'
     | 'afcCaptureRate'
     | 'forecastAccuracy'
@@ -2428,7 +2427,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     noAssignedAgentCloseRate: 3,
     financingTerminationRate: 3,
     agingPipelineRisk: 2,
-    terminationSignal: 2,
     sourceQualityIndex: 2,
     afcCaptureRate: 3,
     forecastAccuracy: 2,
@@ -2444,7 +2442,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     noAssignedAgentCloseRate: 'high',
     financingTerminationRate: 'high',
     agingPipelineRisk: 'medium',
-    terminationSignal: 'medium',
     sourceQualityIndex: 'medium',
     afcCaptureRate: 'high',
     forecastAccuracy: 'medium',
@@ -2460,7 +2457,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     noAssignedAgentCloseRate: 'Closes Without Assigned Agent',
     financingTerminationRate: 'Financing Terminations',
     agingPipelineRisk: 'Aging Pipeline Risk',
-    terminationSignal: 'Termination Signal',
     sourceQualityIndex: 'Source Quality Index',
     afcCaptureRate: 'AFC Capture Rate',
     forecastAccuracy: 'Forecast Accuracy',
@@ -2478,31 +2474,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     'npsScore',
     'afcCaptureRate',
     'agingPipelineRisk',
-    'terminationSignal',
     'sourceQualityIndex',
     'forecastAccuracy',
   ];
-
-  const assertNever = (value: never): never => {
-    throw new Error(`Unhandled MC KPI value: ${String(value)}`);
-  };
-
-  const formatTerminationReason = (reason: TerminatedReasonKey): string => {
-    switch (reason) {
-      case 'financing':
-        return 'Financing';
-      case 'appraisal':
-        return 'Appraisal';
-      case 'inspection':
-        return 'Inspection';
-      case 'changed_mind':
-        return 'Changed Mind';
-      case 'unknown':
-        return 'Unknown';
-      default:
-        return assertNever(reason);
-    }
-  };
 
   const mcVelocityDaysMap = new Map<string, number[]>();
   const mcAfcCaptureMap = new Map<string, { eligible: number; captured: number }>();
@@ -2649,7 +2623,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     noAssignedAgentCloseRate: new Map(),
     financingTerminationRate: new Map(),
     agingPipelineRisk: new Map(),
-    terminationSignal: new Map(),
     sourceQualityIndex: new Map(),
     afcCaptureRate: new Map(),
     forecastAccuracy: new Map(),
@@ -2665,7 +2638,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     noAssignedAgentCloseRate: new Map(),
     financingTerminationRate: new Map(),
     agingPipelineRisk: new Map(),
-    terminationSignal: new Map(),
     sourceQualityIndex: new Map(),
     afcCaptureRate: new Map(),
     forecastAccuracy: new Map(),
@@ -2738,23 +2710,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         `${financingTerminationRate.toFixed(1)}% (${financingTerminationCount})`
       );
     }
-    if (terminated && outcomeCount > 0) {
-      const terminationRate = (terminated.total / outcomeCount) * 100;
-      const severityScore =
-        (terminated.reasons.financing * 1 +
-          terminated.reasons.appraisal * 0.9 +
-          terminated.reasons.inspection * 0.7 +
-          terminated.reasons.changed_mind * 0.5 +
-          terminated.reasons.unknown * 0.6) /
-        Math.max(terminated.total, 1);
-      const signal = terminationRate * (0.7 + severityScore * 0.3);
-      mcKpiRaw.terminationSignal.set(id, signal);
-
-      const topReason = (Object.entries(terminated.reasons) as [TerminatedReasonKey, number][])
-        .sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'unknown';
-      mcKpiDisplayMap.terminationSignal.set(id, `${terminationRate.toFixed(1)}% (${formatTerminationReason(topReason)})`);
-    }
-
     const sourceCounts = sourceBreakdownByMc.get(id);
     if (sourceCounts && referralsForMc > 0) {
       let weightedSourceScore = 0;
@@ -2808,7 +2763,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     noAssignedAgentCloseRate: normalizeAhaKpiMap(mcKpiRaw.noAssignedAgentCloseRate, true),
     financingTerminationRate: normalizeAhaKpiMap(mcKpiRaw.financingTerminationRate, true),
     agingPipelineRisk: normalizeAhaKpiMap(mcKpiRaw.agingPipelineRisk, true),
-    terminationSignal: normalizeAhaKpiMap(mcKpiRaw.terminationSignal, true),
     sourceQualityIndex: normalizeAhaKpiMap(mcKpiRaw.sourceQualityIndex, false),
     afcCaptureRate: normalizeAhaKpiMap(mcKpiRaw.afcCaptureRate, false),
     forecastAccuracy: normalizeAhaKpiMap(mcKpiRaw.forecastAccuracy, false),

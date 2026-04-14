@@ -9,7 +9,11 @@ import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/cons
 import { formatCurrency, formatDateTimeMST } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { useAgentOptions } from '@/hooks/use-agent-options';
-import { confirmCloseStatusDate, confirmPaidStatusDate } from '@/components/referrals/status-date-confirmation-toast';
+import {
+  confirmCloseStatusDate,
+  confirmFeeBreakdownSend,
+  confirmPaidStatusDate,
+} from '@/components/referrals/status-date-confirmation-toast';
 export type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
 export type AgentSelectValue = '' | 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT';
 
@@ -1132,7 +1136,8 @@ export function DealCard({
       ? 'This fee breakdown was already sent. Resend it now?'
       : 'Send fee breakdown email to agent now?\n\n' +
         'If you send manually, the automatic send (7 days before closing) will be disabled for this deal.';
-    if (!window.confirm(message)) {
+    const confirmation = await confirmFeeBreakdownSend({ message });
+    if (!confirmation.confirmed) {
       return;
     }
 
@@ -1142,6 +1147,7 @@ export function DealCard({
       const response = await fetch(`/api/payments/${deal._id}/send-fee-breakdown`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ additionalCc: confirmation.additionalCc }),
       });
 
       if (!response.ok) {

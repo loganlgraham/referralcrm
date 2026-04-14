@@ -29,6 +29,9 @@ interface PaymentLean {
   propertyState?: string | null;
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DEFAULT_FEE_BREAKDOWN_CC = 'kristen.truong@americanhomeagents.com';
+
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -60,6 +63,25 @@ export async function POST(
   // Check if email is configured
   if (!isTransactionalEmailConfigured()) {
     return NextResponse.json({ error: 'Email service not configured' }, { status: 503 });
+  }
+
+  let additionalCc: string | null = null;
+  const requestBody = await request.json().catch(() => null);
+  if (requestBody && typeof requestBody === 'object' && 'additionalCc' in requestBody) {
+    const additionalCcRaw = (requestBody as { additionalCc?: unknown }).additionalCc;
+    if (additionalCcRaw != null && typeof additionalCcRaw !== 'string') {
+      return NextResponse.json({ error: 'Additional CC must be a string' }, { status: 400 });
+    }
+
+    if (typeof additionalCcRaw === 'string') {
+      const normalizedAdditionalCc = additionalCcRaw.trim().toLowerCase();
+      if (normalizedAdditionalCc.length > 0) {
+        if (!EMAIL_REGEX.test(normalizedAdditionalCc)) {
+          return NextResponse.json({ error: 'Additional CC email is invalid' }, { status: 400 });
+        }
+        additionalCc = normalizedAdditionalCc;
+      }
+    }
   }
 
   try {
@@ -144,6 +166,13 @@ export async function POST(
 
     // Generate subject line with borrower's last name
     const subject = generateFeeBreakdownSubject(borrowerName);
+    const ccRecipients = Array.from(
+      new Set(
+        [DEFAULT_FEE_BREAKDOWN_CC, additionalCc]
+          .filter((email): email is string => Boolean(email))
+          .filter((email) => email.toLowerCase() !== agent.email.toLowerCase())
+      )
+    );
 
     // Read and prepare PDF attachments
     const attachments = [];
@@ -192,7 +221,7 @@ export async function POST(
     // Send email
     const emailSent = await sendTransactionalEmail({
       to: [agent.email],
-      cc: ['kristen.truong@americanhomeagents.com'],
+      cc: ccRecipients,
       subject,
       html,
       text,
