@@ -2064,7 +2064,7 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
         Open buy-side AFC-eligible referrals ranked by AFC-loss risk.
       </p>
       {entries.length === 0 ? (
-        <p className="py-8 text-center text-sm text-slate-500">No qualifying deals in the next 30 days.</p>
+        <p className="py-8 text-center text-sm text-slate-500">No qualifying referrals in the active AFC pipeline.</p>
       ) : (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -2110,7 +2110,13 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
                       </span>
                       <span className="font-semibold text-slate-900">{entry.riskScore.toFixed(1)}</span>
                     </div>
-                    <div className="text-xs text-slate-500">{entry.usedAfc === true ? 'AFC attached' : 'AFC not attached'}</div>
+                    <div className="text-xs text-slate-500">
+                      {entry.usedAfc === true
+                        ? 'AFC attached'
+                        : entry.usedAfc === false
+                          ? 'AFC not attached on deal'
+                          : 'No deal record yet'}
+                    </div>
                   </td>
                   <td className="px-3 py-2 text-xs text-slate-600">
                     {entry.reasons.length ? entry.reasons.join(' · ') : 'No elevated signals'}

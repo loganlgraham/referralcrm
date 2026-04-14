@@ -712,21 +712,25 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
 
 describe('Dashboard Metrics - MC AFC Risk Call List', () => {
   const computeRiskScore = ({
+    hasDealRecord,
     usedAfc,
     daysSinceActivity,
     daysToClose,
     outsideLossRatePct,
-    sourceCloseRatePct
+    sourceCloseRatePct,
+    noteSignalScore = 0
   }: {
+    hasDealRecord: boolean;
     usedAfc: boolean | null;
     daysSinceActivity: number;
     daysToClose: number;
     outsideLossRatePct: number;
     sourceCloseRatePct: number;
+    noteSignalScore?: number;
   }) => {
     let score = 0;
 
-    if (usedAfc !== true) score += 35;
+    if (hasDealRecord && usedAfc !== true) score += 35;
 
     if (daysSinceActivity >= 30) score += 25;
     else if (daysSinceActivity >= 14) score += 15;
@@ -738,12 +742,14 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
 
     score += Math.min(15, outsideLossRatePct * 0.15);
     score += Math.min(10, ((100 - sourceCloseRatePct) / 100) * 10);
+    score += Math.max(0, noteSignalScore);
 
     return Math.min(100, Number(score.toFixed(1)));
   };
 
   it('ranks higher-risk calls first using the risk model factors', () => {
     const highRisk = computeRiskScore({
+      hasDealRecord: true,
       usedAfc: false,
       daysSinceActivity: 21,
       daysToClose: 6,
@@ -751,6 +757,7 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
       sourceCloseRatePct: 45
     });
     const lowerRisk = computeRiskScore({
+      hasDealRecord: true,
       usedAfc: true,
       daysSinceActivity: 3,
       daysToClose: 24,
@@ -761,6 +768,27 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     expect(highRisk).toBeGreaterThan(lowerRisk);
     expect(highRisk).toBeGreaterThanOrEqual(70);
     expect(lowerRisk).toBeLessThan(40);
+  });
+
+  it('does not apply AFC-attach penalty before a deal record exists', () => {
+    const preDealScore = computeRiskScore({
+      hasDealRecord: false,
+      usedAfc: null,
+      daysSinceActivity: 10,
+      daysToClose: 20,
+      outsideLossRatePct: 20,
+      sourceCloseRatePct: 60
+    });
+    const withDealNotAttached = computeRiskScore({
+      hasDealRecord: true,
+      usedAfc: false,
+      daysSinceActivity: 10,
+      daysToClose: 20,
+      outsideLossRatePct: 20,
+      sourceCloseRatePct: 60
+    });
+
+    expect(withDealNotAttached - preDealScore).toBeCloseTo(35, 2);
   });
 
   it('returns deterministic order when risk scores tie by using days-to-close', () => {
@@ -804,6 +832,38 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
       .map((referral) => referral.id);
 
     expect(included).toEqual(['paired', 'active', 'under-contract']);
+  });
+
+  it('adds note-signal risk for strong outside/local lender phrasing', () => {
+    const strongTextRisk = 25;
+    const baseScore = computeRiskScore({
+      hasDealRecord: false,
+      usedAfc: null,
+      daysSinceActivity: 5,
+      daysToClose: 30,
+      outsideLossRatePct: 10,
+      sourceCloseRatePct: 70,
+      noteSignalScore: 0
+    });
+    const withStrongNotes = computeRiskScore({
+      hasDealRecord: false,
+      usedAfc: null,
+      daysSinceActivity: 5,
+      daysToClose: 30,
+      outsideLossRatePct: 10,
+      sourceCloseRatePct: 70,
+      noteSignalScore: strongTextRisk
+    });
+
+    expect(withStrongNotes - baseScore).toBeCloseTo(25, 2);
+  });
+
+  it('suppresses note-only risk when counter-signal indicates staying with AFC', () => {
+    const strongTextRisk = 25;
+    const suppressorReduction = 18;
+    const resultingSignal = Math.max(0, strongTextRisk - suppressorReduction);
+
+    expect(resultingSignal).toBe(7);
   });
 });
 

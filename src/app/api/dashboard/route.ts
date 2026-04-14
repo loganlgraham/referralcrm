@@ -165,6 +165,11 @@ interface DashboardReferral {
   lender?: Types.ObjectId | null;
   status?: string;
   preApprovalAmountCents?: number;
+  initialNotes?: string;
+  notes?: {
+    content?: string;
+    createdAt?: Date;
+  }[];
   loanFileNumber?: string;
   borrower?: {
     name?: string;
@@ -190,6 +195,33 @@ const ACTIVE_PIPELINE_STATUSES = new Set<string>([
 const ACTIVE_PIPELINE_STATUS_KEYS = new Set(
   Array.from(ACTIVE_PIPELINE_STATUSES, (status) => status.trim().toLowerCase())
 );
+const NOTE_SIGNAL_STRONG_PHRASES = [
+  'outside lender',
+  'other lender',
+  'another lender',
+  'local lender',
+  'credit union',
+  'using own lender',
+  'already with',
+  'moving to',
+  'switched lender',
+  'switching lender'
+];
+const NOTE_SIGNAL_SOFT_PHRASES = [
+  'shopping rates',
+  'rate quote elsewhere',
+  'asked about another lender',
+  'considering another lender',
+  'mentioned local lender',
+  'comparing lenders'
+];
+const NOTE_SIGNAL_SUPPRESSOR_PHRASES = [
+  'staying with afc',
+  'confirmed afc',
+  'kept afc',
+  'using afc',
+  'sticking with afc'
+];
 
 const TERMINATED_REASON_LABELS: Record<string, string> = {
   inspection: 'Inspection',
@@ -689,6 +721,54 @@ function computeMedian(values: number[]): number {
   return sorted[mid];
 }
 
+function scoreOutsideLenderNoteSignals(
+  textEntries: string[]
+): { score: number; reasons: { label: string; score: number }[]; confidence: 'high' | 'medium' | 'low' | null } {
+  if (!textEntries.length) {
+    return { score: 0, reasons: [], confidence: null };
+  }
+  const normalizedText = textEntries
+    .join(' ')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalizedText) {
+    return { score: 0, reasons: [], confidence: null };
+  }
+
+  const strongMatches = NOTE_SIGNAL_STRONG_PHRASES.filter((phrase) => normalizedText.includes(phrase));
+  const softMatches = NOTE_SIGNAL_SOFT_PHRASES.filter((phrase) => normalizedText.includes(phrase));
+  const suppressorMatches = NOTE_SIGNAL_SUPPRESSOR_PHRASES.filter((phrase) => normalizedText.includes(phrase));
+
+  let score = 0;
+  const reasons: { label: string; score: number }[] = [];
+  let confidence: 'high' | 'medium' | 'low' | null = null;
+
+  if (strongMatches.length > 0) {
+    const strongScore = Math.min(35, 25 + (strongMatches.length - 1) * 5);
+    score += strongScore;
+    reasons.push({ label: `Notes mention outside/local lender intent (${strongMatches[0]})`, score: strongScore });
+    confidence = 'high';
+  } else if (softMatches.length > 0) {
+    const softScore = Math.min(18, 10 + (softMatches.length - 1) * 4);
+    score += softScore;
+    reasons.push({ label: `Notes suggest lender-shopping (${softMatches[0]})`, score: softScore });
+    confidence = 'medium';
+  }
+
+  if (suppressorMatches.length > 0) {
+    const reduction = Math.min(20, 12 + (suppressorMatches.length - 1) * 4);
+    score = Math.max(0, score - reduction);
+    reasons.push({ label: `Counter-signal in notes (${suppressorMatches[0]})`, score: -reduction });
+    if (score === 0) {
+      confidence = 'low';
+    }
+  }
+
+  return { score: Math.round(score * 10) / 10, reasons, confidence };
+}
+
 function isWithinTimeframe(date: Date | null | undefined, timeframe: TimeframeInfo): boolean {
   if (!date) return false;
   const value = new Date(date);
@@ -966,7 +1046,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...referralMatch,
   })
     .select(
-      'createdAt updatedAt referralDate status statusLastUpdated referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents assignedAgent buySideAgent sellSideAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin sla lookingInZip lookingInZips loanFileNumber borrower.name'
+      'createdAt updatedAt referralDate status statusLastUpdated referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents initialNotes notes.content notes.createdAt assignedAgent buySideAgent sellSideAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin dealSide clientType sla lookingInZip lookingInZips loanFileNumber borrower.name'
     )
     .lean<DashboardReferral[]>()
     .exec();
@@ -2652,6 +2732,35 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const mcRiskLastActivityMap = new Map(
     mcRiskActivities.map((item) => [item._id.toString(), item.lastActivityAt])
   );
+  const mcRiskActivityTextRows =
+    mcRiskReferralIds.size > 0
+      ? await Activity.find({
+          referralId: { $in: Array.from(mcRiskReferralIds, (id) => new Types.ObjectId(id)) },
+          content: { $exists: true, $ne: '' },
+          channel: { $in: ['note', 'status', 'update', 'call', 'sms', 'email'] }
+        })
+          .select('referralId content createdAt')
+          .lean<{ referralId: Types.ObjectId; content?: string | null; createdAt?: Date }[]>()
+          .exec()
+      : [];
+  const mcRiskTextByReferralId = new Map<string, string[]>();
+  const appendRiskText = (referralId: string, value: string | null | undefined) => {
+    const text = (value ?? '').trim();
+    if (!text) return;
+    const current = mcRiskTextByReferralId.get(referralId) ?? [];
+    if (!current.includes(text)) {
+      current.push(text);
+    }
+    mcRiskTextByReferralId.set(referralId, current);
+  };
+  mcCandidateReferrals.forEach((referral) => {
+    const referralId = referral._id.toString();
+    appendRiskText(referralId, referral.initialNotes);
+    (referral.notes ?? []).forEach((note) => appendRiskText(referralId, note.content));
+  });
+  mcRiskActivityTextRows.forEach((activity) => {
+    appendRiskText(activity.referralId.toString(), activity.content);
+  });
 
   const mcAfcRiskCallList: McAfcRiskCallListEntry[] = mcCandidateReferrals
     .map((referral) => {
@@ -2674,9 +2783,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       let riskScore = 0;
       const reasons: { label: string; score: number }[] = [];
 
-      if (linkedPayment?.usedAfc !== true) {
+      if (linkedPayment && linkedPayment.usedAfc !== true) {
         riskScore += 35;
-        reasons.push({ label: 'AFC not attached', score: 35 });
+        reasons.push({ label: 'AFC not attached on deal record', score: 35 });
       }
 
       if (!agentId) {
@@ -2693,6 +2802,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       } else if (daysSinceActivity >= 7) {
         riskScore += 8;
         reasons.push({ label: `${daysSinceActivity} days since last activity`, score: 8 });
+      }
+
+      const noteSignal = scoreOutsideLenderNoteSignals(mcRiskTextByReferralId.get(referralId) ?? []);
+      if (noteSignal.score > 0) {
+        riskScore += noteSignal.score;
+      }
+      if (noteSignal.reasons.length > 0) {
+        noteSignal.reasons.forEach((reason) => {
+          reasons.push(reason);
+        });
       }
 
       if (daysToClose != null) {
@@ -2738,7 +2857,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const topReasons = reasons
         .sort((a, b) => b.score - a.score)
         .slice(0, 2)
-        .map((item) => item.label);
+        .map((item) => item.label)
+        .filter((label) => !label.startsWith('Counter-signal in notes'));
 
       return {
         rowId: linkedPayment?._id?.toString() ?? referralId,
