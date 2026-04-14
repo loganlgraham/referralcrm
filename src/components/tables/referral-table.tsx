@@ -29,6 +29,7 @@ import {
 } from '@/constants/deals';
 import { formatCurrency, formatNumber, formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
+import { shouldDefaultEmailMcForAgentNotes } from '@/utils/referral-email-defaults';
 import { calculateTimelineDaysRemaining, formatTimelineCountdown } from '@/utils/timeline-countdown';
 import { mapDealStatusToReferralStatusDisplay } from '@/lib/latest-deal-referral-status';
 import { confirmCloseStatusDate } from '@/components/referrals/status-date-confirmation-toast';
@@ -73,6 +74,8 @@ export interface ReferralRow {
   hasAhaAgentAttached?: boolean;
   urgentTaskCount?: number;
   autoUpdateRemindersEnabled?: boolean;
+  hasAnyPayments?: boolean;
+  hasAnyUsedAfcTrue?: boolean;
 }
 
 type TableMode = 'admin' | 'mc' | 'agent';
@@ -802,16 +805,32 @@ function normalizeStatusForSort({
   return label.toLocaleLowerCase();
 }
 
-function NoteComposer({ referralId, mcEmail }: { referralId: string; mcEmail?: string }) {
+function NoteComposer({
+  referralId,
+  mcEmail,
+  hasAnyPayments = false,
+  hasAnyUsedAfcTrue = false
+}: {
+  referralId: string;
+  mcEmail?: string;
+  hasAnyPayments?: boolean;
+  hasAnyUsedAfcTrue?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState('');
-  const [emailMc, setEmailMc] = useState(() => Boolean(mcEmail));
   const [saving, setSaving] = useState(false);
   const hasMcEmail = Boolean(mcEmail);
+  const defaultEmailMc =
+    hasMcEmail &&
+    shouldDefaultEmailMcForAgentNotes({
+      hasAnyPayments,
+      hasAnyUsedAfcTrue
+    });
+  const [emailMc, setEmailMc] = useState(() => defaultEmailMc);
 
   const reset = () => {
     setNote('');
-    setEmailMc(hasMcEmail);
+    setEmailMc(defaultEmailMc);
     setOpen(false);
   };
 
@@ -1111,7 +1130,14 @@ function buildColumns(
       {
         header: 'Notes',
         id: 'notes',
-        cell: ({ row }) => <NoteComposer referralId={row.original._id} mcEmail={row.original.lenderEmail} />,
+        cell: ({ row }) => (
+          <NoteComposer
+            referralId={row.original._id}
+            mcEmail={row.original.lenderEmail}
+            hasAnyPayments={row.original.hasAnyPayments}
+            hasAnyUsedAfcTrue={row.original.hasAnyUsedAfcTrue}
+          />
+        ),
         enableSorting: false,
       },
       createdColumn
@@ -1387,7 +1413,12 @@ function ReferralMobileStack({
                 {/* Notes zone */}
                 <div className="border-t border-slate-100 pt-3">
                   <MobileField label="Notes">
-                    <NoteComposer referralId={row._id} mcEmail={row.lenderEmail} />
+                    <NoteComposer
+                      referralId={row._id}
+                      mcEmail={row.lenderEmail}
+                      hasAnyPayments={row.hasAnyPayments}
+                      hasAnyUsedAfcTrue={row.hasAnyUsedAfcTrue}
+                    />
                   </MobileField>
                 </div>
               </div>

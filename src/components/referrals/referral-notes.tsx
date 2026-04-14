@@ -7,6 +7,7 @@ import { Trash2, Pencil } from 'lucide-react';
 import { formatInTimeZone } from 'date-fns-tz';
 
 import { SLA_TIME_ZONE } from '@/utils/sla-insights';
+import { shouldDefaultEmailMcForAgentNotes } from '@/utils/referral-email-defaults';
 
 interface StoredReferralNote {
   id: string;
@@ -35,6 +36,8 @@ interface Props {
   agentContact?: { name?: string | null; email?: string | null } | null;
   mcContact?: { name?: string | null; email?: string | null } | null;
   adminContacts?: { name?: string | null; email?: string | null }[];
+  hasAnyPayments?: boolean;
+  hasAnyUsedAfcTrue?: boolean;
 }
 
 const formatTimestamp = (value: string) => {
@@ -94,13 +97,14 @@ export function ReferralNotes({
   agentContact,
   mcContact,
   adminContacts,
+  hasAnyPayments = false,
+  hasAnyUsedAfcTrue = false,
 }: Props) {
   const [notes, setNotes] = useState<StoredReferralNote[]>(() => [...initialNotes]);
   const [content, setContent] = useState('');
   const [hiddenFromAgent, setHiddenFromAgent] = useState(false);
   const [hiddenFromMc, setHiddenFromMc] = useState(false);
   const [emailAgent, setEmailAgent] = useState(false);
-  const [emailMc, setEmailMc] = useState(() => viewerRole === 'agent' && Boolean(mcContact?.email));
   const [emailAdmin, setEmailAdmin] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showNotesDropdown, setShowNotesDropdown] = useState(false);
@@ -117,6 +121,14 @@ export function ReferralNotes({
   const canControlVisibility = viewerRole === 'admin' || viewerRole === 'manager';
   const hasAgentEmail = Boolean(agentContact?.email);
   const hasMcEmail = Boolean(mcContact?.email);
+  const shouldDefaultEmailMc =
+    viewerRole === 'agent' &&
+    hasMcEmail &&
+    shouldDefaultEmailMcForAgentNotes({
+      hasAnyPayments,
+      hasAnyUsedAfcTrue
+    });
+  const [emailMc, setEmailMc] = useState(() => shouldDefaultEmailMc);
   const hasAdminEmails = Array.isArray(adminContacts)
     ? adminContacts.some((contact) => contact?.email)
     : false;
@@ -158,7 +170,7 @@ export function ReferralNotes({
     setHiddenFromAgent(false);
     setHiddenFromMc(false);
     setEmailAgent(false);
-    setEmailMc(viewerRole === 'agent' && hasMcEmail);
+    setEmailMc(shouldDefaultEmailMc);
     setEmailAdmin(false);
   };
 
