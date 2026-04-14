@@ -658,7 +658,7 @@ describe('Dashboard Metrics - AHA Composite Scoring', () => {
 });
 
 describe('Dashboard Metrics - MC Composite Scoring', () => {
-  it('weights MC NPS as medium in composite scoring', () => {
+  it('weights MC NPS equally with other top-tier KPIs', () => {
     const normalizedRevenuePerReferral = new Map([
       ['mc-a', 100],
       ['mc-b', 0]
@@ -669,7 +669,7 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     ]);
 
     const revenueWeight = 3;
-    const npsWeight = 2;
+    const npsWeight = 3;
     const totalWeight = revenueWeight + npsWeight;
 
     const scoreForMcA =
@@ -681,32 +681,116 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
         (normalizedNpsScore.get('mc-b') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
       totalWeight;
 
-    expect(scoreForMcA).toBeCloseTo(60, 2);
-    expect(scoreForMcB).toBeCloseTo(40, 2);
+    expect(scoreForMcA).toBeCloseTo(50, 2);
+    expect(scoreForMcB).toBeCloseTo(50, 2);
   });
 
-  it('uses neutral fill for missing MC NPS while keeping denominator fixed', () => {
+  it('uses neutral fill for missing high-tier MC KPIs while keeping denominator fixed', () => {
     const normalizedRevenuePerReferral = new Map([
+      ['mc-a', 100],
+      ['mc-b', 0]
+    ]);
+    const normalizedReferralCount = new Map([
       ['mc-a', 100],
       ['mc-b', 0]
     ]);
     const normalizedNpsScore = new Map([['mc-a', 90]]);
 
     const revenueWeight = 3;
-    const npsWeight = 2;
-    const totalWeight = revenueWeight + npsWeight;
+    const referralWeight = 3;
+    const npsWeight = 3;
+    const totalWeight = revenueWeight + referralWeight + npsWeight;
 
     const scoreForMcA =
       ((normalizedRevenuePerReferral.get('mc-a') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
+        (normalizedReferralCount.get('mc-a') ?? AHA_NEUTRAL_SCORE) * referralWeight +
         (normalizedNpsScore.get('mc-a') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
       totalWeight;
     const scoreForMcB =
       ((normalizedRevenuePerReferral.get('mc-b') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
+        (normalizedReferralCount.get('mc-b') ?? AHA_NEUTRAL_SCORE) * referralWeight +
         (normalizedNpsScore.get('mc-b') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
       totalWeight;
 
-    expect(scoreForMcA).toBeCloseTo(96, 2);
-    expect(scoreForMcB).toBeCloseTo(20, 2);
+    expect(scoreForMcA).toBeCloseTo(96.67, 2);
+    expect(scoreForMcB).toBeCloseTo(16.67, 2);
+  });
+
+  it('rewards higher referral counts when other KPI inputs are equal', () => {
+    const normalizedRevenuePerReferral = new Map([
+      ['mc-a', 50],
+      ['mc-b', 50]
+    ]);
+    const normalizedReferralCount = new Map([
+      ['mc-a', 100],
+      ['mc-b', 0]
+    ]);
+    const normalizedNpsScore = new Map([
+      ['mc-a', 50],
+      ['mc-b', 50]
+    ]);
+
+    const revenueWeight = 3;
+    const referralWeight = 3;
+    const npsWeight = 3;
+    const totalWeight = revenueWeight + referralWeight + npsWeight;
+
+    const scoreForMcA =
+      ((normalizedRevenuePerReferral.get('mc-a') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
+        (normalizedReferralCount.get('mc-a') ?? AHA_NEUTRAL_SCORE) * referralWeight +
+        (normalizedNpsScore.get('mc-a') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
+      totalWeight;
+    const scoreForMcB =
+      ((normalizedRevenuePerReferral.get('mc-b') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
+        (normalizedReferralCount.get('mc-b') ?? AHA_NEUTRAL_SCORE) * referralWeight +
+        (normalizedNpsScore.get('mc-b') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
+      totalWeight;
+
+    expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
+  });
+
+  it('penalizes higher close-without-AFC rates as a high-tier negative KPI', () => {
+    const normalizedNoAfcCloseRate = new Map([
+      ['mc-a', 100],
+      ['mc-b', 0]
+    ]);
+    const noAfcWeight = 3;
+    const baselineWeight = 3;
+    const baselineNormalizedScore = 50;
+    const totalWeight = noAfcWeight + baselineWeight;
+
+    const scoreForMcA =
+      ((normalizedNoAfcCloseRate.get('mc-a') ?? AHA_NEUTRAL_SCORE) * noAfcWeight +
+        baselineNormalizedScore * baselineWeight) /
+      totalWeight;
+    const scoreForMcB =
+      ((normalizedNoAfcCloseRate.get('mc-b') ?? AHA_NEUTRAL_SCORE) * noAfcWeight +
+        baselineNormalizedScore * baselineWeight) /
+      totalWeight;
+
+    expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
+  });
+
+  it('penalizes higher close-without-assigned-agent rates as a high-tier negative KPI', () => {
+    const normalizedNoAssignedAgentCloseRate = new Map([
+      ['mc-a', 100],
+      ['mc-b', 0]
+    ]);
+    const noAssignedAgentWeight = 3;
+    const baselineWeight = 3;
+    const baselineNormalizedScore = 50;
+    const totalWeight = noAssignedAgentWeight + baselineWeight;
+
+    const scoreForMcA =
+      ((normalizedNoAssignedAgentCloseRate.get('mc-a') ?? AHA_NEUTRAL_SCORE) * noAssignedAgentWeight +
+        baselineNormalizedScore * baselineWeight) /
+      totalWeight;
+    const scoreForMcB =
+      ((normalizedNoAssignedAgentCloseRate.get('mc-b') ?? AHA_NEUTRAL_SCORE) * noAssignedAgentWeight +
+        baselineNormalizedScore * baselineWeight) /
+      totalWeight;
+
+    expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
   });
 });
 

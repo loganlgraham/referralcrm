@@ -120,6 +120,25 @@ const LEADERBOARD_ROW_HEIGHT_REM = 2.5;
 const LEADERBOARD_HEADER_HEIGHT_REM = 1.75;
 const TERMINATED_DEAL_ROW_HEIGHT_REM = 4;
 const RANKED_LIST_ROW_HEIGHT_REM = 3.25;
+const RANKED_LIST_PREVIEW_ROWS = 10;
+
+const getCompositeScoreStyle = (score: number) => {
+  if (score >= 75) return 'bg-emerald-50 text-emerald-700';
+  if (score >= 50) return 'bg-amber-50 text-amber-700';
+  return 'bg-red-50 text-red-700';
+};
+
+const getKpiWeightBadge = (weight: 'high' | 'medium' | 'low') => {
+  if (weight === 'high') return 'bg-slate-700 text-white';
+  if (weight === 'medium') return 'bg-slate-400 text-white';
+  return 'bg-slate-200 text-slate-600';
+};
+
+const getKpiWeightLabel = (weight: 'high' | 'medium' | 'low') => {
+  if (weight === 'high') return 'HIGH';
+  if (weight === 'medium') return 'MED';
+  return 'LOW';
+};
 
 interface LostDealEntry {
   id: string;
@@ -1906,34 +1925,15 @@ function DealsLostTable({ deals }: { deals: LostDealEntry[] }) {
 
 function McRankedList({ title, entries }: { title: string; entries: McRankedEntry[] }) {
   const [selectedMc, setSelectedMc] = useState<McRankedEntry | null>(null);
-  const rowHeightRem = 2.5;
-  const headerHeightRem = 1.75;
-  const scrollMaxHeight = `${AHA_RANK_PREVIEW * rowHeightRem + headerHeightRem}rem`;
-
-  const getScoreStyle = (score: number) => {
-    if (score >= 75) return 'bg-emerald-50 text-emerald-700';
-    if (score >= 50) return 'bg-amber-50 text-amber-700';
-    return 'bg-red-50 text-red-700';
-  };
-
-  const getWeightBadge = (weight: 'high' | 'medium' | 'low') => {
-    if (weight === 'high') return 'bg-slate-700 text-white';
-    if (weight === 'medium') return 'bg-slate-400 text-white';
-    return 'bg-slate-200 text-slate-600';
-  };
-
-  const getWeightLabel = (weight: 'high' | 'medium' | 'low') => {
-    if (weight === 'high') return 'HIGH';
-    if (weight === 'medium') return 'MED';
-    return 'LOW';
-  };
+  const scrollMaxHeight = `${RANKED_LIST_PREVIEW_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
       <p className="mt-1 text-xs text-slate-500">
-        Composite score blends weighted MC KPIs. MCs with fewer than 3 referrals are marked provisional and receive a
-        reliability adjustment.
+        Composite score blends weighted MC KPIs. Referral volume and NPS are top-tier factors, and closes without AFC
+        or without the assigned agent are high-weight penalties. MCs with fewer than 3 referrals are marked provisional
+        and receive a reliability adjustment.
       </p>
       {entries.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-500">No MCs with data for this period.</p>
@@ -1971,7 +1971,7 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
                   </td>
                   <td className="py-2 text-right">
                     <span
-                      className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${getScoreStyle(entry.score)}`}
+                      className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${getCompositeScoreStyle(entry.score)}`}
                     >
                       {entry.score.toFixed(1)}
                     </span>
@@ -1993,7 +1993,7 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
           <div className="p-6 space-y-5">
             <div className="flex items-center gap-3">
               <span className="text-sm text-slate-500">Composite Score</span>
-              <span className={`inline-block rounded-full px-3 py-1 text-sm font-bold tabular-nums ${getScoreStyle(selectedMc.score)}`}>
+              <span className={`inline-block rounded-full px-3 py-1 text-sm font-bold tabular-nums ${getCompositeScoreStyle(selectedMc.score)}`}>
                 {selectedMc.score.toFixed(1)} / 100
               </span>
             </div>
@@ -2017,8 +2017,8 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-slate-700">{kpi.label}</span>
-                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getWeightBadge(kpi.weight)}`}>
-                          {getWeightLabel(kpi.weight)}
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getKpiWeightBadge(kpi.weight)}`}>
+                          {getKpiWeightLabel(kpi.weight)}
                         </span>
                         {kpi.neutralFilled ? (
                           <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
@@ -2156,31 +2156,9 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
   );
 }
 
-const AHA_RANK_PREVIEW = 10;
-
 function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: AhaRankedAgent[] } }) {
   const [selectedAgent, setSelectedAgent] = useState<AhaRankedAgent | null>(null);
-  const rowHeightRem = 2.5;
-  const headerHeightRem = 1.75;
-  const scrollMaxHeight = `${AHA_RANK_PREVIEW * rowHeightRem + headerHeightRem}rem`;
-
-  const getScoreStyle = (score: number) => {
-    if (score >= 75) return 'bg-emerald-50 text-emerald-700';
-    if (score >= 50) return 'bg-amber-50 text-amber-700';
-    return 'bg-red-50 text-red-700';
-  };
-
-  const getWeightBadge = (weight: 'high' | 'medium' | 'low') => {
-    if (weight === 'high') return 'bg-slate-700 text-white';
-    if (weight === 'medium') return 'bg-slate-400 text-white';
-    return 'bg-slate-200 text-slate-600';
-  };
-
-  const getWeightLabel = (weight: 'high' | 'medium' | 'low') => {
-    if (weight === 'high') return 'HIGH';
-    if (weight === 'medium') return 'MED';
-    return 'LOW';
-  };
+  const scrollMaxHeight = `${RANKED_LIST_PREVIEW_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -2225,7 +2203,7 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
                       )}
                     </td>
                     <td className="py-2 text-right">
-                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${getScoreStyle(agent.score)}`}>
+                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${getCompositeScoreStyle(agent.score)}`}>
                         {agent.score.toFixed(1)}
                       </span>
                     </td>
@@ -2247,7 +2225,7 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
           <div className="p-6 space-y-5">
             <div className="flex items-center gap-3">
               <span className="text-sm text-slate-500">Composite Score</span>
-              <span className={`inline-block rounded-full px-3 py-1 text-sm font-bold tabular-nums ${getScoreStyle(selectedAgent.score)}`}>
+              <span className={`inline-block rounded-full px-3 py-1 text-sm font-bold tabular-nums ${getCompositeScoreStyle(selectedAgent.score)}`}>
                 {selectedAgent.score.toFixed(1)} / 100
               </span>
             </div>
@@ -2273,8 +2251,8 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-slate-700">{kpi.label}</span>
-                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getWeightBadge(kpi.weight)}`}>
-                          {getWeightLabel(kpi.weight)}
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getKpiWeightBadge(kpi.weight)}`}>
+                          {getKpiWeightLabel(kpi.weight)}
                         </span>
                         {kpi.neutralFilled ? (
                           <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">

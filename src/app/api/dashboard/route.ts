@@ -2195,9 +2195,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const mcTotalClosedDealsMap = new Map<string, number>();
   const mcAssignedAgentClosesMap = new Map<string, number>();
   const mcOutsideLenderLossMap = new Map<string, number>();
+  const mcNoAfcClosesMap = new Map<string, number>();
+  const mcNoAssignedAgentClosesMap = new Map<string, number>();
   allClosedDealsInTimeframe.forEach((payment) => {
     const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     mcTotalClosedDealsMap.set(mcKey, (mcTotalClosedDealsMap.get(mcKey) ?? 0) + 1);
+    if (payment.usedAfc !== true) {
+      mcNoAfcClosesMap.set(mcKey, (mcNoAfcClosesMap.get(mcKey) ?? 0) + 1);
+    }
+    if (payment.usedAssignedAgent !== true) {
+      mcNoAssignedAgentClosesMap.set(mcKey, (mcNoAssignedAgentClosesMap.get(mcKey) ?? 0) + 1);
+    }
     if (payment.usedAssignedAgent === true) {
       mcAssignedAgentClosesMap.set(mcKey, (mcAssignedAgentClosesMap.get(mcKey) ?? 0) + 1);
     }
@@ -2270,6 +2278,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     | 'revenuePerReferral'
     | 'pipelineCashConversion'
     | 'closeVelocityMedianDays'
+    | 'referralCount'
+    | 'noAfcCloseRate'
+    | 'noAssignedAgentCloseRate'
     | 'agingPipelineRisk'
     | 'terminationSignal'
     | 'sourceQualityIndex'
@@ -2323,28 +2334,37 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     revenuePerReferral: 3,
     pipelineCashConversion: 3,
     closeVelocityMedianDays: 3,
+    referralCount: 3,
+    noAfcCloseRate: 3,
+    noAssignedAgentCloseRate: 3,
     agingPipelineRisk: 2,
     terminationSignal: 2,
     sourceQualityIndex: 2,
     afcCaptureRate: 3,
     forecastAccuracy: 2,
-    npsScore: 2
+    npsScore: 3
   };
   const MC_KPI_TIERS: Record<McKpiKey, 'high' | 'medium' | 'low'> = {
     revenuePerReferral: 'high',
     pipelineCashConversion: 'high',
     closeVelocityMedianDays: 'high',
+    referralCount: 'high',
+    noAfcCloseRate: 'high',
+    noAssignedAgentCloseRate: 'high',
     agingPipelineRisk: 'medium',
     terminationSignal: 'medium',
     sourceQualityIndex: 'medium',
     afcCaptureRate: 'high',
     forecastAccuracy: 'medium',
-    npsScore: 'medium'
+    npsScore: 'high'
   };
   const MC_KPI_LABELS: Record<McKpiKey, string> = {
     revenuePerReferral: 'Revenue per Referral',
     pipelineCashConversion: 'Pipeline to Cash',
     closeVelocityMedianDays: 'Median Days Pair -> Close',
+    referralCount: 'Referral Count',
+    noAfcCloseRate: 'Closes Without AFC',
+    noAssignedAgentCloseRate: 'Closes Without Assigned Agent',
     agingPipelineRisk: 'Aging Pipeline Risk',
     terminationSignal: 'Termination Signal',
     sourceQualityIndex: 'Source Quality Index',
@@ -2356,12 +2376,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     'revenuePerReferral',
     'pipelineCashConversion',
     'closeVelocityMedianDays',
+    'referralCount',
+    'noAfcCloseRate',
+    'noAssignedAgentCloseRate',
+    'npsScore',
+    'afcCaptureRate',
     'agingPipelineRisk',
     'terminationSignal',
     'sourceQualityIndex',
-    'afcCaptureRate',
     'forecastAccuracy',
-    'npsScore'
   ];
 
   const assertNever = (value: never): never => {
@@ -2505,6 +2528,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     revenuePerReferral: new Map(),
     pipelineCashConversion: new Map(),
     closeVelocityMedianDays: new Map(),
+    referralCount: new Map(),
+    noAfcCloseRate: new Map(),
+    noAssignedAgentCloseRate: new Map(),
     agingPipelineRisk: new Map(),
     terminationSignal: new Map(),
     sourceQualityIndex: new Map(),
@@ -2516,6 +2542,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     revenuePerReferral: new Map(),
     pipelineCashConversion: new Map(),
     closeVelocityMedianDays: new Map(),
+    referralCount: new Map(),
+    noAfcCloseRate: new Map(),
+    noAssignedAgentCloseRate: new Map(),
     agingPipelineRisk: new Map(),
     terminationSignal: new Map(),
     sourceQualityIndex: new Map(),
@@ -2538,6 +2567,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const referralsForMc = referralByMcMap.get(id) ?? 0;
     const mcRevenue = mcRevenueMap.get(id) ?? { revenue: 0, expected: 0, closed: 0, totalReferrals: 0 };
     const realizedRevenue = mcRevenue.revenue;
+    const totalClosedDeals = mcTotalClosedDealsMap.get(id) ?? 0;
+
+    mcKpiRaw.referralCount.set(id, referralsForMc);
+    mcKpiDisplayMap.referralCount.set(id, referralsForMc.toLocaleString());
 
     if (referralsForMc > 0) {
       const revenuePerReferral = realizedRevenue / referralsForMc;
@@ -2606,6 +2639,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       mcKpiDisplayMap.afcCaptureRate.set(id, `${afcRate.toFixed(1)}%`);
     }
 
+    if (totalClosedDeals > 0) {
+      const noAfcCloseRate = ((mcNoAfcClosesMap.get(id) ?? 0) / totalClosedDeals) * 100;
+      mcKpiRaw.noAfcCloseRate.set(id, noAfcCloseRate);
+      mcKpiDisplayMap.noAfcCloseRate.set(id, `${noAfcCloseRate.toFixed(1)}%`);
+
+      const noAssignedAgentCloseRate = ((mcNoAssignedAgentClosesMap.get(id) ?? 0) / totalClosedDeals) * 100;
+      mcKpiRaw.noAssignedAgentCloseRate.set(id, noAssignedAgentCloseRate);
+      mcKpiDisplayMap.noAssignedAgentCloseRate.set(id, `${noAssignedAgentCloseRate.toFixed(1)}%`);
+    }
+
     const forecast = mcForecastMap.get(id);
     if (forecast && forecast.expected > 0) {
       const variancePct = Math.abs(forecast.expected - forecast.realized) / forecast.expected;
@@ -2625,6 +2668,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     revenuePerReferral: normalizeAhaKpiMap(mcKpiRaw.revenuePerReferral, false),
     pipelineCashConversion: normalizeAhaKpiMap(mcKpiRaw.pipelineCashConversion, false),
     closeVelocityMedianDays: normalizeAhaKpiMap(mcKpiRaw.closeVelocityMedianDays, true),
+    referralCount: normalizeAhaKpiMap(mcKpiRaw.referralCount, false),
+    noAfcCloseRate: normalizeAhaKpiMap(mcKpiRaw.noAfcCloseRate, true),
+    noAssignedAgentCloseRate: normalizeAhaKpiMap(mcKpiRaw.noAssignedAgentCloseRate, true),
     agingPipelineRisk: normalizeAhaKpiMap(mcKpiRaw.agingPipelineRisk, true),
     terminationSignal: normalizeAhaKpiMap(mcKpiRaw.terminationSignal, true),
     sourceQualityIndex: normalizeAhaKpiMap(mcKpiRaw.sourceQualityIndex, false),
