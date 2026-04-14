@@ -657,6 +657,156 @@ describe('Dashboard Metrics - AHA Composite Scoring', () => {
   });
 });
 
+describe('Dashboard Metrics - MC Composite Scoring', () => {
+  it('weights MC NPS as medium in composite scoring', () => {
+    const normalizedRevenuePerReferral = new Map([
+      ['mc-a', 100],
+      ['mc-b', 0]
+    ]);
+    const normalizedNpsScore = new Map([
+      ['mc-a', 0],
+      ['mc-b', 100]
+    ]);
+
+    const revenueWeight = 3;
+    const npsWeight = 2;
+    const totalWeight = revenueWeight + npsWeight;
+
+    const scoreForMcA =
+      ((normalizedRevenuePerReferral.get('mc-a') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
+        (normalizedNpsScore.get('mc-a') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
+      totalWeight;
+    const scoreForMcB =
+      ((normalizedRevenuePerReferral.get('mc-b') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
+        (normalizedNpsScore.get('mc-b') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
+      totalWeight;
+
+    expect(scoreForMcA).toBeCloseTo(60, 2);
+    expect(scoreForMcB).toBeCloseTo(40, 2);
+  });
+
+  it('uses neutral fill for missing MC NPS while keeping denominator fixed', () => {
+    const normalizedRevenuePerReferral = new Map([
+      ['mc-a', 100],
+      ['mc-b', 0]
+    ]);
+    const normalizedNpsScore = new Map([['mc-a', 90]]);
+
+    const revenueWeight = 3;
+    const npsWeight = 2;
+    const totalWeight = revenueWeight + npsWeight;
+
+    const scoreForMcA =
+      ((normalizedRevenuePerReferral.get('mc-a') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
+        (normalizedNpsScore.get('mc-a') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
+      totalWeight;
+    const scoreForMcB =
+      ((normalizedRevenuePerReferral.get('mc-b') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
+        (normalizedNpsScore.get('mc-b') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
+      totalWeight;
+
+    expect(scoreForMcA).toBeCloseTo(96, 2);
+    expect(scoreForMcB).toBeCloseTo(20, 2);
+  });
+});
+
+describe('Dashboard Metrics - MC AFC Risk Call List', () => {
+  const computeRiskScore = ({
+    usedAfc,
+    daysSinceActivity,
+    daysToClose,
+    outsideLossRatePct,
+    sourceCloseRatePct
+  }: {
+    usedAfc: boolean | null;
+    daysSinceActivity: number;
+    daysToClose: number;
+    outsideLossRatePct: number;
+    sourceCloseRatePct: number;
+  }) => {
+    let score = 0;
+
+    if (usedAfc !== true) score += 35;
+
+    if (daysSinceActivity >= 30) score += 25;
+    else if (daysSinceActivity >= 14) score += 15;
+    else if (daysSinceActivity >= 7) score += 8;
+
+    if (daysToClose <= 7) score += 20;
+    else if (daysToClose <= 14) score += 14;
+    else if (daysToClose <= 30) score += 8;
+
+    score += Math.min(15, outsideLossRatePct * 0.15);
+    score += Math.min(10, ((100 - sourceCloseRatePct) / 100) * 10);
+
+    return Math.min(100, Number(score.toFixed(1)));
+  };
+
+  it('ranks higher-risk calls first using the risk model factors', () => {
+    const highRisk = computeRiskScore({
+      usedAfc: false,
+      daysSinceActivity: 21,
+      daysToClose: 6,
+      outsideLossRatePct: 40,
+      sourceCloseRatePct: 45
+    });
+    const lowerRisk = computeRiskScore({
+      usedAfc: true,
+      daysSinceActivity: 3,
+      daysToClose: 24,
+      outsideLossRatePct: 10,
+      sourceCloseRatePct: 75
+    });
+
+    expect(highRisk).toBeGreaterThan(lowerRisk);
+    expect(highRisk).toBeGreaterThanOrEqual(70);
+    expect(lowerRisk).toBeLessThan(40);
+  });
+
+  it('returns deterministic order when risk scores tie by using days-to-close', () => {
+    const rows = [
+      { id: 'later-close', riskScore: 62.5, daysToClose: 12 },
+      { id: 'sooner-close', riskScore: 62.5, daysToClose: 5 }
+    ];
+
+    rows.sort((a, b) => b.riskScore - a.riskScore || a.daysToClose - b.daysToClose);
+
+    expect(rows.map((row) => row.id)).toEqual(['sooner-close', 'later-close']);
+  });
+
+  it('captures top two reasons for call prioritization', () => {
+    const factors = [
+      { label: 'AFC not attached', score: 35 },
+      { label: '18 days since last activity', score: 15 },
+      { label: '6 days to close', score: 20 },
+      { label: 'MC historical outside-lender loss 30.0%', score: 4.5 }
+    ];
+
+    const topReasons = factors
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 2)
+      .map((item) => item.label);
+
+    expect(topReasons).toEqual(['AFC not attached', '6 days to close']);
+  });
+
+  it('includes pre-under-contract active pipeline statuses for early intervention', () => {
+    const activeStatuses = new Set(['Paired', 'In Communication', 'Active Lead', 'Showing Homes', 'Under Contract']);
+    const referrals = [
+      { id: 'paired', status: 'Paired' },
+      { id: 'active', status: 'Active Lead' },
+      { id: 'under-contract', status: 'Under Contract' },
+      { id: 'closed', status: 'Closed' }
+    ];
+
+    const included = referrals
+      .filter((referral) => activeStatuses.has(referral.status))
+      .map((referral) => referral.id);
+
+    expect(included).toEqual(['paired', 'active', 'under-contract']);
+  });
+});
+
 describe('Dashboard Metrics - Admin Assignment and Unassigned', () => {
   it('counts unassigned as referrals in New Lead status only', () => {
     const adminEligibleReferrals = [

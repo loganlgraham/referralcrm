@@ -46,6 +46,11 @@ interface LeaderboardEntry {
   closeRate?: number;
   dealsClosed?: number;
   totalReferrals?: number;
+  assignedAgentCloses?: number;
+  assignedAgentCloseRate?: number;
+  totalClosedDeals?: number;
+  outsideLenderLossCount?: number;
+  outsideLenderLossRate?: number;
   referrals?: number;
 }
 
@@ -68,6 +73,45 @@ interface AhaRankedAgent {
     weight: 'high' | 'medium' | 'low';
     neutralFilled: boolean;
   }[];
+}
+
+interface McRankedEntry {
+  id: string;
+  name: string;
+  score: number;
+  baseScore: number;
+  reliabilityFactor: number;
+  rank: number;
+  qualified: boolean;
+  referralCount: number;
+  kpis: {
+    label: string;
+    key: string;
+    rawValue: number;
+    displayValue: string;
+    normalizedScore: number;
+    weight: 'high' | 'medium' | 'low';
+    neutralFilled: boolean;
+  }[];
+}
+
+interface McAfcRiskCallListEntry {
+  rowId: string;
+  referralId: string;
+  borrowerName: string;
+  mcId: string | null;
+  mcName: string | null;
+  agentId: string | null;
+  agentName: string | null;
+  status: string;
+  source: string;
+  closingDate: string | null;
+  daysToClose: number | null;
+  daysSinceActivity: number;
+  usedAfc: boolean | null;
+  riskScore: number;
+  riskTier: 'high' | 'medium' | 'low';
+  reasons: string[];
 }
 
 /** Target visible rows for scrollable dashboard lists (matches former collapsed preview). */
@@ -213,8 +257,11 @@ interface DashboardResponse {
       aha: TrendPoint[];
       ahaOos: TrendPoint[];
     };
+    kpiLeaderboard: { rankedMcs: McRankedEntry[] };
+    afcRiskCallList: McAfcRiskCallListEntry[];
     revenueLeaderboard: LeaderboardEntry[];
     closeRateLeaderboard: LeaderboardEntry[];
+    outsideLenderLossLeaderboard: LeaderboardEntry[];
     requestLeaderboard: {
       all: LeaderboardEntry[];
       aha: LeaderboardEntry[];
@@ -1186,6 +1233,122 @@ function LeaderboardTable({
   );
 }
 
+function McCloseEffectivenessTable({ entries }: { entries: LeaderboardEntry[] }) {
+  const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">MC Close Effectiveness</p>
+      <p className="mt-1 text-xs text-slate-500">
+        Overall close rate uses cohort closes/referrals. Assigned close rate uses assigned-agent closes/total closed.
+      </p>
+      <div
+        className="mt-4 overflow-y-auto"
+        style={entries.length ? { maxHeight: scrollMaxHeight } : undefined}
+        aria-label={entries.length ? 'Scrollable list: MC Close Effectiveness' : undefined}
+      >
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 z-[1] bg-white shadow-[inset_0_-1px_0_0_rgb(241_245_249)]">
+            <tr className="text-left text-xs text-slate-500">
+              <th className="py-1 font-medium">Rank</th>
+              <th className="py-1 font-medium">MC</th>
+              <th className="py-1 font-medium text-right">Overall close rate</th>
+              <th className="py-1 font-medium text-right">Assigned close rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.length ? (
+              entries.map((entry, index) => {
+                const overallCloseRate = entry.closeRate ?? 0;
+                const assignedCloseRate = entry.assignedAgentCloseRate ?? 0;
+                return (
+                  <tr key={`${entry.id}-${index}`} className="border-t border-slate-100 text-slate-700">
+                    <td className="py-2 text-slate-400">#{index + 1}</td>
+                    <td className="py-2 font-medium text-slate-900">{entry.name}</td>
+                    <td className="py-2 text-right">
+                      <p>{`${overallCloseRate.toFixed(1)}%`}</p>
+                      <p className="text-xs text-slate-500">
+                        {`${formatNumber(entry.dealsClosed ?? 0)} / ${formatNumber(entry.totalReferrals ?? 0)}`}
+                      </p>
+                    </td>
+                    <td className="py-2 text-right">
+                      <p>{`${assignedCloseRate.toFixed(1)}%`}</p>
+                      <p className="text-xs text-slate-500">
+                        {`${formatNumber(entry.assignedAgentCloses ?? 0)} / ${formatNumber(entry.totalClosedDeals ?? 0)}`}
+                      </p>
+                    </td>
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td colSpan={4} className="py-6 text-center text-sm text-slate-500">
+                  Nothing to display for this period.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function McOutsideLenderLossTable({ entries }: { entries: LeaderboardEntry[] }) {
+  const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">MC Outside Lender Loss Signal</p>
+      <p className="mt-1 text-xs text-slate-500">
+        Share of closed deals where the assigned agent was used, but AFC was not.
+      </p>
+      <div
+        className="mt-4 overflow-y-auto"
+        style={entries.length ? { maxHeight: scrollMaxHeight } : undefined}
+        aria-label={entries.length ? 'Scrollable list: MC Outside Lender Loss Signal' : undefined}
+      >
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 z-[1] bg-white shadow-[inset_0_-1px_0_0_rgb(241_245_249)]">
+            <tr className="text-left text-xs text-slate-500">
+              <th className="py-1 font-medium">Rank</th>
+              <th className="py-1 font-medium">MC</th>
+              <th className="py-1 font-medium text-right">Loss signal rate</th>
+              <th className="py-1 font-medium text-right">Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.length ? (
+              entries.map((entry, index) => {
+                const count = entry.outsideLenderLossCount ?? 0;
+                const totalClosedDeals = entry.totalClosedDeals ?? 0;
+                const rate = entry.outsideLenderLossRate ?? 0;
+                return (
+                  <tr key={`${entry.id}-${index}`} className="border-t border-slate-100 text-slate-700">
+                    <td className="py-2 text-slate-400">#{index + 1}</td>
+                    <td className="py-2 font-medium text-slate-900">{entry.name}</td>
+                    <td className="py-2 text-right">
+                      <p>{`${rate.toFixed(1)}%`}</p>
+                      <p className="text-xs text-slate-500">{`${formatNumber(count)} / ${formatNumber(totalClosedDeals)}`}</p>
+                    </td>
+                    <td className="py-2 text-right">{formatNumber(count)}</td>
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td colSpan={4} className="py-6 text-center text-sm text-slate-500">
+                  Nothing to display for this period.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function PreApprovalConversionSection({
   monthlyReferrals,
   conversion,
@@ -1741,9 +1904,232 @@ function DealsLostTable({ deals }: { deals: LostDealEntry[] }) {
   );
 }
 
+function McRankedList({ title, entries }: { title: string; entries: McRankedEntry[] }) {
+  const [selectedMc, setSelectedMc] = useState<McRankedEntry | null>(null);
+  const rowHeightRem = 2.5;
+  const headerHeightRem = 1.75;
+  const scrollMaxHeight = `${AHA_RANK_PREVIEW * rowHeightRem + headerHeightRem}rem`;
+
+  const getScoreStyle = (score: number) => {
+    if (score >= 75) return 'bg-emerald-50 text-emerald-700';
+    if (score >= 50) return 'bg-amber-50 text-amber-700';
+    return 'bg-red-50 text-red-700';
+  };
+
+  const getWeightBadge = (weight: 'high' | 'medium' | 'low') => {
+    if (weight === 'high') return 'bg-slate-700 text-white';
+    if (weight === 'medium') return 'bg-slate-400 text-white';
+    return 'bg-slate-200 text-slate-600';
+  };
+
+  const getWeightLabel = (weight: 'high' | 'medium' | 'low') => {
+    if (weight === 'high') return 'HIGH';
+    if (weight === 'medium') return 'MED';
+    return 'LOW';
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+      <p className="mt-1 text-xs text-slate-500">
+        Composite score blends weighted MC KPIs. MCs with fewer than 3 referrals are marked provisional and receive a
+        reliability adjustment.
+      </p>
+      {entries.length === 0 ? (
+        <p className="py-8 text-center text-sm text-slate-500">No MCs with data for this period.</p>
+      ) : (
+        <div className="mt-4 overflow-y-auto" style={{ maxHeight: scrollMaxHeight }}>
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-white">
+              <tr className="text-left text-xs text-slate-500">
+                <th className="py-1 font-medium w-10">Rank</th>
+                <th className="py-1 font-medium">MC</th>
+                <th className="py-1 font-medium text-right">Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((entry) => (
+                <tr key={entry.id} className="border-t border-slate-100 text-slate-700">
+                  <td className="py-2 text-slate-400">#{entry.rank}</td>
+                  <td className="py-2 font-medium">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedMc(entry)}
+                      className="text-sky-600 hover:text-sky-800 hover:underline text-left"
+                    >
+                      {entry.name}
+                    </button>
+                    {!entry.qualified ? (
+                      <span className="ml-2 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                        Provisional
+                      </span>
+                    ) : (
+                      <span className="ml-2 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                        Qualified
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2 text-right">
+                    <span
+                      className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${getScoreStyle(entry.score)}`}
+                    >
+                      {entry.score.toFixed(1)}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Modal
+        isOpen={selectedMc != null}
+        onClose={() => setSelectedMc(null)}
+        title={selectedMc?.name ?? ''}
+        size="md"
+      >
+        {selectedMc && (
+          <div className="p-6 space-y-5">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-slate-500">Composite Score</span>
+              <span className={`inline-block rounded-full px-3 py-1 text-sm font-bold tabular-nums ${getScoreStyle(selectedMc.score)}`}>
+                {selectedMc.score.toFixed(1)} / 100
+              </span>
+            </div>
+            <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <p>
+                Base score: <span className="font-semibold text-slate-900">{selectedMc.baseScore.toFixed(1)}</span>
+                {' '}· Reliability factor:{' '}
+                <span className="font-semibold text-slate-900">{selectedMc.reliabilityFactor.toFixed(3)}</span>
+                {' '}· Referrals:{' '}
+                <span className="font-semibold text-slate-900">{formatNumber(selectedMc.referralCount)}</span>
+              </p>
+              {!selectedMc.qualified ? (
+                <p className="mt-1">Provisional ranking: fewer than 3 referrals in selected timeframe.</p>
+              ) : null}
+            </div>
+            <div>
+              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-400">KPI Breakdown</p>
+              <div className="space-y-3">
+                {selectedMc.kpis.map((kpi) => (
+                  <div key={kpi.key}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-slate-700">{kpi.label}</span>
+                        <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getWeightBadge(kpi.weight)}`}>
+                          {getWeightLabel(kpi.weight)}
+                        </span>
+                        {kpi.neutralFilled ? (
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                            Neutral
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="flex items-center gap-3 text-sm">
+                        <span className="text-slate-500">{kpi.displayValue}</span>
+                        <span className="font-semibold text-slate-900 tabular-nums w-12 text-right">
+                          {kpi.normalizedScore.toFixed(0)}/100
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-slate-100">
+                      <div
+                        className={`h-1.5 rounded-full transition-all ${kpi.normalizedScore >= 75 ? 'bg-emerald-500' : kpi.normalizedScore >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                        style={{ width: `${kpi.normalizedScore}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[] }) {
+  const getRiskTierBadge = (tier: McAfcRiskCallListEntry['riskTier']) => {
+    if (tier === 'high') return 'bg-rose-100 text-rose-700';
+    if (tier === 'medium') return 'bg-amber-100 text-amber-700';
+    return 'bg-emerald-100 text-emerald-700';
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">AFC Loss Risk Call List</p>
+      <p className="mt-1 text-xs text-slate-500">
+        Open buy-side AFC-eligible referrals ranked by AFC-loss risk.
+      </p>
+      {entries.length === 0 ? (
+        <p className="py-8 text-center text-sm text-slate-500">No qualifying deals in the next 30 days.</p>
+      ) : (
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-slate-200 text-xs font-medium uppercase text-slate-500">
+              <tr>
+                <th className="px-3 py-2">Borrower</th>
+                <th className="px-3 py-2">MC / Agent</th>
+                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Closing</th>
+                <th className="px-3 py-2">Risk</th>
+                <th className="px-3 py-2">Top reasons</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {entries.map((entry) => (
+                <tr key={entry.rowId} className="hover:bg-slate-50">
+                  <td className="px-3 py-2">
+                    <div className="flex flex-col">
+                      <Link href={`/referrals/${entry.referralId}`} className="font-medium text-brand hover:underline">
+                        {entry.borrowerName}
+                      </Link>
+                      <span className="text-xs text-slate-500">{entry.source}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-slate-600">
+                    <div>{entry.mcName ?? 'Unassigned MC'}</div>
+                    <div className="text-xs text-slate-500">{entry.agentName ?? 'Unassigned Agent'}</div>
+                  </td>
+                  <td className="px-3 py-2 text-slate-600">
+                    <div className="capitalize">{entry.status}</div>
+                    <div className="text-xs text-slate-500">{entry.daysSinceActivity}d since activity</div>
+                  </td>
+                  <td className="px-3 py-2 text-slate-600">
+                    <div>{entry.closingDate ? formatDate(entry.closingDate) : '—'}</div>
+                    <div className="text-xs text-slate-500">
+                      {entry.daysToClose != null ? `${entry.daysToClose}d to close` : 'No closing date'}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${getRiskTierBadge(entry.riskTier)}`}>
+                        {entry.riskTier}
+                      </span>
+                      <span className="font-semibold text-slate-900">{entry.riskScore.toFixed(1)}</span>
+                    </div>
+                    <div className="text-xs text-slate-500">{entry.usedAfc === true ? 'AFC attached' : 'AFC not attached'}</div>
+                  </td>
+                  <td className="px-3 py-2 text-xs text-slate-600">
+                    {entry.reasons.length ? entry.reasons.join(' · ') : 'No elevated signals'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
   return (
     <div className="space-y-6">
+      <McRankedList title="MC Composite KPI Leaderboard" entries={data.kpiLeaderboard.rankedMcs} />
+      <McAfcRiskCallListTable entries={data.afcRiskCallList} />
       <LineChartCard
         title="Requests received"
         data={data.requestTrend.all}
@@ -1757,7 +2143,8 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
           valueLabel="Requests"
         />
         <LeaderboardTable title="Revenue by MC" entries={data.revenueLeaderboard} valueLabel="Revenue" />
-        <LeaderboardTable title="Close rate by MC" entries={data.closeRateLeaderboard} valueLabel="Close rate" />
+        <McCloseEffectivenessTable entries={data.closeRateLeaderboard} />
+        <McOutsideLenderLossTable entries={data.outsideLenderLossLeaderboard} />
       </div>
     </div>
   );
