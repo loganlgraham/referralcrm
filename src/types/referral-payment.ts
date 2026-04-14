@@ -1,4 +1,13 @@
 export interface ReferralPayment {
+  closingDatePushbackCount?: number | null;
+  closingDatePushbacks?: Array<{
+    previousClosingDate?: string | null;
+    nextClosingDate?: string | null;
+    pushedBackDays?: number | null;
+    actorRole?: string | null;
+    actorId?: string | null;
+    timestamp?: string | null;
+  }> | null;
   _id: string;
   status?: string | null;
   expectedAmountCents?: number | null;

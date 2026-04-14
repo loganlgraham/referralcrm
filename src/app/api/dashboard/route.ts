@@ -80,6 +80,15 @@ interface AggregatedPayment {
   contractPriceCents?: number | null;
   commissionFlatFeeCents?: number | null;
   closingDate?: Date | null;
+  closingDatePushbackCount?: number | null;
+  closingDatePushbacks?: Array<{
+    previousClosingDate?: Date | null;
+    nextClosingDate?: Date | null;
+    pushedBackDays?: number | null;
+    actorRole?: string | null;
+    actorId?: Types.ObjectId | null;
+    timestamp?: Date | null;
+  }> | null;
   terminatedReason?: 'inspection' | 'appraisal' | 'financing' | 'changed_mind' | null;
   paidDate?: Date | null;
   invoiceDate?: Date | null;
@@ -1052,7 +1061,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         outsideLenderLossLeaderboard: [],
         requestLeaderboard: { all: [], aha: [], ahaOos: [] },
         kpiLeaderboard: { rankedMcs: [] },
-        afcRiskCallList: []
+        afcRiskCallList: [],
+        pushbackSummary: {
+          distinctDealsPushedBack: 0,
+          totalPushbackEvents: 0,
+          averageDaysPushedBackPerEvent: 0,
+          pushbackRatePercent: 0
+        }
       },
       agent: {
         averageCommissionCents: 0,
@@ -1162,6 +1177,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         contractPriceCents: 1,
         commissionFlatFeeCents: 1,
         closingDate: 1,
+        closingDatePushbackCount: 1,
+        closingDatePushbacks: 1,
         terminatedReason: 1,
         paidDate: 1,
         invoiceDate: 1,
@@ -2366,6 +2383,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     | 'pipelineCashConversion'
     | 'closeVelocityMedianDays'
     | 'referralCount'
+    | 'dealPushbackRate'
     | 'noAfcCloseRate'
     | 'noAssignedAgentCloseRate'
     | 'financingTerminationRate'
@@ -2423,6 +2441,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     pipelineCashConversion: 3,
     closeVelocityMedianDays: 3,
     referralCount: 3,
+    dealPushbackRate: 3,
     noAfcCloseRate: 3,
     noAssignedAgentCloseRate: 3,
     financingTerminationRate: 3,
@@ -2438,6 +2457,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     pipelineCashConversion: 'high',
     closeVelocityMedianDays: 'high',
     referralCount: 'high',
+    dealPushbackRate: 'high',
     noAfcCloseRate: 'high',
     noAssignedAgentCloseRate: 'high',
     financingTerminationRate: 'high',
@@ -2453,6 +2473,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     pipelineCashConversion: 'Pipeline to Cash',
     closeVelocityMedianDays: 'Median Days Pair -> Close',
     referralCount: 'Referral Count',
+    dealPushbackRate: 'Deals Pushed Back Rate',
     noAfcCloseRate: 'Closes Without AFC',
     noAssignedAgentCloseRate: 'Closes Without Assigned Agent',
     financingTerminationRate: 'Financing Terminations',
@@ -2468,6 +2489,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     'pipelineCashConversion',
     'closeVelocityMedianDays',
     'referralCount',
+    'dealPushbackRate',
     'noAfcCloseRate',
     'noAssignedAgentCloseRate',
     'financingTerminationRate',
@@ -2481,7 +2503,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const mcVelocityDaysMap = new Map<string, number[]>();
   const mcAfcCaptureMap = new Map<string, { eligible: number; captured: number }>();
   const mcForecastMap = new Map<string, { expected: number; realized: number }>();
+  const mcPushbackStatsMap = new Map<
+    string,
+    { dealsWithPushback: number; totalPushbackEvents: number; totalPushedBackDays: number }
+  >();
+  let mcDistinctDealsPushedBack = 0;
+  let mcTotalPushbackEvents = 0;
+  let mcTotalPushbackDays = 0;
+  let mcClosedDealsInScope = 0;
   allClosedDealsInTimeframe.forEach((payment) => {
+    mcClosedDealsInScope += 1;
     const key = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     const pairedAtRaw = payment.referral?.sla?.lastPairedAt;
     const closingDate = resolveClosingDate(payment);
@@ -2521,6 +2552,33 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     forecastCurrent.expected += Math.max(payment.expectedAmountCents ?? 0, 0);
     forecastCurrent.realized += Math.max(payment.receivedAmountCents ?? 0, 0);
     mcForecastMap.set(key, forecastCurrent);
+
+    const pushbackCountRaw =
+      typeof payment.closingDatePushbackCount === 'number' && payment.closingDatePushbackCount > 0
+        ? payment.closingDatePushbackCount
+        : 0;
+    const pushbackEntries = Array.isArray(payment.closingDatePushbacks)
+      ? payment.closingDatePushbacks.filter(
+          (entry) => typeof entry?.pushedBackDays === 'number' && entry.pushedBackDays > 0
+        )
+      : [];
+    const pushbackEvents = Math.max(pushbackCountRaw, pushbackEntries.length);
+    if (pushbackEvents > 0) {
+      const pushedBackDays = pushbackEntries.reduce((sum, entry) => sum + (entry.pushedBackDays ?? 0), 0);
+      const current = mcPushbackStatsMap.get(key) ?? {
+        dealsWithPushback: 0,
+        totalPushbackEvents: 0,
+        totalPushedBackDays: 0
+      };
+      current.dealsWithPushback += 1;
+      current.totalPushbackEvents += pushbackEvents;
+      current.totalPushedBackDays += pushedBackDays;
+      mcPushbackStatsMap.set(key, current);
+
+      mcDistinctDealsPushedBack += 1;
+      mcTotalPushbackEvents += pushbackEvents;
+      mcTotalPushbackDays += pushedBackDays;
+    }
   });
 
   const mcAgingRiskMap = new Map<
@@ -2619,6 +2677,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     pipelineCashConversion: new Map(),
     closeVelocityMedianDays: new Map(),
     referralCount: new Map(),
+    dealPushbackRate: new Map(),
     noAfcCloseRate: new Map(),
     noAssignedAgentCloseRate: new Map(),
     financingTerminationRate: new Map(),
@@ -2634,6 +2693,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     pipelineCashConversion: new Map(),
     closeVelocityMedianDays: new Map(),
     referralCount: new Map(),
+    dealPushbackRate: new Map(),
     noAfcCloseRate: new Map(),
     noAssignedAgentCloseRate: new Map(),
     financingTerminationRate: new Map(),
@@ -2648,6 +2708,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...referralByMcMap.keys(),
     ...mcRevenueMap.keys(),
     ...mcTotalClosedDealsMap.keys(),
+    ...mcPushbackStatsMap.keys(),
     ...mcTerminatedMap.keys(),
     ...sourceBreakdownByMc.keys(),
     ...mcAgingRiskMap.keys()
@@ -2729,6 +2790,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     if (totalClosedDeals > 0) {
+      const pushbackStats = mcPushbackStatsMap.get(id);
+      const dealsWithPushback = pushbackStats?.dealsWithPushback ?? 0;
+      const dealPushbackRate = (dealsWithPushback / totalClosedDeals) * 100;
+      mcKpiRaw.dealPushbackRate.set(id, dealPushbackRate);
+      mcKpiDisplayMap.dealPushbackRate.set(
+        id,
+        `${dealPushbackRate.toFixed(1)}% (${dealsWithPushback}/${totalClosedDeals})`
+      );
+
       const noAfcCloseRate = ((mcNoAfcClosesMap.get(id) ?? 0) / totalClosedDeals) * 100;
       mcKpiRaw.noAfcCloseRate.set(id, noAfcCloseRate);
       mcKpiDisplayMap.noAfcCloseRate.set(id, `${noAfcCloseRate.toFixed(1)}%`);
@@ -2759,6 +2829,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     pipelineCashConversion: normalizeAhaKpiMap(mcKpiRaw.pipelineCashConversion, false),
     closeVelocityMedianDays: normalizeAhaKpiMap(mcKpiRaw.closeVelocityMedianDays, true),
     referralCount: normalizeAhaKpiMap(mcKpiRaw.referralCount, false),
+    dealPushbackRate: normalizeAhaKpiMap(mcKpiRaw.dealPushbackRate, true),
     noAfcCloseRate: normalizeAhaKpiMap(mcKpiRaw.noAfcCloseRate, true),
     noAssignedAgentCloseRate: normalizeAhaKpiMap(mcKpiRaw.noAssignedAgentCloseRate, true),
     financingTerminationRate: normalizeAhaKpiMap(mcKpiRaw.financingTerminationRate, true),
@@ -4093,7 +4164,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       outsideLenderLossLeaderboard: mcOutsideLenderLossLeaderboard,
       requestLeaderboard: mcRequestLeaderboard,
       kpiLeaderboard: { rankedMcs: mcKpiLeaderboard },
-      afcRiskCallList: mcAfcRiskCallList
+      afcRiskCallList: mcAfcRiskCallList,
+      pushbackSummary: {
+        distinctDealsPushedBack: mcDistinctDealsPushedBack,
+        totalPushbackEvents: mcTotalPushbackEvents,
+        averageDaysPushedBackPerEvent:
+          mcTotalPushbackEvents > 0 ? mcTotalPushbackDays / mcTotalPushbackEvents : 0,
+        pushbackRatePercent:
+          mcClosedDealsInScope > 0 ? (mcDistinctDealsPushedBack / mcClosedDealsInScope) * 100 : 0
+      }
     },
     agent: {
       averageCommissionCents: averageAgentCommissionCents,

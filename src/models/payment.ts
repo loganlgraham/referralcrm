@@ -52,7 +52,21 @@ const paymentSchema = new Schema(
     paidDate: Date,
     notes: String,
     feeBreakdownEmailSentAt: { type: Date, default: null },
-    feeBreakdownEmailSentBy: { type: String, default: null }
+    feeBreakdownEmailSentBy: { type: String, default: null },
+    closingDatePushbackCount: { type: Number, default: 0 },
+    closingDatePushbacks: {
+      type: [
+        {
+          previousClosingDate: { type: Date, required: true },
+          nextClosingDate: { type: Date, required: true },
+          pushedBackDays: { type: Number, required: true },
+          actorRole: { type: String, default: null },
+          actorId: { type: Schema.Types.ObjectId, default: null },
+          timestamp: { type: Date, default: Date.now },
+        }
+      ],
+      default: []
+    }
   },
   { timestamps: true }
 );

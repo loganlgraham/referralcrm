@@ -426,6 +426,17 @@ function DealCard({
       deal.receivedAmountCents ??
       0
   );
+  const originalClosingDate = (() => {
+    if (!Array.isArray(deal.closingDatePushbacks)) {
+      return null;
+    }
+    for (const entry of deal.closingDatePushbacks) {
+      if (entry?.previousClosingDate) {
+        return entry.previousClosingDate;
+      }
+    }
+    return null;
+  })();
 
   const handleMarkPaidClick = () => {
     let amountDraft = defaultPaidAmountDisplay || '0.00';
@@ -521,6 +532,11 @@ function DealCard({
             <p className="text-xs text-slate-500">
               Closing date: {deal.closingDate ? formatDateMST(deal.closingDate) : '—'}
             </p>
+            {originalClosingDate ? (
+              <p className="text-xs text-slate-500">
+                Original close date: {formatDateMST(originalClosingDate)}
+              </p>
+            ) : null}
             {deal.status === 'terminated' && (
               <p className="text-xs font-medium text-rose-600">
                 Termination reason: {terminatedReasonLabel ?? 'Not specified'}
