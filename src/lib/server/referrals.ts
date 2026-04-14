@@ -104,6 +104,8 @@ interface ReferralListItem {
   buyStatus?: string | null;
   sellStatus?: string | null;
   viewerAssignedSide?: 'buy' | 'sell' | null;
+  hasAnyPayments?: boolean;
+  hasAnyUsedAfcTrue?: boolean;
 }
 
 /**
@@ -540,15 +542,43 @@ export async function getReferrals(params: GetReferralsParams) {
   };
   const paymentDocs = await Payment.find({ referralId: { $in: referralIds } })
     .sort({ createdAt: -1 })
-    .select('referralId status usedAssignedAgent agentAttribution')
+    .select('referralId status side usedAfc usedAssignedAgent agentAttribution')
     .lean<
       {
         referralId: Types.ObjectId;
         status?: string | null;
+        side?: 'buy' | 'sell' | null;
+        usedAfc?: boolean | null;
         usedAssignedAgent?: boolean | null;
         agentAttribution?: string | null;
       }[]
     >();
+  const paymentSummaryByReferralId = new Map<
+    string,
+    {
+      hasAnyPayments: boolean;
+      hasAnyUsedAfcTrue: boolean;
+    }
+  >();
+
+  paymentDocs.forEach((payment) => {
+    if (payment.side !== 'buy') {
+      return;
+    }
+
+    const referralId = payment.referralId.toString();
+    const existingSummary = paymentSummaryByReferralId.get(referralId) ?? {
+      hasAnyPayments: false,
+      hasAnyUsedAfcTrue: false
+    };
+
+    existingSummary.hasAnyPayments = true;
+    if (payment.usedAfc === true) {
+      existingSummary.hasAnyUsedAfcTrue = true;
+    }
+
+    paymentSummaryByReferralId.set(referralId, existingSummary);
+  });
 
   const dealStatusMap = buildDealStatusMap(paymentDocs);
 
@@ -636,6 +666,11 @@ export async function getReferrals(params: GetReferralsParams) {
         item.sellSideAgent?.ahaDesignation === 'AHA'
       );
 
+      const paymentSummary = paymentSummaryByReferralId.get(item._id.toString()) ?? {
+        hasAnyPayments: false,
+        hasAnyUsedAfcTrue: false
+      };
+
       return {
         _id: item._id.toString(),
         createdAt: item.createdAt.toISOString(),
@@ -686,6 +721,8 @@ export async function getReferrals(params: GetReferralsParams) {
         buyStatus: item.buyStatus ?? 'New Lead',
         sellStatus: item.sellStatus ?? 'New Lead',
         viewerAssignedSide,
+        hasAnyPayments: paymentSummary.hasAnyPayments,
+        hasAnyUsedAfcTrue: paymentSummary.hasAnyUsedAfcTrue
       } as ReferralListItem;
     }),
     total,

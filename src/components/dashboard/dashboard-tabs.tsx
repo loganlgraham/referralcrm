@@ -278,6 +278,12 @@ interface DashboardResponse {
     };
     kpiLeaderboard: { rankedMcs: McRankedEntry[] };
     afcRiskCallList: McAfcRiskCallListEntry[];
+    pushbackSummary: {
+      distinctDealsPushedBack: number;
+      totalPushbackEvents: number;
+      averageDaysPushedBackPerEvent: number;
+      pushbackRatePercent: number;
+    };
     revenueLeaderboard: LeaderboardEntry[];
     closeRateLeaderboard: LeaderboardEntry[];
     outsideLenderLossLeaderboard: LeaderboardEntry[];
@@ -2156,6 +2162,28 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
         <LeaderboardTable title="Revenue by MC" entries={data.revenueLeaderboard} valueLabel="Revenue" />
         <McCloseEffectivenessTable entries={data.closeRateLeaderboard} />
         <McOutsideLenderLossTable entries={data.outsideLenderLossLeaderboard} />
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <SummaryCard
+          title="Deals pushed back"
+          value={formatNumber(data.pushbackSummary.distinctDealsPushedBack)}
+          helper="Closed deals with at least one close-date pushback in this view."
+          extraStats={[
+            {
+              label: 'Total pushback events',
+              value: formatNumber(data.pushbackSummary.totalPushbackEvents)
+            },
+            {
+              label: 'Avg. days pushed back',
+              value: `${data.pushbackSummary.averageDaysPushedBackPerEvent.toFixed(1)} days`
+            }
+          ]}
+        />
+        <SummaryCard
+          title="Pushback rate"
+          value={`${data.pushbackSummary.pushbackRatePercent.toFixed(1)}%`}
+          helper="Percent of closed deals that were pushed back in this timeframe/network view."
+        />
       </div>
     </div>
   );

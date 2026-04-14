@@ -857,6 +857,72 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
   });
 
+  it('penalizes higher pushed-back-deal rates as a high-tier negative KPI', () => {
+    const normalizedDealPushbackRate = new Map([
+      ['mc-a', 100],
+      ['mc-b', 0]
+    ]);
+    const pushbackWeight = 3;
+    const baselineWeight = 3;
+    const baselineNormalizedScore = 50;
+    const totalWeight = pushbackWeight + baselineWeight;
+
+    const scoreForMcA =
+      ((normalizedDealPushbackRate.get('mc-a') ?? AHA_NEUTRAL_SCORE) * pushbackWeight +
+        baselineNormalizedScore * baselineWeight) /
+      totalWeight;
+    const scoreForMcB =
+      ((normalizedDealPushbackRate.get('mc-b') ?? AHA_NEUTRAL_SCORE) * pushbackWeight +
+        baselineNormalizedScore * baselineWeight) /
+      totalWeight;
+
+    expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
+  });
+
+  it('calculates pushback summary metrics from closed deals', () => {
+    const allClosedDealsInTimeframe = [
+      { closingDatePushbackCount: 0, closingDatePushbacks: [] },
+      {
+        closingDatePushbackCount: 1,
+        closingDatePushbacks: [{ pushedBackDays: 6 }]
+      },
+      {
+        closingDatePushbackCount: 2,
+        closingDatePushbacks: [{ pushedBackDays: 4 }, { pushedBackDays: 3 }]
+      }
+    ];
+
+    const totals = allClosedDealsInTimeframe.reduce(
+      (acc, payment) => {
+        const pushbackEntries = Array.isArray(payment.closingDatePushbacks)
+          ? payment.closingDatePushbacks.filter(
+              (entry) => typeof entry?.pushedBackDays === 'number' && entry.pushedBackDays > 0
+            )
+          : [];
+        const pushbackEvents = Math.max(payment.closingDatePushbackCount ?? 0, pushbackEntries.length);
+        if (pushbackEvents > 0) {
+          acc.distinctDealsPushedBack += 1;
+          acc.totalPushbackEvents += pushbackEvents;
+          acc.totalPushbackDays += pushbackEntries.reduce((sum, entry) => sum + (entry.pushedBackDays ?? 0), 0);
+        }
+        return acc;
+      },
+      { distinctDealsPushedBack: 0, totalPushbackEvents: 0, totalPushbackDays: 0 }
+    );
+
+    const averageDaysPushedBackPerEvent =
+      totals.totalPushbackEvents > 0 ? totals.totalPushbackDays / totals.totalPushbackEvents : 0;
+    const pushbackRatePercent =
+      allClosedDealsInTimeframe.length > 0
+        ? (totals.distinctDealsPushedBack / allClosedDealsInTimeframe.length) * 100
+        : 0;
+
+    expect(totals.distinctDealsPushedBack).toBe(2);
+    expect(totals.totalPushbackEvents).toBe(3);
+    expect(averageDaysPushedBackPerEvent).toBeCloseTo(4.33, 2);
+    expect(pushbackRatePercent).toBeCloseTo(66.67, 2);
+  });
+
   it('penalizes higher financing-termination rates as a high-tier negative KPI', () => {
     const normalizedFinancingTerminationRate = new Map([
       ['mc-a', 100],

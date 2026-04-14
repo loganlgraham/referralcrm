@@ -1,5 +1,6 @@
 import {
   addMonths,
+  differenceInCalendarDays,
   differenceInDays,
   endOfDay,
   endOfMonth,
@@ -88,6 +89,15 @@ type PaymentWithReferral = {
   agentDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   feeBreakdownEmailSentAt?: Date | null;
   feeBreakdownEmailSentBy?: string | null;
+  closingDatePushbackCount?: number | null;
+  closingDatePushbacks?: Array<{
+    previousClosingDate?: Date | null;
+    nextClosingDate?: Date | null;
+    pushedBackDays?: number | null;
+    actorRole?: string | null;
+    actorId?: Types.ObjectId | null;
+    timestamp?: Date | null;
+  }> | null;
 };
 
 const toDate = (value?: Date | string | null): Date | null => {
@@ -588,6 +598,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       propertyAddress: payment.propertyAddress ?? null,
       terminatedReason: payment.terminatedReason ?? null,
       closingDate: payment.closingDate ? payment.closingDate.toISOString() : null,
+      closingDatePushbackCount: payment.closingDatePushbackCount ?? 0,
+      closingDatePushbacks: Array.isArray(payment.closingDatePushbacks)
+        ? payment.closingDatePushbacks.map((entry) => ({
+            previousClosingDate: entry.previousClosingDate
+              ? entry.previousClosingDate.toISOString()
+              : null,
+            nextClosingDate: entry.nextClosingDate ? entry.nextClosingDate.toISOString() : null,
+            pushedBackDays: entry.pushedBackDays ?? null,
+            actorRole: entry.actorRole ?? null,
+            actorId: entry.actorId ? entry.actorId.toString() : null,
+            timestamp: entry.timestamp ? entry.timestamp.toISOString() : null,
+          }))
+        : [],
       agentAttribution: payment.agentAttribution ?? null,
       usedAfc: payment.side === 'sell' ? false : Boolean(payment.usedAfc),
       usedAssignedAgent: Boolean(payment.usedAssignedAgent),
@@ -1070,6 +1093,40 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   // Auto-set paid date when status is changing TO paid AND no paid date is provided
   if (isPayingNow && !isAgentOrigin && !Object.prototype.hasOwnProperty.call(parsed.data, 'paidDate')) {
     updatePayload.paidDate = new Date();
+  }
+
+  const hasClosingDateUpdate = Object.prototype.hasOwnProperty.call(parsed.data, 'closingDate');
+  const previousClosingDate = toDate(existingPayment.closingDate);
+  const requestedClosingDate = hasClosingDateUpdate ? toDate(parsed.data.closingDate ?? null) : null;
+  const isClosingDatePushback =
+    hasClosingDateUpdate &&
+    previousClosingDate != null &&
+    requestedClosingDate != null &&
+    requestedClosingDate.getTime() > previousClosingDate.getTime();
+  if (isClosingDatePushback) {
+    const pushedBackDays = differenceInCalendarDays(requestedClosingDate, previousClosingDate);
+    if (pushedBackDays > 0) {
+      const previousPushbacks = Array.isArray(existingPayment.closingDatePushbacks)
+        ? existingPayment.closingDatePushbacks
+        : [];
+      const previousPushbackCount =
+        typeof existingPayment.closingDatePushbackCount === 'number'
+          ? existingPayment.closingDatePushbackCount
+          : previousPushbacks.length;
+      const pushbackEvent: Record<string, unknown> = {
+        previousClosingDate,
+        nextClosingDate: requestedClosingDate,
+        pushedBackDays,
+        actorRole: session.user.role,
+        timestamp: new Date(),
+      };
+      const actorId = resolveAuditActorId(session.user.id);
+      if (actorId) {
+        pushbackEvent.actorId = actorId;
+      }
+      updatePayload.closingDatePushbackCount = previousPushbackCount + 1;
+      updatePayload.closingDatePushbacks = [...previousPushbacks, pushbackEvent];
+    }
   }
 
   const nextStatusValue = parsed.data.status ?? existingPayment.status;

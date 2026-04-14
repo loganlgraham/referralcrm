@@ -1230,6 +1230,16 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         : [],
     [referral.payments]
   );
+  const noteEmailDefaultSummary = useMemo(() => {
+    const buySideDeals = referralDeals.filter((payment) => payment.side === 'buy');
+    const hasAnyPayments = buySideDeals.length > 0;
+    const hasAnyUsedAfcTrue = buySideDeals.some((payment) => payment.usedAfc === true);
+
+    return {
+      hasAnyPayments,
+      hasAnyUsedAfcTrue
+    };
+  }, [referralDeals]);
   const { visibleDeals: visibleReferralDeals, hiddenOutsideAgentCount } = useMemo(
     () => getReferralDealsVisibility(referralDeals, viewerRole, referral.viewerAssignedSide ?? null),
     [referral.viewerAssignedSide, referralDeals, viewerRole]
@@ -1568,6 +1578,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
           email: mcContact?.email ?? null
         }}
         adminContacts={referral.adminContacts ?? []}
+        hasAnyPayments={noteEmailDefaultSummary.hasAnyPayments}
+        hasAnyUsedAfcTrue={noteEmailDefaultSummary.hasAnyUsedAfcTrue}
       />
       <ReferralDeals
         referralId={referralId}
