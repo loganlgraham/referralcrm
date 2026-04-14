@@ -100,7 +100,7 @@ export function ReferralNotes({
   const [hiddenFromAgent, setHiddenFromAgent] = useState(false);
   const [hiddenFromMc, setHiddenFromMc] = useState(false);
   const [emailAgent, setEmailAgent] = useState(false);
-  const [emailMc, setEmailMc] = useState(false);
+  const [emailMc, setEmailMc] = useState(() => viewerRole === 'agent' && Boolean(mcContact?.email));
   const [emailAdmin, setEmailAdmin] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showNotesDropdown, setShowNotesDropdown] = useState(false);
@@ -158,7 +158,7 @@ export function ReferralNotes({
     setHiddenFromAgent(false);
     setHiddenFromMc(false);
     setEmailAgent(false);
-    setEmailMc(false);
+    setEmailMc(viewerRole === 'agent' && hasMcEmail);
     setEmailAdmin(false);
   };
 

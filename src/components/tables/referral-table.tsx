@@ -77,6 +77,15 @@ export interface ReferralRow {
 
 type TableMode = 'admin' | 'mc' | 'agent';
 
+type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknown';
+
+interface NoteActivityResponse {
+  id: string;
+  emailedTargets?: ('mc')[];
+  deliveryFailed?: boolean;
+  deliveryFailureReason?: DeliveryFailureReason;
+}
+
 type ReferralTableProps = {
   data: ReferralRow[] | undefined | null;
   mode: TableMode;
@@ -793,13 +802,16 @@ function normalizeStatusForSort({
   return label.toLocaleLowerCase();
 }
 
-function NoteComposer({ referralId }: { referralId: string }) {
+function NoteComposer({ referralId, mcEmail }: { referralId: string; mcEmail?: string }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState('');
+  const [emailMc, setEmailMc] = useState(() => Boolean(mcEmail));
   const [saving, setSaving] = useState(false);
+  const hasMcEmail = Boolean(mcEmail);
 
   const reset = () => {
     setNote('');
+    setEmailMc(hasMcEmail);
     setOpen(false);
   };
 
@@ -814,14 +826,37 @@ function NoteComposer({ referralId }: { referralId: string }) {
       const response = await fetch(`/api/referrals/${referralId}/activities`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel: 'note', content: note.trim() })
+        body: JSON.stringify({
+          channel: 'note',
+          content: note.trim(),
+          emailTargets: emailMc && hasMcEmail ? ['mc'] : undefined
+        })
       });
 
       if (!response.ok) {
         throw new Error('Failed to save note');
       }
 
-      toast.success('Note saved');
+      const payload = (await response.json()) as NoteActivityResponse;
+      const emailSummary =
+        Array.isArray(payload.emailedTargets) && payload.emailedTargets.length > 0
+          ? ' Email sent to MC.'
+          : '';
+      toast.success(`Note saved.${emailSummary}`.trim());
+
+      if (payload.deliveryFailed && emailMc && hasMcEmail) {
+        const message = (() => {
+          switch (payload.deliveryFailureReason) {
+            case 'missing_configuration':
+              return 'Note saved, but email delivery is disabled. Set RESEND_API_KEY and EMAIL_FROM environment variables to enable email notifications.';
+            case 'no_recipients':
+              return 'Note saved, but no MC recipient with a valid email address was available.';
+            default:
+              return 'Note was saved, but the email could not be delivered.';
+          }
+        })();
+        toast.error(message);
+      }
       reset();
     } catch (error) {
       console.error(error);
@@ -853,6 +888,16 @@ function NoteComposer({ referralId }: { referralId: string }) {
         placeholder="Capture quick context for this referral"
         disabled={saving}
       />
+      <label className={`flex items-center gap-2 text-xs font-medium ${hasMcEmail ? 'text-slate-600' : 'text-slate-400'}`}>
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-brand"
+          checked={emailMc}
+          onChange={(event) => setEmailMc(event.target.checked)}
+          disabled={saving || !hasMcEmail}
+        />
+        Email MC
+      </label>
       <div className="flex gap-2 text-sm">
         <button
           type="button"
@@ -1066,7 +1111,7 @@ function buildColumns(
       {
         header: 'Notes',
         id: 'notes',
-        cell: ({ row }) => <NoteComposer referralId={row.original._id} />,
+        cell: ({ row }) => <NoteComposer referralId={row.original._id} mcEmail={row.original.lenderEmail} />,
         enableSorting: false,
       },
       createdColumn
@@ -1342,7 +1387,7 @@ function ReferralMobileStack({
                 {/* Notes zone */}
                 <div className="border-t border-slate-100 pt-3">
                   <MobileField label="Notes">
-                    <NoteComposer referralId={row._id} />
+                    <NoteComposer referralId={row._id} mcEmail={row.lenderEmail} />
                   </MobileField>
                 </div>
               </div>

@@ -10,6 +10,8 @@ import { Referral } from '@/models/referral';
 import { User } from '@/models/user';
 import { resolveActivityActor } from '@/lib/server/activities';
 import { createAdminNotifications } from '@/lib/server/notifications';
+import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
+import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 
 interface Params {
   params: { id: string };
@@ -58,6 +60,7 @@ type LeanReferralAccess = {
 };
 
 const NOTE_ACTIVITY_DEDUPE_WINDOW_MS = 15_000;
+type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknown';
 
 const normalizeRoleToActivityActor = (role: string | null | undefined) => {
   if (role === 'agent') {
@@ -191,7 +194,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     .populate('assignedAgent', 'userId')
     .populate('buySideAgent', 'userId')
     .populate('sellSideAgent', 'userId')
-    .populate('lender', 'userId')
+    .populate('lender', 'userId name email')
     .lean<LeanReferralAccess & { borrower?: { name?: string } }>();
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
@@ -218,6 +221,64 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     content: parsed.data.content
   });
 
+  const requestedTargets = new Set(parsed.data.emailTargets ?? []);
+  let emailedTargets: ('mc')[] = [];
+  let deliveryFailed = false;
+  let deliveryFailureReason: DeliveryFailureReason | undefined;
+
+  if (parsed.data.channel === 'note' && session.user.role === 'agent' && requestedTargets.has('mc')) {
+    const lender =
+      referral.lender && typeof referral.lender === 'object' && !Array.isArray(referral.lender)
+        ? referral.lender
+        : null;
+    const lenderEmail =
+      lender && 'email' in lender && typeof lender.email === 'string' ? lender.email.trim() : '';
+    const lenderName =
+      lender && 'name' in lender && typeof lender.name === 'string' && lender.name.trim()
+        ? lender.name.trim()
+        : 'MC';
+
+    if (!isTransactionalEmailConfigured()) {
+      deliveryFailed = true;
+      deliveryFailureReason = 'missing_configuration';
+    } else if (!lenderEmail) {
+      deliveryFailed = true;
+      deliveryFailureReason = 'no_recipients';
+    } else {
+      const baseUrl = getReferralAppBaseUrl();
+      const referralLink = baseUrl ? buildReferralLink(params.id) : undefined;
+      const borrowerName = referral.borrower?.name ?? 'this referral';
+      const authorName = session.user.name || session.user.email || 'A team member';
+      const plainContent = parsed.data.content;
+      const htmlContent = parsed.data.content.replace(/\n/g, '<br />');
+
+      const delivered = await sendTransactionalEmail({
+        to: [lenderEmail],
+        subject: `New note on ${borrowerName}`,
+        html: `<p>${authorName} added a new note on ${borrowerName}.</p>
+        <p>Recipient: ${lenderName}</p>
+        <blockquote style="margin: 1rem 0; padding-left: 1rem; border-left: 4px solid #cbd5f5;">${htmlContent}</blockquote>
+        ${
+          referralLink
+            ? `<p>Review the referral: <a href="${referralLink}">${referralLink}</a></p>`
+            : ''
+        }`,
+        text: `${authorName} added a new note on ${borrowerName}.
+
+${plainContent}
+
+${referralLink ? `Review the referral: ${referralLink}` : ''}`
+      });
+
+      if (delivered) {
+        emailedTargets = ['mc'];
+      } else {
+        deliveryFailed = true;
+        deliveryFailureReason = 'unknown';
+      }
+    }
+  }
+
   await Referral.findByIdAndUpdate(params.id, { $set: { updatedAt: new Date() } });
 
   // Create notifications for admins if this is an email activity from non-admin
@@ -234,5 +295,13 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     });
   }
 
-  return NextResponse.json({ id: activity._id.toString() }, { status: 201 });
+  return NextResponse.json(
+    {
+      id: activity._id.toString(),
+      emailedTargets,
+      deliveryFailed,
+      deliveryFailureReason
+    },
+    { status: 201 }
+  );
 }
