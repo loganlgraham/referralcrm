@@ -193,8 +193,17 @@ const ACTIVE_PIPELINE_STATUSES = new Set<string>([
   'Under Contract',
 ]);
 const ACTIVE_PIPELINE_STATUS_KEYS = new Set(
-  Array.from(ACTIVE_PIPELINE_STATUSES, (status) => status.trim().toLowerCase())
+  Array.from(ACTIVE_PIPELINE_STATUSES, (status) => normalizeStatusKey(status))
 );
+const TERMINAL_REFERRAL_STATUS_KEYS = new Set<string>([
+  'closed',
+  'lost',
+  'terminated',
+  'payment_sent',
+  'payment_received',
+  'paid'
+]);
+const TERMINAL_PAYMENT_STATUS_KEYS = new Set<string>(['closed', 'payment_sent', 'payment_received', 'paid']);
 const NOTE_SIGNAL_STRONG_PHRASES = [
   'outside lender',
   'other lender',
@@ -271,6 +280,45 @@ const isClosedDealEligible = (payment: AggregatedPayment): boolean =>
   CLOSED_DEAL_STATUSES.has(payment.status) &&
   payment.agentAttribution !== 'OUTSIDE_AGENT' &&
   payment.usedAssignedAgent !== false;
+
+function normalizeStatusKey(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+}
+
+function isTerminalReferralStatus(status: unknown): boolean {
+  return TERMINAL_REFERRAL_STATUS_KEYS.has(normalizeStatusKey(status));
+}
+
+function isTerminalPaymentStatus(status: unknown): boolean {
+  return TERMINAL_PAYMENT_STATUS_KEYS.has(normalizeStatusKey(status));
+}
+
+function getOutcomeTuningMultiplier(
+  sampleSize: number,
+  fullConfidenceAt: number,
+  minMultiplier: number,
+  maxMultiplier: number
+): number {
+  const normalized = Math.min(1, Math.max(0, sampleSize) / Math.max(fullConfidenceAt, 1));
+  return minMultiplier + (maxMultiplier - minMultiplier) * normalized;
+}
+
+function computeHistoricalRiskBoost(outsideLossRate: number, sampleSize: number): number {
+  const baseBoost = Math.min(15, outsideLossRate * 100 * 0.15);
+  const tuningMultiplier = getOutcomeTuningMultiplier(sampleSize, 10, 0.7, 1.1);
+  const tunedBoost = Math.min(15, baseBoost * tuningMultiplier);
+  return Math.round(tunedBoost * 10) / 10;
+}
+
+function computeSourceFragilityBoost(sourceCloseRate: number, sampleSize: number): number {
+  const baseBoost = Math.min(10, ((100 - sourceCloseRate) / 100) * 10);
+  const tuningMultiplier = getOutcomeTuningMultiplier(sampleSize, 15, 0.75, 1.1);
+  const tunedBoost = Math.min(10, baseBoost * tuningMultiplier);
+  return Math.round(tunedBoost * 10) / 10;
+}
 
 function parseDateOnly(value: string | null): Date | null {
   if (!value) return null;
@@ -2768,7 +2816,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const mcCandidateReferrals = filteredReferrals.filter((referral) => {
     if (!referral.lender) return false;
-    const normalizedStatus = String(referral.status ?? '').trim().toLowerCase();
+    const normalizedStatus = normalizeStatusKey(referral.status);
+    const referralId = referral._id.toString();
+    const linkedPayment = latestPaymentByReferralId.get(referralId);
+    if (isTerminalReferralStatus(referral.status)) return false;
+    if (linkedPayment && isTerminalPaymentStatus(linkedPayment.status)) return false;
     if (!ACTIVE_PIPELINE_STATUS_KEYS.has(normalizedStatus)) return false;
     const inferredDealSide = resolveDealSideForMetrics(
       null,
@@ -2893,22 +2945,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const outsideLossRate = mcId
         ? (mcOutsideLenderLossMap.get(mcId) ?? 0) / Math.max(mcTotalClosedDealsMap.get(mcId) ?? 1, 1)
         : 0;
-      const historicalRiskBoost = Math.min(15, outsideLossRate * 100 * 0.15);
+      const mcClosedSampleSize = mcId ? mcTotalClosedDealsMap.get(mcId) ?? 0 : 0;
+      const historicalRiskBoost = computeHistoricalRiskBoost(outsideLossRate, mcClosedSampleSize);
       if (historicalRiskBoost > 0) {
         riskScore += historicalRiskBoost;
         reasons.push({
-          label: `MC historical outside-lender loss ${(outsideLossRate * 100).toFixed(1)}%`,
+          label: `MC historical outside-lender loss ${(outsideLossRate * 100).toFixed(1)}% (${mcClosedSampleSize} closed)`,
           score: historicalRiskBoost
         });
       }
 
       const source = String(referral.source ?? 'Unknown');
       const sourceCloseRate = sourceCloseRateMap.get(source) ?? 0;
-      const sourceFragilityBoost = Math.min(10, ((100 - sourceCloseRate) / 100) * 10);
+      const sourceSampleSize = sourceTotals.get(source) ?? 0;
+      const sourceFragilityBoost = computeSourceFragilityBoost(sourceCloseRate, sourceSampleSize);
       if (sourceFragilityBoost >= 4) {
         riskScore += sourceFragilityBoost;
         reasons.push({
-          label: `Source close-rate baseline ${sourceCloseRate.toFixed(1)}%`,
+          label: `Source close-rate baseline ${sourceCloseRate.toFixed(1)}% (${sourceSampleSize} referrals)`,
           score: sourceFragilityBoost
         });
       }

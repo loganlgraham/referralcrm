@@ -817,6 +817,52 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
 });
 
 describe('Dashboard Metrics - MC AFC Risk Call List', () => {
+  const normalizeStatusKey = (value: string | null | undefined) =>
+    String(value ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '_');
+
+  const TERMINAL_REFERRAL_STATUS_KEYS = new Set([
+    'closed',
+    'lost',
+    'terminated',
+    'payment_sent',
+    'payment_received',
+    'paid'
+  ]);
+  const TERMINAL_PAYMENT_STATUS_KEYS = new Set(['closed', 'payment_sent', 'payment_received', 'paid']);
+  const ACTIVE_PIPELINE_STATUS_KEYS = new Set([
+    'paired',
+    'in_communication',
+    'active_lead',
+    'showing_homes',
+    'under_contract'
+  ]);
+
+  const getOutcomeTuningMultiplier = (
+    sampleSize: number,
+    fullConfidenceAt: number,
+    minMultiplier: number,
+    maxMultiplier: number
+  ) => {
+    const normalized = Math.min(1, Math.max(0, sampleSize) / Math.max(fullConfidenceAt, 1));
+    return minMultiplier + (maxMultiplier - minMultiplier) * normalized;
+  };
+
+  const shouldIncludeInAfcRiskList = ({
+    referralStatus,
+    paymentStatus
+  }: {
+    referralStatus: string;
+    paymentStatus?: string | null;
+  }) => {
+    const normalizedReferralStatus = normalizeStatusKey(referralStatus);
+    if (TERMINAL_REFERRAL_STATUS_KEYS.has(normalizedReferralStatus)) return false;
+    if (paymentStatus && TERMINAL_PAYMENT_STATUS_KEYS.has(normalizeStatusKey(paymentStatus))) return false;
+    return ACTIVE_PIPELINE_STATUS_KEYS.has(normalizedReferralStatus);
+  };
+
   const computeRiskScore = ({
     hasDealRecord,
     usedAfc,
@@ -824,7 +870,9 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     daysToClose,
     outsideLossRatePct,
     sourceCloseRatePct,
-    noteSignalScore = 0
+    noteSignalScore = 0,
+    outsideLossSampleSize = 10,
+    sourceSampleSize = 15
   }: {
     hasDealRecord: boolean;
     usedAfc: boolean | null;
@@ -833,6 +881,8 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     outsideLossRatePct: number;
     sourceCloseRatePct: number;
     noteSignalScore?: number;
+    outsideLossSampleSize?: number;
+    sourceSampleSize?: number;
   }) => {
     let score = 0;
 
@@ -846,8 +896,17 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     else if (daysToClose <= 14) score += 14;
     else if (daysToClose <= 30) score += 8;
 
-    score += Math.min(15, outsideLossRatePct * 0.15);
-    score += Math.min(10, ((100 - sourceCloseRatePct) / 100) * 10);
+    const historicalRiskBoost =
+      Math.min(15, outsideLossRatePct * 0.15) *
+      getOutcomeTuningMultiplier(outsideLossSampleSize, 10, 0.7, 1.1);
+    score += Math.min(15, historicalRiskBoost);
+
+    const sourceFragilityBoost =
+      Math.min(10, ((100 - sourceCloseRatePct) / 100) * 10) *
+      getOutcomeTuningMultiplier(sourceSampleSize, 15, 0.75, 1.1);
+    if (sourceFragilityBoost >= 4) {
+      score += Math.min(10, sourceFragilityBoost);
+    }
     score += Math.max(0, noteSignalScore);
 
     return Math.min(100, Number(score.toFixed(1)));
@@ -925,7 +984,6 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
   });
 
   it('includes pre-under-contract active pipeline statuses for early intervention', () => {
-    const activeStatuses = new Set(['Paired', 'In Communication', 'Active Lead', 'Showing Homes', 'Under Contract']);
     const referrals = [
       { id: 'paired', status: 'Paired' },
       { id: 'active', status: 'Active Lead' },
@@ -934,10 +992,53 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     ];
 
     const included = referrals
-      .filter((referral) => activeStatuses.has(referral.status))
+      .filter((referral) => shouldIncludeInAfcRiskList({ referralStatus: referral.status }))
       .map((referral) => referral.id);
 
     expect(included).toEqual(['paired', 'active', 'under-contract']);
+  });
+
+  it('excludes referrals when referral status is terminal', () => {
+    const included = shouldIncludeInAfcRiskList({
+      referralStatus: 'Payment Sent',
+      paymentStatus: 'under_contract'
+    });
+
+    expect(included).toBe(false);
+  });
+
+  it('excludes referrals when linked payment status is terminal', () => {
+    const included = shouldIncludeInAfcRiskList({
+      referralStatus: 'Under Contract',
+      paymentStatus: 'paid'
+    });
+
+    expect(included).toBe(false);
+  });
+
+  it('raises data-driven boosts as sample size grows', () => {
+    const lowConfidenceScore = computeRiskScore({
+      hasDealRecord: true,
+      usedAfc: false,
+      daysSinceActivity: 7,
+      daysToClose: 18,
+      outsideLossRatePct: 40,
+      sourceCloseRatePct: 45,
+      outsideLossSampleSize: 1,
+      sourceSampleSize: 1
+    });
+    const highConfidenceScore = computeRiskScore({
+      hasDealRecord: true,
+      usedAfc: false,
+      daysSinceActivity: 7,
+      daysToClose: 18,
+      outsideLossRatePct: 40,
+      sourceCloseRatePct: 45,
+      outsideLossSampleSize: 25,
+      sourceSampleSize: 25
+    });
+
+    expect(highConfidenceScore).toBeGreaterThan(lowConfidenceScore);
   });
 
   it('adds note-signal risk for strong outside/local lender phrasing', () => {
@@ -961,7 +1062,7 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
       noteSignalScore: strongTextRisk
     });
 
-    expect(withStrongNotes - baseScore).toBeCloseTo(25, 2);
+    expect(withStrongNotes - baseScore).toBeCloseTo(24.9, 2);
   });
 
   it('suppresses note-only risk when counter-signal indicates staying with AFC', () => {

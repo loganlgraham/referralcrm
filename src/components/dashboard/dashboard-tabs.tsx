@@ -2056,6 +2056,8 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
     if (tier === 'medium') return 'bg-amber-100 text-amber-700';
     return 'bg-emerald-100 text-emerald-700';
   };
+  const shouldScroll = entries.length > RANKED_LIST_PREVIEW_ROWS;
+  const scrollMaxHeight = `${RANKED_LIST_PREVIEW_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -2066,7 +2068,10 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
       {entries.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-500">No qualifying referrals in the active AFC pipeline.</p>
       ) : (
-        <div className="mt-4 overflow-x-auto">
+        <div
+          className="mt-4 overflow-x-auto overflow-y-auto"
+          style={shouldScroll ? { maxHeight: scrollMaxHeight } : undefined}
+        >
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-xs font-medium uppercase text-slate-500">
               <tr>
