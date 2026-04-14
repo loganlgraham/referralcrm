@@ -204,6 +204,11 @@ const TERMINAL_REFERRAL_STATUS_KEYS = new Set<string>([
   'paid'
 ]);
 const TERMINAL_PAYMENT_STATUS_KEYS = new Set<string>(['closed', 'payment_sent', 'payment_received', 'paid']);
+const AFC_RISK_AT_RISK_SCORE_THRESHOLD = 40;
+const AFC_RISK_HIGH_OUTSIDE_LOSS_RATE_THRESHOLD = 0.3;
+const AFC_RISK_MC_LOSS_REASON_PREFIX = 'MC historical outside-lender loss';
+const AFC_RISK_OUTSIDE_NOTE_REASON_PREFIX = 'Notes mention outside/local lender intent';
+const AFC_RISK_COUNTER_SIGNAL_REASON_PREFIX = 'Counter-signal in notes';
 const NOTE_SIGNAL_STRONG_PHRASES = [
   'outside lender',
   'other lender',
@@ -318,6 +323,27 @@ function computeSourceFragilityBoost(sourceCloseRate: number, sampleSize: number
   const tuningMultiplier = getOutcomeTuningMultiplier(sampleSize, 15, 0.75, 1.1);
   const tunedBoost = Math.min(10, baseBoost * tuningMultiplier);
   return Math.round(tunedBoost * 10) / 10;
+}
+
+function prioritizeAfcRiskReasons(
+  reasons: { label: string; score: number }[],
+  outsideLossRate: number
+): string[] {
+  const isHighOutsideLoss = outsideLossRate >= AFC_RISK_HIGH_OUTSIDE_LOSS_RATE_THRESHOLD;
+  return reasons
+    .filter((reason) => !reason.label.startsWith(AFC_RISK_COUNTER_SIGNAL_REASON_PREFIX))
+    .sort((a, b) => {
+      const aPriority =
+        (isHighOutsideLoss && a.label.startsWith(AFC_RISK_MC_LOSS_REASON_PREFIX) ? 2 : 0) +
+        (a.label.startsWith(AFC_RISK_OUTSIDE_NOTE_REASON_PREFIX) ? 1 : 0);
+      const bPriority =
+        (isHighOutsideLoss && b.label.startsWith(AFC_RISK_MC_LOSS_REASON_PREFIX) ? 2 : 0) +
+        (b.label.startsWith(AFC_RISK_OUTSIDE_NOTE_REASON_PREFIX) ? 1 : 0);
+      if (bPriority !== aPriority) return bPriority - aPriority;
+      return b.score - a.score;
+    })
+    .slice(0, 2)
+    .map((reason) => reason.label);
 }
 
 function parseDateOnly(value: string | null): Date | null {
@@ -796,7 +822,7 @@ function scoreOutsideLenderNoteSignals(
   if (strongMatches.length > 0) {
     const strongScore = Math.min(35, 25 + (strongMatches.length - 1) * 5);
     score += strongScore;
-    reasons.push({ label: `Notes mention outside/local lender intent (${strongMatches[0]})`, score: strongScore });
+    reasons.push({ label: `${AFC_RISK_OUTSIDE_NOTE_REASON_PREFIX} (${strongMatches[0]})`, score: strongScore });
     confidence = 'high';
   } else if (softMatches.length > 0) {
     const softScore = Math.min(18, 10 + (softMatches.length - 1) * 4);
@@ -2261,6 +2287,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       mcOutsideLenderLossMap.set(mcKey, (mcOutsideLenderLossMap.get(mcKey) ?? 0) + 1);
     }
   });
+  const allClosedDealsForAfcRisk = paymentsByNetwork.filter((payment) =>
+    CLOSED_DEAL_STATUSES.has(payment.status)
+  );
+  const mcTotalClosedDealsForAfcRiskMap = new Map<string, number>();
+  const mcOutsideLenderLossForAfcRiskMap = new Map<string, number>();
+  allClosedDealsForAfcRisk.forEach((payment) => {
+    const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
+    mcTotalClosedDealsForAfcRiskMap.set(mcKey, (mcTotalClosedDealsForAfcRiskMap.get(mcKey) ?? 0) + 1);
+    if (payment.usedAssignedAgent === true && payment.usedAfc === false) {
+      mcOutsideLenderLossForAfcRiskMap.set(mcKey, (mcOutsideLenderLossForAfcRiskMap.get(mcKey) ?? 0) + 1);
+    }
+  });
 
   const mcRevenueLeaderboard = Array.from(mcRevenueMap.entries())
     .map(([key, value]) => ({
@@ -2323,6 +2361,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   };
 
   type McKpiKey =
+    | 'totalRevenueGenerated'
     | 'revenuePerReferral'
     | 'pipelineCashConversion'
     | 'closeVelocityMedianDays'
@@ -2380,7 +2419,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const MC_MIN_REFERRALS_FOR_RANK = 3;
   const MC_KPI_WEIGHTS: Record<McKpiKey, number> = {
-    revenuePerReferral: 3,
+    totalRevenueGenerated: 5,
+    revenuePerReferral: 4,
     pipelineCashConversion: 3,
     closeVelocityMedianDays: 3,
     referralCount: 3,
@@ -2395,6 +2435,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     npsScore: 3
   };
   const MC_KPI_TIERS: Record<McKpiKey, 'high' | 'medium' | 'low'> = {
+    totalRevenueGenerated: 'high',
     revenuePerReferral: 'high',
     pipelineCashConversion: 'high',
     closeVelocityMedianDays: 'high',
@@ -2410,6 +2451,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     npsScore: 'high'
   };
   const MC_KPI_LABELS: Record<McKpiKey, string> = {
+    totalRevenueGenerated: 'Total Revenue Generated',
     revenuePerReferral: 'Revenue per Referral',
     pipelineCashConversion: 'Pipeline to Cash',
     closeVelocityMedianDays: 'Median Days Pair -> Close',
@@ -2425,6 +2467,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     npsScore: 'NPS Score'
   };
   const MC_KPI_ORDER: McKpiKey[] = [
+    'totalRevenueGenerated',
     'revenuePerReferral',
     'pipelineCashConversion',
     'closeVelocityMedianDays',
@@ -2576,8 +2619,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   for (const [source, total] of sourceTotals) {
     sourceCloseRateMap.set(source, total > 0 ? ((sourceClosedTotals.get(source) ?? 0) / total) * 100 : 0);
   }
+  const sourceTotalsForAfcRisk = new Map<string, number>();
+  const sourceClosedTotalsForAfcRisk = new Map<string, number>();
+  const closedReferralIdsForAfcRisk = new Set(
+    allClosedDealsForAfcRisk.map((payment) => payment.referral._id.toString())
+  );
+  referralsByNetwork.forEach((referral) => {
+    const source = String(referral.source ?? 'Unknown');
+    sourceTotalsForAfcRisk.set(source, (sourceTotalsForAfcRisk.get(source) ?? 0) + 1);
+    if (closedReferralIdsForAfcRisk.has(referral._id.toString())) {
+      sourceClosedTotalsForAfcRisk.set(source, (sourceClosedTotalsForAfcRisk.get(source) ?? 0) + 1);
+    }
+  });
+  const sourceCloseRateForAfcRiskMap = new Map<string, number>();
+  for (const [source, total] of sourceTotalsForAfcRisk) {
+    sourceCloseRateForAfcRiskMap.set(
+      source,
+      total > 0 ? ((sourceClosedTotalsForAfcRisk.get(source) ?? 0) / total) * 100 : 0
+    );
+  }
 
   const mcKpiRaw: Record<McKpiKey, Map<string, number>> = {
+    totalRevenueGenerated: new Map(),
     revenuePerReferral: new Map(),
     pipelineCashConversion: new Map(),
     closeVelocityMedianDays: new Map(),
@@ -2593,6 +2656,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     npsScore: new Map()
   };
   const mcKpiDisplayMap: Record<McKpiKey, Map<string, string>> = {
+    totalRevenueGenerated: new Map(),
     revenuePerReferral: new Map(),
     pipelineCashConversion: new Map(),
     closeVelocityMedianDays: new Map(),
@@ -2623,6 +2687,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const mcRevenue = mcRevenueMap.get(id) ?? { revenue: 0, expected: 0, closed: 0, totalReferrals: 0 };
     const realizedRevenue = mcRevenue.revenue;
     const totalClosedDeals = mcTotalClosedDealsMap.get(id) ?? 0;
+
+    mcKpiRaw.totalRevenueGenerated.set(id, realizedRevenue);
+    mcKpiDisplayMap.totalRevenueGenerated.set(
+      id,
+      `$${Math.round(realizedRevenue / 100).toLocaleString()}`
+    );
 
     mcKpiRaw.referralCount.set(id, referralsForMc);
     mcKpiDisplayMap.referralCount.set(id, referralsForMc.toLocaleString());
@@ -2729,6 +2799,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const mcKpiNormalized: Record<McKpiKey, Map<string, number>> = {
+    totalRevenueGenerated: normalizeAhaKpiMap(mcKpiRaw.totalRevenueGenerated, false),
     revenuePerReferral: normalizeAhaKpiMap(mcKpiRaw.revenuePerReferral, false),
     pipelineCashConversion: normalizeAhaKpiMap(mcKpiRaw.pipelineCashConversion, false),
     closeVelocityMedianDays: normalizeAhaKpiMap(mcKpiRaw.closeVelocityMedianDays, true),
@@ -2814,7 +2885,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   });
 
-  const mcCandidateReferrals = filteredReferrals.filter((referral) => {
+  const mcCandidateReferrals = referralsByNetwork.filter((referral) => {
     if (!referral.lender) return false;
     const normalizedStatus = normalizeStatusKey(referral.status);
     const referralId = referral._id.toString();
@@ -2943,21 +3014,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
 
       const outsideLossRate = mcId
-        ? (mcOutsideLenderLossMap.get(mcId) ?? 0) / Math.max(mcTotalClosedDealsMap.get(mcId) ?? 1, 1)
+        ? (mcOutsideLenderLossForAfcRiskMap.get(mcId) ?? 0) /
+          Math.max(mcTotalClosedDealsForAfcRiskMap.get(mcId) ?? 1, 1)
         : 0;
-      const mcClosedSampleSize = mcId ? mcTotalClosedDealsMap.get(mcId) ?? 0 : 0;
+      const mcClosedSampleSize = mcId ? mcTotalClosedDealsForAfcRiskMap.get(mcId) ?? 0 : 0;
       const historicalRiskBoost = computeHistoricalRiskBoost(outsideLossRate, mcClosedSampleSize);
       if (historicalRiskBoost > 0) {
         riskScore += historicalRiskBoost;
         reasons.push({
-          label: `MC historical outside-lender loss ${(outsideLossRate * 100).toFixed(1)}% (${mcClosedSampleSize} closed)`,
+          label: `${AFC_RISK_MC_LOSS_REASON_PREFIX} ${(outsideLossRate * 100).toFixed(1)}% (${mcClosedSampleSize} closed)`,
           score: historicalRiskBoost
         });
       }
 
       const source = String(referral.source ?? 'Unknown');
-      const sourceCloseRate = sourceCloseRateMap.get(source) ?? 0;
-      const sourceSampleSize = sourceTotals.get(source) ?? 0;
+      const sourceCloseRate = sourceCloseRateForAfcRiskMap.get(source) ?? 0;
+      const sourceSampleSize = sourceTotalsForAfcRisk.get(source) ?? 0;
       const sourceFragilityBoost = computeSourceFragilityBoost(sourceCloseRate, sourceSampleSize);
       if (sourceFragilityBoost >= 4) {
         riskScore += sourceFragilityBoost;
@@ -2971,36 +3043,45 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const riskTier: McAfcRiskCallListEntry['riskTier'] =
         normalizedRiskScore >= 70 ? 'high' : normalizedRiskScore >= 40 ? 'medium' : 'low';
 
-      const topReasons = reasons
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 2)
-        .map((item) => item.label)
-        .filter((label) => !label.startsWith('Counter-signal in notes'));
+      const topReasons = prioritizeAfcRiskReasons(reasons, outsideLossRate);
+      const hasOutsideLenderNoteSignal = noteSignal.reasons.some((reason) =>
+        reason.label.startsWith(AFC_RISK_OUTSIDE_NOTE_REASON_PREFIX)
+      );
+      const hasHighOutsideLenderLoss = outsideLossRate >= AFC_RISK_HIGH_OUTSIDE_LOSS_RATE_THRESHOLD;
 
       return {
-        rowId: linkedPayment?._id?.toString() ?? referralId,
-        referralId,
-        borrowerName: referral.borrower?.name ?? 'Unknown',
-        mcId,
-        mcName: mcId ? (lenderNameMap.get(mcId) ?? null) : null,
-        agentId,
-        agentName: agentId ? (agentNameMap.get(agentId) ?? null) : null,
-        status: (referral.status ?? 'New Lead').replace(/_/g, ' '),
-        source,
-        closingDate: closingDate ? closingDate.toISOString() : null,
-        daysToClose,
-        daysSinceActivity,
-        usedAfc: linkedPayment?.usedAfc ?? null,
-        riskScore: normalizedRiskScore,
-        riskTier,
-        reasons: topReasons
+        entry: {
+          rowId: linkedPayment?._id?.toString() ?? referralId,
+          referralId,
+          borrowerName: referral.borrower?.name ?? 'Unknown',
+          mcId,
+          mcName: mcId ? (lenderNameMap.get(mcId) ?? null) : null,
+          agentId,
+          agentName: agentId ? (agentNameMap.get(agentId) ?? null) : null,
+          status: (referral.status ?? 'New Lead').replace(/_/g, ' '),
+          source,
+          closingDate: closingDate ? closingDate.toISOString() : null,
+          daysToClose,
+          daysSinceActivity,
+          usedAfc: linkedPayment?.usedAfc ?? null,
+          riskScore: normalizedRiskScore,
+          riskTier,
+          reasons: topReasons
+        },
+        hasHighOutsideLenderLoss,
+        hasOutsideLenderNoteSignal
       };
     })
+    .filter((item) => item.entry.riskScore >= AFC_RISK_AT_RISK_SCORE_THRESHOLD)
     .sort(
       (a, b) =>
-        b.riskScore - a.riskScore ||
-        (a.daysToClose ?? Number.POSITIVE_INFINITY) - (b.daysToClose ?? Number.POSITIVE_INFINITY)
-    );
+        Number(b.hasHighOutsideLenderLoss) - Number(a.hasHighOutsideLenderLoss) ||
+        Number(b.hasOutsideLenderNoteSignal) - Number(a.hasOutsideLenderNoteSignal) ||
+        b.entry.riskScore - a.entry.riskScore ||
+        (a.entry.daysToClose ?? Number.POSITIVE_INFINITY) -
+          (b.entry.daysToClose ?? Number.POSITIVE_INFINITY)
+    )
+    .map((item) => item.entry);
 
   // Agent Leaderboard: Count referrals per agent from filtered referrals
   const agentReferralCount = new Map<string, number>();

@@ -2063,7 +2063,7 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-500">AFC Loss Risk Call List</p>
       <p className="mt-1 text-xs text-slate-500">
-        Open buy-side AFC-eligible referrals ranked by AFC-loss risk.
+        All open buy-side AFC referrals currently at risk, ranked with outside-lender notes and MC outside-lender loss priority.
       </p>
       {entries.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-500">No qualifying referrals in the active AFC pipeline.</p>

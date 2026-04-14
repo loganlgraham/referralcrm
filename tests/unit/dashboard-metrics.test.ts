@@ -658,7 +658,11 @@ describe('Dashboard Metrics - AHA Composite Scoring', () => {
 });
 
 describe('Dashboard Metrics - MC Composite Scoring', () => {
-  it('weights MC NPS equally with other top-tier KPIs', () => {
+  it('weights total revenue generated as the strongest MC KPI', () => {
+    const normalizedTotalRevenueGenerated = new Map([
+      ['mc-a', 100],
+      ['mc-b', 0]
+    ]);
     const normalizedRevenuePerReferral = new Map([
       ['mc-a', 100],
       ['mc-b', 0]
@@ -668,24 +672,32 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
       ['mc-b', 100]
     ]);
 
-    const revenueWeight = 3;
+    const totalRevenueWeight = 5;
+    const revenuePerReferralWeight = 4;
     const npsWeight = 3;
-    const totalWeight = revenueWeight + npsWeight;
+    const totalWeight = totalRevenueWeight + revenuePerReferralWeight + npsWeight;
 
     const scoreForMcA =
-      ((normalizedRevenuePerReferral.get('mc-a') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
+      ((normalizedTotalRevenueGenerated.get('mc-a') ?? AHA_NEUTRAL_SCORE) * totalRevenueWeight +
+        (normalizedRevenuePerReferral.get('mc-a') ?? AHA_NEUTRAL_SCORE) * revenuePerReferralWeight +
         (normalizedNpsScore.get('mc-a') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
       totalWeight;
     const scoreForMcB =
-      ((normalizedRevenuePerReferral.get('mc-b') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
+      ((normalizedTotalRevenueGenerated.get('mc-b') ?? AHA_NEUTRAL_SCORE) * totalRevenueWeight +
+        (normalizedRevenuePerReferral.get('mc-b') ?? AHA_NEUTRAL_SCORE) * revenuePerReferralWeight +
         (normalizedNpsScore.get('mc-b') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
       totalWeight;
 
-    expect(scoreForMcA).toBeCloseTo(50, 2);
-    expect(scoreForMcB).toBeCloseTo(50, 2);
+    expect(scoreForMcA).toBeCloseTo(75, 2);
+    expect(scoreForMcB).toBeCloseTo(25, 2);
+    expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
   });
 
   it('uses neutral fill for missing high-tier MC KPIs while keeping denominator fixed', () => {
+    const normalizedTotalRevenueGenerated = new Map([
+      ['mc-a', 100],
+      ['mc-b', 0]
+    ]);
     const normalizedRevenuePerReferral = new Map([
       ['mc-a', 100],
       ['mc-b', 0]
@@ -696,27 +708,34 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     ]);
     const normalizedNpsScore = new Map([['mc-a', 90]]);
 
-    const revenueWeight = 3;
+    const totalRevenueWeight = 5;
+    const revenueWeight = 4;
     const referralWeight = 3;
     const npsWeight = 3;
-    const totalWeight = revenueWeight + referralWeight + npsWeight;
+    const totalWeight = totalRevenueWeight + revenueWeight + referralWeight + npsWeight;
 
     const scoreForMcA =
-      ((normalizedRevenuePerReferral.get('mc-a') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
+      ((normalizedTotalRevenueGenerated.get('mc-a') ?? AHA_NEUTRAL_SCORE) * totalRevenueWeight +
+        (normalizedRevenuePerReferral.get('mc-a') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
         (normalizedReferralCount.get('mc-a') ?? AHA_NEUTRAL_SCORE) * referralWeight +
         (normalizedNpsScore.get('mc-a') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
       totalWeight;
     const scoreForMcB =
-      ((normalizedRevenuePerReferral.get('mc-b') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
+      ((normalizedTotalRevenueGenerated.get('mc-b') ?? AHA_NEUTRAL_SCORE) * totalRevenueWeight +
+        (normalizedRevenuePerReferral.get('mc-b') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
         (normalizedReferralCount.get('mc-b') ?? AHA_NEUTRAL_SCORE) * referralWeight +
         (normalizedNpsScore.get('mc-b') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
       totalWeight;
 
-    expect(scoreForMcA).toBeCloseTo(96.67, 2);
-    expect(scoreForMcB).toBeCloseTo(16.67, 2);
+    expect(scoreForMcA).toBeCloseTo(98, 2);
+    expect(scoreForMcB).toBeCloseTo(10, 2);
   });
 
   it('rewards higher referral counts when other KPI inputs are equal', () => {
+    const normalizedTotalRevenueGenerated = new Map([
+      ['mc-a', 50],
+      ['mc-b', 50]
+    ]);
     const normalizedRevenuePerReferral = new Map([
       ['mc-a', 50],
       ['mc-b', 50]
@@ -730,23 +749,68 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
       ['mc-b', 50]
     ]);
 
-    const revenueWeight = 3;
+    const totalRevenueWeight = 5;
+    const revenueWeight = 4;
     const referralWeight = 3;
     const npsWeight = 3;
-    const totalWeight = revenueWeight + referralWeight + npsWeight;
+    const totalWeight = totalRevenueWeight + revenueWeight + referralWeight + npsWeight;
 
     const scoreForMcA =
-      ((normalizedRevenuePerReferral.get('mc-a') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
+      ((normalizedTotalRevenueGenerated.get('mc-a') ?? AHA_NEUTRAL_SCORE) * totalRevenueWeight +
+        (normalizedRevenuePerReferral.get('mc-a') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
         (normalizedReferralCount.get('mc-a') ?? AHA_NEUTRAL_SCORE) * referralWeight +
         (normalizedNpsScore.get('mc-a') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
       totalWeight;
     const scoreForMcB =
-      ((normalizedRevenuePerReferral.get('mc-b') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
+      ((normalizedTotalRevenueGenerated.get('mc-b') ?? AHA_NEUTRAL_SCORE) * totalRevenueWeight +
+        (normalizedRevenuePerReferral.get('mc-b') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
         (normalizedReferralCount.get('mc-b') ?? AHA_NEUTRAL_SCORE) * referralWeight +
         (normalizedNpsScore.get('mc-b') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
       totalWeight;
 
     expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
+  });
+
+  it('lets high revenue outrank better no-AFC performance when other KPI inputs are comparable', () => {
+    const normalizedTotalRevenueGenerated = new Map([
+      ['mc-a', 100],
+      ['mc-b', 0]
+    ]);
+    const normalizedRevenuePerReferral = new Map([
+      ['mc-a', 100],
+      ['mc-b', 100]
+    ]);
+    const normalizedNoAfcCloseRate = new Map([
+      ['mc-a', 0],
+      ['mc-b', 100]
+    ]);
+    const normalizedNpsScore = new Map([
+      ['mc-a', 50],
+      ['mc-b', 50]
+    ]);
+
+    const totalRevenueWeight = 5;
+    const revenueWeight = 4;
+    const noAfcWeight = 3;
+    const npsWeight = 3;
+    const totalWeight = totalRevenueWeight + revenueWeight + noAfcWeight + npsWeight;
+
+    const scoreForMcA =
+      ((normalizedTotalRevenueGenerated.get('mc-a') ?? AHA_NEUTRAL_SCORE) * totalRevenueWeight +
+        (normalizedRevenuePerReferral.get('mc-a') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
+        (normalizedNoAfcCloseRate.get('mc-a') ?? AHA_NEUTRAL_SCORE) * noAfcWeight +
+        (normalizedNpsScore.get('mc-a') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
+      totalWeight;
+    const scoreForMcB =
+      ((normalizedTotalRevenueGenerated.get('mc-b') ?? AHA_NEUTRAL_SCORE) * totalRevenueWeight +
+        (normalizedRevenuePerReferral.get('mc-b') ?? AHA_NEUTRAL_SCORE) * revenueWeight +
+        (normalizedNoAfcCloseRate.get('mc-b') ?? AHA_NEUTRAL_SCORE) * noAfcWeight +
+        (normalizedNpsScore.get('mc-b') ?? AHA_NEUTRAL_SCORE) * npsWeight) /
+      totalWeight;
+
+    expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
+    expect(scoreForMcA).toBeCloseTo(70, 2);
+    expect(scoreForMcB).toBeCloseTo(56.67, 2);
   });
 
   it('penalizes higher close-without-AFC rates as a high-tier negative KPI', () => {
@@ -839,6 +903,8 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     'showing_homes',
     'under_contract'
   ]);
+  const AFC_RISK_AT_RISK_SCORE_THRESHOLD = 40;
+  const AFC_RISK_HIGH_OUTSIDE_LOSS_RATE_THRESHOLD = 0.3;
 
   const getOutcomeTuningMultiplier = (
     sampleSize: number,
@@ -912,6 +978,27 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     return Math.min(100, Number(score.toFixed(1)));
   };
 
+  const prioritizeAfcRiskReasons = (
+    reasons: { label: string; score: number }[],
+    outsideLossRatePct: number
+  ) => {
+    const isHighOutsideLoss = outsideLossRatePct / 100 >= AFC_RISK_HIGH_OUTSIDE_LOSS_RATE_THRESHOLD;
+    return reasons
+      .filter((reason) => !reason.label.startsWith('Counter-signal in notes'))
+      .sort((a, b) => {
+        const aPriority =
+          (isHighOutsideLoss && a.label.startsWith('MC historical outside-lender loss') ? 2 : 0) +
+          (a.label.startsWith('Notes mention outside/local lender intent') ? 1 : 0);
+        const bPriority =
+          (isHighOutsideLoss && b.label.startsWith('MC historical outside-lender loss') ? 2 : 0) +
+          (b.label.startsWith('Notes mention outside/local lender intent') ? 1 : 0);
+        if (bPriority !== aPriority) return bPriority - aPriority;
+        return b.score - a.score;
+      })
+      .slice(0, 2)
+      .map((reason) => reason.label);
+  };
+
   it('ranks higher-risk calls first using the risk model factors', () => {
     const highRisk = computeRiskScore({
       hasDealRecord: true,
@@ -967,20 +1054,21 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     expect(rows.map((row) => row.id)).toEqual(['sooner-close', 'later-close']);
   });
 
-  it('captures top two reasons for call prioritization', () => {
+  it('prioritizes MC loss and outside-lender note reasons when MC loss is high', () => {
     const factors = [
       { label: 'AFC not attached', score: 35 },
       { label: '18 days since last activity', score: 15 },
       { label: '6 days to close', score: 20 },
-      { label: 'MC historical outside-lender loss 30.0%', score: 4.5 }
+      { label: 'MC historical outside-lender loss 42.0%', score: 4.5 },
+      { label: 'Notes mention outside/local lender intent (outside lender)', score: 25 }
     ];
 
-    const topReasons = factors
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 2)
-      .map((item) => item.label);
+    const topReasons = prioritizeAfcRiskReasons(factors, 42);
 
-    expect(topReasons).toEqual(['AFC not attached', '6 days to close']);
+    expect(topReasons).toEqual([
+      'MC historical outside-lender loss 42.0%',
+      'Notes mention outside/local lender intent (outside lender)'
+    ]);
   });
 
   it('includes pre-under-contract active pipeline statuses for early intervention', () => {
@@ -1039,6 +1127,13 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     });
 
     expect(highConfidenceScore).toBeGreaterThan(lowConfidenceScore);
+  });
+
+  it('keeps only at-risk entries (medium/high) in the call list', () => {
+    const scores = [82.4, 41.2, 39.9, 18.6];
+    const atRisk = scores.filter((score) => score >= AFC_RISK_AT_RISK_SCORE_THRESHOLD);
+
+    expect(atRisk).toEqual([82.4, 41.2]);
   });
 
   it('adds note-signal risk for strong outside/local lender phrasing', () => {
