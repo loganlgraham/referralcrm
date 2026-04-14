@@ -1,5 +1,6 @@
 'use client';
 
+import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
 
 type CloseStatusConfirmationOptions = {
@@ -33,7 +34,7 @@ export type PaidStatusConfirmationResult = {
 
 export type SendFeeBreakdownConfirmationResult = {
   confirmed: boolean;
-  additionalCc?: string;
+  additionalCcRecipients?: string[];
 };
 
 type ConfirmationKind = 'closed' | 'paid';
@@ -250,7 +251,6 @@ export const confirmFeeBreakdownSend = async (
   options: SendFeeBreakdownConfirmationOptions
 ): Promise<SendFeeBreakdownConfirmationResult> =>
   new Promise((resolve) => {
-    let additionalCc = '';
     let settled = false;
 
     const finalize = (result: SendFeeBreakdownConfirmationResult) => {
@@ -262,41 +262,65 @@ export const confirmFeeBreakdownSend = async (
       toast.dismiss(toastId);
     };
 
-    const toastId = toast.custom(
-      () => (
-        <form
-          className="w-[380px] rounded-lg border border-slate-200 bg-white p-4 shadow-lg"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const normalizedCc = additionalCc.trim().toLowerCase();
-            if (normalizedCc && !EMAIL_REGEX.test(normalizedCc)) {
-              toast.error('Enter a valid CC email address.');
-              return;
-            }
+    const FeeBreakdownConfirmationForm = () => {
+      const [ccInputs, setCcInputs] = useState<string[]>(['']);
 
-            finalize({
-              confirmed: true,
-              additionalCc: normalizedCc || undefined,
-            });
-          }}
+      const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        const normalizedRecipients = Array.from(
+          new Set(
+            ccInputs
+              .map((value) => value.trim().toLowerCase())
+              .filter((value) => value.length > 0)
+          )
+        );
+
+        const invalidEmail = normalizedRecipients.find((email) => !EMAIL_REGEX.test(email));
+        if (invalidEmail) {
+          toast.error('Enter valid CC email addresses.');
+          return;
+        }
+
+        finalize({
+          confirmed: true,
+          additionalCcRecipients: normalizedRecipients,
+        });
+      };
+
+      return (
+        <form
+          className="w-[420px] rounded-lg border border-slate-200 bg-white p-4 shadow-lg"
+          onSubmit={handleSubmit}
         >
           <p className="text-sm font-semibold text-slate-900">Send fee breakdown email</p>
           <p className="mt-1 whitespace-pre-line text-xs text-slate-500">{options.message}</p>
 
-          <label className="mt-3 block text-xs font-semibold text-slate-600">
-            Additional CC recipient (optional)
-            <input
-              autoFocus
-              type="email"
-              inputMode="email"
-              placeholder="name@example.com"
-              defaultValue={additionalCc}
-              onChange={(event) => {
-                additionalCc = event.target.value;
-              }}
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
-            />
-          </label>
+          <div className="mt-3 space-y-2">
+            <p className="text-xs font-semibold text-slate-600">Additional CC recipients (optional)</p>
+            {ccInputs.map((value, index) => (
+              <input
+                key={index}
+                autoFocus={index === 0}
+                type="email"
+                inputMode="email"
+                placeholder="name@example.com"
+                value={value}
+                onChange={(event) => {
+                  const nextInputs = [...ccInputs];
+                  nextInputs[index] = event.target.value;
+                  setCcInputs(nextInputs);
+                }}
+                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              />
+            ))}
+            <button
+              type="button"
+              onClick={() => setCcInputs((prev) => [...prev, ''])}
+              className="inline-flex items-center rounded border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              + Add CC recipient
+            </button>
+          </div>
 
           <div className="mt-4 flex justify-end gap-2">
             <button
@@ -314,7 +338,11 @@ export const confirmFeeBreakdownSend = async (
             </button>
           </div>
         </form>
-      ),
+      );
+    };
+
+    const toastId = toast.custom(
+      () => <FeeBreakdownConfirmationForm />,
       {
         duration: Infinity,
         position: 'top-center',

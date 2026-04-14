@@ -65,23 +65,39 @@ export async function POST(
     return NextResponse.json({ error: 'Email service not configured' }, { status: 503 });
   }
 
-  let additionalCc: string | null = null;
+  let additionalCcRecipients: string[] = [];
   const requestBody = await request.json().catch(() => null);
-  if (requestBody && typeof requestBody === 'object' && 'additionalCc' in requestBody) {
-    const additionalCcRaw = (requestBody as { additionalCc?: unknown }).additionalCc;
-    if (additionalCcRaw != null && typeof additionalCcRaw !== 'string') {
-      return NextResponse.json({ error: 'Additional CC must be a string' }, { status: 400 });
+  if (requestBody && typeof requestBody === 'object') {
+    const body = requestBody as { additionalCc?: unknown; additionalCcRecipients?: unknown };
+    const candidates: unknown[] = [];
+
+    if (body.additionalCc != null) {
+      candidates.push(body.additionalCc);
     }
 
-    if (typeof additionalCcRaw === 'string') {
-      const normalizedAdditionalCc = additionalCcRaw.trim().toLowerCase();
-      if (normalizedAdditionalCc.length > 0) {
-        if (!EMAIL_REGEX.test(normalizedAdditionalCc)) {
-          return NextResponse.json({ error: 'Additional CC email is invalid' }, { status: 400 });
-        }
-        additionalCc = normalizedAdditionalCc;
+    if (body.additionalCcRecipients != null) {
+      if (!Array.isArray(body.additionalCcRecipients)) {
+        return NextResponse.json({ error: 'Additional CC recipients must be an array of strings' }, { status: 400 });
       }
+      candidates.push(...body.additionalCcRecipients);
     }
+
+    const normalizedRecipients: string[] = [];
+    for (const candidate of candidates) {
+      if (typeof candidate !== 'string') {
+        return NextResponse.json({ error: 'Additional CC values must be strings' }, { status: 400 });
+      }
+      const normalized = candidate.trim().toLowerCase();
+      if (!normalized) {
+        continue;
+      }
+      if (!EMAIL_REGEX.test(normalized)) {
+        return NextResponse.json({ error: `Additional CC email is invalid: ${normalized}` }, { status: 400 });
+      }
+      normalizedRecipients.push(normalized);
+    }
+
+    additionalCcRecipients = Array.from(new Set(normalizedRecipients));
   }
 
   try {
@@ -113,7 +129,8 @@ export async function POST(
 
     // Get agent email - agentId is populated, so it's an object
     const agent = payment.agentId as { _id: Types.ObjectId; name?: string | null; email?: string | null; ahaDesignation?: string | null } | null;
-    if (!agent || !agent.email) {
+    const agentEmail = agent?.email?.trim();
+    if (!agent || !agentEmail) {
       return NextResponse.json({ error: 'Agent email not found' }, { status: 400 });
     }
 
@@ -143,7 +160,7 @@ export async function POST(
     const { html, text } = generateFeeBreakdownEmailHTML({
       agent: {
         name: agent.name || 'Agent',
-        email: agent.email,
+        email: agentEmail,
       },
       referral: {
         borrowerName,
@@ -168,9 +185,9 @@ export async function POST(
     const subject = generateFeeBreakdownSubject(borrowerName);
     const ccRecipients = Array.from(
       new Set(
-        [DEFAULT_FEE_BREAKDOWN_CC, additionalCc]
+        [DEFAULT_FEE_BREAKDOWN_CC, ...additionalCcRecipients]
           .filter((email): email is string => Boolean(email))
-          .filter((email) => email.toLowerCase() !== agent.email.toLowerCase())
+          .filter((email) => email.toLowerCase() !== agentEmail.toLowerCase())
       )
     );
 
@@ -220,7 +237,7 @@ export async function POST(
 
     // Send email
     const emailSent = await sendTransactionalEmail({
-      to: [agent.email],
+      to: [agentEmail],
       cc: ccRecipients,
       subject,
       html,
@@ -248,7 +265,7 @@ export async function POST(
         actorId: auditActorId,
         actorRole: isCronRequest ? 'system' : (session?.user?.role || 'system'),
         channel: 'email',
-        content: `Fee breakdown email sent to ${agent.email} (${sentBy}) for deal closing ${payment.closingDate.toISOString().split('T')[0]}`,
+        content: `Fee breakdown email sent to ${agentEmail} (${sentBy}) for deal closing ${payment.closingDate.toISOString().split('T')[0]}`,
       });
     } catch (error) {
       // Log error but don't fail the request
@@ -258,7 +275,7 @@ export async function POST(
     return NextResponse.json({ 
       success: true,
       message: 'Fee breakdown email sent successfully',
-      sentTo: agent.email,
+      sentTo: agentEmail,
     });
   } catch (error) {
     console.error('Error sending fee breakdown email:', error);

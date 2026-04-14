@@ -57,7 +57,8 @@ export const updateReferralSchema = z.object({
 
 export const createActivitySchema = z.object({
   channel: z.enum(['call', 'sms', 'email', 'note', 'status', 'update']),
-  content: z.string().min(1)
+  content: z.string().min(1),
+  emailTargets: z.array(z.enum(['agent', 'mc', 'admin'])).optional()
 });
 
 export const assignAgentSchema = z.object({

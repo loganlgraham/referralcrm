@@ -1147,7 +1147,7 @@ export function DealCard({
       const response = await fetch(`/api/payments/${deal._id}/send-fee-breakdown`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ additionalCc: confirmation.additionalCc }),
+        body: JSON.stringify({ additionalCcRecipients: confirmation.additionalCcRecipients }),
       });
 
       if (!response.ok) {
