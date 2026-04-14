@@ -159,6 +159,7 @@ interface DashboardReferral {
   buySideAgent?: Types.ObjectId | null;
   sellSideAgent?: Types.ObjectId | null;
   dealSide?: 'buy' | 'sell' | null;
+  clientType?: 'Seller' | 'Buyer' | 'Both' | null;
   buyStatus?: string | null;
   sellStatus?: string | null;
   lender?: Types.ObjectId | null;
@@ -186,6 +187,9 @@ const ACTIVE_PIPELINE_STATUSES = new Set<string>([
   'Showing Homes',
   'Under Contract',
 ]);
+const ACTIVE_PIPELINE_STATUS_KEYS = new Set(
+  Array.from(ACTIVE_PIPELINE_STATUSES, (status) => status.trim().toLowerCase())
+);
 
 const TERMINATED_REASON_LABELS: Record<string, string> = {
   inspection: 'Inspection',
@@ -2621,14 +2625,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const mcCandidateReferrals = filteredReferrals.filter((referral) => {
     if (!referral.lender) return false;
-    if (!ACTIVE_PIPELINE_STATUSES.has((referral.status as string | undefined) ?? '')) return false;
+    const normalizedStatus = String(referral.status ?? '').trim().toLowerCase();
+    if (!ACTIVE_PIPELINE_STATUS_KEYS.has(normalizedStatus)) return false;
     const inferredDealSide = resolveDealSideForMetrics(
       null,
       referral.dealSide ?? null,
-      null
+      referral.clientType ?? null
     );
-    if (inferredDealSide !== 'buy') return false;
-    return isAfcEligibleDeal(referral.org ?? null, inferredDealSide);
+    if ((referral.org ?? null) !== 'AFC') return false;
+    if (inferredDealSide === 'sell') return false;
+    return true;
   });
   const mcRiskReferralIds = new Set(mcCandidateReferrals.map((referral) => referral._id.toString()));
 
