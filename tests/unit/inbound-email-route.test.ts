@@ -149,7 +149,7 @@ describe('POST /api/inbound-email', () => {
         'First: Jane',
         'Last: Doe',
         'BorrowerEmail: jane@example.com',
-        'Phone: 303-555-1212',
+        'Phone: (303) 555-1212',
         'ZipLookingIn: 80202',
         'LoanNumber: LN-111'
       ].join('\n')
@@ -171,7 +171,8 @@ describe('POST /api/inbound-email', () => {
       expect.objectContaining({
         borrower: expect.objectContaining({
           name: 'Jane Doe',
-          email: 'jane@example.com'
+          email: 'jane@example.com',
+          phone: '303-555-1212'
         }),
         loanFileNumber: 'LN-111'
       })
@@ -247,7 +248,8 @@ describe('POST /api/inbound-email', () => {
         lookingInZip: '27910',
         borrower: expect.objectContaining({
           name: 'Danielle Geldart',
-          email: 'justinlounsbury05@gmail.com'
+          email: 'justinlounsbury05@gmail.com',
+          phone: '863-440-6938'
         }),
         initialNotes: expect.stringContaining('MC: KarimL')
       })
@@ -260,7 +262,7 @@ describe('POST /api/inbound-email', () => {
       first: 'Avery',
       last: 'Buyer',
       borroweremail: 'avery@example.com',
-      phone: '720-555-9999',
+      phone: '1 (720) 555-9999',
       ziplookingin: '80203',
       loannumber: 'LN-222'
     });
@@ -281,11 +283,41 @@ describe('POST /api/inbound-email', () => {
       expect.objectContaining({
         borrower: expect.objectContaining({
           name: 'Avery Buyer',
-          email: 'avery@example.com'
+          email: 'avery@example.com',
+          phone: '720-555-9999'
         }),
         loanFileNumber: 'LN-222'
       })
     );
+  });
+
+  it('returns 400 when phone cannot be normalized to ###-###-####', async () => {
+    mockResendInboundFetch(
+      [
+        'First: Jane',
+        'Last: Doe',
+        'BorrowerEmail: jane@example.com',
+        'Phone: 55512',
+        'ZipLookingIn: 80202',
+        'LoanNumber: LN-111'
+      ].join('\n')
+    );
+    mockedExtractInboundEmailFieldsWithAI.mockResolvedValue(null);
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      error: 'Inbound email is missing borrower contact details or loan number.'
+    });
+    expect(mockedReferralCreate).not.toHaveBeenCalled();
   });
 
   it('accepts Svix signature headers for inbound webhook delivery', async () => {
