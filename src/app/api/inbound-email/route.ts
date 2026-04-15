@@ -93,12 +93,15 @@ function verifyResendSignature(
   return crypto.timingSafeEqual(providedView, expectedView);
 }
 
-function resolveSvixSecret(secret: string): Buffer {
+function resolveSvixSecret(secret: string): Uint8Array {
+  let bytes: Buffer;
   if (secret.startsWith('whsec_')) {
     const raw = secret.slice('whsec_'.length);
-    return Buffer.from(raw, 'base64');
+    bytes = Buffer.from(raw, 'base64');
+  } else {
+    bytes = Buffer.from(secret, 'utf8');
   }
-  return Buffer.from(secret, 'utf8');
+  return Uint8Array.from(bytes);
 }
 
 function verifySvixSignature(
@@ -120,10 +123,10 @@ function verifySvixSignature(
   const payload = `${messageId}.${timestamp}.${rawBody}`;
   const secretBuffer = resolveSvixSecret(secret);
   const expectedBase64 = crypto.createHmac('sha256', secretBuffer).update(payload, 'utf8').digest('base64');
-  const expected = Buffer.from(expectedBase64, 'utf8');
+  const expected = new TextEncoder().encode(expectedBase64);
 
   for (const signature of signatures) {
-    const provided = Buffer.from(signature, 'utf8');
+    const provided = new TextEncoder().encode(signature);
     if (provided.length !== expected.length) {
       continue;
     }

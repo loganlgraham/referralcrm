@@ -71,7 +71,7 @@ function signBody(rawBody: string, secret: string): string {
 
 function signSvixBody(rawBody: string, secret: string, timestamp: string, messageId: string): string {
   const secretRaw = secret.startsWith('whsec_') ? secret.slice('whsec_'.length) : secret;
-  const secretBytes = Buffer.from(secretRaw, 'base64');
+  const secretBytes = Uint8Array.from(Buffer.from(secretRaw, 'base64'));
   const payload = `${messageId}.${timestamp}.${rawBody}`;
   const digest = crypto.createHmac('sha256', secretBytes).update(payload, 'utf8').digest('base64');
   return `v1,${digest}`;
