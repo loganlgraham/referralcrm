@@ -95,17 +95,18 @@ function makeWebhookRequest(
   } as any;
 }
 
-function mockResendInboundFetch(emailText: string) {
+function mockResendInboundFetch(emailText: string, wrapInData = false) {
+  const payload = {
+    id: 'resend-email-1',
+    from: 'Sender <sender@example.com>',
+    to: ['routing+aha@inbound.example.com'],
+    subject: 'New Referral',
+    text: emailText,
+    attachments: []
+  };
   (global as { fetch: typeof fetch }).fetch = jest.fn().mockResolvedValue({
     ok: true,
-    json: async () => ({
-      id: 'resend-email-1',
-      from: 'Sender <sender@example.com>',
-      to: ['routing+aha@inbound.example.com'],
-      subject: 'New Referral',
-      text: emailText,
-      attachments: []
-    })
+    json: async () => (wrapInData ? { data: payload } : payload)
   }) as unknown as typeof fetch;
 }
 
@@ -175,6 +176,32 @@ describe('POST /api/inbound-email', () => {
         loanFileNumber: 'LN-111'
       })
     );
+  });
+
+  it('handles Resend receiving API response wrapped in data', async () => {
+    mockResendInboundFetch(
+      [
+        'First: Jane',
+        'Last: Doe',
+        'BorrowerEmail: jane@example.com',
+        'Phone: 303-555-1212',
+        'ZipLookingIn: 80202',
+        'LoanNumber: LN-111'
+      ].join('\n'),
+      true
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ status: 'created', referralId: 'ref-1' });
   });
 
   it('maps source and alias labels from partner email format', async () => {

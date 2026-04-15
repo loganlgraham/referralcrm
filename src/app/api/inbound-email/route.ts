@@ -236,8 +236,9 @@ async function fetchFromResend(
 async function fetchResendReceivedEmail(emailId: string, apiKey: string): Promise<ResendEmailResponse | null> {
   const json = await fetchFromResend(
     [
-      `${RESEND_API_BASE_URL}/inbound-emails/${emailId}`,
-      `${RESEND_API_BASE_URL}/emails/${emailId}`
+      `${RESEND_API_BASE_URL}/emails/receiving/${emailId}`,
+      `${RESEND_API_BASE_URL}/emails/${emailId}`,
+      `${RESEND_API_BASE_URL}/inbound-emails/${emailId}`
     ],
     apiKey,
     'json'
@@ -245,6 +246,12 @@ async function fetchResendReceivedEmail(emailId: string, apiKey: string): Promis
 
   if (!json || typeof json !== 'object') {
     return null;
+  }
+
+  const jsonRecord = json as Record<string, unknown>;
+  const data = jsonRecord.data;
+  if (data && typeof data === 'object') {
+    return data as ResendEmailResponse;
   }
 
   return json as ResendEmailResponse;
