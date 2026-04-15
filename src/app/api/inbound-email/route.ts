@@ -516,6 +516,21 @@ function parseCurrencyToCents(value: string | undefined): number | null {
   return Math.round(amount * 100);
 }
 
+function normalizeInboundPhone(value: string | undefined): string {
+  if (!value) {
+    return '';
+  }
+
+  const digits = value.replace(/\D+/g, '');
+  const normalizedDigits = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+
+  if (normalizedDigits.length !== 10) {
+    return '';
+  }
+
+  return `${normalizedDigits.slice(0, 3)}-${normalizedDigits.slice(3, 6)}-${normalizedDigits.slice(6)}`;
+}
+
 interface ParsedInboundReferralFields {
   borrowerName: string;
   borrowerEmail: string;
@@ -541,7 +556,7 @@ function parseInboundReferralFields(fields: Record<string, string>): ParsedInbou
   const combinedName = [firstName, lastName].filter(Boolean).join(' ').trim();
   const borrowerName = (combinedName || fields.fullname || '').trim();
   const borrowerEmail = (fields.borroweremail || fields.email || '').trim().toLowerCase();
-  const borrowerPhone = (fields.phone || fields.borrowerphone || '').trim();
+  const borrowerPhone = normalizeInboundPhone((fields.phone || fields.borrowerphone || '').trim());
   const estimatedPriceCents = parseCurrencyToCents(
     (fields.estimatedprice || fields.estimatedpurchaseprice || fields.price || '').trim()
   );
