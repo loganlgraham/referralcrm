@@ -69,8 +69,24 @@ function signBody(rawBody: string, secret: string): string {
   return crypto.createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex');
 }
 
-function makeWebhookRequest(rawBody: string, signature: string) {
-  const headerMap = new Map<string, string>([['resend-signature', signature]]);
+function signSvixBody(rawBody: string, secret: string, timestamp: string, messageId: string): string {
+  const secretRaw = secret.startsWith('whsec_') ? secret.slice('whsec_'.length) : secret;
+  const secretBytes = Buffer.from(secretRaw, 'base64');
+  const payload = `${messageId}.${timestamp}.${rawBody}`;
+  const digest = crypto.createHmac('sha256', secretBytes).update(payload, 'utf8').digest('base64');
+  return `v1,${digest}`;
+}
+
+function makeWebhookRequest(
+  rawBody: string,
+  signature: string,
+  extraHeaders?: Record<string, string>,
+  signatureHeaderName = 'resend-signature'
+) {
+  const headerMap = new Map<string, string>([[signatureHeaderName.toLowerCase(), signature]]);
+  Object.entries(extraHeaders ?? {}).forEach(([key, value]) => {
+    headerMap.set(key.toLowerCase(), value);
+  });
   return {
     headers: {
       get: (name: string) => headerMap.get(name.toLowerCase()) ?? null
@@ -243,6 +259,47 @@ describe('POST /api/inbound-email', () => {
         loanFileNumber: 'LN-222'
       })
     );
+  });
+
+  it('accepts Svix signature headers for inbound webhook delivery', async () => {
+    const svixSecret = `whsec_${Buffer.from('test-svix-secret', 'utf8').toString('base64')}`;
+    process.env.RESEND_INBOUND_SECRET = svixSecret;
+
+    mockResendInboundFetch(
+      [
+        'First Name: Ernesto',
+        'Last Name: Ocana',
+        'Email: jovia218@gmail.com',
+        'Deal Type: Buyer',
+        'Phone: 720-288-7749',
+        'Zipcode: 80602',
+        'Loan Number: 20130975325'
+      ].join('\n')
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+    const svixTimestamp = '1776270931';
+    const svixId = 'msg_3COyV4NVKWNAZ3hvocix8xn3nCx';
+    const svixSignature = signSvixBody(rawBody, svixSecret, svixTimestamp, svixId);
+
+    const response: any = await postHandler(
+      makeWebhookRequest(
+        rawBody,
+        svixSignature,
+        {
+        'svix-signature': svixSignature,
+        'svix-timestamp': svixTimestamp,
+        'svix-id': svixId
+        },
+        'svix-signature'
+      )
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ status: 'created', referralId: 'ref-1' });
   });
 
   it('returns 400 when deterministic parse fails and AI fallback returns nothing', async () => {

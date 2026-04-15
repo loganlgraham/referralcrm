@@ -3,6 +3,21 @@ interface ParsedSignature {
   timestamp?: string;
 }
 
+function sanitizeSvixSignature(value: string): string | undefined {
+  const trimmed = value.replace(/^"|"$/g, '').trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  const [version, signature] = trimmed.split(',', 2);
+  if (!version?.startsWith('v') || !signature) {
+    return undefined;
+  }
+
+  const sanitized = signature.replace(/^"|"$/g, '').trim();
+  return sanitized ? sanitized : undefined;
+}
+
 function sanitizeSignatureComponent(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
@@ -36,6 +51,14 @@ export function parseSignatureHeader(
   }
 
   if (header.includes(',')) {
+    const svixSignature = sanitizeSvixSignature(header);
+    if (svixSignature) {
+      return {
+        signature: svixSignature,
+        timestamp: sanitizeSignatureComponent(fallbackTimestamp)
+      };
+    }
+
     const parts = header
       .split(',')
       .map((pair) => pair.trim())
@@ -67,4 +90,15 @@ export function parseSignatureHeader(
     signature: signatureOnly,
     timestamp: sanitizeSignatureComponent(fallbackTimestamp)
   };
+}
+
+export function parseSvixSignatures(header: string): string[] {
+  if (!header) {
+    return [];
+  }
+
+  return header
+    .split(/\s+/)
+    .map((entry) => sanitizeSvixSignature(entry))
+    .filter((value): value is string => Boolean(value));
 }

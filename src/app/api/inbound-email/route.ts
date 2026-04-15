@@ -7,7 +7,7 @@ import { uploadEmailAttachment } from '@/lib/server/gcs';
 import { sendTransactionalEmail } from '@/lib/email';
 import { buildReferralLink } from '@/lib/referral-links';
 import { extractInboundEmailFieldsWithAI } from '@/lib/server/inbound-email-ai-parser';
-import { parseSignatureHeader } from './signature';
+import { parseSignatureHeader, parseSvixSignatures } from './signature';
 
 interface NormalizedAttachment {
   filename: string;
@@ -91,6 +91,62 @@ function verifyResendSignature(
   const expectedView = new Uint8Array(expected);
 
   return crypto.timingSafeEqual(providedView, expectedView);
+}
+
+function resolveSvixSecret(secret: string): Buffer {
+  if (secret.startsWith('whsec_')) {
+    const raw = secret.slice('whsec_'.length);
+    return Buffer.from(raw, 'base64');
+  }
+  return Buffer.from(secret, 'utf8');
+}
+
+function verifySvixSignature(
+  rawBody: string,
+  header: string,
+  secret: string,
+  timestamp?: string,
+  messageId?: string
+): boolean {
+  if (!timestamp || !messageId) {
+    return false;
+  }
+
+  const signatures = parseSvixSignatures(header);
+  if (signatures.length === 0) {
+    return false;
+  }
+
+  const payload = `${messageId}.${timestamp}.${rawBody}`;
+  const secretBuffer = resolveSvixSecret(secret);
+  const expectedBase64 = crypto.createHmac('sha256', secretBuffer).update(payload, 'utf8').digest('base64');
+  const expected = Buffer.from(expectedBase64, 'utf8');
+
+  for (const signature of signatures) {
+    const provided = Buffer.from(signature, 'utf8');
+    if (provided.length !== expected.length) {
+      continue;
+    }
+    if (crypto.timingSafeEqual(provided, expected)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function verifyInboundSignature(
+  rawBody: string,
+  signatureHeader: string,
+  secret: string,
+  timestamp?: string,
+  svixMessageId?: string
+): boolean {
+  if (verifyResendSignature(rawBody, signatureHeader, secret, timestamp)) {
+    return true;
+  }
+
+  return verifySvixSignature(rawBody, signatureHeader, secret, timestamp, svixMessageId);
 }
 
 function stripHtmlTags(html: string): string {
@@ -625,7 +681,7 @@ function resolveInboundSecret(): string | undefined {
 }
 
 function resolveSignatureHeader(request: NextRequest): string | null {
-  const headerNames = ['resend-signature', 'x-resend-signature'];
+  const headerNames = ['resend-signature', 'x-resend-signature', 'svix-signature'];
   for (const name of headerNames) {
     const value = request.headers.get(name);
     if (value) {
@@ -652,10 +708,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const timestampHeader =
-    request.headers.get('resend-timestamp') ?? request.headers.get('x-resend-timestamp') ?? undefined;
+    request.headers.get('resend-timestamp') ??
+    request.headers.get('x-resend-timestamp') ??
+    request.headers.get('svix-timestamp') ??
+    undefined;
+  const svixMessageId = request.headers.get('svix-id') ?? undefined;
   const rawBody = await request.text();
 
-  if (!verifyResendSignature(rawBody, signatureHeader, secret, timestampHeader)) {
+  if (!verifyInboundSignature(rawBody, signatureHeader, secret, timestampHeader, svixMessageId)) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
