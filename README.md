@@ -212,6 +212,14 @@ RESEND_WEBHOOK_SECRET=
 
 Use `RESEND_INBOUND_SECRET` as the primary value.
 
+Optional fallback parsing for variable inbound email formats:
+
+```env
+OPENAI_API_KEY=
+```
+
+When set, `/api/inbound-email` attempts AI field extraction only if deterministic `Label: value` parsing misses required referral fields.
+
 ### Cron and Scheduled Jobs
 
 ```env

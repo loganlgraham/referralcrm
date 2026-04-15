@@ -6,6 +6,7 @@ import { Referral } from '@/models/referral';
 import { uploadEmailAttachment } from '@/lib/server/gcs';
 import { sendTransactionalEmail } from '@/lib/email';
 import { buildReferralLink } from '@/lib/referral-links';
+import { extractInboundEmailFieldsWithAI } from '@/lib/server/inbound-email-ai-parser';
 import { parseSignatureHeader } from './signature';
 
 interface NormalizedAttachment {
@@ -416,6 +417,20 @@ function extractLabeledFields(text: string): Record<string, string> {
       if (label) {
         acc[label] = value;
       }
+
+      if (label === 'so' || label === 'en') {
+        const nestedMatch = value.match(/^\(([^)]+)\)\s*:\s*(.+)$/);
+        if (nestedMatch) {
+          const nestedLabel = normalizeKey(nestedMatch[1] ?? '');
+          const nestedValue = (nestedMatch[2] ?? '').trim();
+          if (nestedLabel && nestedValue) {
+            acc[`${label}${nestedLabel}`] = nestedValue;
+            if (nestedLabel === 'endorser' && !acc.endorser) {
+              acc.endorser = nestedValue;
+            }
+          }
+        }
+      }
       return acc;
     }, {});
 }
@@ -433,6 +448,98 @@ function parseCurrencyToCents(value: string | undefined): number | null {
     return null;
   }
   return Math.round(amount * 100);
+}
+
+interface ParsedInboundReferralFields {
+  borrowerName: string;
+  borrowerEmail: string;
+  borrowerPhone: string;
+  estimatedPriceCents: number | null;
+  lookingInZips: string[];
+  primaryLookingZip: string;
+  borrowerAddress: string;
+  stageOnTransfer: string;
+  loanType: string;
+  source: string;
+  endorser: string;
+  notes: string;
+  mcValue: string;
+  loanFileNumber: string;
+  clientType: 'Seller' | 'Buyer';
+  hasRequiredFields: boolean;
+}
+
+function parseInboundReferralFields(fields: Record<string, string>): ParsedInboundReferralFields {
+  const firstName = (fields.first || fields.firstname || '').trim();
+  const lastName = (fields.last || fields.lastname || '').trim();
+  const combinedName = [firstName, lastName].filter(Boolean).join(' ').trim();
+  const borrowerName = (combinedName || fields.fullname || '').trim();
+  const borrowerEmail = (fields.borroweremail || fields.email || '').trim().toLowerCase();
+  const borrowerPhone = (fields.phone || fields.borrowerphone || '').trim();
+  const estimatedPriceCents = parseCurrencyToCents(
+    (fields.estimatedprice || fields.estimatedpurchaseprice || fields.price || '').trim()
+  );
+  const lookingInZipRaw = (fields.ziplookingin || fields.zipcode || fields.zip || fields.area || '').trim();
+  const lookingInZips = Array.from(
+    new Set(
+      lookingInZipRaw
+        .split(/[,\s]+/)
+        .map((value) => value.replace(/[^0-9]/g, '').slice(0, 5))
+        .filter((zip) => zip.length === 5)
+    )
+  );
+  const primaryLookingZip = lookingInZips[0] ?? '';
+  const borrowerAddress = (fields.borroweraddress || fields.selleraddress || '').trim();
+  const stageOnTransfer = (fields.stageontransfer || '').trim();
+  const loanType = (fields.loantype || '').trim();
+  const sourceCandidate = (
+    fields.sosource ||
+    fields.referralsource ||
+    fields.leadsource ||
+    ''
+  ).trim();
+  const sourceRaw = (fields.source || '').trim();
+  const sourceTypeRaw = sourceRaw.toLowerCase();
+  const source =
+    sourceCandidate ||
+    (sourceTypeRaw === 'mc' || sourceTypeRaw === 'mortgage consultant'
+      ? 'MC'
+      : sourceTypeRaw === 'lender'
+        ? 'Lender'
+        : '');
+  const endorser = (fields.endorser || fields.referrer || fields.enendorser || '').trim();
+  const notes = (fields.notes || '').trim();
+  const mcValue = (fields.mc || fields.source || '').trim();
+  const loanFileNumber = (fields.loannumber || fields.loannum || '').trim();
+  const clientTypeRaw = (fields.dealtype || '').toLowerCase();
+  const clientType: 'Seller' | 'Buyer' = clientTypeRaw.includes('sell') ? 'Seller' : 'Buyer';
+
+  const hasRequiredFields =
+    Boolean(borrowerName) &&
+    Boolean(borrowerEmail) &&
+    borrowerEmail.includes('@') &&
+    Boolean(borrowerPhone) &&
+    lookingInZips.length > 0 &&
+    Boolean(loanFileNumber);
+
+  return {
+    borrowerName,
+    borrowerEmail,
+    borrowerPhone,
+    estimatedPriceCents,
+    lookingInZips,
+    primaryLookingZip,
+    borrowerAddress,
+    stageOnTransfer,
+    loanType,
+    source,
+    endorser,
+    notes,
+    mcValue,
+    loanFileNumber,
+    clientType,
+    hasRequiredFields
+  };
 }
 
 function sanitizeFileName(name: string): string {
@@ -579,46 +686,56 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ status: 'ignored', reason: 'route_hint_unmatched' }, { status: 202 });
   }
 
-  const fields = extractLabeledFields(email.text);
-  const firstName = (fields.first || fields.firstname || '').trim();
-  const lastName = (fields.last || fields.lastname || '').trim();
-  const combinedName = [firstName, lastName].filter(Boolean).join(' ').trim();
-  const borrowerName = (combinedName || fields.fullname || '').trim();
-  const borrowerEmail = (fields.borroweremail || fields.email || '').trim().toLowerCase();
-  const borrowerPhone = (fields.phone || fields.borrowerphone || '').trim();
-  const estimatedPriceCents = parseCurrencyToCents(
-    (fields.estimatedprice || fields.estimatedpurchaseprice || fields.price || '').trim()
-  );
-  const lookingInZipRaw = (fields.ziplookingin || fields.zip || '').trim();
-  const lookingInZips = Array.from(
-    new Set(
-      lookingInZipRaw
-        .split(/[,\s]+/)
-        .map((value) => value.replace(/[^0-9]/g, '').slice(0, 5))
-        .filter((zip) => zip.length === 5)
-    )
-  );
-  const primaryLookingZip = lookingInZips[0] ?? '';
-  const borrowerAddress = (fields.borroweraddress || '').trim();
-  const stageOnTransfer = (fields.stageontransfer || '').trim();
-  const loanType = (fields.loantype || '').trim();
-  const sourceRaw = (fields.source || '').trim().toLowerCase();
-  const source = sourceRaw === 'mc' || sourceRaw === 'mortgage consultant' ? 'MC' : 'Lender';
-  const endorser = (fields.endorser || '').trim();
-  const notes = (fields.notes || '').trim();
-  const mcValue = (fields.mc || '').trim();
-  const loanFileNumber = (fields.loannumber || fields.loannum || '').trim();
-  const clientTypeRaw = (fields.dealtype || '').toLowerCase();
-  const clientType: 'Seller' | 'Buyer' = clientTypeRaw.includes('sell') ? 'Seller' : 'Buyer';
+  const extractedFields = extractLabeledFields(email.text);
+  let parsedFields = parseInboundReferralFields(extractedFields);
+  let aiFallbackAttempted = false;
+  let aiFallbackApplied = false;
 
-  if (
-    !borrowerName ||
-    !borrowerEmail ||
-    !borrowerEmail.includes('@') ||
-    !borrowerPhone ||
-    lookingInZips.length === 0 ||
-    !loanFileNumber
-  ) {
+  if (!parsedFields.hasRequiredFields) {
+    aiFallbackAttempted = true;
+    const aiFallbackFields = await extractInboundEmailFieldsWithAI({
+      text: email.text,
+      subject: email.subject,
+      from: email.from,
+      to: email.to
+    });
+
+    if (aiFallbackFields) {
+      const mergedFields = {
+        ...aiFallbackFields,
+        ...extractedFields
+      };
+      parsedFields = parseInboundReferralFields(mergedFields);
+      aiFallbackApplied = true;
+    }
+  }
+
+  const {
+    borrowerName,
+    borrowerEmail,
+    borrowerPhone,
+    estimatedPriceCents,
+    lookingInZips,
+    primaryLookingZip,
+    borrowerAddress,
+    stageOnTransfer,
+    loanType,
+    source,
+    endorser,
+    notes,
+    mcValue,
+    loanFileNumber,
+    clientType,
+    hasRequiredFields
+  } = parsedFields;
+
+  if (!hasRequiredFields) {
+    if (aiFallbackAttempted) {
+      console.warn('Inbound email referral parse failed after AI fallback attempt', {
+        messageId: email.messageId,
+        aiFallbackApplied
+      });
+    }
     return NextResponse.json({ error: 'Inbound email is missing borrower contact details or loan number.' }, { status: 400 });
   }
 
