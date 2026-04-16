@@ -535,7 +535,7 @@ function normalizeInboundPhone(value: string | undefined): string {
     return '';
   }
 
-  return normalizedDigits;
+  return `${normalizedDigits.slice(0, 3)}-${normalizedDigits.slice(3, 6)}-${normalizedDigits.slice(6)}`;
 }
 
 function normalizeStageOnTransfer(stageValue: string | undefined, referrerValue: string | undefined): string {

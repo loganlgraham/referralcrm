@@ -195,7 +195,7 @@ describe('POST /api/inbound-email', () => {
         borrower: expect.objectContaining({
           name: 'Jane Doe',
           email: 'jane@example.com',
-          phone: '3035551212'
+          phone: '303-555-1212'
         }),
         loanFileNumber: '111'
       })
@@ -274,7 +274,7 @@ describe('POST /api/inbound-email', () => {
         borrower: expect.objectContaining({
           name: 'Danielle Geldart',
           email: 'justinlounsbury05@gmail.com',
-          phone: '8634406938'
+          phone: '863-440-6938'
         }),
         initialNotes: expect.stringContaining('MC: KarimL')
       })
@@ -368,7 +368,7 @@ describe('POST /api/inbound-email', () => {
         borrower: expect.objectContaining({
           name: 'Avery Buyer',
           email: 'avery@example.com',
-          phone: '7205559999'
+          phone: '720-555-9999'
         }),
         loanFileNumber: '222'
       })
