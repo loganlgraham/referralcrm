@@ -2,6 +2,7 @@ import crypto from 'crypto';
 
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
+import { LenderMC } from '@/models/lender';
 import { sendTransactionalEmail } from '@/lib/email';
 import { extractInboundEmailFieldsWithAI } from '@/lib/server/inbound-email-ai-parser';
 import { logReferralActivity } from '@/lib/server/activities';
@@ -42,6 +43,12 @@ jest.mock('@/models/referral', () => ({
   }
 }));
 
+jest.mock('@/models/lender', () => ({
+  LenderMC: {
+    find: jest.fn()
+  }
+}));
+
 jest.mock('@/lib/server/gcs', () => ({
   uploadEmailAttachment: jest.fn()
 }));
@@ -73,6 +80,21 @@ jest.mock('@/lib/server/notifications', () => ({
 const mockedConnectMongo = connectMongo as jest.MockedFunction<typeof connectMongo>;
 const mockedReferralFindOne = Referral.findOne as jest.Mock;
 const mockedReferralCreate = Referral.create as jest.Mock;
+const mockedLenderFind = LenderMC.find as jest.Mock;
+
+type FakeObjectId = { toString: () => string };
+
+function fakeObjectId(value: string): FakeObjectId {
+  return { toString: () => value };
+}
+
+function mockLenderFindReturn(lenders: { _id: FakeObjectId; name: string }[]) {
+  mockedLenderFind.mockReturnValue({
+    select: jest.fn().mockReturnValue({
+      lean: jest.fn().mockResolvedValue(lenders)
+    })
+  });
+}
 const mockedSendTransactionalEmail = sendTransactionalEmail as jest.MockedFunction<
   typeof sendTransactionalEmail
 >;
@@ -160,6 +182,7 @@ describe('POST /api/inbound-email', () => {
     mockedLogReferralActivity.mockResolvedValue(undefined);
     mockedCleanReferralNotes.mockImplementation(async (notes) => notes);
     mockedCreateAdminNotifications.mockResolvedValue(undefined);
+    mockLenderFindReturn([]);
   });
 
   afterAll(() => {
@@ -307,6 +330,127 @@ describe('POST /api/inbound-email', () => {
         text: expect.stringContaining('Notes: Need to purchase in NC')
       })
     );
+  });
+
+  it('assigns a matching mortgage consultant when Source token matches a single LenderMC', async () => {
+    const lenderId = fakeObjectId('lender-karim');
+    mockLenderFindReturn([
+      { _id: lenderId, name: 'Karim Lopez' },
+      { _id: fakeObjectId('lender-jane'), name: 'Jane Doe' }
+    ]);
+
+    mockResendInboundFetch(
+      [
+        'First Name: Danielle',
+        'Last Name: Geldart',
+        'Email: justinlounsbury05@gmail.com',
+        'Deal Type: Buyer',
+        'Phone: 8634406938',
+        'Area: 27910',
+        'Source: KarimL',
+        'Loan Number: 20130974679'
+      ].join('\n')
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedReferralCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lender: lenderId,
+        initialNotes: expect.stringContaining('MC: Karim Lopez (source: KarimL)')
+      })
+    );
+    expect(mockedLogReferralActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('Auto-assigned mortgage consultant Karim Lopez')
+      })
+    );
+  });
+
+  it('leaves lender unassigned when Source token does not match any LenderMC', async () => {
+    mockLenderFindReturn([{ _id: fakeObjectId('lender-jane'), name: 'Jane Doe' }]);
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    mockResendInboundFetch(
+      [
+        'First Name: Danielle',
+        'Last Name: Geldart',
+        'Email: justinlounsbury05@gmail.com',
+        'Deal Type: Buyer',
+        'Phone: 8634406938',
+        'Area: 27910',
+        'Source: KarimL',
+        'Loan Number: 20130974679'
+      ].join('\n')
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(200);
+    const createArgs = mockedReferralCreate.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(createArgs.lender).toBeUndefined();
+    expect(createArgs.initialNotes).toEqual(expect.stringContaining('MC: KarimL'));
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Inbound email MC source unmatched',
+      expect.objectContaining({ mcValue: 'KarimL', reason: 'no_match' })
+    );
+
+    warnSpy.mockRestore();
+  });
+
+  it('leaves lender unassigned when Source token is ambiguous across multiple LenderMCs', async () => {
+    mockLenderFindReturn([
+      { _id: fakeObjectId('lender-karim-lopez'), name: 'Karim Lopez' },
+      { _id: fakeObjectId('lender-karim-lang'), name: 'Karim Lang' }
+    ]);
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    mockResendInboundFetch(
+      [
+        'First Name: Danielle',
+        'Last Name: Geldart',
+        'Email: justinlounsbury05@gmail.com',
+        'Deal Type: Buyer',
+        'Phone: 8634406938',
+        'Area: 27910',
+        'Source: KarimL',
+        'Loan Number: 20130974679'
+      ].join('\n')
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(200);
+    const createArgs = mockedReferralCreate.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(createArgs.lender).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Inbound email MC source ambiguous',
+      expect.objectContaining({ mcValue: 'KarimL', reason: 'ambiguous_match' })
+    );
+
+    warnSpy.mockRestore();
   });
 
   it('maps non-PNC referrer values to Pre-approval TBD stage', async () => {

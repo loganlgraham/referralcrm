@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { Types } from 'mongoose';
 
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
@@ -10,6 +11,7 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { extractInboundEmailFieldsWithAI } from '@/lib/server/inbound-email-ai-parser';
 import { cleanReferralNotes } from '@/lib/server/referral-notes-cleanup';
 import { createAdminNotifications } from '@/lib/server/notifications';
+import { findMcByFirstNameLastInitialToken, normalizeMcToken } from '@/lib/server/mc-matcher';
 import { parseSignatureHeader, parseSvixSignatures } from './signature';
 
 interface NormalizedAttachment {
@@ -871,6 +873,40 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ status: 'duplicate' }, { status: 202 });
   }
 
+  let matchedLenderId: Types.ObjectId | undefined;
+  let matchedLenderName = '';
+  if (mcValue) {
+    const token = normalizeMcToken(mcValue);
+    if (token) {
+      try {
+        const match = await findMcByFirstNameLastInitialToken(token);
+        if (match && 'id' in match) {
+          matchedLenderId = match.id;
+          matchedLenderName = match.name;
+        } else if (match && 'ambiguous' in match) {
+          console.warn('Inbound email MC source ambiguous', {
+            messageId: email.messageId,
+            mcValue,
+            candidateIds: match.candidateIds,
+            reason: 'ambiguous_match'
+          });
+        } else {
+          console.warn('Inbound email MC source unmatched', {
+            messageId: email.messageId,
+            mcValue,
+            reason: 'no_match'
+          });
+        }
+      } catch (error) {
+        console.error('Failed to match inbound email MC source', {
+          messageId: email.messageId,
+          mcValue,
+          error: error instanceof Error ? error.message : 'unknown_error'
+        });
+      }
+    }
+  }
+
   const attachmentUploads = await Promise.all(
     email.attachments.map(async (attachment, index) => {
       if (!attachment.content) {
@@ -922,7 +958,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const notesSections: string[] = [];
   if (mcValue) {
-    notesSections.push(`MC: ${mcValue}`);
+    notesSections.push(
+      matchedLenderName ? `MC: ${matchedLenderName} (source: ${mcValue})` : `MC: ${mcValue}`
+    );
   }
   if (cleanedNotes) {
     notesSections.push(cleanedNotes);
@@ -949,6 +987,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       preApprovalAmountCents: estimatedPriceCents ?? undefined,
       estPurchasePriceCents: estimatedPriceCents ?? undefined,
       attachments,
+      lender: matchedLenderId,
       org: 'AHA',
       ahaBucket: channelInfo.channel,
       inboundEmail: {
@@ -967,7 +1006,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       `Stage: ${stageOnTransfer}`,
       source ? `Source: ${source}` : null,
       endorser ? `Endorser: ${endorser}` : null,
-      mcValue ? `MC: ${mcValue}` : null,
+      mcValue
+        ? matchedLenderName
+          ? `MC: ${matchedLenderName} (source: ${mcValue})`
+          : `MC: ${mcValue}`
+        : null,
       borrowerEmail ? `Email: ${borrowerEmail}` : null,
       borrowerPhone ? `Phone: ${formatPhoneForSummary(borrowerPhone)}` : null,
       loanFileNumber ? `Loan Number: ${loanFileNumber}` : null,
@@ -979,7 +1022,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       `Route Hint: ${channelInfo.routeHint}`
     ].filter(Boolean) as string[];
 
-    await Promise.allSettled([
+    const activityPromises: Promise<unknown>[] = [
       logReferralActivity({
         referralId: referral._id,
         actorRole: 'system',
@@ -994,7 +1037,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         actorName: 'Inbound Email Import',
         content: `New inbound referral created for ${borrowerName || 'a new client'}.`
       })
-    ]);
+    ];
+
+    if (matchedLenderId && matchedLenderName) {
+      activityPromises.push(
+        logReferralActivity({
+          referralId: referral._id,
+          actorRole: 'system',
+          channel: 'update',
+          content: `Auto-assigned mortgage consultant ${matchedLenderName} from inbound email source "${mcValue}"`
+        })
+      );
+    }
+
+    await Promise.allSettled(activityPromises);
 
     const borrowerLabel = escapeHtml(borrowerName);
     const summaryHtml = `
