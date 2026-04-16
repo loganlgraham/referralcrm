@@ -129,8 +129,9 @@ function toFallbackFieldMap(parsed: z.infer<typeof aiExtractionSchema>): Inbound
   }
   if (endorser) {
     map.endorser = endorser;
-  } else if (referrer) {
-    map.endorser = referrer;
+  }
+  if (referrer) {
+    map.referrer = referrer;
   }
   if (notes) {
     map.notes = notes;
@@ -154,7 +155,7 @@ function getFallbackPrompt(): string {
     'Prefer exact text spans from the email when possible.',
     "Important mapping rule: in many templates, 'Source' means MC name.",
     "If a line like 'So: (Source): ...' appears, map that value to referralSource (not MC name).",
-    "If a line like 'Referrer:' appears, map it to endorser/referrer."
+    "If a line like 'Referrer:' appears, map it to referrer (stage hint), not endorser."
   ].join(' ');
 }
 

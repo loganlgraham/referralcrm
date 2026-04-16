@@ -71,7 +71,7 @@ describe('extractInboundEmailFieldsWithAI', () => {
       loannumber: 'LN-123',
       source: 'UmedY',
       sosource: 'National Podcast - Candace Owens',
-      endorser: 'PNC-Pre-Approved',
+      referrer: 'PNC-Pre-Approved',
       dealtype: 'Buyer'
     });
   });

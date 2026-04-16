@@ -6,7 +6,14 @@ import { formatDistanceToNow } from 'date-fns';
 
 interface Notification {
   _id: string;
-  type: 'note' | 'status_change' | 'email_response' | 'update_request_response' | 'nps_survey_completed' | 'checkin_no_response_48h';
+  type:
+    | 'note'
+    | 'status_change'
+    | 'email_response'
+    | 'update_request_response'
+    | 'nps_survey_completed'
+    | 'checkin_no_response_48h'
+    | 'referral_created';
   referralId: string;
   borrowerName: string;
   actorRole: string;
@@ -138,6 +145,8 @@ export function NotificationDropdown({
         return '⭐';
       case 'checkin_no_response_48h':
         return '⚠️';
+      case 'referral_created':
+        return '🔔';
     }
 
     const exhaustiveCheck: never = type;

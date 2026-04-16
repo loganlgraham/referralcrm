@@ -4,6 +4,9 @@ import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { sendTransactionalEmail } from '@/lib/email';
 import { extractInboundEmailFieldsWithAI } from '@/lib/server/inbound-email-ai-parser';
+import { logReferralActivity } from '@/lib/server/activities';
+import { cleanReferralNotes } from '@/lib/server/referral-notes-cleanup';
+import { createAdminNotifications } from '@/lib/server/notifications';
 
 let postHandler: typeof import('@/app/api/inbound-email/route').POST;
 
@@ -55,6 +58,18 @@ jest.mock('@/lib/server/inbound-email-ai-parser', () => ({
   extractInboundEmailFieldsWithAI: jest.fn()
 }));
 
+jest.mock('@/lib/server/activities', () => ({
+  logReferralActivity: jest.fn()
+}));
+
+jest.mock('@/lib/server/referral-notes-cleanup', () => ({
+  cleanReferralNotes: jest.fn()
+}));
+
+jest.mock('@/lib/server/notifications', () => ({
+  createAdminNotifications: jest.fn()
+}));
+
 const mockedConnectMongo = connectMongo as jest.MockedFunction<typeof connectMongo>;
 const mockedReferralFindOne = Referral.findOne as jest.Mock;
 const mockedReferralCreate = Referral.create as jest.Mock;
@@ -63,6 +78,11 @@ const mockedSendTransactionalEmail = sendTransactionalEmail as jest.MockedFuncti
 >;
 const mockedExtractInboundEmailFieldsWithAI = extractInboundEmailFieldsWithAI as jest.MockedFunction<
   typeof extractInboundEmailFieldsWithAI
+>;
+const mockedLogReferralActivity = logReferralActivity as jest.MockedFunction<typeof logReferralActivity>;
+const mockedCleanReferralNotes = cleanReferralNotes as jest.MockedFunction<typeof cleanReferralNotes>;
+const mockedCreateAdminNotifications = createAdminNotifications as jest.MockedFunction<
+  typeof createAdminNotifications
 >;
 
 function signBody(rawBody: string, secret: string): string {
@@ -137,6 +157,9 @@ describe('POST /api/inbound-email', () => {
     });
     mockedSendTransactionalEmail.mockResolvedValue(true);
     mockedExtractInboundEmailFieldsWithAI.mockResolvedValue(null);
+    mockedLogReferralActivity.mockResolvedValue(undefined);
+    mockedCleanReferralNotes.mockImplementation(async (notes) => notes);
+    mockedCreateAdminNotifications.mockResolvedValue(undefined);
   });
 
   afterAll(() => {
@@ -172,9 +195,9 @@ describe('POST /api/inbound-email', () => {
         borrower: expect.objectContaining({
           name: 'Jane Doe',
           email: 'jane@example.com',
-          phone: '303-555-1212'
+          phone: '3035551212'
         }),
-        loanFileNumber: 'LN-111'
+        loanFileNumber: '111'
       })
     );
   });
@@ -242,16 +265,77 @@ describe('POST /api/inbound-email', () => {
       expect.objectContaining({
         source: 'National Podcast - Candace Owens',
         endorser: 'Candace Owens',
+        stageOnTransfer: 'Pre-approved',
         borrowerCurrentAddress: '20 Kelce Ave, Center Harbor, NH, 03226',
         loanType: 'FHA',
         loanFileNumber: '20130974679',
+        preApprovalAmountCents: 8500000,
         lookingInZip: '27910',
         borrower: expect.objectContaining({
           name: 'Danielle Geldart',
           email: 'justinlounsbury05@gmail.com',
-          phone: '863-440-6938'
+          phone: '8634406938'
         }),
         initialNotes: expect.stringContaining('MC: KarimL')
+      })
+    );
+    expect(mockedCleanReferralNotes).toHaveBeenCalledWith('Need to purchase in NC', {
+      allowFallbackToOriginal: true
+    });
+    expect(mockedLogReferralActivity).toHaveBeenCalledTimes(1);
+    expect(mockedCreateAdminNotifications).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'referral_created',
+        borrowerName: 'Danielle Geldart'
+      })
+    );
+    expect(mockedSendTransactionalEmail).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        text: expect.stringContaining('Loan Number: 20130974679')
+      })
+    );
+    expect(mockedSendTransactionalEmail).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        text: expect.stringContaining('Pre-approval Amount: $85,000.00')
+      })
+    );
+    expect(mockedSendTransactionalEmail).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        text: expect.stringContaining('Notes: Need to purchase in NC')
+      })
+    );
+  });
+
+  it('maps non-PNC referrer values to Pre-approval TBD stage', async () => {
+    mockResendInboundFetch(
+      [
+        'First Name: Jane',
+        'Last Name: Buyer',
+        'Email: janebuyer@example.com',
+        'Deal Type: Buyer',
+        'Phone: 720-555-0000',
+        'Zipcode: 80202',
+        'Referrer: Random Partner',
+        'Loan Number: 20130974680'
+      ].join('\n')
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedReferralCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stageOnTransfer: 'Pre-approval TBD'
       })
     );
   });
@@ -284,9 +368,9 @@ describe('POST /api/inbound-email', () => {
         borrower: expect.objectContaining({
           name: 'Avery Buyer',
           email: 'avery@example.com',
-          phone: '720-555-9999'
+          phone: '7205559999'
         }),
-        loanFileNumber: 'LN-222'
+        loanFileNumber: '222'
       })
     );
   });

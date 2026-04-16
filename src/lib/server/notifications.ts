@@ -3,7 +3,14 @@ import { formatNotificationContent } from '@/lib/format-notification-content';
 import { Notification } from '@/models/notification';
 import { User } from '@/models/user';
 
-type NotificationType = 'note' | 'status_change' | 'email_response' | 'update_request_response' | 'nps_survey_completed' | 'checkin_no_response_48h';
+type NotificationType =
+  | 'note'
+  | 'status_change'
+  | 'email_response'
+  | 'update_request_response'
+  | 'nps_survey_completed'
+  | 'checkin_no_response_48h'
+  | 'referral_created';
 
 interface CreateNotificationParams {
   type: NotificationType;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getCurrentSession } from '@/lib/auth';
+import { cleanReferralNotes } from '@/lib/server/referral-notes-cleanup';
 
 interface Params {
   params: { id: string };
@@ -10,18 +11,6 @@ interface Params {
 const requestSchema = z.object({
   notes: z.string().min(1).max(2000),
 });
-
-const systemPrompt = `You are a professional writing assistant for a real estate referral platform.
-Your job is to clean up and improve notes that will be included in an email to a real estate agent about a new client referral.
-
-Guidelines:
-- Keep the message professional, friendly, and concise
-- Fix any grammar, spelling, or punctuation errors
-- Improve clarity and readability
-- Preserve the original intent and all important information
-- Do not add information that wasn't in the original
-- Keep it brief - these are notes, not a full message
-- Return ONLY the cleaned up notes text, no explanations or formatting`;
 
 export async function POST(request: NextRequest, { params }: Params): Promise<NextResponse> {
   const session = await getCurrentSession();
@@ -59,35 +48,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const { notes } = parsed.data;
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        temperature: 0.3,
-        max_tokens: 500,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: notes },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorPayload = await response.json().catch(() => ({}));
-      console.error('Note cleanup OpenAI error', errorPayload);
-      return NextResponse.json(
-        { error: 'Failed to clean up notes.' },
-        { status: 502 }
-      );
-    }
-
-    const payload = await response.json();
-    const cleanedNotes = payload?.choices?.[0]?.message?.content?.trim();
-
+    const cleanedNotes = await cleanReferralNotes(notes);
     if (!cleanedNotes) {
       return NextResponse.json(
         { error: 'No response from cleanup service.' },
