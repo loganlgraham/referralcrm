@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Types } from 'mongoose';
 import { connectMongo } from '@/lib/mongoose';
 import { Referral, ReferralDocument } from '@/models/referral';
 import { Payment } from '@/models/payment';
@@ -11,12 +12,17 @@ import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/consta
 import { calculateReferralFeeDue } from '@/utils/referral';
 import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
 import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
+import { normalizePhoneNumber } from '@/utils/phone-utils';
 
 interface RouteContext {
   params: { id: string };
 }
 
 const DETAIL_FIELD_LABELS = {
+  borrowerFirstName: 'Borrower First Name',
+  borrowerLastName: 'Borrower Last Name',
+  borrowerEmail: 'Borrower Email',
+  borrowerPhone: 'Borrower Phone',
   source: 'Source',
   endorser: 'Endorser',
   clientType: 'Client Type',
@@ -96,6 +102,84 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     return new NextResponse('Forbidden', { status: 403 });
   }
   const updatePayload = parsed.data as Record<string, unknown>;
+  const canEditBorrowerContact = session.user.role === 'admin' || session.user.role === 'manager';
+  const borrowerFieldKeys = ['borrowerFirstName', 'borrowerLastName', 'borrowerEmail', 'borrowerPhone'] as const;
+  const borrowerFieldUpdateRequested = borrowerFieldKeys.some((field) => field in updatePayload);
+  if (borrowerFieldUpdateRequested && !canEditBorrowerContact) {
+    return NextResponse.json({ error: 'Only admins and managers can update borrower contact details' }, { status: 403 });
+  }
+
+  const nextBorrowerFirstName =
+    typeof updatePayload.borrowerFirstName === 'string'
+      ? updatePayload.borrowerFirstName.trim()
+      : existing.borrower?.firstName?.trim() ?? '';
+  const nextBorrowerLastName =
+    typeof updatePayload.borrowerLastName === 'string'
+      ? updatePayload.borrowerLastName.trim()
+      : existing.borrower?.lastName?.trim() ?? '';
+
+  if (borrowerFieldUpdateRequested) {
+    const borrowerName =
+      [nextBorrowerFirstName, nextBorrowerLastName].filter(Boolean).join(' ').trim() ||
+      existing.borrower?.name?.trim() ||
+      '';
+    updatePayload['borrower.firstName'] = nextBorrowerFirstName;
+    updatePayload['borrower.lastName'] = nextBorrowerLastName;
+    updatePayload['borrower.name'] = borrowerName;
+  }
+
+  if (typeof updatePayload.borrowerEmail === 'string') {
+    const nextBorrowerEmail = updatePayload.borrowerEmail.trim();
+    const escapedEmail = nextBorrowerEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const existingByEmail = await Referral.findOne({
+      _id: { $ne: new Types.ObjectId(context.params.id) },
+      deletedAt: null,
+      'borrower.email': { $regex: new RegExp(`^${escapedEmail}$`, 'i') },
+    })
+      .select('_id borrower.name')
+      .lean<{ _id: Types.ObjectId; borrower?: { name?: string } } | null>();
+    if (existingByEmail) {
+      return NextResponse.json(
+        {
+          error: 'A referral with this email already exists.',
+          existingReferralId: existingByEmail._id.toString(),
+          existingBorrowerName: existingByEmail.borrower?.name ?? '',
+        },
+        { status: 409 }
+      );
+    }
+    updatePayload['borrower.email'] = nextBorrowerEmail;
+  }
+
+  if (typeof updatePayload.borrowerPhone === 'string') {
+    const normalizedInputPhone = normalizePhoneNumber(updatePayload.borrowerPhone);
+    if (normalizedInputPhone) {
+      const allReferralsWithPhones = await Referral.find({
+        _id: { $ne: new Types.ObjectId(context.params.id) },
+        deletedAt: null,
+        'borrower.phone': { $exists: true, $ne: '' },
+      })
+        .select('borrower.phone _id borrower.name')
+        .lean<{ _id: Types.ObjectId; borrower: { phone: string; name: string } }[]>();
+
+      const duplicateByPhone = allReferralsWithPhones.find((ref) => {
+        const refNormalizedPhone = normalizePhoneNumber(ref.borrower.phone);
+        return refNormalizedPhone === normalizedInputPhone;
+      });
+      if (duplicateByPhone) {
+        return NextResponse.json(
+          {
+            error: 'A referral with this phone number already exists.',
+            existingReferralId: duplicateByPhone._id.toString(),
+            existingBorrowerName: duplicateByPhone.borrower.name,
+          },
+          { status: 409 }
+        );
+      }
+    }
+    updatePayload['borrower.phone'] = updatePayload.borrowerPhone.trim();
+  }
+
   const preApprovalAmountCents =
     parsed.data.preApprovalAmount !== undefined
       ? Math.max(0, Math.round(parsed.data.preApprovalAmount * 100))
@@ -148,11 +232,24 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
       return nextISO !== prevISO;
     }
     const nextValue = toComparableString(updatePayload[field]);
-    const previousValue = toComparableString((existing as Record<string, unknown>)[field]);
+    const previousValue =
+      field === 'borrowerFirstName'
+        ? toComparableString(existing.borrower?.firstName ?? '')
+        : field === 'borrowerLastName'
+          ? toComparableString(existing.borrower?.lastName ?? '')
+          : field === 'borrowerEmail'
+            ? toComparableString(existing.borrower?.email ?? '')
+            : field === 'borrowerPhone'
+              ? toComparableString(existing.borrower?.phone ?? '')
+              : toComparableString((existing as Record<string, unknown>)[field]);
     return previousValue !== nextValue;
   });
 
   delete updatePayload.preApprovalAmount;
+  delete updatePayload.borrowerFirstName;
+  delete updatePayload.borrowerLastName;
+  delete updatePayload.borrowerEmail;
+  delete updatePayload.borrowerPhone;
 
   // Handle referralDate update - only allow for admin users
   if ('referralDate' in updatePayload) {
@@ -208,6 +305,10 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     );
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && (error as { code?: number }).code === 11000) {
+      const duplicateError = error as { keyPattern?: Record<string, number> };
+      if (duplicateError.keyPattern?.['borrower.email']) {
+        return NextResponse.json({ error: 'A referral with this email already exists.' }, { status: 409 });
+      }
       return NextResponse.json({ error: 'Loan file number must be unique' }, { status: 409 });
     }
     throw error;

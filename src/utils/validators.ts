@@ -26,6 +26,10 @@ export const createReferralSchema = z.object({
 });
 
 export const updateReferralSchema = z.object({
+  borrowerFirstName: z.string().trim().min(1).optional(),
+  borrowerLastName: z.string().trim().min(1).optional(),
+  borrowerEmail: z.string().trim().email().optional(),
+  borrowerPhone: z.string().trim().min(7).optional(),
   status: z.enum(REFERRAL_STATUS_VALUES).optional(),
   buyStatus: z.enum(REFERRAL_STATUS_VALUES).optional(),
   sellStatus: z.enum(REFERRAL_STATUS_VALUES).optional(),

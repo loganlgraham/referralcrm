@@ -57,6 +57,8 @@ interface ReferralDetail {
   stageOnTransfer?: string | null;
   loanType?: string | null;
   borrower: {
+    firstName?: string;
+    lastName?: string;
     name: string;
     email: string;
     phone: string;
@@ -123,6 +125,10 @@ interface FinancialState {
 }
 
 interface DetailDraft {
+  borrowerFirstName: string;
+  borrowerLastName: string;
+  borrowerEmail: string;
+  borrowerPhone: string;
   loanFileNumber: string;
   source: ReferralSource;
   endorser: string;
@@ -137,6 +143,10 @@ interface DetailDraft {
 }
 
 const DETAIL_FIELD_KEYS: (keyof DetailDraft)[] = [
+  'borrowerFirstName',
+  'borrowerLastName',
+  'borrowerEmail',
+  'borrowerPhone',
   'loanFileNumber',
   'source',
   'endorser',
@@ -189,6 +199,20 @@ const parseZipList = (value: string): string[] =>
   );
 
 const formatZipList = (values: string[]): string => values.join(', ');
+
+const splitBorrowerName = (fullName: string): { firstName: string; lastName: string } => {
+  const parts = fullName.trim().split(/\s+/u).filter(Boolean);
+  if (parts.length === 0) {
+    return { firstName: '', lastName: '' };
+  }
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: '' };
+  }
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(' '),
+  };
+};
 
 const centsToCurrencyInput = (value?: number | null) => {
   if (!value) {
@@ -285,31 +309,43 @@ const dateTimeLocalToISO = (dateTimeLocal: string): string => {
   }
 };
 
-const createDetailDraft = (referral: ReferralDetail): DetailDraft => ({
-  loanFileNumber: ensureString(referral?.loanFileNumber),
-  source: normalizeSource(referral?.source),
-  endorser: ensureString(referral?.endorser),
-  clientType: normalizeClientType(referral?.clientType),
-  lookingInZip: (() => {
-    const values = Array.isArray(referral?.lookingInZips)
-      ? referral.lookingInZips.filter((zip): zip is string => typeof zip === 'string' && zip.trim().length > 0)
-      : [];
-    if (values.length > 0) {
-      return formatZipList(values.map((zip) => zip.trim()));
-    }
-    return ensureString(referral?.lookingInZip);
-  })(),
-  borrowerCurrentAddress: ensureString(referral?.borrowerCurrentAddress),
-  stageOnTransfer: normalizeStageOnTransfer(referral?.stageOnTransfer),
-  loanType: ensureString(referral?.loanType),
-  preApprovalAmount: sanitizeCurrencyInput(centsToCurrencyInput(referral?.preApprovalAmountCents)),
-  timeline: (referral?.timeline && REFERRAL_TIMELINE_VALUES.includes(referral.timeline as any))
-    ? (referral.timeline as DetailDraft['timeline'])
-    : 'not_specified',
-  referralDate: isoToDateTimeLocal(referral?.referralDate ?? null),
-});
+const createDetailDraft = (referral: ReferralDetail): DetailDraft => {
+  const fallbackBorrowerNameParts = splitBorrowerName(ensureString(referral?.borrower?.name));
+
+  return {
+    borrowerFirstName: ensureString(referral?.borrower?.firstName) || fallbackBorrowerNameParts.firstName,
+    borrowerLastName: ensureString(referral?.borrower?.lastName) || fallbackBorrowerNameParts.lastName,
+    borrowerEmail: ensureString(referral?.borrower?.email),
+    borrowerPhone: ensureString(referral?.borrower?.phone),
+    loanFileNumber: ensureString(referral?.loanFileNumber),
+    source: normalizeSource(referral?.source),
+    endorser: ensureString(referral?.endorser),
+    clientType: normalizeClientType(referral?.clientType),
+    lookingInZip: (() => {
+      const values = Array.isArray(referral?.lookingInZips)
+        ? referral.lookingInZips.filter((zip): zip is string => typeof zip === 'string' && zip.trim().length > 0)
+        : [];
+      if (values.length > 0) {
+        return formatZipList(values.map((zip) => zip.trim()));
+      }
+      return ensureString(referral?.lookingInZip);
+    })(),
+    borrowerCurrentAddress: ensureString(referral?.borrowerCurrentAddress),
+    stageOnTransfer: normalizeStageOnTransfer(referral?.stageOnTransfer),
+    loanType: ensureString(referral?.loanType),
+    preApprovalAmount: sanitizeCurrencyInput(centsToCurrencyInput(referral?.preApprovalAmountCents)),
+    timeline: (referral?.timeline && REFERRAL_TIMELINE_VALUES.includes(referral.timeline as any))
+      ? (referral.timeline as DetailDraft['timeline'])
+      : 'not_specified',
+    referralDate: isoToDateTimeLocal(referral?.referralDate ?? null),
+  };
+};
 
 const normalizeDetailDraft = (draft: DetailDraft): DetailDraft => ({
+  borrowerFirstName: draft.borrowerFirstName.trim(),
+  borrowerLastName: draft.borrowerLastName.trim(),
+  borrowerEmail: draft.borrowerEmail.trim(),
+  borrowerPhone: draft.borrowerPhone.trim(),
   loanFileNumber: draft.loanFileNumber.trim(),
   source: draft.source.trim(),
   endorser: draft.endorser.trim(),
@@ -620,6 +656,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const normalizedCurrentDetails = useMemo(
     () => normalizeDetailDraft(createDetailDraft(referral)),
     [
+      referral.borrower?.firstName,
+      referral.borrower?.lastName,
+      referral.borrower?.email,
+      referral.borrower?.phone,
       referral.loanFileNumber,
       referral.source,
       referral.endorser,
@@ -657,6 +697,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     (viewerRole === 'admin' && referral.origin === 'admin') ||
     (viewerRole === 'agent' && referral.origin === 'agent');
   const canEditDetails = viewerRole !== 'viewer';
+  const canEditBorrowerContact = viewerRole === 'admin' || viewerRole === 'manager';
 
   useEffect(() => {
     setReferral(initialReferral);
@@ -668,6 +709,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     }
   }, [
     isEditingDetails,
+    referral.borrower?.firstName,
+    referral.borrower?.lastName,
+    referral.borrower?.email,
+    referral.borrower?.phone,
     referral.loanFileNumber,
     referral.source,
     referral.endorser,
@@ -847,6 +892,11 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     let preApprovalAmountValue: number | undefined;
 
     const standardFieldsChanged = DETAIL_FIELD_KEYS.some((field) => normalizedDraft[field] !== normalizedCurrent[field]);
+    const borrowerFieldsChanged =
+      normalizedDraft.borrowerFirstName !== normalizedCurrent.borrowerFirstName ||
+      normalizedDraft.borrowerLastName !== normalizedCurrent.borrowerLastName ||
+      normalizedDraft.borrowerEmail !== normalizedCurrent.borrowerEmail ||
+      normalizedDraft.borrowerPhone !== normalizedCurrent.borrowerPhone;
     const referralDateChanged = viewerRole === 'admin' && normalizedDraft.referralDate !== normalizedCurrent.referralDate;
     
     if (!standardFieldsChanged && !referralDateChanged) {
@@ -876,6 +926,29 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       toast.error('Stage on transfer is required.');
       return;
     }
+    if (canEditBorrowerContact && borrowerFieldsChanged) {
+      if (!normalizedDraft.borrowerFirstName) {
+        toast.error('Borrower first name is required.');
+        return;
+      }
+      if (!normalizedDraft.borrowerLastName) {
+        toast.error('Borrower last name is required.');
+        return;
+      }
+      if (!normalizedDraft.borrowerEmail) {
+        toast.error('Borrower email is required.');
+        return;
+      }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
+      if (!emailRegex.test(normalizedDraft.borrowerEmail)) {
+        toast.error('Enter a valid borrower email.');
+        return;
+      }
+      if (!normalizedDraft.borrowerPhone || normalizedDraft.borrowerPhone.replace(/\D+/g, '').length < 7) {
+        toast.error('Enter a valid borrower phone number.');
+        return;
+      }
+    }
 
     if (normalizedDraft.preApprovalAmount) {
       preApprovalAmountValue = Number.parseFloat(normalizedDraft.preApprovalAmount);
@@ -890,6 +963,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     const payload: Record<string, unknown> = {};
     DETAIL_FIELD_KEYS.forEach((field) => {
       if (field === 'referralDate') return; // Handled separately below
+      if (
+        !canEditBorrowerContact &&
+        (field === 'borrowerFirstName' || field === 'borrowerLastName' || field === 'borrowerEmail' || field === 'borrowerPhone')
+      ) {
+        return;
+      }
       if (normalizedDraft[field] !== normalizedCurrent[field]) {
         if (field === 'preApprovalAmount') {
           payload.preApprovalAmount = preApprovalAmountValue;
@@ -973,8 +1052,23 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       const updatedReferral = (await response.json().catch(() => undefined)) as ReferralDetail | undefined;
 
       setReferral((previous) => {
+        const nextBorrowerName =
+          [normalizedDraft.borrowerFirstName, normalizedDraft.borrowerLastName].filter(Boolean).join(' ').trim() ||
+          previous.borrower.name;
         const baseUpdate = {
           ...previous,
+          ...(canEditBorrowerContact && borrowerFieldsChanged
+            ? {
+                borrower: {
+                  ...previous.borrower,
+                  firstName: normalizedDraft.borrowerFirstName,
+                  lastName: normalizedDraft.borrowerLastName,
+                  name: nextBorrowerName,
+                  email: normalizedDraft.borrowerEmail,
+                  phone: normalizedDraft.borrowerPhone,
+                },
+              }
+            : {}),
           loanFileNumber: normalizedDraft.loanFileNumber,
           source: normalizedDraft.source,
           endorser: normalizedDraft.endorser,
@@ -1337,6 +1431,56 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         {isEditingDetails ? (
           <form onSubmit={handleDetailsSubmit} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {canEditBorrowerContact && (
+                <>
+                  <label className="space-y-1 text-sm font-medium text-slate-600">
+                    <span>Borrower First Name</span>
+                    <input
+                      name="borrowerFirstName"
+                      value={detailsDraft.borrowerFirstName}
+                      onChange={handleDetailInputChange('borrowerFirstName')}
+                      required
+                      disabled={savingDetails}
+                      className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm font-medium text-slate-600">
+                    <span>Borrower Last Name</span>
+                    <input
+                      name="borrowerLastName"
+                      value={detailsDraft.borrowerLastName}
+                      onChange={handleDetailInputChange('borrowerLastName')}
+                      required
+                      disabled={savingDetails}
+                      className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm font-medium text-slate-600">
+                    <span>Borrower Email</span>
+                    <input
+                      type="email"
+                      name="borrowerEmail"
+                      value={detailsDraft.borrowerEmail}
+                      onChange={handleDetailInputChange('borrowerEmail')}
+                      required
+                      disabled={savingDetails}
+                      className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm font-medium text-slate-600">
+                    <span>Borrower Phone</span>
+                    <input
+                      type="tel"
+                      name="borrowerPhone"
+                      value={detailsDraft.borrowerPhone}
+                      onChange={handleDetailInputChange('borrowerPhone')}
+                      required
+                      disabled={savingDetails}
+                      className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                    />
+                  </label>
+                </>
+              )}
               <label className="space-y-1 text-sm font-medium text-slate-600">
                 <span>Loan File #</span>
                 <input
