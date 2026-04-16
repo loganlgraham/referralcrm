@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { Types } from 'mongoose';
+import type { Types } from 'mongoose';
 
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
