@@ -6,7 +6,10 @@ import { Referral } from '@/models/referral';
 import { uploadEmailAttachment } from '@/lib/server/gcs';
 import { sendTransactionalEmail } from '@/lib/email';
 import { buildReferralLink } from '@/lib/referral-links';
+import { logReferralActivity } from '@/lib/server/activities';
 import { extractInboundEmailFieldsWithAI } from '@/lib/server/inbound-email-ai-parser';
+import { cleanReferralNotes } from '@/lib/server/referral-notes-cleanup';
+import { createAdminNotifications } from '@/lib/server/notifications';
 import { parseSignatureHeader, parseSvixSignatures } from './signature';
 
 interface NormalizedAttachment {
@@ -47,6 +50,10 @@ const CHANNEL_MAP: Record<string, { channel: 'AHA' | 'AHA_OOS'; routeHint: strin
 
 const CONFIRMATION_RECIPIENT = 'logan.graham@americanfinancing.net';
 const RESEND_API_BASE_URL = 'https://api.resend.com';
+const currencyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD'
+});
 
 function decodeSignature(signature: string): Buffer | null {
   const trimmed = signature.trim();
@@ -528,7 +535,40 @@ function normalizeInboundPhone(value: string | undefined): string {
     return '';
   }
 
-  return `${normalizedDigits.slice(0, 3)}-${normalizedDigits.slice(3, 6)}-${normalizedDigits.slice(6)}`;
+  return normalizedDigits;
+}
+
+function normalizeStageOnTransfer(stageValue: string | undefined, referrerValue: string | undefined): string {
+  const normalizedStage = normalizeKey(stageValue ?? '');
+  switch (normalizedStage) {
+    case 'preapproved':
+      return 'Pre-approved';
+    case 'preapprovaltbd':
+      return 'Pre-approval TBD';
+    default:
+      break;
+  }
+
+  const normalizedReferrer = normalizeKey(referrerValue ?? '');
+  if (normalizedReferrer) {
+    return normalizedReferrer === 'pncpreapproved' ? 'Pre-approved' : 'Pre-approval TBD';
+  }
+
+  return 'Pre-approval TBD';
+}
+
+function formatCents(cents: number | null): string {
+  if (cents == null) {
+    return '';
+  }
+  return currencyFormatter.format(cents / 100);
+}
+
+function formatPhoneForSummary(phoneDigits: string): string {
+  if (phoneDigits.length !== 10) {
+    return phoneDigits;
+  }
+  return `${phoneDigits.slice(0, 3)}-${phoneDigits.slice(3, 6)}-${phoneDigits.slice(6)}`;
 }
 
 interface ParsedInboundReferralFields {
@@ -571,7 +611,7 @@ function parseInboundReferralFields(fields: Record<string, string>): ParsedInbou
   );
   const primaryLookingZip = lookingInZips[0] ?? '';
   const borrowerAddress = (fields.borroweraddress || fields.selleraddress || '').trim();
-  const stageOnTransfer = (fields.stageontransfer || '').trim();
+  const stageOnTransfer = normalizeStageOnTransfer(fields.stageontransfer, fields.referrer);
   const loanType = (fields.loantype || '').trim();
   const sourceCandidate = (
     fields.sosource ||
@@ -588,10 +628,10 @@ function parseInboundReferralFields(fields: Record<string, string>): ParsedInbou
       : sourceTypeRaw === 'lender'
         ? 'Lender'
         : '');
-  const endorser = (fields.endorser || fields.referrer || fields.enendorser || '').trim();
+  const endorser = (fields.endorser || fields.enendorser || '').trim();
   const notes = (fields.notes || '').trim();
   const mcValue = (fields.mc || fields.source || '').trim();
-  const loanFileNumber = (fields.loannumber || fields.loannum || '').trim();
+  const loanFileNumber = (fields.loannumber || fields.loannum || '').replace(/\D+/g, '');
   const clientTypeRaw = (fields.dealtype || '').toLowerCase();
   const clientType: 'Seller' | 'Buyer' = clientTypeRaw.includes('sell') ? 'Seller' : 'Buyer';
 
@@ -874,12 +914,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const attachments = attachmentUploads.filter((item): item is { name: string; url: string } => Boolean(item));
 
+  const cleanedNotes = notes
+    ? await cleanReferralNotes(notes, {
+        allowFallbackToOriginal: true
+      })
+    : '';
+
   const notesSections: string[] = [];
   if (mcValue) {
     notesSections.push(`MC: ${mcValue}`);
   }
-  if (notes) {
-    notesSections.push(notes);
+  if (cleanedNotes) {
+    notesSections.push(cleanedNotes);
   }
   const initialNotes = notesSections.filter(Boolean).join('\n\n');
 
@@ -900,6 +946,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       initialNotes,
       loanFileNumber,
       loanType,
+      preApprovalAmountCents: estimatedPriceCents ?? undefined,
       estPurchasePriceCents: estimatedPriceCents ?? undefined,
       attachments,
       org: 'AHA',
@@ -917,9 +964,37 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const summaryFields = [
       `Deal Type: ${clientType}`,
       `Zip${lookingInZips.length > 1 ? 's' : ''}: ${lookingInZips.join(', ')}`,
+      `Stage: ${stageOnTransfer}`,
+      source ? `Source: ${source}` : null,
+      endorser ? `Endorser: ${endorser}` : null,
       mcValue ? `MC: ${mcValue}` : null,
-      stageOnTransfer ? `Stage: ${stageOnTransfer}` : null
+      borrowerEmail ? `Email: ${borrowerEmail}` : null,
+      borrowerPhone ? `Phone: ${formatPhoneForSummary(borrowerPhone)}` : null,
+      loanFileNumber ? `Loan Number: ${loanFileNumber}` : null,
+      loanType ? `Loan Type: ${loanType}` : null,
+      estimatedPriceCents != null ? `Pre-approval Amount: ${formatCents(estimatedPriceCents)}` : null,
+      borrowerAddress ? `Seller Address: ${borrowerAddress}` : null,
+      cleanedNotes ? `Notes: ${cleanedNotes}` : null,
+      `Channel: ${channelInfo.channel}`,
+      `Route Hint: ${channelInfo.routeHint}`
     ].filter(Boolean) as string[];
+
+    await Promise.allSettled([
+      logReferralActivity({
+        referralId: referral._id,
+        actorRole: 'system',
+        channel: 'update',
+        content: `Created referral for ${borrowerName || 'a new client'} via inbound email import`
+      }),
+      createAdminNotifications({
+        type: 'referral_created',
+        referralId: referral._id,
+        borrowerName: borrowerName || 'New Referral',
+        actorRole: 'System',
+        actorName: 'Inbound Email Import',
+        content: `New inbound referral created for ${borrowerName || 'a new client'}.`
+      })
+    ]);
 
     const borrowerLabel = escapeHtml(borrowerName);
     const summaryHtml = `
