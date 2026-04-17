@@ -45,7 +45,7 @@ const auditSchema = new Schema<AuditEntry>(
 
 const referralNoteSchema = new Schema(
   {
-    author: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    author: { type: Schema.Types.ObjectId, ref: 'User', required: false },
     authorName: { type: String, required: true },
     authorRole: { type: String, required: true },
     content: { type: String, required: true },
@@ -313,7 +313,7 @@ export interface ReferralDocument {
   } | null;
   notes?: {
     _id: Types.ObjectId;
-    author: Types.ObjectId;
+    author?: Types.ObjectId;
     authorName: string;
     authorRole: string;
     content: string;

@@ -220,7 +220,8 @@ describe('POST /api/inbound-email', () => {
           email: 'jane@example.com',
           phone: '303-555-1212'
         }),
-        loanFileNumber: '111'
+        loanFileNumber: '111',
+        notes: []
       })
     );
   });
@@ -299,7 +300,14 @@ describe('POST /api/inbound-email', () => {
           email: 'justinlounsbury05@gmail.com',
           phone: '863-440-6938'
         }),
-        initialNotes: expect.stringContaining('MC: KarimL')
+        initialNotes: expect.stringContaining('MC: KarimL'),
+        notes: expect.arrayContaining([
+          expect.objectContaining({
+            authorRole: 'system',
+            authorName: 'Inbound Email Import',
+            content: 'Need to purchase in NC'
+          })
+        ])
       })
     );
     expect(mockedCleanReferralNotes).toHaveBeenCalledWith('Need to purchase in NC', {

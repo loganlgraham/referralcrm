@@ -987,6 +987,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       preApprovalAmountCents: estimatedPriceCents ?? undefined,
       estPurchasePriceCents: estimatedPriceCents ?? undefined,
       attachments,
+      notes: cleanedNotes
+        ? [
+            {
+              authorRole: 'system',
+              authorName: 'Inbound Email Import',
+              content: cleanedNotes,
+              hiddenFromAgent: false,
+              hiddenFromMc: false,
+              createdAt: new Date(),
+              emailedTargets: []
+            }
+          ]
+        : [],
       lender: matchedLenderId,
       org: 'AHA',
       ahaBucket: channelInfo.channel,
