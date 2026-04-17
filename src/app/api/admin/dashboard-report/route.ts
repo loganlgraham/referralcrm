@@ -115,6 +115,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     origin: getAppOrigin(request),
     auth: { kind: 'cookie', cookie: request.headers.get('cookie') ?? '' }
   };
+  const cookieLength = buildInput.auth.kind === 'cookie' ? buildInput.auth.cookie.length : 0;
   debugLog({
     runId,
     hypothesisId: 'H2',
@@ -123,8 +124,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     data: {
       origin: buildInput.origin,
       authKind: buildInput.auth.kind,
-      hasCookie: buildInput.auth.cookie.length > 0,
-      cookieLength: buildInput.auth.cookie.length,
+      hasCookie: cookieLength > 0,
+      cookieLength,
       metrics: buildInput.metrics,
       reportTimeframe: buildInput.reportTimeframe
     }
