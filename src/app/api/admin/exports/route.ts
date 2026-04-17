@@ -7,9 +7,8 @@ import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { Payment } from '@/models/payment';
 import { ACTIVE_REFERRAL_STATUS_VALUES } from '@/constants/referrals';
-import { getAppOrigin } from '@/lib/server/app-origin';
 
-type ExportReport = 'referrals' | 'agents' | 'mcs' | 'deals' | 'dashboard-metrics';
+type ExportReport = 'referrals' | 'agents' | 'mcs' | 'deals';
 
 // Populated document types for type safety
 interface PopulatedAgent {
@@ -183,71 +182,7 @@ async function buildDealRows(): Promise<string[][]> {
   return [headers, ...rows];
 }
 
-async function buildDashboardMetricsRows(request: NextRequest): Promise<string[][]> {
-  const { searchParams } = new URL(request.url);
-  const timeframe = searchParams.get('timeframe') ?? 'month';
-  const network = searchParams.get('network') ?? 'ALL';
-  const start = searchParams.get('start') ?? '';
-  const end = searchParams.get('end') ?? '';
-  const origin = getAppOrigin(request);
-  const cookie = request.headers.get('cookie') ?? '';
-  const url = new URL(`${origin}/api/dashboard`);
-  url.searchParams.set('timeframe', timeframe);
-  url.searchParams.set('network', network);
-  if (start) url.searchParams.set('start', start);
-  if (end) url.searchParams.set('end', end);
-  const res = await fetch(url.toString(), { headers: { cookie }, cache: 'no-store' });
-  if (!res.ok) {
-    throw new Error('Failed to load dashboard data for export.');
-  }
-  const data = (await res.json()) as {
-    main?: {
-      summary?: Record<string, number | undefined>;
-      funnel?: { stages?: { status: string; count: number; avgDaysInStage?: number | null }[] };
-      periodOverPeriod?: {
-        current: { totalReferrals: number; dealsClosed: number; realizedRevenueCents: number; closeRate: number };
-        previous: { totalReferrals: number; dealsClosed: number; realizedRevenueCents: number; closeRate: number };
-      } | null;
-    };
-  };
-  const summary = data.main?.summary ?? {};
-  const funnelStages = data.main?.funnel?.stages ?? [];
-  const pop = data.main?.periodOverPeriod;
-
-  const formatCents = (cents: number | undefined) =>
-    cents != null ? `$${((cents ?? 0) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '';
-
-  const rows: string[][] = [
-    ['Metric', 'Value'],
-    ['Total referrals', String(summary.totalReferrals ?? '')],
-    ['Deals closed', String(summary.dealsClosed ?? '')],
-    ['Close rate %', summary.closeRate != null ? `${summary.closeRate.toFixed(1)}` : ''],
-    ['Realized revenue', formatCents(summary.realizedRevenueCents)],
-    ['Expected revenue', formatCents(summary.expectedRevenueCents)],
-    ['Generated revenue', formatCents(summary.generatedRevenueCents)],
-    ['Active pipeline', String(summary.activePipeline ?? '')],
-    ['Lost referrals', String(summary.lostReferrals ?? '')],
-    ['Pipeline value', formatCents(summary.pipelineValueCents)]
-  ];
-  if (funnelStages.length > 0) {
-    rows.push(['', '']);
-    rows.push(['Funnel stage', 'Count', 'Avg days in stage']);
-    funnelStages.forEach((stage) => {
-      rows.push([stage.status, String(stage.count), stage.avgDaysInStage != null ? String(stage.avgDaysInStage.toFixed(1)) : '']);
-    });
-  }
-  if (pop) {
-    rows.push(['', '']);
-    rows.push(['Period over period', 'Current', 'Previous']);
-    rows.push(['Total referrals', String(pop.current.totalReferrals), String(pop.previous.totalReferrals)]);
-    rows.push(['Deals closed', String(pop.current.dealsClosed), String(pop.previous.dealsClosed)]);
-    rows.push(['Realized revenue', formatCents(pop.current.realizedRevenueCents), formatCents(pop.previous.realizedRevenueCents)]);
-    rows.push(['Close rate %', pop.current.closeRate.toFixed(1), pop.previous.closeRate.toFixed(1)]);
-  }
-  return rows;
-}
-
-async function buildCsv(report: ExportReport, request: NextRequest): Promise<CsvPayload> {
+async function buildCsv(report: ExportReport): Promise<CsvPayload> {
   switch (report) {
     case 'referrals':
       return { filename: 'referrals-report.csv', rows: await buildReferralRows() };
@@ -257,8 +192,6 @@ async function buildCsv(report: ExportReport, request: NextRequest): Promise<Csv
       return { filename: 'mortgage-consultants-report.csv', rows: await buildMcRows() };
     case 'deals':
       return { filename: 'deals-report.csv', rows: await buildDealRows() };
-    case 'dashboard-metrics':
-      return { filename: 'dashboard-metrics.csv', rows: await buildDashboardMetricsRows(request) };
     default:
       throw new Error('Unknown report type');
   }
@@ -282,7 +215,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const csvPayload = await buildCsv(report, request);
+    const csvPayload = await buildCsv(report);
     return toCsv(csvPayload);
   } catch (err) {
     console.error('Failed to build CSV export', err);

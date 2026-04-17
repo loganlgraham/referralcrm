@@ -953,19 +953,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   await connectMongo();
   const session = await getCurrentSession();
 
-  if (!session) {
+  // Allow CRON_SECRET bearer to call this endpoint as an admin (used by scheduled report jobs).
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = request.headers.get('authorization');
+  const isCronAdmin = Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
+
+  if (!session && !isCronAdmin) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
   const attachDebugEnabled =
-    request.nextUrl.searchParams.get('attachDebug') === '1' && session.user?.role === 'admin';
+    request.nextUrl.searchParams.get('attachDebug') === '1' && session?.user?.role === 'admin';
   const attachDebugDealId = request.nextUrl.searchParams.get('attachDealId')?.trim() || null;
 
   const context = createDashboardContext(request);
   const { referralMatch, timeframe } = context;
 
-  const role = session.user?.role;
-  const userId = session.user?.id;
+  const role = session?.user?.role ?? (isCronAdmin ? 'admin' : null);
+  const userId = session?.user?.id;
 
   let missingProfile = false;
 

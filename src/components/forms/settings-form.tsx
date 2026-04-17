@@ -1,21 +1,39 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 const DASHBOARD_METRICS = [
-  { id: 'summary', label: 'Executive summary (totals & close rate)' },
-  { id: 'revenue', label: 'Revenue trends & expected revenue' },
+  { id: 'summary', label: 'Executive summary (totals, close rate, revenue)' },
+  { id: 'revenue', label: 'Revenue trend by period' },
   { id: 'deals', label: 'Deals closed, pipeline, and under contract' },
   { id: 'funnel', label: 'Conversion funnel by stage' },
-  { id: 'attachRate', label: 'AFC/AHA attach rates and lost deals' },
-  { id: 'preApprovals', label: 'Pre-approval conversion by lender' },
-  { id: 'geography', label: 'Revenue by geography and ZIP' },
-  { id: 'network', label: 'Network filters (All / My Network)' },
+  { id: 'attachRate', label: 'AFC and agent attach rates' },
+  { id: 'preApprovals', label: 'Mortgage consultant transfers' },
+  { id: 'geography', label: 'Revenue by state' },
+  { id: 'network', label: 'Network breakdown (AHA / AHA OOS / AFC / Unpaired)' },
   { id: 'termination', label: 'Terminated deals & lost referral fees' }
 ] as const;
 
 type DashboardMetricId = (typeof DASHBOARD_METRICS)[number]['id'];
+
+type Cadence = 'one-time' | 'daily' | 'weekly' | 'monthly';
+type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
+
+type ScheduledReportSummary = {
+  id: string;
+  name: string;
+  reportName: string;
+  reportTimeframe: string;
+  metrics: string[];
+  network: NetworkFilter;
+  recipients: string[];
+  cadence: 'daily' | 'weekly' | 'monthly';
+  attachCsv: boolean;
+  enabled: boolean;
+  lastRunAt: string | null;
+  nextRunAt: string;
+};
 
 type ReportPresetConfig = {
   reportName: string;
@@ -23,10 +41,12 @@ type ReportPresetConfig = {
   customStartDate: string;
   customEndDate: string;
   metrics: DashboardMetricId[];
-  recipient: string;
+  recipients: string;
+  network: NetworkFilter;
+  attachCsv: boolean;
 };
 
-type ExportReport = 'referrals' | 'agents' | 'mcs' | 'deals' | 'dashboard-metrics';
+type ExportReport = 'referrals' | 'agents' | 'mcs' | 'deals';
 
 const EXPORT_DEFINITIONS: Record<ExportReport, { label: string; helper: string }> = {
   referrals: {
@@ -44,12 +64,45 @@ const EXPORT_DEFINITIONS: Record<ExportReport, { label: string; helper: string }
   deals: {
     label: 'Deals',
     helper: 'Closed and active deals with referral fee details.'
-  },
-  'dashboard-metrics': {
-    label: 'Dashboard metrics',
-    helper: 'Key KPIs, funnel stages, and period-over-period as CSV (uses timeframe and network below).'
   }
 };
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function parseRecipientList(raw: string): string[] {
+  return Array.from(
+    new Set(
+      raw
+        .split(/[,;\n]/)
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0)
+    )
+  );
+}
+
+function formatRunAt(value: string | null): string {
+  if (!value) return '—';
+  try {
+    return new Date(value).toLocaleString(undefined, {
+      timeZone: 'America/Denver',
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
+  } catch {
+    return value;
+  }
+}
+
+function describeCadence(cadence: 'daily' | 'weekly' | 'monthly'): string {
+  switch (cadence) {
+    case 'daily':
+      return 'Daily, 7am MT';
+    case 'weekly':
+      return 'Weekly (Mondays, 7am MT)';
+    case 'monthly':
+      return 'Monthly (1st, 7am MT)';
+  }
+}
 
 export function SettingsForm() {
   const [tier1, setTier1] = useState(25);
@@ -62,14 +115,25 @@ export function SettingsForm() {
   const [reportTimeframe, setReportTimeframe] = useState('This month');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
-  const [reportRecipient, setReportRecipient] = useState('ops@referralcrm.com');
+  const [recipientsInput, setRecipientsInput] = useState('ops@referralcrm.com');
+  const [network, setNetwork] = useState<NetworkFilter>('ALL');
+  const [attachCsv, setAttachCsv] = useState(false);
+  const [cadence, setCadence] = useState<Cadence>('one-time');
+  const [scheduleName, setScheduleName] = useState('');
   const [reportLoading, setReportLoading] = useState(false);
+  const [csvLoading, setCsvLoading] = useState(false);
   const [exporting, setExporting] = useState<ExportReport | null>(null);
-  const [dashboardExportTimeframe, setDashboardExportTimeframe] = useState('month');
-  const [dashboardExportNetwork, setDashboardExportNetwork] = useState('ALL');
   const [reportPresets, setReportPresets] = useState<{ name: string; config: ReportPresetConfig }[]>([]);
   const [presetName, setPresetName] = useState('');
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
+  const [schedules, setSchedules] = useState<ScheduledReportSummary[]>([]);
+  const [schedulesLoading, setSchedulesLoading] = useState(true);
+
+  const recipients = useMemo(() => parseRecipientList(recipientsInput), [recipientsInput]);
+  const invalidRecipients = useMemo(
+    () => recipients.filter((email) => !EMAIL_REGEX.test(email)),
+    [recipients]
+  );
 
   useEffect(() => {
     try {
@@ -79,6 +143,27 @@ export function SettingsForm() {
       setReportPresets([]);
     }
   }, []);
+
+  const refreshSchedules = useCallback(async () => {
+    setSchedulesLoading(true);
+    try {
+      const response = await fetch('/api/admin/scheduled-reports');
+      if (!response.ok) {
+        throw new Error('Failed to load schedules');
+      }
+      const data = (await response.json()) as { schedules: ScheduledReportSummary[] };
+      setSchedules(data.schedules ?? []);
+    } catch (err) {
+      console.error(err);
+      setSchedules([]);
+    } finally {
+      setSchedulesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshSchedules();
+  }, [refreshSchedules]);
 
   const savePreset = () => {
     const name = presetName.trim();
@@ -92,7 +177,9 @@ export function SettingsForm() {
       customStartDate,
       customEndDate,
       metrics: selectedMetrics,
-      recipient: reportRecipient
+      recipients: recipientsInput,
+      network,
+      attachCsv
     };
     const next = reportPresets.some((p) => p.name === name)
       ? reportPresets.map((p) => (p.name === name ? { name, config } : p))
@@ -111,7 +198,9 @@ export function SettingsForm() {
     setCustomStartDate(preset.config.customStartDate);
     setCustomEndDate(preset.config.customEndDate);
     setSelectedMetrics(preset.config.metrics);
-    setReportRecipient(preset.config.recipient);
+    setRecipientsInput(preset.config.recipients);
+    setNetwork(preset.config.network ?? 'ALL');
+    setAttachCsv(Boolean(preset.config.attachCsv));
     setSelectedPresetId(name);
     toast.success(`Loaded preset "${name}".`);
   };
@@ -143,14 +232,31 @@ export function SettingsForm() {
     );
   };
 
-  const handleGenerateReport = async () => {
+  const validateForSubmission = (): boolean => {
     if (!selectedMetrics.length) {
       toast.error('Select at least one dashboard metric to include.');
-      return;
+      return false;
     }
-
     if (reportTimeframe === 'Custom export window' && (!customStartDate || !customEndDate)) {
       toast.error('Select a start and end date for the custom timeframe.');
+      return false;
+    }
+    if (recipients.length === 0) {
+      toast.error('Add at least one recipient email.');
+      return false;
+    }
+    if (invalidRecipients.length > 0) {
+      toast.error(`Fix invalid email(s): ${invalidRecipients.join(', ')}`);
+      return false;
+    }
+    return true;
+  };
+
+  const handlePrimaryAction = async () => {
+    if (!validateForSubmission()) return;
+
+    if (cadence !== 'one-time') {
+      await handleSaveSchedule();
       return;
     }
 
@@ -165,7 +271,9 @@ export function SettingsForm() {
           customStartDate,
           customEndDate,
           metrics: selectedMetrics,
-          recipient: reportRecipient
+          network,
+          recipients,
+          attachCsv
         })
       });
 
@@ -179,15 +287,122 @@ export function SettingsForm() {
           ? `${customStartDate || 'Start'} to ${customEndDate || 'End'}`
           : reportTimeframe;
       toast.success(
-        `Dashboard report "${reportName}" (${timeframeLabel}) sent for ${selectedMetrics.length} metric${
-          selectedMetrics.length === 1 ? '' : 's'
-        } to ${reportRecipient}.`
+        `Dashboard report "${reportName}" (${timeframeLabel}) sent to ${recipients.length} recipient${
+          recipients.length === 1 ? '' : 's'
+        }.`
       );
     } catch (error) {
       console.error(error);
-      toast.error('Unable to send dashboard metrics right now.');
+      toast.error(error instanceof Error ? error.message : 'Unable to send dashboard report.');
     } finally {
       setReportLoading(false);
+    }
+  };
+
+  const handleSaveSchedule = async () => {
+    if (cadence === 'one-time') return;
+    try {
+      const response = await fetch('/api/admin/scheduled-reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: scheduleName.trim() || `${reportName} (${cadence})`,
+          reportName,
+          reportTimeframe,
+          customStartDate,
+          customEndDate,
+          metrics: selectedMetrics,
+          network,
+          recipients,
+          cadence,
+          attachCsv,
+          enabled: true
+        })
+      });
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || 'Unable to save schedule.');
+      }
+      toast.success(`Scheduled "${scheduleName.trim() || reportName}" — ${describeCadence(cadence as 'daily' | 'weekly' | 'monthly')}.`);
+      setScheduleName('');
+      setCadence('one-time');
+      await refreshSchedules();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Unable to save schedule.');
+    }
+  };
+
+  const handleDeleteSchedule = async (id: string, name: string) => {
+    if (!window.confirm(`Delete schedule "${name}"? This cannot be undone.`)) return;
+    try {
+      const response = await fetch(`/api/admin/scheduled-reports/${id}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || 'Unable to delete schedule.');
+      }
+      toast.success(`Deleted schedule "${name}".`);
+      await refreshSchedules();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Unable to delete schedule.');
+    }
+  };
+
+  const handleToggleSchedule = async (id: string, enabled: boolean) => {
+    try {
+      const response = await fetch(`/api/admin/scheduled-reports/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+      });
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || 'Unable to update schedule.');
+      }
+      await refreshSchedules();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Unable to update schedule.');
+    }
+  };
+
+  const handleDownloadReportCsv = async () => {
+    if (!validateForSubmission()) return;
+    setCsvLoading(true);
+    try {
+      const response = await fetch('/api/admin/dashboard-report/csv', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reportName,
+          reportTimeframe,
+          customStartDate,
+          customEndDate,
+          metrics: selectedMetrics,
+          network
+        })
+      });
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || 'Unable to download report.');
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const filenameDate = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.setAttribute('download', `dashboard-report-${filenameDate}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success('Dashboard report CSV downloading.');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Unable to download report.');
+    } finally {
+      setCsvLoading(false);
     }
   };
 
@@ -196,10 +411,6 @@ export function SettingsForm() {
     setExporting(report);
     try {
       const params = new URLSearchParams({ report });
-      if (report === 'dashboard-metrics') {
-        params.set('timeframe', dashboardExportTimeframe);
-        params.set('network', dashboardExportNetwork);
-      }
       const response = await fetch(`/api/admin/exports?${params.toString()}`);
       if (!response.ok) {
         const message = await response.text();
@@ -209,7 +420,7 @@ export function SettingsForm() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', report === 'dashboard-metrics' ? 'dashboard-metrics.csv' : `${report}-report.csv`);
+      link.setAttribute('download', `${report}-report.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -272,7 +483,7 @@ export function SettingsForm() {
           <div>
             <h2 className="text-xl font-semibold text-slate-900">Dashboard metric reports</h2>
             <p className="text-sm text-slate-500">
-              Create admin-only reports with every dashboard view, filter, and metric you select.
+              Email a snapshot of admin dashboard metrics to one or more recipients, or schedule recurring delivery.
             </p>
           </div>
           <button
@@ -339,8 +550,20 @@ export function SettingsForm() {
               <option>Custom export window</option>
             </select>
           </label>
+          <label className="text-sm font-medium text-slate-600">
+            Network filter
+            <select
+              value={network}
+              onChange={(event) => setNetwork(event.target.value as NetworkFilter)}
+              className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+            >
+              <option value="ALL">All</option>
+              <option value="AHA">AHA</option>
+              <option value="AHA_OOS">AHA OOS</option>
+            </select>
+          </label>
           {reportTimeframe === 'Custom export window' && (
-            <div className="grid grid-cols-1 gap-4 md:col-span-2 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:col-span-3 md:grid-cols-2">
               <label className="text-sm font-medium text-slate-600">
                 Start date
                 <input
@@ -361,16 +584,65 @@ export function SettingsForm() {
               </label>
             </div>
           )}
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
           <label className="text-sm font-medium text-slate-600">
-            Deliver to
-            <input
-              type="email"
-              value={reportRecipient}
-              onChange={(event) => setReportRecipient(event.target.value)}
-              className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
-              placeholder="analytics@yourteam.com"
+            Recipients (comma-separated)
+            <textarea
+              value={recipientsInput}
+              onChange={(event) => setRecipientsInput(event.target.value)}
+              className="mt-1 h-20 w-full rounded border border-slate-200 px-3 py-2"
+              placeholder="ops@referralcrm.com, leadership@referralcrm.com"
             />
+            <span className="mt-1 block text-xs text-slate-500">
+              {recipients.length} recipient{recipients.length === 1 ? '' : 's'}
+              {invalidRecipients.length > 0 ? (
+                <span className="ml-2 text-amber-700">Invalid: {invalidRecipients.join(', ')}</span>
+              ) : null}
+            </span>
           </label>
+          <div className="space-y-3">
+            <label className="flex items-start gap-2 text-sm font-medium text-slate-600">
+              <input
+                type="checkbox"
+                checked={attachCsv}
+                onChange={(event) => setAttachCsv(event.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+              />
+              <span>
+                Attach detailed CSV to email
+                <span className="block text-xs font-normal text-slate-500">
+                  Includes every section as rows for spreadsheet analysis.
+                </span>
+              </span>
+            </label>
+            <label className="text-sm font-medium text-slate-600">
+              Delivery cadence
+              <select
+                value={cadence}
+                onChange={(event) => setCadence(event.target.value as Cadence)}
+                className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+              >
+                <option value="one-time">Send once now</option>
+                <option value="daily">Daily, 7am MT</option>
+                <option value="weekly">Weekly (Mondays, 7am MT)</option>
+                <option value="monthly">Monthly (1st, 7am MT)</option>
+              </select>
+            </label>
+            {cadence !== 'one-time' && (
+              <label className="text-sm font-medium text-slate-600">
+                Schedule label
+                <input
+                  type="text"
+                  value={scheduleName}
+                  onChange={(event) => setScheduleName(event.target.value)}
+                  placeholder={`${reportName} (${cadence})`}
+                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+                />
+              </label>
+            )}
+          </div>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 p-4">
@@ -410,83 +682,111 @@ export function SettingsForm() {
             ) : (
               <span className="font-medium text-amber-700">Select at least one metric.</span>
             )}
-            <p className="text-slate-500">Includes charts, filters, and network scope from the performance dashboard.</p>
+            <p className="text-slate-500">
+              {cadence === 'one-time'
+                ? 'Email is sent immediately to the recipients above.'
+                : `Recurring delivery: ${describeCadence(cadence as 'daily' | 'weekly' | 'monthly')}.`}
+            </p>
           </div>
-          <button
-            type="button"
-            onClick={handleGenerateReport}
-            disabled={reportLoading}
-            className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white disabled:opacity-70"
-          >
-            {reportLoading ? 'Preparing report…' : 'Create dashboard report'}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDownloadReportCsv}
+              disabled={csvLoading}
+              className="rounded border border-brand bg-white px-4 py-2 text-sm font-semibold text-brand transition hover:bg-brand/5 disabled:opacity-70"
+            >
+              {csvLoading ? 'Building CSV…' : 'Download as CSV'}
+            </button>
+            <button
+              type="button"
+              onClick={handlePrimaryAction}
+              disabled={reportLoading}
+              className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white disabled:opacity-70"
+            >
+              {reportLoading
+                ? 'Sending…'
+                : cadence === 'one-time'
+                  ? 'Send report now'
+                  : 'Save schedule'}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-lg border border-slate-200">
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+            <h3 className="text-base font-semibold text-slate-800">Active scheduled reports</h3>
+            {schedulesLoading ? (
+              <span className="text-xs text-slate-500">Loading…</span>
+            ) : (
+              <span className="text-xs text-slate-500">{schedules.length} schedule(s)</span>
+            )}
+          </div>
+          {schedules.length === 0 && !schedulesLoading ? (
+            <p className="px-4 py-6 text-center text-sm text-slate-500">
+              No recurring reports yet. Pick a cadence above and click <em>Save schedule</em>.
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {schedules.map((schedule) => (
+                <li key={schedule.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-800">{schedule.name}</p>
+                    <p className="text-xs text-slate-500">
+                      {describeCadence(schedule.cadence)} · {schedule.recipients.length} recipient
+                      {schedule.recipients.length === 1 ? '' : 's'} · {schedule.metrics.length} metric
+                      {schedule.metrics.length === 1 ? '' : 's'} · network {schedule.network}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Next run: {formatRunAt(schedule.nextRunAt)} · Last run: {formatRunAt(schedule.lastRunAt)}
+                    </p>
+                    <p className="truncate text-xs text-slate-400">To: {schedule.recipients.join(', ')}</p>
+                  </div>
+                  <div className="flex flex-shrink-0 items-center gap-2">
+                    <label className="flex items-center gap-1 text-xs text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={schedule.enabled}
+                        onChange={(event) => void handleToggleSchedule(schedule.id, event.target.checked)}
+                      />
+                      Enabled
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteSchedule(schedule.id, schedule.name)}
+                      className="rounded border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
 
       <div className="rounded-lg bg-white p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-slate-900">CSV exports</h2>
-        <p className="text-sm text-slate-500">Download individual reports for referrals, agents, mortgage consultants, and deals.</p>
+        <p className="text-sm text-slate-500">Download detailed CSVs for referrals, agents, mortgage consultants, and deals.</p>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           {(Object.keys(EXPORT_DEFINITIONS) as ExportReport[]).map((report) => {
             const definition = EXPORT_DEFINITIONS[report];
             const isDownloading = exporting === report;
-            const isDashboardMetrics = report === 'dashboard-metrics';
             return (
               <div key={report} className="flex flex-col justify-between gap-3 rounded-lg border border-slate-200 p-4">
                 <div>
                   <h3 className="text-base font-semibold text-slate-800">{definition.label}</h3>
                   <p className="text-sm text-slate-500">{definition.helper}</p>
                 </div>
-                {isDashboardMetrics ? (
-                  <div className="flex flex-col gap-2">
-                    <div className="flex gap-2">
-                      <label className="flex-1 text-xs text-slate-500">
-                        Timeframe
-                        <select
-                          value={dashboardExportTimeframe}
-                          onChange={(e) => setDashboardExportTimeframe(e.target.value)}
-                          className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm"
-                        >
-                          <option value="day">Today</option>
-                          <option value="week">This week</option>
-                          <option value="month">This month</option>
-                          <option value="ytd">Year to date</option>
-                          <option value="all">All time</option>
-                        </select>
-                      </label>
-                      <label className="flex-1 text-xs text-slate-500">
-                        Network
-                        <select
-                          value={dashboardExportNetwork}
-                          onChange={(e) => setDashboardExportNetwork(e.target.value)}
-                          className="mt-1 w-full rounded border border-slate-200 px-2 py-1.5 text-sm"
-                        >
-                          <option value="ALL">All</option>
-                          <option value="AHA">AHA</option>
-                          <option value="AHA_OOS">AHA OOS</option>
-                        </select>
-                      </label>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={isDownloading}
-                      onClick={() => void handleDownloadCsv(report)}
-                      className="w-full rounded border border-brand bg-white px-4 py-2 text-sm font-semibold text-brand transition hover:bg-brand/5 disabled:opacity-70"
-                    >
-                      {isDownloading ? 'Preparing CSV…' : `Download ${definition.label.toLowerCase()} CSV`}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={isDownloading}
-                    onClick={() => void handleDownloadCsv(report)}
-                    className="w-full rounded border border-brand bg-white px-4 py-2 text-sm font-semibold text-brand transition hover:bg-brand/5 disabled:opacity-70"
-                  >
-                    {isDownloading ? 'Preparing CSV…' : `Download ${definition.label.toLowerCase()} CSV`}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  disabled={isDownloading}
+                  onClick={() => void handleDownloadCsv(report)}
+                  className="w-full rounded border border-brand bg-white px-4 py-2 text-sm font-semibold text-brand transition hover:bg-brand/5 disabled:opacity-70"
+                >
+                  {isDownloading ? 'Preparing CSV…' : `Download ${definition.label.toLowerCase()} CSV`}
+                </button>
               </div>
             );
           })}
