@@ -1,4 +1,4 @@
-import { mergeClosedStatusQuery } from '@/lib/server/referrals';
+import { mergeClosedStatusQuery } from '@/lib/server/merge-closed-status-query';
 
 describe('mergeClosedStatusQuery', () => {
   it('merges closed deal ids into the status filter while preserving base conditions', () => {

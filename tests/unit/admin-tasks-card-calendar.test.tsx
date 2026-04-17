@@ -65,7 +65,7 @@ describe('AdminTasksCard calendar', () => {
 
     expect(screen.queryByText('Select a day to view and manage tasks.')).not.toBeInTheDocument();
 
-    const scrollList = container.querySelector('div.max-h-\\[24rem\\].overflow-y-auto');
+    const scrollList = container.querySelector('ul.max-h-60.overflow-y-auto');
     expect(scrollList).toBeTruthy();
   });
 
