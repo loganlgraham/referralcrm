@@ -106,7 +106,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       ? [
           {
             filename: `${slugify(reportName)}-${new Date().toISOString().slice(0, 10)}.csv`,
-            content: report.csv
+            content: Buffer.from(report.csv, 'utf8')
           }
         ]
       : undefined

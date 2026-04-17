@@ -80,7 +80,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           ? [
               {
                 filename: `${slugify(schedule.reportName)}-${new Date().toISOString().slice(0, 10)}.csv`,
-                content: report.csv
+                content: Buffer.from(report.csv, 'utf8')
               }
             ]
           : undefined
