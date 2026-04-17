@@ -340,6 +340,101 @@ describe('POST /api/inbound-email', () => {
     );
   });
 
+  it('maps So/En and LoanType from common partner sample format', async () => {
+    mockResendInboundFetch(
+      [
+        'First Name: Christopher',
+        'Last Name: Rhoden',
+        'Email: ccrhoden0925@gmail.com',
+        'Deal Type: Buyer',
+        'Phone: 8032231108',
+        'Price: $465000.00',
+        'Area: 29073',
+        'Zipcode: 29073',
+        'Seller Address: 215 Cassique Drive, Lexington, SC, 29073',
+        'Source: KarimL',
+        'Referrer: PNC-Pre-Approved',
+        'P & I/PITI: $2797.35/$3605.90',
+        'Base Loan: $418500.00',
+        'Notes: Might need help with realtor',
+        'Loan Number: 20130975905',
+        'LoanType:FHA',
+        'LoanProgram:FHA 30 Year Fixed',
+        'So: (Source):YouTube - Louder with Crowder',
+        'En: (Endorser):Steven Crowder'
+      ].join('\n')
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedReferralCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'YouTube - Louder with Crowder',
+        endorser: 'Steven Crowder',
+        loanType: 'FHA',
+        stageOnTransfer: 'Pre-approved',
+        loanFileNumber: '20130975905',
+        preApprovalAmountCents: 46500000,
+        borrowerCurrentAddress: '215 Cassique Drive, Lexington, SC, 29073',
+        borrower: expect.objectContaining({
+          name: 'Christopher Rhoden',
+          email: 'ccrhoden0925@gmail.com',
+          phone: '803-223-1108'
+        })
+      })
+    );
+  });
+
+  it('leaves source, endorser, and loanType blank when nested labels are malformed or missing', async () => {
+    mockResendInboundFetch(
+      [
+        'First Name: Jordan',
+        'Last Name: Buyer',
+        'Email: jordan.buyer@example.com',
+        'Deal Type: Buyer',
+        'Phone: 3035558080',
+        'Zipcode: 80202',
+        'Source: KarimL',
+        'Loan Number: 20130975906',
+        'So: Source - YouTube',
+        'En: Endorser - Steven Crowder',
+        'LoanType:'
+      ].join('\n')
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedReferralCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: '',
+        endorser: '',
+        loanType: '',
+        borrower: expect.objectContaining({
+          name: 'Jordan Buyer',
+          email: 'jordan.buyer@example.com',
+          phone: '303-555-8080'
+        }),
+        loanFileNumber: '20130975906'
+      })
+    );
+  });
+
   it('assigns a matching mortgage consultant when Source token matches a single LenderMC', async () => {
     const lenderId = fakeObjectId('lender-karim');
     mockLenderFindReturn([

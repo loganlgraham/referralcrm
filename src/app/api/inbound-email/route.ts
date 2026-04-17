@@ -481,6 +481,27 @@ function normalizeKey(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+function extractNestedLabelValue(value: string): { nestedLabel: string; nestedValue: string } | null {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return null;
+  }
+
+  const nestedMatch = trimmedValue.match(/^(?:\(([^)]+)\)|([^:]+))\s*:\s*(.+)$/);
+  if (!nestedMatch) {
+    return null;
+  }
+
+  const rawNestedLabel = (nestedMatch[1] ?? nestedMatch[2] ?? '').trim();
+  const nestedLabel = normalizeKey(rawNestedLabel);
+  const nestedValue = (nestedMatch[3] ?? '').trim();
+  if (!nestedLabel || !nestedValue) {
+    return null;
+  }
+
+  return { nestedLabel, nestedValue };
+}
+
 function extractLabeledFields(text: string): Record<string, string> {
   return text
     .split(/\r?\n/)
@@ -498,15 +519,11 @@ function extractLabeledFields(text: string): Record<string, string> {
       }
 
       if (label === 'so' || label === 'en') {
-        const nestedMatch = value.match(/^\(([^)]+)\)\s*:\s*(.+)$/);
-        if (nestedMatch) {
-          const nestedLabel = normalizeKey(nestedMatch[1] ?? '');
-          const nestedValue = (nestedMatch[2] ?? '').trim();
-          if (nestedLabel && nestedValue) {
-            acc[`${label}${nestedLabel}`] = nestedValue;
-            if (nestedLabel === 'endorser' && !acc.endorser) {
-              acc.endorser = nestedValue;
-            }
+        const nestedPair = extractNestedLabelValue(value);
+        if (nestedPair) {
+          acc[`${label}${nestedPair.nestedLabel}`] = nestedPair.nestedValue;
+          if (nestedPair.nestedLabel === 'endorser' && !acc.endorser) {
+            acc.endorser = nestedPair.nestedValue;
           }
         }
       }
