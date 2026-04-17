@@ -9,7 +9,8 @@ type EmailPayload = {
   cc?: string[];
   attachments?: Array<{
     filename: string;
-    content: Buffer | string; // base64 string or Buffer
+    /** Raw bytes as Buffer, or a pre-encoded base64 string. */
+    content: Buffer | string;
   }>;
 };
 
@@ -81,11 +82,8 @@ export async function sendTransactionalEmail(payload: EmailPayload): Promise<boo
       console.log('[Email] Processing attachments:', payload.attachments.length);
       
       emailOptions.attachments = payload.attachments.map((attachment) => {
-        // Resend SDK accepts Buffer directly, so pass it as-is
-        // If it's already a string (base64), use it directly
-        const content = typeof attachment.content === 'string' 
-          ? attachment.content 
-          : attachment.content; // Pass Buffer directly
+        // Resend accepts Buffer directly. String values must already be base64.
+        const content = attachment.content;
         
         console.log('[Email] Attachment:', {
           filename: attachment.filename,

@@ -1,0 +1,31 @@
+# Agent Memory
+
+## Learned User Preferences
+
+- Use a plan-then-implement workflow: plans live under `.cursor/plans/`, todos are auto-created, agent implements without editing the plan file and works through todos sequentially until done.
+- Short implementation directives like "implement", "proceed", "do it", "yes", "approved" mean execute the last proposed plan/fix without re-confirming.
+- "Commit and push" requests should just stage, commit, and push everything; target is whatever was specified (current branch, new branch, or main) — default to current branch when unspecified.
+- Prefer pushing directly to `main` or the current working branch; only create a new branch when the user explicitly says so.
+- Format phone numbers as `###-###-####` everywhere (imports, UI, stored values) and prices as `$###,###,###` with commas in toasts and UI.
+- Default new task due times to 8:00 AM America/Denver (MT) and keep timezone-aware bucketing for Urgent/Upcoming/Overdue.
+- Use plain, layman-friendly wording in user-facing UI text — avoid exposing internal field names like `usedAssignedAgent` or `usedAfc` in copy.
+- Keep dashboards lean: prefer a single consolidated leaderboard/table over many small metric cards; remove cards when asked rather than hiding them.
+- Expect screenshots (pasted into `assets/`) as the primary feedback channel for UI issues; treat them as authoritative on layout/visual intent.
+- Respect the `no-inline-imports` and TypeScript exhaustive-switch workspace rules when editing.
+- When a fix surfaces pre-existing test/CI/build failures in adjacent areas, fix them in-line in the same pass rather than scoping narrowly (the user routinely says "fix those two" for collateral failures).
+- For admin email reports, default to multi-recipient (comma-separated), optional CSV attachment plus a standalone CSV download button, and recurring cadences (daily / weekly Mon / monthly 1st at 7am MT) backed by a `ScheduledReport` cron.
+
+## Learned Workspace Facts
+
+- Next.js 14 App Router CRM (`referralcrm`, repo `loganlgraham/referralcrm`) deployed on Vercel at `referrio.app`; uses MongoDB via Mongoose, NextAuth, Radix UI, TanStack Table, and `lucide-react`.
+- Tests: `pnpm test` runs lint + Jest unit (`jest.config.ts`); API tests via `pnpm test:api` (runs with `TZ=America/Denver`); e2e via Playwright (`pnpm test:e2e`); seed with `pnpm seed`. Jest config requires `testEnvironmentOptions.customExportConditions: ['node', 'node-addons']` (for `bson` CJS resolution) and a default `MONGODB_URI` in `jest.setup.ts`; both `/tests/e2e/` and `<rootDir>/e2e/` are in `testPathIgnorePatterns`. Pure helpers (e.g. `merge-closed-status-query.ts`) should be extracted into mongoose/auth-free modules to stay unit-testable.
+- Core domain entities live in `src/models/`: `referral.ts`, `lender.ts` (LenderMC), `user.ts` (roles include `mortgage-consultant` and admin), plus deals/payments and tasks; the embedded `referralNoteSchema` `author` ObjectId is optional so system imports can write notes without a user id.
+- Inbound referral intake: `src/app/api/inbound-email/route.ts` receives Resend webhooks signed by Svix (`svix-*` headers, `RESEND_WEBHOOK_SECRET` / inbound signing secret); addresses use `import+<mailbox>@referrio.app` (e.g., `import+aha`, `import+ahaoos`). On import, parsed `Notes:` is seeded into the referral's `notes[]` array as `{ authorRole: 'system', authorName: 'Inbound Email Import', content: cleanedNotes }` (the detail-page Notes section reads `notes[]`, not `initialNotes`, which is just a header-style summary string).
+- MC matching reads the `Source:` field as `{FirstName}{LastInitial}` (e.g., `KarimL`, `UmedY`); when missing/unmatched, `findMcInFreeText` in `src/lib/server/mc-matcher.ts` falls back to scanning the email body with `/\b[A-Z][a-z]+[A-Z]\b/g`, dedupes, and intersects with real MC tokens — multiple distinct MC matches log `ambiguous_free_text_match` and skip auto-assign. OpenAI (`openai` package, `OPENAI_API_KEY`) remains the field-extraction fallback when the regex/field parser cannot extract required fields.
+- AFC = America's First Choice (preferred lender). Deal flags `usedAfc` and `usedAssignedAgent` drive most MC KPIs; sell-side deals are generally excluded from MC-email and AFC rules (buy-side only).
+- Agent-note default-to-email-MC rule: ON when the referral has a buy-side deal with `usedAfc=true` or has no deal/payment yet; OFF when there is a buy-side deal with `usedAfc=false`.
+- Referral/deal statuses include: under contract, closed, payment sent, payment received, terminated (with reason e.g. "Financing"); closed/payment-sent/payment-received must be filtered out of at-risk lists.
+- MC dashboard (admin role) centers on: MC Composite KPI Leaderboard (relative scoring vs top performer) and AFC Loss Risk Call List (pre-contract + under-contract risk, capped scrollable after 10 rows); KPIs include close rate, close-rate with assigned agent, outside-lender loss rate, pushed-back closings + avg push-back days, NPS (medium weight), financing terminations, and total revenue (high weight).
+- Closed-deal counts and revenue are payment-driven (`Payment.status ∈ {closed, payment_sent, paid}` + `receivedAmountCents`), never `referral.status === 'Closed'`; geography sections must filter to payments with `receivedAmountCents > 0` to avoid "Unknown" bloat. Network bucketing marks `Unpaired` only when no MC is assigned; paired referrals roll up to AHA / AHA OOS / AFC via the MC's `ahaDesignation`/network.
+- Dashboard metric reports share `buildDashboardReport()` in `src/lib/server/dashboard-report.ts`, which calls `/api/dashboard` server-side (cookie-forwarded) for canonical KPIs so email, CSV download (`/api/admin/dashboard-report/csv`), and recurring delivery all match the live dashboard. Recurring delivery is backed by the `ScheduledReport` model + `/api/cron/scheduled-reports`, registered hourly in `vercel.json`, filtered to 7am America/Denver, authed via `Authorization: Bearer ${CRON_SECRET}`.
+- Vercel build only typechecks `src/` via Next.js (not `tests/`), so test-tree TS errors won't block deploys; however `export { x } from '...'` does NOT bring `x` into local scope, so a re-export without a matching top-of-file `import` will break `next build` even when tests pass locally.

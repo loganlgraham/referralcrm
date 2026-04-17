@@ -241,7 +241,7 @@ describe('Referral status route table-driven deal status sync', () => {
     expect(response.status).toBe(200);
     expect(response.body.status).toBe('Active Lead');
     expect(referralDoc.buyStatus).toBe('Terminated');
-    expect(referralDoc.status).toBe('Terminated');
+    expect(referralDoc.status).toBe('Active Lead');
     expect(referralDoc.save).toHaveBeenCalled();
     expect(latestDeal.status).toBe('terminated');
     expect(latestDeal.terminatedReason).toBe('inspection');

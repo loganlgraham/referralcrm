@@ -104,6 +104,10 @@ jest.mock('@/lib/server/nps', () => ({
   createNPSToken: jest.fn(),
 }));
 
+jest.mock('@/lib/server/notifications', () => ({
+  createAdminNotifications: jest.fn(),
+}));
+
 const mockedGetCurrentSession = getCurrentSession as jest.MockedFunction<typeof getCurrentSession>;
 const mockedConnectMongo = connectMongo as jest.MockedFunction<typeof connectMongo>;
 const mockedAgentFindOne = Agent.findOne as jest.Mock;
