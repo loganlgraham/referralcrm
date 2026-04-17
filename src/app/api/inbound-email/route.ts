@@ -11,7 +11,11 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { extractInboundEmailFieldsWithAI } from '@/lib/server/inbound-email-ai-parser';
 import { cleanReferralNotes } from '@/lib/server/referral-notes-cleanup';
 import { createAdminNotifications } from '@/lib/server/notifications';
-import { findMcByFirstNameLastInitialToken, normalizeMcToken } from '@/lib/server/mc-matcher';
+import {
+  findMcByFirstNameLastInitialToken,
+  findMcInFreeText,
+  normalizeMcToken
+} from '@/lib/server/mc-matcher';
 import { parseSignatureHeader, parseSvixSignatures } from './signature';
 
 interface NormalizedAttachment {
@@ -875,6 +879,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   let matchedLenderId: Types.ObjectId | undefined;
   let matchedLenderName = '';
+  let matchedFromFreeText = false;
   if (mcValue) {
     const token = normalizeMcToken(mcValue);
     if (token) {
@@ -904,6 +909,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           error: error instanceof Error ? error.message : 'unknown_error'
         });
       }
+    }
+  }
+
+  if (!matchedLenderId) {
+    try {
+      const freeTextMatch = await findMcInFreeText(email.text);
+      if (freeTextMatch && 'id' in freeTextMatch) {
+        matchedLenderId = freeTextMatch.id;
+        matchedLenderName = freeTextMatch.name;
+        matchedFromFreeText = true;
+      } else if (freeTextMatch && 'ambiguous' in freeTextMatch) {
+        console.warn('Inbound email MC free-text scan ambiguous', {
+          messageId: email.messageId,
+          candidateIds: freeTextMatch.candidateIds,
+          reason: 'ambiguous_free_text_match'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to scan inbound email for MC token', {
+        messageId: email.messageId,
+        error: error instanceof Error ? error.message : 'unknown_error'
+      });
     }
   }
 
@@ -957,10 +984,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     : '';
 
   const notesSections: string[] = [];
-  if (mcValue) {
-    notesSections.push(
-      matchedLenderName ? `MC: ${matchedLenderName} (source: ${mcValue})` : `MC: ${mcValue}`
-    );
+  if (matchedLenderName) {
+    const suffix = matchedFromFreeText
+      ? ' (detected in email body)'
+      : mcValue
+        ? ` (source: ${mcValue})`
+        : '';
+    notesSections.push(`MC: ${matchedLenderName}${suffix}`);
+  } else if (mcValue) {
+    notesSections.push(`MC: ${mcValue}`);
   }
   if (cleanedNotes) {
     notesSections.push(cleanedNotes);
@@ -1019,11 +1051,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       `Stage: ${stageOnTransfer}`,
       source ? `Source: ${source}` : null,
       endorser ? `Endorser: ${endorser}` : null,
-      mcValue
-        ? matchedLenderName
-          ? `MC: ${matchedLenderName} (source: ${mcValue})`
-          : `MC: ${mcValue}`
-        : null,
+      matchedLenderName
+        ? matchedFromFreeText
+          ? `MC: ${matchedLenderName} (detected in email body)`
+          : mcValue
+            ? `MC: ${matchedLenderName} (source: ${mcValue})`
+            : `MC: ${matchedLenderName}`
+        : mcValue
+          ? `MC: ${mcValue}`
+          : null,
       borrowerEmail ? `Email: ${borrowerEmail}` : null,
       borrowerPhone ? `Phone: ${formatPhoneForSummary(borrowerPhone)}` : null,
       loanFileNumber ? `Loan Number: ${loanFileNumber}` : null,
@@ -1053,12 +1089,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ];
 
     if (matchedLenderId && matchedLenderName) {
+      const assignmentSummary = matchedFromFreeText
+        ? `Auto-assigned mortgage consultant ${matchedLenderName} (detected in inbound email body)`
+        : `Auto-assigned mortgage consultant ${matchedLenderName} from inbound email source "${mcValue}"`;
       activityPromises.push(
         logReferralActivity({
           referralId: referral._id,
           actorRole: 'system',
           channel: 'update',
-          content: `Auto-assigned mortgage consultant ${matchedLenderName} from inbound email source "${mcValue}"`
+          content: assignmentSummary
         })
       );
     }

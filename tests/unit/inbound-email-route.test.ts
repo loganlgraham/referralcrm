@@ -461,6 +461,51 @@ describe('POST /api/inbound-email', () => {
     warnSpy.mockRestore();
   });
 
+  it('auto-assigns MC from free text when Source field is missing but FirstNameLastInitial appears elsewhere', async () => {
+    const lenderId = fakeObjectId('lender-karim');
+    mockLenderFindReturn([
+      { _id: lenderId, name: 'Karim Lopez' },
+      { _id: fakeObjectId('lender-jane'), name: 'Jane Doe' }
+    ]);
+
+    mockResendInboundFetch(
+      [
+        'First Name: Danielle',
+        'Last Name: Geldart',
+        'Email: justinlounsbury05@gmail.com',
+        'Deal Type: Buyer',
+        'Phone: 8634406938',
+        'Area: 27910',
+        'Loan Number: 20130974679 KarimL',
+        'Referrer: Random Partner'
+      ].join('\n')
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedReferralCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lender: lenderId,
+        initialNotes: expect.stringContaining('MC: Karim Lopez (detected in email body)')
+      })
+    );
+    expect(mockedLogReferralActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining(
+          'Auto-assigned mortgage consultant Karim Lopez (detected in inbound email body)'
+        )
+      })
+    );
+  });
+
   it('maps non-PNC referrer values to Pre-approval TBD stage', async () => {
     mockResendInboundFetch(
       [
