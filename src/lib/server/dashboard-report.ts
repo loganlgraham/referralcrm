@@ -157,7 +157,7 @@ function formatPercent(value: number | null | undefined): string {
   return `${value.toFixed(1)}%`;
 }
 
-async function fetchDashboardData(input: BuildDashboardReportInput): Promise<DashboardApiResponse> {
+function buildDashboardApiUrl(input: BuildDashboardReportInput): URL {
   const url = new URL(`${input.origin.replace(/\/$/, '')}/api/dashboard`);
   const dashboardKey = reportTimeframeToDashboardKey(input.reportTimeframe);
   url.searchParams.set('timeframe', dashboardKey);
@@ -169,19 +169,72 @@ async function fetchDashboardData(input: BuildDashboardReportInput): Promise<Das
     if (range.end) url.searchParams.set('end', range.end.toISOString());
   }
 
+  return url;
+}
+
+function buildDashboardAuthHeaders(input: BuildDashboardReportInput): Record<string, string> {
   const headers: Record<string, string> = {};
   if (input.auth.kind === 'cookie') {
     headers.cookie = input.auth.cookie;
   } else {
     headers.authorization = `Bearer ${input.auth.cronSecret}`;
   }
+  return headers;
+}
 
-  const response = await fetch(url.toString(), { headers, cache: 'no-store' });
+async function fetchDashboardDataViaInternalRoute(
+  input: BuildDashboardReportInput,
+  url: URL
+): Promise<DashboardApiResponse> {
+  const [{ GET }, { NextRequest }] = await Promise.all([
+    import('@/app/api/dashboard/route'),
+    import('next/server')
+  ]);
+
+  const request = new NextRequest(url.toString(), {
+    method: 'GET',
+    headers: buildDashboardAuthHeaders(input)
+  });
+  const response = await GET(request);
   if (!response.ok) {
     const body = await response.text().catch(() => '');
     throw new Error(`Failed to load dashboard data (${response.status}): ${body}`);
   }
   return (await response.json()) as DashboardApiResponse;
+}
+
+async function fetchDashboardDataViaHttp(
+  input: BuildDashboardReportInput,
+  url: URL
+): Promise<DashboardApiResponse> {
+  const response = await fetch(url.toString(), {
+    headers: buildDashboardAuthHeaders(input),
+    cache: 'no-store'
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`Failed to load dashboard data (${response.status}): ${body}`);
+  }
+  return (await response.json()) as DashboardApiResponse;
+}
+
+async function fetchDashboardData(input: BuildDashboardReportInput): Promise<DashboardApiResponse> {
+  const url = buildDashboardApiUrl(input);
+
+  // Vercel can challenge server-to-server fetches to the public deployment URL.
+  // Prefer an in-process route invocation in that environment.
+  if (process.env.VERCEL === '1') {
+    try {
+      return await fetchDashboardDataViaInternalRoute(input, url);
+    } catch (error) {
+      console.warn(
+        'Internal dashboard route invocation failed; falling back to HTTP fetch.',
+        error
+      );
+    }
+  }
+
+  return fetchDashboardDataViaHttp(input, url);
 }
 
 type ReferralLite = {
