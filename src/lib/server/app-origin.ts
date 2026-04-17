@@ -10,6 +10,13 @@ import type { NextRequest } from 'next/server';
  * @returns Normalized base URL without trailing slash
  */
 export function getAppOrigin(request?: NextRequest): string {
+  // For request-bound handlers (API/routes), prefer the active request host.
+  // This avoids cross-environment calls in preview deployments where APP_URL/NEXTAUTH_URL
+  // may still point at production.
+  if (request) {
+    return new URL(request.url).origin;
+  }
+
   // Prefer APP_URL, then NEXTAUTH_URL
   const envUrl = process.env.APP_URL || process.env.NEXTAUTH_URL;
   if (envUrl) {
@@ -24,11 +31,6 @@ export function getAppOrigin(request?: NextRequest): string {
   // Fallback to VERCEL_URL
   if (process.env.VERCEL_URL) {
     return `https://${process.env.VERCEL_URL}`;
-  }
-
-  // Last resort: use request origin
-  if (request) {
-    return new URL(request.url).origin;
   }
 
   // Final fallback (shouldn't happen in production)
