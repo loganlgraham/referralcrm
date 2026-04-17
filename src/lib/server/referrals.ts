@@ -19,6 +19,9 @@ import { buildDealStatusMap } from '@/lib/server/referral-deal-status';
 import { mapDealStatusToReferralStatus } from '@/lib/server/referral-deal-status-mapper';
 import { type DealStatus } from '@/constants/deals';
 import { resolveAgentSideForReferral, pickPrimarySideForReferral } from '@/lib/server/referral-sides';
+import { mergeClosedStatusQuery } from '@/lib/server/merge-closed-status-query';
+
+export { mergeClosedStatusQuery };
 
 interface GetReferralsParams {
   session: Session | null;
@@ -174,7 +177,6 @@ const buildPaymentMatchFromQuery = (query: Record<string, unknown>) => {
   return paymentMatch;
 };
 
-export { mergeClosedStatusQuery } from './merge-closed-status-query';
 
 interface FilterQueryParams {
   session: Session | null;
