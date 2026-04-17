@@ -326,11 +326,11 @@ Referral CRM Team
 }
 
 /**
- * Check for referrals where an auto check-in email was sent 48+ hours ago
+ * Check for referrals where an update request email was sent 24+ hours ago
  * and the agent has not responded (no note, status change, or contact action).
  *
  * Creates an admin notification for each such referral, at most once per
- * reminder cycle (deduplicated via lastNoResponse48hNotifiedAt).
+ * reminder cycle (deduplicated via lastNoResponse24hNotifiedAt).
  *
  * Caller must connect to Mongo before calling.
  */
@@ -338,7 +338,8 @@ export async function runNoResponseChecks(
   options: RunAutoUpdateRemindersOptions = {}
 ): Promise<NoResponseCheckResult[]> {
   const now = options.now ?? new Date();
-  const cutoff = new Date(now.getTime() - 48 * 60 * 60 * 1000); // 48 hours ago
+  const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago
+  const epoch = new Date(0);
 
   // Exclude referrals with closed deals (same as runAutoUpdateReminders)
   const referralIdsWithClosedDeal = await Payment.distinct('referralId', {
@@ -350,16 +351,34 @@ export async function runNoResponseChecks(
     status: { $nin: REFERRAL_TERMINAL_STATUSES },
     _id: { $nin: referralIdsWithClosedDeal },
     deletedAt: null,
-    // A reminder was sent more than 48h ago
-    lastAutoReminderSentAt: { $exists: true, $ne: null, $lte: cutoff },
-    // Agent has NOT responded to that reminder:
-    // lastUpdateRequestResponseNotifiedAt is either null or before the reminder
-    $or: [
-      { lastUpdateRequestResponseNotifiedAt: null },
-      { $expr: { $lt: ['$lastUpdateRequestResponseNotifiedAt', '$lastAutoReminderSentAt'] } },
-    ],
+    // Latest update request (auto or manual) was sent more than 24h ago,
+    // and agent has NOT responded since that request.
+    $expr: {
+      $let: {
+        vars: {
+          latestRequestAt: {
+            $max: [
+              { $ifNull: ['$lastAutoReminderSentAt', epoch] },
+              { $ifNull: ['$lastManualReminderSentAt', epoch] },
+            ],
+          },
+        },
+        in: {
+          $and: [
+            { $gt: ['$$latestRequestAt', epoch] },
+            { $lte: ['$$latestRequestAt', cutoff] },
+            {
+              $or: [
+                { $eq: ['$lastUpdateRequestResponseNotifiedAt', null] },
+                { $lt: ['$lastUpdateRequestResponseNotifiedAt', '$$latestRequestAt'] },
+              ],
+            },
+          ],
+        },
+      },
+    },
   })
-    .select('_id borrower.name lastAutoReminderSentAt lastNoResponse48hNotifiedAt')
+    .select('_id borrower.name lastAutoReminderSentAt lastManualReminderSentAt lastNoResponse24hNotifiedAt')
     .lean();
 
   const results: NoResponseCheckResult[] = [];
@@ -370,12 +389,13 @@ export async function runNoResponseChecks(
 
     try {
       // Dedup: skip if we already notified for this reminder cycle
-      const lastNotifiedTime = referral.lastNoResponse48hNotifiedAt
-        ? new Date(referral.lastNoResponse48hNotifiedAt).getTime()
+      const lastNotifiedTime = referral.lastNoResponse24hNotifiedAt
+        ? new Date(referral.lastNoResponse24hNotifiedAt).getTime()
         : 0;
-      const lastReminderTime = referral.lastAutoReminderSentAt
-        ? new Date(referral.lastAutoReminderSentAt).getTime()
-        : 0;
+      const lastReminderTime = Math.max(
+        referral.lastAutoReminderSentAt ? new Date(referral.lastAutoReminderSentAt).getTime() : 0,
+        referral.lastManualReminderSentAt ? new Date(referral.lastManualReminderSentAt).getTime() : 0
+      );
 
       if (lastNotifiedTime >= lastReminderTime) {
         results.push({
@@ -388,16 +408,16 @@ export async function runNoResponseChecks(
       }
 
       await createAdminNotifications({
-        type: 'checkin_no_response_48h',
+        type: 'checkin_no_response_24h',
         referralId,
         borrowerName,
         actorRole: 'system',
         actorName: 'System',
-        content: `Agent has not responded to check-in email for ${borrowerName} (48+ hours)`,
+        content: `Agent has not responded to update request for ${borrowerName} (24+ hours)`,
       });
 
       await Referral.findByIdAndUpdate(referralId, {
-        $set: { lastNoResponse48hNotifiedAt: now },
+        $set: { lastNoResponse24hNotifiedAt: now },
       });
 
       results.push({

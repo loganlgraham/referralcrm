@@ -12,7 +12,7 @@ interface Notification {
     | 'email_response'
     | 'update_request_response'
     | 'nps_survey_completed'
-    | 'checkin_no_response_48h'
+    | 'checkin_no_response_24h'
     | 'referral_created';
   referralId: string;
   borrowerName: string;
@@ -143,7 +143,7 @@ export function NotificationDropdown({
         return '✅';
       case 'nps_survey_completed':
         return '⭐';
-      case 'checkin_no_response_48h':
+      case 'checkin_no_response_24h':
         return '⚠️';
       case 'referral_created':
         return '🔔';

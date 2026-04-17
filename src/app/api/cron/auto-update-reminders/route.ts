@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       `[Auto-Update Reminders] Completed: ${successful} sent, ${skipped} skipped, ${failed} errors, ${totalEmails} emails`
     );
 
-    // Check for agents who haven't responded to check-in emails in 48+ hours
+    // Check for agents who haven't responded to update requests in 24+ hours
     const noResponseResults = await runNoResponseChecks({ now });
     const noResponseNotified = noResponseResults.filter((r) => r.status === 'notified').length;
     const noResponseErrors = noResponseResults.filter((r) => r.status === 'error').length;

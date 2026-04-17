@@ -214,7 +214,7 @@ const referralSchema = new Schema(
     lastAutoReminderSentAt: { type: Date, default: null },
     lastManualReminderSentAt: { type: Date, default: null },
     lastUpdateRequestResponseNotifiedAt: { type: Date, default: null },
-    lastNoResponse48hNotifiedAt: { type: Date, default: null },
+    lastNoResponse24hNotifiedAt: { type: Date, default: null },
     deletedAt: { type: Date, default: null },
     referralDate: { type: Date, default: null },
     deals: [DealSchema], // Ensure this is an array
@@ -331,7 +331,7 @@ export interface ReferralDocument {
   lastAutoReminderSentAt?: Date | null;
   lastManualReminderSentAt?: Date | null;
   lastUpdateRequestResponseNotifiedAt?: Date | null;
-  lastNoResponse48hNotifiedAt?: Date | null;
+  lastNoResponse24hNotifiedAt?: Date | null;
   deletedAt?: Date;
   referralDate?: Date | null;
   audit?: AuditEntry[];

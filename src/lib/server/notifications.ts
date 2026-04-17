@@ -9,7 +9,7 @@ type NotificationType =
   | 'email_response'
   | 'update_request_response'
   | 'nps_survey_completed'
-  | 'checkin_no_response_48h'
+  | 'checkin_no_response_24h'
   | 'referral_created';
 
 interface CreateNotificationParams {

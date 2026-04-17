@@ -5,7 +5,7 @@ const notificationSchema = new Schema(
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     type: { 
       type: String, 
-      enum: ['note', 'status_change', 'email_response', 'update_request_response', 'nps_survey_completed', 'checkin_no_response_48h', 'referral_created'], 
+      enum: ['note', 'status_change', 'email_response', 'update_request_response', 'nps_survey_completed', 'checkin_no_response_24h', 'referral_created'], 
       required: true 
     },
     referralId: { type: Schema.Types.ObjectId, ref: 'Referral', required: true },
