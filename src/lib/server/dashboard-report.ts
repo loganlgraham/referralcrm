@@ -101,6 +101,18 @@ type DashboardApiResponse = {
   };
 };
 
+function debugLog(payload: {
+  runId: string;
+  hypothesisId: string;
+  location: string;
+  message: string;
+  data?: Record<string, unknown>;
+}) {
+  // #region agent log
+  fetch('http://127.0.0.1:7872/ingest/da1edebc-eb15-457d-a553-87cb363ce371',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'4be0fc'},body:JSON.stringify({sessionId:'4be0fc',runId:payload.runId,hypothesisId:payload.hypothesisId,location:payload.location,message:payload.message,data:payload.data ?? {},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+}
+
 function resolveDateRange(
   reportTimeframe: string,
   customStartDate?: string,
@@ -158,6 +170,7 @@ function formatPercent(value: number | null | undefined): string {
 }
 
 async function fetchDashboardData(input: BuildDashboardReportInput): Promise<DashboardApiResponse> {
+  const runId = `dashboard-build-${Date.now()}`;
   const url = new URL(`${input.origin.replace(/\/$/, '')}/api/dashboard`);
   const dashboardKey = reportTimeframeToDashboardKey(input.reportTimeframe);
   url.searchParams.set('timeframe', dashboardKey);
@@ -175,10 +188,35 @@ async function fetchDashboardData(input: BuildDashboardReportInput): Promise<Das
   } else {
     headers.authorization = `Bearer ${input.auth.cronSecret}`;
   }
+  debugLog({
+    runId,
+    hypothesisId: 'H3',
+    location: 'src/lib/server/dashboard-report.ts:196',
+    message: 'Calling /api/dashboard for dashboard report',
+    data: {
+      dashboardUrl: url.toString(),
+      authKind: input.auth.kind,
+      hasCookie: input.auth.kind === 'cookie' ? input.auth.cookie.length > 0 : false,
+      cookieLength: input.auth.kind === 'cookie' ? input.auth.cookie.length : 0,
+      hasAuthHeader: Boolean(headers.authorization),
+      timeframeKey: dashboardKey
+    }
+  });
 
   const response = await fetch(url.toString(), { headers, cache: 'no-store' });
   if (!response.ok) {
     const body = await response.text().catch(() => '');
+    debugLog({
+      runId,
+      hypothesisId: 'H4',
+      location: 'src/lib/server/dashboard-report.ts:214',
+      message: 'Dashboard API returned non-OK response',
+      data: {
+        status: response.status,
+        statusText: response.statusText,
+        bodyPreview: body.slice(0, 400)
+      }
+    });
     throw new Error(`Failed to load dashboard data (${response.status}): ${body}`);
   }
   return (await response.json()) as DashboardApiResponse;
