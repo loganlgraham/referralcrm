@@ -393,6 +393,88 @@ describe('POST /api/inbound-email', () => {
     );
   });
 
+  it('parses labels separated by literal <br> tags in plain-text body', async () => {
+    mockResendInboundFetch(
+      [
+        'First Name: Ronald',
+        'Last Name: Chavez',
+        'Email: ronald.chavez@example.com',
+        'Deal Type: Buyer',
+        'Phone: 3082412347',
+        'Price: $99000.00',
+        'Area: 69145',
+        'Zipcode: 69145',
+        'Seller Address: 506 E 5th St., Kimball, NE, 69145',
+        'Source: ChristopherL',
+        'Referrer: PNC-Pre-Approved',
+        'P & I/PITI: $622.42/$962.18',
+        'Base Loan: $95535.00',
+        'Notes: Is interested 508 E 3rd St, Kimball, NE 69145, wants to make an offer, would like full concessions',
+        'Loan Number: 20130959550 <br>LoanType:FHA <br>LoanProgram:Essex DPA FHA 30 Year w/+2% 2nd DAP <br>So: (Source):Customer Referral <br>En: (Endorser):Other'
+      ].join('\n')
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedExtractInboundEmailFieldsWithAI).not.toHaveBeenCalled();
+    expect(mockedReferralCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'Customer Referral',
+        endorser: 'Other',
+        loanType: 'FHA',
+        loanFileNumber: '20130959550',
+        stageOnTransfer: 'Pre-approved',
+        preApprovalAmountCents: 9900000,
+        lookingInZip: '69145',
+        borrowerCurrentAddress: '506 E 5th St., Kimball, NE, 69145',
+        borrower: expect.objectContaining({
+          name: 'Ronald Chavez',
+          email: 'ronald.chavez@example.com',
+          phone: '308-241-2347'
+        })
+      })
+    );
+  });
+
+  it('truncates inbound loan numbers longer than 11 digits to the first 11', async () => {
+    mockResendInboundFetch(
+      [
+        'First Name: Danielle',
+        'Last Name: Geldart',
+        'Email: justinlounsbury05@gmail.com',
+        'Deal Type: Buyer',
+        'Phone: 8634406938',
+        'Area: 27910',
+        'Source: KarimL',
+        'Loan Number: 2013097467999'
+      ].join('\n')
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedReferralCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        loanFileNumber: '20130974679'
+      })
+    );
+  });
+
   it('leaves source, endorser, and loanType blank when nested labels are malformed or missing', async () => {
     mockResendInboundFetch(
       [
