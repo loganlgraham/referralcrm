@@ -478,6 +478,74 @@ describe('Referral status route table-driven deal status sync', () => {
     expect(mockedCreateAdminNotifications).toHaveBeenCalled();
   });
 
+  it('coerces side to sell for a Seller referral even when the client sends side="buy"', async () => {
+    mockedGetCurrentSession.mockResolvedValueOnce({
+      user: { id: 'admin-1', role: 'admin', name: 'Admin User', email: 'admin@example.com' },
+    } as any);
+    const referralDoc = makeReferralDoc();
+    referralDoc.clientType = 'Seller';
+    // Simulate the bug trigger: UI sends the default buy-side dealSide.
+    referralDoc.dealSide = 'buy';
+    mockedReferralFindById.mockReturnValue(referralDoc);
+    mockPaymentFindOneChain(null);
+
+    const response: any = await postHandler(
+      makeRequest({ status: 'Lost', source: 'referral_detail', side: 'buy' }),
+      { params: { id: 'ref-1' } }
+    );
+
+    expect(response.status).toBe(200);
+    expect(referralDoc.sellStatus).toBe('Lost');
+    expect(referralDoc.buyStatus).toBeUndefined();
+    expect(referralDoc.status).toBe('Lost');
+    expect(response.body.status).toBe('Lost');
+    expect(response.body.side).toBe('sell');
+    expect(referralDoc.save).toHaveBeenCalled();
+  });
+
+  it('coerces side to sell for a Seller referral when no side is sent', async () => {
+    mockedGetCurrentSession.mockResolvedValueOnce({
+      user: { id: 'admin-1', role: 'admin', name: 'Admin User', email: 'admin@example.com' },
+    } as any);
+    const referralDoc = makeReferralDoc();
+    referralDoc.clientType = 'Seller';
+    mockedReferralFindById.mockReturnValue(referralDoc);
+    mockPaymentFindOneChain(null);
+
+    const response: any = await postHandler(
+      makeRequest({ status: 'Lost', source: 'referral_detail' }),
+      { params: { id: 'ref-1' } }
+    );
+
+    expect(response.status).toBe(200);
+    expect(referralDoc.sellStatus).toBe('Lost');
+    expect(referralDoc.buyStatus).toBeUndefined();
+    expect(referralDoc.status).toBe('Lost');
+    expect(response.body.side).toBe('sell');
+  });
+
+  it('coerces side to buy for a Buyer referral even when the client sends side="sell"', async () => {
+    mockedGetCurrentSession.mockResolvedValueOnce({
+      user: { id: 'admin-1', role: 'admin', name: 'Admin User', email: 'admin@example.com' },
+    } as any);
+    const referralDoc = makeReferralDoc();
+    referralDoc.clientType = 'Buyer';
+    referralDoc.dealSide = 'sell';
+    mockedReferralFindById.mockReturnValue(referralDoc);
+    mockPaymentFindOneChain(null);
+
+    const response: any = await postHandler(
+      makeRequest({ status: 'Lost', source: 'referral_detail', side: 'sell' }),
+      { params: { id: 'ref-1' } }
+    );
+
+    expect(response.status).toBe(200);
+    expect(referralDoc.buyStatus).toBe('Lost');
+    expect(referralDoc.sellStatus).toBeUndefined();
+    expect(referralDoc.status).toBe('Lost');
+    expect(response.body.side).toBe('buy');
+  });
+
   it('creates a side-scoped under-contract deal using the side agent', async () => {
     const referralDoc = makeReferralDoc();
     referralDoc.buySideAgent = { _id: 'buy-agent-db' };
