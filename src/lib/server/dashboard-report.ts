@@ -1,4 +1,14 @@
-import { addDays, endOfDay, endOfMonth, startOfMonth, startOfWeek, startOfYear, subDays } from 'date-fns';
+import {
+  addDays,
+  endOfDay,
+  endOfMonth,
+  startOfMonth,
+  startOfWeek,
+  startOfYear,
+  subDays,
+  subMonths,
+  subWeeks
+} from 'date-fns';
 import { Types } from 'mongoose';
 
 import { Referral } from '@/models/referral';
@@ -14,7 +24,7 @@ export const DASHBOARD_REPORT_METRICS = [
   { id: 'attachRate', label: 'AFC and agent attach rates' },
   { id: 'preApprovals', label: 'Mortgage consultant transfers' },
   { id: 'geography', label: 'Revenue by state' },
-  { id: 'network', label: 'Network breakdown (AHA / AHA OOS / AFC / Unpaired)' },
+  { id: 'network', label: 'Network breakdown (AHA / AHA OOS / AGIT / Unpaired)' },
   { id: 'termination', label: 'Terminated deals & lost referral fees' }
 ] as const;
 
@@ -27,7 +37,9 @@ const METRIC_LABEL_MAP: Record<DashboardReportMetricId, string> = DASHBOARD_REPO
 
 export type DashboardReportTimeframe =
   | 'This week'
+  | 'Last week'
   | 'This month'
+  | 'Last month'
   | 'Last 90 days'
   | 'Year to date'
   | 'All'
@@ -112,8 +124,16 @@ function resolveDateRange(
       const start = startOfWeek(now, { weekStartsOn: 1 });
       return { start, end: endOfDay(addDays(start, 6)) };
     }
+    case 'Last week': {
+      const start = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
+      return { start, end: endOfDay(addDays(start, 6)) };
+    }
     case 'This month':
       return { start: startOfMonth(now), end: endOfMonth(now) };
+    case 'Last month': {
+      const lastMonth = subMonths(now, 1);
+      return { start: startOfMonth(lastMonth), end: endOfMonth(lastMonth) };
+    }
     case 'Last 90 days':
       return { start: subDays(now, 90), end: endOfDay(now) };
     case 'Year to date':
@@ -250,7 +270,7 @@ type ReferralLite = {
 async function buildNetworkBreakdown(range: {
   start: Date | null;
   end: Date | null;
-}): Promise<Record<'AHA' | 'AHA OOS' | 'AFC' | 'Unpaired', number>> {
+}): Promise<Record<'AHA' | 'AHA OOS' | 'AGIT' | 'Unpaired', number>> {
   const referralMatch: Record<string, unknown> = { deletedAt: null };
   if (range.start || range.end) {
     const window: Record<string, Date> = {};
@@ -281,10 +301,10 @@ async function buildNetworkBreakdown(range: {
     });
   }
 
-  const buckets: Record<'AHA' | 'AHA OOS' | 'AFC' | 'Unpaired', number> = {
+  const buckets: Record<'AHA' | 'AHA OOS' | 'AGIT' | 'Unpaired', number> = {
     AHA: 0,
     'AHA OOS': 0,
-    AFC: 0,
+    AGIT: 0,
     Unpaired: 0
   };
 
@@ -304,6 +324,10 @@ async function buildNetworkBreakdown(range: {
       buckets.AHA += 1;
       continue;
     }
+    if (designation === 'AGIT') {
+      buckets.AGIT += 1;
+      continue;
+    }
     if (referral.ahaBucket === 'AHA_OOS') {
       buckets['AHA OOS'] += 1;
       continue;
@@ -312,7 +336,7 @@ async function buildNetworkBreakdown(range: {
       buckets.AHA += 1;
       continue;
     }
-    buckets.AFC += 1;
+    // Strict AGIT mode: paired referrals without an AHA/AHA_OOS/AGIT signal are not counted.
   }
 
   return buckets;
@@ -357,19 +381,96 @@ async function buildMcTransfers(range: {
     .sort((a, b) => b.transfers - a.transfers || a.name.localeCompare(b.name));
 }
 
+type UnderContractCounts = {
+  withAssignedAgent: number;
+  total: number;
+  attachedByDesignation: { AHA: number; 'AHA OOS': number; AGIT: number };
+};
+
 async function countReferralsEnteredUnderContract(range: {
   start: Date | null;
   end: Date | null;
-}): Promise<number> {
-  if (!range.start && !range.end) {
-    const ids = await Payment.distinct('referralId', { underContractDate: { $ne: null } });
-    return ids.length;
+}): Promise<UnderContractCounts> {
+  const filter: Record<string, unknown> =
+    !range.start && !range.end
+      ? { underContractDate: { $ne: null } }
+      : (() => {
+          const window: Record<string, Date> = {};
+          if (range.start) window.$gte = range.start;
+          if (range.end) window.$lte = range.end;
+          return { underContractDate: window };
+        })();
+
+  const payments = await Payment.find(filter)
+    .select('referralId usedAssignedAgent agentId')
+    .lean<
+      {
+        referralId: Types.ObjectId;
+        usedAssignedAgent?: boolean;
+        agentId?: Types.ObjectId | null;
+      }[]
+    >();
+
+  const emptyAttachedByDesignation = { AHA: 0, 'AHA OOS': 0, AGIT: 0 };
+  if (payments.length === 0) {
+    return { withAssignedAgent: 0, total: 0, attachedByDesignation: emptyAttachedByDesignation };
   }
-  const window: Record<string, Date> = {};
-  if (range.start) window.$gte = range.start;
-  if (range.end) window.$lte = range.end;
-  const ids = await Payment.distinct('referralId', { underContractDate: window });
-  return ids.length;
+
+  const referralIdStrings = Array.from(new Set(payments.map((p) => p.referralId.toString())));
+  const referrals = referralIdStrings.length
+    ? await Referral.find({
+        _id: { $in: referralIdStrings.map((id) => new Types.ObjectId(id)) }
+      })
+        .select('assignedAgent')
+        .lean<{ _id: Types.ObjectId; assignedAgent?: Types.ObjectId | null }[]>()
+    : [];
+  const assignedAgentByReferral = new Map<string, string | null>(
+    referrals.map((r) => [r._id.toString(), r.assignedAgent?.toString() ?? null])
+  );
+
+  const agentIds = new Set<string>();
+  for (const p of payments) {
+    if (p.agentId) agentIds.add(p.agentId.toString());
+    const fallback = assignedAgentByReferral.get(p.referralId.toString());
+    if (fallback) agentIds.add(fallback);
+  }
+
+  const agents = agentIds.size
+    ? await Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } })
+        .select('ahaDesignation')
+        .lean<{ _id: Types.ObjectId; ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null }[]>()
+    : [];
+  const designationByAgent = new Map<string, 'AHA' | 'AHA_OOS' | 'AGIT' | null>(
+    agents.map((a) => [a._id.toString(), a.ahaDesignation ?? null])
+  );
+
+  const totalIds = new Set<string>();
+  const attachedByReferral = new Map<string, 'AHA' | 'AHA_OOS' | 'AGIT' | null>();
+  for (const p of payments) {
+    const refId = p.referralId.toString();
+    totalIds.add(refId);
+    if (!p.usedAssignedAgent) continue;
+    const agentId = p.agentId?.toString() ?? assignedAgentByReferral.get(refId) ?? null;
+    const designation = agentId ? designationByAgent.get(agentId) ?? null : null;
+    if (!attachedByReferral.has(refId)) {
+      attachedByReferral.set(refId, designation);
+    } else if (attachedByReferral.get(refId) == null && designation) {
+      attachedByReferral.set(refId, designation);
+    }
+  }
+
+  const attachedByDesignation = { AHA: 0, 'AHA OOS': 0, AGIT: 0 };
+  for (const des of attachedByReferral.values()) {
+    if (des === 'AHA') attachedByDesignation.AHA += 1;
+    else if (des === 'AHA_OOS') attachedByDesignation['AHA OOS'] += 1;
+    else if (des === 'AGIT') attachedByDesignation.AGIT += 1;
+  }
+
+  return {
+    withAssignedAgent: attachedByReferral.size,
+    total: totalIds.size,
+    attachedByDesignation
+  };
 }
 
 function describeWindow(input: BuildDashboardReportInput): string {
@@ -384,9 +485,9 @@ function describeWindow(input: BuildDashboardReportInput): string {
 function buildSections(args: {
   metrics: DashboardReportMetricId[];
   dashboard: DashboardApiResponse;
-  network: Record<'AHA' | 'AHA OOS' | 'AFC' | 'Unpaired', number>;
+  network: Record<'AHA' | 'AHA OOS' | 'AGIT' | 'Unpaired', number>;
   mcTransfers: { name: string; transfers: number }[];
-  referralsEnteredUnderContract: number;
+  underContract: UnderContractCounts;
 }): ReportSection[] {
   const summary = args.dashboard.main?.summary ?? {};
   const sections: ReportSection[] = [];
@@ -400,7 +501,17 @@ function buildSections(args: {
           rows: [
             { label: 'Total referrals', value: String(summary.totalReferrals ?? 0) },
             { label: 'Deals closed (in period)', value: String(summary.dealsClosedInTimeframe ?? summary.dealsClosed ?? 0) },
-            { label: 'Referrals that entered Under Contract', value: String(args.referralsEnteredUnderContract) },
+            {
+              label: 'Referrals that entered Under Contract (used assigned agent)',
+              value: String(args.underContract.withAssignedAgent)
+            },
+            { label: '  - AHA', value: String(args.underContract.attachedByDesignation.AHA) },
+            { label: '  - AHA OOS', value: String(args.underContract.attachedByDesignation['AHA OOS']) },
+            { label: '  - AGIT', value: String(args.underContract.attachedByDesignation.AGIT) },
+            {
+              label: 'Referrals that entered Under Contract (total)',
+              value: String(args.underContract.total)
+            },
             { label: 'Close rate', value: formatPercent(summary.closeRate) },
             { label: 'Revenue received', value: formatCents(summary.realizedRevenueCents) },
             { label: 'Expected revenue (outstanding)', value: formatCents(summary.expectedRevenueCents) }
@@ -427,7 +538,6 @@ function buildSections(args: {
           rows: [
             { label: 'Active pipeline', value: String(summary.activePipeline ?? 0) },
             { label: 'Currently under contract', value: String(summary.dealsUnderContract ?? 0) },
-            { label: 'Entered under contract in period', value: String(args.referralsEnteredUnderContract) },
             { label: 'Closed deals (in period)', value: String(summary.dealsClosedInTimeframe ?? summary.dealsClosed ?? 0) },
             { label: 'Pipeline value', value: formatCents(summary.pipelineValueCents) }
           ]
@@ -484,7 +594,7 @@ function buildSections(args: {
         break;
       }
       case 'network': {
-        const ordered: Array<keyof typeof args.network> = ['AHA', 'AHA OOS', 'AFC', 'Unpaired'];
+        const ordered: Array<keyof typeof args.network> = ['AHA', 'AHA OOS', 'AGIT', 'Unpaired'];
         sections.push({
           id: 'network',
           title: METRIC_LABEL_MAP.network,
@@ -624,19 +734,24 @@ export async function buildDashboardReport(
 
   const needsNetworkBreakdown = input.metrics.includes('network');
   const needsMcTransfers = input.metrics.includes('preApprovals');
-  const needsUcCount =
-    input.metrics.includes('summary') || input.metrics.includes('deals');
+  const needsUcCount = input.metrics.includes('summary');
 
-  const [dashboard, networkBreakdown, mcTransfers, referralsEnteredUnderContract] = await Promise.all([
+  const emptyUnderContract: UnderContractCounts = {
+    withAssignedAgent: 0,
+    total: 0,
+    attachedByDesignation: { AHA: 0, 'AHA OOS': 0, AGIT: 0 }
+  };
+
+  const [dashboard, networkBreakdown, mcTransfers, underContract] = await Promise.all([
     fetchDashboardData(input),
     needsNetworkBreakdown
       ? buildNetworkBreakdown(range)
-      : Promise.resolve({ AHA: 0, 'AHA OOS': 0, AFC: 0, Unpaired: 0 } as Record<
-          'AHA' | 'AHA OOS' | 'AFC' | 'Unpaired',
+      : Promise.resolve({ AHA: 0, 'AHA OOS': 0, AGIT: 0, Unpaired: 0 } as Record<
+          'AHA' | 'AHA OOS' | 'AGIT' | 'Unpaired',
           number
         >),
     needsMcTransfers ? buildMcTransfers(range) : Promise.resolve([] as { name: string; transfers: number }[]),
-    needsUcCount ? countReferralsEnteredUnderContract(range) : Promise.resolve(0)
+    needsUcCount ? countReferralsEnteredUnderContract(range) : Promise.resolve(emptyUnderContract)
   ]);
 
   const sections = buildSections({
@@ -644,7 +759,7 @@ export async function buildDashboardReport(
     dashboard,
     network: networkBreakdown,
     mcTransfers,
-    referralsEnteredUnderContract
+    underContract
   });
 
   const windowLabel = describeWindow(input);
