@@ -1440,7 +1440,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
   const allClosedDealsInPushbackWindow = allClosedDealsInNetwork.filter((payment) => {
     // Pushback metrics should react to recent activity, not only close/invoice/paid dates.
-    return isWithinTimeframe(payment.updatedAt, timeframe);
+    return isWithinTimeframe(payment.updatedAt);
   });
 
   const closedDealReferralIds = new Set(

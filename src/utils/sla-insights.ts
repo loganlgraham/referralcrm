@@ -241,7 +241,7 @@ const resolveCommunicationStart = (
 };
 
 const isValidDate = (value: Date | null): value is Date =>
-  Boolean(value) && !Number.isNaN(value.getTime());
+  value !== null && !Number.isNaN(value.getTime());
 
 const resolveReferralStartFallback = (referral: ReferralLike, createdAt: Date): Date => {
   const referralDate = parseTimestamp(referral.referralDate);
