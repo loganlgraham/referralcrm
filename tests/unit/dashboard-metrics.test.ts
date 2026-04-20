@@ -989,6 +989,118 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     expect(scopedPushback.pushedBackDays).toBe(5);
   });
 
+  it('counts under-contract deals with pushed-back closing dates and builds a per-MC breakdown', () => {
+    const NON_TERMINATED_DEAL_STATUSES = new Set([
+      'under_contract',
+      'past_inspection',
+      'past_appraisal',
+      'clear_to_close',
+      'closed',
+      'payment_sent',
+      'paid'
+    ]);
+    const timeframe = {
+      start: new Date('2026-04-01T00:00:00.000Z'),
+      end: new Date('2026-04-30T23:59:59.999Z')
+    };
+    const isWithinTimeframe = (value: Date | null | undefined) => {
+      if (!value) return false;
+      const candidate = value instanceof Date ? value : new Date(value);
+      if (Number.isNaN(candidate.getTime())) return false;
+      if (timeframe.start && candidate < timeframe.start) return false;
+      if (timeframe.end && candidate > timeframe.end) return false;
+      return true;
+    };
+    type TestPayment = {
+      status: string;
+      updatedAt: Date;
+      lender: string;
+      closingDatePushbackCount: number;
+      closingDatePushbacks: Array<{ pushedBackDays: number; timestamp: Date }>;
+    };
+    const paymentsByNetwork: TestPayment[] = [
+      {
+        status: 'under_contract',
+        updatedAt: new Date('2026-04-11T10:00:00.000Z'),
+        lender: 'mc-a',
+        closingDatePushbackCount: 1,
+        closingDatePushbacks: [{ pushedBackDays: 7, timestamp: new Date('2026-04-11T10:00:00.000Z') }]
+      },
+      {
+        status: 'under_contract',
+        updatedAt: new Date('2026-04-12T10:00:00.000Z'),
+        lender: 'mc-b',
+        closingDatePushbackCount: 0,
+        closingDatePushbacks: []
+      },
+      {
+        status: 'closed',
+        updatedAt: new Date('2026-04-14T10:00:00.000Z'),
+        lender: 'mc-a',
+        closingDatePushbackCount: 0,
+        closingDatePushbacks: []
+      },
+      {
+        status: 'terminated',
+        updatedAt: new Date('2026-04-15T10:00:00.000Z'),
+        lender: 'mc-c',
+        closingDatePushbackCount: 1,
+        closingDatePushbacks: [{ pushedBackDays: 4, timestamp: new Date('2026-04-15T10:00:00.000Z') }]
+      }
+    ];
+    const pushbackEventInTimeframe = (payment: TestPayment) =>
+      payment.closingDatePushbacks.some((entry) => isWithinTimeframe(entry.timestamp));
+    const allDealsInPushbackWindow = paymentsByNetwork.filter(
+      (payment) =>
+        NON_TERMINATED_DEAL_STATUSES.has(payment.status) &&
+        (isWithinTimeframe(payment.updatedAt) || pushbackEventInTimeframe(payment))
+    );
+
+    const mcPushbackStatsMap = new Map<string, { dealsWithPushback: number }>();
+    const mcEligibleDealsMap = new Map<string, number>();
+    let distinctDealsPushedBack = 0;
+    let eligibleDealsInScope = 0;
+    allDealsInPushbackWindow.forEach((payment) => {
+      eligibleDealsInScope += 1;
+      mcEligibleDealsMap.set(payment.lender, (mcEligibleDealsMap.get(payment.lender) ?? 0) + 1);
+      const scoped = resolvePushbackMetricsInTimeframe(payment, timeframe);
+      if (scoped.events > 0) {
+        const current = mcPushbackStatsMap.get(payment.lender) ?? { dealsWithPushback: 0 };
+        current.dealsWithPushback += 1;
+        mcPushbackStatsMap.set(payment.lender, current);
+        distinctDealsPushedBack += 1;
+      }
+    });
+    const pushbackRatePercent =
+      eligibleDealsInScope > 0 ? (distinctDealsPushedBack / eligibleDealsInScope) * 100 : 0;
+    const byMc = Array.from(mcPushbackStatsMap.entries())
+      .filter(([, stats]) => stats.dealsWithPushback > 0)
+      .map(([id, stats]) => {
+        const totalDeals = mcEligibleDealsMap.get(id) ?? 0;
+        return {
+          id,
+          dealsPushedBack: stats.dealsWithPushback,
+          totalDeals,
+          pushbackRatePercent: totalDeals > 0 ? (stats.dealsWithPushback / totalDeals) * 100 : 0
+        };
+      })
+      .sort(
+        (a, b) =>
+          b.dealsPushedBack - a.dealsPushedBack || b.pushbackRatePercent - a.pushbackRatePercent
+      );
+
+    expect(distinctDealsPushedBack).toBe(1);
+    expect(eligibleDealsInScope).toBe(3);
+    expect(pushbackRatePercent).toBeCloseTo(33.33, 2);
+    expect(byMc).toHaveLength(1);
+    expect(byMc[0]).toEqual({
+      id: 'mc-a',
+      dealsPushedBack: 1,
+      totalDeals: 2,
+      pushbackRatePercent: 50
+    });
+  });
+
   it('penalizes higher financing-termination rates as a high-tier negative KPI', () => {
     const normalizedFinancingTerminationRate = new Map([
       ['mc-a', 100],
