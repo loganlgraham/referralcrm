@@ -2167,7 +2167,7 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
         <SummaryCard
           title="Deals pushed back"
           value={formatNumber(data.pushbackSummary.distinctDealsPushedBack)}
-          helper="Closed deals with at least one close-date pushback in this view."
+          helper="Closed deals updated in this timeframe/network view with at least one close-date pushback."
           extraStats={[
             {
               label: 'Total pushback events',
@@ -2182,7 +2182,7 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
         <SummaryCard
           title="Pushback rate"
           value={`${data.pushbackSummary.pushbackRatePercent.toFixed(1)}%`}
-          helper="Percent of closed deals that were pushed back in this timeframe/network view."
+          helper="Percent of closed deals updated in this timeframe/network view that had a pushback."
         />
       </div>
     </div>
