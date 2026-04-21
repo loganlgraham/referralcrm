@@ -1,7 +1,7 @@
 import { computeSlaDurations, computeSlaInsights, calculateBusinessMinutesBetween, type ReferralLike } from '@/utils/sla-insights';
 
 describe('computeSlaDurations', () => {
-  it('uses business hours for early stages and calendar time for post-communication stages', () => {
+  it('uses business hours for early stages and earliest lead date for communication-to-contract', () => {
     const createdAt = new Date('2024-01-05T23:00:00Z');
     const pairedAt = new Date('2024-01-08T17:00:00Z');
     const communicationAt = new Date('2024-01-08T19:00:00Z');
@@ -33,7 +33,7 @@ describe('computeSlaDurations', () => {
 
     expect(durationByKey['new-lead-to-paired']).toBe(180);
     expect(durationByKey['paired-to-communication']).toBe(120);
-    expect(durationByKey['communication-to-contract']).toBe(2880);
+    expect(durationByKey['communication-to-contract']).toBe(6960);
     expect(durationByKey['contract-to-close']).toBe(1440);
     expect(durationByKey['close-to-paid']).toBe(1440);
   });
@@ -98,6 +98,65 @@ describe('computeSlaDurations', () => {
     expect(contractToClose?.minutes).toBeNull();
     expect(contractToClose?.formatted).toContain('Pending');
     expect(contractToClose?.formatted).toContain('prev 30h');
+  });
+
+  it('uses historical referralDate when it is earlier than createdAt', () => {
+    const referral: ReferralLike = {
+      _id: 'ref-earlier-referral-date',
+      createdAt: '2024-01-03T00:00:00Z',
+      referralDate: '2024-01-01T00:00:00Z',
+      audit: [{ field: 'status', newValue: 'Under Contract', timestamp: '2024-01-05T00:00:00Z' }],
+    };
+
+    const durations = computeSlaDurations(referral);
+    const communicationToContract = durations.find((duration) => duration.key === 'communication-to-contract');
+
+    expect(communicationToContract?.minutes).toBe(5760);
+  });
+
+  it('uses createdAt when it is earlier than historical referralDate', () => {
+    const referral: ReferralLike = {
+      _id: 'ref-earlier-created-at',
+      createdAt: '2024-01-01T00:00:00Z',
+      referralDate: '2024-01-03T00:00:00Z',
+      audit: [{ field: 'status', newValue: 'Under Contract', timestamp: '2024-01-04T00:00:00Z' }],
+    };
+
+    const durations = computeSlaDurations(referral);
+    const communicationToContract = durations.find((duration) => duration.key === 'communication-to-contract');
+
+    expect(communicationToContract?.minutes).toBe(4320);
+  });
+
+  it('falls back to createdAt when historical referralDate is invalid', () => {
+    const referral: ReferralLike = {
+      _id: 'ref-invalid-referral-date',
+      createdAt: '2024-01-02T00:00:00Z',
+      referralDate: 'not-a-valid-date',
+      audit: [{ field: 'status', newValue: 'Under Contract', timestamp: '2024-01-04T00:00:00Z' }],
+    };
+
+    const durations = computeSlaDurations(referral);
+    const communicationToContract = durations.find((duration) => duration.key === 'communication-to-contract');
+
+    expect(communicationToContract?.minutes).toBe(2880);
+  });
+
+  it('uses farthest-back fallback date even when communication status exists', () => {
+    const referral: ReferralLike = {
+      _id: 'ref-communication-status-priority',
+      createdAt: '2024-01-02T00:00:00Z',
+      referralDate: '2024-01-01T00:00:00Z',
+      audit: [
+        { field: 'status', newValue: 'In Communication', timestamp: '2024-01-03T00:00:00Z' },
+        { field: 'status', newValue: 'Under Contract', timestamp: '2024-01-04T00:00:00Z' },
+      ],
+    };
+
+    const durations = computeSlaDurations(referral);
+    const communicationToContract = durations.find((duration) => duration.key === 'communication-to-contract');
+
+    expect(communicationToContract?.minutes).toBe(4320);
   });
 });
 

@@ -120,7 +120,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     session.user.role === 'agent' && parsed.data.status === 'Lost'
       ? sideFromAssignedDeal ?? sideFromAgent
       : sideFromAgent;
-  const requestSide: ReferralSide =
+  let requestSide: ReferralSide =
     parsed.data.side ??
     parsed.data.contractDetails?.dealSide ??
     preferredAgentSideForRequest ??
@@ -132,11 +132,20 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       clientType: referral.clientType ?? null,
     });
 
+  // Single-sided referrals must always write to their own side, regardless of
+  // what the client sent (the UI's `dealSide` field can lag behind `clientType`
+  // on Seller/Buyer referrals, which would otherwise silently update the wrong
+  // side's status and leave `referral.status` unchanged).
+  if (referral.clientType === 'Seller') {
+    requestSide = 'sell';
+  } else if (referral.clientType === 'Buyer') {
+    requestSide = 'buy';
+  }
+
   if (
     session.user.role === 'agent' &&
-    parsed.data.side &&
     sideFromAgent &&
-    parsed.data.side !== sideFromAgent
+    requestSide !== sideFromAgent
   ) {
     return NextResponse.json(
       { error: { side: ['Agents can only update statuses for their assigned side.'] } },

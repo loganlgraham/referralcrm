@@ -283,6 +283,13 @@ interface DashboardResponse {
       totalPushbackEvents: number;
       averageDaysPushedBackPerEvent: number;
       pushbackRatePercent: number;
+      byMc: Array<{
+        id: string;
+        name: string;
+        dealsPushedBack: number;
+        totalDeals: number;
+        pushbackRatePercent: number;
+      }>;
     };
     revenueLeaderboard: LeaderboardEntry[];
     closeRateLeaderboard: LeaderboardEntry[];
@@ -2163,27 +2170,110 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
         <McCloseEffectivenessTable entries={data.closeRateLeaderboard} />
         <McOutsideLenderLossTable entries={data.outsideLenderLossLeaderboard} />
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        <SummaryCard
-          title="Deals pushed back"
-          value={formatNumber(data.pushbackSummary.distinctDealsPushedBack)}
-          helper="Closed deals with at least one close-date pushback in this view."
-          extraStats={[
-            {
-              label: 'Total pushback events',
-              value: formatNumber(data.pushbackSummary.totalPushbackEvents)
-            },
-            {
-              label: 'Avg. days pushed back',
-              value: `${data.pushbackSummary.averageDaysPushedBackPerEvent.toFixed(1)} days`
-            }
-          ]}
-        />
-        <SummaryCard
-          title="Pushback rate"
-          value={`${data.pushbackSummary.pushbackRatePercent.toFixed(1)}%`}
-          helper="Percent of closed deals that were pushed back in this timeframe/network view."
-        />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <PushbackSummaryCard summary={data.pushbackSummary} />
+        <McPushbackLeaderboardTable entries={data.pushbackSummary.byMc} />
+      </div>
+    </div>
+  );
+}
+
+function PushbackSummaryCard({
+  summary
+}: {
+  summary: DashboardResponse['mc']['pushbackSummary'];
+}) {
+  const rate = summary.pushbackRatePercent.toFixed(1);
+  const avgDays = summary.averageDaysPushedBackPerEvent.toFixed(1);
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        Deals pushed back
+      </p>
+      <div className="mt-2 flex items-baseline gap-3">
+        <p className="text-2xl font-semibold text-slate-900">
+          {formatNumber(summary.distinctDealsPushedBack)}
+        </p>
+        <p className="text-sm font-medium text-slate-500">{rate}% pushback rate</p>
+      </div>
+      <p className="mt-1 text-xs text-slate-500">
+        Any deal whose closing date was moved to a later date in this timeframe/network view.
+        Rate = pushed-back deals / all active or closed deals.
+      </p>
+      <dl className="mt-3 grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-slate-50 px-2 py-1">
+          <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Total pushback events
+          </dt>
+          <dd className="text-sm font-semibold text-slate-900">
+            {formatNumber(summary.totalPushbackEvents)}
+          </dd>
+        </div>
+        <div className="rounded-lg bg-slate-50 px-2 py-1">
+          <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Avg. days pushed back
+          </dt>
+          <dd className="text-sm font-semibold text-slate-900">{avgDays} days</dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
+function McPushbackLeaderboardTable({
+  entries
+}: {
+  entries: DashboardResponse['mc']['pushbackSummary']['byMc'];
+}) {
+  const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        Pushbacks by MC
+      </p>
+      <p className="mt-1 text-xs text-slate-500">
+        MCs with at least one deal whose closing date was moved later in this timeframe.
+      </p>
+      <div
+        className="mt-4 overflow-y-auto"
+        style={entries.length ? { maxHeight: scrollMaxHeight } : undefined}
+        aria-label={entries.length ? 'Scrollable list: Pushbacks by MC' : undefined}
+      >
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 z-[1] bg-white shadow-[inset_0_-1px_0_0_rgb(241_245_249)]">
+            <tr className="text-left text-xs text-slate-500">
+              <th className="py-1 font-medium">Rank</th>
+              <th className="py-1 font-medium">MC</th>
+              <th className="py-1 font-medium text-right">Deals pushed back</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.length ? (
+              entries.map((entry, index) => (
+                <tr
+                  key={`${entry.id}-${index}`}
+                  className="border-t border-slate-100 text-slate-700"
+                >
+                  <td className="py-2 text-slate-400">#{index + 1}</td>
+                  <td className="py-2 font-medium text-slate-900">{entry.name}</td>
+                  <td className="py-2 text-right">
+                    <p>{`${formatNumber(entry.dealsPushedBack)} (${entry.pushbackRatePercent.toFixed(1)}%)`}</p>
+                    <p className="text-xs text-slate-500">
+                      {`${formatNumber(entry.dealsPushedBack)} / ${formatNumber(entry.totalDeals)} deals`}
+                    </p>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={3} className="py-6 text-center text-sm text-slate-500">
+                  No deals have been pushed back in this timeframe.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

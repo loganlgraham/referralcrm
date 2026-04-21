@@ -1118,7 +1118,7 @@ export function ReferralHeader({
                     status={status}
                     statuses={REFERRAL_STATUSES}
                     includeTerminalStatuses={viewerRole === 'admin'}
-                    side={dealSide}
+                    side={primarySide}
                     preApprovalAmountCents={preApprovalAmountCents}
                     onStatusChanged={handleStatusChanged}
                     onPreApprovalSaved={handlePreApprovalSaved}

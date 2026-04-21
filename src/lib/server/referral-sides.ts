@@ -116,15 +116,21 @@ export const resolveAgentSideForReferral = (
 };
 
 export const pickPrimarySideForReferral = (referral: ReferralSideSource): ReferralSide => {
+  // clientType is the strongest signal for single-sided referrals; it must win
+  // over `dealSide`, which can drift (e.g. schema default of 'buy' on a Seller
+  // referral). `Both` falls through to the dealSide/agent heuristics below.
+  if (referral.clientType === 'Seller') {
+    return 'sell';
+  }
+  if (referral.clientType === 'Buyer') {
+    return 'buy';
+  }
+
   if (referral.dealSide === 'sell') {
     return 'sell';
   }
   if (referral.dealSide === 'buy') {
     return 'buy';
-  }
-
-  if (referral.clientType === 'Seller') {
-    return 'sell';
   }
 
   const hasBuy = Boolean(toId(referral.buySideAgent));

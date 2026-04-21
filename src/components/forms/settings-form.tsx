@@ -543,7 +543,9 @@ export function SettingsForm() {
               className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
             >
               <option>This week</option>
+              <option>Last week</option>
               <option>This month</option>
+              <option>Last month</option>
               <option>Last 90 days</option>
               <option>Year to date</option>
               <option>All</option>

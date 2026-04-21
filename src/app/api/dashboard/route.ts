@@ -44,6 +44,7 @@ import {
   computeAhaReliabilityFactor,
   normalizeAhaKpiMap
 } from '@/lib/server/aha-leaderboard-scoring';
+import { resolvePushbackMetricsInTimeframe } from '@/lib/server/pushback-metrics';
 
 type TimeframeKey = 'day' | 'week' | 'month' | 'next_month' | 'year' | 'ytd' | 'all' | 'custom';
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
@@ -288,6 +289,11 @@ const CLOSED_DEAL_STATUSES = new Set<AggregatedPayment['status']>([
   'closed',
   'payment_sent',
   'paid'
+]);
+
+const NON_TERMINATED_DEAL_STATUSES = new Set<AggregatedPayment['status']>([
+  ...UNDER_CONTRACT_STATUSES,
+  ...CLOSED_DEAL_STATUSES
 ]);
 
 const isClosedDealEligible = (payment: AggregatedPayment): boolean =>
@@ -1071,7 +1077,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           distinctDealsPushedBack: 0,
           totalPushbackEvents: 0,
           averageDaysPushedBackPerEvent: 0,
-          pushbackRatePercent: 0
+          pushbackRatePercent: 0,
+          byMc: []
         }
       },
       agent: {
@@ -1429,12 +1436,30 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!isClosedDealEligible(payment)) return false;
     return true;
   });
-  const allClosedDealsInTimeframe = paymentsByNetwork.filter((payment) => {
+  const allClosedDealsInNetwork = paymentsByNetwork.filter((payment) => CLOSED_DEAL_STATUSES.has(payment.status));
+  const allClosedDealsInTimeframe = allClosedDealsInNetwork.filter((payment) => {
     const metricDate = payment.metricDate ?? resolveMetricDate(payment);
     if (!metricDate) return false;
     if (timeframeStart && metricDate < timeframeStart) return false;
     if (timeframeEnd && metricDate > timeframeEnd) return false;
-    return CLOSED_DEAL_STATUSES.has(payment.status);
+    return true;
+  });
+  const allClosedDealsInPushbackWindow = allClosedDealsInNetwork.filter((payment) => {
+    // Pushback metrics should react to recent activity, not only close/invoice/paid dates.
+    return isWithinTimeframe(payment.updatedAt);
+  });
+  // Pushback metrics must count any non-terminated deal whose closing date was moved,
+  // not just already-closed deals. Include events where the pushback timestamp falls in
+  // the timeframe even if the payment itself hasn't been updated since.
+  const pushbackEventInTimeframe = (payment: AggregatedPayment): boolean => {
+    if (!Array.isArray(payment.closingDatePushbacks)) return false;
+    return payment.closingDatePushbacks.some((entry) =>
+      entry?.timestamp ? isWithinTimeframe(entry.timestamp) : false
+    );
+  };
+  const allDealsInPushbackWindow = paymentsByNetwork.filter((payment) => {
+    if (!NON_TERMINATED_DEAL_STATUSES.has(payment.status)) return false;
+    return isWithinTimeframe(payment.updatedAt) || pushbackEventInTimeframe(payment);
   });
 
   const closedDealReferralIds = new Set(
@@ -2512,12 +2537,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     string,
     { dealsWithPushback: number; totalPushbackEvents: number; totalPushedBackDays: number }
   >();
+  const mcEligibleDealsForPushbackRateMap = new Map<string, number>();
   let mcDistinctDealsPushedBack = 0;
   let mcTotalPushbackEvents = 0;
   let mcTotalPushbackDays = 0;
-  let mcClosedDealsInScope = 0;
-  allClosedDealsInTimeframe.forEach((payment) => {
-    mcClosedDealsInScope += 1;
+  let mcEligibleDealsForPushbackInScope = 0;
+
+  // Closed-only pass: AFC capture, close velocity, and forecast accuracy only make
+  // sense once a deal has actually closed, so leave them scoped to CLOSED_DEAL_STATUSES.
+  allClosedDealsInPushbackWindow.forEach((payment) => {
     const key = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     const pairedAtRaw = payment.referral?.sla?.lastPairedAt;
     const closingDate = resolveClosingDate(payment);
@@ -2557,19 +2585,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     forecastCurrent.expected += Math.max(payment.expectedAmountCents ?? 0, 0);
     forecastCurrent.realized += Math.max(payment.receivedAmountCents ?? 0, 0);
     mcForecastMap.set(key, forecastCurrent);
+  });
 
-    const pushbackCountRaw =
-      typeof payment.closingDatePushbackCount === 'number' && payment.closingDatePushbackCount > 0
-        ? payment.closingDatePushbackCount
-        : 0;
-    const pushbackEntries = Array.isArray(payment.closingDatePushbacks)
-      ? payment.closingDatePushbacks.filter(
-          (entry) => typeof entry?.pushedBackDays === 'number' && entry.pushedBackDays > 0
-        )
-      : [];
-    const pushbackEvents = Math.max(pushbackCountRaw, pushbackEntries.length);
+  // Pushback pass: any non-terminated deal whose closing date was moved later counts,
+  // whether the deal is still under contract or already closed.
+  allDealsInPushbackWindow.forEach((payment) => {
+    mcEligibleDealsForPushbackInScope += 1;
+    const key = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
+    mcEligibleDealsForPushbackRateMap.set(
+      key,
+      (mcEligibleDealsForPushbackRateMap.get(key) ?? 0) + 1
+    );
+
+    const { events: pushbackEvents, pushedBackDays } = resolvePushbackMetricsInTimeframe(payment, timeframe);
     if (pushbackEvents > 0) {
-      const pushedBackDays = pushbackEntries.reduce((sum, entry) => sum + (entry.pushedBackDays ?? 0), 0);
       const current = mcPushbackStatsMap.get(key) ?? {
         dealsWithPushback: 0,
         totalPushbackEvents: 0,
@@ -2794,16 +2823,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       mcKpiDisplayMap.afcCaptureRate.set(id, `${afcRate.toFixed(1)}%`);
     }
 
-    if (totalClosedDeals > 0) {
+    const totalEligibleDealsForPushbackRate = mcEligibleDealsForPushbackRateMap.get(id) ?? 0;
+    if (totalEligibleDealsForPushbackRate > 0) {
       const pushbackStats = mcPushbackStatsMap.get(id);
       const dealsWithPushback = pushbackStats?.dealsWithPushback ?? 0;
-      const dealPushbackRate = (dealsWithPushback / totalClosedDeals) * 100;
+      const dealPushbackRate = (dealsWithPushback / totalEligibleDealsForPushbackRate) * 100;
       mcKpiRaw.dealPushbackRate.set(id, dealPushbackRate);
       mcKpiDisplayMap.dealPushbackRate.set(
         id,
-        `${dealPushbackRate.toFixed(1)}% (${dealsWithPushback}/${totalClosedDeals})`
+        `${dealPushbackRate.toFixed(1)}% (${dealsWithPushback}/${totalEligibleDealsForPushbackRate})`
       );
+    }
 
+    if (totalClosedDeals > 0) {
       const noAfcCloseRate = ((mcNoAfcClosesMap.get(id) ?? 0) / totalClosedDeals) * 100;
       mcKpiRaw.noAfcCloseRate.set(id, noAfcCloseRate);
       mcKpiDisplayMap.noAfcCloseRate.set(id, `${noAfcCloseRate.toFixed(1)}%`);
@@ -4176,7 +4208,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         averageDaysPushedBackPerEvent:
           mcTotalPushbackEvents > 0 ? mcTotalPushbackDays / mcTotalPushbackEvents : 0,
         pushbackRatePercent:
-          mcClosedDealsInScope > 0 ? (mcDistinctDealsPushedBack / mcClosedDealsInScope) * 100 : 0
+          mcEligibleDealsForPushbackInScope > 0
+            ? (mcDistinctDealsPushedBack / mcEligibleDealsForPushbackInScope) * 100
+            : 0,
+        byMc: Array.from(mcPushbackStatsMap.entries())
+          .filter(([id, stats]) => id !== 'unassigned' && stats.dealsWithPushback > 0)
+          .map(([id, stats]) => {
+            const totalDeals = mcEligibleDealsForPushbackRateMap.get(id) ?? 0;
+            const pushbackRatePercent =
+              totalDeals > 0 ? (stats.dealsWithPushback / totalDeals) * 100 : 0;
+            return {
+              id,
+              name: lenderNameMap.get(id) ?? 'Unknown MC',
+              dealsPushedBack: stats.dealsWithPushback,
+              totalDeals,
+              pushbackRatePercent
+            };
+          })
+          .sort(
+            (a, b) =>
+              b.dealsPushedBack - a.dealsPushedBack ||
+              b.pushbackRatePercent - a.pushbackRatePercent
+          )
       }
     },
     agent: {

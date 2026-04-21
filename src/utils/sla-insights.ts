@@ -65,6 +65,7 @@ export interface SlaInsights {
 export interface ReferralLike {
   _id: string;
   createdAt?: string | Date;
+  referralDate?: string | Date | null;
   status?: string;
   statusLastUpdated?: string | Date | null;
   daysInStatus?: number;
@@ -233,10 +234,33 @@ const resolveEffectiveStatus = (
 
 const resolveCommunicationStart = (
   getFirstStatusTimestamp: ReturnType<typeof buildStatusLookup>,
-  createdAt: Date,
+  fallbackStart: Date,
   pairedAt: Date | null
 ): Date | null => {
-  return getFirstStatusTimestamp('In Communication') ?? pairedAt ?? createdAt ?? null;
+  return getFirstStatusTimestamp('In Communication') ?? pairedAt ?? fallbackStart ?? null;
+};
+
+const isValidDate = (value: Date | null): value is Date =>
+  value !== null && !Number.isNaN(value.getTime());
+
+const resolveReferralStartFallback = (referral: ReferralLike, createdAt: Date): Date => {
+  const referralDate = parseTimestamp(referral.referralDate);
+  if (!isValidDate(referralDate)) {
+    return createdAt;
+  }
+
+  return referralDate.getTime() < createdAt.getTime() ? referralDate : createdAt;
+};
+
+const resolveEarliestStart = (first: Date | null, second: Date | null): Date | null => {
+  if (!first) {
+    return second;
+  }
+  if (!second) {
+    return first;
+  }
+
+  return first.getTime() <= second.getTime() ? first : second;
 };
 
 const formatDateKey = (date: Date): string => formatInTimeZone(date, SLA_TIME_ZONE, 'yyyy-MM-dd');
@@ -485,6 +509,7 @@ const getLatestNoteTimestamp = (notes: NoteLike[] | undefined): Date | null => {
 
 export const computeSlaDurations = (referral: ReferralLike): SlaDuration[] => {
   const createdAt = parseTimestamp(referral.createdAt) ?? new Date();
+  const fallbackStart = resolveReferralStartFallback(referral, createdAt);
   const auditEntries = Array.isArray(referral.audit) ? referral.audit : [];
   const getFirstStatusTimestamp = buildStatusLookup(referral, auditEntries);
   const pairedAt = getFirstStatusTimestamp('Paired');
@@ -524,7 +549,10 @@ export const computeSlaDurations = (referral: ReferralLike): SlaDuration[] => {
   const dealClosedAt = findFirstDealClosedTimestamp(deals) ?? getFirstStatusTimestamp('Closed');
   const dealPaidAt = findFirstDealPaidTimestamp(deals);
 
-  const communicationStart = resolveCommunicationStart(getFirstStatusTimestamp, createdAt, pairedAt);
+  const communicationStart = resolveEarliestStart(
+    resolveCommunicationStart(getFirstStatusTimestamp, fallbackStart, pairedAt),
+    fallbackStart
+  );
   const newLeadToPaired = minutesBetween(createdAt, pairedAt, { businessHoursOnly: true });
   const pairedToCommunication = minutesBetween(pairedAt, inCommunicationAt ?? communicationStart, {
     businessHoursOnly: true,
@@ -633,10 +661,11 @@ const buildSlaClock = (
   lastCompletedAt: Date | null
 ): { statusLastUpdated: Date; createdAt: Date; status: string; lastCompletedAt: Date | null } => {
   const createdAt = parseTimestamp(referral.createdAt) ?? new Date();
+  const fallbackStart = resolveReferralStartFallback(referral, createdAt);
   const auditEntries = Array.isArray(referral.audit) ? referral.audit : [];
   const getFirstStatusTimestamp = buildStatusLookup(referral, auditEntries);
   const pairedAt = getFirstStatusTimestamp('Paired');
-  const communicationStart = resolveCommunicationStart(getFirstStatusTimestamp, createdAt, pairedAt);
+  const communicationStart = resolveCommunicationStart(getFirstStatusTimestamp, fallbackStart, pairedAt);
   const { status, updatedAt } = resolveEffectiveStatus(referral);
   const rawUpdatedAt = (() => {
     if (status === 'In Communication' || ACTIVE_LEAD_STATUSES.has(status)) {

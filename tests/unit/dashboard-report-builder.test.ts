@@ -3,7 +3,7 @@ import { Types } from 'mongoose';
 
 const referralFindMock = jest.fn();
 const referralAggregateMock = jest.fn();
-const paymentDistinctMock = jest.fn();
+const paymentFindMock = jest.fn();
 const agentFindMock = jest.fn();
 const lenderFindMock = jest.fn();
 
@@ -16,7 +16,7 @@ jest.mock('@/models/referral', () => ({
 
 jest.mock('@/models/payment', () => ({
   Payment: {
-    distinct: (...args: unknown[]) => paymentDistinctMock(...args)
+    find: (...args: unknown[]) => paymentFindMock(...args)
   }
 }));
 
@@ -46,7 +46,7 @@ describe('buildDashboardReport', () => {
     jest.resetAllMocks();
     referralFindMock.mockReturnValue(buildLeanQuery([]));
     referralAggregateMock.mockResolvedValue([]);
-    paymentDistinctMock.mockResolvedValue([]);
+    paymentFindMock.mockReturnValue(buildLeanQuery([]));
     agentFindMock.mockReturnValue(buildLeanQuery([]));
     lenderFindMock.mockReturnValue(buildLeanQuery([]));
   });
@@ -110,11 +110,12 @@ describe('buildDashboardReport', () => {
     expect(section?.rows[0].value).toBe('$8,000');
   });
 
-  it('buckets referrals by network with Unpaired/AHA/AHA OOS/AFC', async () => {
+  it('buckets referrals by network with Unpaired/AHA/AHA OOS/AGIT and drops unmatched paired referrals', async () => {
     mockDashboardResponse();
     const agentAhaId = new Types.ObjectId();
     const agentOosId = new Types.ObjectId();
-    const agentAfcId = new Types.ObjectId();
+    const agentAgitId = new Types.ObjectId();
+    const agentUndesignatedId = new Types.ObjectId();
 
     referralFindMock.mockReturnValueOnce(
       buildLeanQuery([
@@ -124,8 +125,10 @@ describe('buildDashboardReport', () => {
         { _id: new Types.ObjectId(), lender: new Types.ObjectId(), ahaBucket: null, org: 'AHA', assignedAgent: agentAhaId },
         // Paired + AHA_OOS agent
         { _id: new Types.ObjectId(), lender: new Types.ObjectId(), ahaBucket: null, org: 'AHA', assignedAgent: agentOosId },
-        // Paired + AFC fallback (no AHA designation)
-        { _id: new Types.ObjectId(), lender: new Types.ObjectId(), ahaBucket: null, org: 'AFC', assignedAgent: agentAfcId },
+        // Paired + AGIT agent
+        { _id: new Types.ObjectId(), lender: new Types.ObjectId(), ahaBucket: null, org: 'AFC', assignedAgent: agentAgitId },
+        // Paired + agent with no AHA designation and no AHA signal -> dropped
+        { _id: new Types.ObjectId(), lender: new Types.ObjectId(), ahaBucket: null, org: 'AFC', assignedAgent: agentUndesignatedId },
         // Paired + ahaBucket signal even without agent
         { _id: new Types.ObjectId(), lender: new Types.ObjectId(), ahaBucket: 'AHA_OOS', org: 'AFC', assignedAgent: null }
       ])
@@ -135,7 +138,8 @@ describe('buildDashboardReport', () => {
       buildLeanQuery([
         { _id: agentAhaId, ahaDesignation: 'AHA' },
         { _id: agentOosId, ahaDesignation: 'AHA_OOS' },
-        { _id: agentAfcId, ahaDesignation: null }
+        { _id: agentAgitId, ahaDesignation: 'AGIT' },
+        { _id: agentUndesignatedId, ahaDesignation: null }
       ])
     );
 
@@ -155,7 +159,7 @@ describe('buildDashboardReport', () => {
     expect(rows).toEqual({
       AHA: '1',
       'AHA OOS': '2',
-      AFC: '1',
+      AGIT: '1',
       Unpaired: '1'
     });
   });
@@ -194,9 +198,34 @@ describe('buildDashboardReport', () => {
     ]);
   });
 
-  it('summary section uses canonical KPIs and includes Under Contract count', async () => {
+  it('summary section splits Under Contract into attached/total with AHA/AHA OOS/AGIT breakdown', async () => {
     mockDashboardResponse();
-    paymentDistinctMock.mockResolvedValueOnce([new Types.ObjectId(), new Types.ObjectId()]);
+
+    const referralAhaId = new Types.ObjectId();
+    const referralAgitId = new Types.ObjectId();
+    const agentAhaId = new Types.ObjectId();
+    const agentAgitId = new Types.ObjectId();
+
+    paymentFindMock.mockReturnValueOnce(
+      buildLeanQuery([
+        { referralId: referralAhaId, usedAssignedAgent: true, agentId: agentAhaId },
+        { referralId: referralAgitId, usedAssignedAgent: true, agentId: agentAgitId }
+      ])
+    );
+
+    referralFindMock.mockReturnValueOnce(
+      buildLeanQuery([
+        { _id: referralAhaId, assignedAgent: agentAhaId },
+        { _id: referralAgitId, assignedAgent: agentAgitId }
+      ])
+    );
+
+    agentFindMock.mockReturnValueOnce(
+      buildLeanQuery([
+        { _id: agentAhaId, ahaDesignation: 'AHA' },
+        { _id: agentAgitId, ahaDesignation: 'AGIT' }
+      ])
+    );
 
     const { buildDashboardReport } = await import('@/lib/server/dashboard-report');
 
@@ -212,7 +241,11 @@ describe('buildDashboardReport', () => {
     const rows = Object.fromEntries((summary?.rows ?? []).map((row) => [row.label, row.value]));
     expect(rows['Total referrals']).toBe('53');
     expect(rows['Deals closed (in period)']).toBe('4');
-    expect(rows['Referrals that entered Under Contract']).toBe('2');
+    expect(rows['Referrals that entered Under Contract (used assigned agent)']).toBe('2');
+    expect(rows['  - AHA']).toBe('1');
+    expect(rows['  - AHA OOS']).toBe('0');
+    expect(rows['  - AGIT']).toBe('1');
+    expect(rows['Referrals that entered Under Contract (total)']).toBe('2');
     expect(rows['Close rate']).toBe('7.5%');
     expect(rows['Revenue received']).toBe('$12,000');
     expect(rows['Expected revenue (outstanding)']).toBe('$46,208');

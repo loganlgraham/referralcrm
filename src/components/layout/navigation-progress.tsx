@@ -56,10 +56,33 @@ export function NavigationProgress() {
 
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
+      // Skip clicks that don't navigate the current tab: modifier-key clicks
+      // (open in new tab/window), non-left-button clicks, or clicks that have
+      // already been cancelled.
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
+        return;
+      }
+
       const target = event.target as HTMLElement | null;
       const anchor = target?.closest('a');
 
-      if (anchor instanceof HTMLAnchorElement && isInternalNavigation(anchor) && !isSameLocation(anchor.href)) {
+      if (!(anchor instanceof HTMLAnchorElement)) {
+        return;
+      }
+
+      const anchorTarget = anchor.target;
+      if (anchorTarget && anchorTarget !== '_self') {
+        return;
+      }
+
+      if (isInternalNavigation(anchor) && !isSameLocation(anchor.href)) {
         start();
       }
     };
@@ -81,16 +104,16 @@ export function NavigationProgress() {
         return method.apply(this, args as never);
       };
 
+    // Note: no popstate listener. Next.js App Router updates pathname/searchParams
+    // synchronously from the router cache on back/forward navigation, so the
+    // pathname effect below already transitions the bar to idle. Calling start()
+    // on popstate fires AFTER that transition and leaves the bar stuck.
     history.pushState = wrapHistoryMethod(originalPushState);
     history.replaceState = wrapHistoryMethod(originalReplaceState);
-
-    const handlePopState = () => start();
-    window.addEventListener('popstate', handlePopState);
 
     return () => {
       history.pushState = originalPushState;
       history.replaceState = originalReplaceState;
-      window.removeEventListener('popstate', handlePopState);
     };
   }, []);
 

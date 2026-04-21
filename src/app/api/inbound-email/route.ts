@@ -177,6 +177,13 @@ function stripHtmlTags(html: string): string {
     .trim();
 }
 
+function normalizeInboundTextBreaks(text: string): string {
+  return text
+    .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+    .replace(/<\/\s*(p|div|tr|li|h[1-6])\s*>/gi, '\n')
+    .replace(/&nbsp;/gi, ' ');
+}
+
 function pickEmailAddress(value: unknown): string | undefined {
   if (typeof value === 'string') {
     return value;
@@ -654,7 +661,8 @@ function parseInboundReferralFields(fields: Record<string, string>): ParsedInbou
   const endorser = (fields.endorser || fields.enendorser || '').trim();
   const notes = (fields.notes || '').trim();
   const mcValue = (fields.mc || fields.source || '').trim();
-  const loanFileNumber = (fields.loannumber || fields.loannum || '').replace(/\D+/g, '');
+  const rawLoanDigits = (fields.loannumber || fields.loannum || '').replace(/\D+/g, '');
+  const loanFileNumber = rawLoanDigits.slice(0, 11);
   const clientTypeRaw = (fields.dealtype || '').toLowerCase();
   const clientType: 'Seller' | 'Buyer' = clientTypeRaw.includes('sell') ? 'Seller' : 'Buyer';
 
@@ -834,7 +842,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ status: 'ignored', reason: 'route_hint_unmatched' }, { status: 202 });
   }
 
-  const extractedFields = extractLabeledFields(email.text);
+  const extractedFields = extractLabeledFields(normalizeInboundTextBreaks(email.text));
   let parsedFields = parseInboundReferralFields(extractedFields);
   let aiFallbackAttempted = false;
   let aiFallbackApplied = false;

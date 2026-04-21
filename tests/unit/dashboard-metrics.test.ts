@@ -16,6 +16,7 @@ import {
   computeAhaReliabilityFactor,
   normalizeAhaKpiMap
 } from '@/lib/server/aha-leaderboard-scoring';
+import { resolvePushbackMetricsInTimeframe } from '@/lib/server/pushback-metrics';
 
 describe('Dashboard Metrics - Close Rate Calculation', () => {
   it('calculates close rate correctly when referrals and deals are in same timeframe', () => {
@@ -879,31 +880,39 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
   });
 
-  it('calculates pushback summary metrics from closed deals', () => {
-    const allClosedDealsInTimeframe = [
-      { closingDatePushbackCount: 0, closingDatePushbacks: [] },
+  it('calculates pushback summary metrics from closed deals updated in timeframe', () => {
+    const timeframe = {
+      start: new Date('2026-04-01T00:00:00.000Z'),
+      end: new Date('2026-04-30T23:59:59.999Z')
+    };
+    const allClosedDealsInPushbackWindow = [
       {
-        closingDatePushbackCount: 1,
-        closingDatePushbacks: [{ pushedBackDays: 6 }]
+        updatedAt: new Date('2026-04-05T10:00:00.000Z'),
+        closingDatePushbackCount: 0,
+        closingDatePushbacks: []
       },
       {
+        updatedAt: new Date('2026-04-10T10:00:00.000Z'),
+        closingDatePushbackCount: 1,
+        closingDatePushbacks: [{ pushedBackDays: 6, timestamp: new Date('2026-04-10T10:00:00.000Z') }]
+      },
+      {
+        updatedAt: new Date('2026-04-12T10:00:00.000Z'),
         closingDatePushbackCount: 2,
-        closingDatePushbacks: [{ pushedBackDays: 4 }, { pushedBackDays: 3 }]
+        closingDatePushbacks: [
+          { pushedBackDays: 4, timestamp: new Date('2026-04-11T10:00:00.000Z') },
+          { pushedBackDays: 3, timestamp: new Date('2026-04-12T10:00:00.000Z') }
+        ]
       }
     ];
 
-    const totals = allClosedDealsInTimeframe.reduce(
+    const totals = allClosedDealsInPushbackWindow.reduce(
       (acc, payment) => {
-        const pushbackEntries = Array.isArray(payment.closingDatePushbacks)
-          ? payment.closingDatePushbacks.filter(
-              (entry) => typeof entry?.pushedBackDays === 'number' && entry.pushedBackDays > 0
-            )
-          : [];
-        const pushbackEvents = Math.max(payment.closingDatePushbackCount ?? 0, pushbackEntries.length);
-        if (pushbackEvents > 0) {
+        const scopedPushback = resolvePushbackMetricsInTimeframe(payment, timeframe);
+        if (scopedPushback.events > 0) {
           acc.distinctDealsPushedBack += 1;
-          acc.totalPushbackEvents += pushbackEvents;
-          acc.totalPushbackDays += pushbackEntries.reduce((sum, entry) => sum + (entry.pushedBackDays ?? 0), 0);
+          acc.totalPushbackEvents += scopedPushback.events;
+          acc.totalPushbackDays += scopedPushback.pushedBackDays;
         }
         return acc;
       },
@@ -913,14 +922,183 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     const averageDaysPushedBackPerEvent =
       totals.totalPushbackEvents > 0 ? totals.totalPushbackDays / totals.totalPushbackEvents : 0;
     const pushbackRatePercent =
-      allClosedDealsInTimeframe.length > 0
-        ? (totals.distinctDealsPushedBack / allClosedDealsInTimeframe.length) * 100
+      allClosedDealsInPushbackWindow.length > 0
+        ? (totals.distinctDealsPushedBack / allClosedDealsInPushbackWindow.length) * 100
         : 0;
 
     expect(totals.distinctDealsPushedBack).toBe(2);
     expect(totals.totalPushbackEvents).toBe(3);
     expect(averageDaysPushedBackPerEvent).toBeCloseTo(4.33, 2);
     expect(pushbackRatePercent).toBeCloseTo(66.67, 2);
+  });
+
+  it('uses pushback event timestamps for timeframe scoping', () => {
+    const timeframe = {
+      start: new Date('2026-04-01T00:00:00.000Z'),
+      end: new Date('2026-04-30T23:59:59.999Z')
+    };
+    const scopedPushback = resolvePushbackMetricsInTimeframe(
+      {
+        updatedAt: new Date('2026-04-10T10:00:00.000Z'),
+        closingDatePushbackCount: 2,
+        closingDatePushbacks: [
+          { pushedBackDays: 5, timestamp: new Date('2026-04-08T10:00:00.000Z') },
+          { pushedBackDays: 4, timestamp: new Date('2026-03-20T10:00:00.000Z') }
+        ]
+      },
+      timeframe
+    );
+
+    expect(scopedPushback.events).toBe(1);
+    expect(scopedPushback.pushedBackDays).toBe(5);
+  });
+
+  it('falls back to updatedAt when pushback history is incomplete', () => {
+    const timeframe = {
+      start: new Date('2026-04-01T00:00:00.000Z'),
+      end: new Date('2026-04-30T23:59:59.999Z')
+    };
+    const scopedPushback = resolvePushbackMetricsInTimeframe(
+      {
+        updatedAt: new Date('2026-04-13T10:00:00.000Z'),
+        closingDatePushbackCount: 2,
+        closingDatePushbacks: [{ pushedBackDays: 3, timestamp: new Date('2026-04-13T10:00:00.000Z') }]
+      },
+      timeframe
+    );
+
+    expect(scopedPushback.events).toBe(2);
+    expect(scopedPushback.pushedBackDays).toBe(3);
+  });
+
+  it('counts a five-day pushback as a non-zero in-range event', () => {
+    const timeframe = {
+      start: new Date('2026-04-01T00:00:00.000Z'),
+      end: new Date('2026-04-30T23:59:59.999Z')
+    };
+    const scopedPushback = resolvePushbackMetricsInTimeframe(
+      {
+        updatedAt: new Date('2026-04-18T10:00:00.000Z'),
+        closingDatePushbackCount: 1,
+        closingDatePushbacks: [{ pushedBackDays: 5, timestamp: new Date('2026-04-18T10:00:00.000Z') }]
+      },
+      timeframe
+    );
+
+    expect(scopedPushback.events).toBe(1);
+    expect(scopedPushback.pushedBackDays).toBe(5);
+  });
+
+  it('counts under-contract deals with pushed-back closing dates and builds a per-MC breakdown', () => {
+    const NON_TERMINATED_DEAL_STATUSES = new Set([
+      'under_contract',
+      'past_inspection',
+      'past_appraisal',
+      'clear_to_close',
+      'closed',
+      'payment_sent',
+      'paid'
+    ]);
+    const timeframe = {
+      start: new Date('2026-04-01T00:00:00.000Z'),
+      end: new Date('2026-04-30T23:59:59.999Z')
+    };
+    const isWithinTimeframe = (value: Date | null | undefined) => {
+      if (!value) return false;
+      const candidate = value instanceof Date ? value : new Date(value);
+      if (Number.isNaN(candidate.getTime())) return false;
+      if (timeframe.start && candidate < timeframe.start) return false;
+      if (timeframe.end && candidate > timeframe.end) return false;
+      return true;
+    };
+    type TestPayment = {
+      status: string;
+      updatedAt: Date;
+      lender: string;
+      closingDatePushbackCount: number;
+      closingDatePushbacks: Array<{ pushedBackDays: number; timestamp: Date }>;
+    };
+    const paymentsByNetwork: TestPayment[] = [
+      {
+        status: 'under_contract',
+        updatedAt: new Date('2026-04-11T10:00:00.000Z'),
+        lender: 'mc-a',
+        closingDatePushbackCount: 1,
+        closingDatePushbacks: [{ pushedBackDays: 7, timestamp: new Date('2026-04-11T10:00:00.000Z') }]
+      },
+      {
+        status: 'under_contract',
+        updatedAt: new Date('2026-04-12T10:00:00.000Z'),
+        lender: 'mc-b',
+        closingDatePushbackCount: 0,
+        closingDatePushbacks: []
+      },
+      {
+        status: 'closed',
+        updatedAt: new Date('2026-04-14T10:00:00.000Z'),
+        lender: 'mc-a',
+        closingDatePushbackCount: 0,
+        closingDatePushbacks: []
+      },
+      {
+        status: 'terminated',
+        updatedAt: new Date('2026-04-15T10:00:00.000Z'),
+        lender: 'mc-c',
+        closingDatePushbackCount: 1,
+        closingDatePushbacks: [{ pushedBackDays: 4, timestamp: new Date('2026-04-15T10:00:00.000Z') }]
+      }
+    ];
+    const pushbackEventInTimeframe = (payment: TestPayment) =>
+      payment.closingDatePushbacks.some((entry) => isWithinTimeframe(entry.timestamp));
+    const allDealsInPushbackWindow = paymentsByNetwork.filter(
+      (payment) =>
+        NON_TERMINATED_DEAL_STATUSES.has(payment.status) &&
+        (isWithinTimeframe(payment.updatedAt) || pushbackEventInTimeframe(payment))
+    );
+
+    const mcPushbackStatsMap = new Map<string, { dealsWithPushback: number }>();
+    const mcEligibleDealsMap = new Map<string, number>();
+    let distinctDealsPushedBack = 0;
+    let eligibleDealsInScope = 0;
+    allDealsInPushbackWindow.forEach((payment) => {
+      eligibleDealsInScope += 1;
+      mcEligibleDealsMap.set(payment.lender, (mcEligibleDealsMap.get(payment.lender) ?? 0) + 1);
+      const scoped = resolvePushbackMetricsInTimeframe(payment, timeframe);
+      if (scoped.events > 0) {
+        const current = mcPushbackStatsMap.get(payment.lender) ?? { dealsWithPushback: 0 };
+        current.dealsWithPushback += 1;
+        mcPushbackStatsMap.set(payment.lender, current);
+        distinctDealsPushedBack += 1;
+      }
+    });
+    const pushbackRatePercent =
+      eligibleDealsInScope > 0 ? (distinctDealsPushedBack / eligibleDealsInScope) * 100 : 0;
+    const byMc = Array.from(mcPushbackStatsMap.entries())
+      .filter(([, stats]) => stats.dealsWithPushback > 0)
+      .map(([id, stats]) => {
+        const totalDeals = mcEligibleDealsMap.get(id) ?? 0;
+        return {
+          id,
+          dealsPushedBack: stats.dealsWithPushback,
+          totalDeals,
+          pushbackRatePercent: totalDeals > 0 ? (stats.dealsWithPushback / totalDeals) * 100 : 0
+        };
+      })
+      .sort(
+        (a, b) =>
+          b.dealsPushedBack - a.dealsPushedBack || b.pushbackRatePercent - a.pushbackRatePercent
+      );
+
+    expect(distinctDealsPushedBack).toBe(1);
+    expect(eligibleDealsInScope).toBe(3);
+    expect(pushbackRatePercent).toBeCloseTo(33.33, 2);
+    expect(byMc).toHaveLength(1);
+    expect(byMc[0]).toEqual({
+      id: 'mc-a',
+      dealsPushedBack: 1,
+      totalDeals: 2,
+      pushbackRatePercent: 50
+    });
   });
 
   it('penalizes higher financing-termination rates as a high-tier negative KPI', () => {
