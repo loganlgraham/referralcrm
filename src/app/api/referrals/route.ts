@@ -1037,33 +1037,32 @@ export async function POST(request: Request) {
     'borrower.email': { $regex: new RegExp(`^${escapedEmail}$`, 'i') }
   });
 
-  // Check for duplicate referrals by phone (normalized)
-  let duplicateByPhone = null;
+  // Check for duplicate referrals by phone (normalized).
+  // Uses the indexed `borrower.phoneDigits` field populated by the Referral
+  // model's pre-save/pre-update hooks — O(log n) instead of loading every
+  // phone-bearing referral into memory.
+  let duplicateByPhone: { _id: Types.ObjectId; borrower: { name?: string | null; phone?: string | null } } | null = null;
   const normalizedInputPhone = normalizePhoneNumber(parsed.data.borrowerPhone);
   if (normalizedInputPhone) {
-    // Optimize: Only fetch minimal fields needed for duplicate check
-    // Use lean() for faster queries and reduced memory usage
-    const allReferralsWithPhones = await Referral.find({
-      'borrower.phone': { $exists: true, $ne: '' }
+    duplicateByPhone = await Referral.findOne({
+      'borrower.phoneDigits': normalizedInputPhone,
+      deletedAt: null,
     })
-      .select('borrower.phone _id borrower.name')
-      .lean<{ _id: Types.ObjectId; borrower: { phone: string; name: string } }[]>();
-    
-    duplicateByPhone = allReferralsWithPhones.find((ref) => {
-      const refNormalizedPhone = normalizePhoneNumber(ref.borrower.phone);
-      return refNormalizedPhone === normalizedInputPhone;
-    }) || null;
+      .select('_id borrower.name borrower.phone')
+      .lean<{ _id: Types.ObjectId; borrower: { name?: string | null; phone?: string | null } } | null>();
   }
 
   // Return error if duplicate found
   if (existingByEmail || duplicateByPhone) {
-    const existing = existingByEmail || duplicateByPhone;
+    const existing = existingByEmail ?? duplicateByPhone;
     const matchField = existingByEmail ? 'email' : 'phone number';
+    const existingId = existing?._id ? existing._id.toString() : '';
+    const existingName = existing?.borrower?.name ?? '';
     return NextResponse.json(
       {
         message: `A referral with this ${matchField} already exists.`,
-        existingReferralId: existing._id.toString(),
-        existingBorrowerName: existing.borrower.name
+        existingReferralId: existingId,
+        existingBorrowerName: existingName,
       },
       { status: 409 }
     );

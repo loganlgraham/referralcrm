@@ -3732,10 +3732,38 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const adminAverageLeadToContract = daysToContractAvg;
   const adminAverageContractToClose = daysToCloseAvg;
 
-  // Admin task metrics: overdue, due today, completed today, 30-day trend
-  const adminTasks = await AdminTask.find({}).lean<AdminTaskLean[]>();
+  // Admin task metrics: overdue, due today, completed today, 30-day trend.
+  // Unfiltered AdminTask.find({}) was scanning the entire collection (growing
+  // forever) on every dashboard load. We only need:
+  //   - all currently-open tasks (for overdue / due-today / total counts and
+  //     for "outstanding at end of day" over the 30-day trend)
+  //   - tasks resolved within the trend / timeframe window (for completion
+  //     counts and on-time metrics)
+  const taskTrendDays = 30;
   const todayStart = startOfDay(now);
   const todayEnd = endOfDay(now);
+  const trendStart = startOfDay(addDays(now, -taskTrendDays + 1));
+  const resolvedSince =
+    timeframeStart && timeframeStart < trendStart ? timeframeStart : trendStart;
+
+  const ADMIN_TASK_PROJECTION =
+    'status dueAt dueAtOverride snoozedUntil completedAt dismissedAt createdAt updatedAt referralId ruleKey cycleKey';
+
+  const [openTasks, resolvedTasks] = await Promise.all([
+    AdminTask.find({ status: 'open' })
+      .select(ADMIN_TASK_PROJECTION)
+      .lean<AdminTaskLean[]>(),
+    AdminTask.find({
+      status: { $in: ['completed', 'dismissed'] },
+      $or: [
+        { completedAt: { $gte: resolvedSince } },
+        { dismissedAt: { $gte: resolvedSince } },
+      ],
+    })
+      .select(ADMIN_TASK_PROJECTION)
+      .lean<AdminTaskLean[]>(),
+  ]);
+  const adminTasks: AdminTaskLean[] = [...openTasks, ...resolvedTasks];
 
   function getTaskDueBucket(effectiveDue: Date | null, status: string): 'overdue' | 'today' | 'upcoming' | null {
     if (status !== 'open') return null;
@@ -3783,9 +3811,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   ).length;
   const onTimeTaskCompletionSampleSize = resolvedTasksWithDueDateInTimeframe.length;
 
-  // 30-day task activity trend: one point per day
-  const taskTrendDays = 30;
-  const trendStart = startOfDay(addDays(now, -taskTrendDays + 1));
+  // 30-day task activity trend: one point per day (taskTrendDays / trendStart
+  // declared above so they can floor the AdminTask fetch window).
   const dayBuckets: { key: string; label: string; date: Date }[] = [];
   for (let i = 0; i < taskTrendDays; i++) {
     const d = addDays(trendStart, i);

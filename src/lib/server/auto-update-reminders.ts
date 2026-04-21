@@ -289,31 +289,42 @@ Referral CRM Team
         }
       }
 
-      await Referral.findByIdAndUpdate(referralId, {
-        $set: { lastAutoReminderSentAt: now },
-        $push: {
-          audit: {
-            actorId: null,
-            actorRole: 'system',
-            field: 'auto_update_reminder',
-            previousValue: null,
-            newValue: agents.map((a) => a._id),
-            timestamp: now,
+      // Only advance the reminder cursor if at least one email actually
+      // delivered. Advancing on zero-sent batches silently skips the next
+      // scheduled day when Resend/email is transiently broken.
+      if (result.emailsSent > 0) {
+        await Referral.findByIdAndUpdate(referralId, {
+          $set: { lastAutoReminderSentAt: now },
+          $push: {
+            audit: {
+              actorId: null,
+              actorRole: 'system',
+              field: 'auto_update_reminder',
+              previousValue: null,
+              newValue: agents.map((a) => a._id),
+              timestamp: now,
+            },
           },
-        },
-      });
+        });
 
-      const agentNames = agents.map((a) => a.name).join(', ');
-      await logReferralActivity({
-        referralId,
-        actorRole: 'system',
-        actorId: null,
-        channel: 'email',
-        content: `Automated update reminder sent to ${agentNames} (Day ${daysSincePairing})`,
-      });
+        const agentNames = agents.map((a) => a.name).join(', ');
+        await logReferralActivity({
+          referralId,
+          actorRole: 'system',
+          actorId: null,
+          channel: 'email',
+          content: `Automated update reminder sent to ${agentNames} (Day ${daysSincePairing})`,
+        });
 
-      result.status = 'success';
-      result.reason = `Sent to ${result.emailsSent} agent(s)`;
+        result.status = 'success';
+        result.reason = `Sent to ${result.emailsSent} agent(s)`;
+      } else {
+        result.status = 'error';
+        result.reason = `Email delivery failed for all ${agents.length} agent(s); will retry on next run`;
+        console.error(
+          `[AutoUpdateReminders] No emails delivered for referral ${referralId}; cursor not advanced so the next cron run can retry.`
+        );
+      }
     } catch (error) {
       result.status = 'error';
       result.reason = error instanceof Error ? error.message : 'Unknown error';

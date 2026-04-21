@@ -232,6 +232,38 @@ function computeDueAt(rule: TaskRuleDefinition, baseDate: Date): Date {
   return dueTimeDenver(addDays(baseDate, rule.dueOffsetDays));
 }
 
+/**
+ * Dismiss any open tasks for this (referral, ruleKey) whose cycleKey is not
+ * the current cycle. Without this, monthly rules (e.g. long-term check-ins)
+ * stack a new open row every cycle forever because the unique index allows
+ * distinct cycleKeys per referral+ruleKey.
+ */
+async function markPriorCyclesDismissed(params: {
+  referralId: Types.ObjectId;
+  ruleKey: string;
+  currentCycleKey: string;
+  actorId: string;
+  now: Date;
+}): Promise<void> {
+  const { referralId, ruleKey, currentCycleKey, actorId, now } = params;
+  await AdminTask.updateMany(
+    {
+      referralId,
+      ruleKey,
+      status: 'open',
+      cycleKey: { $ne: currentCycleKey },
+    },
+    {
+      $set: {
+        status: 'dismissed',
+        dismissedAt: now,
+        dismissedBy: actorId,
+        updatedBy: actorId,
+      },
+    }
+  );
+}
+
 /** True when any attached agent has AHA or AGIT designation. Uses AHA task template (not AHA_OOS standard template). */
 function hasAhaAgentAttached(referral: {
   assignedAgent?: { ahaDesignation?: string | null } | null;
@@ -299,48 +331,27 @@ export async function generateAndReconcileAdminTasks({
       ? getBaseDateForAhaPreUc(snapshot)
       : getBaseDateForStatus(snapshot, status);
 
+  const dismisserId = actorId ?? 'system';
+
   for (const { ruleKey, cycleKey } of rulesToDismiss) {
-    if (cycleKey === 'month') {
-      const openLongTerm = await AdminTask.find({
-        referralId: ref._id,
-        ruleKey,
-        status: 'open',
-      }).lean();
-      for (const task of openLongTerm) {
-        await AdminTask.updateOne(
-          { _id: task._id },
-          {
-            $set: {
-              status: 'dismissed',
-              dismissedAt: now,
-              dismissedBy: actorId ?? 'system',
-              updatedBy: actorId ?? 'system',
-            },
-          }
-        );
-      }
-    } else {
-      // Dismiss matching ruleKey regardless of cycleKey when wildcard
-      const query: Record<string, unknown> = {
-        referralId: ref._id,
-        ruleKey,
-        status: 'open',
-      };
-      if (cycleKey !== '*') {
-        query.cycleKey = cycleKey;
-      }
-      await AdminTask.updateMany(
-        query,
-        {
-          $set: {
-            status: 'dismissed',
-            dismissedAt: now,
-            dismissedBy: actorId ?? 'system',
-            updatedBy: actorId ?? 'system',
-          },
-        }
-      );
+    const query: Record<string, unknown> = {
+      referralId: ref._id,
+      ruleKey,
+      status: 'open',
+    };
+    // 'month' and '*' are both treated as "every open cycle for this rule";
+    // a concrete cycleKey string only dismisses that exact cycle.
+    if (cycleKey !== '*' && cycleKey !== 'month') {
+      query.cycleKey = cycleKey;
     }
+    await AdminTask.updateMany(query, {
+      $set: {
+        status: 'dismissed',
+        dismissedAt: now,
+        dismissedBy: dismisserId,
+        updatedBy: dismisserId,
+      },
+    });
   }
 
   for (const rule of applicableRules) {
@@ -355,6 +366,17 @@ export async function generateAndReconcileAdminTasks({
       const cycleStart = addDays(baseDate, cycleIndex * 30);
       dueAt = dueTimeDenver(addDays(cycleStart, rule.dueOffsetDays));
       cycleKey = formatInTimeZone(dueAt, SLA_TIME_ZONE, 'yyyy-MM');
+
+      // For monthly rules, sweep any still-open rows from prior cycles of the
+      // same rule. Without this, each month adds a new open row forever
+      // (e.g. long-term check-ins stacking 3+ copies on one referral).
+      await markPriorCyclesDismissed({
+        referralId: ref._id,
+        ruleKey: rule.ruleKey,
+        currentCycleKey: cycleKey,
+        actorId: dismisserId,
+        now,
+      });
     } else {
       cycleKey = computeCycleKey(rule, baseDate, snapshot);
       dueAt = computeDueAt(rule, baseDate);
@@ -372,27 +394,36 @@ export async function generateAndReconcileAdminTasks({
       }
     }
 
-    await AdminTask.findOneAndUpdate(
-      {
-        referralId: ref._id,
-        ruleKey: rule.ruleKey,
-        cycleKey,
-      },
-      {
-        $setOnInsert: {
+    try {
+      await AdminTask.findOneAndUpdate(
+        {
           referralId: ref._id,
-          title: rule.title,
-          description: rule.description,
-          category: rule.category,
-          priority: rule.priority,
-          status: 'open',
-          dueAt,
           ruleKey: rule.ruleKey,
           cycleKey,
-          createdBy: 'system',
         },
-      },
-      { upsert: true }
-    );
+        {
+          $setOnInsert: {
+            referralId: ref._id,
+            title: rule.title,
+            description: rule.description,
+            category: rule.category,
+            priority: rule.priority,
+            status: 'open',
+            dueAt,
+            ruleKey: rule.ruleKey,
+            cycleKey,
+            createdBy: 'system',
+          },
+        },
+        { upsert: true }
+      );
+    } catch (error) {
+      // Concurrent reconcilers racing on the same unique key can throw
+      // E11000 — treat as a no-op since the other writer already inserted.
+      const code = (error as { code?: number } | null)?.code;
+      if (code !== 11000) {
+        throw error;
+      }
+    }
   }
 }

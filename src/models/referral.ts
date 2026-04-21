@@ -7,6 +7,7 @@ import {
   REFERRAL_STATUS_VALUES,
   REFERRAL_TIMELINE_VALUES
 } from '@/constants/referrals';
+import { normalizePhoneNumber } from '@/utils/phone-utils';
 
 export type ReferralStatus = (typeof REFERRAL_STATUSES)[number];
 
@@ -110,7 +111,13 @@ const referralSchema = new Schema(
       lastName: { type: String, default: '', trim: true },
       name: { type: String, required: true },
       email: { type: String, index: true, required: true },
-      phone: { type: String, required: true }
+      phone: { type: String, required: true },
+      // Normalized 10-digit phone used for indexed duplicate lookup. Kept in
+      // sync by the pre-save / pre-findOneAndUpdate hooks below. Legacy docs
+      // without this field won't be detected as phone duplicates until they
+      // are next touched — matching prior partial behavior — but any new
+      // writes are covered.
+      phoneDigits: { type: String, default: null },
     },
     lookingInZip: {
       type: String,
@@ -259,6 +266,67 @@ referralSchema.index({ deletedAt: 1, 'borrower.email': 1 });
 referralSchema.index({ deletedAt: 1, loanFileNumber: 1 });
 referralSchema.index({ deletedAt: 1, status: 1, createdAt: -1 });
 referralSchema.index({ deletedAt: 1, referralDate: 1 });
+// Sparse index supports the duplicate-phone lookup without forcing legacy
+// docs to backfill before queries work. `findOne` on `borrower.phoneDigits`
+// is O(log n) regardless of collection size.
+referralSchema.index(
+  { 'borrower.phoneDigits': 1 },
+  {
+    sparse: true,
+    partialFilterExpression: { 'borrower.phoneDigits': { $type: 'string' } },
+  }
+);
+
+referralSchema.pre('save', function syncPhoneDigits(next) {
+  const doc = this as unknown as {
+    isModified: (path: string) => boolean;
+    borrower?: { phone?: string | null; phoneDigits?: string | null };
+  };
+  if (doc.borrower && (doc.isModified('borrower.phone') || doc.isModified('borrower'))) {
+    doc.borrower.phoneDigits = normalizePhoneNumber(doc.borrower.phone ?? null);
+  }
+  next();
+});
+
+function syncPhoneDigitsOnUpdate(this: {
+  getUpdate: () => Record<string, unknown> | null;
+  setUpdate: (update: Record<string, unknown>) => void;
+}): void {
+  const update = (this.getUpdate?.() ?? {}) as Record<string, unknown>;
+  if (!update || typeof update !== 'object') return;
+
+  const applySet = (setObj: Record<string, unknown>) => {
+    let nextPhone: string | null | undefined;
+    if (typeof setObj['borrower.phone'] === 'string') {
+      nextPhone = setObj['borrower.phone'] as string;
+    } else if (
+      setObj.borrower &&
+      typeof setObj.borrower === 'object' &&
+      'phone' in (setObj.borrower as Record<string, unknown>)
+    ) {
+      nextPhone = (setObj.borrower as { phone?: string | null }).phone ?? null;
+    }
+    if (nextPhone !== undefined) {
+      const digits = normalizePhoneNumber(nextPhone);
+      if ('borrower.phone' in setObj) {
+        setObj['borrower.phoneDigits'] = digits;
+      } else if (setObj.borrower && typeof setObj.borrower === 'object') {
+        (setObj.borrower as Record<string, unknown>).phoneDigits = digits;
+      }
+    }
+  };
+
+  if (update.$set && typeof update.$set === 'object') {
+    applySet(update.$set as Record<string, unknown>);
+  }
+  // Top-level fields on findOneAndUpdate without $set
+  applySet(update);
+  this.setUpdate?.(update);
+}
+
+referralSchema.pre('findOneAndUpdate', syncPhoneDigitsOnUpdate);
+referralSchema.pre('updateOne', syncPhoneDigitsOnUpdate);
+referralSchema.pre('updateMany', syncPhoneDigitsOnUpdate);
 
 export interface ReferralDocument {
   _id: Types.ObjectId;

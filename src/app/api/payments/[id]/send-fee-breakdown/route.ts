@@ -105,10 +105,21 @@ export async function POST(
     const payment = await Payment.findById(paymentId)
       .populate('referralId')
       .populate('agentId', '_id name email ahaDesignation')
-      .lean<PaymentLean>();
+      .lean<PaymentLean & { feeBreakdownEmailSentAt?: Date | null }>();
 
     if (!payment) {
       return NextResponse.json({ error: 'Payment not found' }, { status: 404 });
+    }
+
+    // Cron is idempotent: if the payment has already been claimed, short-circuit
+    // without calling Resend. Manual admin sends still bypass this so admins can
+    // resend at will.
+    if (isCronRequest && payment.feeBreakdownEmailSentAt) {
+      return NextResponse.json({
+        success: true,
+        alreadySent: true,
+        message: 'Fee breakdown was already sent; skipping duplicate send',
+      });
     }
 
     // Validate payment has required data
@@ -235,26 +246,70 @@ export async function POST(
       // Continue without attachments rather than failing the entire email
     }
 
-    // Send email
-    const emailSent = await sendTransactionalEmail({
-      to: [agentEmail],
-      cc: ccRecipients,
-      subject,
-      html,
-      text,
-      attachments: attachments.length > 0 ? attachments : undefined,
-    });
+    const actorId = isCronRequest ? 'cron' : (session?.user?.id || 'system');
+    const claimedAt = new Date();
+
+    // For cron sends, atomically "claim" the payment before calling Resend.
+    // This prevents duplicate sends if two cron workers race or the outer
+    // route retries after a transient failure. A missed claim means another
+    // worker already won; we treat that as already-sent.
+    if (isCronRequest) {
+      const claim = await Payment.findOneAndUpdate(
+        { _id: paymentId, feeBreakdownEmailSentAt: null },
+        {
+          $set: {
+            feeBreakdownEmailSentAt: claimedAt,
+            feeBreakdownEmailSentBy: actorId,
+          },
+        }
+      );
+      if (!claim) {
+        return NextResponse.json({
+          success: true,
+          alreadySent: true,
+          message: 'Fee breakdown was claimed by another worker; skipping duplicate send',
+        });
+      }
+    }
+
+    let emailSent = false;
+    let sendError: unknown = null;
+    try {
+      emailSent = await sendTransactionalEmail({
+        to: [agentEmail],
+        cc: ccRecipients,
+        subject,
+        html,
+        text,
+        attachments: attachments.length > 0 ? attachments : undefined,
+      });
+    } catch (err) {
+      sendError = err;
+    }
 
     if (!emailSent) {
+      // Roll back the cron claim so the next run can retry this payment.
+      if (isCronRequest) {
+        await Payment.updateOne(
+          { _id: paymentId, feeBreakdownEmailSentAt: claimedAt },
+          { $set: { feeBreakdownEmailSentAt: null, feeBreakdownEmailSentBy: null } }
+        ).catch((rollbackErr) => {
+          console.error('[Fee Breakdown] Failed to roll back claim after send error:', rollbackErr);
+        });
+      }
+      if (sendError) {
+        console.error('[Fee Breakdown] sendTransactionalEmail threw:', sendError);
+      }
       return NextResponse.json({ error: 'Failed to send email' }, { status: 500 });
     }
 
-    // Update payment record
-    const actorId = isCronRequest ? 'cron' : (session?.user?.id || 'system');
-    await Payment.findByIdAndUpdate(paymentId, {
-      feeBreakdownEmailSentAt: new Date(),
-      feeBreakdownEmailSentBy: actorId,
-    });
+    // Manual sends commit the timestamp only on delivery success.
+    if (!isCronRequest) {
+      await Payment.findByIdAndUpdate(paymentId, {
+        feeBreakdownEmailSentAt: claimedAt,
+        feeBreakdownEmailSentBy: actorId,
+      });
+    }
 
     // Log activity
     try {
