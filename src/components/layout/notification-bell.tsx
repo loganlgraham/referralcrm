@@ -49,12 +49,12 @@ export function NotificationBell({ session }: NotificationBellProps) {
       <button
         type="button"
         onClick={handleToggle}
-        className="relative rounded-md p-2 text-slate-600 transition hover:bg-slate-100 focus:outline-none"
+        className="relative rounded-md p-2 text-foreground-muted transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
         aria-label="Notifications"
       >
         <Bell className="h-5 w-5" />
         {count > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-semibold text-white">
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-danger px-1 text-xs font-semibold text-white ring-2 ring-surface-raised">
             {count > 99 ? '99+' : count}
           </span>
         )}

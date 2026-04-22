@@ -21,6 +21,8 @@ import {
 import { DEAL_STATUS_LABELS, DEAL_STATUS_VALUES, type DealStatus } from '@/constants/deals';
 import { DEFAULT_AGENT_COMMISSION_BPS } from '@/constants/referrals';
 import { Pagination } from '@/components/tables/pagination';
+import { StatusPill } from '@/components/ui/status-pill';
+import { Badge } from '@/components/ui/badge';
 import { fetcher } from '@/utils/fetcher';
 import { addYears } from 'date-fns';
 import { formatCurrency, formatDate } from '@/utils/formatters';
@@ -84,9 +86,9 @@ interface DealRow {
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-slate-900">{value}</p>
+    <div className="rounded-xl border border-border bg-surface-raised px-5 py-4 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-foreground">{value}</p>
     </div>
   );
 }
@@ -115,11 +117,11 @@ function ToggleSwitch({
       }}
       disabled={disabled}
       className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-        checked ? 'bg-brand' : 'bg-slate-200'
+        checked ? 'bg-primary-600' : 'bg-surface-subtle'
       } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
     >
       <span
-        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+        className={`inline-block h-5 w-5 transform rounded-full bg-surface-raised shadow transition ${
           checked ? 'translate-x-5' : 'translate-x-1'
         }`}
       />
@@ -468,7 +470,7 @@ export function DealsTable() {
         className="flex items-center gap-1 text-left"
       >
         <span>{label}</span>
-        <span className="text-[10px] text-slate-400">{icon}</span>
+        <span className="text-[10px] text-foreground-subtle">{icon}</span>
       </button>
     );
   };
@@ -773,14 +775,14 @@ export function DealsTable() {
     const href = deal.referralId ? `/referrals/${deal.referralId}` : '#';
 
     if (!deal.referralId) {
-      return <span className="font-medium text-slate-900">{label}</span>;
+      return <span className="font-medium text-foreground">{label}</span>;
     }
 
     return (
       <Link
         prefetch={false}
         href={href}
-        className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+        className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
       >
         {label}
       </Link>
@@ -789,46 +791,23 @@ export function DealsTable() {
 
   const renderAgentLink = (deal: DealRow) => {
     if (!deal.agent?.id) {
-      return <span className="text-sm text-slate-500">Unassigned</span>;
+      return <span className="text-sm text-foreground-subtle">Unassigned</span>;
     }
 
     return (
       <Link
         prefetch={false}
         href={`/agents/${deal.agent.id}`}
-        className="text-sm font-medium text-brand transition hover:text-brand-dark hover:underline"
+        className="text-sm font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
       >
         {deal.agent.name || 'Agent'}
       </Link>
     );
   };
 
-  const getStatusColor = (status: string): { bg: string; text: string } => {
-    switch (status) {
-      case 'under_contract':
-        return { bg: 'bg-blue-100', text: 'text-blue-700' };
-      case 'past_inspection':
-      case 'past_appraisal':
-        return { bg: 'bg-indigo-100', text: 'text-indigo-700' };
-      case 'clear_to_close':
-        return { bg: 'bg-purple-100', text: 'text-purple-700' };
-      case 'closed':
-        return { bg: 'bg-green-100', text: 'text-green-700' };
-      case 'payment_sent':
-        return { bg: 'bg-teal-100', text: 'text-teal-700' };
-      case 'paid':
-        return { bg: 'bg-emerald-100', text: 'text-emerald-700' };
-      case 'terminated':
-        return { bg: 'bg-red-100', text: 'text-red-700' };
-      default:
-        return { bg: 'bg-slate-100', text: 'text-slate-700' };
-    }
-  };
-
   const renderStatusControl = (deal: DealRow) => {
     const isTerminated = deal.status === 'terminated';
     const statusLabel = normalizeStatusLabel(deal.status) || '—';
-    const colors = getStatusColor(deal.status);
     const terminatedLabel = deal.terminatedReason
       ? TERMINATED_REASON_OPTIONS.find((option) => option.value === deal.terminatedReason)?.label ??
         deal.terminatedReason
@@ -836,11 +815,9 @@ export function DealsTable() {
 
     return (
       <div className="space-y-1">
-        <span className={`inline-flex items-center rounded-full ${colors.bg} px-2.5 py-0.5 text-xs font-medium ${colors.text}`}>
-          {statusLabel}
-        </span>
+        <StatusPill kind="deal" status={deal.status} label={statusLabel} />
         {isTerminated && terminatedLabel && (
-          <p className="text-xs text-slate-500">Reason: {terminatedLabel}</p>
+          <p className="text-xs text-foreground-subtle">Reason: {terminatedLabel}</p>
         )}
       </div>
     );
@@ -878,46 +855,46 @@ export function DealsTable() {
   };
 
   const renderAdminTable = () => (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-      <table className="min-w-full divide-y divide-slate-200">
-        <thead className="sticky top-0 z-10 bg-slate-50">
+    <div className="overflow-x-auto rounded-card border border-border bg-surface-raised shadow-sm">
+      <table className="min-w-full divide-y divide-border">
+        <thead className="sticky top-0 z-10 bg-surface-muted">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               <SortableHeader label="Referral" sortKey="referral" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               <SortableHeader label="Agent" sortKey="agent" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               <SortableHeader label="Deal Side" sortKey="dealSide" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               <SortableHeader label="Status" sortKey="status" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               <SortableHeader label="Closing date" sortKey="closingDate" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               <SortableHeader label="Address" sortKey="address" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               <SortableHeader label="Referral Fee" sortKey="referralFee" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               <SortableHeader label="Amount Received" sortKey="receivedAmount" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               <SortableHeader label="Used AFC" sortKey="usedAfc" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               <SortableHeader label="Used Agent" sortKey="usedAgent" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               <SortableHeader label="Paid" sortKey="paid" />
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-border">
           {deals.map((deal) => {
             const isTerminated = deal.status === 'terminated';
             const isSellSideDeal = deal.side === 'sell' || deal.referral?.dealSide === 'sell';
@@ -935,29 +912,29 @@ export function DealsTable() {
             const isUpdating = updatingId === deal._id;
 
             return (
-              <tr key={deal._id} className="even:bg-slate-50/50 hover:bg-slate-100">
-                <td className="px-4 py-3 text-sm text-slate-700">
+              <tr key={deal._id} className="even:bg-surface-muted/50 hover:bg-surface-subtle">
+                <td className="px-4 py-3 text-sm text-foreground-muted">
                   <div className="flex flex-col">
                     {renderReferralLink(deal)}
-                    <span className="text-xs text-slate-500">
+                    <span className="text-xs text-foreground-subtle">
                       Loan # {deal.referral?.loanFileNumber || '—'}
                     </span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-700">{renderAgentLink(deal)}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">{renderDealSide(deal)}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">{renderStatusControl(deal)}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">{renderClosingDate(deal.closingDate)}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">
+                <td className="px-4 py-3 text-sm text-foreground-muted">{renderAgentLink(deal)}</td>
+                <td className="px-4 py-3 text-sm text-foreground-muted">{renderDealSide(deal)}</td>
+                <td className="px-4 py-3 text-sm text-foreground-muted">{renderStatusControl(deal)}</td>
+                <td className="px-4 py-3 text-sm text-foreground-muted">{renderClosingDate(deal.closingDate)}</td>
+                <td className="px-4 py-3 text-sm text-foreground-muted">
                   {getDealAddress(deal) || '—'}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(referralFee)}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">
+                <td className="px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(referralFee)}</td>
+                <td className="px-4 py-3 text-sm text-foreground-muted">
                   {isTerminated ? (
                     '—'
                   ) : (
                     <div className="flex items-center gap-2">
-                      <span className="text-slate-400">$</span>
+                      <span className="text-foreground-subtle">$</span>
                       <input
                         type="text"
                         inputMode="decimal"
@@ -990,13 +967,13 @@ export function DealsTable() {
                             event.currentTarget.blur();
                           }
                         }}
-                        className="w-28 rounded border border-slate-200 px-2 py-1 text-sm text-slate-700 focus:border-brand focus:outline-none"
+                        className="w-28 rounded border border-border px-2 py-1 text-sm text-foreground-muted focus:border-primary-500 focus:outline-none"
                         disabled={isUpdating}
                       />
                     </div>
                   )}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-700">
+                <td className="px-4 py-3 text-sm text-foreground-muted">
                   {isTerminated ? (
                     '—'
                   ) : isSellSideDeal ? (
@@ -1009,11 +986,11 @@ export function DealsTable() {
                         onChange={(nextValue) => handleAfcUsageChange(deal, nextValue)}
                         disabled={isUpdating || isSellSideDeal}
                       />
-                      <span className="text-sm text-slate-700">{usedAfc ? 'Yes' : 'No'}</span>
+                      <span className="text-sm text-foreground-muted">{usedAfc ? 'Yes' : 'No'}</span>
                     </div>
                   )}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-700">
+                <td className="px-4 py-3 text-sm text-foreground-muted">
                   {isTerminated ? (
                     '—'
                   ) : (
@@ -1024,11 +1001,11 @@ export function DealsTable() {
                         onChange={(nextValue) => handleUsedAgentToggle(deal, nextValue)}
                         disabled={isUpdating}
                       />
-                      <span className="text-sm text-slate-700">{usedAssignedAgent ? 'Yes' : 'No'}</span>
+                      <span className="text-sm text-foreground-muted">{usedAssignedAgent ? 'Yes' : 'No'}</span>
                     </div>
                   )}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-700">
+                <td className="px-4 py-3 text-sm text-foreground-muted">
                   {isTerminated ? (
                     '—'
                   ) : (
@@ -1039,7 +1016,7 @@ export function DealsTable() {
                         onChange={(nextValue) => handlePaidToggle(deal, nextValue)}
                         disabled={isUpdating || isPaid}
                       />
-                      <span className="text-sm text-slate-700">{isPaid ? 'Yes' : 'No'}</span>
+                      <span className="text-sm text-foreground-muted">{isPaid ? 'Yes' : 'No'}</span>
                     </div>
                   )}
                 </td>
@@ -1081,12 +1058,12 @@ export function DealsTable() {
         })();
         const outcomeColor =
           outcome === 'Won'
-            ? 'text-slate-800'
+            ? 'text-foreground'
             : outcome === 'Lost'
               ? 'text-rose-600'
               : outcome === 'N/A'
-                ? 'text-slate-500'
-                : 'text-slate-500';
+                ? 'text-foreground-subtle'
+                : 'text-foreground-subtle';
 
         return {
           deal,
@@ -1108,62 +1085,57 @@ export function DealsTable() {
             isAgentView ? (
               <div
                 key={deal._id}
-                className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+                className="overflow-hidden rounded-card border border-border bg-surface-raised shadow-card"
               >
                 {/* Header zone */}
-                <div className="flex items-start justify-between gap-3 bg-slate-50 px-4 pt-4 pb-3">
+                <div className="flex items-start justify-between gap-3 bg-surface-muted px-4 pt-4 pb-3">
                   <div className="min-w-0 flex-1">
-                    <div className="text-base font-semibold text-slate-900 break-words">
+                    <div className="text-base font-semibold text-foreground break-words">
                       {renderReferralLink(deal)}
                     </div>
-                    <p className="mt-0.5 text-xs text-slate-500">
+                    <p className="mt-0.5 text-xs text-foreground-subtle">
                       {getDealAddress(deal) || `Loan # ${deal.referral?.loanFileNumber || '—'}`}
                     </p>
                   </div>
-                  <span
-                    className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
-                      outcome === 'Won'
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : outcome === 'Lost'
-                          ? 'bg-rose-100 text-rose-700'
-                          : 'bg-slate-100 text-slate-600'
-                    }`}
+                  <Badge
+                    variant={outcome === 'Won' ? 'success' : outcome === 'Lost' ? 'danger' : 'neutral'}
+                    className="shrink-0"
                   >
                     {outcome}
-                  </span>
+                  </Badge>
                 </div>
 
                 {/* Status + closing date row */}
                 <div className="px-4 py-3 space-y-3">
                   <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                     <div className="space-y-1">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
-                      <div className="text-sm text-slate-800">{renderStatusControl(deal)}</div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Status</p>
+                      <div className="text-sm text-foreground">{renderStatusControl(deal)}</div>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Closing date</p>
-                      <p className="text-sm text-slate-800">{renderClosingDate(deal.closingDate)}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Closing date</p>
+                      <p className="text-sm text-foreground">{renderClosingDate(deal.closingDate)}</p>
                     </div>
                   </div>
 
                   {/* Financial section */}
-                  <div className="rounded-md bg-slate-50 p-3">
+                  <div className="rounded-md bg-surface-muted p-3">
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                       <div className="space-y-0.5">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Referral fee</p>
-                        <p className="text-sm font-semibold text-slate-900">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">Referral fee</p>
+                        <p className="text-sm font-semibold text-foreground">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</p>
                       </div>
                       <div className="space-y-0.5">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Fee paid</p>
-                        <p className="text-sm font-semibold text-slate-900">{isTerminated ? '—' : formatCurrency(paidAmount)}</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">Fee paid</p>
+                        <p className="text-sm font-semibold text-foreground">{isTerminated ? '—' : formatCurrency(paidAmount)}</p>
                       </div>
                       <div className="space-y-0.5">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Commission</p>
-                        <p className="text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(commission)}</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">Commission</p>
+                        <p className="text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(commission)}</p>
                       </div>
                       <div className="space-y-0.5">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Net commission</p>
-                        <p className="text-sm font-semibold text-slate-900">{isTerminated ? '—' : formatCurrency(netCommission)}</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">Net commission</p>
+                        <p className="text-sm font-semibold text-foreground">{isTerminated ? '—' : formatCurrency(netCommission)}</p>
                       </div>
                     </div>
                   </div>
@@ -1172,100 +1144,100 @@ export function DealsTable() {
             ) : (
               <div
                 key={deal._id}
-                className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+                className="space-y-3 rounded-card border border-border bg-surface-raised p-4 shadow-card"
               >
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</p>
-                  <div className="text-sm text-slate-800">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Referral</p>
+                  <div className="text-sm text-foreground">
                     <div className="flex flex-col gap-0.5 break-words">
                       {renderReferralLink(deal)}
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-foreground-subtle">
                         {getDealAddress(deal) || `Loan # ${deal.referral?.loanFileNumber || '—'}`}
                       </span>
                     </div>
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
-                  <div className="text-sm text-slate-800">{renderStatusControl(deal)}</div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Status</p>
+                  <div className="text-sm text-foreground">{renderStatusControl(deal)}</div>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Closing date</p>
-                  <p className="text-sm text-slate-800">{renderClosingDate(deal.closingDate)}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Closing date</p>
+                  <p className="text-sm text-foreground">{renderClosingDate(deal.closingDate)}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Outcome</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Outcome</p>
                   <p className={`text-sm font-medium ${outcomeColor}`}>{outcome}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Referral fee</p>
-                  <p className="text-sm text-slate-800">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Referral fee</p>
+                  <p className="text-sm text-foreground">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Paid</p>
-                  <p className="text-sm text-slate-800">{isTerminated ? '—' : formatCurrency(paidAmount)}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Paid</p>
+                  <p className="text-sm text-foreground">{isTerminated ? '—' : formatCurrency(paidAmount)}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Commission</p>
-                  <p className="text-sm text-slate-800">{isTerminated ? '—' : formatCurrency(commission)}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Commission</p>
+                  <p className="text-sm text-foreground">{isTerminated ? '—' : formatCurrency(commission)}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Net commission</p>
-                  <p className="text-sm text-slate-800">{isTerminated ? '—' : formatCurrency(netCommission)}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Net commission</p>
+                  <p className="text-sm text-foreground">{isTerminated ? '—' : formatCurrency(netCommission)}</p>
                 </div>
               </div>
             )
         )}
       </div>
-      <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm md:block">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
+      <div className="hidden overflow-x-auto rounded-card border border-border bg-surface-raised shadow-sm md:block">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-surface-muted">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Referral" sortKey="referral" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Status" sortKey="status" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Closing date" sortKey="closingDate" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Outcome" sortKey="outcome" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Referral Fee" sortKey="referralFee" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label={isAgentView ? 'Referral Fee Paid' : 'Paid'} sortKey="receivedAmount" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Commission" sortKey="commission" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Net Commission" sortKey="netCommission" />
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-border">
             {defaultDealRowModels.map(
               ({ deal, commission, isTerminated, paidAmount, referralFee, netCommission, outcome, outcomeColor }) => (
-                <tr key={deal._id} className="even:bg-slate-50/50 hover:bg-slate-100">
-                  <td className="px-4 py-3 text-sm text-slate-700">
+                <tr key={deal._id} className="even:bg-surface-muted/50 hover:bg-surface-subtle">
+                  <td className="px-4 py-3 text-sm text-foreground-muted">
                     <div className="flex flex-col">
                       {renderReferralLink(deal)}
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-foreground-subtle">
                         {getDealAddress(deal) || `Loan # ${deal.referral?.loanFileNumber || '—'}`}
                       </span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-700">{renderStatusControl(deal)}</td>
-                  <td className="px-4 py-3 text-sm text-slate-700">{renderClosingDate(deal.closingDate)}</td>
+                  <td className="px-4 py-3 text-sm text-foreground-muted">{renderStatusControl(deal)}</td>
+                  <td className="px-4 py-3 text-sm text-foreground-muted">{renderClosingDate(deal.closingDate)}</td>
                   <td className={`px-4 py-3 text-sm font-medium ${outcomeColor}`}>{outcome}</td>
-                  <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</td>
-                  <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(paidAmount)}</td>
-                  <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(commission)}</td>
-                  <td className="px-4 py-3 text-sm text-slate-700">{isTerminated ? '—' : formatCurrency(netCommission)}</td>
+                  <td className="px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</td>
+                  <td className="px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(paidAmount)}</td>
+                  <td className="px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(commission)}</td>
+                  <td className="px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(netCommission)}</td>
                 </tr>
               )
             )}
@@ -1278,12 +1250,12 @@ export function DealsTable() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div className="h-8 w-48 animate-pulse rounded-lg bg-slate-200" />
+        <div className="h-8 w-48 animate-pulse rounded-lg bg-surface-subtle" />
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="h-20 animate-pulse rounded-xl bg-slate-200" />
-          <div className="h-20 animate-pulse rounded-xl bg-slate-200" />
+          <div className="h-20 animate-pulse rounded-xl bg-surface-subtle" />
+          <div className="h-20 animate-pulse rounded-xl bg-surface-subtle" />
         </div>
-        <div className="h-96 animate-pulse rounded-xl bg-slate-200" />
+        <div className="h-96 animate-pulse rounded-xl bg-surface-subtle" />
       </div>
     );
   }
@@ -1292,8 +1264,8 @@ export function DealsTable() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Deals</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-2xl font-semibold text-foreground">Deals</h1>
+          <p className="text-sm text-foreground-subtle">
             {data
               ? `${data.total} ${hasActiveFilters ? 'filtered ' : ''}deal${data.total !== 1 ? 's' : ''}`
               : 'Loading...'}
@@ -1313,42 +1285,42 @@ export function DealsTable() {
           </div>
         )}
       </div>
-      <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
-        <label className="flex flex-col text-xs font-semibold text-slate-600">
+      <div className="space-y-4 rounded-xl border border-border bg-surface-muted/50 p-4">
+        <label className="flex flex-col text-xs font-semibold text-foreground-muted">
           Search
           <input
             type="text"
             value={searchTerm}
             onChange={(event) => handleSearchInput(event.target.value)}
-            className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-2 w-full rounded-lg border border-border bg-surface-raised px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
             placeholder="Borrower, address, loan #, agent"
           />
         </label>
         {isAdminView && (
           <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div ref={statusMenuRef} className="relative min-w-0 flex flex-col text-xs font-semibold uppercase text-slate-500">
+            <div ref={statusMenuRef} className="relative min-w-0 flex flex-col text-xs font-semibold uppercase text-foreground-subtle">
               Status
               <div className="relative mt-1">
                 <button
                   type="button"
                   onClick={() => setIsStatusMenuOpen((open) => !open)}
                   disabled={isPending}
-                  className="flex w-full items-center justify-between gap-2 rounded border border-slate-200 bg-white px-3 py-2 text-left text-sm normal-case text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex w-full items-center justify-between gap-2 rounded border border-border bg-surface-raised px-3 py-2 text-left text-sm normal-case text-foreground-muted disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <span className="truncate">
                     {statusFilters.length > 0
                       ? `${statusFilters.length} status${statusFilters.length > 1 ? 'es' : ''} selected`
                       : 'All statuses'}
                   </span>
-                  <span className="text-slate-400">&#9662;</span>
+                  <span className="text-foreground-subtle">&#9662;</span>
                 </button>
                 {isStatusMenuOpen && (
-                  <div className="absolute left-0 right-0 z-30 mt-1 max-h-60 w-full overflow-y-auto rounded border border-slate-200 bg-white py-1 shadow-lg">
-                    <div className="mb-2 flex items-center justify-between px-3 pt-1 text-xs font-semibold text-slate-600">
+                  <div className="absolute left-0 right-0 z-30 mt-1 max-h-60 w-full overflow-y-auto rounded border border-border bg-surface-raised py-1 shadow-lg">
+                    <div className="mb-2 flex items-center justify-between px-3 pt-1 text-xs font-semibold text-foreground-muted">
                       <span>Filter statuses</span>
                       <button
                         type="button"
-                        className="text-brand hover:text-brand/80"
+                        className="text-primary-700 hover:text-primary-700/80"
                         onClick={() => updateParams({ status: '' })}
                       >
                         Clear
@@ -1358,12 +1330,12 @@ export function DealsTable() {
                       {STATUS_FILTER_OPTIONS.map(({ value, label }) => (
                         <label
                           key={value}
-                          className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-foreground-muted hover:bg-surface-muted"
                         >
-                          <span className="text-slate-700">{label}</span>
+                          <span className="text-foreground-muted">{label}</span>
                           <input
                             type="checkbox"
-                            className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                            className="h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
                             checked={statusFilters.includes(value as DealStatus)}
                             onChange={(event) => {
                               const checked = event.target.checked;
@@ -1380,29 +1352,29 @@ export function DealsTable() {
                 )}
               </div>
             </div>
-            <div ref={designationMenuRef} className="relative min-w-0 flex flex-col text-xs font-semibold uppercase text-slate-500">
+            <div ref={designationMenuRef} className="relative min-w-0 flex flex-col text-xs font-semibold uppercase text-foreground-subtle">
               Agent Designation
               <div className="relative mt-1">
                 <button
                   type="button"
                   onClick={() => setIsDesignationMenuOpen((open) => !open)}
                   disabled={isPending}
-                  className="flex w-full items-center justify-between gap-2 rounded border border-slate-200 bg-white px-3 py-2 text-left text-sm normal-case text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex w-full items-center justify-between gap-2 rounded border border-border bg-surface-raised px-3 py-2 text-left text-sm normal-case text-foreground-muted disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <span className="truncate">
                     {designationFilters.length > 0
                       ? `${designationFilters.length} designation${designationFilters.length > 1 ? 's' : ''} selected`
                       : 'All designations'}
                   </span>
-                  <span className="text-slate-400">&#9662;</span>
+                  <span className="text-foreground-subtle">&#9662;</span>
                 </button>
                 {isDesignationMenuOpen && (
-                  <div className="absolute left-0 right-0 z-30 mt-1 max-h-60 w-full overflow-y-auto rounded border border-slate-200 bg-white py-1 shadow-lg">
-                    <div className="mb-2 flex items-center justify-between px-3 pt-1 text-xs font-semibold text-slate-600">
+                  <div className="absolute left-0 right-0 z-30 mt-1 max-h-60 w-full overflow-y-auto rounded border border-border bg-surface-raised py-1 shadow-lg">
+                    <div className="mb-2 flex items-center justify-between px-3 pt-1 text-xs font-semibold text-foreground-muted">
                       <span>Filter by designation</span>
                       <button
                         type="button"
-                        className="text-brand hover:text-brand/80"
+                        className="text-primary-700 hover:text-primary-700/80"
                         onClick={() => updateParams({ designation: '' })}
                       >
                         Clear
@@ -1412,12 +1384,12 @@ export function DealsTable() {
                       {DESIGNATION_FILTER_OPTIONS.map(({ value, label }) => (
                         <label
                           key={value}
-                          className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          className="flex items-center justify-between gap-3 rounded-md px-2 py-1 text-sm font-medium text-foreground-muted hover:bg-surface-muted"
                         >
-                          <span className="text-slate-700">{label}</span>
+                          <span className="text-foreground-muted">{label}</span>
                           <input
                             type="checkbox"
-                            className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                            className="h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
                             checked={designationFilters.includes(value)}
                             onChange={(event) => {
                               const checked = event.target.checked;
@@ -1434,14 +1406,14 @@ export function DealsTable() {
                 )}
               </div>
             </div>
-            <label className="flex min-w-0 flex-col text-xs font-semibold uppercase text-slate-500">
+            <label className="flex min-w-0 flex-col text-xs font-semibold uppercase text-foreground-subtle">
               Used Agent
               <select
                 value={usedAgentFilter}
                 onChange={(event) =>
                   updateParams({ usedAgent: event.target.value as TriStateFilterValue })
                 }
-                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={isPending}
               >
                 <option value="all">All</option>
@@ -1449,14 +1421,14 @@ export function DealsTable() {
                 <option value="false">No</option>
               </select>
             </label>
-            <label className="flex min-w-0 flex-col text-xs font-semibold uppercase text-slate-500">
+            <label className="flex min-w-0 flex-col text-xs font-semibold uppercase text-foreground-subtle">
               Used AFC
               <select
                 value={usedAfcFilter}
                 onChange={(event) =>
                   updateParams({ usedAfc: event.target.value as TriStateFilterValue })
                 }
-                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={isPending}
               >
                 <option value="all">All</option>
@@ -1469,9 +1441,9 @@ export function DealsTable() {
       </div>
       {summarySection}
       {deals.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white py-16">
-          <p className="text-lg font-medium text-slate-500">No deals found</p>
-          <p className="mt-1 text-sm text-slate-400">Try adjusting your filters or timeframe</p>
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border-strong bg-surface-raised py-16">
+          <p className="text-lg font-medium text-foreground-subtle">No deals found</p>
+          <p className="mt-1 text-sm text-foreground-subtle">Try adjusting your filters or timeframe</p>
         </div>
       ) : (
         isAdminView ? renderAdminTable() : renderDefaultTable()

@@ -154,24 +154,22 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
   if (typeof updatePayload.borrowerPhone === 'string') {
     const normalizedInputPhone = normalizePhoneNumber(updatePayload.borrowerPhone);
     if (normalizedInputPhone) {
-      const allReferralsWithPhones = await Referral.find({
+      // Indexed lookup via borrower.phoneDigits (populated by the Referral
+      // model hooks). Replaces an O(n) full collection scan.
+      const duplicateByPhone = await Referral.findOne({
         _id: { $ne: new Types.ObjectId(context.params.id) },
         deletedAt: null,
-        'borrower.phone': { $exists: true, $ne: '' },
+        'borrower.phoneDigits': normalizedInputPhone,
       })
-        .select('borrower.phone _id borrower.name')
-        .lean<{ _id: Types.ObjectId; borrower: { phone: string; name: string } }[]>();
+        .select('_id borrower.name')
+        .lean<{ _id: Types.ObjectId; borrower: { name?: string | null } } | null>();
 
-      const duplicateByPhone = allReferralsWithPhones.find((ref) => {
-        const refNormalizedPhone = normalizePhoneNumber(ref.borrower.phone);
-        return refNormalizedPhone === normalizedInputPhone;
-      });
       if (duplicateByPhone) {
         return NextResponse.json(
           {
             error: 'A referral with this phone number already exists.',
             existingReferralId: duplicateByPhone._id.toString(),
-            existingBorrowerName: duplicateByPhone.borrower.name,
+            existingBorrowerName: duplicateByPhone.borrower?.name ?? '',
           },
           { status: 409 }
         );

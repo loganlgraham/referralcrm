@@ -332,7 +332,7 @@ export function ProfileForm() {
   };
 
   if (!data) {
-    return <div className="rounded-lg bg-white p-6 shadow-sm">Loading profile…</div>;
+    return <div className="rounded-md bg-surface-raised p-6 shadow-sm">Loading profile…</div>;
   }
 
   const parseList = (value: string, transform?: (value: string) => string) =>
@@ -633,7 +633,7 @@ export function ProfileForm() {
 
   const renderBadgeList = (values: string[] | undefined, emptyLabel = 'Not provided') => {
     if (!values || values.length === 0) {
-      return <p className="text-sm text-slate-500">{emptyLabel}</p>;
+      return <p className="text-sm text-foreground-subtle">{emptyLabel}</p>;
     }
 
     return (
@@ -641,7 +641,7 @@ export function ProfileForm() {
         {values.map((item) => (
           <span
             key={item}
-            className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"
+            className="inline-flex items-center rounded-full bg-surface-subtle px-3 py-1 text-xs font-medium text-foreground-muted"
           >
             {item}
           </span>
@@ -662,60 +662,60 @@ export function ProfileForm() {
     return (
       <div className="space-y-8">
         <section className="space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Contact & basics</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Contact & basics</h2>
           <div className="grid gap-6 sm:grid-cols-2">
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-400">Name</p>
-              <p className="mt-1 text-base font-semibold text-slate-900">{profile.name}</p>
+              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Name</p>
+              <p className="mt-1 text-base font-semibold text-foreground">{profile.name}</p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-400">Email</p>
-              <p className="mt-1 text-base font-medium text-slate-900">{profile.email}</p>
+              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Email</p>
+              <p className="mt-1 text-base font-medium text-foreground">{profile.email}</p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-400">Phone</p>
-              <p className="mt-1 text-base font-medium text-slate-900">
+              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Phone</p>
+              <p className="mt-1 text-base font-medium text-foreground">
                 {profile.phone ? profile.phone : 'Not provided'}
               </p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-400">Brokerage</p>
-              <p className="mt-1 text-base font-medium text-slate-900">
+              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Brokerage</p>
+              <p className="mt-1 text-base font-medium text-foreground">
                 {profile.brokerage ? profile.brokerage : 'Not provided'}
               </p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-400">License number</p>
-              <p className="mt-1 text-base font-medium text-slate-900">
+              <p className="text-xs uppercase tracking-wide text-foreground-subtle">License number</p>
+              <p className="mt-1 text-base font-medium text-foreground">
                 {profile.licenseNumber ? profile.licenseNumber : 'Not provided'}
               </p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-400">Years of experience</p>
-              <p className="mt-1 text-base font-medium text-slate-900">{yearsExperienceLabel}</p>
+              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Years of experience</p>
+              <p className="mt-1 text-base font-medium text-foreground">{yearsExperienceLabel}</p>
             </div>
           </div>
         </section>
 
         <section className="space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Coverage & markets</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Coverage & markets</h2>
           <div className="grid gap-6 sm:grid-cols-2">
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-400">Licensed states</p>
+              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Licensed states</p>
               <div className="mt-2">{renderBadgeList(profile.statesLicensed?.map((state) => state.toUpperCase()))}</div>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-slate-400">Areas covered</p>
+              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Areas covered</p>
               <div className="mt-2">
                 {renderBadgeList(profile.coverageLocations?.map((location) => location.label))}
               </div>
             </div>
             <div className="sm:col-span-2">
-              <p className="text-xs uppercase tracking-wide text-slate-400">Specialties</p>
+              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Specialties</p>
               <div className="mt-2">{renderBadgeList(profile.specialties)}</div>
             </div>
             <div className="sm:col-span-2">
-              <p className="text-xs uppercase tracking-wide text-slate-400">Languages</p>
+              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Languages</p>
               <div className="mt-2">{renderBadgeList(profile.languages, 'No languages listed')}</div>
             </div>
           </div>
@@ -727,31 +727,31 @@ export function ProfileForm() {
   const readOnlyMc = (profile: McProfileResponse) => (
     <div className="space-y-8">
       <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Contact & basics</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Contact & basics</h2>
         <div className="grid gap-6 sm:grid-cols-2">
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-400">Name</p>
-            <p className="mt-1 text-base font-semibold text-slate-900">{profile.name}</p>
+            <p className="text-xs uppercase tracking-wide text-foreground-subtle">Name</p>
+            <p className="mt-1 text-base font-semibold text-foreground">{profile.name}</p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-400">Email</p>
-            <p className="mt-1 text-base font-medium text-slate-900">{profile.email}</p>
+            <p className="text-xs uppercase tracking-wide text-foreground-subtle">Email</p>
+            <p className="mt-1 text-base font-medium text-foreground">{profile.email}</p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-400">Phone</p>
-            <p className="mt-1 text-base font-medium text-slate-900">
+            <p className="text-xs uppercase tracking-wide text-foreground-subtle">Phone</p>
+            <p className="mt-1 text-base font-medium text-foreground">
               {profile.phone ? profile.phone : 'Not provided'}
             </p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-slate-400">NMLS ID</p>
-            <p className="mt-1 text-base font-medium text-slate-900">{profile.nmlsId || 'Not provided'}</p>
+            <p className="text-xs uppercase tracking-wide text-foreground-subtle">NMLS ID</p>
+            <p className="mt-1 text-base font-medium text-foreground">{profile.nmlsId || 'Not provided'}</p>
           </div>
         </div>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Licensed states</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Licensed states</h2>
         <div>{renderBadgeList(profile.licensedStates?.map((state) => state.toUpperCase()))}</div>
       </section>
     </div>
@@ -760,31 +760,31 @@ export function ProfileForm() {
   const readOnlyAdmin = (profile: AdminProfileResponse) => (
     <div className="space-y-4">
       <div>
-        <p className="text-xs uppercase tracking-wide text-slate-400">Name</p>
-        <p className="mt-1 text-base font-semibold text-slate-900">{profile.name ?? 'Not provided'}</p>
+        <p className="text-xs uppercase tracking-wide text-foreground-subtle">Name</p>
+        <p className="mt-1 text-base font-semibold text-foreground">{profile.name ?? 'Not provided'}</p>
       </div>
       <div>
-        <p className="text-xs uppercase tracking-wide text-slate-400">Email</p>
-        <p className="mt-1 text-base font-medium text-slate-900">{profile.email ?? 'Not provided'}</p>
+        <p className="text-xs uppercase tracking-wide text-foreground-subtle">Email</p>
+        <p className="mt-1 text-base font-medium text-foreground">{profile.email ?? 'Not provided'}</p>
       </div>
-      <p className="text-sm text-slate-500">Admin profiles are managed by the Referral CRM team.</p>
+      <p className="text-sm text-foreground-subtle">Admin profiles are managed by the Referral CRM team.</p>
     </div>
   );
 
   const canEdit = data.role === 'agent' || data.role === 'mc';
 
   return (
-    <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
-      <div className="flex flex-col gap-4 border-b border-slate-100 pb-6 sm:flex-row sm:items-start sm:justify-between">
+    <div className="rounded-card bg-surface-raised p-6 shadow-sm ring-1 ring-border">
+      <div className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-brand">Referral CRM</p>
-          <h1 className="mt-2 text-2xl font-semibold text-slate-900">My profile</h1>
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary-700">Referral CRM</p>
+          <h1 className="mt-2 text-2xl font-semibold text-foreground">My profile</h1>
         </div>
         {canEdit && !isEditing && (
           <button
             type="button"
             onClick={() => setIsEditing(true)}
-            className="inline-flex items-center rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            className="inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground-muted transition hover:border-border-strong hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
           >
             Edit profile
           </button>
@@ -794,49 +794,49 @@ export function ProfileForm() {
       {isEditing ? (
         <form onSubmit={handleSubmit} className="mt-6 space-y-8">
           <section className="space-y-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Contact & basics</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Contact & basics</h2>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="text-sm font-semibold text-slate-600">
+              <label className="text-sm font-semibold text-foreground-muted">
                 Name
                 <input
                   type="text"
                   value={form.name}
                   onChange={handleChange('name')}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
                   required
                   disabled={saving}
                 />
               </label>
-              <label className="text-sm font-semibold text-slate-600">
+              <label className="text-sm font-semibold text-foreground-muted">
                 Email
                 <input
                   type="email"
                   value={form.email}
                   onChange={handleChange('email')}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
                   required
                   disabled={saving}
                 />
               </label>
-              <label className="text-sm font-semibold text-slate-600">
+              <label className="text-sm font-semibold text-foreground-muted">
                 Phone
                 <input
                   type="tel"
                   value={form.phone}
                   onChange={handleChange('phone')}
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
                   placeholder="(555) 123-4567"
                   disabled={saving}
                 />
               </label>
               {data.role === 'mc' && (
-                <label className="text-sm font-semibold text-slate-600">
+                <label className="text-sm font-semibold text-foreground-muted">
                   NMLS ID
                   <input
                     type="text"
                     value={form.nmlsId}
                     onChange={handleChange('nmlsId')}
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
                     placeholder="123456"
                     disabled={saving}
                     required
@@ -849,41 +849,41 @@ export function ProfileForm() {
           {data.role === 'agent' && (
             <>
               <section className="space-y-4">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Coverage & licensing</h2>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Coverage & licensing</h2>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm font-semibold text-slate-600">
+                  <label className="text-sm font-semibold text-foreground-muted">
                     Brokerage
                     <input
                       type="text"
                       value={form.brokerage}
                       onChange={handleChange('brokerage')}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
                       disabled={saving}
                     />
                   </label>
-                  <label className="text-sm font-semibold text-slate-600">
+                  <label className="text-sm font-semibold text-foreground-muted">
                     License number
                     <input
                       type="text"
                       value={form.licenseNumber}
                       onChange={handleChange('licenseNumber')}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
                       disabled={saving}
                     />
                   </label>
-                  <label className="text-sm font-semibold text-slate-600 sm:col-span-2">
+                  <label className="text-sm font-semibold text-foreground-muted sm:col-span-2">
                     Licensed states
                     <textarea
                       value={form.states}
                       onChange={handleChange('states')}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
                       placeholder="CO, UT, AZ"
                       rows={2}
                       disabled={saving}
                     />
                   </label>
                   <div className="sm:col-span-2">
-                    <label htmlFor="profile-coverage-description" className="text-sm font-semibold text-slate-600">
+                    <label htmlFor="profile-coverage-description" className="text-sm font-semibold text-foreground-muted">
                       Areas covered
                     </label>
                     <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-4">
@@ -891,7 +891,7 @@ export function ProfileForm() {
                         id="profile-coverage-description"
                         value={form.coverageDescription}
                         onChange={handleChange('coverageDescription')}
-                        className="w-full flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40 sm:min-h-[5.5rem]"
+                        className="w-full flex-1 rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40 sm:min-h-[5.5rem]"
                         placeholder="Describe neighborhoods, cities, and counties you serve"
                         rows={3}
                         disabled={saving || isGeneratingCoverage || isPersistingCoverage}
@@ -899,7 +899,7 @@ export function ProfileForm() {
                       <button
                         type="button"
                         onClick={generateCoverageLocations}
-                        className="flex shrink-0 items-center justify-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70 sm:h-full sm:min-h-[5.5rem] sm:self-stretch"
+                        className="flex shrink-0 items-center justify-center rounded-lg bg-primary-600 px-4 text-sm font-semibold text-white transition hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-70 sm:h-full sm:min-h-[5.5rem] sm:self-stretch"
                         style={coverageButtonStyles}
                         disabled={saving || isGeneratingCoverage || isPersistingCoverage}
                       >
@@ -908,21 +908,21 @@ export function ProfileForm() {
                     </div>
                   </div>
                   <div className="sm:col-span-2">
-                    <p className="text-sm font-semibold text-slate-600">Cities, towns & counties</p>
+                    <p className="text-sm font-semibold text-foreground-muted">Cities, towns & counties</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {form.coverageLocations.length === 0 ? (
-                        <p className="text-sm text-slate-500">No coverage locations added yet.</p>
+                        <p className="text-sm text-foreground-subtle">No coverage locations added yet.</p>
                       ) : (
                         form.coverageLocations.map((location) => (
                           <span
                             key={location.label}
-                            className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"
+                            className="inline-flex items-center gap-2 rounded-full bg-surface-subtle px-3 py-1 text-xs font-medium text-foreground-muted"
                           >
                             {location.label}
                             <button
                               type="button"
                               onClick={() => removeCoverageLocation(location.label)}
-                              className="text-slate-500 transition hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                              className="text-foreground-subtle transition hover:text-foreground-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60"
                               aria-label={`Remove ${location.label}`}
                               disabled={saving || isPersistingCoverage}
                             >
@@ -937,27 +937,27 @@ export function ProfileForm() {
               </section>
 
               <section className="space-y-4">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">
                   Experience, specialties & languages
                 </h2>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm font-semibold text-slate-600">
+                  <label className="text-sm font-semibold text-foreground-muted">
                     Experience start date
                     <input
                       type="date"
                       value={form.experienceSince}
                       onChange={handleChange('experienceSince')}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
                       disabled={saving}
                     />
                   </label>
-                  <label className="text-sm font-semibold text-slate-600 sm:col-span-2">
+                  <label className="text-sm font-semibold text-foreground-muted sm:col-span-2">
                     Specialties
                     <select
                       multiple
                       value={form.specialties}
                       onChange={handleSelectChange('specialties')}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
                       size={6}
                       disabled={saving}
                     >
@@ -967,17 +967,17 @@ export function ProfileForm() {
                         </option>
                       ))}
                     </select>
-                    <span className="mt-1 block text-xs font-normal text-slate-500">
+                    <span className="mt-1 block text-xs font-normal text-foreground-subtle">
                       Hold Ctrl (Windows) or Command (Mac) to select multiple specialties.
                     </span>
                   </label>
-                  <label className="text-sm font-semibold text-slate-600 sm:col-span-2">
+                  <label className="text-sm font-semibold text-foreground-muted sm:col-span-2">
                     Languages spoken
                     <select
                       multiple
                       value={form.languages}
                       onChange={handleSelectChange('languages')}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
                       size={5}
                       disabled={saving}
                     >
@@ -987,7 +987,7 @@ export function ProfileForm() {
                         </option>
                       ))}
                     </select>
-                    <span className="mt-1 block text-xs font-normal text-slate-500">
+                    <span className="mt-1 block text-xs font-normal text-foreground-subtle">
                       Hold Ctrl (Windows) or Command (Mac) to select multiple languages.
                     </span>
                   </label>
@@ -999,11 +999,11 @@ export function ProfileForm() {
 
           {data.role === 'mc' && (
             <section className="space-y-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Licensed states</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Licensed states</h2>
               <textarea
                 value={form.states}
                 onChange={handleChange('states')}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
                 placeholder="CO, UT, AZ"
                 rows={2}
                 disabled={saving}
@@ -1015,7 +1015,7 @@ export function ProfileForm() {
             <button
               type="button"
               onClick={cancelEditing}
-              className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              className="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground-muted transition hover:border-border-strong hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
               disabled={saving}
             >
               Cancel
@@ -1023,7 +1023,7 @@ export function ProfileForm() {
             <button
               type="submit"
               disabled={saving || !canEdit}
-              className="inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-70"
+              className="inline-flex items-center justify-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {saving ? 'Saving…' : 'Save profile'}
             </button>

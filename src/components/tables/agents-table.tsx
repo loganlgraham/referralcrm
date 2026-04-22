@@ -240,13 +240,13 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
         className="flex items-center gap-1 text-left"
       >
         <span>{label}</span>
-        <span className="text-[10px] text-slate-400">{icon}</span>
+        <span className="text-[10px] text-foreground-subtle">{icon}</span>
       </button>
     );
   };
 
   if (!data) {
-    return <div className="rounded-lg bg-white p-4 shadow-sm">Loading agents…</div>;
+    return <div className="rounded-md bg-surface-raised p-4 shadow-sm">Loading agents…</div>;
   }
 
 
@@ -259,32 +259,32 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
       {!isAdmin && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Agents</h1>
-            <p className="text-sm text-slate-500">Browse real estate agent partners.</p>
+            <h1 className="text-2xl font-semibold text-foreground">Agents</h1>
+            <p className="text-sm text-foreground-subtle">Browse real estate agent partners.</p>
           </div>
         </div>
       )}
-      <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+      <div className="rounded-xl border border-border bg-surface-muted/50 p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-end">
           {isAdmin && (
-            <label className="flex-1 text-xs font-semibold text-slate-600">
+            <label className="flex-1 text-xs font-semibold text-foreground-muted">
               Search
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(event) => handleSearchInput(event.target.value)}
-                className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-2 w-full rounded-lg border border-border bg-surface-raised px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
                 placeholder="Name, email, phone, brokerage"
               />
             </label>
           )}
-          <label className="text-xs font-semibold text-slate-600">
+          <label className="text-xs font-semibold text-foreground-muted">
             Agent Designation
             <select
               value={ahaFilter}
               onChange={(event) => updateParams({ ahaFilter: event.target.value })}
               disabled={isPending}
-              className="mt-1 rounded border border-slate-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-1 rounded border border-border bg-surface-raised px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
             >
               <option value="all">All agents</option>
               <option value="AHA">AHA</option>
@@ -295,87 +295,87 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
+      <div className="overflow-x-auto rounded-card border border-border bg-surface-raised shadow-sm">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-surface-muted">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Agent" sortKey="name" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Closings (12mo)" sortKey="closings" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Closing %" sortKey="closingRate" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="NPS" sortKey="nps" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Avg response" sortKey="avgResponse" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Referral fees paid" sortKey="referralFees" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Net income" sortKey="netIncome" />
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-border">
             {agents.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-center text-sm text-slate-500" colSpan={7}>
+                <td className="px-4 py-6 text-center text-sm text-foreground-subtle" colSpan={7}>
                   No agents match the selected filter.
                 </td>
               </tr>
             ) : (
               agents.map((agent) => (
-                <tr key={agent._id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 text-sm text-slate-700">
-                    <div className="font-medium text-slate-900">
-                      <Link href={`/agents/${agent._id}`} className="text-brand hover:underline">
+                <tr key={agent._id} className="hover:bg-surface-muted">
+                  <td className="px-4 py-3 text-sm text-foreground-muted">
+                    <div className="font-medium text-foreground">
+                      <Link href={`/agents/${agent._id}`} className="text-primary-700 hover:underline">
                         {agent.name}
                       </Link>
                     </div>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-foreground-subtle">
                       <a
                       href={buildGmailComposeUrl(agent.email)}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-brand hover:underline"
+                      className="text-primary-700 hover:underline"
                     >
                       {agent.email}
                     </a>
                     </div>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-foreground-subtle">
                       {agent.phone ? (
                         <a
                           href={`tel:${agent.phone.replace(/[^0-9+]/g, '')}`}
-                          className="text-brand hover:underline"
+                          className="text-primary-700 hover:underline"
                         >
                           {formatPhoneNumber(agent.phone)}
                         </a>
                       ) : '—'}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-700">{agent.metrics.closingsLast12Months}</td>
-                  <td className="px-4 py-3 text-sm text-slate-700">
+                  <td className="px-4 py-3 text-sm text-foreground-muted">{agent.metrics.closingsLast12Months}</td>
+                  <td className="px-4 py-3 text-sm text-foreground-muted">
                     {(() => {
                       const closingRate = formatDecimal(agent.metrics.closingRate);
                       return closingRate === '—' ? '—' : `${closingRate}%`;
                     })()}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-700">{agent.metrics.npsScore ?? '—'}</td>
-                  <td className="px-4 py-3 text-sm text-slate-700">
+                  <td className="px-4 py-3 text-sm text-foreground-muted">{agent.metrics.npsScore ?? '—'}</td>
+                  <td className="px-4 py-3 text-sm text-foreground-muted">
                     {agent.metrics.avgResponseHours == null
                       ? '—'
                       : `${formatDecimal(agent.metrics.avgResponseHours)} hrs`}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-700">
+                  <td className="px-4 py-3 text-sm text-foreground-muted">
                     {formatCurrency(agent.metrics.totalReferralFeesPaidCents)}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-700">
+                  <td className="px-4 py-3 text-sm text-foreground-muted">
                     {formatCurrency(agent.metrics.totalNetIncomeCents)}
                   </td>
                 </tr>

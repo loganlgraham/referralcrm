@@ -3,11 +3,15 @@
 export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
-import clsx from 'clsx';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { FormEvent, Suspense, useEffect, useMemo, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
+import { AuthShell, AuthHeading } from '@/components/layout/auth-shell';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Field } from '@/components/ui/field';
+import { cn } from '@/lib/cn';
 
 const roleOptions = [
   { value: 'agent', label: 'Agent' },
@@ -42,32 +46,21 @@ export default function SignupPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen flex-col bg-slate-100 lg:flex-row">
-          <div className="relative hidden w-full flex-col justify-between overflow-hidden bg-gradient-to-br from-brand to-brand-dark p-12 text-white lg:flex lg:max-w-xl xl:max-w-2xl">
-            <div className="space-y-6">
-              <p className="text-sm font-semibold uppercase tracking-[0.3em] text-white/80">AFC · AHA</p>
-              <h2 className="text-4xl font-semibold leading-tight xl:text-5xl">Create clarity for every referral partner.</h2>
-              <p className="max-w-md text-sm text-white/80">
-                We'll have your onboarding workspace ready in just a moment.
-              </p>
-            </div>
-            <div className="space-y-1 text-sm text-white/70">
-              <p className="font-semibold">Referral CRM</p>
-              <p>Built for the AFC &amp; AHA network.</p>
-            </div>
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_55%)]" aria-hidden="true" />
-          </div>
-          <div className="flex w-full flex-1 items-center justify-center px-6 py-12 sm:px-10 lg:px-12">
-            <div className="w-full max-w-xl space-y-6 rounded-2xl bg-white p-8 text-center shadow-xl ring-1 ring-black/5">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-700">AFC · AHA</p>
-              <div className="space-y-2">
-                <h1 className="text-3xl font-semibold text-slate-900">Create your account</h1>
-                <p className="text-sm text-slate-600">Preparing your signup experience…</p>
-              </div>
-              <div className="mx-auto h-2 w-32 animate-pulse rounded-full bg-slate-200" />
-            </div>
-          </div>
-        </div>
+        <AuthShell
+          hero={{
+            eyebrow: 'AFC · AHA',
+            title: 'Create clarity for every referral partner.',
+            description: "We'll have your onboarding workspace ready in just a moment.",
+          }}
+          wide
+        >
+          <AuthHeading
+            eyebrow="AFC · AHA"
+            title="Create your account"
+            description="Preparing your signup experience…"
+          />
+          <div className="mx-auto h-2 w-32 animate-pulse rounded-full bg-surface-muted" />
+        </AuthShell>
       }
     >
       <SignupPageContent />
@@ -184,193 +177,163 @@ function SignupPageContent() {
     }
   };
 
-  const renderFieldError = (key: keyof FieldErrors) => {
-    const messages = fieldErrors[key];
-    if (!messages || messages.length === 0) return null;
-    return (
-      <p className="text-xs font-medium text-red-600" role="alert">
-        {messages[0]}
-      </p>
-    );
-  };
+  const firstError = (key: keyof FieldErrors) => fieldErrors[key]?.[0];
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-100 lg:flex-row">
-      <div className="relative hidden w-full flex-col justify-between overflow-hidden bg-gradient-to-br from-brand to-brand-dark p-12 text-white lg:flex lg:max-w-xl xl:max-w-2xl">
-        <div className="space-y-6">
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-white/80">AFC · AHA</p>
-          <h2 className="text-4xl font-semibold leading-tight xl:text-5xl">Create your Referral CRM workspace.</h2>
-          <p className="max-w-md text-sm text-white/80">
-            Invite your teams, track referrals, and strengthen every borrower journey from a single platform.
-          </p>
+    <AuthShell
+      hero={{
+        eyebrow: 'AFC · AHA',
+        title: 'Create your Referrio workspace.',
+        description:
+          'Invite your teams, track referrals, and strengthen every borrower journey from a single platform.',
+      }}
+      wide
+    >
+      <AuthHeading
+        eyebrow="AFC · AHA"
+        title="Create your account"
+        description="Tell us a few details to personalize your Referrio experience."
+      />
+
+      {error && (
+        <div className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-[hsl(var(--danger))]" role="alert">
+          <p className="font-medium">{error}</p>
         </div>
-        <div className="space-y-1 text-sm text-white/70">
-          <p className="font-semibold">Referral CRM</p>
-          <p>Built for the AFC &amp; AHA network.</p>
-        </div>
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_55%)]" aria-hidden="true" />
-      </div>
-      <div className="flex w-full flex-1 items-center justify-center px-6 py-12 sm:px-10 lg:px-12">
-        <div className="relative w-full max-w-xl space-y-8 rounded-2xl bg-white p-8 shadow-xl ring-1 ring-black/5">
-          <div className="space-y-2 text-center">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-700">AFC · AHA</p>
-            <h1 className="text-3xl font-semibold text-slate-900">Create your account</h1>
-            <p className="text-sm text-slate-600">Tell us a few details to personalize your Referral CRM experience.</p>
-          </div>
+      )}
 
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-              <p className="font-medium">{error}</p>
-            </div>
-          )}
+      <form onSubmit={handleSubmit} className="space-y-5 text-left">
+        <Field id="name" label="Name" error={firstError('name')}>
+          <Input
+            id="name"
+            type="text"
+            autoComplete="name"
+            placeholder="Your full name"
+            value={name}
+            invalid={Boolean(firstError('name'))}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </Field>
 
-          <form onSubmit={handleSubmit} className="space-y-6 text-left">
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-700" htmlFor="name">
-                Name
-              </label>
-              <input
-                id="name"
-                type="text"
-                autoComplete="name"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
-                placeholder="Your full name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-              {renderFieldError('name')}
-            </div>
+        <Field
+          id="username"
+          label="Username"
+          hint="Letters, numbers, hyphens, and underscores only."
+          error={firstError('username')}
+        >
+          <Input
+            id="username"
+            type="text"
+            autoComplete="username"
+            placeholder="Choose a unique username"
+            value={username}
+            invalid={Boolean(firstError('username'))}
+            onChange={(event) => setUsername(event.target.value)}
+          />
+        </Field>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-700" htmlFor="username">
-                Username
-              </label>
-              <input
-                id="username"
-                type="text"
-                autoComplete="username"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
-                placeholder="Choose a unique username"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-              />
-              <p className="text-xs text-slate-500">Letters, numbers, hyphens, and underscores only.</p>
-              {renderFieldError('username')}
-            </div>
+        <Field id="email" label="Email" error={firstError('email')}>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={email}
+            invalid={Boolean(firstError('email'))}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </Field>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-700" htmlFor="email">
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-              {renderFieldError('email')}
-            </div>
+        <Field
+          id="password"
+          label="Password"
+          hint="Use at least 8 characters."
+          error={firstError('password')}
+        >
+          <Input
+            id="password"
+            type="password"
+            autoComplete="new-password"
+            placeholder="Create a password"
+            value={password}
+            invalid={Boolean(firstError('password'))}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </Field>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-700" htmlFor="password">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="new-password"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
-                placeholder="Create a password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-              <p className="text-xs text-slate-500">Use at least 8 characters.</p>
-              {renderFieldError('password')}
-            </div>
-
-            <div className="space-y-2">
-              <span className="block text-sm font-medium text-slate-700">Role</span>
-              <div className="space-y-2">
-                {roleOptions.map((option) => {
-                  const isSelected = role === option.value;
-                  return (
-                    <label
-                      key={option.value}
-                      className={clsx(
-                        'flex items-center gap-3 rounded-lg border px-4 py-3 transition focus-within:outline-none focus-within:ring-2 focus-within:ring-slate-600/30',
-                        isSelected
-                          ? 'border-slate-600 bg-slate-100 shadow-sm'
-                          : 'border-slate-200 hover:border-slate-400 hover:bg-slate-50'
-                      )}
-                    >
-                      <input
-                        type="radio"
-                        name="role"
-                        value={option.value}
-                        checked={isSelected}
-                        onChange={() => setRole(option.value)}
-                        className="h-4 w-4 border-slate-300 text-slate-900 focus:ring-slate-700"
-                      />
-                      <span className={clsx('text-sm font-medium', isSelected ? 'text-slate-900' : 'text-slate-700')}>
-                        {option.label}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-              {renderFieldError('role')}
-            </div>
-
-            {role === 'admin' && (
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-700" htmlFor="admin-secret">
-                  Admin signup code
+        <div className="space-y-2">
+          <span className="block text-sm font-medium text-foreground">Role</span>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {roleOptions.map((option) => {
+              const isSelected = role === option.value;
+              return (
+                <label
+                  key={option.value}
+                  className={cn(
+                    'flex cursor-pointer items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm font-medium transition focus-within:outline-none focus-within:ring-2 focus-within:ring-primary-500/40',
+                    isSelected
+                      ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-sm'
+                      : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="role"
+                    value={option.value}
+                    checked={isSelected}
+                    onChange={() => setRole(option.value)}
+                    className="sr-only"
+                  />
+                  {option.label}
                 </label>
-                <input
-                  id="admin-secret"
-                  type="password"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
-                  placeholder="Enter the admin code"
-                  value={adminSecret}
-                  onChange={(event) => setAdminSecret(event.target.value)}
-                />
-                <p className="text-xs text-slate-500">Ask an existing admin for the secret code to join as an administrator.</p>
-                {renderFieldError('adminSecret')}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/60 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? 'Creating account…' : 'Create account'}
-            </button>
-          </form>
-
-          <p className="text-center text-sm text-slate-600">
-            Already have an account?{' '}
-            <Link href="/login" className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950 hover:decoration-slate-500">
-              Log in
-            </Link>
-          </p>
-
-          <p className="text-center text-xs text-slate-400">
-            Need assistance?{' '}
-            <a
-              href={buildGmailComposeUrl('support@referralcrm.example.com')}
-              target="_blank"
-              rel="noreferrer"
-              className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950 hover:decoration-slate-500"
-            >
-              Contact support
-            </a>
-          </p>
+              );
+            })}
+          </div>
+          {firstError('role') && (
+            <p className="text-xs text-danger">{firstError('role')}</p>
+          )}
         </div>
-      </div>
-    </div>
+
+        {role === 'admin' && (
+          <Field
+            id="admin-secret"
+            label="Admin signup code"
+            hint="Ask an existing admin for the secret code to join as an administrator."
+            error={firstError('adminSecret')}
+          >
+            <Input
+              id="admin-secret"
+              type="password"
+              placeholder="Enter the admin code"
+              value={adminSecret}
+              invalid={Boolean(firstError('adminSecret'))}
+              onChange={(event) => setAdminSecret(event.target.value)}
+            />
+          </Field>
+        )}
+
+        <Button type="submit" loading={loading} size="lg" className="w-full">
+          {loading ? 'Creating account…' : 'Create account'}
+        </Button>
+      </form>
+
+      <p className="text-center text-sm text-foreground-muted">
+        Already have an account?{' '}
+        <Link href="/login" className="font-medium text-primary-700 no-underline hover:underline">
+          Log in
+        </Link>
+      </p>
+
+      <p className="text-center text-xs text-foreground-subtle">
+        Need assistance?{' '}
+        <a
+          href={buildGmailComposeUrl('support@referralcrm.example.com')}
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-primary-700 no-underline hover:underline"
+        >
+          Contact support
+        </a>
+      </p>
+    </AuthShell>
   );
 }

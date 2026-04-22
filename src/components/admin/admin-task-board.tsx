@@ -61,8 +61,8 @@ export function AdminTaskBoard() {
             onClick={() => setView('urgent')}
             className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
               view === 'urgent'
-                ? 'bg-brand text-white'
-                : 'border border-slate-200 text-slate-600 hover:bg-slate-100'
+                ? 'bg-primary-600 text-white'
+                : 'border border-border text-foreground-muted hover:bg-surface-subtle'
             }`}
           >
             Urgent
@@ -72,15 +72,15 @@ export function AdminTaskBoard() {
             onClick={() => setView('upcoming')}
             className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
               view === 'upcoming'
-                ? 'bg-brand text-white'
-                : 'border border-slate-200 text-slate-600 hover:bg-slate-100'
+                ? 'bg-primary-600 text-white'
+                : 'border border-border text-foreground-muted hover:bg-surface-subtle'
             }`}
           >
             Upcoming
           </button>
         </div>
 
-        <div className="h-6 w-px bg-slate-200" />
+        <div className="h-6 w-px bg-surface-subtle" />
 
         <div className="flex items-center gap-2">
           <button
@@ -88,8 +88,8 @@ export function AdminTaskBoard() {
             onClick={() => setGroupBy('due')}
             className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
               groupBy === 'due'
-                ? 'bg-brand text-white'
-                : 'border border-slate-200 text-slate-600 hover:bg-slate-100'
+                ? 'bg-primary-600 text-white'
+                : 'border border-border text-foreground-muted hover:bg-surface-subtle'
             }`}
           >
             Group by due date
@@ -99,8 +99,8 @@ export function AdminTaskBoard() {
             onClick={() => setGroupBy('agent')}
             className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
               groupBy === 'agent'
-                ? 'bg-brand text-white'
-                : 'border border-slate-200 text-slate-600 hover:bg-slate-100'
+                ? 'bg-primary-600 text-white'
+                : 'border border-border text-foreground-muted hover:bg-surface-subtle'
             }`}
           >
             Group by agent
@@ -110,24 +110,24 @@ export function AdminTaskBoard() {
             onClick={() => setGroupBy('similar')}
             className={`rounded-md px-3 py-1.5 text-sm font-semibold transition ${
               groupBy === 'similar'
-                ? 'bg-brand text-white'
-                : 'border border-slate-200 text-slate-600 hover:bg-slate-100'
+                ? 'bg-primary-600 text-white'
+                : 'border border-border text-foreground-muted hover:bg-surface-subtle'
             }`}
           >
             Group by similar task
           </button>
         </div>
 
-        <div className="h-6 w-px bg-slate-200" />
+        <div className="h-6 w-px bg-surface-subtle" />
 
         <div className="flex items-center gap-2">
-          <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm text-slate-600">
+          <label className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm text-foreground-muted">
             <Calendar className="h-4 w-4" />
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-transparent text-sm text-slate-700 outline-none"
+              className="bg-transparent text-sm text-foreground-muted outline-none"
               aria-label="Filter tasks by due date"
             />
           </label>
@@ -135,7 +135,7 @@ export function AdminTaskBoard() {
             <button
               type="button"
               onClick={() => setSelectedDate('')}
-              className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+              className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm font-semibold text-foreground-muted transition hover:bg-surface-subtle"
             >
               <X className="h-3.5 w-3.5" />
               Clear
@@ -146,7 +146,7 @@ export function AdminTaskBoard() {
 
       {groupBy === 'due' ? (
         referralCards.length === 0 ? (
-          <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+          <div className="rounded-lg border border-border bg-surface-raised p-8 text-center text-sm text-foreground-subtle">
             {emptyLabel}
           </div>
         ) : (
@@ -157,7 +157,7 @@ export function AdminTaskBoard() {
           </div>
         )
       ) : groupedSections.length === 0 ? (
-        <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+        <div className="rounded-lg border border-border bg-surface-raised p-8 text-center text-sm text-foreground-subtle">
           {emptyLabel}
         </div>
       ) : (
@@ -165,9 +165,9 @@ export function AdminTaskBoard() {
           {groupedSections.map((group) => (
             <section
               key={group.groupKey}
-              className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+              className="rounded-card border border-border bg-surface-raised p-4 shadow-card"
             >
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-700">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-foreground-muted">
                 {group.groupLabel}
               </h2>
               <div className="space-y-4">

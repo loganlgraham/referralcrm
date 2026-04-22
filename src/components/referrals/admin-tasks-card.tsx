@@ -347,17 +347,17 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
   }
 
   return (
-    <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="space-y-4 rounded-2xl border border-border bg-surface-raised p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Tasks</h2>
-          <p className="text-xs text-slate-500">Admin tasks for this referral.</p>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">Tasks</h2>
+          <p className="text-xs text-foreground-subtle">Admin tasks for this referral.</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setStatusFilter(statusFilter === 'open' ? 'completed' : 'open')}
-            className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+            className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-foreground-muted transition hover:bg-surface-subtle"
           >
             {statusFilter === 'open' ? 'Show completed' : 'Show open'}
           </button>
@@ -365,7 +365,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
             <button
               type="button"
               onClick={() => setShowManualForm(!showManualForm)}
-              className="inline-flex items-center gap-1 rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-dark"
+              className="inline-flex items-center gap-1 rounded-md bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-800"
             >
               <Plus className="h-3.5 w-3.5" /> Add task
             </button>
@@ -374,26 +374,26 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
       </div>
 
       {showManualForm && (
-        <form onSubmit={handleManualSubmit} className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <form onSubmit={handleManualSubmit} className="space-y-2 rounded-lg border border-border bg-surface-muted p-3">
           <input
             type="text"
             value={manualTitle}
             onChange={(e) => setManualTitle(e.target.value)}
             placeholder="Task name"
-            className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="w-full rounded border border-border px-3 py-2 text-sm"
             required
           />
           <input
             type="datetime-local"
             value={manualDueAt}
             onChange={(e) => setManualDueAt(e.target.value)}
-            className="w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="w-full rounded border border-border px-3 py-2 text-sm"
             required
           />
           <div className="flex gap-2">
             <button
               type="submit"
-              className="rounded bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark"
+              className="rounded bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-800"
             >
               Create
             </button>
@@ -404,7 +404,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
                 setManualTitle('');
                 setManualDueAt(getTodayEightAmMountainDateTimeLocal());
               }}
-              className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              className="rounded border border-border px-3 py-1.5 text-xs font-semibold text-foreground-muted hover:bg-surface-subtle"
             >
               Cancel
             </button>
@@ -416,7 +416,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
         <ul className="space-y-2">
           {statusFilter === 'open' ? (
             overdueAndToday.length === 0 && upcoming.length === 0 ? (
-              <li className="py-4 text-center text-sm text-slate-500">No open tasks</li>
+              <li className="py-4 text-center text-sm text-foreground-subtle">No open tasks</li>
             ) : (
               <>
                 {overdueAndToday.map((task) => (
@@ -439,7 +439,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
                     <button
                       type="button"
                       onClick={() => setShowUpcoming(!showUpcoming)}
-                      className="flex items-center gap-1 text-sm font-semibold text-slate-700 hover:text-slate-900"
+                      className="flex items-center gap-1 text-sm font-semibold text-foreground-muted hover:text-foreground"
                     >
                       {showUpcoming ? (
                         <ChevronDown className="h-4 w-4" />
@@ -472,7 +472,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
               </>
             )
           ) : sortedTasks.length === 0 ? (
-            <li className="py-4 text-center text-sm text-slate-500">No completed tasks</li>
+            <li className="py-4 text-center text-sm text-foreground-subtle">No completed tasks</li>
           ) : (
             sortedTasks.map((task) => (
               <TaskItem
@@ -493,9 +493,9 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
         </ul>
       </div>
 
-      <div className="space-y-3 border-t border-slate-200 pt-4">
+      <div className="space-y-3 border-t border-border pt-4">
         <div className="flex items-center justify-between">
-          <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+          <div className="inline-flex items-center gap-2 text-sm font-semibold text-foreground-muted">
             <CalendarDays className="h-4 w-4" />
             Calendar
           </div>
@@ -503,18 +503,18 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
             <button
               type="button"
               onClick={() => setCalendarMonth((prev) => shiftMonth(prev, -1))}
-              className="rounded border border-slate-200 p-1 text-slate-600 transition hover:bg-slate-100"
+              className="rounded border border-border p-1 text-foreground-muted transition hover:bg-surface-subtle"
               aria-label="Previous month"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <p className="min-w-[8rem] text-center text-xs font-medium text-slate-600">
+            <p className="min-w-[8rem] text-center text-xs font-medium text-foreground-muted">
               {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
             </p>
             <button
               type="button"
               onClick={() => setCalendarMonth((prev) => shiftMonth(prev, 1))}
-              className="rounded border border-slate-200 p-1 text-slate-600 transition hover:bg-slate-100"
+              className="rounded border border-border p-1 text-foreground-muted transition hover:bg-surface-subtle"
               aria-label="Next month"
             >
               <ChevronRight className="h-4 w-4" />
@@ -522,7 +522,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium uppercase tracking-wide text-slate-500">
+        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium uppercase tracking-wide text-foreground-subtle">
           {CALENDAR_WEEK_DAYS.map((day) => (
             <span key={day}>{day}</span>
           ))}
@@ -531,7 +531,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
         <div className="grid grid-cols-7 gap-1">
           {calendarCells.map((cell, idx) => {
             if (!cell.dayKey || !cell.label) {
-              return <div key={`empty-${idx}`} className="h-10 rounded-md bg-slate-50/40" aria-hidden />;
+              return <div key={`empty-${idx}`} className="h-10 rounded-md bg-surface-muted/40" aria-hidden />;
             }
             const hasTasks = tasksByDay.has(cell.dayKey);
             const isSelected = selectedDay === cell.dayKey;
@@ -543,33 +543,33 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
                 onClick={() => handleCalendarDaySelect(cell.dayKey)}
                 className={`relative h-10 rounded-md border text-sm transition ${
                   isSelected
-                    ? 'border-brand bg-brand/10 text-brand'
+                    ? 'border-primary-500 bg-primary-600/10 text-primary-700'
                     : hasTasks
-                      ? 'border-slate-300 bg-slate-50 text-slate-800 hover:bg-slate-100'
-                      : 'border-slate-100 text-slate-500 hover:bg-slate-50'
+                      ? 'border-border-strong bg-surface-muted text-foreground hover:bg-surface-subtle'
+                      : 'border-border text-foreground-subtle hover:bg-surface-muted'
                 }`}
               >
                 {cell.label}
                 {hasTasks && (
-                  <span className="absolute bottom-1 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-brand" />
+                  <span className="absolute bottom-1 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-primary-600" />
                 )}
               </button>
             );
           })}
         </div>
 
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="rounded-lg border border-border bg-surface-muted p-3">
           {!selectedDay ? (
-            <p className="text-sm text-slate-500">Select a day to view and manage tasks.</p>
+            <p className="text-sm text-foreground-subtle">Select a day to view and manage tasks.</p>
           ) : (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-700">{formatSelectedDay(selectedDay)}</p>
-                <p className="text-xs text-slate-500">{selectedDayTasks.length} task(s)</p>
+                <p className="text-sm font-semibold text-foreground-muted">{formatSelectedDay(selectedDay)}</p>
+                <p className="text-xs text-foreground-subtle">{selectedDayTasks.length} task(s)</p>
               </div>
               {selectedDayTasks.length === 0 ? (
                 <div className="space-y-2">
-                  <p className="text-sm text-slate-500">No tasks due on this day.</p>
+                  <p className="text-sm text-foreground-subtle">No tasks due on this day.</p>
                   {statusFilter === 'open' && !showDayManualForm && (
                     <button
                       type="button"
@@ -579,7 +579,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
                           setDayManualDueAt(getDefaultDueAtForDay(selectedDay));
                         }
                       }}
-                      className="inline-flex items-center gap-1 rounded-md bg-brand px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-dark"
+                      className="inline-flex items-center gap-1 rounded-md bg-primary-600 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-800"
                     >
                       <Plus className="h-3.5 w-3.5" /> Add task for this day
                     </button>
@@ -587,27 +587,27 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
                   {statusFilter === 'open' && showDayManualForm && (
                     <form
                       onSubmit={handleDayManualSubmit}
-                      className="space-y-2 rounded-lg border border-slate-200 bg-white p-2.5"
+                      className="space-y-2 rounded-lg border border-border bg-surface-raised p-2.5"
                     >
                       <input
                         type="text"
                         value={dayManualTitle}
                         onChange={(e) => setDayManualTitle(e.target.value)}
                         placeholder="Task name"
-                        className="w-full rounded border border-slate-200 px-2 py-1.5 text-sm"
+                        className="w-full rounded border border-border px-2 py-1.5 text-sm"
                         required
                       />
                       <input
                         type="datetime-local"
                         value={dayManualDueAt}
                         onChange={(e) => setDayManualDueAt(e.target.value)}
-                        className="w-full rounded border border-slate-200 px-2 py-1.5 text-sm"
+                        className="w-full rounded border border-border px-2 py-1.5 text-sm"
                         required
                       />
                       <div className="flex gap-2">
                         <button
                           type="submit"
-                          className="rounded bg-brand px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand-dark"
+                          className="rounded bg-primary-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-primary-800"
                         >
                           Create
                         </button>
@@ -620,7 +620,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
                               setDayManualDueAt(getDefaultDueAtForDay(selectedDay));
                             }
                           }}
-                          className="rounded border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                          className="rounded border border-border px-2.5 py-1 text-xs font-semibold text-foreground-muted hover:bg-surface-subtle"
                         >
                           Cancel
                         </button>

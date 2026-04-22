@@ -48,26 +48,26 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
     } else if (welcomeEmailSentAt) {
       return { text: 'Welcome email sent, not signed up', color: 'bg-amber-50 text-amber-700' };
     } else {
-      return { text: 'No welcome email sent', color: 'bg-slate-50 text-slate-600' };
+      return { text: 'No welcome email sent', color: 'bg-surface-muted text-foreground-muted' };
     }
   }, [isAdmin, agent.signupStatus]);
 
   return (
-    <div className="rounded-lg bg-white p-6 shadow-sm">
+    <div className="rounded-md bg-surface-raised p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-1.5">
-            <h1 className="text-2xl font-semibold text-slate-900">{agent.name}</h1>
+            <h1 className="text-2xl font-semibold text-foreground">{agent.name}</h1>
             <CopyButton value={agent.name} label="Copy name" />
           </div>
-          <div className="mt-2 space-y-1 text-sm text-slate-600">
+          <div className="mt-2 space-y-1 text-sm text-foreground-muted">
             <p className="flex items-center gap-1">
               Email{' '}
               <a
                 href={buildGmailComposeUrl(agent.email)}
                 target="_blank"
                 rel="noreferrer"
-                className="text-brand hover:underline"
+                className="text-primary-700 hover:underline"
               >
                 {agent.email}
               </a>
@@ -78,7 +78,7 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
               {agent.phone ? (
                 <a
                   href={`tel:${agent.phone.replace(/[^0-9+]/g, '')}`}
-                  className="text-brand hover:underline"
+                  className="text-primary-700 hover:underline"
                 >
                   {formatPhoneNumber(agent.phone)}
                 </a>
@@ -114,7 +114,7 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
               />
               <button
                 type="button"
-                className="inline-flex items-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90"
+                className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700"
                 onClick={() => setShowEditor((previous) => !previous)}
               >
                 {showEditor ? 'Close edit' : 'Edit details'}
@@ -129,26 +129,26 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
         )}
       </div>
 
-      <div className="mt-4 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
+      <div className="mt-4 grid gap-3 text-sm text-foreground-muted sm:grid-cols-2">
         <div>
-          <p className="text-xs uppercase text-slate-400">States Licensed</p>
-          <p className="font-medium text-slate-900">{agent.statesLicensed?.join(', ') || '—'}</p>
+          <p className="text-xs uppercase text-foreground-subtle">States Licensed</p>
+          <p className="font-medium text-foreground">{agent.statesLicensed?.join(', ') || '—'}</p>
         </div>
         <div>
-          <p className="text-xs uppercase text-slate-400">Areas Covered</p>
-          <p className="font-medium text-slate-900">{coverageLabels.slice(0, 10).join(', ') || '—'}</p>
+          <p className="text-xs uppercase text-foreground-subtle">Areas Covered</p>
+          <p className="font-medium text-foreground">{coverageLabels.slice(0, 10).join(', ') || '—'}</p>
         </div>
         <div>
-          <p className="text-xs uppercase text-slate-400">Specialties</p>
-          <p className="font-medium text-slate-900">
+          <p className="text-xs uppercase text-foreground-subtle">Specialties</p>
+          <p className="font-medium text-foreground">
             {Array.isArray(agent.specialties) && agent.specialties.length > 0
               ? agent.specialties.join(', ')
               : '—'}
           </p>
         </div>
         <div>
-          <p className="text-xs uppercase text-slate-400">Languages</p>
-          <p className="font-medium text-slate-900">
+          <p className="text-xs uppercase text-foreground-subtle">Languages</p>
+          <p className="font-medium text-foreground">
             {Array.isArray(agent.languages) && agent.languages.length > 0
               ? agent.languages.join(', ')
               : '—'}
@@ -156,8 +156,8 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
         </div>
         {agent.npsScore !== null && agent.npsScore !== undefined && (
           <div>
-            <p className="text-xs uppercase text-slate-400">NPS Score</p>
-            <p className="font-medium text-slate-900">
+            <p className="text-xs uppercase text-foreground-subtle">NPS Score</p>
+            <p className="font-medium text-foreground">
               {typeof agent.npsScore === 'number' ? agent.npsScore.toFixed(1) : '—'}
             </p>
           </div>
@@ -165,7 +165,7 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
       </div>
 
       {isAdmin && showEditor && (
-        <div className="mt-6 border-t border-slate-200 pt-6">
+        <div className="mt-6 border-t border-border pt-6">
           <AgentAdminEditor
             agent={agent}
             variant="embedded"

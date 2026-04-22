@@ -19,7 +19,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={inter.variable}>
-      <body className="min-h-screen bg-slate-100 text-slate-900">
+      <body className="min-h-screen bg-surface-muted text-foreground antialiased">
         <Suspense
           fallback={(
             <div className="pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden top-progress-track" aria-hidden>
@@ -29,7 +29,29 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         >
           <NavigationProgress />
         </Suspense>
-        <Toaster position="top-right" richColors closeButton />
+        <Toaster
+          position="top-right"
+          closeButton
+          theme="light"
+          toastOptions={{
+            classNames: {
+              toast:
+                'group rounded-card border border-border bg-surface-raised text-sm text-foreground shadow-raised',
+              title: 'text-sm font-medium text-foreground',
+              description: 'text-xs text-foreground-muted',
+              actionButton:
+                'bg-primary-600 text-white hover:bg-primary-700 rounded-md px-3 py-1 text-xs font-semibold',
+              cancelButton:
+                'bg-surface-muted text-foreground-muted hover:bg-surface-subtle rounded-md px-3 py-1 text-xs font-semibold',
+              closeButton:
+                'bg-surface-raised text-foreground-subtle hover:text-foreground border border-border',
+              success: 'border-success/40',
+              error: 'border-danger/40',
+              warning: 'border-warning/40',
+              info: 'border-info/40'
+            }
+          }}
+        />
         <NextAuthProvider>
           {children}
         </NextAuthProvider>

@@ -214,7 +214,7 @@ export function RequestUpdateButton({
         type="button"
         onClick={handleOpenModal}
         disabled={agents.length === 0}
-        className="inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Mail className="h-4 w-4" />
         Request Update from Agent
@@ -222,11 +222,11 @@ export function RequestUpdateButton({
 
       {/* Status Display */}
       {agents.length > 0 && (
-        <div className="text-xs text-slate-600">
+        <div className="text-xs text-foreground-muted">
           {statusInfo.lastSent ? (
             <div className="space-y-1">
               <div className="flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5 text-slate-400" />
+                <Clock className="h-3.5 w-3.5 text-foreground-subtle" />
                 <span>
                   Last sent: {formatDate(statusInfo.lastSent)} ({daysSince(statusInfo.lastSent)})
                 </span>
@@ -244,7 +244,7 @@ export function RequestUpdateButton({
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 text-slate-500">
+            <div className="flex items-center gap-1.5 text-foreground-subtle">
               <Mail className="h-3.5 w-3.5" />
               <span>Never sent</span>
             </div>
@@ -263,7 +263,7 @@ export function RequestUpdateButton({
               </span>
             </div>
           ) : nextSendInfo.reason ? (
-            <div className="flex items-center gap-1.5 text-slate-500 mt-2">
+            <div className="flex items-center gap-1.5 text-foreground-subtle mt-2">
               <Calendar className="h-3.5 w-3.5" />
               <span>{nextSendInfo.reason}</span>
             </div>
@@ -272,7 +272,7 @@ export function RequestUpdateButton({
       )}
 
       {agents.length === 0 && (
-        <p className="text-xs text-slate-500">No agents assigned to this referral</p>
+        <p className="text-xs text-foreground-subtle">No agents assigned to this referral</p>
       )}
 
       {/* Success message outside modal */}
@@ -290,7 +290,7 @@ export function RequestUpdateButton({
         size="sm"
       >
         <div className="p-6 space-y-4">
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-foreground-muted">
             Select which agent(s) should receive an email requesting them to update the referral status and add notes.
           </p>
 
@@ -304,27 +304,27 @@ export function RequestUpdateButton({
             {agents.map((agent) => (
               <label
                 key={agent.id}
-                className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 cursor-pointer hover:bg-slate-50 transition"
+                className="flex items-center gap-3 rounded-lg border border-border p-3 cursor-pointer hover:bg-surface-muted transition"
               >
                 <input
                   type="checkbox"
                   checked={selectedAgentIds.includes(agent.id)}
                   onChange={() => handleToggleAgent(agent.id)}
-                  className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                  className="h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
                 />
                 <div className="flex-1">
-                  <div className="font-medium text-sm text-slate-900">{agent.name ?? 'Agent'}</div>
-                  <div className="text-xs text-slate-500">{agent.email ?? 'No email on file'}</div>
+                  <div className="font-medium text-sm text-foreground">{agent.name ?? 'Agent'}</div>
+                  <div className="text-xs text-foreground-subtle">{agent.email ?? 'No email on file'}</div>
                 </div>
               </label>
             ))}
           </div>
 
-          <div className="flex gap-3 pt-4 border-t border-slate-200">
+          <div className="flex gap-3 pt-4 border-t border-border">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="flex-1 rounded-lg border border-border-strong bg-surface-raised px-4 py-2 text-sm font-semibold text-foreground-muted transition hover:bg-surface-muted"
             >
               Cancel
             </button>
@@ -332,7 +332,7 @@ export function RequestUpdateButton({
               type="button"
               onClick={handleSubmit}
               disabled={isSending || selectedAgentIds.length === 0}
-              className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSending ? (
                 <>

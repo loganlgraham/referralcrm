@@ -2,48 +2,129 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --font-sans: 'Inter', sans-serif;
-  color-scheme: light;
+@layer base {
+  :root {
+    --font-sans: 'Inter', sans-serif;
+    color-scheme: light;
+
+    /* Semantic tokens (HSL triplets so `hsl(var(--x) / <alpha>)` works in Tailwind) */
+    --surface: 0 0% 100%;
+    --surface-raised: 0 0% 100%;
+    --surface-muted: 210 40% 96%;
+    --surface-subtle: 210 40% 98%;
+
+    --border: 220 14% 91%;
+    --border-strong: 220 13% 82%;
+
+    --text: 222 47% 11%;
+    --text-muted: 215 16% 37%;
+    --text-subtle: 215 14% 50%;
+
+    /* Primary = original slate brand (#1F2937). */
+    --primary: 217 33% 17%;
+    --primary-foreground: 0 0% 100%;
+
+    --ring: 217 33% 32%;
+
+    --success: 152 56% 35%;
+    --success-foreground: 0 0% 100%;
+    --success-soft: 152 60% 94%;
+
+    --warning: 32 95% 44%;
+    --warning-foreground: 30 100% 8%;
+    --warning-soft: 45 94% 94%;
+
+    --danger: 0 72% 48%;
+    --danger-foreground: 0 0% 100%;
+    --danger-soft: 0 80% 96%;
+
+    --info: 214 90% 48%;
+    --info-foreground: 0 0% 100%;
+    --info-soft: 214 95% 95%;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    background-color: hsl(var(--surface-muted));
+    color: hsl(var(--text));
+    font-feature-settings: 'cv11', 'ss01';
+    min-height: 100%;
+    overflow-x: hidden;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  /* Default link styling — override on purpose inside shells using the Button/Link primitives. */
+  a {
+    color: hsl(var(--text));
+    text-decoration: underline;
+    text-decoration-color: hsl(var(--text) / 0.25);
+    text-underline-offset: 3px;
+  }
+
+  a:hover,
+  a:focus-visible {
+    color: hsl(var(--text));
+    text-decoration-color: hsl(var(--primary) / 0.9);
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.25);
+    color: hsl(var(--text));
+  }
+
+  /* Inputs inherit the warm ring by default for a consistent focus style. */
+  :where(input, textarea, select, button):focus-visible {
+    outline: none;
+  }
 }
 
-a {
-  color: #111827;
-  text-decoration: underline;
-  text-decoration-color: rgba(15, 23, 42, 0.35);
+@layer utilities {
+  .text-eyebrow {
+    font-size: 0.6875rem;
+    line-height: 1rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--border-strong) / 0.6);
+    border-radius: 9999px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--border-strong));
+  }
 }
 
-a:hover,
-a:focus-visible {
-  color: #0f172a;
-  text-decoration-color: rgba(15, 23, 42, 0.6);
-}
-
-::selection {
-  background: #e2e8f0;
-  color: #0f172a;
-}
-
-html,
-body {
-  height: 100%;
-}
-
-body {
-  @apply bg-slate-50 text-slate-900;
-  min-height: 100%;
-  overflow-x: hidden;
-  overscroll-behavior-y: contain;
-  -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
-}
-
+/* Top-of-page route progress bar — uses the primary brand token. */
 .top-progress-track {
-  background: linear-gradient(90deg, rgba(148, 163, 184, 0.35), rgba(100, 116, 139, 0.35), rgba(51, 65, 85, 0.45));
+  background: linear-gradient(
+    90deg,
+    hsl(var(--primary) / 0.15),
+    hsl(var(--primary) / 0.25),
+    hsl(var(--primary) / 0.4)
+  );
 }
 
 .top-progress-bar {
-  background: linear-gradient(90deg, #0f172a, #111827 45%, #0f172a);
+  background: linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.85) 45%, hsl(var(--primary)) 100%);
+  box-shadow: 0 0 10px hsl(var(--primary) / 0.6);
 }
 
 .top-progress-animate {

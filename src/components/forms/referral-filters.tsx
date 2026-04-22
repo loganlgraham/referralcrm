@@ -52,24 +52,24 @@ function StatusMultiSelect({
   const label = selected.length === 0 ? 'All' : `${selected.length} selected`;
 
   return (
-    <div ref={containerRef} className="relative flex flex-col text-xs font-semibold uppercase text-slate-500">
+    <div ref={containerRef} className="relative flex flex-col text-xs font-semibold uppercase text-foreground-subtle">
       Status
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         disabled={disabled}
-        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-2 text-left text-sm normal-case text-slate-700 disabled:opacity-50"
+        className="mt-1 w-full rounded border border-border bg-surface-raised px-3 py-2 text-left text-sm normal-case text-foreground-muted disabled:opacity-50"
       >
         {label}
-        <span className="float-right text-slate-400">&#9662;</span>
+        <span className="float-right text-foreground-subtle">&#9662;</span>
       </button>
       {open && (
-        <div className="absolute top-full z-20 mt-1 max-h-60 w-full overflow-y-auto rounded border border-slate-200 bg-white py-1 shadow-lg">
+        <div className="absolute top-full z-20 mt-1 max-h-60 w-full overflow-y-auto rounded border border-border bg-surface-raised py-1 shadow-lg">
           {selected.length > 0 && (
             <button
               type="button"
               onClick={() => onChange([])}
-              className="w-full px-3 py-1.5 text-left text-sm normal-case text-indigo-600 hover:bg-slate-50"
+              className="w-full px-3 py-1.5 text-left text-sm normal-case text-indigo-600 hover:bg-surface-muted"
             >
               Clear all
             </button>
@@ -77,13 +77,13 @@ function StatusMultiSelect({
           {REFERRAL_STATUSES.map((status) => (
             <label
               key={status}
-              className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm normal-case text-slate-700 hover:bg-slate-50"
+              className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm normal-case text-foreground-muted hover:bg-surface-muted"
             >
               <input
                 type="checkbox"
                 checked={selected.includes(status)}
                 onChange={() => toggle(status)}
-                className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-3.5 w-3.5 rounded border-border-strong text-indigo-600 focus:ring-indigo-500"
               />
               {status}
             </label>
@@ -197,14 +197,14 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   }, [searchTerm]);
 
   return (
-    <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
-      <label className="flex flex-col text-xs font-semibold text-slate-600">
+    <div className="space-y-4 rounded-xl border border-border bg-surface-muted/50 p-4">
+      <label className="flex flex-col text-xs font-semibold text-foreground-muted">
         Search
         <input
           type="text"
           value={searchTerm}
           onChange={(event) => handleSearchInput(event.target.value)}
-          className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-base shadow-sm"
+          className="mt-2 w-full rounded-lg border border-border bg-surface-raised px-4 py-3 text-base shadow-sm"
           placeholder="Name, email, phone, loan #"
         />
       </label>
@@ -221,12 +221,12 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
           disabled={isPending}
         />
         {isAdminMode && (
-          <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+          <label className="flex flex-col text-xs font-semibold uppercase text-foreground-subtle">
             Agent referrals
             <select
               value={agentReferralValue}
               onChange={(event) => handleChange('agentReferrals', event.target.value)}
-              className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
               disabled={isPending}
             >
               <option value="">All</option>
@@ -236,12 +236,12 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
           </label>
         )}
         {showAhaBucket && (
-          <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+          <label className="flex flex-col text-xs font-semibold uppercase text-foreground-subtle">
             Agent Designation
             <select
               value={ahaBucketValue}
               onChange={(event) => handleChange('ahaBucket', event.target.value)}
-              className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
               disabled={isPending}
             >
               <option value="">All</option>
@@ -251,12 +251,12 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
             </select>
           </label>
         )}
-        <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+        <label className="flex flex-col text-xs font-semibold uppercase text-foreground-subtle">
           MC
           <select
             value={lenderValue}
             onChange={(event) => handleChange('mc', event.target.value)}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
             disabled={isPending}
           >
             <option value="">All</option>
@@ -269,12 +269,12 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
           </select>
         </label>
         {!isAgentMode && (
-          <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+          <label className="flex flex-col text-xs font-semibold uppercase text-foreground-subtle">
             Agent
             <select
               value={agentValue}
               onChange={(event) => handleChange('agent', event.target.value)}
-              className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
               disabled={isPending}
             >
               <option value="">All</option>
@@ -287,12 +287,12 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
             </select>
           </label>
         )}
-        <label className="flex flex-col text-xs font-semibold uppercase text-slate-500">
+        <label className="flex flex-col text-xs font-semibold uppercase text-foreground-subtle">
           Timeline
           <select
             value={timelineValue}
             onChange={(event) => handleChange('timeline', event.target.value)}
-            className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+            className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
             disabled={isPending}
           >
             <option value="">All</option>

@@ -32,8 +32,8 @@ export default async function LenderDetailPage({ params }: LenderDetailPageProps
   return (
     <div className="space-y-6">
       <LenderOverviewCard lender={lender} isAdmin={isAdmin} />
-      <div className="rounded-lg bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Deals</h2>
+      <div className="rounded-md bg-surface-raised p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-foreground">Deals</h2>
         <div className="mt-4">
           <PersonDealsTable deals={lender.deals} context="mc" />
         </div>

@@ -967,16 +967,16 @@ export function ReferralHeader({
         : 'grid items-start gap-2.5';
 
   return (
-    <div className="space-y-5 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100 sm:p-5">
+    <div className="space-y-5 rounded-card bg-surface-raised p-4 shadow-sm ring-1 ring-border sm:p-5">
       <div className="grid gap-4 rounded-xl bg-gradient-to-r from-slate-50 via-white to-slate-50 p-4 lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-center">
         <div className="space-y-2 lg:self-center">
           <div>
             <div className="flex items-center gap-1.5">
-              <h1 className="text-2xl font-semibold text-slate-900">{borrowerName}</h1>
+              <h1 className="text-2xl font-semibold text-foreground">{borrowerName}</h1>
               <CopyButton value={borrowerName} label="Copy name" />
             </div>
             {hasBorrowerContact ? (
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-foreground-muted">
                 {borrowerEmail && (
                   <>
                     <EmailActivityLink
@@ -991,7 +991,7 @@ export function ReferralHeader({
                     <CopyButton value={borrowerEmail} label="Copy email" />
                   </>
                 )}
-                {borrowerEmail && borrowerPhone && <span className="text-slate-300">•</span>}
+                {borrowerEmail && borrowerPhone && <span className="text-foreground-subtle">•</span>}
                 {borrowerPhone && (
                   <>
                     <PhoneActivityLink
@@ -1008,12 +1008,12 @@ export function ReferralHeader({
                 )}
               </div>
             ) : (
-              <p className="mt-1 text-sm text-slate-600">Contact information pending</p>
+              <p className="mt-1 text-sm text-foreground-muted">Contact information pending</p>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-600">
-            <span className="rounded-full bg-brand/15 px-3 py-1 text-brand">{status}</span>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">{propertyLabel}</span>
+          <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
+            <span className="rounded-full bg-primary-600/15 px-3 py-1 text-primary-700">{status}</span>
+            <span className="rounded-full bg-surface-subtle px-3 py-1 text-foreground-muted">{propertyLabel}</span>
             <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-700">{daysInStatus} days in stage</span>
           </div>
         </div>
@@ -1022,18 +1022,18 @@ export function ReferralHeader({
             isAgentView ? 'lg:justify-start' : ''
           }`}
         >
-          <section className="w-full rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <section className="w-full rounded-lg border border-border bg-surface-raised p-3 shadow-sm">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-700">Status &amp; progress</h2>
-              <span className="text-xs uppercase tracking-wide text-slate-500">Pipeline</span>
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">Status &amp; progress</h2>
+              <span className="text-xs uppercase tracking-wide text-foreground-subtle">Pipeline</span>
             </div>
             <div className="mt-1.5">
               {isBothClientType && viewerRole === 'admin' ? (
                 <div className="space-y-3">
                   <div className="grid gap-3 lg:grid-cols-2">
-                    <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50/70 p-2.5">
+                    <div className="space-y-2 rounded-md border border-border bg-surface-muted/70 p-2.5">
                       <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">Buy</div>
-                      <p className="text-[11px] text-slate-500">Latest deal: {latestBuyDealStatusLabel}</p>
+                      <p className="text-[11px] text-foreground-subtle">Latest deal: {latestBuyDealStatusLabel}</p>
                       <StatusChanger
                         referralId={referral._id}
                         status={buyStatusLabel}
@@ -1048,9 +1048,9 @@ export function ReferralHeader({
                         onUnderContractIntentChange={onUnderContractIntentChange}
                       />
                     </div>
-                    <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50/70 p-2.5">
+                    <div className="space-y-2 rounded-md border border-border bg-surface-muted/70 p-2.5">
                       <div className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">Sell</div>
-                      <p className="text-[11px] text-slate-500">Latest deal: {latestSellDealStatusLabel}</p>
+                      <p className="text-[11px] text-foreground-subtle">Latest deal: {latestSellDealStatusLabel}</p>
                       <StatusChanger
                         referralId={referral._id}
                         status={sellStatusLabel}
@@ -1066,7 +1066,7 @@ export function ReferralHeader({
                       />
                     </div>
                   </div>
-                  <div className="rounded-md border border-slate-200 bg-slate-50/70 p-2.5">
+                  <div className="rounded-md border border-border bg-surface-muted/70 p-2.5">
                     <StatusChanger
                       referralId={referral._id}
                       status={status}
@@ -1089,7 +1089,7 @@ export function ReferralHeader({
                       Sell: {sellStatusLabel}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-foreground-subtle">
                     Latest deal on my side ({viewerAssignedSide.toUpperCase()}):{' '}
                     {viewerAssignedSide === 'sell' ? latestSellDealStatusLabel : latestBuyDealStatusLabel}
                   </p>
@@ -1106,13 +1106,13 @@ export function ReferralHeader({
                     onPreApprovalSaved={handlePreApprovalSaved}
                     onUnderContractIntentChange={onUnderContractIntentChange}
                   />
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-foreground-subtle">
                     {oppositeSide.toUpperCase()} side status: {oppositeSideStatus}
                   </p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <p className="text-[11px] text-slate-500">Latest deal: {latestDealStatusLabel}</p>
+                  <p className="text-[11px] text-foreground-subtle">Latest deal: {latestDealStatusLabel}</p>
                   <StatusChanger
                     referralId={referral._id}
                     status={status}
@@ -1129,24 +1129,24 @@ export function ReferralHeader({
             </div>
           </section>
           {showBucketSummary && (
-            <section className="flex h-full flex-col justify-between rounded-lg border border-slate-200 bg-slate-900/5 p-4 sm:col-span-2">
+            <section className="flex h-full flex-col justify-between rounded-lg border border-border bg-surface-muted p-4 sm:col-span-2">
               <div className="space-y-2">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">Agent bucket</h2>
-                <p className="text-xs text-slate-500">{bucketDescription}</p>
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">Agent bucket</h2>
+                <p className="text-xs text-foreground-subtle">{bucketDescription}</p>
               </div>
               {canEditBucket ? (
                 <select
                   value={ahaBucket}
                   onChange={handleBucketChange}
                   disabled={savingBucket}
-                  className="mt-2 w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+                  className="mt-2 w-full rounded border border-border-strong bg-surface-raised px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none"
                 >
                   <option value="">Not set</option>
                   <option value="AHA">AHA</option>
                   <option value="AHA_OOS">AHA OOS</option>
                 </select>
               ) : (
-                <p className="mt-3 text-lg font-semibold text-slate-900">{bucketLabel}</p>
+                <p className="mt-3 text-lg font-semibold text-foreground">{bucketLabel}</p>
               )}
             </section>
           )}
@@ -1162,10 +1162,10 @@ export function ReferralHeader({
         }
       >
         {viewerRole === 'admin' && <AdminTasksCard referralId={String(referral._id)} viewerRole={viewerRole} />}
-        <section className="space-y-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm">
+        <section className="space-y-3 rounded-xl border border-border bg-surface-raised px-4 py-3.5 shadow-sm">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-700">Team assignments</h2>
-            <p className="text-xs text-slate-500">Keep the right partners aligned on this referral.</p>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">Team assignments</h2>
+            <p className="text-xs text-foreground-subtle">Keep the right partners aligned on this referral.</p>
           </div>
           {shouldStackAssignmentsForAdminBoth ? (
             <div className="space-y-2.5">
@@ -1243,17 +1243,17 @@ export function ReferralHeader({
             </div>
           )}
           {viewerRole === 'admin' && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="rounded-lg border border-border bg-surface-muted px-3 py-2">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="space-y-0.5 text-xs text-slate-600">
-                  <p className="font-semibold uppercase tracking-wide text-slate-700">Intro emails</p>
+                <div className="space-y-0.5 text-xs text-foreground-muted">
+                  <p className="font-semibold uppercase tracking-wide text-foreground-muted">Intro emails</p>
                   <p>Send friendly updates to the agent and MC.</p>
                 </div>
                 <button
                   type="button"
                   onClick={handlePreviewIntroductions}
                   disabled={sendingIntroductions || cleaningNotes}
-                  className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                  className="rounded-md bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {sendingIntroductions ? 'Sending…' : cleaningNotes ? 'Preparing…' : 'Send now'}
                 </button>
@@ -1262,16 +1262,16 @@ export function ReferralHeader({
                 value={introNotes}
                 onChange={(event) => setIntroNotes(event.target.value)}
                 rows={2}
-                className="mt-2 w-full rounded border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 placeholder:text-slate-400 focus:border-brand focus:outline-none"
+                className="mt-2 w-full rounded border border-border bg-surface-raised px-3 py-2 text-xs text-foreground-muted placeholder:text-foreground-subtle focus:border-primary-500 focus:outline-none"
                 placeholder="Add a note to include in the agent email (optional)"
                 disabled={sendingIntroductions || cleaningNotes}
               />
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-[11px] text-foreground-subtle">
                 Agent intro emails include MC info plus opposite-side agent details when available, and the MC email highlights the paired agent team.
               </p>
               {introEmailStatus && (
                 <div className="mt-2 space-y-2">
-                  <div className="text-[11px] text-slate-600">
+                  <div className="text-[11px] text-foreground-muted">
                     <p>{introEmailStatus.summary}</p>
                     <p>
                       Copied intro email for Gmail and sent at{' '}
@@ -1282,7 +1282,7 @@ export function ReferralHeader({
                   <button
                     type="button"
                     onClick={handleRecopyIntroEmail}
-                    className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+                    className="rounded-md border border-border-strong bg-surface-raised px-3 py-1.5 text-xs font-medium text-foreground-muted shadow-sm transition hover:bg-surface-muted"
                   >
                     Re-copy intro email
                   </button>
@@ -1290,31 +1290,31 @@ export function ReferralHeader({
               )}
               {showPreview && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                  <div className="mx-4 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
-                    <h3 className="text-lg font-semibold text-slate-900">Preview Email Notes</h3>
-                    <p className="mt-1 text-sm text-slate-500">
+                  <div className="mx-4 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-md bg-surface-raised p-6 shadow-xl">
+                    <h3 className="text-lg font-semibold text-foreground">Preview Email Notes</h3>
+                    <p className="mt-1 text-sm text-foreground-subtle">
                       Review the cleaned-up notes before sending to the agent.
                     </p>
                     {cleanedNotes ? (
-                      <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Notes (cleaned up)</p>
+                      <div className="mt-4 rounded-md border border-border bg-surface-muted p-3">
+                        <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Notes (cleaned up)</p>
                         <textarea
                           value={cleanedNotes}
                           onChange={(event) => setCleanedNotes(event.target.value)}
                           rows={4}
-                          className="mt-2 w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-brand focus:outline-none"
+                          className="mt-2 w-full rounded border border-border bg-surface-raised px-3 py-2 text-sm text-foreground-muted focus:border-primary-500 focus:outline-none"
                         />
                       </div>
                     ) : (
-                      <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
-                        <p className="text-sm text-slate-600">No notes will be included in the email.</p>
+                      <div className="mt-4 rounded-md border border-border bg-surface-muted p-3">
+                        <p className="text-sm text-foreground-muted">No notes will be included in the email.</p>
                       </div>
                     )}
                     <div className="mt-6 flex justify-end gap-3">
                       <button
                         type="button"
                         onClick={handleCancelPreview}
-                        className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+                        className="rounded-md border border-border-strong bg-surface-raised px-4 py-2 text-sm font-medium text-foreground-muted shadow-sm transition hover:bg-surface-muted"
                       >
                         Cancel
                       </button>
@@ -1322,7 +1322,7 @@ export function ReferralHeader({
                         type="button"
                         onClick={handleConfirmSend}
                         disabled={sendingIntroductions}
-                        className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                        className="rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
                       >
                         {sendingIntroductions ? 'Sending…' : 'Confirm & Send'}
                       </button>
@@ -1335,7 +1335,7 @@ export function ReferralHeader({
           
           {/* Agent Update Request Section */}
           {viewerRole === 'admin' && (
-            <div className="space-y-3 border-t border-slate-200 pt-4">
+            <div className="space-y-3 border-t border-border pt-4">
               <RequestUpdateButton
                 referralId={referral._id}
                 assignedAgent={effectiveAgentContact}

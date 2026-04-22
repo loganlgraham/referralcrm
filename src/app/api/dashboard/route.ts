@@ -1016,6 +1016,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           pendingClosings: 0,
           pendingClosingsThisMonth: 0,
           pendingClosingsNextMonth: 0,
+          pendingClosingsList: [],
+          pendingClosingsThisMonthList: [],
+          pendingClosingsNextMonthList: [],
+          expectedRevenueFromPendingClosingsCents: 0,
+          generatedRevenueList: [],
+          closedNotPaidList: [],
+          dealsClosedList: [],
+          averageDaysClosedToPaidList: [],
           closeRate: 0,
           afcDealsLost: 0,
           afcDealsLostList: [],
@@ -1571,48 +1579,46 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const paidPayments = filteredPaymentsByNetwork.filter(
     (payment) => payment.status === 'paid' && payment.usedAssignedAgent === true
   );
-  
-  // Calculate average days from closing date to paid date
-  const averageDaysClosedToPaid = computeAverage(
-    paidPayments
-      .map((payment) => {
-        // Use paidDate as the end date
-        const end = payment.paidDate ? new Date(payment.paidDate) : null;
-        if (!end) {
-          return null;
-        }
 
-        // Try to get closing date from payment first, then from referral SLA
-        const closingDate = payment.closingDate
-          ? new Date(payment.closingDate)
-          : payment.referral?.sla?.lastClosedAt
-          ? new Date(payment.referral.sla.lastClosedAt)
-          : null;
+  const computeDaysClosedToPaid = (payment: AggregatedPayment): number | null => {
+    const end = payment.paidDate ? new Date(payment.paidDate) : null;
+    if (!end) {
+      return null;
+    }
 
-        // If we have both dates, calculate the difference
-        if (end && closingDate) {
-          const days = differenceInCalendarDays(end, closingDate);
-          return days >= 0 ? days : null; // Only return positive values
-        }
+    const closingDate = payment.closingDate
+      ? new Date(payment.closingDate)
+      : payment.referral?.sla?.lastClosedAt
+      ? new Date(payment.referral.sla.lastClosedAt)
+      : null;
 
-        // Fallback to stored minutes from SLA if available
-        const storedMinutes =
-          payment.referral?.sla?.closedToPaidMinutes ?? payment.referral?.sla?.previousClosedToPaidMinutes ?? null;
-        if (storedMinutes != null && storedMinutes >= 0) {
-          return storedMinutes / (60 * 24);
-        }
+    if (end && closingDate) {
+      const days = differenceInCalendarDays(end, closingDate);
+      return days >= 0 ? days : null;
+    }
 
-        // Last resort: use invoiceDate or updatedAt as fallback start date
-        if (end) {
-          const fallbackStart = closingDate ?? (payment.invoiceDate ? new Date(payment.invoiceDate) : new Date(payment.updatedAt));
-          const days = differenceInCalendarDays(end, fallbackStart);
-          return days >= 0 ? days : null;
-        }
+    const storedMinutes =
+      payment.referral?.sla?.closedToPaidMinutes ?? payment.referral?.sla?.previousClosedToPaidMinutes ?? null;
+    if (storedMinutes != null && storedMinutes >= 0) {
+      return storedMinutes / (60 * 24);
+    }
 
-        return null;
-      })
-      .filter((value): value is number => value != null && !Number.isNaN(value))
-  );
+    if (end) {
+      const fallbackStart = closingDate ?? (payment.invoiceDate ? new Date(payment.invoiceDate) : new Date(payment.updatedAt));
+      const days = differenceInCalendarDays(end, fallbackStart);
+      return days >= 0 ? days : null;
+    }
+
+    return null;
+  };
+
+  const paidPaymentsWithDays = paidPayments.flatMap((payment) => {
+    const days = computeDaysClosedToPaid(payment);
+    if (days == null || Number.isNaN(days)) return [];
+    return [{ payment, days }];
+  });
+
+  const averageDaysClosedToPaid = computeAverage(paidPaymentsWithDays.map((entry) => entry.days));
 
   const underContractOrLaterStatuses = new Set<AggregatedPayment['status']>([
     'under_contract',
@@ -2143,6 +2149,117 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const ahaOosDealsLostList = ahaOosRelevant
     .filter((payment) => !payment.usedAssignedAgent)
     .map(serializeLostDeal);
+
+  const serializePendingClosing = (payment: AggregatedPayment) => {
+    const refId = payment.referral._id.toString();
+    const agentId = (payment.agentId ?? payment.referral?.assignedAgent)?.toString() ?? null;
+    const mcId = payment.referral?.lender?.toString() ?? null;
+    return {
+      id: payment._id.toString(),
+      referralId: refId,
+      borrowerName: referralBorrowerMap.get(refId) ?? 'Unknown',
+      agentName: agentId ? (agentNameMap.get(agentId) ?? 'Unknown') : null,
+      mcName: mcId ? (lenderNameMap.get(mcId) ?? 'Unknown') : null,
+      status: payment.status,
+      closingDate: payment.closingDate ? new Date(payment.closingDate).toISOString() : null,
+      expectedAmountCents: payment.expectedAmountCents ?? 0,
+    };
+  };
+
+  const sortByClosingDateAsc = <T extends { closingDate: string | null }>(list: T[]): T[] =>
+    [...list].sort((a, b) => {
+      if (!a.closingDate && !b.closingDate) return 0;
+      if (!a.closingDate) return 1;
+      if (!b.closingDate) return -1;
+      return a.closingDate.localeCompare(b.closingDate);
+    });
+
+  const pendingClosingsList = sortByClosingDateAsc(
+    pendingClosings.map(serializePendingClosing)
+  );
+  const pendingClosingsThisMonthList = sortByClosingDateAsc(
+    pendingClosingsThisMonth.map(serializePendingClosing)
+  );
+  const pendingClosingsNextMonthList = sortByClosingDateAsc(
+    pendingClosingsNextMonth.map(serializePendingClosing)
+  );
+
+  const expectedRevenueFromPendingClosingsCents = pendingClosings.reduce(
+    (sum, payment) => sum + (payment.expectedAmountCents ?? 0),
+    0
+  );
+
+  const serializeClosedDeal = (
+    payment: AggregatedPayment,
+    extras?: { daysClosedToPaid?: number | null }
+  ) => {
+    const refId = payment.referral._id.toString();
+    const agentId = (payment.agentId ?? payment.referral?.assignedAgent)?.toString() ?? null;
+    const mcId = payment.referral?.lender?.toString() ?? null;
+    const expectedAmountCents = payment.expectedAmountCents ?? 0;
+    const receivedAmountCents = payment.receivedAmountCents ?? 0;
+    return {
+      id: payment._id.toString(),
+      referralId: refId,
+      borrowerName: referralBorrowerMap.get(refId) ?? 'Unknown',
+      agentName: agentId ? (agentNameMap.get(agentId) ?? 'Unknown') : null,
+      mcName: mcId ? (lenderNameMap.get(mcId) ?? 'Unknown') : null,
+      status: payment.status,
+      closingDate: payment.closingDate ? new Date(payment.closingDate).toISOString() : null,
+      paidDate: payment.paidDate ? new Date(payment.paidDate).toISOString() : null,
+      expectedAmountCents,
+      receivedAmountCents,
+      outstandingAmountCents: Math.max(expectedAmountCents - receivedAmountCents, 0),
+      daysClosedToPaid: extras?.daysClosedToPaid ?? null,
+    };
+  };
+
+  const sortByClosingDateDesc = <T extends { closingDate: string | null }>(list: T[]): T[] =>
+    [...list].sort((a, b) => {
+      if (!a.closingDate && !b.closingDate) return 0;
+      if (!a.closingDate) return 1;
+      if (!b.closingDate) return -1;
+      return b.closingDate.localeCompare(a.closingDate);
+    });
+
+  const sortByPaidDateDesc = <T extends { paidDate: string | null }>(list: T[]): T[] =>
+    [...list].sort((a, b) => {
+      if (!a.paidDate && !b.paidDate) return 0;
+      if (!a.paidDate) return 1;
+      if (!b.paidDate) return -1;
+      return b.paidDate.localeCompare(a.paidDate);
+    });
+
+  const generatedRevenueList = sortByClosingDateDesc(
+    dealsClosedInTimeframe.map((payment) => serializeClosedDeal(payment))
+  );
+
+  const dealsClosedList = sortByClosingDateDesc(
+    dealsClosedInTimeframe.map((payment) => serializeClosedDeal(payment))
+  );
+
+  const closedNotPaidPayments = revenueEligiblePayments.filter((payment) => {
+    if (payment.status === 'closed') {
+      const outstanding = (payment.expectedAmountCents ?? 0) - (payment.receivedAmountCents ?? 0);
+      return outstanding > 0;
+    }
+    if (
+      payment.status === 'paid' &&
+      (payment.receivedAmountCents ?? 0) < (payment.expectedAmountCents ?? 0)
+    ) {
+      return true;
+    }
+    return false;
+  });
+  const closedNotPaidList = sortByClosingDateDesc(
+    closedNotPaidPayments.map((payment) => serializeClosedDeal(payment))
+  );
+
+  const averageDaysClosedToPaidList = sortByPaidDateDesc(
+    paidPaymentsWithDays.map((entry) =>
+      serializeClosedDeal(entry.payment, { daysClosedToPaid: entry.days })
+    )
+  );
 
   const attachRateDebug = (() => {
     if (!attachDebugEnabled) return undefined;
@@ -3732,10 +3849,38 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const adminAverageLeadToContract = daysToContractAvg;
   const adminAverageContractToClose = daysToCloseAvg;
 
-  // Admin task metrics: overdue, due today, completed today, 30-day trend
-  const adminTasks = await AdminTask.find({}).lean<AdminTaskLean[]>();
+  // Admin task metrics: overdue, due today, completed today, 30-day trend.
+  // Unfiltered AdminTask.find({}) was scanning the entire collection (growing
+  // forever) on every dashboard load. We only need:
+  //   - all currently-open tasks (for overdue / due-today / total counts and
+  //     for "outstanding at end of day" over the 30-day trend)
+  //   - tasks resolved within the trend / timeframe window (for completion
+  //     counts and on-time metrics)
+  const taskTrendDays = 30;
   const todayStart = startOfDay(now);
   const todayEnd = endOfDay(now);
+  const trendStart = startOfDay(addDays(now, -taskTrendDays + 1));
+  const resolvedSince =
+    timeframeStart && timeframeStart < trendStart ? timeframeStart : trendStart;
+
+  const ADMIN_TASK_PROJECTION =
+    'status dueAt dueAtOverride snoozedUntil completedAt dismissedAt createdAt updatedAt referralId ruleKey cycleKey';
+
+  const [openTasks, resolvedTasks] = await Promise.all([
+    AdminTask.find({ status: 'open' })
+      .select(ADMIN_TASK_PROJECTION)
+      .lean<AdminTaskLean[]>(),
+    AdminTask.find({
+      status: { $in: ['completed', 'dismissed'] },
+      $or: [
+        { completedAt: { $gte: resolvedSince } },
+        { dismissedAt: { $gte: resolvedSince } },
+      ],
+    })
+      .select(ADMIN_TASK_PROJECTION)
+      .lean<AdminTaskLean[]>(),
+  ]);
+  const adminTasks: AdminTaskLean[] = [...openTasks, ...resolvedTasks];
 
   function getTaskDueBucket(effectiveDue: Date | null, status: string): 'overdue' | 'today' | 'upcoming' | null {
     if (status !== 'open') return null;
@@ -3783,9 +3928,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   ).length;
   const onTimeTaskCompletionSampleSize = resolvedTasksWithDueDateInTimeframe.length;
 
-  // 30-day task activity trend: one point per day
-  const taskTrendDays = 30;
-  const trendStart = startOfDay(addDays(now, -taskTrendDays + 1));
+  // 30-day task activity trend: one point per day (taskTrendDays / trendStart
+  // declared above so they can floor the AdminTask fetch window).
   const dayBuckets: { key: string; label: string; date: Date }[] = [];
   for (let i = 0; i < taskTrendDays; i++) {
     const d = addDays(trendStart, i);
@@ -4137,6 +4281,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         pendingClosings: pendingClosings.length,
         pendingClosingsThisMonth: pendingClosingsThisMonth.length,
         pendingClosingsNextMonth: pendingClosingsNextMonth.length,
+        pendingClosingsList,
+        pendingClosingsThisMonthList,
+        pendingClosingsNextMonthList,
+        expectedRevenueFromPendingClosingsCents,
+        generatedRevenueList,
+        closedNotPaidList,
+        dealsClosedList,
+        averageDaysClosedToPaidList,
         closeRate: closeRateForSummary,
         afcDealsLost,
         afcDealsLostList,

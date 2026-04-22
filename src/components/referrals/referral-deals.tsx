@@ -445,7 +445,7 @@ function DealCard({
     toast.custom(
       (toastInstance) => (
         <form
-          className="w-[360px] rounded-lg border border-slate-200 bg-white p-4 shadow-lg"
+          className="w-[360px] rounded-lg border border-border bg-surface-raised p-4 shadow-lg"
           onSubmit={async (event) => {
             event.preventDefault();
             const trimmedValue = amountDraft.trim();
@@ -467,9 +467,9 @@ function DealCard({
             }
           }}
         >
-          <p className="text-sm font-semibold text-slate-900">Mark deal as paid</p>
-          <p className="mt-1 text-xs text-slate-500">Confirm the amount paid for this deal.</p>
-          <label className="mt-3 block text-xs font-semibold text-slate-600">
+          <p className="text-sm font-semibold text-foreground">Mark deal as paid</p>
+          <p className="mt-1 text-xs text-foreground-subtle">Confirm the amount paid for this deal.</p>
+          <label className="mt-3 block text-xs font-semibold text-foreground-muted">
             Amount paid
             <input
               autoFocus
@@ -481,10 +481,10 @@ function DealCard({
               onChange={(event) => {
                 amountDraft = event.target.value;
               }}
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
             />
           </label>
-          <label className="mt-3 block text-xs font-semibold text-slate-600">
+          <label className="mt-3 block text-xs font-semibold text-foreground-muted">
             Paid date
             <input
               type="date"
@@ -492,20 +492,20 @@ function DealCard({
               onChange={(event) => {
                 paidDateDraft = event.target.value;
               }}
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
             />
           </label>
           <div className="mt-3 flex justify-end gap-2">
             <button
               type="button"
               onClick={() => toast.dismiss(toastInstance)}
-              className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="rounded border border-border-strong bg-surface-raised px-3 py-1.5 text-xs font-semibold text-foreground-muted transition hover:bg-surface-muted"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-dark"
+              className="rounded bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-800"
             >
               Save
             </button>
@@ -518,22 +518,22 @@ function DealCard({
 
   return (
     <div
-      className="flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 shadow-sm"
+      className="flex flex-col gap-3 rounded-md border border-border bg-surface-muted p-4 shadow-sm"
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-2">
           <div className="space-y-1">
-            <p className="text-xs uppercase text-slate-500">Status</p>
-            <p className="text-sm font-semibold text-slate-900">{statusLabel}</p>
-            <p className="text-xs text-slate-500">Created {formatDateMST(deal.createdAt)}</p>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs uppercase text-foreground-subtle">Status</p>
+            <p className="text-sm font-semibold text-foreground">{statusLabel}</p>
+            <p className="text-xs text-foreground-subtle">Created {formatDateMST(deal.createdAt)}</p>
+            <p className="text-xs text-foreground-subtle">
               Under contract: {deal.underContractDate ? formatDateMST(deal.underContractDate) : '—'}
             </p>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-foreground-subtle">
               Closing date: {deal.closingDate ? formatDateMST(deal.closingDate) : '—'}
             </p>
             {originalClosingDate ? (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-foreground-subtle">
                 Original close date: {formatDateMST(originalClosingDate)}
               </p>
             ) : null}
@@ -544,7 +544,7 @@ function DealCard({
             )}
           </div>
           {!isCrossSideReadOnly && (
-            <label className="block text-xs font-semibold text-slate-600">
+            <label className="block text-xs font-semibold text-foreground-muted">
               <span className="mr-2">Update stage</span>
               <select
                 value={(deal.status as DealStatus | undefined) ?? 'under_contract'}
@@ -556,7 +556,7 @@ function DealCard({
                   )
                 }
                 disabled={!canManage || statusUpdating}
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs shadow-sm focus:border-brand focus:outline-none"
+                className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:outline-none"
               >
                 {statusOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -567,7 +567,7 @@ function DealCard({
             </label>
           )}
           {canManage && !isCrossSideReadOnly && (
-            <label className="block text-xs font-semibold text-slate-600">
+            <label className="block text-xs font-semibold text-foreground-muted">
               <span className="mr-2">Termination reason</span>
               <select
                 value={terminatedReason ?? ''}
@@ -577,7 +577,7 @@ function DealCard({
                   )
                 }
                 disabled={!canManage || statusUpdating}
-                className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs shadow-sm focus:border-brand focus:outline-none"
+                className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:outline-none"
               >
                 <option value="">Select reason</option>
                 {TERMINATED_REASON_OPTIONS.map((option) => (
@@ -591,20 +591,20 @@ function DealCard({
         </div>
         {!isCrossSideReadOnly && (
           <div className="space-y-1">
-            <p className="text-xs uppercase text-slate-500">Expected</p>
-            <p className="text-sm font-semibold text-slate-900">{expected}</p>
-            <p className="text-xs text-slate-500">Net paid: {netPaid}</p>
+            <p className="text-xs uppercase text-foreground-subtle">Expected</p>
+            <p className="text-sm font-semibold text-foreground">{expected}</p>
+            <p className="text-xs text-foreground-subtle">Net paid: {netPaid}</p>
           </div>
         )}
-        <div className="space-y-1 text-sm text-slate-700">
+        <div className="space-y-1 text-sm text-foreground-muted">
           <p>
-            <span className="text-xs uppercase text-slate-500">Contract price: </span>
+            <span className="text-xs uppercase text-foreground-subtle">Contract price: </span>
             <span className="font-semibold">{contractPriceValue}</span>
           </p>
           {!isCrossSideReadOnly && (
             <>
               <p>
-                <span className="text-xs uppercase text-slate-500">Commission: </span>
+                <span className="text-xs uppercase text-foreground-subtle">Commission: </span>
                 <span className="font-semibold">
                   {deal.commissionFlatFeeCents
                     ? formatCurrency(deal.commissionFlatFeeCents)
@@ -612,29 +612,29 @@ function DealCard({
                 </span>
               </p>
               <p>
-                <span className="text-xs uppercase text-slate-500">Referral fee: </span>
+                <span className="text-xs uppercase text-foreground-subtle">Referral fee: </span>
                 <span className="font-semibold">{formatPercent(deal.referralFeeBasisPoints)}</span>
               </p>
               <p>
-                <span className="text-xs uppercase text-slate-500">Side: </span>
+                <span className="text-xs uppercase text-foreground-subtle">Side: </span>
                 <span className="font-semibold">{dealSide}</span>
               </p>
               <p>
-                <span className="text-xs uppercase text-slate-500">Used AFC: </span>
+                <span className="text-xs uppercase text-foreground-subtle">Used AFC: </span>
                 <span className="font-semibold">{deal.side === 'sell' ? 'N/A' : deal.usedAfc ? 'Yes' : 'No'}</span>
               </p>
               <p>
-                <span className="text-xs uppercase text-slate-500">Used Agent: </span>
+                <span className="text-xs uppercase text-foreground-subtle">Used Agent: </span>
                 <span className="font-semibold">{deal.usedAssignedAgent ? 'Yes' : 'No'}</span>
               </p>
             </>
           )}
           <p>
-            <span className="text-xs uppercase text-slate-500">Address: </span>
+            <span className="text-xs uppercase text-foreground-subtle">Address: </span>
             <span className="font-semibold">{deal.propertyAddress?.trim() || '—'}</span>
           </p>
           <p>
-            <span className="text-xs uppercase text-slate-500">Agent: </span>
+            <span className="text-xs uppercase text-foreground-subtle">Agent: </span>
             <span className="font-semibold">{deal.agent?.name ?? 'Unassigned'}</span>
           </p>
         </div>
@@ -645,7 +645,7 @@ function DealCard({
                 type="button"
                 onClick={handleMarkPaidClick}
                 disabled={statusUpdating}
-                className="rounded border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
+                className="rounded border border-border-strong bg-surface-muted px-3 py-2 text-xs font-semibold text-foreground transition hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-70"
               >
                 Mark Paid
               </button>
@@ -663,7 +663,7 @@ function DealCard({
             <button
               type="button"
               onClick={() => setEditing((previous) => !previous)}
-              className="rounded border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="rounded border border-border bg-surface-raised px-3 py-2 text-xs font-semibold text-foreground-muted transition hover:bg-surface-muted"
             >
               {editing ? 'Close edit' : 'Edit deal'}
             </button>
@@ -687,7 +687,7 @@ function DealCard({
                 </button>
                 {deal.closingDate && (
                   <div className="space-y-0.5">
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-foreground-subtle">
                       {deal.feeBreakdownEmailSentAt ? (
                         <>
                           {deal.feeBreakdownEmailSentBy === 'cron'
@@ -723,8 +723,8 @@ function DealCard({
       </div>
 
       {editing && canManage && (
-        <form onSubmit={handleSubmit} className="grid gap-3 rounded-md border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="space-y-1 text-sm font-medium text-slate-700">
+        <form onSubmit={handleSubmit} className="grid gap-3 rounded-md border border-border bg-surface-raised p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="space-y-1 text-sm font-medium text-foreground-muted">
             <span>Contract price</span>
             <input
               type="number"
@@ -733,20 +733,20 @@ function DealCard({
               step="0.01"
               value={contractPrice}
               onChange={(event) => setContractPrice(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
               placeholder="0.00"
               disabled={saving || isNoFeeDeal}
             />
           </label>
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-slate-700">Commission</span>
-              <div className="flex rounded border border-slate-300 text-xs font-medium overflow-hidden">
+              <span className="text-sm font-medium text-foreground-muted">Commission</span>
+              <div className="flex rounded border border-border-strong text-xs font-medium overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setCommissionMode('%')}
                   disabled={saving || isNoFeeDeal}
-                  className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-brand text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                  className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                 >
                   %
                 </button>
@@ -754,7 +754,7 @@ function DealCard({
                   type="button"
                   onClick={() => setCommissionMode('$')}
                   disabled={saving || isNoFeeDeal}
-                  className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-brand text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                  className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                 >
                   $
                 </button>
@@ -768,7 +768,7 @@ function DealCard({
                 step="0.01"
                 value={commissionPercentage}
                 onChange={(event) => setCommissionPercentage(event.target.value)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                 placeholder="0.00"
                 disabled={saving || isNoFeeDeal}
               />
@@ -780,13 +780,13 @@ function DealCard({
                 step="0.01"
                 value={commissionFlat}
                 onChange={(event) => setCommissionFlat(event.target.value)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                 placeholder="0.00"
                 disabled={saving || isNoFeeDeal}
               />
             )}
           </div>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
+          <label className="space-y-1 text-sm font-medium text-foreground-muted">
             <span>Referral fee %</span>
             <input
               type="number"
@@ -795,12 +795,12 @@ function DealCard({
               step="0.01"
               value={referralFeePercentage}
               onChange={(event) => setReferralFeePercentage(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
               placeholder="0.00"
               disabled={saving || isNoFeeDeal}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
+          <label className="space-y-1 text-sm font-medium text-foreground-muted">
             <span>Expected amount</span>
             <input
               type="number"
@@ -813,12 +813,12 @@ function DealCard({
                 setExpectedManuallyEdited(Boolean(value));
                 setExpectedAmount(value);
               }}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
               placeholder="0.00"
               disabled={saving || isNoFeeDeal}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
+          <label className="space-y-1 text-sm font-medium text-foreground-muted">
             <span>Net referral fee paid (optional)</span>
             <input
               type="number"
@@ -827,17 +827,17 @@ function DealCard({
               step="0.01"
               value={netReferralFeePaid}
               onChange={(event) => setNetReferralFeePaid(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
               placeholder="0.00"
               disabled={saving || isNoFeeDeal}
             />
           </label>
-            <label className="space-y-1 text-sm font-medium text-slate-700">
+            <label className="space-y-1 text-sm font-medium text-foreground-muted">
               <span>Status</span>
               <select
                 value={status}
                 onChange={(event) => setStatus(event.target.value as DealStatus)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                 disabled={saving}
               >
                 {statusOptions.map((option) => (
@@ -848,7 +848,7 @@ function DealCard({
               </select>
             </label>
             {status === 'terminated' && (
-              <label className="space-y-1 text-sm font-medium text-slate-700">
+              <label className="space-y-1 text-sm font-medium text-foreground-muted">
                 <span>Termination reason</span>
                 <select
                   value={terminatedReason ?? ''}
@@ -857,7 +857,7 @@ function DealCard({
                       event.target.value ? (event.target.value as TerminatedReason) : null
                     )
                   }
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                   disabled={saving}
                 >
                   <option value="">Select reason</option>
@@ -869,49 +869,49 @@ function DealCard({
                 </select>
               </label>
             )}
-            <label className="space-y-1 text-sm font-medium text-slate-700">
+            <label className="space-y-1 text-sm font-medium text-foreground-muted">
               <span>Under contract date</span>
               <input
                 type="date"
                 value={underContractDate}
                 onChange={(event) => setUnderContractDate(event.target.value)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                 disabled={saving}
               />
             </label>
-            <label className="space-y-1 text-sm font-medium text-slate-700">
+            <label className="space-y-1 text-sm font-medium text-foreground-muted">
               <span>Closing date</span>
               <input
                 type="date"
                 value={closingDate}
               onChange={(event) => setClosingDate(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
               disabled={saving}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
+          <label className="space-y-1 text-sm font-medium text-foreground-muted">
             <span>Property address</span>
             <input
               type="text"
               value={propertyAddress}
               onChange={(event) => setPropertyAddress(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
               placeholder="123 Main St, City, ST"
               disabled={saving}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
+          <label className="space-y-1 text-sm font-medium text-foreground-muted">
             <span>Property city</span>
             <input
               type="text"
               value={propertyCity}
               onChange={(event) => setPropertyCity(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
               placeholder="City"
               disabled={saving}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
+          <label className="space-y-1 text-sm font-medium text-foreground-muted">
             <span>Property state</span>
             <input
               type="text"
@@ -928,17 +928,17 @@ function DealCard({
                 setPropertyState(processed);
                 event.currentTarget.value = processed;
               }}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm uppercase focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm uppercase focus:border-primary-500 focus:outline-none"
               placeholder="ST"
               disabled={saving}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
+          <label className="space-y-1 text-sm font-medium text-foreground-muted">
             <span>Agent</span>
             <select
               value={agentId}
               onChange={(event) => setAgentId(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
               disabled={saving || agentsLoading}
             >
               <option value="">Unassigned</option>
@@ -953,24 +953,24 @@ function DealCard({
               )}
             </select>
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
+          <label className="space-y-1 text-sm font-medium text-foreground-muted">
             <span>Deal side</span>
             <select
               value={side}
               onChange={(event) => setSide(event.target.value as 'buy' | 'sell')}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
               disabled={saving}
             >
               <option value="buy">Buy-side</option>
               <option value="sell">Sell-side</option>
             </select>
           </label>
-          <div className="flex flex-col justify-center gap-2 rounded border border-slate-200 p-3 text-sm sm:col-span-2 lg:col-span-4">
+          <div className="flex flex-col justify-center gap-2 rounded border border-border p-3 text-sm sm:col-span-2 lg:col-span-4">
             {side !== 'sell' && (
-              <label className="flex items-center gap-2 text-slate-700">
+              <label className="flex items-center gap-2 text-foreground-muted">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-slate-300"
+                  className="h-4 w-4 rounded border-border-strong"
                   checked={usedAfc}
                   onChange={(event) => setUsedAfc(event.target.checked)}
                   disabled={saving}
@@ -978,10 +978,10 @@ function DealCard({
                 Used AFC
               </label>
             )}
-            <label className="flex items-center gap-2 text-slate-700">
+            <label className="flex items-center gap-2 text-foreground-muted">
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-slate-300"
+                className="h-4 w-4 rounded border-border-strong"
                 checked={usedAssignedAgent}
                 onChange={(event) => setUsedAssignedAgent(event.target.checked)}
                 disabled={saving}
@@ -989,17 +989,17 @@ function DealCard({
               Used Agent
             </label>
             {!agentCreatedReferral && isNoFeeDeal && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-foreground-subtle">
                 {isAgitDeal
                   ? 'AGIT agent deal: no referral fee is collected. Commission/referral fee fields are disabled and owed amount is forced to $0.'
                   : 'Outside-agent deal selected: commission/referral fee fields are disabled and owed amount is forced to $0.'}
               </p>
             )}
             {viewerRole === 'admin' && (
-              <label className="flex items-center gap-2 text-slate-700">
+              <label className="flex items-center gap-2 text-foreground-muted">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-slate-300"
+                  className="h-4 w-4 rounded border-border-strong"
                   checked={markPaid || status === 'paid'}
                   onChange={(event) => {
                     const checked = event.target.checked;
@@ -1021,7 +1021,7 @@ function DealCard({
             <button
               type="submit"
               disabled={saving}
-              className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+              className="rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {saving ? 'Saving…' : 'Save changes'}
             </button>
@@ -1032,7 +1032,7 @@ function DealCard({
                 setExpectedManuallyEdited(false);
                 setEditing(false);
               }}
-              className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+              className="rounded-md border border-border bg-surface-raised px-4 py-2 text-sm font-semibold text-foreground-muted shadow-sm transition hover:bg-surface-muted"
               disabled={saving}
             >
               Cancel
@@ -1558,17 +1558,17 @@ export function ReferralDeals({
   };
 
   return (
-    <section className="space-y-4 rounded-md border border-slate-200 bg-white p-6 shadow-sm">
+    <section className="space-y-4 rounded-md border border-border bg-surface-raised p-6 shadow-sm">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs uppercase text-slate-500">Deals</p>
-          <h2 className="text-lg font-semibold text-slate-900">Referral deals</h2>
+          <p className="text-xs uppercase text-foreground-subtle">Deals</p>
+          <h2 className="text-lg font-semibold text-foreground">Referral deals</h2>
         </div>
         {canManage && canCreateForViewer && (
           <button
             type="button"
             onClick={() => setShowForm((previous) => !previous)}
-            className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100"
+            className="flex items-center gap-2 rounded-full border border-border bg-surface-muted px-3 py-1 text-xs font-semibold text-foreground-muted shadow-sm transition hover:bg-surface-subtle"
           >
             <span className="text-lg leading-none">{showForm ? '−' : '+'}</span>
             {showForm ? 'Hide form' : 'Add deal'}
@@ -1579,9 +1579,9 @@ export function ReferralDeals({
       {canManage && canCreateForViewer && showForm && (
         <form
           onSubmit={handleSubmit}
-          className="grid gap-4 rounded-md border border-slate-200 p-4 sm:grid-cols-2 lg:grid-cols-4"
+          className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-2 lg:grid-cols-4"
         >
-          <label className="space-y-1 text-sm font-medium text-slate-700">
+          <label className="space-y-1 text-sm font-medium text-foreground-muted">
             <span>Contract price</span>
             <input
               type="number"
@@ -1590,7 +1590,7 @@ export function ReferralDeals({
               step="0.01"
               value={contractPrice}
               onChange={(event) => setContractPrice(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
               placeholder="0.00"
               disabled={submitting}
             />
@@ -1599,13 +1599,13 @@ export function ReferralDeals({
             <>
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-slate-700">Commission</span>
-                  <div className="flex rounded border border-slate-300 text-xs font-medium overflow-hidden">
+                  <span className="text-sm font-medium text-foreground-muted">Commission</span>
+                  <div className="flex rounded border border-border-strong text-xs font-medium overflow-hidden">
                     <button
                       type="button"
                       onClick={() => setCommissionMode('%')}
                       disabled={submitting || !usedAssignedAgent || isAgitDeal}
-                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-brand text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                     >
                       %
                     </button>
@@ -1613,7 +1613,7 @@ export function ReferralDeals({
                       type="button"
                       onClick={() => setCommissionMode('$')}
                       disabled={submitting || !usedAssignedAgent || isAgitDeal}
-                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-brand text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                     >
                       $
                     </button>
@@ -1627,7 +1627,7 @@ export function ReferralDeals({
                     step="0.01"
                     value={commissionPercentage}
                     onChange={(event) => setCommissionPercentage(event.target.value)}
-                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                    className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                     placeholder="0.00"
                     disabled={submitting || !usedAssignedAgent || isAgitDeal}
                   />
@@ -1639,13 +1639,13 @@ export function ReferralDeals({
                     step="0.01"
                     value={commissionFlat}
                     onChange={(event) => setCommissionFlat(event.target.value)}
-                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                    className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                     placeholder="0.00"
                     disabled={submitting || !usedAssignedAgent || isAgitDeal}
                   />
                 )}
               </div>
-              <label className="space-y-1 text-sm font-medium text-slate-700">
+              <label className="space-y-1 text-sm font-medium text-foreground-muted">
                 <span>Referral fee %</span>
                 <input
                   type="number"
@@ -1654,12 +1654,12 @@ export function ReferralDeals({
                   step="0.01"
                   value={referralFeePercentage}
                   onChange={(event) => setReferralFeePercentage(event.target.value)}
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                   placeholder="0.00"
                   disabled={submitting || !usedAssignedAgent || isAgitDeal}
                 />
               </label>
-              <label className="space-y-1 text-sm font-medium text-slate-700">
+              <label className="space-y-1 text-sm font-medium text-foreground-muted">
                 <span>Expected amount</span>
                 <input
                   type="number"
@@ -1672,12 +1672,12 @@ export function ReferralDeals({
                     setExpectedManuallyEdited(Boolean(value));
                     setExpectedAmount(value);
                   }}
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                   placeholder="0.00"
                   disabled={submitting || !usedAssignedAgent || isAgitDeal}
                 />
               </label>
-              <label className="space-y-1 text-sm font-medium text-slate-700">
+              <label className="space-y-1 text-sm font-medium text-foreground-muted">
                 <span>Net referral fee paid (optional)</span>
                 <input
                   type="number"
@@ -1686,19 +1686,19 @@ export function ReferralDeals({
                   step="0.01"
                   value={netReferralFeePaid}
                   onChange={(event) => setNetReferralFeePaid(event.target.value)}
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                   placeholder="0.00"
                   disabled={submitting || !usedAssignedAgent || isAgitDeal}
                 />
               </label>
             </>
           )}
-            <label className="space-y-1 text-sm font-medium text-slate-700">
+            <label className="space-y-1 text-sm font-medium text-foreground-muted">
               <span>Status</span>
               <select
                 value={status}
                 onChange={(event) => setStatus(event.target.value as DealStatus)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                 disabled={submitting}
               >
                 {statusOptions.map((option) => (
@@ -1709,7 +1709,7 @@ export function ReferralDeals({
               </select>
             </label>
             {status === 'terminated' && (
-              <label className="space-y-1 text-sm font-medium text-slate-700">
+              <label className="space-y-1 text-sm font-medium text-foreground-muted">
                 <span>Termination reason</span>
                 <select
                   value={terminatedReason ?? ''}
@@ -1718,7 +1718,7 @@ export function ReferralDeals({
                       event.target.value ? (event.target.value as TerminatedReason) : null
                     )
                   }
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                   disabled={submitting}
                 >
                   <option value="">Select reason</option>
@@ -1730,49 +1730,49 @@ export function ReferralDeals({
                 </select>
               </label>
             )}
-            <label className="space-y-1 text-sm font-medium text-slate-700">
+            <label className="space-y-1 text-sm font-medium text-foreground-muted">
               <span>Under contract date</span>
               <input
                 type="date"
                 value={underContractDate}
                 onChange={(event) => setUnderContractDate(event.target.value)}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                 disabled={submitting}
               />
             </label>
-            <label className="space-y-1 text-sm font-medium text-slate-700">
+            <label className="space-y-1 text-sm font-medium text-foreground-muted">
               <span>Closing date</span>
               <input
                 type="date"
                 value={closingDate}
               onChange={(event) => setClosingDate(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
               disabled={submitting}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700 sm:col-span-2 lg:col-span-4">
+          <label className="space-y-1 text-sm font-medium text-foreground-muted sm:col-span-2 lg:col-span-4">
             <span>Property address</span>
             <input
               type="text"
               value={propertyAddress}
               onChange={(event) => setPropertyAddress(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
               placeholder="123 Main St, City, ST"
               disabled={submitting}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
+          <label className="space-y-1 text-sm font-medium text-foreground-muted">
             <span>Property city</span>
             <input
               type="text"
               value={propertyCity}
               onChange={(event) => setPropertyCity(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
               placeholder="City"
               disabled={submitting}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
+          <label className="space-y-1 text-sm font-medium text-foreground-muted">
             <span>Property state</span>
             <input
               type="text"
@@ -1789,17 +1789,17 @@ export function ReferralDeals({
                 setPropertyState(processed);
                 event.currentTarget.value = processed;
               }}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm uppercase focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm uppercase focus:border-primary-500 focus:outline-none"
               placeholder="ST"
               disabled={submitting}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-slate-700">
+          <label className="space-y-1 text-sm font-medium text-foreground-muted">
             <span>Agent</span>
             <select
               value={agentId}
               onChange={(event) => setAgentId(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
               disabled={submitting || agentsLoading}
             >
               <option value="">Unassigned</option>
@@ -1815,12 +1815,12 @@ export function ReferralDeals({
             </select>
           </label>
           {!(viewerRole === 'agent' && (viewerAssignedSide === 'buy' || viewerAssignedSide === 'sell')) && (
-            <label className="space-y-1 text-sm font-medium text-slate-700">
+            <label className="space-y-1 text-sm font-medium text-foreground-muted">
               <span>Deal side</span>
               <select
                 value={side}
                 onChange={(event) => setSide(event.target.value as 'buy' | 'sell')}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                 disabled={submitting}
               >
                 <option value="buy">Buy-side</option>
@@ -1828,12 +1828,12 @@ export function ReferralDeals({
               </select>
             </label>
           )}
-          <div className="flex flex-col justify-center gap-2 rounded border border-slate-200 p-3 text-sm sm:col-span-2 lg:col-span-4">
+          <div className="flex flex-col justify-center gap-2 rounded border border-border p-3 text-sm sm:col-span-2 lg:col-span-4">
             {effectiveCreateSide !== 'sell' && (
-              <label className="flex items-center gap-2 text-slate-700">
+              <label className="flex items-center gap-2 text-foreground-muted">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-slate-300"
+                  className="h-4 w-4 rounded border-border-strong"
                   checked={usedAfc}
                   onChange={(event) => setUsedAfc(event.target.checked)}
                   disabled={submitting}
@@ -1841,10 +1841,10 @@ export function ReferralDeals({
                 Used AFC
               </label>
             )}
-            <label className="flex items-center gap-2 text-slate-700">
+            <label className="flex items-center gap-2 text-foreground-muted">
               <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-slate-300"
+                className="h-4 w-4 rounded border-border-strong"
                 checked={usedAssignedAgent}
                 onChange={(event) => setUsedAssignedAgent(event.target.checked)}
                 disabled={submitting}
@@ -1852,17 +1852,17 @@ export function ReferralDeals({
               Used Agent
             </label>
             {!isAgentOrigin && (!usedAssignedAgent || isAgitDeal) && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-foreground-subtle">
                 {isAgitDeal
                   ? 'AGIT agent deal: no referral fee is collected. Commission/referral fee fields are disabled and owed amount is forced to $0.'
                   : 'Outside-agent deal selected: commission/referral fee fields are disabled and owed amount is forced to $0.'}
               </p>
             )}
             {viewerRole === 'admin' && (
-              <label className="flex items-center gap-2 text-slate-700">
+              <label className="flex items-center gap-2 text-foreground-muted">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-slate-300"
+                  className="h-4 w-4 rounded border-border-strong"
                   checked={markPaid || status === 'paid'}
                   onChange={(event) => {
                     const checked = event.target.checked;
@@ -1884,7 +1884,7 @@ export function ReferralDeals({
             <button
               type="submit"
               disabled={submitting}
-              className="w-full rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+              className="w-full rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {submitting ? 'Saving…' : 'Add deal'}
             </button>
@@ -1895,7 +1895,7 @@ export function ReferralDeals({
       <div className="space-y-3">
         {sortedDeals.length === 0 ? (
           shouldHideAgentEmptyState ? null : (
-          <p className="text-sm text-slate-600">No deals have been added yet.</p>
+          <p className="text-sm text-foreground-muted">No deals have been added yet.</p>
           )
         ) : (
           <>

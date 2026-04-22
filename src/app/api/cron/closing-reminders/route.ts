@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { addDays, startOfDay, endOfDay } from 'date-fns';
+import { utcToZonedTime, zonedTimeToUtc } from 'date-fns-tz';
 import { Types } from 'mongoose';
 
 import { connectMongo } from '@/lib/mongoose';
@@ -12,6 +13,7 @@ export const runtime = 'nodejs';
 const SEND_DELAY_MS = 1000;
 const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 2000;
+const SLA_TIME_ZONE = 'America/Denver';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -48,19 +50,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  await connectMongo();
-
   const now = new Date();
-  const sevenDaysFromNow = addDays(now, 7);
-  
-  // Get start and end of the day 7 days from now (to catch all deals closing on that date)
-  const targetDateStart = startOfDay(sevenDaysFromNow);
-  const targetDateEnd = endOfDay(sevenDaysFromNow);
+
+  // Compute the 7-days-out window in America/Denver so payments closing on the
+  // correct Denver calendar day are picked up regardless of when the cron fires
+  // in UTC. Without this the bounds drift by ~7h across the DST boundary and
+  // can exclude/duplicate payments near midnight MT.
+  const zonedNow = utcToZonedTime(now, SLA_TIME_ZONE);
+  const zonedTargetStart = startOfDay(addDays(zonedNow, 7));
+  const zonedTargetEnd = endOfDay(addDays(zonedNow, 7));
+  const targetDateStart = zonedTimeToUtc(zonedTargetStart, SLA_TIME_ZONE);
+  const targetDateEnd = zonedTimeToUtc(zonedTargetEnd, SLA_TIME_ZONE);
 
   console.log(`[Closing Reminders] Running cron job at ${now.toISOString()}`);
-  console.log(`[Closing Reminders] Looking for deals closing on ${targetDateStart.toISOString()} to ${targetDateEnd.toISOString()}`);
+  console.log(`[Closing Reminders] Looking for deals closing on ${targetDateStart.toISOString()} to ${targetDateEnd.toISOString()} (Denver day)`);
 
   try {
+    // connectMongo is inside the try so connection failures produce the
+    // structured JSON error shape, not an unhandled rejection.
+    await connectMongo();
+
     // Exclude deals with AHA- or AGIT-designated agents (only AHA_OOS and others get auto-send)
     const ahaAgents = await Agent.find({ ahaDesignation: { $in: ['AHA', 'AGIT'] } })
       .select('_id')

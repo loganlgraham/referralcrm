@@ -1,5 +1,13 @@
 import { Schema, model, models } from 'mongoose';
 
+// Compound index to support the closing-reminders cron hot path:
+// filter by closingDate range + status + feeBreakdownEmailSentAt presence.
+// Mongo builds this on the next connect; no manual migration needed.
+const paymentSchemaIndexes = {
+  closingDateStatus: { closingDate: 1, status: 1 } as const,
+  referralIdStatus: { referralId: 1, status: 1 } as const,
+};
+
 const paymentSchema = new Schema(
   {
     referralId: { type: Schema.Types.ObjectId, ref: 'Referral', required: true, index: true },
@@ -70,5 +78,8 @@ const paymentSchema = new Schema(
   },
   { timestamps: true }
 );
+
+paymentSchema.index(paymentSchemaIndexes.closingDateStatus);
+paymentSchema.index(paymentSchemaIndexes.referralIdStatus);
 
 export const Payment = models.Payment || model('Payment', paymentSchema);

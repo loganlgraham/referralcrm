@@ -133,13 +133,13 @@ export default async function AgentDetailPage({ params, searchParams }: AgentDet
   return (
     <div className="space-y-6">
       <AgentOverviewCard agent={agent} isAdmin={isAdmin} />
-      <div className="rounded-lg bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Performance snapshot</h2>
-        <div className="mt-4 grid gap-4 text-sm text-slate-600 md:grid-cols-3">
+      <div className="rounded-md bg-surface-raised p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-foreground">Performance snapshot</h2>
+        <div className="mt-4 grid gap-4 text-sm text-foreground-muted md:grid-cols-3">
           {metricCards.map((card) => (
-            <div key={card.label} className="rounded border border-slate-200 p-4">
-              <p className="text-xs uppercase text-slate-400">{card.label}</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">{card.value}</p>
+            <div key={card.label} className="rounded border border-border p-4">
+              <p className="text-xs uppercase text-foreground-subtle">{card.label}</p>
+              <p className="mt-1 text-lg font-semibold text-foreground">{card.value}</p>
             </div>
           ))}
         </div>
@@ -151,8 +151,8 @@ export default async function AgentDetailPage({ params, searchParams }: AgentDet
       </div>
       {canViewDeals && (
         <>
-          <div className="rounded-lg bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900">Referrals</h2>
+          <div className="rounded-md bg-surface-raised p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-foreground">Referrals</h2>
             <div className="mt-4 space-y-4">
               {referralItems.length > 0 ? (
                 <>
@@ -171,14 +171,14 @@ export default async function AgentDetailPage({ params, searchParams }: AgentDet
                   />
                 </>
               ) : (
-                <div className="rounded-lg border border-dashed border-slate-200 p-10 text-center text-sm text-slate-500">
+                <div className="rounded-lg border border-dashed border-border p-10 text-center text-sm text-foreground-subtle">
                   No referrals yet.
                 </div>
               )}
             </div>
           </div>
-          <div className="rounded-lg bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-900">Deals</h2>
+          <div className="rounded-md bg-surface-raised p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-foreground">Deals</h2>
             <div className="mt-4">
               <PersonDealsTable deals={agent.deals} context="agent" />
             </div>

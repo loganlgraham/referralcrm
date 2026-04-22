@@ -50,17 +50,17 @@ const computeOutcome = (deal: PersonDealSummary, context: 'agent' | 'mc'): 'Won'
 
 const outcomeClassName = (outcome: 'Won' | 'Lost' | 'Pending'): string => {
   if (outcome === 'Won') {
-    return 'text-slate-800';
+    return 'text-foreground';
   }
   if (outcome === 'Lost') {
     return 'text-rose-600';
   }
-  return 'text-slate-500';
+  return 'text-foreground-subtle';
 };
 
 export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
   if (!Array.isArray(deals) || deals.length === 0) {
-    return <p className="text-sm text-slate-500">No deals recorded yet.</p>;
+    return <p className="text-sm text-foreground-subtle">No deals recorded yet.</p>;
   }
 
   const showAgentColumn = context === 'mc' && deals.some((deal) => deal.agent?.id);
@@ -83,57 +83,57 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
           return (
             <div
               key={deal.id}
-              className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+              className="space-y-3 rounded-card border border-border bg-surface-raised p-4 shadow-card"
             >
               <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</p>
-                <div className="text-sm text-slate-700">
+                <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Referral</p>
+                <div className="text-sm text-foreground-muted">
                   <div className="flex flex-col gap-0.5 break-words">
                     {deal.referralId ? (
                       <Link
                         prefetch={false}
                         href={`/referrals/${deal.referralId}`}
-                        className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+                        className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
                       >
                         {label}
                       </Link>
                     ) : (
-                      <span className="font-medium text-slate-900">{label}</span>
+                      <span className="font-medium text-foreground">{label}</span>
                     )}
-                    <span className="text-xs text-slate-500">{detail}</span>
+                    <span className="text-xs text-foreground-subtle">{detail}</span>
                   </div>
                 </div>
               </div>
               <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</p>
-                <p className="text-sm text-slate-700">{getStatusLabel(deal.status)}</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Status</p>
+                <p className="text-sm text-foreground-muted">{getStatusLabel(deal.status)}</p>
               </div>
               <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Outcome</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Outcome</p>
                 <p className={`text-sm font-medium ${outcomeColor}`}>{outcome}</p>
               </div>
               <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Expected</p>
-                <p className="text-sm text-slate-700">{formatCurrency(expectedCents)}</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Expected</p>
+                <p className="text-sm text-foreground-muted">{formatCurrency(expectedCents)}</p>
               </div>
               <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Received</p>
-                <p className="text-sm text-slate-700">{formatCurrency(receivedCents)}</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Received</p>
+                <p className="text-sm text-foreground-muted">{formatCurrency(receivedCents)}</p>
               </div>
               {showAgentColumn ? (
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</p>
-                  <div className="text-sm text-slate-700">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent</p>
+                  <div className="text-sm text-foreground-muted">
                     {deal.agent?.id ? (
                       <Link
                         prefetch={false}
                         href={`/agents/${deal.agent.id}`}
-                        className="text-brand transition hover:text-brand-dark hover:underline break-words"
+                        className="text-primary-700 transition hover:text-primary-800 hover:underline break-words"
                       >
                         {deal.agent.name || 'Agent'}
                       </Link>
                     ) : (
-                      <span className="text-slate-500">Unassigned</span>
+                      <span className="text-foreground-subtle">Unassigned</span>
                     )}
                   </div>
                 </div>
@@ -142,33 +142,33 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
           );
         })}
       </div>
-      <div className="hidden overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm md:block">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
+      <div className="hidden overflow-hidden rounded-card border border-border bg-surface-raised shadow-card md:block">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-surface-muted">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 Referral
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 Status
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 Outcome
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 Expected
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 Received
               </th>
               {showAgentColumn && (
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                   Agent
                 </th>
               )}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-border">
             {deals.map((deal) => {
               const outcome = computeOutcome(deal, context);
               const outcomeColor = outcomeClassName(outcome);
@@ -182,39 +182,39 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
                   : 'Loan # —';
 
               return (
-                <tr key={deal.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 text-sm text-slate-700">
+                <tr key={deal.id} className="hover:bg-surface-muted">
+                  <td className="px-4 py-3 text-sm text-foreground-muted">
                     <div className="flex flex-col">
                       {deal.referralId ? (
                         <Link
                           prefetch={false}
                           href={`/referrals/${deal.referralId}`}
-                          className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+                          className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
                         >
                           {label}
                         </Link>
                       ) : (
-                        <span className="font-medium text-slate-900">{label}</span>
+                        <span className="font-medium text-foreground">{label}</span>
                       )}
-                      <span className="text-xs text-slate-500">{detail}</span>
+                      <span className="text-xs text-foreground-subtle">{detail}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-700">{getStatusLabel(deal.status)}</td>
+                  <td className="px-4 py-3 text-sm text-foreground-muted">{getStatusLabel(deal.status)}</td>
                   <td className={`px-4 py-3 text-sm font-medium ${outcomeColor}`}>{outcome}</td>
-                  <td className="px-4 py-3 text-sm text-slate-700">{formatCurrency(expectedCents)}</td>
-                  <td className="px-4 py-3 text-sm text-slate-700">{formatCurrency(receivedCents)}</td>
+                  <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(expectedCents)}</td>
+                  <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(receivedCents)}</td>
                   {showAgentColumn && (
-                    <td className="px-4 py-3 text-sm text-slate-700">
+                    <td className="px-4 py-3 text-sm text-foreground-muted">
                       {deal.agent?.id ? (
                         <Link
                           prefetch={false}
                           href={`/agents/${deal.agent.id}`}
-                          className="text-brand transition hover:text-brand-dark hover:underline"
+                          className="text-primary-700 transition hover:text-primary-800 hover:underline"
                         >
                           {deal.agent.name || 'Agent'}
                         </Link>
                       ) : (
-                        <span className="text-slate-500">Unassigned</span>
+                        <span className="text-foreground-subtle">Unassigned</span>
                       )}
                     </td>
                   )}

@@ -134,12 +134,12 @@ export function TaskItem({
   };
 
   return (
-    <li className="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+    <li className="flex items-start gap-2 rounded-lg border border-border bg-surface-muted/50 p-3">
       {!showAsCompleted ? (
         <button
           type="button"
           onClick={() => onComplete(task._id)}
-          className="mt-0.5 shrink-0 text-slate-400 transition hover:text-brand"
+          className="mt-0.5 shrink-0 text-foreground-subtle transition hover:text-primary-700"
           title="Complete"
         >
           <Circle className="h-5 w-5" />
@@ -148,13 +148,13 @@ export function TaskItem({
         <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
       )}
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-slate-900">{task.title}</p>
-        <p className="text-xs text-slate-500">
+        <p className="text-sm font-medium text-foreground">{task.title}</p>
+        <p className="text-xs text-foreground-subtle">
           {formatDueDate(task.effectiveDueAt ?? task.dueAt)}
           {isSnoozed && <span className="ml-1 text-amber-600">(snoozed)</span>}
         </p>
         {isExpanded && !showAsCompleted && (
-          <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
+          <div className="mt-3 space-y-2 border-t border-border pt-3">
             {task.ruleKey && (
               <button
                 type="button"
@@ -176,18 +176,18 @@ export function TaskItem({
                     return !prev;
                   })
                 }
-                className="block text-xs font-semibold text-slate-700 hover:underline"
+                className="block text-xs font-semibold text-foreground-muted hover:underline"
               >
                 {isEditing ? 'Cancel edit' : 'Edit task'}
               </button>
             )}
             {isEditing && onEdit && (
-              <div className="space-y-2 rounded-md border border-slate-200 bg-white p-2">
+              <div className="space-y-2 rounded-md border border-border bg-surface-raised p-2">
                 <input
                   type="text"
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full rounded border border-slate-200 px-2 py-1 text-xs"
+                  className="w-full rounded border border-border px-2 py-1 text-xs"
                   placeholder="Task name"
                 />
                 <div className="flex flex-wrap items-center gap-2">
@@ -195,12 +195,12 @@ export function TaskItem({
                     type="datetime-local"
                     value={editDueAt}
                     onChange={(e) => setEditDueAt(e.target.value)}
-                    className="rounded border border-slate-200 px-2 py-1 text-xs"
+                    className="rounded border border-border px-2 py-1 text-xs"
                   />
                   <button
                     type="button"
                     onClick={handleEditSave}
-                    className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                    className="rounded border border-border bg-surface-raised px-2 py-1 text-xs font-medium text-foreground-muted transition hover:bg-surface-muted"
                   >
                     Save
                   </button>
@@ -211,19 +211,19 @@ export function TaskItem({
               <button
                 type="button"
                 onClick={() => onUnsnooze(task._id)}
-                className="block text-xs font-semibold text-slate-600 hover:underline"
+                className="block text-xs font-semibold text-foreground-muted hover:underline"
               >
                 Unsnooze
               </button>
             ) : (
               <div className="flex flex-wrap items-center gap-1">
-                <span className="mr-1 text-xs text-slate-500">Snooze:</span>
+                <span className="mr-1 text-xs text-foreground-subtle">Snooze:</span>
                 {([1, 3, 7, 30] as const).map((days) => (
                   <button
                     key={days}
                     type="button"
                     onClick={() => handleSnoozePreset(days)}
-                    className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                    className="rounded border border-border bg-surface-raised px-2 py-1 text-xs font-medium text-foreground-muted transition hover:bg-surface-muted"
                   >
                     +{days} day{days === 1 ? '' : 's'}
                   </button>
@@ -231,18 +231,18 @@ export function TaskItem({
               </div>
             )}
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-slate-500">Reschedule:</span>
+              <span className="text-xs text-foreground-subtle">Reschedule:</span>
               <input
                 type="datetime-local"
                 value={dueOverride}
                 onChange={(e) => setDueOverride(e.target.value)}
-                className="rounded border border-slate-200 px-2 py-1 text-xs"
+                className="rounded border border-border px-2 py-1 text-xs"
               />
               <button
                 type="button"
                 onClick={handleSetReschedule}
                 disabled={!dueOverride}
-                className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                className="rounded border border-border bg-surface-raised px-2 py-1 text-xs font-medium text-foreground-muted transition hover:bg-surface-muted disabled:opacity-50"
               >
                 Set
               </button>
@@ -250,7 +250,7 @@ export function TaskItem({
                 <button
                   type="button"
                   onClick={handleResetReschedule}
-                  className="text-xs font-semibold text-slate-600 hover:underline"
+                  className="text-xs font-semibold text-foreground-muted hover:underline"
                 >
                   Reset to original
                 </button>
@@ -263,7 +263,7 @@ export function TaskItem({
         <button
           type="button"
           onClick={() => onToggleExpand(task._id)}
-          className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+          className="shrink-0 rounded p-1 text-foreground-subtle hover:bg-surface-subtle hover:text-foreground-muted"
         >
           <MoreHorizontal className="h-4 w-4" />
         </button>

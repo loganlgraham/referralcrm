@@ -33,28 +33,28 @@ export function ReferralTimeline({ referralId }: { referralId: string }) {
   const canShowToggle = activities.length > 5;
 
   return (
-    <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="space-y-4 rounded-lg border border-border bg-surface-raised p-5 shadow-sm">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Activity timeline</h2>
-        <p className="text-sm text-slate-500">Latest interactions and updates from your team.</p>
+        <h2 className="text-lg font-semibold text-foreground">Activity timeline</h2>
+        <p className="text-sm text-foreground-subtle">Latest interactions and updates from your team.</p>
       </div>
-      {isLoading && <p className="text-sm text-slate-500">Loading activity…</p>}
+      {isLoading && <p className="text-sm text-foreground-subtle">Loading activity…</p>}
       {error && !isLoading && (
         <p className="text-sm text-rose-500">We couldn’t load recent activity. Please refresh to try again.</p>
       )}
       {data && !hasActivity && (
-        <p className="text-sm text-slate-500">No activity logged yet. Add a note or update the status to get started.</p>
+        <p className="text-sm text-foreground-subtle">No activity logged yet. Add a note or update the status to get started.</p>
       )}
       {hasActivity && (
         <div className="space-y-3">
           {visibleActivities.map((activity) => (
-            <div key={activity._id} className="rounded-lg border border-slate-200 bg-slate-50/60 p-4">
-              <div className="flex items-center justify-between text-xs text-slate-400">
+            <div key={activity._id} className="rounded-lg border border-border bg-surface-muted/60 p-4">
+              <div className="flex items-center justify-between text-xs text-foreground-subtle">
                 <span className="uppercase">{activity.channel}</span>
                 <span>{formatInTimeZone(new Date(activity.createdAt), SLA_TIME_ZONE, "MMM d, yyyy 'at' h:mm a 'MT'")}</span>
               </div>
-              <p className="mt-2 text-sm text-slate-700">{activity.content}</p>
-              <p className="text-xs text-slate-500">by {activity.actor}</p>
+              <p className="mt-2 text-sm text-foreground-muted">{activity.content}</p>
+              <p className="text-xs text-foreground-subtle">by {activity.actor}</p>
             </div>
           ))}
           {canShowToggle && (

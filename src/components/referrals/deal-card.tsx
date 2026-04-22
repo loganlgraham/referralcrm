@@ -6,6 +6,7 @@ import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/constants/deals';
+import { StatusPill } from '@/components/ui/status-pill';
 import { formatCurrency, formatDateTimeMST } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { useAgentOptions } from '@/hooks/use-agent-options';
@@ -1298,47 +1299,27 @@ export function DealCard({
     };
 
     return (
-      <div key={deal._id} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center gap-4 bg-slate-50 px-4 py-3">
+      <div key={deal._id} className="overflow-hidden rounded-card border border-border bg-surface-raised shadow-card">
+        <div className="flex flex-wrap items-center gap-4 bg-surface-muted px-4 py-3">
           <div className="flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:gap-4">
             <div className="flex flex-wrap items-center gap-3">
-              <span
-                className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                  status === 'terminated'
-                    ? 'bg-rose-50 text-rose-600'
-                    : status === 'paid'
-                      ? 'bg-slate-100 text-slate-700'
-                      : status === 'payment_sent'
-                        ? 'bg-indigo-50 text-indigo-600'
-                        : status === 'closed'
-                          ? 'bg-sky-50 text-sky-600'
-                          : status === 'clear_to_close'
-                            ? 'bg-slate-100 text-slate-700'
-                            : status === 'past_appraisal'
-                              ? 'bg-blue-50 text-blue-600'
-                              : status === 'past_inspection'
-                                ? 'bg-amber-50 text-amber-600'
-                                : 'bg-amber-50 text-amber-600'
-                }`}
-              >
-                {statusLabel}
-              </span>
-              <span className="text-xs uppercase tracking-wide text-slate-400">
+              <StatusPill kind="deal" status={status} label={statusLabel} />
+              <span className="text-xs uppercase tracking-wide text-foreground-subtle">
                 {isPrimary ? 'Active Deal' : 'Deal History'}
               </span>
             </div>
-            <div className="flex flex-col text-sm text-slate-600 sm:flex-row sm:items-center sm:gap-2">
-              <span className="font-medium text-slate-900">{formattedAmount}</span>
-              <span className="text-xs text-slate-500">{propertyLabel}</span>
+            <div className="flex flex-col text-sm text-foreground-muted sm:flex-row sm:items-center sm:gap-2">
+              <span className="font-medium text-foreground">{formattedAmount}</span>
+              <span className="text-xs text-foreground-subtle">{propertyLabel}</span>
               {assignedAgentName && (
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-foreground-subtle">
                   Agent:{' '}
                   {assignedAgentHref ? (
                     <a
                       href={assignedAgentHref}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-brand underline-offset-2 hover:underline"
+                      className="text-primary-700 underline-offset-2 hover:underline"
                     >
                       {assignedAgentName}
                     </a>
@@ -1350,12 +1331,12 @@ export function DealCard({
             </div>
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-xs uppercase text-slate-400">
+            <label className="flex items-center gap-2 text-xs uppercase text-foreground-subtle">
               Status
               <select
                 value={status}
                 onChange={handleStatusChange(deal)}
-                className="rounded border border-slate-200 px-3 py-1.5 text-sm text-slate-700"
+                className="rounded border border-border px-3 py-1.5 text-sm text-foreground-muted"
                 disabled={isSaving || isDetailSaving}
               >
                 {statusOptions.map((option) => (
@@ -1368,7 +1349,7 @@ export function DealCard({
             <button
               type="button"
               onClick={toggleExpanded}
-              className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+              className="rounded border border-border px-3 py-1.5 text-xs font-semibold text-foreground-muted transition hover:bg-surface-subtle"
             >
               {isExpanded ? 'Hide details' : 'Show details'}
             </button>
@@ -1384,30 +1365,30 @@ export function DealCard({
           </div>
         </div>
         {isExpanded && (
-          <div className="space-y-4 border-t border-slate-200 bg-white px-4 py-4 text-sm">
+          <div className="space-y-4 border-t border-border bg-surface-raised px-4 py-4 text-sm">
             <form onSubmit={handleSubmitDetails} className="space-y-3">
               <div className="grid gap-3 md:grid-cols-2">
-                <label className="flex flex-col gap-1 text-xs uppercase text-slate-400">
+                <label className="flex flex-col gap-1 text-xs uppercase text-foreground-subtle">
                   Contract Price (USD)
                   <input
                     type="text"
                     inputMode="decimal"
                     value={draft.contractPrice}
                     onChange={handleDraftChange('contractPrice')}
-                    className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+                    className="rounded border border-border-strong px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none"
                     placeholder="350000"
                     disabled={isDetailSaving}
                   />
                 </label>
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs uppercase text-slate-400">Agent Commission</span>
-                    <div className="flex rounded border border-slate-300 text-xs font-medium overflow-hidden">
+                    <span className="text-xs uppercase text-foreground-subtle">Agent Commission</span>
+                    <div className="flex rounded border border-border-strong text-xs font-medium overflow-hidden">
                       <button
                         type="button"
                         onClick={() => handleCommissionModeToggle('%')}
                         disabled={isDetailSaving || isOutsideAgentSelected}
-                        className={`px-1.5 py-0.5 transition-colors ${draft.commissionMode === '%' ? 'bg-brand text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                        className={`px-1.5 py-0.5 transition-colors ${draft.commissionMode === '%' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                       >
                         %
                       </button>
@@ -1415,7 +1396,7 @@ export function DealCard({
                         type="button"
                         onClick={() => handleCommissionModeToggle('$')}
                         disabled={isDetailSaving || isOutsideAgentSelected}
-                        className={`px-1.5 py-0.5 transition-colors ${draft.commissionMode === '$' ? 'bg-brand text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                        className={`px-1.5 py-0.5 transition-colors ${draft.commissionMode === '$' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                       >
                         $
                       </button>
@@ -1427,7 +1408,7 @@ export function DealCard({
                       inputMode="decimal"
                       value={draft.commissionPercent}
                       onChange={handleDraftChange('commissionPercent')}
-                      className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+                      className="rounded border border-border-strong px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none"
                       placeholder="3"
                       disabled={isDetailSaving || isOutsideAgentSelected}
                     />
@@ -1437,32 +1418,32 @@ export function DealCard({
                       inputMode="decimal"
                       value={draft.commissionFlat}
                       onChange={handleDraftChange('commissionFlat')}
-                      className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+                      className="rounded border border-border-strong px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none"
                       placeholder="5000"
                       disabled={isDetailSaving || isOutsideAgentSelected}
                     />
                   )}
                 </div>
                 {!isAgentOrigin && (
-                  <label className="flex flex-col gap-1 text-xs uppercase text-slate-400">
+                  <label className="flex flex-col gap-1 text-xs uppercase text-foreground-subtle">
                     Referral Fee %
                     <input
                       type="text"
                       inputMode="decimal"
                       value={draft.referralFeePercent}
                       onChange={handleDraftChange('referralFeePercent')}
-                      className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+                      className="rounded border border-border-strong px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none"
                       placeholder="25"
                       disabled={isDetailSaving || isOutsideAgentSelected}
                     />
                   </label>
                 )}
-                <label className="flex flex-col gap-1 text-xs uppercase text-slate-400">
+                <label className="flex flex-col gap-1 text-xs uppercase text-foreground-subtle">
                   Deal Side
                   <select
                     value={draft.side}
                     onChange={handleDraftChange('side')}
-                    className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+                    className="rounded border border-border-strong px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none"
                     disabled={isDetailSaving}
                   >
                     <option value="buy">Buy-side</option>
@@ -1470,7 +1451,7 @@ export function DealCard({
                   </select>
                 </label>
               </div>
-              <div className="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-2 text-xs text-foreground-subtle sm:flex-row sm:items-center sm:justify-between">
                 {isAgentOrigin ? (
                   <p>No referral fee is collected for agent-sourced deals.</p>
                 ) : isOutsideAgentSelected ? (
@@ -1478,7 +1459,7 @@ export function DealCard({
                 ) : (
                   <p>
                     Projected Referral Fee:{' '}
-                    <span className="text-sm font-semibold text-slate-900">{draftReferralFeeDisplay}</span>
+                    <span className="text-sm font-semibold text-foreground">{draftReferralFeeDisplay}</span>
                   </p>
                 )}
                 <div className="flex gap-2">
@@ -1486,14 +1467,14 @@ export function DealCard({
                     type="button"
                     onClick={handleResetDraft}
                     disabled={isDetailSaving}
-                    className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded border border-border px-3 py-1.5 text-xs font-semibold text-foreground-muted transition hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Reset
                   </button>
                   <button
                     type="submit"
                     disabled={isDetailSaving}
-                    className="rounded bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isDetailSaving ? 'Saving…' : 'Save details'}
                   </button>
@@ -1501,14 +1482,14 @@ export function DealCard({
               </div>
             </form>
             <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded border border-slate-200 bg-slate-50 p-3">
+              <div className="rounded border border-border bg-surface-muted p-3">
                 {status === 'terminated' ? (
-                  <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">
+                  <label className="flex flex-col gap-2 text-xs uppercase text-foreground-subtle">
                     Termination Reason
                     <select
                       value={selectedReason}
                       onChange={handleReasonChange(deal)}
-                      className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                      className="rounded border border-border px-3 py-2 text-sm text-foreground-muted"
                       disabled={isSaving}
                     >
                       {TERMINATED_REASON_OPTIONS.map((option) => (
@@ -1519,7 +1500,7 @@ export function DealCard({
                     </select>
                   </label>
                 ) : (
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-foreground-subtle">
                     {isAgentOrigin
                       ? 'Update the contract details to keep this deal accurate for reporting.'
                       : isOutsideAgentSelected
@@ -1536,12 +1517,12 @@ export function DealCard({
                   </p>
                 )}
               </div>
-              <div className="rounded border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+              <div className="rounded border border-border bg-surface-muted p-3 text-xs text-foreground-subtle">
                 {status === 'payment_sent' && (
                   <p className="text-indigo-600">Agent marked payment as sent. Awaiting admin confirmation.</p>
                 )}
                 {status === 'paid' && (
-                  <p className="text-slate-700">Payment received and confirmed by admin.</p>
+                  <p className="text-foreground-muted">Payment received and confirmed by admin.</p>
                 )}
                 {status !== 'payment_sent' && status !== 'paid' && (
                   <p>Track the payment journey from contract through payout for this referral.</p>
@@ -1549,13 +1530,13 @@ export function DealCard({
               </div>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">
+              <div className="rounded border border-border bg-surface-muted p-3">
+                <label className="flex flex-col gap-2 text-xs uppercase text-foreground-subtle">
                   Agent Outcome
                   <select
                     value={agentOutcomeSelection}
                     onChange={handleAgentOutcomeChange(deal, expectedAmountCents)}
-                    className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                    className="rounded border border-border px-3 py-2 text-sm text-foreground-muted"
                     disabled={isSaving || isDetailSaving}
                   >
                     <option value="USED_AGENT">Used agent</option>
@@ -1568,13 +1549,13 @@ export function DealCard({
                   </p>
                 )}
               </div>
-              <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                <label className="flex flex-col gap-2 text-xs uppercase text-slate-400">
+              <div className="rounded border border-border bg-surface-muted p-3">
+                <label className="flex flex-col gap-2 text-xs uppercase text-foreground-subtle">
                   Deal Agent
                   <select
                     value={selectedAgentId}
                     onChange={handleDealAgentChange(deal)}
-                    className="rounded border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                    className="rounded border border-border px-3 py-2 text-sm text-foreground-muted"
                     disabled={agentSelectDisabled}
                   >
                     <option value="">Select agent</option>
@@ -1585,20 +1566,20 @@ export function DealCard({
                     ))}
                   </select>
                 </label>
-                <p className="mt-2 text-xs text-slate-500">
+                <p className="mt-2 text-xs text-foreground-subtle">
                   {selectedAgentName ? `Currently: ${selectedAgentName}` : 'No agent selected'}
                 </p>
               </div>
-              <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs uppercase text-slate-400">Mortgage Company</p>
+              <div className="rounded border border-border bg-surface-muted p-3">
+                <p className="text-xs uppercase text-foreground-subtle">Mortgage Company</p>
                 {isSellSideDeal ? (
-                  <p className="mt-2 text-sm text-slate-600">N/A for sell-side deals.</p>
+                  <p className="mt-2 text-sm text-foreground-muted">N/A for sell-side deals.</p>
                 ) : (
                   <>
-                    <label className="mt-2 inline-flex items-center gap-2 text-sm text-slate-700">
+                    <label className="mt-2 inline-flex items-center gap-2 text-sm text-foreground-muted">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                        className="h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
                         checked={usedAfc}
                         onChange={handleAfcToggle(deal)}
                         disabled={isSaving}
@@ -1606,20 +1587,20 @@ export function DealCard({
                       Used AFC
                     </label>
                     {!usedAfc && (
-                      <p className="mt-2 text-xs text-slate-500">Track whether AFC handled this deal.</p>
+                      <p className="mt-2 text-xs text-foreground-subtle">Track whether AFC handled this deal.</p>
                     )}
                   </>
                 )}
               </div>
             </div>
             {viewerRole === 'admin' && (
-              <div className="rounded border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs uppercase text-slate-400 mb-2">
+              <div className="rounded border border-border bg-surface-muted p-3">
+                <p className="text-xs uppercase text-foreground-subtle mb-2">
                   Referral Fee Notification
                 </p>
                 {deal.closingDate && (
                   <div className="space-y-0.5 mb-2">
-                    <p className="text-xs text-slate-600">
+                    <p className="text-xs text-foreground-muted">
                       {deal.feeBreakdownEmailSentAt ? (
                         <>
                           {deal.feeBreakdownEmailSentBy === 'cron'
@@ -1665,11 +1646,11 @@ export function DealCard({
   };
 
   return (
-    <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="space-y-4 rounded-lg border border-border bg-surface-raised p-5 shadow-sm">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Deals</h2>
-          <p className="text-sm text-slate-500">
+          <h2 className="text-lg font-semibold text-foreground">Deals</h2>
+          <p className="text-sm text-foreground-subtle">
             {isAgentOrigin
               ? 'Track deal milestones from contract through payout.'
               : 'Track referral revenue from contract through payout.'}
@@ -1679,47 +1660,47 @@ export function DealCard({
           <button
             type="button"
             onClick={onAddDeal}
-            className="inline-flex items-center justify-center rounded bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-brand-dark"
+            className="inline-flex items-center justify-center rounded bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-primary-800"
           >
             Add deal
           </button>
         )}
       </div>
       {sortedDeals.length === 0 || overrides?.hasUnsavedContractChanges ? (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <div className="rounded-lg border border-border bg-surface-muted p-4">
           <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div>
-              <dt className="text-xs uppercase text-slate-400">Referral</dt>
-              <dd className="text-sm font-medium text-slate-900">{summaryBorrower ?? '—'}</dd>
+              <dt className="text-xs uppercase text-foreground-subtle">Referral</dt>
+              <dd className="text-sm font-medium text-foreground">{summaryBorrower ?? '—'}</dd>
             </div>
             <div>
-              <dt className="text-xs uppercase text-slate-400">Status</dt>
-              <dd className="text-sm font-medium text-slate-900">{summaryStatusLabel ?? '—'}</dd>
+              <dt className="text-xs uppercase text-foreground-subtle">Status</dt>
+              <dd className="text-sm font-medium text-foreground">{summaryStatusLabel ?? '—'}</dd>
             </div>
             <div className="sm:col-span-2 lg:col-span-3">
-              <dt className="text-xs uppercase text-slate-400">Property</dt>
-              <dd className="text-sm font-medium text-slate-900">{summaryAddress}</dd>
+              <dt className="text-xs uppercase text-foreground-subtle">Property</dt>
+              <dd className="text-sm font-medium text-foreground">{summaryAddress}</dd>
             </div>
             <div>
-              <dt className="text-xs uppercase text-slate-400">Contract Price</dt>
-              <dd className="text-sm font-medium text-slate-900">{summaryContractPriceDisplay}</dd>
+              <dt className="text-xs uppercase text-foreground-subtle">Contract Price</dt>
+              <dd className="text-sm font-medium text-foreground">{summaryContractPriceDisplay}</dd>
             </div>
             <div>
-              <dt className="text-xs uppercase text-slate-400">
+              <dt className="text-xs uppercase text-foreground-subtle">
                 Agent Commission {primaryDealFlatFeeCents ? '$' : '%'}
               </dt>
-              <dd className="text-sm font-medium text-slate-900">{summaryCommissionDisplay}</dd>
+              <dd className="text-sm font-medium text-foreground">{summaryCommissionDisplay}</dd>
             </div>
             <div>
-              <dt className="text-xs uppercase text-slate-400">Agent</dt>
-              <dd className="text-sm font-medium text-slate-900">
+              <dt className="text-xs uppercase text-foreground-subtle">Agent</dt>
+              <dd className="text-sm font-medium text-foreground">
                 {assignedAgentName ? (
                   assignedAgentHref ? (
                     <a
                       href={assignedAgentHref}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-brand underline-offset-2 hover:underline"
+                      className="text-primary-700 underline-offset-2 hover:underline"
                     >
                       {assignedAgentName}
                     </a>
@@ -1733,23 +1714,23 @@ export function DealCard({
             </div>
             {!isAgentOrigin && (
               <div>
-                <dt className="text-xs uppercase text-slate-400">Referral Fee %</dt>
-                <dd className="text-sm font-medium text-slate-900">{summaryReferralFeePercentDisplay}</dd>
+                <dt className="text-xs uppercase text-foreground-subtle">Referral Fee %</dt>
+                <dd className="text-sm font-medium text-foreground">{summaryReferralFeePercentDisplay}</dd>
               </div>
             )}
             {!isAgentOrigin && (
               <div>
-                <dt className="text-xs uppercase text-slate-400">Referral Fee</dt>
-                <dd className="text-sm font-medium text-slate-900">{summaryReferralFeeDisplay}</dd>
+                <dt className="text-xs uppercase text-foreground-subtle">Referral Fee</dt>
+                <dd className="text-sm font-medium text-foreground">{summaryReferralFeeDisplay}</dd>
               </div>
             )}
             <div>
-              <dt className="text-xs uppercase text-slate-400">Net Commission</dt>
-              <dd className="text-sm font-medium text-slate-900">{summaryNetCommissionDisplay}</dd>
+              <dt className="text-xs uppercase text-foreground-subtle">Net Commission</dt>
+              <dd className="text-sm font-medium text-foreground">{summaryNetCommissionDisplay}</dd>
             </div>
             <div>
-              <dt className="text-xs uppercase text-slate-400">Deal Side</dt>
-              <dd className="text-sm font-medium text-slate-900">{summaryDealSideDisplay}</dd>
+              <dt className="text-xs uppercase text-foreground-subtle">Deal Side</dt>
+              <dd className="text-sm font-medium text-foreground">{summaryDealSideDisplay}</dd>
             </div>
           </dl>
           {overrides?.hasUnsavedContractChanges && (
@@ -1760,7 +1741,7 @@ export function DealCard({
         </div>
       ) : null}
       {sortedDeals.length === 0 ? (
-        <div className="rounded border border-dashed border-slate-300 p-4 text-sm text-slate-600">
+        <div className="rounded border border-dashed border-border-strong p-4 text-sm text-foreground-muted">
           <p>Use the deal preparation form below to create the first deal for this referral.</p>
         </div>
       ) : (

@@ -56,26 +56,26 @@ export function AutoReminderToggle({
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-raised p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <div className="mt-1 rounded-full bg-amber-100 p-2 text-amber-700">
             <Bell className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-slate-900">Automated update reminders</p>
-            <p className="text-xs text-slate-600">
+            <p className="text-sm font-semibold text-foreground">Automated update reminders</p>
+            <p className="text-xs text-foreground-muted">
               Sends periodic emails to agents requesting updates (Day 1, 3, 7, 14, then every 2 weeks from agent assignment)
             </p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700">
+          <label className="inline-flex items-center gap-2 text-xs font-semibold text-foreground-muted">
             <input
               type="checkbox"
               checked={enabled}
               onChange={(event) => handleToggle(event.target.checked)}
               disabled={isUpdating}
-              className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
             />
             {isUpdating ? 'Updating...' : enabled ? 'Enabled' : 'Disabled'}
           </label>

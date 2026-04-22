@@ -75,39 +75,39 @@ export function PersonNotes({ subjectId, initialNotes, endpoint, description }: 
   };
 
   return (
-    <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="space-y-4 rounded-lg border border-border bg-surface-raised p-5 shadow-sm">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Admin Notes</h2>
-        <p className="text-sm text-slate-500">{description}</p>
+        <h2 className="text-lg font-semibold text-foreground">Admin Notes</h2>
+        <p className="text-sm text-foreground-subtle">{description}</p>
       </div>
       <form onSubmit={handleSubmit} className="space-y-3">
         <textarea
           value={content}
           onChange={(event) => setContent(event.target.value)}
           rows={3}
-          className="w-full rounded border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-brand focus:outline-none"
+          className="w-full rounded border border-border px-3 py-2 text-sm text-foreground-muted focus:border-primary-500 focus:outline-none"
           placeholder="Record context for internal use"
           disabled={saving}
         />
         <button
           type="submit"
           disabled={saving || !content.trim()}
-          className="inline-flex items-center rounded bg-brand px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+          className="inline-flex items-center rounded bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
         >
           {saving ? 'Saving…' : 'Save note'}
         </button>
       </form>
       <div className="space-y-3">
-        {sortedNotes.length === 0 && <p className="text-sm text-slate-500">No notes yet.</p>}
+        {sortedNotes.length === 0 && <p className="text-sm text-foreground-subtle">No notes yet.</p>}
         {sortedNotes.map((note) => (
-          <div key={note.id} className="rounded border border-slate-200 p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-              <span className="font-semibold text-slate-700">
+          <div key={note.id} className="rounded border border-border p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-foreground-subtle">
+              <span className="font-semibold text-foreground-muted">
                 {note.authorName} · {note.authorRole}
               </span>
               <span>{formatTimestamp(note.createdAt)}</span>
             </div>
-            <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{note.content}</p>
+            <p className="mt-2 whitespace-pre-line text-sm text-foreground-muted">{note.content}</p>
           </div>
         ))}
       </div>

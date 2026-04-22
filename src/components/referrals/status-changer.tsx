@@ -245,11 +245,11 @@ export function StatusChanger({
       <div className="space-y-4">
         {showStatusControl && (
           <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{statusLabel}</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{statusLabel}</p>
             <select
               value={currentStatus}
               onChange={handleChange}
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-md border border-border-strong bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none"
               disabled={loading}
             >
               {pipelineOptions.map((item) => (
@@ -259,13 +259,13 @@ export function StatusChanger({
               ))}
             </select>
             {pendingTerminatedSelection && (
-              <div className="space-y-2 rounded border border-slate-200 bg-slate-50 p-2">
-                <label className="block text-xs font-semibold text-slate-600">
+              <div className="space-y-2 rounded border border-border bg-surface-muted p-2">
+                <label className="block text-xs font-semibold text-foreground-muted">
                   Termination reason
                   <select
                     value={terminatedReason}
                     onChange={(event) => setTerminatedReason(event.target.value as TerminatedReason | '')}
-                    className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs shadow-sm focus:border-brand focus:outline-none"
+                    className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:outline-none"
                     disabled={loading}
                   >
                     <option value="">Select reason</option>
@@ -279,7 +279,7 @@ export function StatusChanger({
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    className="rounded bg-slate-900 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
+                    className="rounded bg-foreground px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
                     disabled={loading}
                     onClick={() => {
                       if (!terminatedReason) {
@@ -294,7 +294,7 @@ export function StatusChanger({
                   </button>
                   <button
                     type="button"
-                    className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600"
+                    className="rounded border border-border-strong px-2 py-1 text-xs font-semibold text-foreground-muted"
                     disabled={loading}
                     onClick={() => {
                       setPendingTerminatedSelection(false);
@@ -312,7 +312,7 @@ export function StatusChanger({
 
         {showPreApproval && (
           <div className="space-y-1">
-            <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Pre-approval</div>
+            <div className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Pre-approval</div>
             {editingPreApproval ? (
               <div className="space-y-2">
                 <input
@@ -320,7 +320,7 @@ export function StatusChanger({
                   inputMode="decimal"
                   value={formatCurrencyInputDisplay(preApproval)}
                   onChange={handlePreApprovalChange}
-                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand focus:outline-none"
+                  className="w-full rounded-md border border-border-strong bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none"
                   placeholder="300,000"
                   disabled={preApprovalSaving || loading}
                 />
@@ -329,7 +329,7 @@ export function StatusChanger({
                     type="button"
                     onClick={handlePreApprovalSave}
                     disabled={preApprovalSaving || !preApprovalDirty}
-                    className="inline-flex flex-1 items-center justify-center rounded bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="inline-flex flex-1 items-center justify-center rounded bg-foreground px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {preApprovalSaving ? 'Saving…' : 'Save'}
                   </button>
@@ -337,19 +337,19 @@ export function StatusChanger({
                     type="button"
                     onClick={handlePreApprovalCancel}
                     disabled={preApprovalSaving || loading}
-                    className="inline-flex items-center justify-center rounded border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="inline-flex items-center justify-center rounded border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     Cancel
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-between rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm">
+              <div className="flex items-center justify-between rounded-md border border-border-strong bg-surface-raised px-3 py-2 text-sm font-semibold text-foreground shadow-sm">
                 <span>{formattedPreApprovalDisplay}</span>
                 <button
                   type="button"
                   onClick={() => setEditingPreApproval(true)}
-                  className="inline-flex items-center justify-center rounded p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                  className="inline-flex items-center justify-center rounded p-1 text-foreground-subtle transition hover:bg-surface-subtle hover:text-foreground-muted"
                   aria-label="Edit pre-approval"
                 >
                   <Pencil className="h-4 w-4" aria-hidden="true" />

@@ -174,7 +174,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
     });
   }, [data, sortConfig]);
 
-  if (!data) return <div className="rounded-lg bg-white p-4 shadow-sm">Loading mortgage consultants…</div>;
+  if (!data) return <div className="rounded-md bg-surface-raised p-4 shadow-sm">Loading mortgage consultants…</div>;
 
   const toggleSort = (key: SortKey) => {
     setSortConfig((previous) => {
@@ -196,7 +196,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
         className="flex items-center gap-1 text-left"
       >
         <span>{label}</span>
-        <span className="text-[10px] text-slate-400">{icon}</span>
+        <span className="text-[10px] text-foreground-subtle">{icon}</span>
       </button>
     );
   };
@@ -284,27 +284,27 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
   return (
     <div className="space-y-4">
       {isAdmin && lastCreatedLender && (
-        <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-sm font-semibold text-slate-900">
+              <p className="text-sm font-semibold text-foreground">
                 Send welcome email to {lastCreatedLender.name}
               </p>
-              <p className="text-xs text-slate-600">{lastCreatedLender.email}</p>
+              <p className="text-xs text-foreground-muted">{lastCreatedLender.email}</p>
             </div>
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={handleSendWelcomeEmail}
                 disabled={sendingWelcome}
-                className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {sendingWelcome ? 'Sending…' : 'Send welcome email'}
               </button>
               <button
                 type="button"
                 onClick={() => setLastCreatedLender(null)}
-                className="rounded border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="rounded border border-border px-4 py-2 text-sm font-semibold text-foreground-muted hover:bg-surface-muted"
               >
                 Dismiss
               </button>
@@ -314,71 +314,71 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
       )}
 
       {isAdmin && !hasExternalControl && (
-        <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 shadow-sm">
+        <div className="rounded-lg border border-dashed border-border-strong bg-surface-raised p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-slate-800">Add a mortgage consultant</h2>
-              <p className="text-xs text-slate-500">Keep the directory up to date so agents can collaborate quickly.</p>
+              <h2 className="text-sm font-semibold text-foreground">Add a mortgage consultant</h2>
+              <p className="text-xs text-foreground-subtle">Keep the directory up to date so agents can collaborate quickly.</p>
             </div>
             <button
               type="button"
               onClick={() => setShowForm((previous) => !previous)}
-              className="rounded border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+              className="rounded border border-border-strong px-3 py-1 text-xs font-semibold text-foreground-muted hover:bg-surface-subtle"
             >
               {showForm ? 'Close' : 'New MC'}
             </button>
           </div>
           {showForm && (
             <form onSubmit={handleCreate} className="mt-4 grid gap-3 md:grid-cols-2">
-              <label className="text-xs font-semibold text-slate-600">
+              <label className="text-xs font-semibold text-foreground-muted">
                 Name
                 <input
                   type="text"
                   value={form.name}
                   onChange={handleChange('name')}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
                   required
                   disabled={saving}
                 />
               </label>
-              <label className="text-xs font-semibold text-slate-600">
+              <label className="text-xs font-semibold text-foreground-muted">
                 Email
                 <input
                   type="email"
                   value={form.email}
                   onChange={handleChange('email')}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
                   required
                   disabled={saving}
                 />
               </label>
-              <label className="text-xs font-semibold text-slate-600">
+              <label className="text-xs font-semibold text-foreground-muted">
                 Phone
                 <input
                   type="tel"
                   value={form.phone}
                   onChange={handleChange('phone')}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
                   disabled={saving}
                 />
               </label>
-              <label className="text-xs font-semibold text-slate-600">
+              <label className="text-xs font-semibold text-foreground-muted">
                 NMLS ID
                 <input
                   type="text"
                   value={form.nmlsId}
                   onChange={handleChange('nmlsId')}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
                   disabled={saving}
                 />
               </label>
-              <label className="text-xs font-semibold text-slate-600">
+              <label className="text-xs font-semibold text-foreground-muted">
                 Licensed states (comma separated)
                 <input
                   type="text"
                   value={form.licensedStates}
                   onChange={handleChange('licensedStates')}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
                   placeholder="CO, UT"
                   disabled={saving}
                 />
@@ -387,7 +387,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
                 <button
                   type="submit"
                   disabled={saving}
-                  className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                  className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {saving ? 'Saving…' : 'Save MC'}
                 </button>
@@ -397,57 +397,57 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
         </div>
       )}
       {isAdmin && showForm && hasExternalControl && (
-        <form onSubmit={handleCreate} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <form onSubmit={handleCreate} className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-xs font-semibold text-slate-600">
+            <label className="text-xs font-semibold text-foreground-muted">
               Name
               <input
                 type="text"
                 value={form.name}
                 onChange={handleChange('name')}
-                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
                 required
                 disabled={saving}
               />
             </label>
-            <label className="text-xs font-semibold text-slate-600">
+            <label className="text-xs font-semibold text-foreground-muted">
               Email
               <input
                 type="email"
                 value={form.email}
                 onChange={handleChange('email')}
-                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
                 required
                 disabled={saving}
               />
             </label>
-            <label className="text-xs font-semibold text-slate-600">
+            <label className="text-xs font-semibold text-foreground-muted">
               Phone
               <input
                 type="tel"
                 value={form.phone}
                 onChange={handleChange('phone')}
-                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
                 disabled={saving}
               />
             </label>
-            <label className="text-xs font-semibold text-slate-600">
+            <label className="text-xs font-semibold text-foreground-muted">
               NMLS ID
               <input
                 type="text"
                 value={form.nmlsId}
                 onChange={handleChange('nmlsId')}
-                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
                 disabled={saving}
               />
             </label>
-            <label className="text-xs font-semibold text-slate-600">
+            <label className="text-xs font-semibold text-foreground-muted">
               Licensed states (comma separated)
               <input
                 type="text"
                 value={form.licensedStates}
                 onChange={handleChange('licensedStates')}
-                className="mt-1 w-full rounded border border-slate-200 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
                 placeholder="CO, UT"
                 disabled={saving}
               />
@@ -456,7 +456,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
               <button
                 type="submit"
                 disabled={saving}
-                className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {saving ? 'Saving…' : 'Save MC'}
               </button>
@@ -465,47 +465,47 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
         </form>
       )}
       {isAdmin && (
-        <label className="block text-xs font-semibold text-slate-600">
+        <label className="block text-xs font-semibold text-foreground-muted">
           Search
           <input
             type="text"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             disabled={isPending}
-            className="mt-2 w-full max-w-2xl rounded-lg border border-slate-200 px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-2 w-full max-w-2xl rounded-lg border border-border px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
             placeholder="Name, email, phone, NMLS ID"
           />
         </label>
       )}
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
+      <div className="overflow-x-auto rounded-card border border-border bg-surface-raised shadow-card">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-surface-muted">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Lender" sortKey="name" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="NMLS" sortKey="nmls" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Licensed states" sortKey="states" />
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-border">
             {sortedLenders.map((lender) => (
-              <tr key={lender._id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  <div className="font-medium text-slate-900">
-                    <Link href={`/lenders/${lender._id}`} className="text-brand hover:underline">
+              <tr key={lender._id} className="hover:bg-surface-muted">
+                <td className="px-4 py-3 text-sm text-foreground-muted">
+                  <div className="font-medium text-foreground">
+                    <Link href={`/lenders/${lender._id}`} className="text-primary-700 hover:underline">
                       {lender.name}
                     </Link>
                   </div>
-                  <div className="text-xs text-slate-500">{lender.email}</div>
-                  <div className="text-xs text-slate-500">{lender.phone}</div>
+                  <div className="text-xs text-foreground-subtle">{lender.email}</div>
+                  <div className="text-xs text-foreground-subtle">{lender.phone}</div>
                 </td>
-              <td className="px-4 py-3 text-sm text-slate-700">{lender.nmlsId}</td>
-              <td className="px-4 py-3 text-sm text-slate-700">{(lender.licensedStates ?? []).join(', ') || '—'}</td>
+              <td className="px-4 py-3 text-sm text-foreground-muted">{lender.nmlsId}</td>
+              <td className="px-4 py-3 text-sm text-foreground-muted">{(lender.licensedStates ?? []).join(', ') || '—'}</td>
             </tr>
           ))}
         </tbody>

@@ -7,6 +7,10 @@ import { FormEvent, Suspense, useMemo, useState } from 'react';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
+import { AuthShell, AuthHeading } from '@/components/layout/auth-shell';
+import { Button } from '@/components/ui/button';
+import { Field } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 
 const providerErrorMessages: Record<string, string> = {
   CredentialsSignin: 'Unable to sign in with the provided credentials.',
@@ -95,111 +99,96 @@ function LoginForm() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-100 lg:flex-row">
-      <div className="relative hidden w-full flex-col justify-between overflow-hidden bg-gradient-to-br from-brand to-brand-dark p-12 text-white lg:flex lg:max-w-xl xl:max-w-2xl">
-        <div className="space-y-6">
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-white/80">AFC · AHA</p>
-          <h2 className="text-4xl font-semibold leading-tight xl:text-5xl">Referral relationships, coordinated in one workspace.</h2>
-          <p className="max-w-md text-sm text-white/80">
-            Manage referrals, follow-ups, and lender partnerships with the tools your teams already trust.
-          </p>
+    <AuthShell
+      hero={{
+        eyebrow: 'AFC · AHA',
+        title: 'Referral relationships, coordinated in one workspace.',
+        description:
+          'Manage referrals, follow-ups, and lender partnerships with the tools your teams already trust.',
+      }}
+    >
+      <AuthHeading
+        eyebrow="AFC · AHA"
+        title="Sign in to Referrio"
+        description="Use your Referrio credentials to sign in."
+      />
+
+      {displayProviderError && (
+        <div className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-[hsl(var(--danger))]">
+          <p className="font-medium">Authentication error</p>
+          <p className="text-xs">{displayProviderError}</p>
         </div>
-        <div className="space-y-1 text-sm text-white/70">
-          <p className="font-semibold">Referral CRM</p>
-          <p>Built for the AFC &amp; AHA network.</p>
+      )}
+
+      {error && (
+        <div className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-[hsl(var(--danger))]">
+          <p className="font-medium">{error}</p>
         </div>
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_55%)]" aria-hidden="true" />
-      </div>
-      <div className="flex w-full flex-1 flex-col items-start justify-start px-6 pb-8 pt-4 sm:px-10 sm:pb-12 sm:pt-6 lg:flex-row lg:items-center lg:justify-center lg:px-12 lg:pt-0">
-        <div className="relative w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl ring-1 ring-black/5">
-          <div className="space-y-2 text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-brand">AFC · AHA</p>
-            <h1 className="text-3xl font-semibold text-slate-900">Sign in to Referral CRM</h1>
-            <p className="text-sm text-slate-600">Use your Referral CRM credentials to sign in.</p>
-          </div>
+      )}
 
-          {displayProviderError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-              <p className="font-medium">Authentication error</p>
-              <p className="text-xs text-red-800">{displayProviderError}</p>
-            </div>
-          )}
+      <form onSubmit={handleSubmit} className="space-y-4 text-left">
+        <Field id="identifier" label="Username or email">
+          <Input
+            id="identifier"
+            type="text"
+            autoComplete="username"
+            placeholder="yourname or you@example.com"
+            value={identifier}
+            onChange={(event) => setIdentifier(event.target.value)}
+          />
+        </Field>
 
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-              <p className="font-medium">{error}</p>
-            </div>
-          )}
-
-          <div className="space-y-6">
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-2 text-left">
-                <label className="block text-sm font-medium text-slate-700" htmlFor="identifier">
-                  Username or email
-                </label>
-                <input
-                  id="identifier"
-                  type="text"
-                  autoComplete="username"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
-                  placeholder="yourname or you@example.com"
-                  value={identifier}
-                  onChange={(event) => setIdentifier(event.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2 text-left">
-                <label className="block text-sm font-medium text-slate-700" htmlFor="password">
-                  Password
-                </label>
-                <input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-                <div className="flex justify-between text-xs text-slate-500">
-                  <span />
-                  <Link href="/reset-password" className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950 hover:decoration-slate-500">
-                    Forgot password?
-                  </Link>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-              className="w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/60 disabled:cursor-not-allowed disabled:opacity-60"
+        <Field
+          id="password"
+          label="Password"
+          hint={
+            <span className="flex justify-end">
+              <Link
+                href="/reset-password"
+                className="font-medium text-primary-700 no-underline hover:underline"
               >
-                {loading ? 'Signing in…' : 'Sign in'}
-              </button>
-            </form>
-          </div>
+                Forgot password?
+              </Link>
+            </span>
+          }
+        >
+          <Input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            placeholder="Enter your password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </Field>
 
-          <p className="text-center text-sm text-slate-600">
-            Don't have an account?{' '}
-            <Link href="/signup" className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950 hover:decoration-slate-500">
-              Sign up
-            </Link>
-          </p>
+        <Button type="submit" loading={loading} className="w-full" size="lg">
+          {loading ? 'Signing in…' : 'Sign in'}
+        </Button>
+      </form>
 
-          <p className="text-center text-xs text-slate-400">
-            Need help?{' '}
-            <a
-              href={buildGmailComposeUrl('logan.graham@americanfinancing.net')}
-              target="_blank"
-              rel="noreferrer"
-              className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950 hover:decoration-slate-500"
-            >
-              Contact support
-            </a>
-          </p>
-        </div>
-      </div>
-    </div>
+      <p className="text-center text-sm text-foreground-muted">
+        Don&apos;t have an account?{' '}
+        <Link
+          href="/signup"
+          className="font-medium text-primary-700 no-underline hover:underline"
+        >
+          Sign up
+        </Link>
+      </p>
+
+      <p className="text-center text-xs text-foreground-subtle">
+        Need help?{' '}
+        <a
+          href={buildGmailComposeUrl('logan.graham@americanfinancing.net')}
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-primary-700 no-underline hover:underline"
+        >
+          Contact support
+        </a>
+      </p>
+    </AuthShell>
   );
 }
 

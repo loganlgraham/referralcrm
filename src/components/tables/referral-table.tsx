@@ -33,6 +33,7 @@ import { shouldDefaultEmailMcForAgentNotes } from '@/utils/referral-email-defaul
 import { calculateTimelineDaysRemaining, formatTimelineCountdown } from '@/utils/timeline-countdown';
 import { mapDealStatusToReferralStatusDisplay } from '@/lib/latest-deal-referral-status';
 import { confirmCloseStatusDate } from '@/components/referrals/status-date-confirmation-toast';
+import { StatusPill } from '@/components/ui/status-pill';
 export interface ReferralRow {
   _id: string;
   createdAt: string;
@@ -253,9 +254,9 @@ function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: Unde
   }, [side, usedAfc]);
 
   return (
-    <div className="w-[min(calc(100vw-1rem),40rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
-      <h3 className="text-sm font-semibold text-slate-900">Add Deal Details</h3>
-      <p className="mt-1 text-xs text-slate-500">Enter full deal info before moving referral to Under Contract.</p>
+    <div className="w-[min(calc(100vw-1rem),40rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-lg border border-border bg-surface-raised p-4 shadow-xl">
+      <h3 className="text-sm font-semibold text-foreground">Add Deal Details</h3>
+      <p className="mt-1 text-xs text-foreground-subtle">Enter full deal info before moving referral to Under Contract.</p>
       <form
         className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"
         onSubmit={async (event) => {
@@ -352,26 +353,26 @@ function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: Unde
           }
         }}
       >
-        <label className="text-xs font-medium text-slate-700">Contract price
+        <label className="text-xs font-medium text-foreground-muted">Contract price
           <div className="relative mt-1">
-            <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-sm text-slate-500">$</span>
+            <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-sm text-foreground-subtle">$</span>
             <input
-              className="w-full rounded border border-slate-300 py-1 pl-6 pr-2 text-sm"
+              className="w-full rounded border border-border-strong py-1 pl-6 pr-2 text-sm"
               inputMode="decimal"
               value={contractPrice}
               onChange={(e) => setContractPrice(formatCurrencyInput(e.target.value))}
             />
           </div>
         </label>
-        <div className="text-xs font-medium text-slate-700">
+        <div className="text-xs font-medium text-foreground-muted">
           <span>Commission</span>
           <div className="mt-1 flex flex-wrap gap-2">
             <button
               type="button"
               className={`rounded border px-2 py-1 text-xs font-semibold transition ${
                 commissionMode === '%'
-                  ? 'border-brand bg-brand text-white'
-                  : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+                  ? 'border-primary-500 bg-primary-600 text-white'
+                  : 'border-border-strong bg-surface-raised text-foreground-muted hover:bg-surface-muted'
               }`}
               onClick={() => setCommissionMode('%')}
             >
@@ -381,65 +382,65 @@ function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: Unde
               type="button"
               className={`rounded border px-2 py-1 text-xs font-semibold transition ${
                 commissionMode === '$'
-                  ? 'border-brand bg-brand text-white'
-                  : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+                  ? 'border-primary-500 bg-primary-600 text-white'
+                  : 'border-border-strong bg-surface-raised text-foreground-muted hover:bg-surface-muted'
               }`}
               onClick={() => setCommissionMode('$')}
             >
               $
             </button>
             <input
-              className="w-full rounded border border-slate-300 px-2 py-1 text-sm sm:flex-1"
+              className="w-full rounded border border-border-strong px-2 py-1 text-sm sm:flex-1"
               value={commissionMode === '%' ? commissionPercentage : commissionFlat}
               onChange={(event) => commissionMode === '%' ? setCommissionPercentage(event.target.value) : setCommissionFlat(event.target.value)}
             />
           </div>
         </div>
-        <label className="text-xs font-medium text-slate-700">Referral fee %
-          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={referralFeePercentage} onChange={(e) => setReferralFeePercentage(e.target.value)} />
+        <label className="text-xs font-medium text-foreground-muted">Referral fee %
+          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={referralFeePercentage} onChange={(e) => setReferralFeePercentage(e.target.value)} />
         </label>
-        <label className="text-xs font-medium text-slate-700">Expected amount
-          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={expectedAmount} onChange={(e) => { setExpectedManuallyEdited(Boolean(e.target.value)); setExpectedAmount(e.target.value); }} />
+        <label className="text-xs font-medium text-foreground-muted">Expected amount
+          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={expectedAmount} onChange={(e) => { setExpectedManuallyEdited(Boolean(e.target.value)); setExpectedAmount(e.target.value); }} />
         </label>
-        <label className="text-xs font-medium text-slate-700">Under contract date
+        <label className="text-xs font-medium text-foreground-muted">Under contract date
           <input
             type="date"
-            className="mt-1 w-full cursor-pointer rounded border border-slate-300 px-2 py-1 text-sm"
+            className="mt-1 w-full cursor-pointer rounded border border-border-strong px-2 py-1 text-sm"
             value={underContractDate}
             onClick={handleDateInputClick}
             onChange={(e) => setUnderContractDate(e.target.value)}
           />
         </label>
-        <label className="text-xs font-medium text-slate-700">Closing date
+        <label className="text-xs font-medium text-foreground-muted">Closing date
           <input
             type="date"
-            className="mt-1 w-full cursor-pointer rounded border border-slate-300 px-2 py-1 text-sm"
+            className="mt-1 w-full cursor-pointer rounded border border-border-strong px-2 py-1 text-sm"
             value={closingDate}
             onClick={handleDateInputClick}
             onChange={(e) => setClosingDate(e.target.value)}
           />
         </label>
-        <label className="text-xs font-medium text-slate-700 sm:col-span-2">Property address
-          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={propertyAddress} onChange={(e) => setPropertyAddress(e.target.value)} />
+        <label className="text-xs font-medium text-foreground-muted sm:col-span-2">Property address
+          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={propertyAddress} onChange={(e) => setPropertyAddress(e.target.value)} />
         </label>
-        <label className="text-xs font-medium text-slate-700">Property city
-          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={propertyCity} onChange={(e) => setPropertyCity(e.target.value)} />
+        <label className="text-xs font-medium text-foreground-muted">Property city
+          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={propertyCity} onChange={(e) => setPropertyCity(e.target.value)} />
         </label>
-        <label className="text-xs font-medium text-slate-700">Property state
-          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm uppercase" maxLength={2} value={propertyState} onChange={(e) => setPropertyState(e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2))} />
+        <label className="text-xs font-medium text-foreground-muted">Property state
+          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm uppercase" maxLength={2} value={propertyState} onChange={(e) => setPropertyState(e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2))} />
         </label>
-        <label className="text-xs font-medium text-slate-700">Property ZIP
-          <input className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={propertyPostalCode} onChange={(e) => setPropertyPostalCode(e.target.value)} />
+        <label className="text-xs font-medium text-foreground-muted">Property ZIP
+          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={propertyPostalCode} onChange={(e) => setPropertyPostalCode(e.target.value)} />
         </label>
-        <label className="text-xs font-medium text-slate-700">Deal side
-          <select className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-sm" value={side} onChange={(e) => setSide(e.target.value as 'buy' | 'sell')}>
+        <label className="text-xs font-medium text-foreground-muted">Deal side
+          <select className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={side} onChange={(e) => setSide(e.target.value as 'buy' | 'sell')}>
             <option value="buy">Buy-side</option>
             <option value="sell">Sell-side</option>
           </select>
         </label>
         {side !== 'sell' && (
-          <div className="rounded border border-brand/40 bg-brand/5 px-3 py-2 sm:col-span-2">
-            <label className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+          <div className="rounded border border-primary-500/40 bg-primary-600/5 px-3 py-2 sm:col-span-2">
+            <label className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <input
                 type="checkbox"
                 className="h-4 w-4 accent-brand"
@@ -448,12 +449,12 @@ function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: Unde
               />
               Used AFC
             </label>
-            <p className="mt-1 text-xs text-slate-600">Check this when AFC handled this deal.</p>
+            <p className="mt-1 text-xs text-foreground-muted">Check this when AFC handled this deal.</p>
           </div>
         )}
         <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
-          <button type="button" className="w-full rounded border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 sm:w-auto" onClick={onClose} disabled={submitting}>Cancel</button>
-          <button type="submit" className="w-full rounded bg-brand px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 sm:w-auto" disabled={submitting}>{submitting ? 'Saving…' : 'Save deal & move status'}</button>
+          <button type="button" className="w-full rounded border border-border-strong px-3 py-1.5 text-xs font-semibold text-foreground-muted sm:w-auto" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button type="submit" className="w-full rounded bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 sm:w-auto" disabled={submitting}>{submitting ? 'Saving…' : 'Save deal & move status'}</button>
         </div>
       </form>
     </div>
@@ -614,7 +615,7 @@ function StatusSelect({
         value={status}
         onChange={handleChange}
         disabled={loading}
-        className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+        className="w-full rounded border border-border bg-surface-raised px-2 py-1 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
       >
         {REFERRAL_STATUSES.map((item) => (
           <option key={item} value={item}>
@@ -623,13 +624,13 @@ function StatusSelect({
         ))}
       </select>
       {pendingTerminatedSelection && (
-        <div className="space-y-2 rounded border border-slate-200 bg-slate-50 p-2">
-          <label className="block text-xs font-semibold text-slate-600">
+        <div className="space-y-2 rounded border border-border bg-surface-muted p-2">
+          <label className="block text-xs font-semibold text-foreground-muted">
             Termination reason
             <select
               value={terminatedReason}
               onChange={(event) => setTerminatedReason(event.target.value as TerminatedReason | '')}
-              className="mt-1 w-full rounded border border-slate-300 px-2 py-1 text-xs shadow-sm focus:border-brand focus:outline-none"
+              className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
               disabled={loading}
             >
               <option value="">Select reason</option>
@@ -643,7 +644,7 @@ function StatusSelect({
           <div className="flex gap-2">
             <button
               type="button"
-              className="rounded bg-slate-900 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
+              className="rounded bg-primary-600 hover:bg-primary-700 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
               disabled={loading}
               onClick={async () => {
                 if (!terminatedReason) {
@@ -682,7 +683,7 @@ function StatusSelect({
             </button>
             <button
               type="button"
-              className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600"
+              className="rounded border border-border-strong px-2 py-1 text-xs font-semibold text-foreground-muted"
               disabled={loading}
               onClick={() => {
                 setPendingTerminatedSelection(false);
@@ -696,7 +697,7 @@ function StatusSelect({
         </div>
       )}
       {dealStatusLabel && dealStatusLabel !== status && dealStatusLabel !== 'Terminated' && (
-        <p className="text-xs text-slate-500">Deal stage: {dealStatusLabel}</p>
+        <p className="text-xs text-foreground-subtle">Deal stage: {dealStatusLabel}</p>
       )}
     </div>
   );
@@ -704,9 +705,9 @@ function StatusSelect({
 
 function SideStatusPill({ label, status }: { label: string; status?: ReferralStatus | null }) {
   return (
-    <div className="rounded border border-slate-200 bg-slate-50 px-2 py-1">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="text-xs font-medium text-slate-700">{status ?? '—'}</p>
+    <div className="rounded border border-border bg-surface-muted px-2 py-1">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground-subtle">{label}</p>
+      <p className="text-xs font-medium text-foreground-muted">{status ?? '—'}</p>
     </div>
   );
 }
@@ -729,8 +730,8 @@ function AgentBothStatusCell({ row }: { row: ReferralRow }) {
         <SideStatusPill label="Buy" status={buyStatus} />
         <SideStatusPill label="Sell" status={sellStatus} />
       </div>
-      <div className="rounded border border-brand/20 bg-brand/5 p-2">
-        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-brand">
+      <div className="rounded border border-primary-500/20 bg-primary-600/5 p-2">
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-primary-700">
           My side: {assignedSide}
         </p>
         <StatusSelect
@@ -753,23 +754,6 @@ function AgentBothStatusCell({ row }: { row: ReferralRow }) {
   );
 }
 
-const STATUS_BADGE_STYLES: Record<string, string> = {
-  'New Lead': 'bg-sky-100 text-sky-700',
-  Paired: 'bg-indigo-100 text-indigo-700',
-  'In Communication': 'bg-amber-100 text-amber-700',
-  'Active Lead': 'bg-violet-100 text-violet-700',
-  'Showing Homes': 'bg-violet-100 text-violet-700',
-  'Under Contract': 'bg-slate-100 text-slate-700',
-  Closed: 'bg-slate-200 text-slate-800',
-  Lost: 'bg-slate-200 text-slate-600',
-  Terminated: 'bg-rose-100 text-rose-700',
-  'Past Inspection': 'bg-amber-100 text-amber-700',
-  'Past Appraisal': 'bg-blue-100 text-blue-700',
-  'Clear to Close': 'bg-slate-100 text-slate-700',
-  'Payment Sent': 'bg-indigo-100 text-indigo-700',
-  'Payment Received': 'bg-slate-200 text-slate-800'
-};
-
 const STATUS_LABELS: Record<string, string> = {
   'New Lead': 'New Lead',
   Paired: 'Paired',
@@ -788,13 +772,8 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 function StatusBadge({ status }: { status: string }) {
-  const style = STATUS_BADGE_STYLES[status] ?? 'bg-slate-100 text-slate-700';
   const label = STATUS_LABELS[status] ?? status;
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold ${style}`}>
-      {label}
-    </span>
-  );
+  return <StatusPill kind="auto" status={status} label={label} />;
 }
 
 function normalizeStatusForSort({
@@ -890,7 +869,7 @@ function NoteComposer({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-sm font-medium text-brand hover:underline"
+        className="text-sm font-medium text-primary-700 hover:underline"
       >
         Add note
       </button>
@@ -903,11 +882,11 @@ function NoteComposer({
         value={note}
         onChange={(event) => setNote(event.target.value)}
         rows={3}
-        className="w-full rounded border border-slate-200 px-2 py-1 text-sm text-slate-700 shadow-sm focus:border-brand focus:outline-none"
+        className="w-full rounded border border-border px-2 py-1 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
         placeholder="Capture quick context for this referral"
         disabled={saving}
       />
-      <label className={`flex items-center gap-2 text-xs font-medium ${hasMcEmail ? 'text-slate-600' : 'text-slate-400'}`}>
+      <label className={`flex items-center gap-2 text-xs font-medium ${hasMcEmail ? 'text-foreground-muted' : 'text-foreground-subtle'}`}>
         <input
           type="checkbox"
           className="h-4 w-4 accent-brand"
@@ -922,7 +901,7 @@ function NoteComposer({
           type="button"
           onClick={handleSubmit}
           disabled={saving}
-          className="inline-flex items-center rounded bg-brand px-3 py-1 font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+          className="inline-flex items-center rounded bg-primary-600 px-3 py-1 font-semibold text-white shadow-sm transition hover:bg-primary-600-dark disabled:cursor-not-allowed disabled:opacity-70"
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
@@ -930,7 +909,7 @@ function NoteComposer({
           type="button"
           onClick={reset}
           disabled={saving}
-          className="inline-flex items-center rounded border border-slate-200 px-3 py-1 font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
+          className="inline-flex items-center rounded border border-border px-3 py-1 font-semibold text-foreground-muted transition hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-70"
         >
           Cancel
         </button>
@@ -972,7 +951,7 @@ function SortButton({
       className="flex items-center gap-1 text-left"
     >
       <span>{label}</span>
-      <span className="text-[10px] text-slate-400">{icon}</span>
+      <span className="text-[10px] text-foreground-subtle">{icon}</span>
     </button>
   );
 }
@@ -1023,12 +1002,12 @@ function buildColumns(
           <div className="flex items-center gap-2">
             {showAgentOriginIndicator && row.original.origin === 'agent' ? (
               <span
-                className="inline-block h-2.5 w-2.5 rounded-full bg-slate-700"
+                className="inline-block h-2.5 w-2.5 rounded-full bg-foreground-muted"
                 aria-label="Agent-created referral"
                 title="Agent-created referral"
               />
             ) : null}
-            <Link href={listParams ? `/referrals/${_id}?${listParams}` : `/referrals/${_id}`} className="font-medium text-brand">
+            <Link href={listParams ? `/referrals/${_id}?${listParams}` : `/referrals/${_id}`} className="font-medium text-primary-700">
               {borrowerName}
             </Link>
             {mode === 'admin' && (urgentTaskCount ?? 0) > 0 ? (
@@ -1045,7 +1024,7 @@ function buildColumns(
               href={buildGmailComposeUrl(borrowerEmail)}
               target="_blank"
               rel="noreferrer"
-              className="text-xs text-brand hover:underline"
+              className="text-xs text-primary-700 hover:underline"
             >
               Email
             </a>
@@ -1053,12 +1032,12 @@ function buildColumns(
           {borrowerPhone ? (
             <a
               href={`tel:${borrowerPhone.replace(/[^0-9+]/g, '')}`}
-              className="text-xs text-brand hover:underline"
+              className="text-xs text-primary-700 hover:underline"
             >
               {formatPhoneNumber(borrowerPhone)}
             </a>
           ) : (
-            <span className="text-xs text-slate-400">—</span>
+            <span className="text-xs text-foreground-subtle">—</span>
           )}
         </div>
       );
@@ -1158,11 +1137,11 @@ function buildColumns(
         cell: ({ row }) => (
           <div className="flex flex-col text-sm">
             <div className="flex items-center gap-1.5">
-              <span className="font-medium text-slate-700">{row.original.assignedAgentName || 'Unassigned'}</span>
+              <span className="font-medium text-foreground-muted">{row.original.assignedAgentName || 'Unassigned'}</span>
               {row.original.autoUpdateRemindersEnabled && (
                 <span title="Auto reminders enabled">
                   <Clock 
-                    className="h-3.5 w-3.5 text-slate-400" 
+                    className="h-3.5 w-3.5 text-foreground-subtle" 
                     aria-label="Auto reminders enabled"
                   />
                 </span>
@@ -1173,7 +1152,7 @@ function buildColumns(
                 href={buildGmailComposeUrl(row.original.assignedAgentEmail)}
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs text-brand hover:underline"
+                className="text-xs text-primary-700 hover:underline"
               >
                 Email
               </a>
@@ -1181,7 +1160,7 @@ function buildColumns(
             {row.original.assignedAgentPhone && (
               <a
                 href={`tel:${row.original.assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
-                className="text-xs text-brand hover:underline"
+                className="text-xs text-primary-700 hover:underline"
               >
                 {formatPhoneNumber(row.original.assignedAgentPhone)}
               </a>
@@ -1211,11 +1190,11 @@ function buildColumns(
       return (
         <div className="flex flex-col text-sm">
           <div className="flex items-center gap-1.5">
-            <span className="font-medium text-slate-700">{assignedAgentName || 'Unassigned'}</span>
+            <span className="font-medium text-foreground-muted">{assignedAgentName || 'Unassigned'}</span>
             {autoUpdateRemindersEnabled && (
               <span title="Auto reminders enabled">
                 <Clock 
-                  className="h-3.5 w-3.5 text-slate-400" 
+                  className="h-3.5 w-3.5 text-foreground-subtle" 
                   aria-label="Auto reminders enabled"
                 />
               </span>
@@ -1226,7 +1205,7 @@ function buildColumns(
               href={buildGmailComposeUrl(assignedAgentEmail)}
               target="_blank"
               rel="noreferrer"
-              className="text-xs text-brand hover:underline"
+              className="text-xs text-primary-700 hover:underline"
             >
               Email
             </a>
@@ -1234,7 +1213,7 @@ function buildColumns(
           {assignedAgentPhone && (
             <a
               href={`tel:${assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
-              className="text-xs text-brand hover:underline"
+              className="text-xs text-primary-700 hover:underline"
             >
               {formatPhoneNumber(assignedAgentPhone)}
             </a>
@@ -1267,13 +1246,13 @@ function buildColumns(
         }
         return (
           <div className="flex flex-col text-sm">
-            <span className="font-medium text-slate-700">{lenderName || 'Unassigned'}</span>
+            <span className="font-medium text-foreground-muted">{lenderName || 'Unassigned'}</span>
             {lenderEmail && (
               <a
                 href={buildGmailComposeUrl(lenderEmail)}
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs text-brand hover:underline"
+                className="text-xs text-primary-700 hover:underline"
               >
                 Email
               </a>
@@ -1281,7 +1260,7 @@ function buildColumns(
             {lenderPhone && (
               <a
                 href={`tel:${lenderPhone.replace(/[^0-9+]/g, '')}`}
-                className="text-xs text-brand hover:underline"
+                className="text-xs text-primary-700 hover:underline"
               >
                 {formatPhoneNumber(lenderPhone)}
               </a>
@@ -1306,8 +1285,8 @@ function referralDetailHref(row: ReferralRow, listParams: string) {
 function MobileField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-1">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <div className="text-sm text-slate-800">{children}</div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">{label}</p>
+      <div className="text-sm text-foreground">{children}</div>
     </div>
   );
 }
@@ -1341,21 +1320,21 @@ function ReferralMobileStack({
           return (
             <div
               key={row._id}
-              className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+              className="overflow-hidden rounded-card border border-border bg-surface-raised shadow-card"
             >
               {/* Header zone */}
-              <div className={`bg-slate-50 px-4 pt-4 ${row.clientType === 'Both' ? 'pb-3' : 'pb-3'}`}>
+              <div className={`bg-surface-muted px-4 pt-4 ${row.clientType === 'Both' ? 'pb-3' : 'pb-3'}`}>
                 <div className={`flex ${row.clientType === 'Both' ? 'flex-col gap-3' : 'items-start justify-between gap-3'}`}>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       {showOrigin && row.origin === 'agent' ? (
                         <span
-                          className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-slate-700"
+                          className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-foreground-muted"
                           aria-label="Agent-created referral"
                           title="Agent-created referral"
                         />
                       ) : null}
-                      <Link href={href} className="text-base font-semibold text-slate-900 break-words hover:text-brand">
+                      <Link href={href} className="text-base font-semibold text-foreground break-words hover:text-primary-700">
                         {row.borrowerName}
                       </Link>
                     </div>
@@ -1365,7 +1344,7 @@ function ReferralMobileStack({
                           href={buildGmailComposeUrl(row.borrowerEmail)}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-xs text-brand hover:underline"
+                          className="text-xs text-primary-700 hover:underline"
                         >
                           Email
                         </a>
@@ -1373,7 +1352,7 @@ function ReferralMobileStack({
                       {row.borrowerPhone ? (
                         <a
                           href={`tel:${row.borrowerPhone.replace(/[^0-9+]/g, '')}`}
-                          className="text-xs text-brand hover:underline"
+                          className="text-xs text-primary-700 hover:underline"
                         >
                           {formatPhoneNumber(row.borrowerPhone)}
                         </a>
@@ -1404,14 +1383,14 @@ function ReferralMobileStack({
                   <MobileField label="Timeline">{timelineText}</MobileField>
                   <MobileField label="Pre-approval">
                     {row.preApprovalAmountCents ? (
-                      <span className="font-semibold text-slate-900">{formatCurrency(row.preApprovalAmountCents)}</span>
+                      <span className="font-semibold text-foreground">{formatCurrency(row.preApprovalAmountCents)}</span>
                     ) : '—'}
                   </MobileField>
                   <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
                 </div>
 
                 {/* Notes zone */}
-                <div className="border-t border-slate-100 pt-3">
+                <div className="border-t border-border pt-3">
                   <MobileField label="Notes">
                     <NoteComposer
                       referralId={row._id}
@@ -1429,19 +1408,19 @@ function ReferralMobileStack({
         return (
           <div
             key={row._id}
-            className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm space-y-3"
+            className="rounded-card border border-border bg-surface-raised p-4 shadow-card space-y-3"
           >
             <MobileField label="Borrower">
               <div className="flex flex-col gap-1">
                 <div className="flex flex-wrap items-center gap-2">
                   {showOrigin && row.origin === 'agent' ? (
                     <span
-                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-slate-700"
+                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-foreground-muted"
                       aria-label="Agent-created referral"
                       title="Agent-created referral"
                     />
                   ) : null}
-                  <Link href={href} className="font-medium text-brand break-words">
+                  <Link href={href} className="font-medium text-primary-700 break-words">
                     {row.borrowerName}
                   </Link>
                   {mode === 'admin' && (row.urgentTaskCount ?? 0) > 0 ? (
@@ -1458,7 +1437,7 @@ function ReferralMobileStack({
                     href={buildGmailComposeUrl(row.borrowerEmail)}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-xs text-brand hover:underline w-fit"
+                    className="text-xs text-primary-700 hover:underline w-fit"
                   >
                     Email
                   </a>
@@ -1466,12 +1445,12 @@ function ReferralMobileStack({
                 {row.borrowerPhone ? (
                   <a
                     href={`tel:${row.borrowerPhone.replace(/[^0-9+]/g, '')}`}
-                    className="text-xs text-brand hover:underline w-fit"
+                    className="text-xs text-primary-700 hover:underline w-fit"
                   >
                     {formatPhoneNumber(row.borrowerPhone)}
                   </a>
                 ) : (
-                  <span className="text-xs text-slate-400">—</span>
+                  <span className="text-xs text-foreground-subtle">—</span>
                 )}
               </div>
             </MobileField>
@@ -1484,12 +1463,12 @@ function ReferralMobileStack({
                 <MobileField label="Agent contact">
                   <div className="flex flex-col gap-1">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-medium text-slate-700">
+                      <span className="font-medium text-foreground-muted">
                         {row.assignedAgentName || 'Unassigned'}
                       </span>
                       {row.autoUpdateRemindersEnabled ? (
                         <span title="Auto reminders enabled">
-                          <Clock className="h-3.5 w-3.5 text-slate-400" aria-label="Auto reminders enabled" />
+                          <Clock className="h-3.5 w-3.5 text-foreground-subtle" aria-label="Auto reminders enabled" />
                         </span>
                       ) : null}
                     </div>
@@ -1498,7 +1477,7 @@ function ReferralMobileStack({
                         href={buildGmailComposeUrl(row.assignedAgentEmail)}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-xs text-brand hover:underline w-fit"
+                        className="text-xs text-primary-700 hover:underline w-fit"
                       >
                         Email
                       </a>
@@ -1506,7 +1485,7 @@ function ReferralMobileStack({
                     {row.assignedAgentPhone ? (
                       <a
                         href={`tel:${row.assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
-                        className="text-xs text-brand hover:underline w-fit"
+                        className="text-xs text-primary-700 hover:underline w-fit"
                       >
                         {formatPhoneNumber(row.assignedAgentPhone)}
                       </a>
@@ -1532,12 +1511,12 @@ function ReferralMobileStack({
                     ) : (
                       <div className="flex flex-col gap-1">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-medium text-slate-700">
+                          <span className="font-medium text-foreground-muted">
                             {row.assignedAgentName || 'Unassigned'}
                           </span>
                           {row.autoUpdateRemindersEnabled ? (
                             <span title="Auto reminders enabled">
-                              <Clock className="h-3.5 w-3.5 text-slate-400" aria-label="Auto reminders enabled" />
+                              <Clock className="h-3.5 w-3.5 text-foreground-subtle" aria-label="Auto reminders enabled" />
                             </span>
                           ) : null}
                         </div>
@@ -1546,7 +1525,7 @@ function ReferralMobileStack({
                             href={buildGmailComposeUrl(row.assignedAgentEmail)}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-xs text-brand hover:underline w-fit"
+                            className="text-xs text-primary-700 hover:underline w-fit"
                           >
                             Email
                           </a>
@@ -1554,7 +1533,7 @@ function ReferralMobileStack({
                         {row.assignedAgentPhone ? (
                           <a
                             href={`tel:${row.assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
-                            className="text-xs text-brand hover:underline w-fit"
+                            className="text-xs text-primary-700 hover:underline w-fit"
                           >
                             {formatPhoneNumber(row.assignedAgentPhone)}
                           </a>
@@ -1568,13 +1547,13 @@ function ReferralMobileStack({
                     '—'
                   ) : (
                     <div className="flex flex-col gap-1">
-                      <span className="font-medium text-slate-700">{row.lenderName || 'Unassigned'}</span>
+                      <span className="font-medium text-foreground-muted">{row.lenderName || 'Unassigned'}</span>
                       {row.lenderEmail ? (
                         <a
                           href={buildGmailComposeUrl(row.lenderEmail)}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-xs text-brand hover:underline w-fit"
+                          className="text-xs text-primary-700 hover:underline w-fit"
                         >
                           Email
                         </a>
@@ -1582,7 +1561,7 @@ function ReferralMobileStack({
                       {row.lenderPhone ? (
                         <a
                           href={`tel:${row.lenderPhone.replace(/[^0-9+]/g, '')}`}
-                          className="text-xs text-brand hover:underline w-fit"
+                          className="text-xs text-primary-700 hover:underline w-fit"
                         >
                           {formatPhoneNumber(row.lenderPhone)}
                         </a>
@@ -1700,15 +1679,15 @@ export function ReferralTable({
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-      <table className="min-w-full divide-y divide-slate-200">
-        <thead className="bg-slate-50">
+    <div className="overflow-x-auto rounded-card border border-border bg-surface-raised shadow-card">
+      <table className="min-w-full divide-y divide-border">
+        <thead className="bg-surface-muted">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
                 <th
                   key={header.id}
-                  className={`px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 ${
+                  className={`px-4 py-3 text-xs font-semibold uppercase tracking-wide text-foreground-subtle ${
                     header.column.id === 'actions' ? 'text-right' : 'text-left'
                   }`}
                 >
@@ -1718,13 +1697,13 @@ export function ReferralTable({
             </tr>
           ))}
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-border">
           {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} className="hover:bg-slate-50">
+            <tr key={row.id} className="hover:bg-surface-muted">
               {row.getVisibleCells().map((cell) => (
                 <td
                   key={cell.id}
-                  className={`px-4 py-3 text-sm text-slate-700 ${
+                  className={`px-4 py-3 text-sm text-foreground-muted ${
                     cell.column.id === 'actions' ? 'text-right' : ''
                   }`}
                 >
@@ -1795,12 +1774,12 @@ export function ReferralSummary({
   const columnClass = mode === 'agent' ? 'md:grid-cols-4' : 'md:grid-cols-3';
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <dl className={clsx('grid gap-4', columnClass)}>
         {metrics.map((metric) => (
           <div key={metric.label}>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{metric.label}</dt>
-            <dd className="mt-1 text-2xl font-semibold text-slate-900">{metric.value}</dd>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">{metric.label}</dt>
+            <dd className="mt-1 text-2xl font-semibold text-foreground">{metric.value}</dd>
           </div>
         ))}
       </dl>
