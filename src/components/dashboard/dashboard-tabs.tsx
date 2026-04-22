@@ -227,6 +227,11 @@ interface FunnelStage {
   avgDaysInStage: number | null;
 }
 
+interface FunnelTerminalTotals {
+  lostTotal: number;
+  terminatedTotal: number;
+}
+
 interface PeriodOverPeriod {
   previous: { totalReferrals: number; dealsClosed: number; realizedRevenueCents: number; closeRate: number };
   current: { totalReferrals: number; dealsClosed: number; realizedRevenueCents: number; closeRate: number };
@@ -244,7 +249,7 @@ interface DashboardResponse {
     role: string | null;
   };
   main: {
-    funnel?: { stages: FunnelStage[] };
+    funnel?: { stages: FunnelStage[]; terminal?: FunnelTerminalTotals };
     periodOverPeriod?: PeriodOverPeriod | null;
     summary: DashboardSummary;
     trends: {
@@ -1160,41 +1165,61 @@ function TerminatedDealsList({
 
 function ConversionFunnelCard({
   stages,
+  terminal,
   networkFilter
 }: {
   stages: FunnelStage[];
+  terminal: FunnelTerminalTotals;
   networkFilter: NetworkFilter;
 }) {
-  const buildDrillDownUrl = (status: string) => {
-    const params = new URLSearchParams();
-    params.set('status', status);
+  const withNetworkParam = (params: URLSearchParams) => {
     if (networkFilter === 'AHA' || networkFilter === 'AHA_OOS') {
       params.set('ahaBucket', networkFilter);
     }
-    return `/referrals?${params.toString()}`;
+    return params;
+  };
+
+  const buildStageDrillDownUrl = (status: string) => {
+    const params = new URLSearchParams();
+    params.set('maxStageReached', status);
+    return `/referrals?${withNetworkParam(params).toString()}`;
+  };
+
+  const buildTerminalDrillDownUrl = (status: 'Lost' | 'Terminated') => {
+    const params = new URLSearchParams();
+    params.set('status', status);
+    return `/referrals?${withNetworkParam(params).toString()}`;
   };
 
   return (
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Conversion funnel</p>
-      <p className="mt-1 text-xs text-foreground-subtle">Referrals by stage — click any row to view list</p>
+      <p className="mt-1 text-xs text-foreground-subtle">
+        Cohort funnel: each stage counts referrals that ever reached that stage. Click a row to view the list.
+      </p>
       <div className="mt-4 space-y-1.5">
         {stages.length ? (
-          stages.map((stage) => {
+          stages.map((stage, index) => {
+            const isFirst = index === 0;
             return (
               <Link
                 key={stage.status}
-                href={buildDrillDownUrl(stage.status)}
+                href={buildStageDrillDownUrl(stage.status)}
                 className="group block rounded-md border border-border px-3 py-2 transition hover:border-primary-200 hover:bg-primary-50/40"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium text-foreground group-hover:text-sky-700">{stage.label}</span>
                   <div className="flex items-center gap-3 text-sm text-foreground-muted">
                     <span className="font-semibold text-foreground">{formatNumber(stage.count)}</span>
-                    {stage.avgDaysInStage != null ? (
-                      <span className="text-xs text-foreground-subtle">avg {stage.avgDaysInStage}d</span>
+                    {!isFirst && stage.conversionFromPrevious != null ? (
+                      <span className="text-xs text-foreground-subtle">
+                        {stage.conversionFromPrevious.toFixed(0)}% conv
+                      </span>
                     ) : null}
-                    {stage.dropOffPercent != null && stage.dropOffPercent > 0 ? (
+                    {stage.avgDaysInStage != null ? (
+                      <span className="text-xs text-foreground-subtle">avg {stage.avgDaysInStage}d → next</span>
+                    ) : null}
+                    {!isFirst && stage.dropOffPercent != null && stage.dropOffPercent > 0 ? (
                       <span className="text-xs font-medium text-amber-600">↓{stage.dropOffPercent.toFixed(0)}%</span>
                     ) : null}
                   </div>
@@ -1206,6 +1231,24 @@ function ConversionFunnelCard({
           <p className="py-4 text-center text-sm text-foreground-subtle">No referral data for this period.</p>
         )}
       </div>
+      {stages.length ? (
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3 text-xs text-foreground-subtle">
+          <span className="uppercase tracking-wide">Terminal outcomes:</span>
+          <Link
+            href={buildTerminalDrillDownUrl('Lost')}
+            className="font-medium text-foreground-muted hover:text-sky-700"
+          >
+            Lost {formatNumber(terminal.lostTotal)}
+          </Link>
+          <span aria-hidden="true">•</span>
+          <Link
+            href={buildTerminalDrillDownUrl('Terminated')}
+            className="font-medium text-foreground-muted hover:text-sky-700"
+          >
+            Terminated {formatNumber(terminal.terminatedTotal)}
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1905,6 +1948,7 @@ function MainDashboard({
   ];
 
   const funnelStages = data.funnel?.stages ?? [];
+  const funnelTerminal = data.funnel?.terminal ?? { lostTotal: 0, terminatedTotal: 0 };
 
   return (
     <div className="space-y-6">
@@ -1923,7 +1967,11 @@ function MainDashboard({
       </div>
 
       {funnelStages.length > 0 ? (
-        <ConversionFunnelCard stages={funnelStages} networkFilter={networkFilter} />
+        <ConversionFunnelCard
+          stages={funnelStages}
+          terminal={funnelTerminal}
+          networkFilter={networkFilter}
+        />
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">

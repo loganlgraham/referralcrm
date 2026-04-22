@@ -20,6 +20,12 @@ import { mapDealStatusToReferralStatus } from '@/lib/server/referral-deal-status
 import { type DealStatus } from '@/constants/deals';
 import { resolveAgentSideForReferral, pickPrimarySideForReferral } from '@/lib/server/referral-sides';
 import { mergeClosedStatusQuery } from '@/lib/server/merge-closed-status-query';
+import {
+  FUNNEL_STAGE_ORDER,
+  isFunnelStage,
+  stagesAtOrAbove,
+  type FunnelStageName
+} from '@/lib/server/conversion-funnel';
 
 export { mergeClosedStatusQuery };
 
@@ -38,6 +44,7 @@ interface GetReferralsParams {
   timeline?: string | null;
   sortBy?: string | null;
   sortDirection?: 'asc' | 'desc' | null;
+  maxStageReached?: string | null;
 }
 
 interface PopulatedAgent {
@@ -187,12 +194,14 @@ interface FilterQueryParams {
   search?: string | null;
   ahaBucket?: string | null;
   agentReferrals?: string | null;
+  maxStageReached?: string | null;
 }
 
 async function buildReferralFilterQuery(
   params: FilterQueryParams
 ): Promise<{ query: Record<string, unknown>; empty: boolean }> {
-  const { session, status, mc, agent, zip, search, ahaBucket, agentReferrals } = params;
+  const { session, status, mc, agent, zip, search, ahaBucket, agentReferrals, maxStageReached } =
+    params;
 
   const query: Record<string, unknown> = { deletedAt: null };
   const appendOrConditions = (conditions: Record<string, unknown>[]) => {
@@ -207,6 +216,49 @@ async function buildReferralFilterQuery(
   if (status) {
     const statuses = status.split(',').map((s) => s.trim()).filter(Boolean);
     query.status = statuses.length === 1 ? statuses[0] : { $in: statuses };
+  }
+
+  if (maxStageReached) {
+    const trimmed = maxStageReached.trim();
+    const stage: FunnelStageName | null = isFunnelStage(trimmed) ? trimmed : null;
+    if (stage) {
+      const stagesAtOrAboveTarget = stagesAtOrAbove(stage);
+      const statusCandidates: string[] = [...stagesAtOrAboveTarget];
+      if (stagesAtOrAboveTarget.includes('Active Lead')) {
+        statusCandidates.push('Showing Homes');
+      }
+      const conditions: Record<string, unknown>[] = [
+        { status: { $in: statusCandidates } },
+        {
+          audit: {
+            $elemMatch: {
+              field: 'status',
+              newValue: { $in: statusCandidates }
+            }
+          }
+        }
+      ];
+      const stageIdx = FUNNEL_STAGE_ORDER.indexOf(stage);
+      if (stageIdx <= FUNNEL_STAGE_ORDER.indexOf('Paired')) {
+        conditions.push({ 'sla.lastPairedAt': { $type: 'date' } });
+      }
+      if (stageIdx <= FUNNEL_STAGE_ORDER.indexOf('Under Contract')) {
+        conditions.push({ 'sla.lastUnderContractAt': { $type: 'date' } });
+      }
+      if (stageIdx <= FUNNEL_STAGE_ORDER.indexOf('Closed')) {
+        conditions.push({ 'sla.lastClosedAt': { $type: 'date' } });
+        conditions.push({ 'sla.lastPaidAt': { $type: 'date' } });
+        const closedDealIds = await Payment.distinct('referralId', {
+          status: { $in: ['closed', 'payment_sent', 'paid'] },
+          agentAttribution: { $ne: 'OUTSIDE_AGENT' },
+          usedAssignedAgent: { $ne: false }
+        });
+        if (Array.isArray(closedDealIds) && closedDealIds.length > 0) {
+          conditions.push({ _id: { $in: closedDealIds } });
+        }
+      }
+      appendOrConditions(conditions);
+    }
   }
 
   if (zip) {
@@ -354,7 +406,7 @@ async function buildReferralFilterQuery(
 }
 
 export async function getReferrals(params: GetReferralsParams) {
-  const { session, page = 1, pageSize, fetchAll = false, status, mc, agent, zip, ahaBucket, agentReferrals, search, timeline, sortBy, sortDirection } = params;
+  const { session, page = 1, pageSize, fetchAll = false, status, mc, agent, zip, ahaBucket, agentReferrals, search, timeline, sortBy, sortDirection, maxStageReached } = params;
   await connectMongo();
   
   const validPageSizes = [20, 25, 50, 100];
@@ -363,7 +415,7 @@ export async function getReferrals(params: GetReferralsParams) {
   const effectivePage = shouldPaginate ? page : 1;
 
   const { query, empty } = await buildReferralFilterQuery({
-    session, status, mc, agent, zip, search, ahaBucket, agentReferrals,
+    session, status, mc, agent, zip, search, ahaBucket, agentReferrals, maxStageReached,
   });
 
   if (empty) {
@@ -997,13 +1049,14 @@ export async function getAdjacentReferralIds(
     agentReferrals?: string | null;
     sortBy?: string | null;
     sortDirection?: 'asc' | 'desc' | null;
+    maxStageReached?: string | null;
   }
 ): Promise<{ prevId: string | null; nextId: string | null }> {
-  const { session, status, mc, agent, zip, search, ahaBucket, agentReferrals, sortBy, sortDirection } = params;
+  const { session, status, mc, agent, zip, search, ahaBucket, agentReferrals, sortBy, sortDirection, maxStageReached } = params;
   await connectMongo();
 
   const { query, empty } = await buildReferralFilterQuery({
-    session, status, mc, agent, zip, search, ahaBucket, agentReferrals,
+    session, status, mc, agent, zip, search, ahaBucket, agentReferrals, maxStageReached,
   });
 
   if (empty) {

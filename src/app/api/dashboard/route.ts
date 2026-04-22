@@ -45,6 +45,7 @@ import {
   normalizeAhaKpiMap
 } from '@/lib/server/aha-leaderboard-scoring';
 import { resolvePushbackMetricsInTimeframe } from '@/lib/server/pushback-metrics';
+import { buildConversionFunnel, type FunnelReferralInput } from '@/lib/server/conversion-funnel';
 
 type TimeframeKey = 'day' | 'week' | 'month' | 'next_month' | 'year' | 'ytd' | 'all' | 'custom';
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
@@ -1006,7 +1007,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         role: role ?? null
       },
       main: {
-        funnel: { stages: [] },
+        funnel: { stages: [], terminal: { lostTotal: 0, terminatedTotal: 0 } },
         periodOverPeriod: null,
         summary: {
           totalReferrals: 0,
@@ -1725,56 +1726,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ACTIVE_PIPELINE_STATUSES.has((referral.status as string | undefined) ?? '')
   ).length;
 
-  // Conversion funnel: stages in pipeline order; "Showing Homes" normalized to "Active Lead"
-  const FUNNEL_ORDER = [
-    'New Lead',
-    'Paired',
-    'In Communication',
-    'Active Lead',
-    'Under Contract',
-    'Closed',
-    'Lost',
-    'Terminated'
-  ] as const;
-  const normalizeFunnelStatus = (status: string | undefined): string => {
-    if (!status) return 'New Lead';
-    return status === 'Showing Homes' ? 'Active Lead' : status;
-  };
-  const funnelCountByStatus = new Map<string, number>();
-  FUNNEL_ORDER.forEach((s) => funnelCountByStatus.set(s, 0));
-  const funnelDaysInStageByStatus = new Map<string, number[]>();
-  filteredReferrals.forEach((referral) => {
-    let status = normalizeFunnelStatus(referral.status);
-    if (status !== 'Closed' && closedDealReferralIds.has(referral._id.toString())) {
-      status = 'Closed';
-    }
-    funnelCountByStatus.set(status, (funnelCountByStatus.get(status) ?? 0) + 1);
-    const statusLastUpdated = referral.statusLastUpdated ?? referral.createdAt;
-    if (statusLastUpdated) {
-      const d = new Date(statusLastUpdated);
-      if (!Number.isNaN(d.getTime())) {
-        const days = differenceInCalendarDays(new Date(), d);
-        const arr = funnelDaysInStageByStatus.get(status) ?? [];
-        arr.push(days);
-        funnelDaysInStageByStatus.set(status, arr);
-      }
-    }
-  });
-  const funnelStages = FUNNEL_ORDER.map((status, index) => {
-    const count = funnelCountByStatus.get(status) ?? 0;
-    const prevCount = index === 0 ? count : (funnelCountByStatus.get(FUNNEL_ORDER[index - 1]) ?? 0);
-    const conversionFromPrevious = prevCount === 0 ? null : (count / prevCount) * 100;
-    const dropOffPercent = prevCount === 0 ? null : 100 - (conversionFromPrevious ?? 0);
-    const daysArr = funnelDaysInStageByStatus.get(status) ?? [];
-    const avgDaysInStage = daysArr.length === 0 ? null : daysArr.reduce((a, b) => a + b, 0) / daysArr.length;
-    return {
-      status,
-      label: status,
-      count,
-      conversionFromPrevious: conversionFromPrevious != null ? Number(conversionFromPrevious.toFixed(1)) : null,
-      dropOffPercent: dropOffPercent != null ? Number(dropOffPercent.toFixed(1)) : null,
-      avgDaysInStage: avgDaysInStage != null ? Number(avgDaysInStage.toFixed(1)) : null
-    };
+  // Cohort conversion funnel: stage N's count = referrals whose max stage ever reached >= N.
+  // Derived from referral.audit status-transition entries, with SLA timestamps and the
+  // closed-deal override as fallbacks. "Showing Homes" normalizes to "Active Lead".
+  // Lost / Terminated are reported as branch totals, not funnel rows.
+  const funnelInputs: FunnelReferralInput[] = filteredReferrals.map((referral) => ({
+    _id: referral._id,
+    status: referral.status as string | undefined,
+    statusLastUpdated: referral.statusLastUpdated ?? null,
+    createdAt: referral.createdAt ?? null,
+    referralDate: (referral as unknown as { referralDate?: Date | null }).referralDate ?? null,
+    audit: (referral as unknown as { audit?: Array<Record<string, unknown>> }).audit ?? null,
+    sla: (referral as unknown as {
+      sla?: {
+        lastPairedAt?: Date | null;
+        lastUnderContractAt?: Date | null;
+        lastClosedAt?: Date | null;
+        lastPaidAt?: Date | null;
+      } | null;
+    }).sla ?? null
+  }));
+  const conversionFunnel = buildConversionFunnel(funnelInputs, {
+    closedDealReferralIds
   });
 
   const revenueBySource = Array.from(revenueBySourceMap.entries())
@@ -4270,7 +4243,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       role: role ?? null
     },
     main: {
-      funnel: { stages: funnelStages },
+      funnel: conversionFunnel,
       periodOverPeriod,
       ...(attachRateDebug ? { attachRateDebug } : {}),
       summary: {

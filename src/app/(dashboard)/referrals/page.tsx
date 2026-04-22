@@ -47,7 +47,8 @@ export default async function ReferralsPage({
     agentReferrals: role === 'admin' && agentReferrals !== 'all' ? agentReferrals : null,
     timeline: searchParams.timeline?.toString() ?? null,
     sortBy,
-    sortDirection
+    sortDirection,
+    maxStageReached: searchParams.maxStageReached?.toString() ?? null
   });
 
   const items = (data && Array.isArray(data.items) ? data.items : []) as ReferralRow[];

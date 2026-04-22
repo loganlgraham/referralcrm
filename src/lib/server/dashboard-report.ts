@@ -100,7 +100,16 @@ type DashboardApiResponse = {
       ahaOosAttachRate?: number;
       ahaOosDealsLost?: number;
     };
-    funnel?: { stages?: { status: string; count: number }[] };
+    funnel?: {
+      stages?: {
+        status: string;
+        count: number;
+        conversionFromPrevious?: number | null;
+        dropOffPercent?: number | null;
+        avgDaysInStage?: number | null;
+      }[];
+      terminal?: { lostTotal?: number; terminatedTotal?: number };
+    };
     revenueByState?: { label: string; value: number }[];
     trends?: {
       revenue?: { key: string; label: string; value: number }[];
@@ -546,10 +555,26 @@ function buildSections(args: {
       }
       case 'funnel': {
         const stages = args.dashboard.main?.funnel?.stages ?? [];
+        const terminal = args.dashboard.main?.funnel?.terminal ?? {};
+        const stageRows = stages.map((stage, index) => {
+          const extras: string[] = [];
+          if (index > 0 && stage.conversionFromPrevious != null) {
+            extras.push(`${stage.conversionFromPrevious.toFixed(0)}% conv`);
+          }
+          if (stage.avgDaysInStage != null) {
+            extras.push(`avg ${stage.avgDaysInStage}d → next`);
+          }
+          const suffix = extras.length > 0 ? ` (${extras.join(', ')})` : '';
+          return { label: stage.status, value: `${stage.count}${suffix}` };
+        });
+        const terminalRows = [
+          { label: 'Lost (total)', value: String(terminal.lostTotal ?? 0) },
+          { label: 'Terminated (total)', value: String(terminal.terminatedTotal ?? 0) }
+        ];
         sections.push({
           id: 'funnel',
           title: METRIC_LABEL_MAP.funnel,
-          rows: stages.map((stage) => ({ label: stage.status, value: String(stage.count) })),
+          rows: [...stageRows, ...terminalRows],
           emptyMessage: 'No funnel data available.'
         });
         break;
