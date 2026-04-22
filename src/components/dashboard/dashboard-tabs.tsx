@@ -162,6 +162,21 @@ interface PendingClosingEntry {
   expectedAmountCents: number;
 }
 
+interface ClosedDealEntry {
+  id: string;
+  referralId: string;
+  borrowerName: string;
+  agentName: string | null;
+  mcName: string | null;
+  status: string;
+  closingDate: string | null;
+  paidDate: string | null;
+  expectedAmountCents: number;
+  receivedAmountCents: number;
+  outstandingAmountCents: number;
+  daysClosedToPaid: number | null;
+}
+
 interface DashboardSummary {
   totalReferrals: number;
   dealsClosed: number;
@@ -173,6 +188,11 @@ interface DashboardSummary {
   pendingClosingsList: PendingClosingEntry[];
   pendingClosingsThisMonthList: PendingClosingEntry[];
   pendingClosingsNextMonthList: PendingClosingEntry[];
+  expectedRevenueFromPendingClosingsCents: number;
+  generatedRevenueList: ClosedDealEntry[];
+  closedNotPaidList: ClosedDealEntry[];
+  dealsClosedList: ClosedDealEntry[];
+  averageDaysClosedToPaidList: ClosedDealEntry[];
   closeRate: number;
   afcDealsLost: number;
   afcDealsLostList: LostDealEntry[];
@@ -505,7 +525,7 @@ function SummaryCard({
     </>
   );
   const headerInteractiveClass =
-    'block w-full rounded-md text-left transition hover:bg-surface-muted cursor-pointer';
+    'block w-full rounded-md text-left transition hover:bg-surface-muted cursor-pointer no-underline hover:no-underline';
   let headerNode: ReactNode;
   if (drillDownHref) {
     headerNode = (
@@ -525,7 +545,7 @@ function SummaryCard({
   const extraStatsNode = extraStats?.length ? (
     <dl className="mt-3 grid grid-cols-2 gap-2">
       {extraStats.map((stat) => {
-        const tileBase = 'rounded-lg bg-surface-muted px-2 py-1 text-left transition';
+        const tileBase = 'rounded-lg bg-surface-muted px-2 py-1 text-left transition min-h-[3.6rem] flex flex-col justify-between';
         if (stat.onClick) {
           return (
             <button
@@ -538,14 +558,14 @@ function SummaryCard({
               }}
               className={`${tileBase} cursor-pointer hover:bg-surface-subtle hover:ring-1 hover:ring-sky-300`}
             >
-              <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{stat.label}</dt>
+              <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle leading-tight min-h-[1.8rem]">{stat.label}</dt>
               <dd className="text-sm font-semibold text-foreground">{stat.value}</dd>
             </button>
           );
         }
         return (
           <div key={`${title}-${stat.label}`} className={tileBase}>
-            <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{stat.label}</dt>
+            <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle leading-tight min-h-[1.8rem]">{stat.label}</dt>
             <dd className="text-sm font-semibold text-foreground">{stat.value}</dd>
           </div>
         );
@@ -1718,6 +1738,9 @@ function MainDashboard({
 }) {
   const [dealsLostModal, setDealsLostModal] = useState<'afc' | 'ahaOos' | null>(null);
   const [pendingClosingsModal, setPendingClosingsModal] = useState<'all' | 'thisMonth' | 'nextMonth' | null>(null);
+  const [closedDealsModal, setClosedDealsModal] = useState<
+    'generated' | 'closedNotPaid' | 'dealsClosed' | 'avgDaysPaid' | null
+  >(null);
   const summary = data.summary;
   const realizedRevenueCents = Math.max(summary.realizedRevenueCents ?? 0, 0);
   const expectedRevenueCents = Math.max(summary.expectedRevenueCents ?? 0, 0);
@@ -1752,13 +1775,31 @@ function MainDashboard({
       value: formatCurrency(summary.realizedRevenueCents),
       helper: revenueVsPrev != null ? `vs previous period: ${revenueVsPrev}` : undefined,
       extraStats: [
-        { label: 'Generated (closed)', value: formatCurrency(summary.generatedRevenueCents) },
-        { label: 'Closed, not paid', value: formatCurrency(summary.closedNotPaidCents) }
+        {
+          label: 'Generated (closed)',
+          value: formatCurrency(summary.generatedRevenueCents),
+          onClick:
+            summary.generatedRevenueList.length > 0
+              ? () => setClosedDealsModal('generated')
+              : undefined
+        },
+        {
+          label: 'Closed, not paid',
+          value: formatCurrency(summary.closedNotPaidCents),
+          onClick:
+            summary.closedNotPaidList.length > 0
+              ? () => setClosedDealsModal('closedNotPaid')
+              : undefined
+        }
       ]
     },
     {
       title: 'Total Future Closings',
       value: formatNumber(summary.pendingClosings),
+      helper:
+        summary.pendingClosings > 0
+          ? `${formatCurrency(summary.expectedRevenueFromPendingClosingsCents)} expected`
+          : undefined,
       onClick:
         summary.pendingClosings > 0
           ? () => setPendingClosingsModal('all')
@@ -1786,7 +1827,16 @@ function MainDashboard({
       title: 'Total referrals',
       value: formatNumber(summary.totalReferrals),
       helper: referralsVsPrev != null ? `vs previous period: ${referralsVsPrev}` : undefined,
-      extraStats: [{ label: 'Deals closed', value: formatNumber(summary.dealsClosedInTimeframe) }],
+      extraStats: [
+        {
+          label: 'Deals closed',
+          value: formatNumber(summary.dealsClosedInTimeframe),
+          onClick:
+            summary.dealsClosedList.length > 0
+              ? () => setClosedDealsModal('dealsClosed')
+              : undefined
+        }
+      ],
       drillDownHref: (() => {
         const params = new URLSearchParams();
         if (networkFilter === 'AHA' || networkFilter === 'AHA_OOS') params.set('ahaBucket', networkFilter);
@@ -1800,7 +1850,11 @@ function MainDashboard({
       extraStats: [
         {
           label: 'Avg. days closed → paid',
-          value: `${summary.averageDaysClosedToPaid.toFixed(1)} days`
+          value: `${summary.averageDaysClosedToPaid.toFixed(1)} days`,
+          onClick:
+            summary.averageDaysClosedToPaidList.length > 0
+              ? () => setClosedDealsModal('avgDaysPaid')
+              : undefined
         }
       ],
       drillDownHref: (() => {
@@ -1986,6 +2040,38 @@ function MainDashboard({
           }
         />
       </Modal>
+
+      <Modal
+        isOpen={closedDealsModal !== null}
+        onClose={() => setClosedDealsModal(null)}
+        title={
+          closedDealsModal === 'generated'
+            ? 'Generated Revenue (Closed Deals)'
+            : closedDealsModal === 'closedNotPaid'
+              ? 'Closed, Not Paid'
+              : closedDealsModal === 'dealsClosed'
+                ? 'Deals Closed'
+                : closedDealsModal === 'avgDaysPaid'
+                  ? 'Avg. Days Closed → Paid'
+                  : ''
+        }
+        size="lg"
+      >
+        <ClosedDealsTable
+          variant={closedDealsModal ?? 'generated'}
+          deals={
+            closedDealsModal === 'generated'
+              ? summary.generatedRevenueList
+              : closedDealsModal === 'closedNotPaid'
+                ? summary.closedNotPaidList
+                : closedDealsModal === 'dealsClosed'
+                  ? summary.dealsClosedList
+                  : closedDealsModal === 'avgDaysPaid'
+                    ? summary.averageDaysClosedToPaidList
+                    : []
+          }
+        />
+      </Modal>
     </div>
   );
 }
@@ -2070,6 +2156,90 @@ function PendingClosingsTable({ deals }: { deals: PendingClosingEntry[] }) {
                 <td className="px-6 py-3 text-right text-foreground-muted">
                   {formatCurrency(deal.expectedAmountCents)}
                 </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+type ClosedDealsTableVariant = 'generated' | 'closedNotPaid' | 'dealsClosed' | 'avgDaysPaid';
+
+function ClosedDealsTable({
+  variant,
+  deals
+}: {
+  variant: ClosedDealsTableVariant;
+  deals: ClosedDealEntry[];
+}) {
+  if (!deals.length) {
+    return (
+      <p className="px-6 py-8 text-center text-sm text-foreground-subtle">
+        No deals to display for this period.
+      </p>
+    );
+  }
+
+  const showStatus = variant !== 'avgDaysPaid';
+  const trailingHeader =
+    variant === 'closedNotPaid'
+      ? 'Outstanding'
+      : variant === 'avgDaysPaid'
+        ? 'Days closed → paid'
+        : 'Expected fee';
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead>
+          <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
+            <th className="px-6 py-3">Borrower</th>
+            <th className="px-6 py-3">Agent</th>
+            <th className="px-6 py-3">MC</th>
+            {showStatus ? <th className="px-6 py-3">Status</th> : null}
+            <th className="px-6 py-3">Closing date</th>
+            {variant === 'avgDaysPaid' ? <th className="px-6 py-3">Paid date</th> : null}
+            <th className="px-6 py-3 text-right">{trailingHeader}</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {deals.map((deal) => {
+            const statusLabel =
+              DEAL_STATUS_LABELS[deal.status as DealStatus] ?? deal.status;
+            const trailingValue =
+              variant === 'closedNotPaid'
+                ? formatCurrency(deal.outstandingAmountCents)
+                : variant === 'avgDaysPaid'
+                  ? deal.daysClosedToPaid != null
+                    ? `${deal.daysClosedToPaid.toFixed(1)} days`
+                    : '—'
+                  : formatCurrency(deal.expectedAmountCents);
+            return (
+              <tr key={deal.id} className="hover:bg-surface-muted">
+                <td className="px-6 py-3 font-medium text-foreground-muted">
+                  <Link
+                    href={`/referrals/${deal.referralId}`}
+                    className="hover:text-sky-600 hover:underline"
+                  >
+                    {deal.borrowerName}
+                  </Link>
+                </td>
+                <td className="px-6 py-3 text-foreground-muted">{deal.agentName ?? '—'}</td>
+                <td className="px-6 py-3 text-foreground-muted">{deal.mcName ?? '—'}</td>
+                {showStatus ? (
+                  <td className="px-6 py-3 text-foreground-muted">{statusLabel}</td>
+                ) : null}
+                <td className="px-6 py-3 text-foreground-muted">
+                  {deal.closingDate ? formatDate(deal.closingDate) : '—'}
+                </td>
+                {variant === 'avgDaysPaid' ? (
+                  <td className="px-6 py-3 text-foreground-muted">
+                    {deal.paidDate ? formatDate(deal.paidDate) : '—'}
+                  </td>
+                ) : null}
+                <td className="px-6 py-3 text-right text-foreground-muted">{trailingValue}</td>
               </tr>
             );
           })}
