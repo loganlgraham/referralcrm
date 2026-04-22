@@ -37,6 +37,7 @@ type AgentProfile = {
   languages?: string[];
   ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   source?: string;
+  active: boolean;
   metrics: AgentMetricsSummary;
   notes: NoteSummary[];
   deals: PersonDealSnapshot[];
@@ -114,6 +115,7 @@ type AgentLean = {
   userId?: Types.ObjectId | null;
   welcomeEmailSentAt?: Date | null;
   source?: string | null;
+  active?: boolean | null;
 };
 
 type LenderLean = {
@@ -135,7 +137,7 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
 
   await connectMongo();
   const agent = await Agent.findById(id)
-    .select('name email phone licenseNumber brokerage statesLicensed zipCoverage coverageLocations npsScore notes specialties languages ahaDesignation userId welcomeEmailSentAt source')
+    .select('name email phone licenseNumber brokerage statesLicensed zipCoverage coverageLocations npsScore notes specialties languages ahaDesignation userId welcomeEmailSentAt source active')
     .lean<AgentLean>();
   if (!agent) {
     return null;
@@ -298,6 +300,7 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
         ? agent.ahaDesignation
         : null,
     source: session.user.role === 'admin' ? (agent.source ?? undefined) : undefined,
+    active: Boolean(agent.active),
     metrics,
     notes: serializeNotes(agent.notes),
     deals,

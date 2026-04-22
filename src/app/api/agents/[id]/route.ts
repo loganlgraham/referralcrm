@@ -43,6 +43,7 @@ const updateAgentSchema = z.object({
   languages: z.array(z.string().trim().min(1)).optional(),
   ahaDesignation: z.enum(['AHA', 'AHA_OOS', 'AGIT']).nullable().optional(),
   source: z.string().trim().optional(),
+  active: z.boolean().optional(),
 });
 
 interface Params {
@@ -165,6 +166,14 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     update.npsScore = parsed.data.npsScore;
   }
 
+  // Active flag requires admin
+  if (parsed.data.active !== undefined) {
+    if (!isAdmin) {
+      return new NextResponse('Forbidden', { status: 403 });
+    }
+    update.active = parsed.data.active;
+  }
+
   const updated = await Agent.findByIdAndUpdate(params.id, { $set: update }, { new: true });
 
   if (!updated) {
@@ -265,6 +274,7 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
         ? updatedAgent.ahaDesignation
         : null,
     source: isAdmin ? (updatedAgent.source ?? '') : undefined,
+    active: Boolean(updatedAgent.active),
     metrics,
     npsScore: metrics.npsScore,
   });

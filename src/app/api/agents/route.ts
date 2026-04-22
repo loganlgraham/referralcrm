@@ -64,12 +64,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     : 25;
   const search = searchParams.get('search')?.trim() || null;
   const ahaFilter = searchParams.get('ahaFilter') || null;
+  const activeFilter = searchParams.get('activeFilter') || null;
   const sortBy = searchParams.get('sortBy')?.trim() || null;
   const sortDirection = (searchParams.get('sortDirection')?.trim() as 'asc' | 'desc') || 'desc';
   
   const filter: Record<string, unknown> = {};
   if (session.user.role !== 'admin') {
     filter.active = true;
+  } else if (activeFilter === 'active') {
+    filter.active = true;
+  } else if (activeFilter === 'inactive') {
+    filter.active = false;
   }
   
   // Add AHA filter if provided
@@ -145,6 +150,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     specialties?: string[] | null;
     languages?: string[] | null;
     ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
+    active?: boolean | null;
   };
 
   const sortObject = getSortObject(sortBy, sortDirection);
@@ -202,6 +208,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         agent.ahaDesignation === 'AHA' || agent.ahaDesignation === 'AHA_OOS' || agent.ahaDesignation === 'AGIT'
           ? agent.ahaDesignation
           : null,
+      active: Boolean(agent.active),
     };
 
     if (!minimal) {

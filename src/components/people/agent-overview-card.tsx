@@ -58,6 +58,13 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
         <div>
           <div className="flex items-center gap-1.5">
             <h1 className="text-2xl font-semibold text-foreground">{agent.name}</h1>
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                agent.active ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+              }`}
+            >
+              {agent.active ? 'Active' : 'Inactive'}
+            </span>
             <CopyButton value={agent.name} label="Copy name" />
           </div>
           <div className="mt-2 space-y-1 text-sm text-foreground-muted">
