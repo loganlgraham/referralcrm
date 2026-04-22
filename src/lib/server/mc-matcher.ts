@@ -14,9 +14,17 @@ interface LenderTokenEntry {
 }
 
 const FREE_TEXT_TOKEN_PATTERN = /\b[A-Z][a-z]+[A-Z]\b/g;
+const MC_TOKEN_ALIASES: Record<string, string> = {
+  christopherl: 'chrisl',
+  jasoncr: 'jasonc'
+};
 
 export function normalizeMcToken(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function resolveMcTokenAlias(normalizedToken: string): string {
+  return MC_TOKEN_ALIASES[normalizedToken] ?? normalizedToken;
 }
 
 function buildLenderToken(name: string): string | null {
@@ -65,7 +73,7 @@ function resolveMatchesForToken(
 }
 
 export async function findMcByFirstNameLastInitialToken(token: string): Promise<McMatchResult> {
-  const normalizedToken = normalizeMcToken(token);
+  const normalizedToken = resolveMcTokenAlias(normalizeMcToken(token));
   if (!normalizedToken) {
     return null;
   }
@@ -103,7 +111,7 @@ export async function findMcInFreeText(text: string): Promise<McMatchResult> {
 
   const normalizedCandidates = new Set<string>();
   for (const rawToken of rawTokens) {
-    const normalized = normalizeMcToken(rawToken);
+    const normalized = resolveMcTokenAlias(normalizeMcToken(rawToken));
     if (normalized) {
       normalizedCandidates.add(normalized);
     }
