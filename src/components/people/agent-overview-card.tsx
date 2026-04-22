@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 import { AgentAdminEditor, type AgentAdminEditorProps } from '@/components/people/agent-admin-editor';
 import { SendWelcomeEmailButton } from '@/components/people/send-welcome-email-button';
@@ -20,7 +22,32 @@ interface AgentOverviewCardProps {
 }
 
 export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
+  const router = useRouter();
   const [showEditor, setShowEditor] = useState(false);
+  const [togglingActive, setTogglingActive] = useState(false);
+
+  const handleToggleActive = async () => {
+    if (togglingActive) return;
+    setTogglingActive(true);
+    try {
+      const response = await fetch(`/api/agents/${agent._id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !agent.active }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.message ?? 'Unable to update agent status');
+      }
+      toast.success(!agent.active ? 'Agent marked active' : 'Agent marked inactive');
+      router.refresh();
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Unable to update agent status');
+    } finally {
+      setTogglingActive(false);
+    }
+  };
 
   const coverageLabels = useMemo(() => {
     if (Array.isArray(agent.coverageLocations) && agent.coverageLocations.length > 0) {
@@ -119,6 +146,23 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
                 recipientEmail={agent.email}
                 recipientName={agent.name}
               />
+              <button
+                type="button"
+                onClick={handleToggleActive}
+                disabled={togglingActive}
+                className={`inline-flex items-center rounded-md px-4 py-2 text-sm font-semibold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-70 ${
+                  agent.active
+                    ? 'border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                    : 'border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                }`}
+                title={agent.active ? 'Mark this agent inactive so admins know not to use them' : 'Mark this agent active'}
+              >
+                {togglingActive
+                  ? 'Saving…'
+                  : agent.active
+                  ? 'Mark inactive'
+                  : 'Mark active'}
+              </button>
               <button
                 type="button"
                 className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700"
