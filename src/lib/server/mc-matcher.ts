@@ -13,7 +13,7 @@ interface LenderTokenEntry {
   token: string;
 }
 
-const FREE_TEXT_TOKEN_PATTERN = /\b[A-Z][a-z]+[A-Z]\b/g;
+const FREE_TEXT_TOKEN_PATTERN = /\b[A-Z][a-z]+[A-Z](?:[a-z])?\b/g;
 const MC_TOKEN_ALIASES: Record<string, string> = {
   christopherl: 'chrisl',
   jasoncr: 'jasonc'
