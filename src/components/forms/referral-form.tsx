@@ -46,9 +46,9 @@ const referralSchema = z.object({
 });
 
 const inputClasses =
-  'mt-2 w-full rounded-lg border border-slate-300/80 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-1 focus:ring-offset-white';
+  'mt-2 w-full rounded-lg border border-border-strong/80 bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-white';
 
-const labelClasses = 'flex flex-col text-sm font-medium text-slate-700';
+const labelClasses = 'flex flex-col text-sm font-medium text-foreground-muted';
 
 // Use the robust formatPhoneInput utility which handles various formats including paste events
 
@@ -296,10 +296,10 @@ export function ReferralForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
-      <div className="overflow-hidden rounded-3xl border border-slate-200/80 bg-white/95 shadow-xl shadow-slate-200/70 ring-1 ring-slate-100">
-        <div className="border-b border-slate-200/80 bg-gradient-to-r from-slate-50 to-slate-100 px-6 py-6 sm:px-8">
-          <h1 className="text-2xl font-semibold text-slate-900">Start a new referral</h1>
-          <p className="mt-2 max-w-2xl text-sm text-slate-600">
+      <div className="overflow-hidden rounded-3xl border border-border/80 bg-surface-raised/95 shadow-xl shadow-slate-200/70 ring-1 ring-border">
+        <div className="border-b border-border/80 bg-gradient-to-r from-slate-50 to-slate-100 px-6 py-6 sm:px-8">
+          <h1 className="text-2xl font-semibold text-foreground">Start a new referral</h1>
+          <p className="mt-2 max-w-2xl text-sm text-foreground-muted">
             {isAgent
               ? 'Share your client’s details so our mortgage consultants can connect quickly and keep you in the loop.'
               : "Capture the borrower's details, context, and pre-approval information so teammates can jump in without missing a beat."}
@@ -308,7 +308,7 @@ export function ReferralForm() {
 
         <div className="space-y-8 px-6 py-6 sm:px-8 sm:py-8">
           <fieldset className="space-y-4">
-            <legend className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+            <legend className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">
               Borrower information
             </legend>
             <div className="grid gap-4 md:grid-cols-2">
@@ -359,7 +359,7 @@ export function ReferralForm() {
           </fieldset>
 
           <fieldset className="space-y-4">
-            <legend className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+            <legend className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">
               Referral details
             </legend>
             <div className="grid gap-4 md:grid-cols-2">
@@ -445,7 +445,7 @@ export function ReferralForm() {
                   <label className={labelClasses}>
                     Pre-approval amount
                     <div className="relative mt-2">
-                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-slate-400">
+                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-foreground-subtle">
                         $
                       </span>
                       <input
@@ -495,10 +495,10 @@ export function ReferralForm() {
           </fieldset>
 
           <fieldset className="space-y-3">
-            <legend className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+            <legend className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">
               Notes for the team
             </legend>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-foreground-subtle">
               These notes will land in the referral's conversation thread so everyone has the same
               context from the start.
             </p>
@@ -511,15 +511,15 @@ export function ReferralForm() {
           </fieldset>
         </div>
 
-        <div className="flex flex-col gap-4 border-t border-slate-200/80 bg-slate-50/80 px-6 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-          <p className="text-sm text-slate-600">
+        <div className="flex flex-col gap-4 border-t border-border/80 bg-surface-muted/80 px-6 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+          <p className="text-sm text-foreground-muted">
             Double-check the details before saving. You can always fine-tune anything after the
             referral is created.
           </p>
           <button
             type="submit"
             disabled={loading}
-            className="inline-flex items-center justify-center rounded-full bg-brand px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-brand/20 transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-brand/20 transition hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {loading ? 'Creating…' : 'Create referral'}
           </button>

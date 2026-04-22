@@ -200,14 +200,14 @@ export function MortgageConsultantSearch() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg bg-white p-6 shadow-sm">
+      <div className="rounded-md bg-surface-raised p-6 shadow-sm">
         <div className="flex items-start gap-3">
-          <div className="mt-1 rounded-full bg-brand/10 p-2 text-brand">
+          <div className="mt-1 rounded-full bg-primary-600/10 p-2 text-primary-700">
             <SparklesIcon className="h-5 w-5" />
           </div>
           <div className="space-y-2">
-            <p className="text-sm font-semibold text-slate-700">Find a mortgage consultant</p>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm font-semibold text-foreground-muted">Find a mortgage consultant</p>
+            <p className="text-sm text-foreground-muted">
               Describe where your borrower needs a licensed mortgage consultant. We’ll surface teammates licensed in that state
               with recent performance so you can pick a partner and launch the referral flow.
             </p>
@@ -216,23 +216,23 @@ export function MortgageConsultantSearch() {
 
         <form onSubmit={handleSearch} className="mt-6 space-y-4">
           <label className="block space-y-2">
-            <span className="text-sm font-medium text-slate-700">Which state does your borrower need?</span>
+            <span className="text-sm font-medium text-foreground-muted">Which state does your borrower need?</span>
             <textarea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               rows={2}
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
+              className="w-full rounded-md border border-border bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
               placeholder="e.g., TX and NM or Colorado"
               disabled={isSearching}
             />
           </label>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-slate-500">We’ll check licensing coverage and rank top performers.</p>
+            <p className="text-sm text-foreground-subtle">We’ll check licensing coverage and rank top performers.</p>
             <button
               type="submit"
               disabled={isSearching || isLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-surface-subtle"
             >
               {isSearching ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <SearchIcon className="h-4 w-4" />}
               {isSearching ? 'Searching...' : 'Find licensed MCs'}
@@ -241,25 +241,25 @@ export function MortgageConsultantSearch() {
         </form>
       </div>
 
-      <div className="rounded-lg bg-white p-6 shadow-sm">
+      <div className="rounded-md bg-surface-raised p-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase text-slate-400">Licensing focus</p>
-            <div className="mt-1 flex flex-wrap gap-2 text-sm text-slate-700">
+            <p className="text-xs uppercase text-foreground-subtle">Licensing focus</p>
+            <div className="mt-1 flex flex-wrap gap-2 text-sm text-foreground-muted">
               {states.length > 0 ? (
                 states.map((state) => (
-                  <span key={state} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                  <span key={state} className="inline-flex items-center gap-1 rounded-full bg-surface-subtle px-3 py-1 text-xs font-medium text-foreground-muted">
                     {state}
                   </span>
                 ))
               ) : (
-                <span className="text-sm text-slate-500">No states entered yet.</span>
+                <span className="text-sm text-foreground-subtle">No states entered yet.</span>
               )}
             </div>
           </div>
-          <div className="text-right text-sm text-slate-600">
-            <p className="font-semibold text-slate-900">{matchedCountLabel}</p>
-            <p className="text-xs text-slate-500">Profiles are read-only—start a referral when you pick your partner.</p>
+          <div className="text-right text-sm text-foreground-muted">
+            <p className="font-semibold text-foreground">{matchedCountLabel}</p>
+            <p className="text-xs text-foreground-subtle">Profiles are read-only—start a referral when you pick your partner.</p>
           </div>
         </div>
 
@@ -267,7 +267,7 @@ export function MortgageConsultantSearch() {
 
         <div className="mt-6 space-y-4">
           {isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-slate-600">
+            <div className="flex items-center gap-2 text-sm text-foreground-muted">
               <Loader2Icon className="h-4 w-4 animate-spin" />
               Loading mortgage consultants...
             </div>
@@ -275,19 +275,19 @@ export function MortgageConsultantSearch() {
             matches.map((mc) => {
               const metrics = mc.metrics ?? EMPTY_LENDER_METRICS;
               return (
-                <div key={mc._id} className="rounded-lg border border-slate-200 p-4 shadow-sm">
+                <div key={mc._id} className="rounded-lg border border-border p-4 shadow-sm">
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <h2 className="text-lg font-semibold text-slate-900">{mc.name}</h2>
-                      <p className="text-sm text-slate-600">NMLS {mc.nmlsId || 'pending'}</p>
-                      <p className="mt-1 text-xs text-slate-500">Licensed: {(mc.licensedStates ?? []).join(', ') || '—'}</p>
+                      <h2 className="text-lg font-semibold text-foreground">{mc.name}</h2>
+                      <p className="text-sm text-foreground-muted">NMLS {mc.nmlsId || 'pending'}</p>
+                      <p className="mt-1 text-xs text-foreground-subtle">Licensed: {(mc.licensedStates ?? []).join(', ') || '—'}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
                       <a
                         href={buildGmailComposeUrl(mc.email)}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-brand hover:text-brand"
+                        className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:border-primary-500 hover:text-primary-700"
                       >
                         <MailIcon className="h-4 w-4" />
                         Email
@@ -295,7 +295,7 @@ export function MortgageConsultantSearch() {
                       {mc.phone && (
                         <a
                           href={`tel:${mc.phone}`}
-                          className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-brand hover:text-brand"
+                          className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:border-primary-500 hover:text-primary-700"
                         >
                           <PhoneIcon className="h-4 w-4" />
                           {formatPhoneNumber(mc.phone) || 'Call'}
@@ -303,14 +303,14 @@ export function MortgageConsultantSearch() {
                       )}
                       <Link
                         href={`/lenders/${mc._id}`}
-                        className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                        className="inline-flex items-center gap-2 rounded-md bg-foreground px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
                       >
                         View profile
                         <ArrowRightIcon className="h-4 w-4" />
                       </Link>
                       <Link
                         href={`/referrals/new`}
-                        className="inline-flex items-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white transition hover:bg-brand/90"
+                        className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
                       >
                         Start referral
                         <ArrowRightIcon className="h-4 w-4" />
@@ -318,41 +318,41 @@ export function MortgageConsultantSearch() {
                     </div>
                   </div>
 
-                  <div className="mt-4 grid gap-3 text-sm text-slate-600 sm:grid-cols-2 md:grid-cols-4">
-                    <div className="rounded border border-slate-200 p-3">
-                      <p className="text-xs uppercase text-slate-400">Closings (12 mo)</p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900">{formatNumber(metrics.closingsLast12Months)}</p>
+                  <div className="mt-4 grid gap-3 text-sm text-foreground-muted sm:grid-cols-2 md:grid-cols-4">
+                    <div className="rounded border border-border p-3">
+                      <p className="text-xs uppercase text-foreground-subtle">Closings (12 mo)</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">{formatNumber(metrics.closingsLast12Months)}</p>
                     </div>
-                    <div className="rounded border border-slate-200 p-3">
-                      <p className="text-xs uppercase text-slate-400">Closing rate</p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900">{formatDecimal(metrics.closingRate)}%</p>
+                    <div className="rounded border border-border p-3">
+                      <p className="text-xs uppercase text-foreground-subtle">Closing rate</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">{formatDecimal(metrics.closingRate)}%</p>
                     </div>
-                    <div className="rounded border border-slate-200 p-3">
-                      <p className="text-xs uppercase text-slate-400">Total referrals</p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900">{formatNumber(metrics.totalReferrals)}</p>
+                    <div className="rounded border border-border p-3">
+                      <p className="text-xs uppercase text-foreground-subtle">Total referrals</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">{formatNumber(metrics.totalReferrals)}</p>
                     </div>
-                    <div className="rounded border border-slate-200 p-3">
-                      <p className="text-xs uppercase text-slate-400">Active pipeline</p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900">{formatNumber(metrics.activePipeline)}</p>
+                    <div className="rounded border border-border p-3">
+                      <p className="text-xs uppercase text-foreground-subtle">Active pipeline</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">{formatNumber(metrics.activePipeline)}</p>
                     </div>
-                    <div className="rounded border border-slate-200 p-3">
-                      <p className="text-xs uppercase text-slate-400">Deals closed</p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900">{formatNumber(metrics.dealsClosedAllTime)}</p>
+                    <div className="rounded border border-border p-3">
+                      <p className="text-xs uppercase text-foreground-subtle">Deals closed</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">{formatNumber(metrics.dealsClosedAllTime)}</p>
                     </div>
-                    <div className="rounded border border-slate-200 p-3">
-                      <p className="text-xs uppercase text-slate-400">Revenue realized</p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900">{formatCurrency(metrics.revenueRealizedCents)}</p>
+                    <div className="rounded border border-border p-3">
+                      <p className="text-xs uppercase text-foreground-subtle">Revenue realized</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">{formatCurrency(metrics.revenueRealizedCents)}</p>
                     </div>
-                    <div className="rounded border border-slate-200 p-3">
-                      <p className="text-xs uppercase text-slate-400">NPS</p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900">{metrics.npsScore == null ? '—' : formatDecimal(metrics.npsScore)}</p>
+                    <div className="rounded border border-border p-3">
+                      <p className="text-xs uppercase text-foreground-subtle">NPS</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">{metrics.npsScore == null ? '—' : formatDecimal(metrics.npsScore)}</p>
                     </div>
                   </div>
                 </div>
               );
             })
           ) : (
-            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-600">
+            <div className="rounded-lg border border-dashed border-border bg-surface-muted p-8 text-center text-sm text-foreground-muted">
               Suggested mortgage consultants will appear here after you run a search.
             </div>
           )}

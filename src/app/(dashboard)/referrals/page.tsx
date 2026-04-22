@@ -65,10 +65,10 @@ export default async function ReferralsPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">
+          <h1 className="text-2xl font-semibold text-foreground">
             {tableMode === 'agent' ? 'My referrals' : 'Referrals'}
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-foreground-subtle">
             {tableMode === 'agent'
               ? 'Review your leads, update their status, and capture quick notes as you work each opportunity.'
               : tableMode === 'mc'
@@ -79,7 +79,7 @@ export default async function ReferralsPage({
         {showAddReferralButton && (
           <Link
             href="/referrals/new"
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           >
             <PlusIcon className="h-4 w-4" />
             {role === 'admin' ? 'Add Referral' : 'Add Referral for AFC'}
@@ -107,7 +107,7 @@ export default async function ReferralsPage({
           />
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-500">
+        <div className="rounded-xl border border-dashed border-border-strong bg-surface-raised p-10 text-center text-sm text-foreground-subtle">
           No referrals yet. Add your first referral to get started.
         </div>
       )}

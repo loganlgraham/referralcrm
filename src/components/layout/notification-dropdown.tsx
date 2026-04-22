@@ -156,16 +156,16 @@ export function NotificationDropdown({
   return (
     <div
       ref={dropdownRef}
-      className="absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border border-slate-200 bg-white shadow-lg sm:w-80 md:left-full md:right-auto md:ml-2 md:w-96"
+      className="absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border border-border bg-surface-raised shadow-lg sm:w-80 md:left-full md:right-auto md:ml-2 md:w-96"
     >
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
-        <h3 className="text-sm font-semibold text-slate-900">Notifications</h3>
+      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+        <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
         {notifications.length > 0 && unreadCount > 0 ? (
           <button
             type="button"
             onClick={handleMarkAllRead}
             disabled={markingAllRead}
-            className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="shrink-0 rounded-full border border-border bg-surface-raised px-3 py-1 text-xs font-medium text-foreground-muted shadow-sm transition hover:border-border-strong hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
           >
             Mark all as read
           </button>
@@ -175,16 +175,16 @@ export function NotificationDropdown({
       <div className="max-h-96 overflow-y-auto">
         {notifications.length === 0 ? (
           <div className="px-4 py-8 text-center">
-            <p className="text-sm text-slate-500">No notifications</p>
+            <p className="text-sm text-foreground-subtle">No notifications</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-border">
             {notifications.map((notification) => (
               <button
                 key={notification._id}
                 type="button"
                 onClick={() => handleNotificationClick(notification._id, notification.referralId)}
-                className="w-full px-4 py-3 text-left transition hover:bg-slate-50"
+                className="w-full px-4 py-3 text-left transition hover:bg-surface-muted"
               >
                 <div className="flex items-start gap-3">
                   <span className="text-xl">{getNotificationIcon(notification.type)}</span>
@@ -196,14 +196,14 @@ export function NotificationDropdown({
                           aria-label="Unread notification"
                         />
                       )}
-                      <p className={`text-sm font-semibold hover:underline ${notification.readAt == null ? 'text-brand' : 'text-slate-600'}`}>
+                      <p className={`text-sm font-semibold hover:underline ${notification.readAt == null ? 'text-primary-700' : 'text-foreground-muted'}`}>
                         {notification.borrowerName}
                       </p>
                     </div>
-                    <p className={`mt-1 text-sm ${notification.readAt == null ? 'text-slate-900' : 'text-slate-500'}`}>
+                    <p className={`mt-1 text-sm ${notification.readAt == null ? 'text-foreground' : 'text-foreground-subtle'}`}>
                       {notification.content}
                     </p>
-                    <p className={`mt-1 text-xs ${notification.readAt == null ? 'text-slate-500' : 'text-slate-400'}`}>
+                    <p className={`mt-1 text-xs ${notification.readAt == null ? 'text-foreground-subtle' : 'text-foreground-subtle'}`}>
                       {formatDistanceToNow(new Date(notification.createdAt), {
                         addSuffix: true,
                       })}

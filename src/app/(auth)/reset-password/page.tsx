@@ -3,6 +3,10 @@
 import Link from 'next/link';
 import { FormEvent, Suspense, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { AuthShell, AuthHeading } from '@/components/layout/auth-shell';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Field } from '@/components/ui/field';
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
@@ -114,123 +118,95 @@ function ResetPasswordForm() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-100 lg:flex-row">
-      <div className="relative hidden w-full flex-col justify-between overflow-hidden bg-gradient-to-br from-brand to-brand-dark p-12 text-white lg:flex lg:max-w-xl xl:max-w-2xl">
-        <div className="space-y-6">
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-white/80">AFC · AHA</p>
-          <h2 className="text-4xl font-semibold leading-tight xl:text-5xl">Reset your password securely.</h2>
-          <p className="max-w-md text-sm text-white/80">
-            Use your Referral CRM account email to receive a secure reset link powered by Resend.
-          </p>
+    <AuthShell
+      hero={{
+        eyebrow: 'AFC · AHA',
+        title: 'Reset your password securely.',
+        description:
+          'Use your Referrio account email to receive a secure reset link powered by Resend.',
+      }}
+    >
+      <AuthHeading
+        eyebrow="AFC · AHA"
+        title={isResetMode ? 'Choose a new password' : 'Forgot your password?'}
+        description={
+          isResetMode
+            ? 'Enter your email and new password to finish resetting your account.'
+            : 'Enter the email associated with your account to receive a reset link.'
+        }
+      />
+
+      {error && (
+        <div className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-[hsl(var(--danger))]">
+          <p className="font-medium">{error}</p>
         </div>
-        <div className="space-y-1 text-sm text-white/70">
-          <p className="font-semibold">Referral CRM</p>
-          <p>Built for the AFC &amp; AHA network.</p>
+      )}
+
+      {message && (
+        <div className="rounded-md border border-[hsl(var(--success)/0.3)] bg-success-soft px-3 py-2 text-sm text-[hsl(var(--success))]">
+          <p className="font-medium">{message}</p>
         </div>
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.18),transparent_55%)]" aria-hidden="true" />
-      </div>
-      <div className="flex w-full flex-1 items-center justify-center px-6 py-12 sm:px-10 lg:px-12">
-        <div className="relative w-full max-w-md space-y-8 rounded-2xl bg-white p-8 shadow-xl ring-1 ring-black/5">
-          <div className="space-y-2 text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-brand">AFC · AHA</p>
-            <h1 className="text-3xl font-semibold text-slate-900">
-              {isResetMode ? 'Choose a new password' : 'Forgot your password?'}
-            </h1>
-            <p className="text-sm text-slate-600">
-              {isResetMode
-                ? 'Enter your email and new password to finish resetting your account.'
-                : 'Enter the email associated with your account to receive a reset link.'}
-            </p>
-          </div>
+      )}
 
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-              <p className="font-medium">{error}</p>
-            </div>
-          )}
+      <form
+        onSubmit={isResetMode ? handleResetPassword : handleRequestReset}
+        className="space-y-4 text-left"
+      >
+        <Field id="email" label="Email">
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </Field>
 
-          {message && (
-            <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-900">
-              <p className="font-medium">{message}</p>
-            </div>
-          )}
+        {isResetMode && (
+          <>
+            <Field id="password" label="New password">
+              <Input
+                id="password"
+                type="password"
+                autoComplete="new-password"
+                placeholder="Enter a new password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </Field>
 
-          <div className="space-y-6">
-            <form onSubmit={isResetMode ? handleResetPassword : handleRequestReset} className="space-y-5">
-              <div className="space-y-2 text-left">
-                <label className="block text-sm font-medium text-slate-700" htmlFor="email">
-                  Email
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-              </div>
+            <Field id="confirmPassword" label="Confirm password">
+              <Input
+                id="confirmPassword"
+                type="password"
+                autoComplete="new-password"
+                placeholder="Re-enter your new password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+              />
+            </Field>
+          </>
+        )}
 
-              {isResetMode && (
-                <>
-                  <div className="space-y-2 text-left">
-                    <label className="block text-sm font-medium text-slate-700" htmlFor="password">
-                      New password
-                    </label>
-                    <input
-                      id="password"
-                      type="password"
-                      autoComplete="new-password"
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
-                      placeholder="Enter a new password"
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                    />
-                  </div>
+        <Button type="submit" loading={loading} size="lg" className="w-full">
+          {loading
+            ? isResetMode
+              ? 'Updating password…'
+              : 'Sending reset link…'
+            : isResetMode
+              ? 'Update password'
+              : 'Send reset link'}
+        </Button>
+      </form>
 
-                  <div className="space-y-2 text-left">
-                    <label className="block text-sm font-medium text-slate-700" htmlFor="confirmPassword">
-                      Confirm password
-                    </label>
-                    <input
-                      id="confirmPassword"
-                      type="password"
-                      autoComplete="new-password"
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-600/30"
-                      placeholder="Re-enter your new password"
-                      value={confirmPassword}
-                      onChange={(event) => setConfirmPassword(event.target.value)}
-                    />
-                  </div>
-                </>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-              className="w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/60 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {loading
-                  ? isResetMode
-                    ? 'Updating password…'
-                    : 'Sending reset link…'
-                  : isResetMode
-                    ? 'Update password'
-                    : 'Send reset link'}
-              </button>
-            </form>
-          </div>
-
-          <p className="text-center text-sm text-slate-600">
-            Remembered your password?{' '}
-            <Link href="/login" className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950 hover:decoration-slate-500">
-              Go back to sign in
-            </Link>
-          </p>
-        </div>
-      </div>
-    </div>
+      <p className="text-center text-sm text-foreground-muted">
+        Remembered your password?{' '}
+        <Link href="/login" className="font-medium text-primary-700 no-underline hover:underline">
+          Go back to sign in
+        </Link>
+      </p>
+    </AuthShell>
   );
 }
 

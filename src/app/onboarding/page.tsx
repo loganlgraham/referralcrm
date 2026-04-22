@@ -5,6 +5,10 @@ export const dynamic = 'force-dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
+import { Loader2 } from 'lucide-react';
+import { AuthShell, AuthHeading } from '@/components/layout/auth-shell';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/cn';
 
 const roleOptions = [
   {
@@ -31,6 +35,17 @@ function getRoleDestination(role: RoleOption | string | undefined | null) {
     return '/profile?welcome=1';
   }
   return '/dashboard';
+}
+
+function CenteredSpinner({ label }: { label?: string }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-surface-muted">
+      <div className="text-center">
+        <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary-600" aria-hidden />
+        {label && <p className="mt-4 text-sm text-foreground-muted">{label}</p>}
+      </div>
+    </div>
+  );
 }
 
 function OnboardingInner() {
@@ -89,7 +104,7 @@ function OnboardingInner() {
         const error = await res.json();
         setError(error.error || 'Could not save role.');
       }
-    } catch (e) {
+    } catch {
       setError('Could not save role.');
     } finally {
       setSaving(false);
@@ -97,102 +112,93 @@ function OnboardingInner() {
   }
 
   if (status === 'loading') {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-black mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
+    return <CenteredSpinner label="Loading..." />;
   }
 
   if (!session) return null;
 
   if (redirecting) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-black"></div>
-          <p className="mt-4 text-gray-600">Redirecting you to your workspace…</p>
-        </div>
-      </div>
-    );
+    return <CenteredSpinner label="Redirecting you to your workspace…" />;
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-md space-y-6 rounded-lg border bg-white p-8 shadow-sm">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold">Welcome!</h1>
-          <p className="mt-2 text-sm text-gray-600">Let's finish setting up your account</p>
-        </div>
+    <AuthShell
+      hero={{
+        eyebrow: 'Welcome to Referrio',
+        title: 'Tell us how you work, and we will tailor the rest.',
+        description:
+          'Pick the role that matches how you use the network — you can always adjust later from Settings.',
+      }}
+    >
+      <AuthHeading
+        eyebrow="Welcome"
+        title="Finish setting up your account"
+        description="Select how you'll use Referrio so we can tailor your workspace."
+      />
 
-        {roleAlreadySet ? null : (
-          <div className="space-y-5">
-            <div className="space-y-2">
-              <h2 className="text-sm font-semibold text-gray-900">Choose your role</h2>
-              <p className="text-sm text-gray-600">
-                Select how you'll use Referral CRM so we can tailor your workspace.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              {roleOptions.map((option) => {
-                const isActive = selectedRole === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setSelectedRole(option.value)}
-                    className={`w-full rounded-lg border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black ${
-                      isActive
-                        ? 'border-black bg-gray-900/5'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-base font-semibold text-gray-900">{option.label}</span>
-                      <span
-                        className={`h-3 w-3 rounded-full border ${
-                          isActive ? 'border-black bg-black' : 'border-gray-300'
-                        }`}
-                        aria-hidden="true"
-                      />
-                    </div>
-                    <p className="mt-1 text-sm text-gray-600">{option.description}</p>
-                  </button>
-                );
-              })}
-            </div>
-
-            {error && (
-              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                {error}
-              </div>
-            )}
-
-            <button
-              onClick={saveRole}
-              disabled={saving}
-              className="w-full rounded-md bg-black px-4 py-3 text-white hover:bg-gray-800 disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Confirm and Continue'}
-            </button>
+      {roleAlreadySet ? null : (
+        <div className="space-y-5">
+          <div className="space-y-2.5">
+            {roleOptions.map((option) => {
+              const isActive = selectedRole === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setSelectedRole(option.value)}
+                  className={cn(
+                    'group w-full rounded-md border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40',
+                    isActive
+                      ? 'border-primary-500 bg-primary-50/70 shadow-sm'
+                      : 'border-border bg-surface hover:border-border-strong hover:bg-surface-muted'
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span
+                      className={cn(
+                        'text-base font-semibold',
+                        isActive ? 'text-primary-700' : 'text-foreground'
+                      )}
+                    >
+                      {option.label}
+                    </span>
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'flex h-4 w-4 items-center justify-center rounded-full border-2 transition',
+                        isActive ? 'border-primary-600 bg-primary-600' : 'border-border-strong'
+                      )}
+                    >
+                      {isActive && <span className="h-1.5 w-1.5 rounded-full bg-surface-raised" />}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-foreground-muted">{option.description}</p>
+                </button>
+              );
+            })}
           </div>
-        )}
-      </div>
-    </div>
+
+          {error && (
+            <div
+              className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-[hsl(var(--danger))]"
+              role="alert"
+            >
+              {error}
+            </div>
+          )}
+
+          <Button onClick={saveRole} loading={saving} size="lg" className="w-full">
+            {saving ? 'Saving...' : 'Confirm and continue'}
+          </Button>
+        </div>
+      )}
+    </AuthShell>
   );
 }
 
 export default function OnboardingPage() {
   return (
-    <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-black"></div>
-      </div>
-    }>
+    <Suspense fallback={<CenteredSpinner />}>
       <OnboardingInner />
     </Suspense>
   );

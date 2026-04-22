@@ -242,27 +242,27 @@ export function ContactAssignment({
 
   return (
     <div className={className ? `h-full ${className}` : 'h-full'}>
-      <div className="flex h-full flex-col rounded-lg border border-slate-200 bg-white px-3 py-2">
+      <div className="flex h-full flex-col rounded-lg border border-border bg-surface-raised px-3 py-2">
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase text-slate-400">{title}</p>
+            <p className="text-xs uppercase text-foreground-subtle">{title}</p>
             {formattedContact ? (
               <div className="space-y-0">
                 <div className="flex items-center gap-1">
                   {currentContact?.id ? (
                     <Link
                       href={type === 'agent' ? `/agents/${currentContact.id}` : `/lenders/${currentContact.id}`}
-                      className="font-medium text-brand break-words hover:underline"
+                      className="font-medium text-primary-700 break-words hover:underline"
                     >
                       {formattedContact.name}
                     </Link>
                   ) : (
-                    <p className="font-medium text-slate-900 break-words">{formattedContact.name}</p>
+                    <p className="font-medium text-foreground break-words">{formattedContact.name}</p>
                   )}
                   <CopyButton value={formattedContact.name} label="Copy name" />
                 </div>
                 {formattedContact.email && (
-                  <p className="text-xs text-slate-500 break-all">
+                  <p className="text-xs text-foreground-subtle break-all">
                     Email:{' '}
                     <EmailActivityLink
                       referralId={referralId}
@@ -277,7 +277,7 @@ export function ContactAssignment({
                   </p>
                 )}
                 {formattedContact.phone && (
-                  <p className="text-xs text-slate-500 break-all">
+                  <p className="text-xs text-foreground-subtle break-all">
                     Phone:{' '}
                     <PhoneActivityLink
                       referralId={referralId}
@@ -293,14 +293,14 @@ export function ContactAssignment({
                 )}
               </div>
             ) : (
-              <p className="text-xs text-slate-500">Unassigned</p>
+              <p className="text-xs text-foreground-subtle">Unassigned</p>
             )}
           </div>
           {canAssign && (
             <button
               type="button"
               onClick={() => setOpen((previous) => !previous)}
-              className="ml-auto shrink-0 rounded border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
+              className="ml-auto shrink-0 rounded border border-border px-2 py-1 text-xs font-semibold text-foreground-muted transition hover:bg-surface-subtle"
             >
               {open ? 'Cancel' : formattedContact ? 'Reassign' : 'Assign'}
             </button>
@@ -308,20 +308,20 @@ export function ContactAssignment({
         </div>
         {open && canAssign && (
           <form onSubmit={handleSubmit} className="mt-3 space-y-3">
-            <label className="block text-xs font-semibold uppercase text-slate-500">
+            <label className="block text-xs font-semibold uppercase text-foreground-subtle">
               Select {title}
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                className="mt-1 w-full rounded border border-slate-200 px-2 py-1 text-sm"
+                className="mt-1 w-full rounded border border-border px-2 py-1 text-sm"
                 placeholder={`Type to filter ${title.toLowerCase()}s…`}
                 disabled={!Array.isArray(options) || options.length === 0 || submitting}
               />
               <select
                 value={selected}
                 onChange={(event) => setSelected(event.target.value)}
-                className="mt-2 w-full rounded border border-slate-200 px-2 py-1 text-sm"
+                className="mt-2 w-full rounded border border-border px-2 py-1 text-sm"
                 disabled={!Array.isArray(options) || options.length === 0 || submitting}
               >
                 <option value="">Choose…</option>
@@ -333,21 +333,21 @@ export function ContactAssignment({
               </select>
             </label>
             {type === 'agent' && (
-              <div className="flex flex-col gap-2 rounded border border-dashed border-slate-200 p-3 text-xs text-slate-600">
+              <div className="flex flex-col gap-2 rounded border border-dashed border-border p-3 text-xs text-foreground-muted">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="font-semibold text-slate-700">Need a recommendation?</p>
+                  <p className="font-semibold text-foreground-muted">Need a recommendation?</p>
                   <button
                     type="button"
                     onClick={handleSuggest}
                     disabled={suggesting}
-                    className="inline-flex items-center justify-center rounded bg-slate-800 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="inline-flex items-center justify-center rounded bg-foreground px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-foreground disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {suggesting ? 'Thinking…' : 'Suggest agent'}
                   </button>
                 </div>
                 {suggestionReason && (
-                  <p className="rounded bg-slate-50 p-2 text-[11px] text-slate-600">
-                    <span className="font-semibold text-slate-700">Why:</span> {suggestionReason}
+                  <p className="rounded bg-surface-muted p-2 text-[11px] text-foreground-muted">
+                    <span className="font-semibold text-foreground-muted">Why:</span> {suggestionReason}
                   </p>
                 )}
               </div>
@@ -355,7 +355,7 @@ export function ContactAssignment({
             <button
               type="submit"
               disabled={submitting || !selected}
-              className="inline-flex w-full items-center justify-center rounded bg-brand px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+              className="inline-flex w-full items-center justify-center rounded bg-primary-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {submitting ? 'Saving…' : 'Save'}
             </button>

@@ -237,37 +237,37 @@ export function TimeframeDropdown({
 
   return (
     <div ref={dropdownRef} className="relative flex flex-col items-end gap-2">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Timeframe</span>
+      <span className="text-[11px] font-medium uppercase tracking-wide text-foreground-subtle">Timeframe</span>
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
+        className="flex items-center gap-2 rounded-full border border-border px-3 py-1 text-sm font-medium text-foreground-muted transition hover:border-border-strong hover:text-foreground"
       >
         <span>{rangeLabel}</span>
-        <span className="text-xs text-slate-400">▾</span>
+        <span className="text-xs text-foreground-subtle">▾</span>
       </button>
       {isOpen ? (
-        <div className="absolute right-0 z-20 mt-2 w-80 rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
+        <div className="absolute right-0 z-20 mt-2 w-80 rounded-lg border border-border bg-surface-raised p-4 shadow-xl">
           <div className="flex items-center justify-between">
             <button
               type="button"
               onClick={() => setVisibleMonth((prev) => addMonths(prev, -1))}
-              className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+              className="rounded border border-border px-2 py-1 text-xs text-foreground-muted transition hover:border-border-strong hover:text-foreground"
             >
               ‹
             </button>
-            <div className="text-sm font-semibold text-slate-700">{formatDate(visibleMonth, 'MMMM yyyy')}</div>
+            <div className="text-sm font-semibold text-foreground-muted">{formatDate(visibleMonth, 'MMMM yyyy')}</div>
             <button
               type="button"
               onClick={() => setVisibleMonth((prev) => addMonths(prev, 1))}
-              className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-40"
+              className="rounded border border-border px-2 py-1 text-xs text-foreground-muted transition hover:border-border-strong hover:text-foreground disabled:opacity-40"
               disabled={!canGoNextMonth}
             >
               ›
             </button>
           </div>
 
-          <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px] font-medium uppercase tracking-wide text-slate-400">
+          <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[11px] font-medium uppercase tracking-wide text-foreground-subtle">
             {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
               <div key={day}>{day}</div>
             ))}
@@ -289,10 +289,10 @@ export function TimeframeDropdown({
                   onMouseEnter={() => handleDayHover(dateKey)}
                   className={`rounded px-0.5 py-1 text-xs transition ${
                     isSelected
-                      ? 'bg-slate-900 text-white'
+                      ? 'bg-foreground text-white'
                       : isPastMax
-                      ? 'text-slate-300'
-                      : 'text-slate-700 hover:bg-slate-100'
+                      ? 'text-foreground-subtle'
+                      : 'text-foreground-muted hover:bg-surface-subtle'
                   } ${isStart ? 'rounded-l-full' : ''} ${isEnd ? 'rounded-r-full' : ''}`}
                   disabled={isPastMax}
                 >
@@ -302,13 +302,13 @@ export function TimeframeDropdown({
             })}
           </div>
 
-          <div className="mt-3 text-xs text-slate-500">
+          <div className="mt-3 text-xs text-foreground-subtle">
             <p>{selectionPrompt}</p>
             <p className="mt-1">Latest selectable date: {maxDateLabel}</p>
           </div>
 
-          <div className="mt-4 border-t border-slate-200 pt-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Quick ranges</p>
+          <div className="mt-4 border-t border-border pt-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Quick ranges</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {TIMEFRAME_PRESETS.map((option) => {
                 const isActive = timeframe === option.value;
@@ -319,8 +319,8 @@ export function TimeframeDropdown({
                     onClick={() => handlePresetClick(option.value)}
                     className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
                       isActive
-                        ? 'border-transparent bg-slate-900 text-white'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                        ? 'border-transparent bg-foreground text-white'
+                        : 'border-border bg-surface-raised text-foreground-muted hover:border-border-strong'
                     }`}
                   >
                     {option.label}
@@ -352,7 +352,7 @@ export function TimeframePresetButton({
       onClick={onClick}
       data-value={value}
       className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-        isActive ? 'border-transparent bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+        isActive ? 'border-transparent bg-foreground text-white' : 'border-border bg-surface-raised text-foreground-muted hover:border-border-strong'
       }`}
     >
       {label}

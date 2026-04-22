@@ -438,15 +438,15 @@ export function SettingsForm() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Settings</h1>
-          <p className="text-sm text-slate-500">Manage referral fee policies, reports, and data exports.</p>
+          <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
+          <p className="text-sm text-foreground-subtle">Manage referral fee policies, reports, and data exports.</p>
         </div>
       </div>
-      <form onSubmit={handleSubmit} className="space-y-4 rounded-lg bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-900">Referral fee policy</h2>
-        <p className="text-sm text-slate-500">Configure default referral fee tiers.</p>
+      <form onSubmit={handleSubmit} className="space-y-4 rounded-md bg-surface-raised p-6 shadow-sm">
+        <h2 className="text-xl font-semibold text-foreground">Referral fee policy</h2>
+        <p className="text-sm text-foreground-subtle">Configure default referral fee tiers.</p>
         <div className="grid gap-4 md:grid-cols-2">
-          <label className="text-sm font-medium text-slate-600">
+          <label className="text-sm font-medium text-foreground-muted">
             Closed price ≤ $400k (% of commission)
             <input
               type="number"
@@ -454,10 +454,10 @@ export function SettingsForm() {
               max="100"
               value={tier1}
               onChange={(event) => setTier1(Number(event.target.value))}
-              className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded border border-border px-3 py-2"
             />
           </label>
-          <label className="text-sm font-medium text-slate-600">
+          <label className="text-sm font-medium text-foreground-muted">
             Closed price &gt; $400k (% of commission)
             <input
               type="number"
@@ -465,31 +465,31 @@ export function SettingsForm() {
               max="100"
               value={tier2}
               onChange={(event) => setTier2(Number(event.target.value))}
-              className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded border border-border px-3 py-2"
             />
           </label>
         </div>
         <button
           type="submit"
           disabled={loading}
-          className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white"
+          className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white"
         >
           {loading ? 'Saving…' : 'Save changes'}
         </button>
       </form>
 
-      <div className="rounded-lg bg-white p-6 shadow-sm">
+      <div className="rounded-md bg-surface-raised p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-xl font-semibold text-slate-900">Dashboard metric reports</h2>
-            <p className="text-sm text-slate-500">
+            <h2 className="text-xl font-semibold text-foreground">Dashboard metric reports</h2>
+            <p className="text-sm text-foreground-subtle">
               Email a snapshot of admin dashboard metrics to one or more recipients, or schedule recurring delivery.
             </p>
           </div>
           <button
             type="button"
             onClick={handleSelectAll}
-            className="text-sm font-semibold text-brand hover:text-brand/80"
+            className="text-sm font-semibold text-primary-700 hover:text-primary-700/80"
           >
             {allMetricsSelected ? 'Clear selection' : 'Select all metrics'}
           </button>
@@ -502,33 +502,33 @@ export function SettingsForm() {
               <label
                 key={metric.id}
                 className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition ${
-                  isChecked ? 'border-brand/40 bg-brand/5' : 'border-slate-200 hover:border-slate-300'
+                  isChecked ? 'border-primary-500/40 bg-primary-600/5' : 'border-border hover:border-border-strong'
                 }`}
               >
                 <input
                   type="checkbox"
                   checked={isChecked}
                   onChange={() => toggleMetric(metric.id)}
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                  className="mt-1 h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
                 />
-                <span className="text-sm text-slate-700">{metric.label}</span>
+                <span className="text-sm text-foreground-muted">{metric.label}</span>
               </label>
             );
           })}
         </div>
 
         <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <label className="text-sm font-medium text-slate-600">
+          <label className="text-sm font-medium text-foreground-muted">
             Report name
             <input
               type="text"
               value={reportName}
               onChange={(event) => setReportName(event.target.value)}
-              className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded border border-border px-3 py-2"
               placeholder="Performance dashboard export"
             />
           </label>
-          <label className="text-sm font-medium text-slate-600">
+          <label className="text-sm font-medium text-foreground-muted">
             Timeframe
             <select
               value={reportTimeframe}
@@ -540,7 +540,7 @@ export function SettingsForm() {
                   setCustomEndDate('');
                 }
               }}
-              className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded border border-border px-3 py-2"
             >
               <option>This week</option>
               <option>Last week</option>
@@ -552,12 +552,12 @@ export function SettingsForm() {
               <option>Custom export window</option>
             </select>
           </label>
-          <label className="text-sm font-medium text-slate-600">
+          <label className="text-sm font-medium text-foreground-muted">
             Network filter
             <select
               value={network}
               onChange={(event) => setNetwork(event.target.value as NetworkFilter)}
-              className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded border border-border px-3 py-2"
             >
               <option value="ALL">All</option>
               <option value="AHA">AHA</option>
@@ -566,22 +566,22 @@ export function SettingsForm() {
           </label>
           {reportTimeframe === 'Custom export window' && (
             <div className="grid grid-cols-1 gap-4 md:col-span-3 md:grid-cols-2">
-              <label className="text-sm font-medium text-slate-600">
+              <label className="text-sm font-medium text-foreground-muted">
                 Start date
                 <input
                   type="date"
                   value={customStartDate}
                   onChange={(event) => setCustomStartDate(event.target.value)}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+                  className="mt-1 w-full rounded border border-border px-3 py-2"
                 />
               </label>
-              <label className="text-sm font-medium text-slate-600">
+              <label className="text-sm font-medium text-foreground-muted">
                 End date
                 <input
                   type="date"
                   value={customEndDate}
                   onChange={(event) => setCustomEndDate(event.target.value)}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+                  className="mt-1 w-full rounded border border-border px-3 py-2"
                 />
               </label>
             </div>
@@ -589,15 +589,15 @@ export function SettingsForm() {
         </div>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="text-sm font-medium text-slate-600">
+          <label className="text-sm font-medium text-foreground-muted">
             Recipients (comma-separated)
             <textarea
               value={recipientsInput}
               onChange={(event) => setRecipientsInput(event.target.value)}
-              className="mt-1 h-20 w-full rounded border border-slate-200 px-3 py-2"
+              className="mt-1 h-20 w-full rounded border border-border px-3 py-2"
               placeholder="ops@referralcrm.com, leadership@referralcrm.com"
             />
-            <span className="mt-1 block text-xs text-slate-500">
+            <span className="mt-1 block text-xs text-foreground-subtle">
               {recipients.length} recipient{recipients.length === 1 ? '' : 's'}
               {invalidRecipients.length > 0 ? (
                 <span className="ml-2 text-amber-700">Invalid: {invalidRecipients.join(', ')}</span>
@@ -605,26 +605,26 @@ export function SettingsForm() {
             </span>
           </label>
           <div className="space-y-3">
-            <label className="flex items-start gap-2 text-sm font-medium text-slate-600">
+            <label className="flex items-start gap-2 text-sm font-medium text-foreground-muted">
               <input
                 type="checkbox"
                 checked={attachCsv}
                 onChange={(event) => setAttachCsv(event.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                className="mt-1 h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
               />
               <span>
                 Attach detailed CSV to email
-                <span className="block text-xs font-normal text-slate-500">
+                <span className="block text-xs font-normal text-foreground-subtle">
                   Includes every section as rows for spreadsheet analysis.
                 </span>
               </span>
             </label>
-            <label className="text-sm font-medium text-slate-600">
+            <label className="text-sm font-medium text-foreground-muted">
               Delivery cadence
               <select
                 value={cadence}
                 onChange={(event) => setCadence(event.target.value as Cadence)}
-                className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+                className="mt-1 w-full rounded border border-border px-3 py-2"
               >
                 <option value="one-time">Send once now</option>
                 <option value="daily">Daily, 7am MT</option>
@@ -633,22 +633,22 @@ export function SettingsForm() {
               </select>
             </label>
             {cadence !== 'one-time' && (
-              <label className="text-sm font-medium text-slate-600">
+              <label className="text-sm font-medium text-foreground-muted">
                 Schedule label
                 <input
                   type="text"
                   value={scheduleName}
                   onChange={(event) => setScheduleName(event.target.value)}
                   placeholder={`${reportName} (${cadence})`}
-                  className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+                  className="mt-1 w-full rounded border border-border px-3 py-2"
                 />
               </label>
             )}
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 p-4">
-          <span className="text-sm font-medium text-slate-600">Presets</span>
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border p-4">
+          <span className="text-sm font-medium text-foreground-muted">Presets</span>
           <select
             value={selectedPresetId}
             onChange={(e) => {
@@ -656,7 +656,7 @@ export function SettingsForm() {
               setSelectedPresetId(v);
               if (v) loadPreset(v);
             }}
-            className="rounded border border-slate-200 px-3 py-1.5 text-sm"
+            className="rounded border border-border px-3 py-1.5 text-sm"
           >
             <option value="">Load preset…</option>
             {reportPresets.map((p) => (
@@ -670,21 +670,21 @@ export function SettingsForm() {
             value={presetName}
             onChange={(e) => setPresetName(e.target.value)}
             placeholder="Preset name"
-            className="w-40 rounded border border-slate-200 px-3 py-1.5 text-sm"
+            className="w-40 rounded border border-border px-3 py-1.5 text-sm"
           />
-          <button type="button" onClick={savePreset} className="rounded border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          <button type="button" onClick={savePreset} className="rounded border border-border-strong px-3 py-1.5 text-sm font-medium text-foreground-muted hover:bg-surface-muted">
             Save as preset
           </button>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 p-4 text-sm text-slate-700">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-muted p-4 text-sm text-foreground-muted">
           <div>
             {selectedMetrics.length ? (
               <span className="font-medium">{selectedMetrics.length} metric(s) selected</span>
             ) : (
               <span className="font-medium text-amber-700">Select at least one metric.</span>
             )}
-            <p className="text-slate-500">
+            <p className="text-foreground-subtle">
               {cadence === 'one-time'
                 ? 'Email is sent immediately to the recipients above.'
                 : `Recurring delivery: ${describeCadence(cadence as 'daily' | 'weekly' | 'monthly')}.`}
@@ -695,7 +695,7 @@ export function SettingsForm() {
               type="button"
               onClick={handleDownloadReportCsv}
               disabled={csvLoading}
-              className="rounded border border-brand bg-white px-4 py-2 text-sm font-semibold text-brand transition hover:bg-brand/5 disabled:opacity-70"
+              className="rounded border border-primary-500 bg-surface-raised px-4 py-2 text-sm font-semibold text-primary-700 transition hover:bg-primary-700/5 disabled:opacity-70"
             >
               {csvLoading ? 'Building CSV…' : 'Download as CSV'}
             </button>
@@ -703,7 +703,7 @@ export function SettingsForm() {
               type="button"
               onClick={handlePrimaryAction}
               disabled={reportLoading}
-              className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white disabled:opacity-70"
+              className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-70"
             >
               {reportLoading
                 ? 'Sending…'
@@ -714,37 +714,37 @@ export function SettingsForm() {
           </div>
         </div>
 
-        <div className="mt-6 rounded-lg border border-slate-200">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-            <h3 className="text-base font-semibold text-slate-800">Active scheduled reports</h3>
+        <div className="mt-6 rounded-lg border border-border">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <h3 className="text-base font-semibold text-foreground">Active scheduled reports</h3>
             {schedulesLoading ? (
-              <span className="text-xs text-slate-500">Loading…</span>
+              <span className="text-xs text-foreground-subtle">Loading…</span>
             ) : (
-              <span className="text-xs text-slate-500">{schedules.length} schedule(s)</span>
+              <span className="text-xs text-foreground-subtle">{schedules.length} schedule(s)</span>
             )}
           </div>
           {schedules.length === 0 && !schedulesLoading ? (
-            <p className="px-4 py-6 text-center text-sm text-slate-500">
+            <p className="px-4 py-6 text-center text-sm text-foreground-subtle">
               No recurring reports yet. Pick a cadence above and click <em>Save schedule</em>.
             </p>
           ) : (
-            <ul className="divide-y divide-slate-100">
+            <ul className="divide-y divide-border">
               {schedules.map((schedule) => (
                 <li key={schedule.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-800">{schedule.name}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-sm font-semibold text-foreground">{schedule.name}</p>
+                    <p className="text-xs text-foreground-subtle">
                       {describeCadence(schedule.cadence)} · {schedule.recipients.length} recipient
                       {schedule.recipients.length === 1 ? '' : 's'} · {schedule.metrics.length} metric
                       {schedule.metrics.length === 1 ? '' : 's'} · network {schedule.network}
                     </p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-foreground-subtle">
                       Next run: {formatRunAt(schedule.nextRunAt)} · Last run: {formatRunAt(schedule.lastRunAt)}
                     </p>
-                    <p className="truncate text-xs text-slate-400">To: {schedule.recipients.join(', ')}</p>
+                    <p className="truncate text-xs text-foreground-subtle">To: {schedule.recipients.join(', ')}</p>
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-2">
-                    <label className="flex items-center gap-1 text-xs text-slate-600">
+                    <label className="flex items-center gap-1 text-xs text-foreground-muted">
                       <input
                         type="checkbox"
                         checked={schedule.enabled}
@@ -767,25 +767,25 @@ export function SettingsForm() {
         </div>
       </div>
 
-      <div className="rounded-lg bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-900">CSV exports</h2>
-        <p className="text-sm text-slate-500">Download detailed CSVs for referrals, agents, mortgage consultants, and deals.</p>
+      <div className="rounded-md bg-surface-raised p-6 shadow-sm">
+        <h2 className="text-xl font-semibold text-foreground">CSV exports</h2>
+        <p className="text-sm text-foreground-subtle">Download detailed CSVs for referrals, agents, mortgage consultants, and deals.</p>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           {(Object.keys(EXPORT_DEFINITIONS) as ExportReport[]).map((report) => {
             const definition = EXPORT_DEFINITIONS[report];
             const isDownloading = exporting === report;
             return (
-              <div key={report} className="flex flex-col justify-between gap-3 rounded-lg border border-slate-200 p-4">
+              <div key={report} className="flex flex-col justify-between gap-3 rounded-lg border border-border p-4">
                 <div>
-                  <h3 className="text-base font-semibold text-slate-800">{definition.label}</h3>
-                  <p className="text-sm text-slate-500">{definition.helper}</p>
+                  <h3 className="text-base font-semibold text-foreground">{definition.label}</h3>
+                  <p className="text-sm text-foreground-subtle">{definition.helper}</p>
                 </div>
                 <button
                   type="button"
                   disabled={isDownloading}
                   onClick={() => void handleDownloadCsv(report)}
-                  className="w-full rounded border border-brand bg-white px-4 py-2 text-sm font-semibold text-brand transition hover:bg-brand/5 disabled:opacity-70"
+                  className="w-full rounded border border-primary-500 bg-surface-raised px-4 py-2 text-sm font-semibold text-primary-700 transition hover:bg-primary-700/5 disabled:opacity-70"
                 >
                   {isDownloading ? 'Preparing CSV…' : `Download ${definition.label.toLowerCase()} CSV`}
                 </button>

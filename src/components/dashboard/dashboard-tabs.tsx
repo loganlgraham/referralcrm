@@ -18,6 +18,7 @@ import { formatCurrency, formatDate, formatNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { Trash2 } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
+import { DEAL_STATUS_LABELS, type DealStatus } from '@/constants/deals';
 import {
   TimeframeDropdown,
   TIMEFRAME_PRESETS,
@@ -129,9 +130,9 @@ const getCompositeScoreStyle = (score: number) => {
 };
 
 const getKpiWeightBadge = (weight: 'high' | 'medium' | 'low') => {
-  if (weight === 'high') return 'bg-slate-700 text-white';
-  if (weight === 'medium') return 'bg-slate-400 text-white';
-  return 'bg-slate-200 text-slate-600';
+  if (weight === 'high') return 'bg-[hsl(var(--text))] text-white';
+  if (weight === 'medium') return 'bg-foreground-muted text-white';
+  return 'bg-surface-subtle text-foreground-muted';
 };
 
 const getKpiWeightLabel = (weight: 'high' | 'medium' | 'low') => {
@@ -150,6 +151,17 @@ interface LostDealEntry {
   expectedAmountCents: number;
 }
 
+interface PendingClosingEntry {
+  id: string;
+  referralId: string;
+  borrowerName: string;
+  agentName: string | null;
+  mcName: string | null;
+  status: string;
+  closingDate: string | null;
+  expectedAmountCents: number;
+}
+
 interface DashboardSummary {
   totalReferrals: number;
   dealsClosed: number;
@@ -158,6 +170,9 @@ interface DashboardSummary {
   pendingClosings: number;
   pendingClosingsThisMonth: number;
   pendingClosingsNextMonth: number;
+  pendingClosingsList: PendingClosingEntry[];
+  pendingClosingsThisMonthList: PendingClosingEntry[];
+  pendingClosingsNextMonthList: PendingClosingEntry[];
   closeRate: number;
   afcDealsLost: number;
   afcDealsLostList: LostDealEntry[];
@@ -445,8 +460,8 @@ function NetworkFilterButtons({
             onClick={() => onChange(option.value)}
             className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
               isActive
-                ? 'border-transparent bg-brand text-white'
-                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                ? 'border-transparent bg-primary-600 text-white shadow-sm'
+                : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
             }`}
           >
             {option.label}
@@ -477,44 +492,73 @@ function SummaryCard({
   title: string;
   value: string;
   helper?: string;
-  extraStats?: { label: string; value: string }[];
+  extraStats?: { label: string; value: string; onClick?: () => void }[];
   drillDownHref?: string;
   onClick?: () => void;
 }) {
-  const isInteractive = Boolean(drillDownHref ?? onClick);
-  const content = (
+  const isHeaderInteractive = Boolean(drillDownHref ?? onClick);
+  const headerContent = (
     <>
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
-      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
-      {helper ? <p className="mt-1 text-xs text-slate-500">{helper}</p> : null}
-      {extraStats?.length ? (
-        <dl className="mt-3 grid grid-cols-2 gap-2">
-          {extraStats.map((stat) => (
-            <div key={`${title}-${stat.label}`} className="rounded-lg bg-slate-50 px-2 py-1">
-              <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{stat.label}</dt>
-              <dd className="text-sm font-semibold text-slate-900">{stat.value}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+      <p className="mt-2 text-2xl font-semibold text-foreground">{value}</p>
+      {helper ? <p className="mt-1 text-xs text-foreground-subtle">{helper}</p> : null}
     </>
   );
-  const className = `rounded-xl border border-slate-200 bg-white p-4 shadow-sm block w-full text-left transition${isInteractive ? ' cursor-pointer hover:border-sky-300 hover:shadow-md' : ''}`;
+  const headerInteractiveClass =
+    'block w-full rounded-md text-left transition hover:bg-surface-muted cursor-pointer';
+  let headerNode: ReactNode;
   if (drillDownHref) {
-    return (
-      <Link href={drillDownHref} className={className}>
-        {content}
+    headerNode = (
+      <Link href={drillDownHref} className={headerInteractiveClass}>
+        {headerContent}
       </Link>
     );
-  }
-  if (onClick) {
-    return (
-      <button type="button" onClick={onClick} className={className}>
-        {content}
+  } else if (onClick) {
+    headerNode = (
+      <button type="button" onClick={onClick} className={headerInteractiveClass}>
+        {headerContent}
       </button>
     );
+  } else {
+    headerNode = <div className="block w-full text-left">{headerContent}</div>;
   }
-  return <div className={className}>{content}</div>;
+  const extraStatsNode = extraStats?.length ? (
+    <dl className="mt-3 grid grid-cols-2 gap-2">
+      {extraStats.map((stat) => {
+        const tileBase = 'rounded-lg bg-surface-muted px-2 py-1 text-left transition';
+        if (stat.onClick) {
+          return (
+            <button
+              key={`${title}-${stat.label}`}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                event.preventDefault();
+                stat.onClick?.();
+              }}
+              className={`${tileBase} cursor-pointer hover:bg-surface-subtle hover:ring-1 hover:ring-sky-300`}
+            >
+              <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{stat.label}</dt>
+              <dd className="text-sm font-semibold text-foreground">{stat.value}</dd>
+            </button>
+          );
+        }
+        return (
+          <div key={`${title}-${stat.label}`} className={tileBase}>
+            <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{stat.label}</dt>
+            <dd className="text-sm font-semibold text-foreground">{stat.value}</dd>
+          </div>
+        );
+      })}
+    </dl>
+  ) : null;
+  const wrapperClass = `rounded-card border border-border bg-surface-raised p-4 shadow-card block w-full text-left transition${isHeaderInteractive ? ' hover:border-sky-300 hover:shadow-md' : ''}`;
+  return (
+    <div className={wrapperClass}>
+      {headerNode}
+      {extraStatsNode}
+    </div>
+  );
 }
 
 function MetricGroupCard({
@@ -525,14 +569,14 @@ function MetricGroupCard({
   metrics: { label: string; value: string; helper?: string; onHelperClick?: () => void }[];
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
-      <dl className="mt-3 divide-y divide-slate-100">
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+      <dl className="mt-3 divide-y divide-border">
         {metrics.map((metric, index) => (
           <div key={`${title}-${metric.label}`} className="space-y-0.5 py-2.5 first:pt-0 last:pb-0">
             <div className="flex items-baseline justify-between gap-3">
-              <dt className={index < 2 ? 'text-sm font-medium text-slate-700' : 'text-sm text-slate-500'}>{metric.label}</dt>
-              <dd className={index < 2 ? 'text-base font-bold text-slate-900' : 'text-sm font-semibold text-slate-900'}>{metric.value}</dd>
+              <dt className={index < 2 ? 'text-sm font-medium text-foreground-muted' : 'text-sm text-foreground-subtle'}>{metric.label}</dt>
+              <dd className={index < 2 ? 'text-base font-bold text-foreground' : 'text-sm font-semibold text-foreground'}>{metric.value}</dd>
             </div>
             {metric.helper ? (
               metric.onHelperClick ? (
@@ -544,7 +588,7 @@ function MetricGroupCard({
                   {metric.helper}
                 </button>
               ) : (
-                <p className="text-xs text-slate-400">{metric.helper}</p>
+                <p className="text-xs text-foreground-subtle">{metric.helper}</p>
               )
             ) : null}
           </div>
@@ -642,18 +686,18 @@ function LineChartCard({
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
-          {helper ? <p className="text-xs text-slate-500">{helper}</p> : null}
+          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+          {helper ? <p className="text-xs text-foreground-subtle">{helper}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
           {activePoint ? (
-            <div className="text-right text-sm text-slate-700">
+            <div className="text-right text-sm text-foreground-muted">
               <p className="font-semibold">{formatValue(activePoint.value)}</p>
-              <p className="text-xs text-slate-500">{activePoint.label}</p>
+              <p className="text-xs text-foreground-subtle">{activePoint.label}</p>
             </div>
           ) : null}
         </div>
@@ -755,7 +799,7 @@ function LineChartCard({
             </text>
           </svg>
         ) : (
-          <div className="flex h-48 w-full items-center justify-center rounded-md bg-slate-50 text-sm text-slate-500">
+          <div className="flex h-48 w-full items-center justify-center rounded-md bg-surface-muted text-sm text-foreground-subtle">
             No data for this period.
           </div>
         )}
@@ -843,19 +887,19 @@ function MultiLineChartCard({
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
-          {helper ? <p className="text-xs text-slate-500">{helper}</p> : null}
+          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+          {helper ? <p className="text-xs text-foreground-subtle">{helper}</p> : null}
         </div>
         <div className="flex items-center gap-4">
           {actions}
           {hasData && labelText ? (
             <div className="flex items-center gap-3">
-              <span className="text-xs text-slate-500">{labelText}</span>
+              <span className="text-xs text-foreground-subtle">{labelText}</span>
               {activeValues.map((item, index) => (
-                <span key={index} className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
+                <span key={index} className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
                   <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
                   {formatValue(item.value)}
                 </span>
@@ -946,7 +990,7 @@ function MultiLineChartCard({
           </svg>
           <div className="mt-3 flex flex-wrap items-center gap-4">
             {seriesPoints.map((entry) => (
-              <div key={entry.label} className="flex items-center gap-1.5 text-xs text-slate-600">
+              <div key={entry.label} className="flex items-center gap-1.5 text-xs text-foreground-muted">
                 <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
                 {entry.label}
               </div>
@@ -954,7 +998,7 @@ function MultiLineChartCard({
           </div>
         </div>
       ) : (
-        <div className="mt-3 text-sm text-slate-500">No data available.</div>
+        <div className="mt-3 text-sm text-foreground-subtle">No data available.</div>
       )}
     </div>
   );
@@ -988,13 +1032,13 @@ function PieChartCard({
   let currentAngle = -Math.PI / 2;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
-          {helper ? <p className="text-xs text-slate-500">{helper}</p> : null}
+          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+          {helper ? <p className="text-xs text-foreground-subtle">{helper}</p> : null}
         </div>
-        <p className="text-xs font-semibold text-slate-700">{total > 0 ? `${formatNumber(total)} deals` : '—'}</p>
+        <p className="text-xs font-semibold text-foreground-muted">{total > 0 ? `${formatNumber(total)} deals` : '—'}</p>
       </div>
       {total > 0 ? (
         <div className="mt-4 grid gap-4 sm:grid-cols-[1fr,1.2fr] sm:items-center">
@@ -1022,23 +1066,23 @@ function PieChartCard({
             {data.map((item, index) => {
               const resolvedPercentage = item.percentage ?? (total ? (item.value / total) * 100 : 0);
               return (
-                <div key={`${item.label}-${index}`} className="flex items-center justify-between gap-3 text-sm text-slate-700">
+                <div key={`${item.label}-${index}`} className="flex items-center justify-between gap-3 text-sm text-foreground-muted">
                   <div className="flex items-center gap-2">
                     <span
                       className="h-3 w-3 rounded-sm"
                       style={{ backgroundColor: colors[index % colors.length] }}
                       aria-hidden
                     />
-                    <span className="font-medium text-slate-900">{item.label}</span>
+                    <span className="font-medium text-foreground">{item.label}</span>
                   </div>
-                  <span className="text-slate-600">{`${formatNumber(item.value)} (${resolvedPercentage.toFixed(1)}%)`}</span>
+                  <span className="text-foreground-muted">{`${formatNumber(item.value)} (${resolvedPercentage.toFixed(1)}%)`}</span>
                 </div>
               );
             })}
           </div>
         </div>
       ) : (
-        <div className="mt-6 flex h-40 items-center justify-center rounded-md bg-slate-50 text-sm text-slate-500">
+        <div className="mt-6 flex h-40 items-center justify-center rounded-md bg-surface-muted text-sm text-foreground-subtle">
           No terminated deals recorded this period.
         </div>
       )}
@@ -1058,27 +1102,27 @@ function TerminatedDealsList({
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * TERMINATED_DEAL_ROW_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <div className="flex items-baseline justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Terminated deals</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">{formatCurrency(totalLostReferralFeeCents)}</p>
-          <p className="text-xs text-slate-500">{formatNumber(totalDeals)} lost deals</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Terminated deals</p>
+          <p className="mt-2 text-2xl font-semibold text-foreground">{formatCurrency(totalLostReferralFeeCents)}</p>
+          <p className="text-xs text-foreground-subtle">{formatNumber(totalDeals)} lost deals</p>
         </div>
       </div>
 
       <div className="mt-4">
         {deals.length ? (
           <div
-            className="divide-y divide-slate-100 overflow-y-auto"
+            className="divide-y divide-border overflow-y-auto"
             style={{ maxHeight: scrollMaxHeight }}
             aria-label="Scrollable list: terminated deals"
           >
             {deals.map((deal) => (
               <div key={deal.id} className="flex items-start justify-between gap-3 py-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900">{deal.mcName}, {deal.agentName}</p>
-                  <p className="text-xs text-slate-500">{deal.reasonLabel}</p>
+                  <p className="truncate text-sm font-semibold text-foreground">{deal.mcName}, {deal.agentName}</p>
+                  <p className="text-xs text-foreground-subtle">{deal.reasonLabel}</p>
                 </div>
                 <p className="whitespace-nowrap text-sm font-semibold text-rose-600">
                   {formatCurrency(deal.lostReferralFeeCents)}
@@ -1087,7 +1131,7 @@ function TerminatedDealsList({
             ))}
           </div>
         ) : (
-          <p className="py-6 text-center text-sm text-slate-500">No terminated deals this period.</p>
+          <p className="py-6 text-center text-sm text-foreground-subtle">No terminated deals this period.</p>
         )}
       </div>
     </div>
@@ -1111,9 +1155,9 @@ function ConversionFunnelCard({
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Conversion funnel</p>
-      <p className="mt-1 text-xs text-slate-500">Referrals by stage — click any row to view list</p>
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Conversion funnel</p>
+      <p className="mt-1 text-xs text-foreground-subtle">Referrals by stage — click any row to view list</p>
       <div className="mt-4 space-y-1.5">
         {stages.length ? (
           stages.map((stage) => {
@@ -1121,14 +1165,14 @@ function ConversionFunnelCard({
               <Link
                 key={stage.status}
                 href={buildDrillDownUrl(stage.status)}
-                className="group block rounded-lg border border-slate-100 px-3 py-2 transition hover:border-sky-200 hover:bg-sky-50"
+                className="group block rounded-md border border-border px-3 py-2 transition hover:border-primary-200 hover:bg-primary-50/40"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium text-slate-900 group-hover:text-sky-700">{stage.label}</span>
-                  <div className="flex items-center gap-3 text-sm text-slate-600">
-                    <span className="font-semibold text-slate-900">{formatNumber(stage.count)}</span>
+                  <span className="font-medium text-foreground group-hover:text-sky-700">{stage.label}</span>
+                  <div className="flex items-center gap-3 text-sm text-foreground-muted">
+                    <span className="font-semibold text-foreground">{formatNumber(stage.count)}</span>
                     {stage.avgDaysInStage != null ? (
-                      <span className="text-xs text-slate-500">avg {stage.avgDaysInStage}d</span>
+                      <span className="text-xs text-foreground-subtle">avg {stage.avgDaysInStage}d</span>
                     ) : null}
                     {stage.dropOffPercent != null && stage.dropOffPercent > 0 ? (
                       <span className="text-xs font-medium text-amber-600">↓{stage.dropOffPercent.toFixed(0)}%</span>
@@ -1139,7 +1183,7 @@ function ConversionFunnelCard({
             );
           })
         ) : (
-          <p className="py-4 text-center text-sm text-slate-500">No referral data for this period.</p>
+          <p className="py-4 text-center text-sm text-foreground-subtle">No referral data for this period.</p>
         )}
       </div>
     </div>
@@ -1161,8 +1205,8 @@ function RankedList({
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * RANKED_LIST_ROW_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
       <div className="mt-4">
         <div
           className={items.length ? 'overflow-y-auto' : undefined}
@@ -1175,11 +1219,11 @@ function RankedList({
                 const barPct = Math.max((item.value / maxValue) * 100, item.value > 0 ? 2 : 0);
                 return (
                   <li key={item.label}>
-                    <div className="flex items-center justify-between text-sm text-slate-700">
-                      <span className="font-medium text-slate-900">{item.label}</span>
-                      <span className="text-slate-600">{formatValue(item.value)}</span>
+                    <div className="flex items-center justify-between text-sm text-foreground-muted">
+                      <span className="font-medium text-foreground">{item.label}</span>
+                      <span className="text-foreground-muted">{formatValue(item.value)}</span>
                     </div>
-                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-100">
+                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface-subtle">
                       <div
                         className="h-full rounded-full bg-sky-400"
                         style={{ width: `${barPct}%` }}
@@ -1189,7 +1233,7 @@ function RankedList({
                 );
               })
             ) : (
-              <li className="text-sm text-slate-500">{emptyMessage}</li>
+              <li className="text-sm text-foreground-subtle">{emptyMessage}</li>
             )}
           </ul>
         </div>
@@ -1212,9 +1256,9 @@ function LeaderboardTable({
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
       <div
@@ -1223,8 +1267,8 @@ function LeaderboardTable({
         aria-label={entries.length ? `Scrollable list: ${title}` : undefined}
       >
         <table className="w-full text-sm">
-          <thead className="sticky top-0 z-[1] bg-white shadow-[inset_0_-1px_0_0_rgb(241_245_249)]">
-            <tr className="text-left text-xs text-slate-500">
+          <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
+            <tr className="text-left text-xs text-foreground-subtle">
               <th className="py-1 font-medium">Rank</th>
               <th className="py-1 font-medium">Name</th>
               <th className="py-1 font-medium text-right">{valueLabel}</th>
@@ -1233,9 +1277,9 @@ function LeaderboardTable({
           <tbody>
             {entries.length ? (
               entries.map((entry, index) => (
-                <tr key={`${entry.id}-${index}`} className="border-t border-slate-100 text-slate-700">
-                  <td className="py-2 text-slate-400">#{index + 1}</td>
-                  <td className="py-2 font-medium text-slate-900">{entry.name}</td>
+                <tr key={`${entry.id}-${index}`} className="border-t border-border text-foreground-muted">
+                  <td className="py-2 text-foreground-subtle">#{index + 1}</td>
+                  <td className="py-2 font-medium text-foreground">{entry.name}</td>
                   <td className="py-2 text-right">
                     {entry.revenueCents != null
                       ? formatCurrency(entry.revenueCents)
@@ -1253,7 +1297,7 @@ function LeaderboardTable({
               ))
             ) : (
               <tr>
-                <td colSpan={3} className="py-6 text-center text-sm text-slate-500">
+                <td colSpan={3} className="py-6 text-center text-sm text-foreground-subtle">
                   Nothing to display for this period.
                 </td>
               </tr>
@@ -1269,9 +1313,9 @@ function McCloseEffectivenessTable({ entries }: { entries: LeaderboardEntry[] })
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">MC Close Effectiveness</p>
-      <p className="mt-1 text-xs text-slate-500">
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">MC Close Effectiveness</p>
+      <p className="mt-1 text-xs text-foreground-subtle">
         Overall close rate uses cohort closes/referrals. Assigned close rate uses assigned-agent closes/total closed.
       </p>
       <div
@@ -1280,8 +1324,8 @@ function McCloseEffectivenessTable({ entries }: { entries: LeaderboardEntry[] })
         aria-label={entries.length ? 'Scrollable list: MC Close Effectiveness' : undefined}
       >
         <table className="w-full text-sm">
-          <thead className="sticky top-0 z-[1] bg-white shadow-[inset_0_-1px_0_0_rgb(241_245_249)]">
-            <tr className="text-left text-xs text-slate-500">
+          <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
+            <tr className="text-left text-xs text-foreground-subtle">
               <th className="py-1 font-medium">Rank</th>
               <th className="py-1 font-medium">MC</th>
               <th className="py-1 font-medium text-right">Overall close rate</th>
@@ -1294,18 +1338,18 @@ function McCloseEffectivenessTable({ entries }: { entries: LeaderboardEntry[] })
                 const overallCloseRate = entry.closeRate ?? 0;
                 const assignedCloseRate = entry.assignedAgentCloseRate ?? 0;
                 return (
-                  <tr key={`${entry.id}-${index}`} className="border-t border-slate-100 text-slate-700">
-                    <td className="py-2 text-slate-400">#{index + 1}</td>
-                    <td className="py-2 font-medium text-slate-900">{entry.name}</td>
+                  <tr key={`${entry.id}-${index}`} className="border-t border-border text-foreground-muted">
+                    <td className="py-2 text-foreground-subtle">#{index + 1}</td>
+                    <td className="py-2 font-medium text-foreground">{entry.name}</td>
                     <td className="py-2 text-right">
                       <p>{`${overallCloseRate.toFixed(1)}%`}</p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-foreground-subtle">
                         {`${formatNumber(entry.dealsClosed ?? 0)} / ${formatNumber(entry.totalReferrals ?? 0)}`}
                       </p>
                     </td>
                     <td className="py-2 text-right">
                       <p>{`${assignedCloseRate.toFixed(1)}%`}</p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-foreground-subtle">
                         {`${formatNumber(entry.assignedAgentCloses ?? 0)} / ${formatNumber(entry.totalClosedDeals ?? 0)}`}
                       </p>
                     </td>
@@ -1314,7 +1358,7 @@ function McCloseEffectivenessTable({ entries }: { entries: LeaderboardEntry[] })
               })
             ) : (
               <tr>
-                <td colSpan={4} className="py-6 text-center text-sm text-slate-500">
+                <td colSpan={4} className="py-6 text-center text-sm text-foreground-subtle">
                   Nothing to display for this period.
                 </td>
               </tr>
@@ -1330,9 +1374,9 @@ function McOutsideLenderLossTable({ entries }: { entries: LeaderboardEntry[] }) 
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">MC Outside Lender Loss Signal</p>
-      <p className="mt-1 text-xs text-slate-500">
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">MC Outside Lender Loss Signal</p>
+      <p className="mt-1 text-xs text-foreground-subtle">
         Share of closed deals where the assigned agent was used, but AFC was not.
       </p>
       <div
@@ -1341,8 +1385,8 @@ function McOutsideLenderLossTable({ entries }: { entries: LeaderboardEntry[] }) 
         aria-label={entries.length ? 'Scrollable list: MC Outside Lender Loss Signal' : undefined}
       >
         <table className="w-full text-sm">
-          <thead className="sticky top-0 z-[1] bg-white shadow-[inset_0_-1px_0_0_rgb(241_245_249)]">
-            <tr className="text-left text-xs text-slate-500">
+          <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
+            <tr className="text-left text-xs text-foreground-subtle">
               <th className="py-1 font-medium">Rank</th>
               <th className="py-1 font-medium">MC</th>
               <th className="py-1 font-medium text-right">Loss signal rate</th>
@@ -1356,12 +1400,12 @@ function McOutsideLenderLossTable({ entries }: { entries: LeaderboardEntry[] }) 
                 const totalClosedDeals = entry.totalClosedDeals ?? 0;
                 const rate = entry.outsideLenderLossRate ?? 0;
                 return (
-                  <tr key={`${entry.id}-${index}`} className="border-t border-slate-100 text-slate-700">
-                    <td className="py-2 text-slate-400">#{index + 1}</td>
-                    <td className="py-2 font-medium text-slate-900">{entry.name}</td>
+                  <tr key={`${entry.id}-${index}`} className="border-t border-border text-foreground-muted">
+                    <td className="py-2 text-foreground-subtle">#{index + 1}</td>
+                    <td className="py-2 font-medium text-foreground">{entry.name}</td>
                     <td className="py-2 text-right">
                       <p>{`${rate.toFixed(1)}%`}</p>
-                      <p className="text-xs text-slate-500">{`${formatNumber(count)} / ${formatNumber(totalClosedDeals)}`}</p>
+                      <p className="text-xs text-foreground-subtle">{`${formatNumber(count)} / ${formatNumber(totalClosedDeals)}`}</p>
                     </td>
                     <td className="py-2 text-right">{formatNumber(count)}</td>
                   </tr>
@@ -1369,7 +1413,7 @@ function McOutsideLenderLossTable({ entries }: { entries: LeaderboardEntry[] }) 
               })
             ) : (
               <tr>
-                <td colSpan={4} className="py-6 text-center text-sm text-slate-500">
+                <td colSpan={4} className="py-6 text-center text-sm text-foreground-subtle">
                   Nothing to display for this period.
                 </td>
               </tr>
@@ -1515,48 +1559,48 @@ function PreApprovalConversionSection({
   };
 
   return (
-    <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="space-y-4 rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Pre-approval conversion</p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Pre-approval conversion</p>
+          <p className="text-xs text-foreground-subtle">
             Track how referral volume compares with AHA and AHA OOS pre-approvals issued each month.
           </p>
         </div>
         {canEdit ? (
           <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col text-xs font-medium text-slate-600">
+            <label className="flex flex-col text-xs font-medium text-foreground-muted">
               Month
               <input
                 type="month"
                 value={selectedMonth}
                 onChange={(event) => setSelectedMonth(event.target.value)}
-                className="mt-1 w-40 rounded border border-slate-200 px-2 py-1 text-sm"
+                className="mt-1 w-40 rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
               />
             </label>
-            <label className="flex flex-col text-xs font-medium text-slate-600">
+            <label className="flex flex-col text-xs font-medium text-foreground-muted">
               Pre-approvals (AHA)
               <input
                 type="number"
                 min={0}
                 value={inputAhaValue}
                 onChange={(event) => setInputAhaValue(event.target.value)}
-                className="mt-1 w-32 rounded border border-slate-200 px-2 py-1 text-sm"
+                className="mt-1 w-32 rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
               />
             </label>
-            <label className="flex flex-col text-xs font-medium text-slate-600">
+            <label className="flex flex-col text-xs font-medium text-foreground-muted">
               Pre-approvals (AHA OOS)
               <input
                 type="number"
                 min={0}
                 value={inputAhaOosValue}
                 onChange={(event) => setInputAhaOosValue(event.target.value)}
-                className="mt-1 w-32 rounded border border-slate-200 px-2 py-1 text-sm"
+                className="mt-1 w-32 rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
               />
             </label>
             <button
               type="submit"
-              className="rounded bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={status === 'saving'}
             >
               {status === 'saving' ? 'Saving…' : 'Save entry'}
@@ -1565,7 +1609,7 @@ function PreApprovalConversionSection({
         ) : null}
       </div>
       {selectedEntry ? (
-        <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-600">
+        <div className="rounded-md bg-surface-muted p-3 text-xs text-foreground-muted">
           <p>
             {selectedEntry.label}: {formatNumber(referralsForMonth)} referrals ·{' '}
             {existingPreApprovals > 0
@@ -1585,7 +1629,7 @@ function PreApprovalConversionSection({
       ) : null}
       {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
       {status === 'saved' && !errorMessage ? (
-        <p className="text-sm text-slate-700">Pre-approvals saved.</p>
+        <p className="text-sm text-foreground-muted">Pre-approvals saved.</p>
       ) : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <MultiLineChartCard
@@ -1594,9 +1638,9 @@ function PreApprovalConversionSection({
           formatValue={(value) => `${value.toFixed(1)}%`}
           helper="Referrals ÷ pre-approvals across recorded months by network"
         />
-        <div className="overflow-x-auto rounded-lg border border-slate-200">
+        <div className="overflow-x-auto rounded-card border border-border">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-xs text-slate-500">
+            <thead className="bg-surface-muted text-xs text-foreground-subtle">
               <tr className="text-left">
                 <th className="px-3 py-2 font-medium">Month</th>
                 <th className="px-3 py-2 font-medium text-right">Referrals</th>
@@ -1611,8 +1655,8 @@ function PreApprovalConversionSection({
             <tbody>
               {sortedEntries.length ? (
                 sortedEntries.map((entry) => (
-                  <tr key={entry.monthKey} className="border-t border-slate-100 text-slate-700">
-                    <td className="px-3 py-2 font-medium text-slate-900">{entry.label}</td>
+                  <tr key={entry.monthKey} className="border-t border-border text-foreground-muted">
+                    <td className="px-3 py-2 font-medium text-foreground">{entry.label}</td>
                     <td className="px-3 py-2 text-right">{formatNumber(entry.totalReferrals)}</td>
                     <td className="px-3 py-2 text-right">{formatNumber(entry.ahaPreApprovals)}</td>
                     <td className="px-3 py-2 text-right">{formatNumber(entry.ahaOosPreApprovals)}</td>
@@ -1623,7 +1667,7 @@ function PreApprovalConversionSection({
                       <td className="px-3 py-2 text-right">
                         <button
                           type="button"
-                          className="inline-flex items-center rounded border border-transparent px-2 py-1 text-sm text-slate-600 hover:text-red-600 disabled:opacity-50"
+                          className="inline-flex items-center rounded border border-transparent px-2 py-1 text-sm text-foreground-muted hover:text-red-600 disabled:opacity-50"
                           onClick={() => handleDelete(entry.monthKey)}
                           disabled={deletingMonth === entry.monthKey}
                           aria-label={`Delete ${entry.label} pre-approvals`}
@@ -1636,7 +1680,7 @@ function PreApprovalConversionSection({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={canEdit ? 8 : 7} className="px-3 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={canEdit ? 8 : 7} className="px-3 py-6 text-center text-sm text-foreground-subtle">
                     No pre-approval history captured yet.
                   </td>
                 </tr>
@@ -1673,6 +1717,7 @@ function MainDashboard({
   networkFilter: NetworkFilter;
 }) {
   const [dealsLostModal, setDealsLostModal] = useState<'afc' | 'ahaOos' | null>(null);
+  const [pendingClosingsModal, setPendingClosingsModal] = useState<'all' | 'thisMonth' | 'nextMonth' | null>(null);
   const summary = data.summary;
   const realizedRevenueCents = Math.max(summary.realizedRevenueCents ?? 0, 0);
   const expectedRevenueCents = Math.max(summary.expectedRevenueCents ?? 0, 0);
@@ -1698,8 +1743,9 @@ function MainDashboard({
     title: string;
     value: string;
     helper?: string;
-    extraStats: { label: string; value: string }[];
+    extraStats: { label: string; value: string; onClick?: () => void }[];
     drillDownHref?: string;
+    onClick?: () => void;
   }[] = [
     {
       title: 'Revenue received',
@@ -1713,9 +1759,27 @@ function MainDashboard({
     {
       title: 'Total Future Closings',
       value: formatNumber(summary.pendingClosings),
+      onClick:
+        summary.pendingClosings > 0
+          ? () => setPendingClosingsModal('all')
+          : undefined,
       extraStats: [
-        { label: 'Closings this month', value: formatNumber(summary.pendingClosingsThisMonth) },
-        { label: 'Closings next month', value: formatNumber(summary.pendingClosingsNextMonth) }
+        {
+          label: 'Closings this month',
+          value: formatNumber(summary.pendingClosingsThisMonth),
+          onClick:
+            summary.pendingClosingsThisMonth > 0
+              ? () => setPendingClosingsModal('thisMonth')
+              : undefined
+        },
+        {
+          label: 'Closings next month',
+          value: formatNumber(summary.pendingClosingsNextMonth),
+          onClick:
+            summary.pendingClosingsNextMonth > 0
+              ? () => setPendingClosingsModal('nextMonth')
+              : undefined
+        }
       ]
     },
     {
@@ -1799,6 +1863,7 @@ function MainDashboard({
             helper={card.helper}
             extraStats={card.extraStats}
             drillDownHref={card.drillDownHref}
+            onClick={card.onClick}
           />
         ))}
       </div>
@@ -1896,19 +1961,44 @@ function MainDashboard({
           }
         />
       </Modal>
+
+      <Modal
+        isOpen={pendingClosingsModal !== null}
+        onClose={() => setPendingClosingsModal(null)}
+        title={
+          pendingClosingsModal === 'all'
+            ? 'All Future Closings'
+            : pendingClosingsModal === 'thisMonth'
+              ? 'Closings This Month'
+              : 'Closings Next Month'
+        }
+        size="lg"
+      >
+        <PendingClosingsTable
+          deals={
+            pendingClosingsModal === 'all'
+              ? summary.pendingClosingsList
+              : pendingClosingsModal === 'thisMonth'
+                ? summary.pendingClosingsThisMonthList
+                : pendingClosingsModal === 'nextMonth'
+                  ? summary.pendingClosingsNextMonthList
+                  : []
+          }
+        />
+      </Modal>
     </div>
   );
 }
 
 function DealsLostTable({ deals }: { deals: LostDealEntry[] }) {
   if (!deals.length) {
-    return <p className="px-6 py-8 text-center text-sm text-slate-500">No lost deals.</p>;
+    return <p className="px-6 py-8 text-center text-sm text-foreground-subtle">No lost deals.</p>;
   }
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-slate-200 text-xs font-medium uppercase text-slate-500">
+          <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
             <th className="px-6 py-3">Borrower</th>
             <th className="px-6 py-3">Agent</th>
             <th className="px-6 py-3">MC</th>
@@ -1916,20 +2006,73 @@ function DealsLostTable({ deals }: { deals: LostDealEntry[] }) {
             <th className="px-6 py-3 text-right">Expected</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-border">
           {deals.map((deal) => (
-            <tr key={deal.id} className="hover:bg-slate-50">
-              <td className="px-6 py-3 font-medium text-slate-700">
+            <tr key={deal.id} className="hover:bg-surface-muted">
+              <td className="px-6 py-3 font-medium text-foreground-muted">
                 <Link href={`/referrals/${deal.referralId}`} className="hover:text-sky-600 hover:underline">
                   {deal.borrowerName}
                 </Link>
               </td>
-              <td className="px-6 py-3 text-slate-600">{deal.agentName ?? '—'}</td>
-              <td className="px-6 py-3 text-slate-600">{deal.mcName ?? '—'}</td>
-              <td className="px-6 py-3 text-slate-600">{deal.status}</td>
-              <td className="px-6 py-3 text-right text-slate-600">{formatCurrency(deal.expectedAmountCents)}</td>
+              <td className="px-6 py-3 text-foreground-muted">{deal.agentName ?? '—'}</td>
+              <td className="px-6 py-3 text-foreground-muted">{deal.mcName ?? '—'}</td>
+              <td className="px-6 py-3 text-foreground-muted">{deal.status}</td>
+              <td className="px-6 py-3 text-right text-foreground-muted">{formatCurrency(deal.expectedAmountCents)}</td>
             </tr>
           ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PendingClosingsTable({ deals }: { deals: PendingClosingEntry[] }) {
+  if (!deals.length) {
+    return (
+      <p className="px-6 py-8 text-center text-sm text-foreground-subtle">
+        No pending closings for this period.
+      </p>
+    );
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead>
+          <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
+            <th className="px-6 py-3">Borrower</th>
+            <th className="px-6 py-3">Agent</th>
+            <th className="px-6 py-3">MC</th>
+            <th className="px-6 py-3">Status</th>
+            <th className="px-6 py-3">Closing date</th>
+            <th className="px-6 py-3 text-right">Expected fee</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {deals.map((deal) => {
+            const statusLabel =
+              DEAL_STATUS_LABELS[deal.status as DealStatus] ?? deal.status;
+            return (
+              <tr key={deal.id} className="hover:bg-surface-muted">
+                <td className="px-6 py-3 font-medium text-foreground-muted">
+                  <Link
+                    href={`/referrals/${deal.referralId}`}
+                    className="hover:text-sky-600 hover:underline"
+                  >
+                    {deal.borrowerName}
+                  </Link>
+                </td>
+                <td className="px-6 py-3 text-foreground-muted">{deal.agentName ?? '—'}</td>
+                <td className="px-6 py-3 text-foreground-muted">{deal.mcName ?? '—'}</td>
+                <td className="px-6 py-3 text-foreground-muted">{statusLabel}</td>
+                <td className="px-6 py-3 text-foreground-muted">
+                  {deal.closingDate ? formatDate(deal.closingDate) : '—'}
+                </td>
+                <td className="px-6 py-3 text-right text-foreground-muted">
+                  {formatCurrency(deal.expectedAmountCents)}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -1941,20 +2084,20 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
   const scrollMaxHeight = `${RANKED_LIST_PREVIEW_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
-      <p className="mt-1 text-xs text-slate-500">
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+      <p className="mt-1 text-xs text-foreground-subtle">
         Composite score blends weighted MC KPIs. Referral volume and NPS are top-tier factors, and closes without AFC
         or without the assigned agent are high-weight penalties. Financing-related terminations also count against MC
         score. MCs with fewer than 3 referrals are marked provisional and receive a reliability adjustment.
       </p>
       {entries.length === 0 ? (
-        <p className="py-8 text-center text-sm text-slate-500">No MCs with data for this period.</p>
+        <p className="py-8 text-center text-sm text-foreground-subtle">No MCs with data for this period.</p>
       ) : (
         <div className="mt-4 overflow-y-auto" style={{ maxHeight: scrollMaxHeight }}>
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-white">
-              <tr className="text-left text-xs text-slate-500">
+            <thead className="sticky top-0 bg-surface-raised">
+              <tr className="text-left text-xs text-foreground-subtle">
                 <th className="py-1 font-medium w-10">Rank</th>
                 <th className="py-1 font-medium">MC</th>
                 <th className="py-1 font-medium text-right">Score</th>
@@ -1962,8 +2105,8 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
             </thead>
             <tbody>
               {entries.map((entry) => (
-                <tr key={entry.id} className="border-t border-slate-100 text-slate-700">
-                  <td className="py-2 text-slate-400">#{entry.rank}</td>
+                <tr key={entry.id} className="border-t border-border text-foreground-muted">
+                  <td className="py-2 text-foreground-subtle">#{entry.rank}</td>
                   <td className="py-2 font-medium">
                     <button
                       type="button"
@@ -2005,48 +2148,48 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
         {selectedMc && (
           <div className="p-6 space-y-5">
             <div className="flex items-center gap-3">
-              <span className="text-sm text-slate-500">Composite Score</span>
+              <span className="text-sm text-foreground-subtle">Composite Score</span>
               <span className={`inline-block rounded-full px-3 py-1 text-sm font-bold tabular-nums ${getCompositeScoreStyle(selectedMc.score)}`}>
                 {selectedMc.score.toFixed(1)} / 100
               </span>
             </div>
-            <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <div className="rounded-md bg-surface-muted px-3 py-2 text-xs text-foreground-muted">
               <p>
-                Base score: <span className="font-semibold text-slate-900">{selectedMc.baseScore.toFixed(1)}</span>
+                Base score: <span className="font-semibold text-foreground">{selectedMc.baseScore.toFixed(1)}</span>
                 {' '}· Reliability factor:{' '}
-                <span className="font-semibold text-slate-900">{selectedMc.reliabilityFactor.toFixed(3)}</span>
+                <span className="font-semibold text-foreground">{selectedMc.reliabilityFactor.toFixed(3)}</span>
                 {' '}· Referrals:{' '}
-                <span className="font-semibold text-slate-900">{formatNumber(selectedMc.referralCount)}</span>
+                <span className="font-semibold text-foreground">{formatNumber(selectedMc.referralCount)}</span>
               </p>
               {!selectedMc.qualified ? (
                 <p className="mt-1">Provisional ranking: fewer than 3 referrals in selected timeframe.</p>
               ) : null}
             </div>
             <div>
-              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-400">KPI Breakdown</p>
+              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-foreground-subtle">KPI Breakdown</p>
               <div className="space-y-3">
                 {selectedMc.kpis.map((kpi) => (
                   <div key={kpi.key}>
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-slate-700">{kpi.label}</span>
+                        <span className="text-sm font-medium text-foreground-muted">{kpi.label}</span>
                         <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getKpiWeightBadge(kpi.weight)}`}>
                           {getKpiWeightLabel(kpi.weight)}
                         </span>
                         {kpi.neutralFilled ? (
-                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                          <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground-muted">
                             Neutral
                           </span>
                         ) : null}
                       </div>
                       <div className="flex items-center gap-3 text-sm">
-                        <span className="text-slate-500">{kpi.displayValue}</span>
-                        <span className="font-semibold text-slate-900 tabular-nums w-12 text-right">
+                        <span className="text-foreground-subtle">{kpi.displayValue}</span>
+                        <span className="font-semibold text-foreground tabular-nums w-12 text-right">
                           {kpi.normalizedScore.toFixed(0)}/100
                         </span>
                       </div>
                     </div>
-                    <div className="h-1.5 w-full rounded-full bg-slate-100">
+                    <div className="h-1.5 w-full rounded-full bg-surface-subtle">
                       <div
                         className={`h-1.5 rounded-full transition-all ${kpi.normalizedScore >= 75 ? 'bg-emerald-500' : kpi.normalizedScore >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
                         style={{ width: `${kpi.normalizedScore}%` }}
@@ -2073,20 +2216,20 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
   const scrollMaxHeight = `${RANKED_LIST_PREVIEW_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">AFC Loss Risk Call List</p>
-      <p className="mt-1 text-xs text-slate-500">
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">AFC Loss Risk Call List</p>
+      <p className="mt-1 text-xs text-foreground-subtle">
         All open buy-side AFC referrals currently at risk, ranked with outside-lender notes and MC outside-lender loss priority.
       </p>
       {entries.length === 0 ? (
-        <p className="py-8 text-center text-sm text-slate-500">No qualifying referrals in the active AFC pipeline.</p>
+        <p className="py-8 text-center text-sm text-foreground-subtle">No qualifying referrals in the active AFC pipeline.</p>
       ) : (
         <div
           className="mt-4 overflow-x-auto overflow-y-auto"
           style={shouldScroll ? { maxHeight: scrollMaxHeight } : undefined}
         >
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 text-xs font-medium uppercase text-slate-500">
+            <thead className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
               <tr>
                 <th className="px-3 py-2">Borrower</th>
                 <th className="px-3 py-2">MC / Agent</th>
@@ -2096,28 +2239,28 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
                 <th className="px-3 py-2">Top reasons</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-border">
               {entries.map((entry) => (
-                <tr key={entry.rowId} className="hover:bg-slate-50">
+                <tr key={entry.rowId} className="hover:bg-surface-muted">
                   <td className="px-3 py-2">
                     <div className="flex flex-col">
-                      <Link href={`/referrals/${entry.referralId}`} className="font-medium text-brand hover:underline">
+                      <Link href={`/referrals/${entry.referralId}`} className="font-medium text-primary-700 hover:underline">
                         {entry.borrowerName}
                       </Link>
-                      <span className="text-xs text-slate-500">{entry.source}</span>
+                      <span className="text-xs text-foreground-subtle">{entry.source}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">
+                  <td className="px-3 py-2 text-foreground-muted">
                     <div>{entry.mcName ?? 'Unassigned MC'}</div>
-                    <div className="text-xs text-slate-500">{entry.agentName ?? 'Unassigned Agent'}</div>
+                    <div className="text-xs text-foreground-subtle">{entry.agentName ?? 'Unassigned Agent'}</div>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">
+                  <td className="px-3 py-2 text-foreground-muted">
                     <div className="capitalize">{entry.status}</div>
-                    <div className="text-xs text-slate-500">{entry.daysSinceActivity}d since activity</div>
+                    <div className="text-xs text-foreground-subtle">{entry.daysSinceActivity}d since activity</div>
                   </td>
-                  <td className="px-3 py-2 text-slate-600">
+                  <td className="px-3 py-2 text-foreground-muted">
                     <div>{entry.closingDate ? formatDate(entry.closingDate) : '—'}</div>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-foreground-subtle">
                       {entry.daysToClose != null ? `${entry.daysToClose}d to close` : 'No closing date'}
                     </div>
                   </td>
@@ -2126,9 +2269,9 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${getRiskTierBadge(entry.riskTier)}`}>
                         {entry.riskTier}
                       </span>
-                      <span className="font-semibold text-slate-900">{entry.riskScore.toFixed(1)}</span>
+                      <span className="font-semibold text-foreground">{entry.riskScore.toFixed(1)}</span>
                     </div>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-foreground-subtle">
                       {entry.usedAfc === true
                         ? 'AFC attached'
                         : entry.usedAfc === false
@@ -2136,7 +2279,7 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
                           : 'No deal record yet'}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-xs text-slate-600">
+                  <td className="px-3 py-2 text-xs text-foreground-muted">
                     {entry.reasons.length ? entry.reasons.join(' · ') : 'No elevated signals'}
                   </td>
                 </tr>
@@ -2186,34 +2329,34 @@ function PushbackSummaryCard({
   const rate = summary.pushbackRatePercent.toFixed(1);
   const avgDays = summary.averageDaysPushedBackPerEvent.toFixed(1);
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
         Deals pushed back
       </p>
       <div className="mt-2 flex items-baseline gap-3">
-        <p className="text-2xl font-semibold text-slate-900">
+        <p className="text-2xl font-semibold text-foreground">
           {formatNumber(summary.distinctDealsPushedBack)}
         </p>
-        <p className="text-sm font-medium text-slate-500">{rate}% pushback rate</p>
+        <p className="text-sm font-medium text-foreground-subtle">{rate}% pushback rate</p>
       </div>
-      <p className="mt-1 text-xs text-slate-500">
+      <p className="mt-1 text-xs text-foreground-subtle">
         Any deal whose closing date was moved to a later date in this timeframe/network view.
         Rate = pushed-back deals / all active or closed deals.
       </p>
       <dl className="mt-3 grid grid-cols-2 gap-2">
-        <div className="rounded-lg bg-slate-50 px-2 py-1">
-          <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <div className="rounded-lg bg-surface-muted px-2 py-1">
+          <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
             Total pushback events
           </dt>
-          <dd className="text-sm font-semibold text-slate-900">
+          <dd className="text-sm font-semibold text-foreground">
             {formatNumber(summary.totalPushbackEvents)}
           </dd>
         </div>
-        <div className="rounded-lg bg-slate-50 px-2 py-1">
-          <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+        <div className="rounded-lg bg-surface-muted px-2 py-1">
+          <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
             Avg. days pushed back
           </dt>
-          <dd className="text-sm font-semibold text-slate-900">{avgDays} days</dd>
+          <dd className="text-sm font-semibold text-foreground">{avgDays} days</dd>
         </div>
       </dl>
     </div>
@@ -2228,11 +2371,11 @@ function McPushbackLeaderboardTable({
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
         Pushbacks by MC
       </p>
-      <p className="mt-1 text-xs text-slate-500">
+      <p className="mt-1 text-xs text-foreground-subtle">
         MCs with at least one deal whose closing date was moved later in this timeframe.
       </p>
       <div
@@ -2241,8 +2384,8 @@ function McPushbackLeaderboardTable({
         aria-label={entries.length ? 'Scrollable list: Pushbacks by MC' : undefined}
       >
         <table className="w-full text-sm">
-          <thead className="sticky top-0 z-[1] bg-white shadow-[inset_0_-1px_0_0_rgb(241_245_249)]">
-            <tr className="text-left text-xs text-slate-500">
+          <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
+            <tr className="text-left text-xs text-foreground-subtle">
               <th className="py-1 font-medium">Rank</th>
               <th className="py-1 font-medium">MC</th>
               <th className="py-1 font-medium text-right">Deals pushed back</th>
@@ -2253,13 +2396,13 @@ function McPushbackLeaderboardTable({
               entries.map((entry, index) => (
                 <tr
                   key={`${entry.id}-${index}`}
-                  className="border-t border-slate-100 text-slate-700"
+                  className="border-t border-border text-foreground-muted"
                 >
-                  <td className="py-2 text-slate-400">#{index + 1}</td>
-                  <td className="py-2 font-medium text-slate-900">{entry.name}</td>
+                  <td className="py-2 text-foreground-subtle">#{index + 1}</td>
+                  <td className="py-2 font-medium text-foreground">{entry.name}</td>
                   <td className="py-2 text-right">
                     <p>{`${formatNumber(entry.dealsPushedBack)} (${entry.pushbackRatePercent.toFixed(1)}%)`}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-foreground-subtle">
                       {`${formatNumber(entry.dealsPushedBack)} / ${formatNumber(entry.totalDeals)} deals`}
                     </p>
                   </td>
@@ -2267,7 +2410,7 @@ function McPushbackLeaderboardTable({
               ))
             ) : (
               <tr>
-                <td colSpan={3} className="py-6 text-center text-sm text-slate-500">
+                <td colSpan={3} className="py-6 text-center text-sm text-foreground-subtle">
                   No deals have been pushed back in this timeframe.
                 </td>
               </tr>
@@ -2284,20 +2427,20 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
   const scrollMaxHeight = `${RANKED_LIST_PREVIEW_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{title}</p>
-      <p className="mt-1 text-xs text-slate-500">
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+      <p className="mt-1 text-xs text-foreground-subtle">
         Composite score blends weighted KPIs. Agents with fewer than 3 referrals are marked provisional and receive a
         reliability adjustment.
       </p>
       {data.rankedAgents.length === 0 ? (
-        <p className="py-8 text-center text-sm text-slate-500">No agents with data for this period.</p>
+        <p className="py-8 text-center text-sm text-foreground-subtle">No agents with data for this period.</p>
       ) : (
         <>
           <div className="mt-4 overflow-y-auto" style={{ maxHeight: scrollMaxHeight }}>
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-white">
-                <tr className="text-left text-xs text-slate-500">
+              <thead className="sticky top-0 bg-surface-raised">
+                <tr className="text-left text-xs text-foreground-subtle">
                   <th className="py-1 font-medium w-10">Rank</th>
                   <th className="py-1 font-medium">Agent</th>
                   <th className="py-1 font-medium text-right">Score</th>
@@ -2305,8 +2448,8 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
               </thead>
               <tbody>
                 {data.rankedAgents.map((agent) => (
-                  <tr key={agent.id} className="border-t border-slate-100 text-slate-700">
-                    <td className="py-2 text-slate-400">#{agent.rank}</td>
+                  <tr key={agent.id} className="border-t border-border text-foreground-muted">
+                    <td className="py-2 text-foreground-subtle">#{agent.rank}</td>
                     <td className="py-2 font-medium">
                       <button
                         type="button"
@@ -2347,18 +2490,18 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
         {selectedAgent && (
           <div className="p-6 space-y-5">
             <div className="flex items-center gap-3">
-              <span className="text-sm text-slate-500">Composite Score</span>
+              <span className="text-sm text-foreground-subtle">Composite Score</span>
               <span className={`inline-block rounded-full px-3 py-1 text-sm font-bold tabular-nums ${getCompositeScoreStyle(selectedAgent.score)}`}>
                 {selectedAgent.score.toFixed(1)} / 100
               </span>
             </div>
-            <div className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <div className="rounded-md bg-surface-muted px-3 py-2 text-xs text-foreground-muted">
               <p>
-                Base score: <span className="font-semibold text-slate-900">{selectedAgent.baseScore.toFixed(1)}</span>
+                Base score: <span className="font-semibold text-foreground">{selectedAgent.baseScore.toFixed(1)}</span>
                 {' '}· Reliability factor:{' '}
-                <span className="font-semibold text-slate-900">{selectedAgent.reliabilityFactor.toFixed(3)}</span>
+                <span className="font-semibold text-foreground">{selectedAgent.reliabilityFactor.toFixed(3)}</span>
                 {' '}· Referrals:{' '}
-                <span className="font-semibold text-slate-900">{formatNumber(selectedAgent.referralCount)}</span>
+                <span className="font-semibold text-foreground">{formatNumber(selectedAgent.referralCount)}</span>
               </p>
               {!selectedAgent.qualified ? (
                 <p className="mt-1">
@@ -2367,30 +2510,30 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
               ) : null}
             </div>
             <div>
-              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-slate-400">KPI Breakdown</p>
+              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-foreground-subtle">KPI Breakdown</p>
               <div className="space-y-3">
                 {selectedAgent.kpis.map((kpi) => (
                   <div key={kpi.key}>
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-slate-700">{kpi.label}</span>
+                        <span className="text-sm font-medium text-foreground-muted">{kpi.label}</span>
                         <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getKpiWeightBadge(kpi.weight)}`}>
                           {getKpiWeightLabel(kpi.weight)}
                         </span>
                         {kpi.neutralFilled ? (
-                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                          <span className="rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground-muted">
                             Neutral
                           </span>
                         ) : null}
                       </div>
                       <div className="flex items-center gap-3 text-sm">
-                        <span className="text-slate-500">{kpi.displayValue}</span>
-                        <span className="font-semibold text-slate-900 tabular-nums w-12 text-right">
+                        <span className="text-foreground-subtle">{kpi.displayValue}</span>
+                        <span className="font-semibold text-foreground tabular-nums w-12 text-right">
                           {kpi.normalizedScore.toFixed(0)}/100
                         </span>
                       </div>
                     </div>
-                    <div className="h-1.5 w-full rounded-full bg-slate-100">
+                    <div className="h-1.5 w-full rounded-full bg-surface-subtle">
                       <div
                         className={`h-1.5 rounded-full transition-all ${kpi.normalizedScore >= 75 ? 'bg-emerald-500' : kpi.normalizedScore >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
                         style={{ width: `${kpi.normalizedScore}%` }}
@@ -2464,13 +2607,13 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
 
 function StaleReferralsTable({ referrals }: { referrals: StaleReferralEntry[] }) {
   if (!referrals.length) {
-    return <p className="px-6 py-8 text-center text-sm text-slate-500">No stale referrals.</p>;
+    return <p className="px-6 py-8 text-center text-sm text-foreground-subtle">No stale referrals.</p>;
   }
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-slate-200 text-xs font-medium uppercase text-slate-500">
+          <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
             <th className="px-6 py-3">Borrower</th>
             <th className="px-6 py-3">Status</th>
             <th className="px-6 py-3">Agent</th>
@@ -2479,18 +2622,18 @@ function StaleReferralsTable({ referrals }: { referrals: StaleReferralEntry[] })
             <th className="px-6 py-3 text-right">Days Stale</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-border">
           {referrals.map((row) => (
-            <tr key={row.id} className="hover:bg-slate-50">
-              <td className="px-6 py-3 font-medium text-slate-700">
+            <tr key={row.id} className="hover:bg-surface-muted">
+              <td className="px-6 py-3 font-medium text-foreground-muted">
                 <Link href={`/referrals/${row.id}`} className="hover:text-sky-600 hover:underline">
                   {row.borrowerName}
                 </Link>
               </td>
-              <td className="px-6 py-3 text-slate-600">{row.status}</td>
-              <td className="px-6 py-3 text-slate-600">{row.agentName ?? '—'}</td>
-              <td className="px-6 py-3 text-slate-600">{row.mcName ?? '—'}</td>
-              <td className="px-6 py-3 text-slate-600">
+              <td className="px-6 py-3 text-foreground-muted">{row.status}</td>
+              <td className="px-6 py-3 text-foreground-muted">{row.agentName ?? '—'}</td>
+              <td className="px-6 py-3 text-foreground-muted">{row.mcName ?? '—'}</td>
+              <td className="px-6 py-3 text-foreground-muted">
                 {row.lastActivityAt
                   ? new Date(row.lastActivityAt).toLocaleDateString(undefined, {
                       year: 'numeric',
@@ -2499,7 +2642,7 @@ function StaleReferralsTable({ referrals }: { referrals: StaleReferralEntry[] })
                     })
                   : '—'}
               </td>
-              <td className="px-6 py-3 text-right font-medium text-slate-700">{row.daysSinceActivity}</td>
+              <td className="px-6 py-3 text-right font-medium text-foreground-muted">{row.daysSinceActivity}</td>
             </tr>
           ))}
         </tbody>
@@ -2649,47 +2792,47 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
 
       {/* AGIT Referrals Table */}
       <div>
-        <h3 className="mb-3 text-lg font-semibold text-slate-900">AGIT Referrals</h3>
+        <h3 className="mb-3 text-lg font-semibold text-foreground">AGIT Referrals</h3>
         {data.referralRows.length === 0 ? (
-          <p className="text-sm text-slate-500">No AGIT referrals in this timeframe.</p>
+          <p className="text-sm text-foreground-subtle">No AGIT referrals in this timeframe.</p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
+          <div className="overflow-hidden rounded-card border border-border bg-surface-raised shadow-card">
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-surface-muted">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Borrower</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">MC</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Created</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Last Updated</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Borrower</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">MC</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Created</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Last Updated</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-border">
                 {data.referralRows.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-sm text-slate-700">
+                  <tr key={row.id} className="hover:bg-surface-muted">
+                    <td className="px-4 py-3 text-sm text-foreground-muted">
                       <div className="flex flex-col">
                         <Link
                           prefetch={false}
                           href={`/referrals/${row.id}`}
-                          className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+                          className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
                         >
                           {row.borrowerName}
                         </Link>
                         {row.loanFileNumber && (
-                          <span className="text-xs text-slate-500">Loan # {row.loanFileNumber}</span>
+                          <span className="text-xs text-foreground-subtle">Loan # {row.loanFileNumber}</span>
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-700">{row.status}</td>
-                    <td className="px-4 py-3 text-sm text-slate-700">
+                    <td className="px-4 py-3 text-sm text-foreground-muted">{row.status}</td>
+                    <td className="px-4 py-3 text-sm text-foreground-muted">
                       {row.agentId ? (
                         <div className="flex flex-col">
                           <Link
                             prefetch={false}
                             href={`/agents/${row.agentId}`}
-                            className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+                            className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
                           >
                             {row.agentName || 'Agent'}
                           </Link>
@@ -2698,7 +2841,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                               href={buildGmailComposeUrl(row.agentEmail)}
                               target="_blank"
                               rel="noreferrer"
-                              className="block text-xs text-brand hover:underline"
+                              className="block text-xs text-primary-700 hover:underline"
                             >
                               {row.agentEmail}
                             </a>
@@ -2706,23 +2849,23 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                           {row.agentPhone && (
                             <a
                               href={`tel:${row.agentPhone.replace(/[^0-9+]/g, '')}`}
-                              className="block text-xs text-brand hover:underline"
+                              className="block text-xs text-primary-700 hover:underline"
                             >
                               {row.agentPhone}
                             </a>
                           )}
                         </div>
                       ) : (
-                        <span className="text-slate-400">Unassigned</span>
+                        <span className="text-foreground-subtle">Unassigned</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-700">
+                    <td className="px-4 py-3 text-sm text-foreground-muted">
                       {row.mcId ? (
                         <div className="flex flex-col">
                           <Link
                             prefetch={false}
                             href={`/lenders/${row.mcId}`}
-                            className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+                            className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
                           >
                             {row.mcName || 'MC'}
                           </Link>
@@ -2731,7 +2874,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                               href={buildGmailComposeUrl(row.mcEmail)}
                               target="_blank"
                               rel="noreferrer"
-                              className="block text-xs text-brand hover:underline"
+                              className="block text-xs text-primary-700 hover:underline"
                             >
                               {row.mcEmail}
                             </a>
@@ -2739,20 +2882,20 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                           {row.mcPhone && (
                             <a
                               href={`tel:${row.mcPhone.replace(/[^0-9+]/g, '')}`}
-                              className="block text-xs text-brand hover:underline"
+                              className="block text-xs text-primary-700 hover:underline"
                             >
                               {row.mcPhone}
                             </a>
                           )}
                         </div>
                       ) : (
-                        <span className="text-slate-400">Unassigned</span>
+                        <span className="text-foreground-subtle">Unassigned</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-700">
+                    <td className="px-4 py-3 text-sm text-foreground-muted">
                       {formatDate(row.createdAt)}
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-700">
+                    <td className="px-4 py-3 text-sm text-foreground-muted">
                       {formatDate(row.updatedAt)}
                     </td>
                   </tr>
@@ -2765,59 +2908,59 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
 
       {/* AGIT Deals Table */}
       <div>
-        <h3 className="mb-3 text-lg font-semibold text-slate-900">AGIT Deals</h3>
+        <h3 className="mb-3 text-lg font-semibold text-foreground">AGIT Deals</h3>
         {data.dealRows.length === 0 ? (
-          <p className="text-sm text-slate-500">No deals for AGIT referrals in this timeframe.</p>
+          <p className="text-sm text-foreground-subtle">No deals for AGIT referrals in this timeframe.</p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead className="bg-slate-50">
+          <div className="overflow-hidden rounded-card border border-border bg-surface-raised shadow-card">
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-surface-muted">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Referral</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Expected</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Received</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Agent</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">MC</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Closing Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Used AFC</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Referral</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Expected</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Received</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">MC</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Closing Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Used AFC</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-border">
                 {data.dealRows.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-sm text-slate-700">
+                  <tr key={row.id} className="hover:bg-surface-muted">
+                    <td className="px-4 py-3 text-sm text-foreground-muted">
                       <Link
                         prefetch={false}
                         href={`/referrals/${row.referralId}`}
-                        className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+                        className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
                       >
                         {row.borrowerName}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-700 capitalize">{row.status.replace(/_/g, ' ')}</td>
-                    <td className="px-4 py-3 text-sm text-slate-700">{formatCurrency(row.expectedAmountCents)}</td>
-                    <td className="px-4 py-3 text-sm text-slate-700">{formatCurrency(row.receivedAmountCents)}</td>
-                    <td className="px-4 py-3 text-sm text-slate-700">
+                    <td className="px-4 py-3 text-sm text-foreground-muted capitalize">{row.status.replace(/_/g, ' ')}</td>
+                    <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(row.expectedAmountCents)}</td>
+                    <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(row.receivedAmountCents)}</td>
+                    <td className="px-4 py-3 text-sm text-foreground-muted">
                       {row.agentId ? (
                         <Link
                           prefetch={false}
                           href={`/agents/${row.agentId}`}
-                          className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+                          className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
                         >
                           {row.agentName || 'Agent'}
                         </Link>
                       ) : (
-                        <span className="text-slate-400">Unassigned</span>
+                        <span className="text-foreground-subtle">Unassigned</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-700">
+                    <td className="px-4 py-3 text-sm text-foreground-muted">
                       {row.mcId ? (
                         <div className="flex flex-col">
                           <Link
                             prefetch={false}
                             href={`/lenders/${row.mcId}`}
-                            className="font-medium text-brand transition hover:text-brand-dark hover:underline"
+                            className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
                           >
                             {row.mcName || 'MC'}
                           </Link>
@@ -2826,7 +2969,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                               href={buildGmailComposeUrl(row.mcEmail)}
                               target="_blank"
                               rel="noreferrer"
-                              className="block text-xs text-brand hover:underline"
+                              className="block text-xs text-primary-700 hover:underline"
                             >
                               {row.mcEmail}
                             </a>
@@ -2834,20 +2977,20 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                           {row.mcPhone && (
                             <a
                               href={`tel:${row.mcPhone.replace(/[^0-9+]/g, '')}`}
-                              className="block text-xs text-brand hover:underline"
+                              className="block text-xs text-primary-700 hover:underline"
                             >
                               {row.mcPhone}
                             </a>
                           )}
                         </div>
                       ) : (
-                        <span className="text-slate-400">Unassigned</span>
+                        <span className="text-foreground-subtle">Unassigned</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-700">
+                    <td className="px-4 py-3 text-sm text-foreground-muted">
                       {row.closingDate ? formatDate(row.closingDate) : '—'}
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-700">
+                    <td className="px-4 py-3 text-sm text-foreground-muted">
                       {row.usedAfc === null ? '—' : row.usedAfc ? 'Yes' : 'No'}
                     </td>
                   </tr>
@@ -2970,8 +3113,8 @@ export function DashboardTabs() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Performance dashboards</h1>
-          <p className="text-sm text-slate-500">{timeframeLabel}</p>
+          <h1 className="text-2xl font-semibold text-foreground">Performance dashboards</h1>
+          <p className="text-sm text-foreground-subtle">{timeframeLabel}</p>
         </div>
         <div className="flex flex-wrap items-start justify-end gap-6">
           <TimeframeDropdown
@@ -2983,7 +3126,7 @@ export function DashboardTabs() {
             maxDate={maxSelectableDate}
           />
           <div className="flex flex-col items-end gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Network</span>
+            <span className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Network</span>
             <NetworkFilterButtons
               value={activeNetworkFilter}
               onChange={(value) => handleNetworkFilterChange(activeTab, value)}
@@ -3002,8 +3145,8 @@ export function DashboardTabs() {
               onClick={() => setActiveTab(tab.value)}
               className={`rounded-full border px-4 py-1 text-sm font-medium transition ${
                 isActive
-                  ? 'border-transparent bg-brand text-white'
-                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                  ? 'border-transparent bg-primary-600 text-white shadow-sm'
+                  : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
               }`}
             >
               {tab.label}
@@ -3016,17 +3159,17 @@ export function DashboardTabs() {
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="h-28 animate-pulse rounded-xl border border-slate-200 bg-white" />
+              <div key={index} className="h-28 animate-pulse rounded-card border border-border bg-surface-muted" />
             ))}
           </div>
-          <div className="h-40 animate-pulse rounded-xl border border-slate-200 bg-white" />
+          <div className="h-40 animate-pulse rounded-card border border-border bg-surface-muted" />
           <div className="grid gap-4 lg:grid-cols-2">
-            <div className="h-52 animate-pulse rounded-xl border border-slate-200 bg-white" />
-            <div className="h-52 animate-pulse rounded-xl border border-slate-200 bg-white" />
+            <div className="h-52 animate-pulse rounded-card border border-border bg-surface-muted" />
+            <div className="h-52 animate-pulse rounded-card border border-border bg-surface-muted" />
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
-            <div className="h-48 animate-pulse rounded-xl border border-slate-200 bg-white" />
-            <div className="h-48 animate-pulse rounded-xl border border-slate-200 bg-white" />
+            <div className="h-48 animate-pulse rounded-card border border-border bg-surface-muted" />
+            <div className="h-48 animate-pulse rounded-card border border-border bg-surface-muted" />
           </div>
         </div>
       ) : null}

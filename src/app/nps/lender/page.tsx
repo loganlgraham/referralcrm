@@ -83,9 +83,9 @@ function NPSSurveyContent() {
 
   if (loading) {
     return (
-      <main className="flex min-h-[60vh] items-center justify-center bg-slate-100 px-4 py-12">
-        <div className="w-full max-w-xl rounded-2xl bg-white p-8 shadow-lg ring-1 ring-slate-200">
-          <p className="text-center text-slate-700">Loading survey...</p>
+      <main className="flex min-h-[60vh] items-center justify-center bg-surface-subtle px-4 py-12">
+        <div className="w-full max-w-xl rounded-card bg-surface-raised p-8 shadow-lg ring-1 ring-border">
+          <p className="text-center text-foreground-muted">Loading survey...</p>
         </div>
       </main>
     );
@@ -93,11 +93,11 @@ function NPSSurveyContent() {
 
   if (!valid) {
     return (
-      <main className="flex min-h-[60vh] items-center justify-center bg-slate-100 px-4 py-12">
-        <div className="w-full max-w-xl rounded-2xl bg-white p-8 shadow-lg ring-1 ring-slate-200">
+      <main className="flex min-h-[60vh] items-center justify-center bg-surface-subtle px-4 py-12">
+        <div className="w-full max-w-xl rounded-card bg-surface-raised p-8 shadow-lg ring-1 ring-border">
           <div className="space-y-2 text-center">
-            <h1 className="text-2xl font-semibold text-slate-900">Survey Not Available</h1>
-            <p className="text-sm text-slate-600">{error || 'This survey link is invalid or has expired.'}</p>
+            <h1 className="text-2xl font-semibold text-foreground">Survey Not Available</h1>
+            <p className="text-sm text-foreground-muted">{error || 'This survey link is invalid or has expired.'}</p>
           </div>
         </div>
       </main>
@@ -107,20 +107,20 @@ function NPSSurveyContent() {
   const firstName = recipientName.split(' ')[0] || recipientName;
 
   return (
-    <main className="flex min-h-[60vh] items-center justify-center bg-slate-100 px-4 py-12">
-      <div className="w-full max-w-xl rounded-2xl bg-white p-8 shadow-lg ring-1 ring-slate-200">
+    <main className="flex min-h-[60vh] items-center justify-center bg-surface-subtle px-4 py-12">
+      <div className="w-full max-w-xl rounded-card bg-surface-raised p-8 shadow-lg ring-1 ring-border">
         <div className="space-y-6">
           <div className="text-center">
-            <p className="text-xs font-semibold uppercase tracking-wide text-brand">Net Promoter Score</p>
-            <h1 className="mt-2 text-2xl font-semibold text-slate-900">Help us improve</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">Net Promoter Score</p>
+            <h1 className="mt-2 text-2xl font-semibold text-foreground">Help us improve</h1>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-foreground-muted">
                 Hi {firstName},
               </p>
-              <p className="mt-2 text-base font-medium text-slate-900">
+              <p className="mt-2 text-base font-medium text-foreground">
                 On a scale of 0-10, how likely are you to recommend American Financing to a client or colleague?
               </p>
             </div>
@@ -132,8 +132,8 @@ function NPSSurveyContent() {
                     key={score}
                     className={`flex cursor-pointer flex-col items-center rounded-lg border-2 p-3 transition ${
                       selectedScore === score
-                        ? 'border-brand bg-brand/5'
-                        : 'border-slate-200 hover:border-slate-300'
+                        ? 'border-primary-500 bg-primary-600/5'
+                        : 'border-border hover:border-border-strong'
                     }`}
                   >
                     <input
@@ -144,11 +144,11 @@ function NPSSurveyContent() {
                       onChange={() => setSelectedScore(score)}
                       className="sr-only"
                     />
-                    <span className="text-lg font-semibold text-slate-900">{score}</span>
+                    <span className="text-lg font-semibold text-foreground">{score}</span>
                   </label>
                 ))}
               </div>
-              <div className="flex justify-between text-xs text-slate-500">
+              <div className="flex justify-between text-xs text-foreground-subtle">
                 <span>Not at all likely</span>
                 <span>Extremely likely</span>
               </div>
@@ -161,7 +161,7 @@ function NPSSurveyContent() {
             <button
               type="submit"
               disabled={submitting || selectedScore === null}
-              className="w-full rounded-md bg-brand px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-md bg-primary-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting ? 'Submitting...' : 'Submit'}
             </button>
@@ -175,9 +175,9 @@ function NPSSurveyContent() {
 export default function LenderNPSSurveyPage() {
   return (
     <Suspense fallback={
-      <main className="flex min-h-[60vh] items-center justify-center bg-slate-100 px-4 py-12">
-        <div className="w-full max-w-xl rounded-2xl bg-white p-8 shadow-lg ring-1 ring-slate-200">
-          <p className="text-center text-slate-700">Loading survey...</p>
+      <main className="flex min-h-[60vh] items-center justify-center bg-surface-subtle px-4 py-12">
+        <div className="w-full max-w-xl rounded-card bg-surface-raised p-8 shadow-lg ring-1 ring-border">
+          <p className="text-center text-foreground-muted">Loading survey...</p>
         </div>
       </main>
     }>

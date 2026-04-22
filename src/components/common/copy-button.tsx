@@ -41,7 +41,7 @@ export function CopyButton({ value, label = 'Copy', className }: CopyButtonProps
       disabled={copying}
       aria-label={label}
       className={clsx(
-        'inline-flex shrink-0 items-center justify-center rounded p-0.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50',
+        'inline-flex shrink-0 items-center justify-center rounded p-0.5 text-foreground-subtle transition hover:bg-surface-subtle hover:text-foreground-muted disabled:opacity-50',
         className
       )}
     >

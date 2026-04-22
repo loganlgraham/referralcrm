@@ -63,10 +63,10 @@ function ToggleControl({ label, checked, onChange, disabled }: ToggleControlProp
   };
 
   const trackClasses = `relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${
-    disabled ? 'bg-slate-200' : checked ? 'bg-brand' : 'bg-slate-300'
+    disabled ? 'bg-surface-subtle' : checked ? 'bg-primary-600' : 'bg-surface-subtle'
   }`;
 
-  const thumbClasses = `inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+  const thumbClasses = `inline-block h-4 w-4 transform rounded-full bg-surface-raised shadow transition ${
     checked ? 'translate-x-4' : 'translate-x-1'
   }`;
 
@@ -78,8 +78,8 @@ function ToggleControl({ label, checked, onChange, disabled }: ToggleControlProp
       aria-label={label}
       onClick={handleToggle}
       disabled={disabled}
-      className={`inline-flex items-center gap-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 ${
-        disabled ? 'cursor-not-allowed text-slate-400' : 'cursor-pointer text-slate-600'
+      className={`inline-flex items-center gap-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 ${
+        disabled ? 'cursor-not-allowed text-foreground-subtle' : 'cursor-pointer text-foreground-muted'
       }`}
     >
       <span className={trackClasses}>
@@ -363,19 +363,19 @@ export function ReferralNotes({
     const isEditingNote = editingNotes.has(note.id);
 
     return (
-      <div key={note.id} className="rounded border border-slate-200 bg-white px-3 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs font-semibold text-slate-600">
+      <div key={note.id} className="rounded border border-border bg-surface-raised px-3 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs font-semibold text-foreground-muted">
           <span className="truncate">
             {note.authorName} · {note.authorRole}
           </span>
           <div className="flex items-center gap-2">
-            <span className="text-slate-400">{formatTimestamp(note.createdAt)}</span>
+            <span className="text-foreground-subtle">{formatTimestamp(note.createdAt)}</span>
             {!isEditing && (
               <>
                 <button
                   type="button"
                   onClick={() => handleEditStart(note)}
-                  className="inline-flex items-center rounded p-1 text-slate-400 transition hover:text-brand hover:bg-brand/10"
+                  className="inline-flex items-center rounded p-1 text-foreground-subtle transition hover:text-primary-700 hover:bg-primary-700/10"
                   aria-label="Edit note"
                 >
                   <Pencil className="h-3.5 w-3.5" />
@@ -385,7 +385,7 @@ export function ReferralNotes({
                     type="button"
                     onClick={() => handleDelete(note.id)}
                     disabled={isDeleting}
-                    className="inline-flex items-center rounded p-1 text-slate-400 transition hover:text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center rounded p-1 text-foreground-subtle transition hover:text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label="Delete note"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -401,7 +401,7 @@ export function ReferralNotes({
               value={editContent}
               onChange={(event) => setEditContent(event.target.value)}
               rows={3}
-              className="w-full rounded border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-brand focus:outline-none"
+              className="w-full rounded border border-border px-3 py-2 text-sm text-foreground-muted focus:border-primary-500 focus:outline-none"
               placeholder="Edit note content"
               disabled={isEditingNote}
             />
@@ -426,7 +426,7 @@ export function ReferralNotes({
                 type="button"
                 onClick={() => handleEditSave(note.id)}
                 disabled={isEditingNote || !editContent.trim()}
-                className="inline-flex items-center rounded bg-brand px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                className="inline-flex items-center rounded bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {isEditingNote ? 'Saving…' : 'Save'}
               </button>
@@ -434,7 +434,7 @@ export function ReferralNotes({
                 type="button"
                 onClick={handleEditCancel}
                 disabled={isEditingNote}
-                className="inline-flex items-center rounded border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
+                className="inline-flex items-center rounded border border-border px-3 py-2 text-sm font-semibold text-foreground-muted transition hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-70"
               >
                 Cancel
               </button>
@@ -442,7 +442,7 @@ export function ReferralNotes({
           </div>
         ) : (
           <>
-            <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{note.content}</p>
+            <p className="mt-2 whitespace-pre-line text-sm text-foreground-muted">{note.content}</p>
             {showBadges && (
               <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide">
                 {showVisibilityBadge && (
@@ -453,7 +453,7 @@ export function ReferralNotes({
                   </span>
                 )}
                 {showEmailBadge && (
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700">
+                  <span className="rounded-full bg-surface-subtle px-2 py-0.5 text-foreground-muted">
                     {`Emailed: ${note.emailedTargets
                       ?.map((target) => {
                         if (target === 'agent') {
@@ -476,17 +476,17 @@ export function ReferralNotes({
   };
 
   return (
-    <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="space-y-4 rounded-lg border border-border bg-surface-raised p-5 shadow-sm">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Notes</h2>
-        <p className="text-sm text-slate-500">Capture context and decisions for this referral</p>
+        <h2 className="text-lg font-semibold text-foreground">Notes</h2>
+        <p className="text-sm text-foreground-subtle">Capture context and decisions for this referral</p>
       </div>
       <form onSubmit={handleSubmit} className="space-y-3">
         <textarea
           value={content}
           onChange={(event) => setContent(event.target.value)}
           rows={3}
-          className="w-full rounded border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-brand focus:outline-none"
+          className="w-full rounded border border-border px-3 py-2 text-sm text-foreground-muted focus:border-primary-500 focus:outline-none"
           placeholder="Add a note with borrower updates or next steps"
           disabled={saving}
         />
@@ -538,7 +538,7 @@ export function ReferralNotes({
             missingMessages.push('Add an admin user with an email address to notify them automatically.');
           }
           return missingMessages.length > 0 ? (
-            <ul className="space-y-1 text-xs text-slate-400">
+            <ul className="space-y-1 text-xs text-foreground-subtle">
               {missingMessages.map((message) => (
                 <li key={message}>{message}</li>
               ))}
@@ -549,7 +549,7 @@ export function ReferralNotes({
           <button
             type="submit"
             disabled={saving || !content.trim()}
-            className="inline-flex items-center rounded bg-brand px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex items-center rounded bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {saving ? 'Saving…' : 'Save note'}
           </button>
@@ -557,7 +557,7 @@ export function ReferralNotes({
             type="button"
             disabled={saving}
             onClick={resetForm}
-            className="inline-flex items-center rounded border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex items-center rounded border border-border px-3 py-2 text-sm font-semibold text-foreground-muted transition hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-70"
           >
             Cancel
           </button>
@@ -565,7 +565,7 @@ export function ReferralNotes({
       </form>
       <div>
         {sortedNotes.length === 0 ? (
-          <p className="text-sm text-slate-500">No notes yet.</p>
+          <p className="text-sm text-foreground-subtle">No notes yet.</p>
         ) : (
           <div className="space-y-2">
             {!showNotesDropdown && (
@@ -577,7 +577,7 @@ export function ReferralNotes({
               <button
                 type="button"
                 onClick={handleDropdownToggle}
-                className="flex w-full items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                className="flex w-full items-center justify-between rounded border border-border bg-surface-muted px-3 py-2 text-left text-sm font-semibold text-foreground-muted transition hover:bg-surface-subtle"
               >
                 <span>
                   {showNotesDropdown ? 'Hide note drawer' : `Show all notes (${sortedNotes.length})`}
@@ -588,7 +588,7 @@ export function ReferralNotes({
               </button>
             )}
             {showNotesDropdown && (
-              <div className="max-h-80 space-y-2 overflow-y-auto rounded border border-slate-200 bg-slate-50 p-2">
+              <div className="max-h-80 space-y-2 overflow-y-auto rounded border border-border bg-surface-muted p-2">
                 {sortedNotes.map(renderNoteCard)}
               </div>
             )}

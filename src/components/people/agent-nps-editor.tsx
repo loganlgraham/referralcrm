@@ -60,8 +60,8 @@ export function AgentNpsEditor({ agentId, initialScore }: AgentNpsEditorProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <label className="block text-sm font-semibold text-slate-700">NPS score</label>
+    <form onSubmit={handleSubmit} className="rounded-lg border border-border bg-surface-muted p-4">
+      <label className="block text-sm font-semibold text-foreground-muted">NPS score</label>
       <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-center">
         <input
           type="number"
@@ -70,19 +70,19 @@ export function AgentNpsEditor({ agentId, initialScore }: AgentNpsEditorProps) {
           max={100}
           value={value}
           onChange={(event) => setValue(event.target.value)}
-          className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/40 sm:max-w-xs"
+          className="flex-1 rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40 sm:max-w-xs"
           placeholder="68"
           disabled={saving}
         />
         <button
           type="submit"
           disabled={saving}
-          className="inline-flex shrink-0 items-center justify-center rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {saving ? 'Saving…' : 'Save NPS'}
         </button>
       </div>
-      <p className="mt-2 text-xs text-slate-500">Only admins can update this score. Leave blank to clear the value.</p>
+      <p className="mt-2 text-xs text-foreground-subtle">Only admins can update this score. Leave blank to clear the value.</p>
     </form>
   );
 }

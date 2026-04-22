@@ -27,9 +27,9 @@ export function ExtraPrincipalImpact({
 }: ExtraPrincipalImpactProps) {
   if (extraPrincipalAmount === 0 || monthsSaved <= 0) {
     return (
-      <div className="rounded-lg border border-slate-200 p-4">
-        <h3 className="text-sm font-semibold text-slate-800">Extra Principal Impact</h3>
-        <p className="mt-2 text-xs text-slate-500">
+      <div className="rounded-lg border border-border p-4">
+        <h3 className="text-sm font-semibold text-foreground">Extra Principal Impact</h3>
+        <p className="mt-2 text-xs text-foreground-subtle">
           Add an extra principal payment to see how much time and interest you can save.
         </p>
       </div>
@@ -58,43 +58,43 @@ export function ExtraPrincipalImpact({
 
       <div className="mt-4 grid gap-3">
         {/* Time Saved */}
-        <div className="flex items-start gap-3 rounded-lg bg-white p-3 shadow-sm">
+        <div className="flex items-start gap-3 rounded-md bg-surface-raised p-3 shadow-sm">
           <div className="rounded-md bg-emerald-100 p-2 text-emerald-600">
             <ClockIcon className="h-4 w-4" />
           </div>
           <div className="flex-1">
-            <p className="text-xs font-medium text-slate-700">Time Saved</p>
-            <p className="mt-0.5 text-lg font-bold text-slate-900">
+            <p className="text-xs font-medium text-foreground-muted">Time Saved</p>
+            <p className="mt-0.5 text-lg font-bold text-foreground">
               {yearsDisplay > 0 && `${yearsDisplay} ${yearsDisplay === 1 ? 'year' : 'years'}`}
               {yearsDisplay > 0 && monthsDisplay > 0 && ', '}
               {monthsDisplay > 0 && `${monthsDisplay} ${monthsDisplay === 1 ? 'month' : 'months'}`}
             </p>
-            <p className="mt-0.5 text-xs text-slate-500">Earlier loan payoff</p>
+            <p className="mt-0.5 text-xs text-foreground-subtle">Earlier loan payoff</p>
           </div>
         </div>
 
         {/* Interest Saved */}
-        <div className="flex items-start gap-3 rounded-lg bg-white p-3 shadow-sm">
+        <div className="flex items-start gap-3 rounded-md bg-surface-raised p-3 shadow-sm">
           <div className="rounded-md bg-emerald-100 p-2 text-emerald-600">
             <DollarSignIcon className="h-4 w-4" />
           </div>
           <div className="flex-1">
-            <p className="text-xs font-medium text-slate-700">Interest Saved</p>
-            <p className="mt-0.5 text-lg font-bold text-slate-900">{currencyFormatter.format(interestSaved)}</p>
-            <p className="mt-0.5 text-xs text-slate-500">Over the life of the loan</p>
+            <p className="text-xs font-medium text-foreground-muted">Interest Saved</p>
+            <p className="mt-0.5 text-lg font-bold text-foreground">{currencyFormatter.format(interestSaved)}</p>
+            <p className="mt-0.5 text-xs text-foreground-subtle">Over the life of the loan</p>
           </div>
         </div>
 
         {/* Payoff Date */}
-        <div className="flex items-start gap-3 rounded-lg bg-white p-3 shadow-sm">
+        <div className="flex items-start gap-3 rounded-md bg-surface-raised p-3 shadow-sm">
           <div className="rounded-md bg-emerald-100 p-2 text-emerald-600">
             <CalendarIcon className="h-4 w-4" />
           </div>
           <div className="flex-1">
-            <p className="text-xs font-medium text-slate-700">New Payoff Date</p>
-            <p className="mt-0.5 text-lg font-bold text-slate-900">{formatDate(newPayoffDate)}</p>
-            <p className="mt-0.5 text-xs text-slate-500">
-              <span className="line-through text-slate-400">{formatDate(originalPayoffDate)}</span> original
+            <p className="text-xs font-medium text-foreground-muted">New Payoff Date</p>
+            <p className="mt-0.5 text-lg font-bold text-foreground">{formatDate(newPayoffDate)}</p>
+            <p className="mt-0.5 text-xs text-foreground-subtle">
+              <span className="line-through text-foreground-subtle">{formatDate(originalPayoffDate)}</span> original
             </p>
           </div>
         </div>
@@ -105,9 +105,9 @@ export function ExtraPrincipalImpact({
         <p className="text-xs font-medium text-emerald-900">Payoff Progress Comparison</p>
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
-            <span className="w-20 text-xs text-slate-600">Standard</span>
-            <div className="h-4 flex-1 rounded-full bg-slate-200">
-              <div className="h-4 rounded-full bg-slate-400" style={{ width: '100%' }} />
+            <span className="w-20 text-xs text-foreground-muted">Standard</span>
+            <div className="h-4 flex-1 rounded-full bg-surface-subtle">
+              <div className="h-4 rounded-full bg-foreground-subtle" style={{ width: '100%' }} />
             </div>
           </div>
           <div className="flex items-center gap-2">

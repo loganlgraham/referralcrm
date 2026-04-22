@@ -1,15 +1,16 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { MenuIcon, XIcon, LogOutIcon } from 'lucide-react';
-import { useState } from 'react';
 import { Session } from 'next-auth';
-import clsx from 'clsx';
 import { signOut } from 'next-auth/react';
 
-import { navItems } from './sidebar';
+import { navSections } from './sidebar';
 import { NotificationBell } from './notification-bell';
+import { cn } from '@/lib/cn';
+import { Avatar } from '@/components/ui/avatar';
 
 type MobileNavProps = {
   session: Session;
@@ -20,88 +21,158 @@ export function MobileNav({ session }: MobileNavProps) {
   const [open, setOpen] = useState(false);
   const role = session.user.role;
 
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open]);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  const sections = navSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => !item.roles || item.roles.includes(role))
+    }))
+    .filter((section) => section.items.length > 0);
+
   const handleSignOut = async () => {
     const result = await signOut({ callbackUrl: '/login', redirect: false });
     const url = result?.url ?? '/login';
     window.location.href = url;
   };
 
-  const filteredNavItems = navItems.filter((item) => !item.roles || item.roles.includes(role));
-  const compactNavItems = filteredNavItems.reduce<typeof navItems>((acc, item) => {
-    if (item.type === 'divider') {
-      const last = acc[acc.length - 1];
-      if (!last || last.type === 'divider') {
-        return acc;
-      }
-    }
-    acc.push(item);
-    return acc;
-  }, []);
-
-  if (compactNavItems[compactNavItems.length - 1]?.type === 'divider') {
-    compactNavItems.pop();
-  }
+  const name = session.user.name ?? session.user.email ?? 'User';
 
   return (
-    <header className="sticky top-0 z-30 bg-white shadow-sm md:hidden">
-      <div className="flex h-14 items-center justify-between px-4">
-        <div>
-          <p className="text-sm font-semibold text-brand">AFC · AHA</p>
-          <p className="text-xs text-slate-500">Referral CRM</p>
+    <>
+      <header className="sticky top-0 z-30 border-b border-border bg-surface-raised/90 backdrop-blur md:hidden">
+        <div className="flex h-14 items-center justify-between px-4">
+          <Link href={role === 'admin' ? '/dashboard' : '/referrals'} className="flex items-center gap-2 no-underline">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary-600 text-xs font-bold text-white shadow-sm">
+              R
+            </span>
+            <div className="leading-tight">
+              <p className="text-sm font-semibold text-foreground">Referrio</p>
+              <p className="text-[10px] text-foreground-subtle">AFC · AHA</p>
+            </div>
+          </Link>
+          <div className="flex items-center gap-1.5">
+            <NotificationBell session={session} />
+            <button
+              type="button"
+              onClick={() => setOpen((prev) => !prev)}
+              className="inline-flex items-center rounded-md border border-border bg-surface p-2 text-foreground-muted shadow-sm transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+              aria-label={open ? 'Close navigation' : 'Open navigation'}
+              aria-expanded={open}
+            >
+              {open ? <XIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <NotificationBell session={session} />
-          <button
-            type="button"
-            onClick={() => setOpen((prev) => !prev)}
-            className="inline-flex items-center rounded-md border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:bg-slate-50 focus:outline-none"
-            aria-label="Toggle navigation"
-          >
-            {open ? <XIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
-          </button>
-        </div>
-      </div>
-      {open && (
-        <div className="border-t border-slate-200 bg-white">
-          <nav className="flex flex-col">
-            {compactNavItems.map((item, index) => {
-              if (item.type === 'divider') {
-                return <div key={`mobile-divider-${index}`} className="my-1 border-t border-slate-200" />;
-              }
+      </header>
 
-              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-              const isReferralsParent = item.href === '/referrals' && pathname.startsWith('/admin/tasks');
-              const active = isActive && !isReferralsParent;
+      {/* Slide-over drawer */}
+      <div
+        className={cn(
+          'fixed inset-0 z-40 transition md:hidden',
+          open ? 'pointer-events-auto' : 'pointer-events-none'
+        )}
+        aria-hidden={!open}
+      >
+        <div
+          onClick={() => setOpen(false)}
+          className={cn(
+            'absolute inset-0 bg-[hsl(var(--text))]/40 transition-opacity duration-200',
+            open ? 'opacity-100' : 'opacity-0'
+          )}
+        />
+        <aside
+          className={cn(
+            'absolute inset-y-0 right-0 flex w-[82%] max-w-sm flex-col border-l border-border bg-surface-raised shadow-raised transition-transform duration-200',
+            open ? 'translate-x-0' : 'translate-x-full'
+          )}
+          role="dialog"
+          aria-label="Navigation"
+        >
+          <div className="flex items-center justify-between border-b border-border px-5 py-4">
+            <div className="flex items-center gap-3">
+              <Avatar name={name} highlighted />
+              <div className="leading-tight">
+                <p className="text-sm font-medium text-foreground">{name}</p>
+                <p className="text-[11px] text-foreground-subtle capitalize">
+                  {role === 'mc' ? 'Mortgage Consultant' : role}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-md p-2 text-foreground-subtle transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+              aria-label="Close navigation"
+            >
+              <XIcon className="h-5 w-5" />
+            </button>
+          </div>
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={clsx(
-                    'px-4 py-3 text-sm font-medium transition',
-                    active
-                      ? 'bg-brand text-white hover:bg-brand-dark hover:text-white'
-                      : 'text-slate-700 hover:bg-slate-100'
-                  )}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
+          <nav className="flex-1 overflow-y-auto scrollbar-thin px-3 py-4">
+            {sections.map((section) => (
+              <div key={section.label} className="mb-4 last:mb-0">
+                <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground-subtle">
+                  {section.label}
+                </p>
+                <ul className="space-y-0.5">
+                  {section.items.map((item) => {
+                    const Icon = item.icon;
+                    const isExact = pathname === item.href;
+                    const isNested = pathname.startsWith(`${item.href}/`);
+                    const excluded = item.href === '/referrals' && pathname.startsWith('/admin/tasks');
+                    const active = (isExact || isNested) && !excluded;
+                    return (
+                      <li key={item.href}>
+                        <Link
+                          href={item.href}
+                          onClick={() => setOpen(false)}
+                          className={cn(
+                            'flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium no-underline transition',
+                            active
+                              ? 'bg-primary-50 text-primary-700'
+                              : 'text-foreground-muted hover:bg-surface-muted hover:text-foreground'
+                          )}
+                        >
+                          <Icon
+                            aria-hidden
+                            className={cn('h-4 w-4 shrink-0', active ? 'text-primary-600' : 'text-foreground-subtle')}
+                          />
+                          {item.label}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
           </nav>
-          <div className="p-4">
+
+          <div className="border-t border-border p-3">
             <button
               type="button"
               onClick={handleSignOut}
-              className="flex w-full items-center justify-center gap-2 rounded-md bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-300"
+              className="flex w-full items-center justify-center gap-2 rounded-md bg-surface-muted px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-surface-subtle"
             >
               <LogOutIcon className="h-4 w-4" />
               Sign out
             </button>
           </div>
-        </div>
-      )}
-    </header>
+        </aside>
+      </div>
+    </>
   );
 }

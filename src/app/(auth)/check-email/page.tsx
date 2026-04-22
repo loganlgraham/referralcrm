@@ -1,12 +1,32 @@
+import Link from 'next/link';
+import { MailCheck } from 'lucide-react';
+import { AuthShell, AuthHeading } from '@/components/layout/auth-shell';
+
 export default function CheckEmailPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-md space-y-6 rounded-lg border bg-white p-8 text-center shadow-sm">
-        <h1 className="text-3xl font-bold">Check your email</h1>
-        <p className="text-gray-600">
-          A sign-in link has been sent to your email address. Click the link to continue.
-        </p>
+    <AuthShell
+      hero={{
+        eyebrow: 'AFC · AHA',
+        title: 'Just one more step.',
+        description: 'We sent a secure sign-in link to your inbox. Open it on any device to continue.',
+      }}
+    >
+      <div className="flex items-center justify-center">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-50 text-primary-600 ring-1 ring-primary-200">
+          <MailCheck className="h-6 w-6" aria-hidden />
+        </span>
       </div>
-    </div>
+      <AuthHeading
+        eyebrow="AFC · AHA"
+        title="Check your email"
+        description="A sign-in link has been sent to your email address. Click the link to continue."
+      />
+      <p className="text-center text-sm text-foreground-muted">
+        Didn&apos;t receive it?{' '}
+        <Link href="/email" className="font-medium text-primary-700 no-underline hover:underline">
+          Try again
+        </Link>
+      </p>
+    </AuthShell>
   );
 }

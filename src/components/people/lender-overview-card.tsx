@@ -17,21 +17,21 @@ export function LenderOverviewCard({ lender, isAdmin }: LenderOverviewCardProps)
   const [showEditor, setShowEditor] = useState(false);
 
   return (
-    <div className="rounded-lg bg-white p-6 shadow-sm">
+    <div className="rounded-md bg-surface-raised p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-1.5">
-            <h1 className="text-2xl font-semibold text-slate-900">{lender.name}</h1>
+            <h1 className="text-2xl font-semibold text-foreground">{lender.name}</h1>
             <CopyButton value={lender.name} label="Copy name" />
           </div>
-          <div className="mt-2 space-y-1 text-sm text-slate-600">
+          <div className="mt-2 space-y-1 text-sm text-foreground-muted">
             <p className="flex items-center gap-1">
               Email{' '}
               <a
                 href={buildGmailComposeUrl(lender.email)}
                 target="_blank"
                 rel="noreferrer"
-                className="text-brand hover:underline"
+                className="text-primary-700 hover:underline"
               >
                 {lender.email}
               </a>
@@ -45,7 +45,7 @@ export function LenderOverviewCard({ lender, isAdmin }: LenderOverviewCardProps)
             {isAdmin && lender.npsScore !== null && lender.npsScore !== undefined && (
               <p>
                 NPS Score:{' '}
-                <span className="font-medium text-slate-900">
+                <span className="font-medium text-foreground">
                   {typeof lender.npsScore === 'number' ? lender.npsScore.toFixed(1) : '—'}
                 </span>
               </p>
@@ -61,7 +61,7 @@ export function LenderOverviewCard({ lender, isAdmin }: LenderOverviewCardProps)
             />
             <button
               type="button"
-              className="inline-flex items-center rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90"
+              className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700"
               onClick={() => setShowEditor((previous) => !previous)}
             >
               {showEditor ? 'Close edit' : 'Edit details'}
@@ -70,15 +70,15 @@ export function LenderOverviewCard({ lender, isAdmin }: LenderOverviewCardProps)
         )}
       </div>
 
-      <div className="mt-4 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
+      <div className="mt-4 grid gap-3 text-sm text-foreground-muted sm:grid-cols-2">
         <div>
-          <p className="text-xs uppercase text-slate-400">Licensed States</p>
-          <p className="font-medium text-slate-900">{(lender.licensedStates ?? []).join(', ') || '—'}</p>
+          <p className="text-xs uppercase text-foreground-subtle">Licensed States</p>
+          <p className="font-medium text-foreground">{(lender.licensedStates ?? []).join(', ') || '—'}</p>
         </div>
       </div>
 
       {isAdmin && showEditor && (
-        <div className="mt-6 border-t border-slate-200 pt-6">
+        <div className="mt-6 border-t border-border pt-6">
           <LenderAdminEditor
             lender={lender}
             className="space-y-4"

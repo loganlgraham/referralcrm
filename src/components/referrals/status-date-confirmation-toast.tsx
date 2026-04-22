@@ -101,7 +101,7 @@ const openDateConfirmationToast = (options: {
     const toastId = toast.custom(
       () => (
         <form
-          className="w-[360px] rounded-lg border border-slate-200 bg-white p-4 shadow-lg"
+          className="w-[360px] rounded-lg border border-border bg-surface-raised p-4 shadow-lg"
           onSubmit={(event) => {
             event.preventDefault();
             if (!selectedDate) {
@@ -117,10 +117,10 @@ const openDateConfirmationToast = (options: {
             });
           }}
         >
-          <p className="text-sm font-semibold text-slate-900">{title}</p>
-          <p className="mt-1 text-xs text-slate-500">{description}</p>
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+          <p className="mt-1 text-xs text-foreground-subtle">{description}</p>
 
-          <label className="mt-3 block text-xs font-semibold text-slate-600">
+          <label className="mt-3 block text-xs font-semibold text-foreground-muted">
             {isClose ? 'Closing date' : 'Paid date'}
             <input
               autoFocus
@@ -129,19 +129,19 @@ const openDateConfirmationToast = (options: {
               onChange={(event) => {
                 selectedDate = event.target.value;
               }}
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+              className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
             />
           </label>
 
           {isClose && showEmailPreference && options.canSendClosedEmails ? (
-            <label className="mt-3 flex items-start gap-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
+            <label className="mt-3 flex items-start gap-2 rounded border border-border bg-surface-muted p-2 text-xs text-foreground-muted">
               <input
                 type="checkbox"
                 defaultChecked={sendClosedEmails}
                 onChange={(event) => {
                   sendClosedEmails = event.target.checked;
                 }}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                className="mt-0.5 h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
               />
               <span>Send a congratulations email to the referral to rate their agent.</span>
             </label>
@@ -154,14 +154,14 @@ const openDateConfirmationToast = (options: {
           ) : null}
 
           {isClose && showEmailPreference && options.canSendAgentNpsEmail ? (
-            <label className="mt-3 flex items-start gap-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
+            <label className="mt-3 flex items-start gap-2 rounded border border-border bg-surface-muted p-2 text-xs text-foreground-muted">
               <input
                 type="checkbox"
                 defaultChecked={sendAgentNpsEmail}
                 onChange={(event) => {
                   sendAgentNpsEmail = event.target.checked;
                 }}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                className="mt-0.5 h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
               />
               <span>Send MC NPS email to the agent.</span>
             </label>
@@ -173,13 +173,13 @@ const openDateConfirmationToast = (options: {
               onClick={() =>
                 finalize({ confirmed: false, sendClosedEmails: false, sendAgentNpsEmail: false })
               }
-              className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="rounded border border-border-strong bg-surface-raised px-3 py-1.5 text-xs font-semibold text-foreground-muted transition hover:bg-surface-muted"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-dark"
+              className="rounded bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-800"
             >
               Confirm
             </button>
@@ -289,14 +289,14 @@ export const confirmFeeBreakdownSend = async (
 
       return (
         <form
-          className="w-[420px] rounded-lg border border-slate-200 bg-white p-4 shadow-lg"
+          className="w-[420px] rounded-lg border border-border bg-surface-raised p-4 shadow-lg"
           onSubmit={handleSubmit}
         >
-          <p className="text-sm font-semibold text-slate-900">Send fee breakdown email</p>
-          <p className="mt-1 whitespace-pre-line text-xs text-slate-500">{options.message}</p>
+          <p className="text-sm font-semibold text-foreground">Send fee breakdown email</p>
+          <p className="mt-1 whitespace-pre-line text-xs text-foreground-subtle">{options.message}</p>
 
           <div className="mt-3 space-y-2">
-            <p className="text-xs font-semibold text-slate-600">Additional CC recipients (optional)</p>
+            <p className="text-xs font-semibold text-foreground-muted">Additional CC recipients (optional)</p>
             {ccInputs.map((value, index) => (
               <input
                 key={index}
@@ -310,13 +310,13 @@ export const confirmFeeBreakdownSend = async (
                   nextInputs[index] = event.target.value;
                   setCcInputs(nextInputs);
                 }}
-                className="w-full rounded border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none"
+                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
               />
             ))}
             <button
               type="button"
               onClick={() => setCcInputs((prev) => [...prev, ''])}
-              className="inline-flex items-center rounded border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="inline-flex items-center rounded border border-border-strong bg-surface-raised px-2 py-1 text-xs font-semibold text-foreground-muted transition hover:bg-surface-muted"
             >
               + Add CC recipient
             </button>
@@ -326,13 +326,13 @@ export const confirmFeeBreakdownSend = async (
             <button
               type="button"
               onClick={() => finalize({ confirmed: false })}
-              className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="rounded border border-border-strong bg-surface-raised px-3 py-1.5 text-xs font-semibold text-foreground-muted transition hover:bg-surface-muted"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded bg-brand px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-dark"
+              className="rounded bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-800"
             >
               Send
             </button>

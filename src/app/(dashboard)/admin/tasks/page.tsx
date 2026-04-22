@@ -41,13 +41,13 @@ export default async function AdminTasksPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Admin Tasks</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-2xl font-semibold text-foreground">Admin Tasks</h1>
+          <p className="text-sm text-foreground-subtle">
             Shared tasks across all referrals. All admins see the same task state.
           </p>
         </div>
-        <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 shadow-sm">
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground-muted">
+          <span className="rounded-full border border-border bg-surface-raised px-3 py-1 shadow-sm">
             Due today: {dueTodayCount}
           </span>
           <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-rose-700 shadow-sm">

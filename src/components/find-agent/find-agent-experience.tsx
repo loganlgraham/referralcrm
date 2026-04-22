@@ -188,26 +188,26 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg bg-white p-6 shadow-sm">
+      <div className="rounded-md bg-surface-raised p-6 shadow-sm">
         <div className="flex items-start gap-3">
-          <div className="mt-1 rounded-full bg-brand/10 p-2 text-brand">
+          <div className="mt-1 rounded-full bg-primary-600/10 p-2 text-primary-700">
             <SparklesIcon className="h-5 w-5" />
           </div>
           <div className="space-y-2">
-            <h1 className="text-2xl font-semibold text-slate-900">{headline}</h1>
-            <p className="text-sm text-slate-600">{introCopy}</p>
+            <h1 className="text-2xl font-semibold text-foreground">{headline}</h1>
+            <p className="text-sm text-foreground-muted">{introCopy}</p>
           </div>
         </div>
 
         <form onSubmit={handleSearch} className="mt-6 space-y-4">
           <label className="block space-y-2">
-            <span className="text-sm font-medium text-slate-700">{promptLabel}</span>
+            <span className="text-sm font-medium text-foreground-muted">{promptLabel}</span>
             {isAdminVariant ? (
               <input
                 type="text"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
+                className="w-full rounded-md border border-border bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
                 placeholder={placeholder}
                 disabled={isSearching}
               />
@@ -216,7 +216,7 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 rows={3}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30"
+                className="w-full rounded-md border border-border bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
                 placeholder={placeholder}
                 disabled={isSearching}
               />
@@ -224,11 +224,11 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
           </label>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-slate-500">{helperCopy}</p>
+            <p className="text-sm text-foreground-subtle">{helperCopy}</p>
             <button
               type="submit"
               disabled={isSearching || isLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-surface-subtle"
             >
               {isSearching ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <SearchIcon className="h-4 w-4" />}
               {isSearching ? 'Searching...' : ctaLabel}
@@ -237,26 +237,26 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
         </form>
       </div>
 
-      <div className="rounded-lg bg-white p-6 shadow-sm">
+      <div className="rounded-md bg-surface-raised p-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase text-slate-400">Coverage focus</p>
-            <div className="mt-1 flex flex-wrap gap-2 text-sm text-slate-700">
+            <p className="text-xs uppercase text-foreground-subtle">Coverage focus</p>
+            <div className="mt-1 flex flex-wrap gap-2 text-sm text-foreground-muted">
               {derivedCoverageLabels.length > 0 ? (
                 derivedCoverageLabels.map((label) => (
-                  <span key={label} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-                    <MapPinIcon className="h-3 w-3 text-brand" />
+                  <span key={label} className="inline-flex items-center gap-1 rounded-full bg-surface-subtle px-3 py-1 text-xs font-medium text-foreground-muted">
+                    <MapPinIcon className="h-3 w-3 text-primary-700" />
                     {label}
                   </span>
                 ))
               ) : (
-                <span className="text-sm text-slate-500">No coverage entered yet.</span>
+                <span className="text-sm text-foreground-subtle">No coverage entered yet.</span>
               )}
             </div>
           </div>
-          <div className="text-right text-sm text-slate-600">
-            <p className="font-semibold text-slate-900">{matchedCountLabel}</p>
-            <p className="text-xs text-slate-500">Profiles are read-only and do not create referrals.</p>
+          <div className="text-right text-sm text-foreground-muted">
+            <p className="font-semibold text-foreground">{matchedCountLabel}</p>
+            <p className="text-xs text-foreground-subtle">Profiles are read-only and do not create referrals.</p>
           </div>
         </div>
 
@@ -264,7 +264,7 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
 
         <div className="mt-6 space-y-4">
           {isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-slate-600">
+            <div className="flex items-center gap-2 text-sm text-foreground-muted">
               <Loader2Icon className="h-4 w-4 animate-spin" />
               Loading agents...
             </div>
@@ -276,18 +276,18 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
                   ? agent.coverageAreas 
                   : [];
               return (
-                <div key={agent._id} className="rounded-lg border border-slate-200 p-4 shadow-sm">
+                <div key={agent._id} className="rounded-lg border border-border p-4 shadow-sm">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div className="space-y-1">
-                      <h2 className="text-lg font-semibold text-slate-900">{agent.name}</h2>
-                      <p className="text-sm text-slate-600">{agent.brokerage || 'Brokerage not provided'}</p>
+                      <h2 className="text-lg font-semibold text-foreground">{agent.name}</h2>
+                      <p className="text-sm text-foreground-muted">{agent.brokerage || 'Brokerage not provided'}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-3 md:justify-end">
                       <a
                         href={buildGmailComposeUrl(agent.email)}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-brand hover:text-brand"
+                        className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:border-primary-500 hover:text-primary-700"
                       >
                         <MailIcon className="h-4 w-4" />
                         Email
@@ -295,7 +295,7 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
                       {agent.phone && (
                         <a
                           href={`tel:${agent.phone}`}
-                          className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-brand hover:text-brand whitespace-nowrap"
+                          className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:border-primary-500 hover:text-primary-700 whitespace-nowrap"
                         >
                           <PhoneIcon className="h-4 w-4" />
                           {formatPhoneNumber(agent.phone) || 'Call'}
@@ -303,7 +303,7 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
                       )}
                       <Link
                         href={`/agents/${agent._id}`}
-                        className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                        className="inline-flex items-center gap-2 rounded-md bg-foreground px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
                       >
                         View profile
                         <ArrowRightIcon className="h-4 w-4" />
@@ -311,9 +311,9 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
                     </div>
                   </div>
 
-                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                    <span className="inline-flex items-center gap-1 font-medium uppercase text-slate-500">
-                      <MapPinIcon className="h-3 w-3 text-brand" />
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-foreground-subtle">
+                    <span className="inline-flex items-center gap-1 font-medium uppercase text-foreground-subtle">
+                      <MapPinIcon className="h-3 w-3 text-primary-700" />
                       {coverageLabels.slice(0, 5).join(', ') || 'Coverage pending'}
                     </span>
                     <span>Licensed: {agent.statesLicensed.join(', ') || '—'}</span>
@@ -325,42 +325,42 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
                     )}
                   </div>
 
-                  <div className="mt-4 grid gap-3 text-sm text-slate-600 sm:grid-cols-2 md:grid-cols-4">
-                    <div className="rounded border border-slate-200 p-3">
-                      <p className="text-xs uppercase text-slate-400">Closings (12 mo)</p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900">
+                  <div className="mt-4 grid gap-3 text-sm text-foreground-muted sm:grid-cols-2 md:grid-cols-4">
+                    <div className="rounded border border-border p-3">
+                      <p className="text-xs uppercase text-foreground-subtle">Closings (12 mo)</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">
                         {formatNumber(agent.metrics.closingsLast12Months)}
                       </p>
                     </div>
-                    <div className="rounded border border-slate-200 p-3">
-                      <p className="text-xs uppercase text-slate-400">Closing rate</p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900">
+                    <div className="rounded border border-border p-3">
+                      <p className="text-xs uppercase text-foreground-subtle">Closing rate</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">
                         {formatDecimal(agent.metrics.closingRate)}%
                       </p>
                     </div>
-                    <div className="rounded border border-slate-200 p-3">
-                      <p className="text-xs uppercase text-slate-400">NPS</p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900">
+                    <div className="rounded border border-border p-3">
+                      <p className="text-xs uppercase text-foreground-subtle">NPS</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">
                         {agent.metrics.npsScore == null ? '—' : formatDecimal(agent.metrics.npsScore)}
                       </p>
                     </div>
-                    <div className="rounded border border-slate-200 p-3">
-                      <p className="text-xs uppercase text-slate-400">Avg response (hrs)</p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900">
+                    <div className="rounded border border-border p-3">
+                      <p className="text-xs uppercase text-foreground-subtle">Avg response (hrs)</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">
                         {agent.metrics.avgResponseHours == null
                           ? '—'
                           : formatDecimal(agent.metrics.avgResponseHours)}
                       </p>
                     </div>
-                    <div className="rounded border border-slate-200 p-3">
-                      <p className="text-xs uppercase text-slate-400">Total referrals</p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900">
+                    <div className="rounded border border-border p-3">
+                      <p className="text-xs uppercase text-foreground-subtle">Total referrals</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">
                         {formatNumber(agent.metrics.totalReferrals)}
                       </p>
                     </div>
-                    <div className="rounded border border-slate-200 p-3">
-                      <p className="text-xs uppercase text-slate-400">Active pipeline</p>
-                      <p className="mt-1 text-lg font-semibold text-slate-900">
+                    <div className="rounded border border-border p-3">
+                      <p className="text-xs uppercase text-foreground-subtle">Active pipeline</p>
+                      <p className="mt-1 text-lg font-semibold text-foreground">
                         {formatNumber(agent.metrics.activePipeline)}
                       </p>
                     </div>
@@ -369,7 +369,7 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
               );
             })
           ) : (
-            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-600">
+            <div className="rounded-lg border border-dashed border-border bg-surface-muted p-8 text-center text-sm text-foreground-muted">
               Suggested agents will appear here after you run a search.
             </div>
           )}

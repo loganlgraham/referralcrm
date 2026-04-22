@@ -294,15 +294,15 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg bg-white p-6 shadow-sm">
+      <div className="rounded-md bg-surface-raised p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
-            <div className="rounded-lg bg-brand/10 p-2 text-brand">
+            <div className="rounded-lg bg-primary-600/10 p-2 text-primary-700">
               <CalculatorIcon className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-slate-900">Mortgage Coach Calculator</h1>
-              <p className="text-sm text-slate-600">
+              <h1 className="text-lg font-semibold text-foreground">Mortgage Coach Calculator</h1>
+              <p className="text-sm text-foreground-muted">
                 Model payment scenarios with taxes, insurance, HOA dues, and PMI so agents can set clear expectations with referrals.
               </p>
             </div>
@@ -312,21 +312,21 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
           <div className="flex flex-wrap gap-2">
             <button
               onClick={handleReset}
-              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="inline-flex items-center gap-2 rounded-md border border-border-strong bg-surface-raised px-3 py-1.5 text-sm font-medium text-foreground-muted hover:bg-surface-muted"
             >
               <RotateCcwIcon className="h-4 w-4" />
               Reset
             </button>
             <button
               onClick={handleShareLink}
-              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="inline-flex items-center gap-2 rounded-md border border-border-strong bg-surface-raised px-3 py-1.5 text-sm font-medium text-foreground-muted hover:bg-surface-muted"
             >
               <Share2Icon className="h-4 w-4" />
               Share Link
             </button>
             <button
               onClick={handleCopyToClipboard}
-              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="inline-flex items-center gap-2 rounded-md border border-border-strong bg-surface-raised px-3 py-1.5 text-sm font-medium text-foreground-muted hover:bg-surface-muted"
             >
               <ClipboardIcon className="h-4 w-4" />
               Copy Summary
@@ -334,7 +334,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
             {activeTab === 'calculator' && (
               <button
                 onClick={handleSaveScenario}
-                className="inline-flex items-center gap-2 rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand/90"
+                className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
               >
                 <PlusIcon className="h-4 w-4" />
                 Save Scenario
@@ -350,14 +350,14 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
         )}
 
         {/* Tabs */}
-        <div className="mt-6 border-b border-slate-200">
+        <div className="mt-6 border-b border-border">
           <nav className="-mb-px flex gap-6 overflow-x-auto">
             <button
               onClick={() => setActiveTab('calculator')}
               className={`whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium ${
                 activeTab === 'calculator'
-                  ? 'border-brand text-brand'
-                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                  ? 'border-primary-500 text-primary-700'
+                  : 'border-transparent text-foreground-subtle hover:border-border-strong hover:text-foreground-muted'
               }`}
             >
               Calculator
@@ -366,8 +366,8 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
               onClick={() => setActiveTab('amortization')}
               className={`whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium ${
                 activeTab === 'amortization'
-                  ? 'border-brand text-brand'
-                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                  ? 'border-primary-500 text-primary-700'
+                  : 'border-transparent text-foreground-subtle hover:border-border-strong hover:text-foreground-muted'
               }`}
             >
               Amortization
@@ -376,8 +376,8 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
               onClick={() => setActiveTab('scenarios')}
               className={`whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium ${
                 activeTab === 'scenarios'
-                  ? 'border-brand text-brand'
-                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                  ? 'border-primary-500 text-primary-700'
+                  : 'border-transparent text-foreground-subtle hover:border-border-strong hover:text-foreground-muted'
               }`}
             >
               Scenarios {scenarios.length > 0 && `(${scenarios.length})`}
@@ -386,8 +386,8 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
               onClick={() => setActiveTab('affordability')}
               className={`whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium ${
                 activeTab === 'affordability'
-                  ? 'border-brand text-brand'
-                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                  ? 'border-primary-500 text-primary-700'
+                  : 'border-transparent text-foreground-subtle hover:border-border-strong hover:text-foreground-muted'
               }`}
             >
               Affordability
@@ -401,13 +401,13 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="space-y-4">
                 {/* Loan Type Selector */}
-                <div className="rounded-lg border border-slate-200 p-4">
+                <div className="rounded-lg border border-border p-4">
                   <label className="space-y-2">
-                    <div className="text-sm font-semibold text-slate-800">Loan Type</div>
+                    <div className="text-sm font-semibold text-foreground">Loan Type</div>
                     <select
                       value={loanType}
                       onChange={onChange('loanType')}
-                      className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                      className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                     >
                       <option value="conventional">Conventional</option>
                       <option value="fha">FHA</option>
@@ -415,19 +415,19 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <option value="usda">USDA</option>
                       <option value="jumbo">Jumbo</option>
                     </select>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-foreground-subtle">
                       {loanTypeInfo.description}
                       {loanTypeInfo.minDownPaymentPercent > 0 && ` (Min ${loanTypeInfo.minDownPaymentPercent}% down)`}
                     </p>
                   </label>
                 </div>
 
-                <div className="rounded-lg border border-slate-200 p-4">
+                <div className="rounded-lg border border-border p-4">
                   <div className="grid grid-cols-2 gap-4">
                     <label className="space-y-2">
-                      <div className="flex items-center justify-between text-sm font-medium text-slate-700">
+                      <div className="flex items-center justify-between text-sm font-medium text-foreground-muted">
                         Purchase price
-                        <span className="text-xs text-slate-500">USD</span>
+                        <span className="text-xs text-foreground-subtle">USD</span>
                       </div>
                       <input
                         type="text"
@@ -435,13 +435,13 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         value={formatNumberInput('purchasePrice', purchasePrice)}
                         onChange={onChange('purchasePrice')}
                         onBlur={onBlur('purchasePrice')}
-                        className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     </label>
                     <label className="space-y-2">
-                      <div className="flex items-center justify-between text-sm font-medium text-slate-700">
+                      <div className="flex items-center justify-between text-sm font-medium text-foreground-muted">
                         Down payment
-                        <span className="text-xs text-slate-500">% of price</span>
+                        <span className="text-xs text-foreground-subtle">% of price</span>
                       </div>
                       <input
                         type="text"
@@ -449,14 +449,14 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         value={formatNumberInput('downPaymentPercent', downPaymentPercent)}
                         onChange={onChange('downPaymentPercent')}
                         onBlur={onBlur('downPaymentPercent')}
-                        className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
-                      <p className="text-xs text-slate-500">{formatCurrency(calculations.downPaymentAmount)} down</p>
+                      <p className="text-xs text-foreground-subtle">{formatCurrency(calculations.downPaymentAmount)} down</p>
                     </label>
                     <label className="space-y-2">
-                      <div className="flex items-center justify-between text-sm font-medium text-slate-700">
+                      <div className="flex items-center justify-between text-sm font-medium text-foreground-muted">
                         Interest rate
-                        <span className="text-xs text-slate-500">Annual %</span>
+                        <span className="text-xs text-foreground-subtle">Annual %</span>
                       </div>
                       <input
                         type="text"
@@ -464,13 +464,13 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         value={formatNumberInput('interestRate', interestRate)}
                         onChange={onChange('interestRate')}
                         onBlur={onBlur('interestRate')}
-                        className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     </label>
                     <label className="space-y-2">
-                      <div className="flex items-center justify-between text-sm font-medium text-slate-700">
+                      <div className="flex items-center justify-between text-sm font-medium text-foreground-muted">
                         Term
-                        <span className="text-xs text-slate-500">Years</span>
+                        <span className="text-xs text-foreground-subtle">Years</span>
                       </div>
                       <input
                         type="text"
@@ -478,13 +478,13 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         value={formatNumberInput('termYears', termYears)}
                         onChange={onChange('termYears')}
                         onBlur={onBlur('termYears')}
-                        className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     </label>
                     <label className="space-y-2">
-                      <div className="flex items-center justify-between text-sm font-medium text-slate-700">
+                      <div className="flex items-center justify-between text-sm font-medium text-foreground-muted">
                         Property tax rate
-                        <span className="text-xs text-slate-500">% / year</span>
+                        <span className="text-xs text-foreground-subtle">% / year</span>
                       </div>
                       <input
                         type="text"
@@ -492,14 +492,14 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         value={formatNumberInput('propertyTaxRate', propertyTaxRate)}
                         onChange={onChange('propertyTaxRate')}
                         onBlur={onBlur('propertyTaxRate')}
-                        className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
-                      <p className="text-xs text-slate-500">{formatCurrency(calculations.propertyTaxes)} per month</p>
+                      <p className="text-xs text-foreground-subtle">{formatCurrency(calculations.propertyTaxes)} per month</p>
                     </label>
                     <label className="space-y-2">
-                      <div className="flex items-center justify-between text-sm font-medium text-slate-700">
+                      <div className="flex items-center justify-between text-sm font-medium text-foreground-muted">
                         Homeowners insurance
-                        <span className="text-xs text-slate-500">Monthly</span>
+                        <span className="text-xs text-foreground-subtle">Monthly</span>
                       </div>
                       <input
                         type="text"
@@ -507,13 +507,13 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         value={formatNumberInput('insuranceMonthly', insuranceMonthly)}
                         onChange={onChange('insuranceMonthly')}
                         onBlur={onBlur('insuranceMonthly')}
-                        className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     </label>
                     <label className="space-y-2">
-                      <div className="flex items-center justify-between text-sm font-medium text-slate-700">
+                      <div className="flex items-center justify-between text-sm font-medium text-foreground-muted">
                         HOA dues
-                        <span className="text-xs text-slate-500">Monthly</span>
+                        <span className="text-xs text-foreground-subtle">Monthly</span>
                       </div>
                       <input
                         type="text"
@@ -521,14 +521,14 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         value={formatNumberInput('hoaMonthly', hoaMonthly)}
                         onChange={onChange('hoaMonthly')}
                         onBlur={onBlur('hoaMonthly')}
-                        className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
                     </label>
                     {loanTypeInfo.hasPMI && (
                       <label className="space-y-2">
-                        <div className="flex items-center justify-between text-sm font-medium text-slate-700">
+                        <div className="flex items-center justify-between text-sm font-medium text-foreground-muted">
                           PMI rate
-                          <span className="text-xs text-slate-500">Annual %</span>
+                          <span className="text-xs text-foreground-subtle">Annual %</span>
                         </div>
                         <input
                           type="text"
@@ -536,17 +536,17 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                           value={formatNumberInput('pmiRate', pmiRate)}
                           onChange={onChange('pmiRate')}
                           onBlur={onBlur('pmiRate')}
-                          className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                          className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                         />
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-foreground-subtle">
                           {loanType === 'fha' ? 'FHA MIP applies to all loans' : 'Applies when <20% down'}
                         </p>
                       </label>
                     )}
                     <label className="space-y-2">
-                      <div className="flex items-center justify-between text-sm font-medium text-slate-700">
+                      <div className="flex items-center justify-between text-sm font-medium text-foreground-muted">
                         Extra principal
-                        <span className="text-xs text-slate-500">Monthly</span>
+                        <span className="text-xs text-foreground-subtle">Monthly</span>
                       </div>
                       <input
                         type="text"
@@ -554,20 +554,20 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         value={formatNumberInput('extraPrincipal', extraPrincipal)}
                         onChange={onChange('extraPrincipal')}
                         onBlur={onBlur('extraPrincipal')}
-                        className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                       />
-                      <p className="text-xs text-slate-500">Shows payoff acceleration potential.</p>
+                      <p className="text-xs text-foreground-subtle">Shows payoff acceleration potential.</p>
                     </label>
                   </div>
                 </div>
               </div>
               <div className="space-y-4">
-                <div className="rounded-lg border border-slate-200 p-4">
+                <div className="rounded-lg border border-border p-4">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-slate-800">Monthly payment breakdown</p>
-                    <span className="text-xs text-slate-500">Principal, interest & expenses</span>
+                    <p className="text-sm font-semibold text-foreground">Monthly payment breakdown</p>
+                    <span className="text-xs text-foreground-subtle">Principal, interest & expenses</span>
                   </div>
-                  <dl className="mt-4 space-y-3 text-sm text-slate-700">
+                  <dl className="mt-4 space-y-3 text-sm text-foreground-muted">
                     <div className="flex items-center justify-between">
                       <dt className="flex items-center gap-2 font-medium">Principal & interest</dt>
                       <dd className="font-semibold">{formatCurrency(calculations.principalAndInterest)}</dd>
@@ -585,7 +585,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <dd className="font-semibold">{formatCurrency(hoaMonthly)}</dd>
                     </div>
                     {calculations.pmiMonthly > 0 && (
-                      <div className="flex items-center justify-between text-brand">
+                      <div className="flex items-center justify-between text-primary-700">
                         <dt className="flex items-center gap-2 font-semibold">
                           {loanType === 'fha' ? 'MIP' : 'PMI'}
                         </dt>
@@ -593,53 +593,53 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       </div>
                     )}
                     {extraPrincipal > 0 && (
-                      <div className="flex items-center justify-between text-slate-700">
+                      <div className="flex items-center justify-between text-foreground-muted">
                         <dt className="flex items-center gap-2 font-semibold">Extra principal</dt>
                         <dd className="font-semibold">{formatCurrency(extraPrincipal)}</dd>
                       </div>
                     )}
                   </dl>
-                  <div className="mt-4 flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
-                    <span className="text-sm font-semibold text-slate-700">Estimated total</span>
-                    <span className="text-lg font-bold text-slate-900">{formatCurrency(calculations.totalMonthly)}</span>
+                  <div className="mt-4 flex items-center justify-between rounded-md bg-surface-muted px-3 py-2">
+                    <span className="text-sm font-semibold text-foreground-muted">Estimated total</span>
+                    <span className="text-lg font-bold text-foreground">{formatCurrency(calculations.totalMonthly)}</span>
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">
+                  <p className="mt-2 text-xs text-foreground-subtle">
                     Amounts are estimates for coaching conversations. Actual lender disclosures will differ based on credit, programs, and fees.
                   </p>
                 </div>
 
-                <div className="rounded-lg border border-slate-200 p-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                    <InfoIcon className="h-4 w-4 text-slate-500" />
+                <div className="rounded-lg border border-border p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <InfoIcon className="h-4 w-4 text-foreground-subtle" />
                     Loan snapshot
                   </div>
-                  <dl className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-700">
-                    <div className="rounded-md bg-slate-50 px-3 py-2">
-                      <dt className="text-xs text-slate-500">Loan amount</dt>
-                      <dd className="text-base font-semibold text-slate-900">{formatCurrency(calculations.loanAmount)}</dd>
+                  <dl className="mt-3 grid grid-cols-2 gap-3 text-sm text-foreground-muted">
+                    <div className="rounded-md bg-surface-muted px-3 py-2">
+                      <dt className="text-xs text-foreground-subtle">Loan amount</dt>
+                      <dd className="text-base font-semibold text-foreground">{formatCurrency(calculations.loanAmount)}</dd>
                     </div>
-                    <div className="rounded-md bg-slate-50 px-3 py-2">
-                      <dt className="text-xs text-slate-500">Down payment</dt>
-                      <dd className="text-base font-semibold text-slate-900">{formatCurrency(calculations.downPaymentAmount)}</dd>
+                    <div className="rounded-md bg-surface-muted px-3 py-2">
+                      <dt className="text-xs text-foreground-subtle">Down payment</dt>
+                      <dd className="text-base font-semibold text-foreground">{formatCurrency(calculations.downPaymentAmount)}</dd>
                     </div>
-                    <div className="rounded-md bg-slate-50 px-3 py-2">
-                      <dt className="text-xs text-slate-500">Loan-to-value</dt>
-                      <dd className="text-base font-semibold text-slate-900">{formatPercent(calculations.ltv)}</dd>
+                    <div className="rounded-md bg-surface-muted px-3 py-2">
+                      <dt className="text-xs text-foreground-subtle">Loan-to-value</dt>
+                      <dd className="text-base font-semibold text-foreground">{formatPercent(calculations.ltv)}</dd>
                     </div>
-                    <div className="rounded-md bg-slate-50 px-3 py-2">
-                      <dt className="text-xs text-slate-500">Total scheduled interest</dt>
-                      <dd className="text-base font-semibold text-slate-900">{formatCurrency(calculations.totalInterest)}</dd>
+                    <div className="rounded-md bg-surface-muted px-3 py-2">
+                      <dt className="text-xs text-foreground-subtle">Total scheduled interest</dt>
+                      <dd className="text-base font-semibold text-foreground">{formatCurrency(calculations.totalInterest)}</dd>
                     </div>
                     {calculations.upfrontMIP && (
-                      <div className="rounded-md bg-slate-50 px-3 py-2">
-                        <dt className="text-xs text-slate-500">Upfront MIP (FHA)</dt>
-                        <dd className="text-base font-semibold text-slate-900">{formatCurrency(calculations.upfrontMIP)}</dd>
+                      <div className="rounded-md bg-surface-muted px-3 py-2">
+                        <dt className="text-xs text-foreground-subtle">Upfront MIP (FHA)</dt>
+                        <dd className="text-base font-semibold text-foreground">{formatCurrency(calculations.upfrontMIP)}</dd>
                       </div>
                     )}
                     {calculations.fundingFee && (
-                      <div className="rounded-md bg-slate-50 px-3 py-2">
-                        <dt className="text-xs text-slate-500">VA Funding Fee</dt>
-                        <dd className="text-base font-semibold text-slate-900">{formatCurrency(calculations.fundingFee)}</dd>
+                      <div className="rounded-md bg-surface-muted px-3 py-2">
+                        <dt className="text-xs text-foreground-subtle">VA Funding Fee</dt>
+                        <dd className="text-base font-semibold text-foreground">{formatCurrency(calculations.fundingFee)}</dd>
                       </div>
                     )}
                   </dl>
@@ -656,15 +656,15 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                   />
                 )}
 
-                <div className="rounded-lg border border-slate-200 p-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                    <SparklesIcon className="h-4 w-4 text-brand" />
+                <div className="rounded-lg border border-border p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <SparklesIcon className="h-4 w-4 text-primary-700" />
                     Coaching angles
                   </div>
-                  <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                  <ul className="mt-3 space-y-2 text-sm text-foreground-muted">
                     {insights.map((insight, idx) => (
                       <li key={idx} className="flex gap-2">
-                        <span className="text-brand">•</span>
+                        <span className="text-primary-700">•</span>
                         <span>{insight}</span>
                       </li>
                     ))}

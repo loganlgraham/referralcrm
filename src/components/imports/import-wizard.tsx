@@ -182,25 +182,25 @@ export function ImportWizard() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Import Wizard</h1>
-          <p className="text-sm text-slate-500">Upload CSV/XLSX/ZIP files and map to CRM fields.</p>
+          <h1 className="text-2xl font-semibold text-foreground">Import Wizard</h1>
+          <p className="text-sm text-foreground-subtle">Upload CSV/XLSX/ZIP files and map to CRM fields.</p>
         </div>
       </div>
-      <div className="space-y-6 rounded-lg bg-white p-6 shadow-sm">
-      <div className="flex items-center gap-4 text-sm text-slate-500">
+      <div className="space-y-6 rounded-md bg-surface-raised p-6 shadow-sm">
+      <div className="flex items-center gap-4 text-sm text-foreground-subtle">
         {steps.map((item) => (
-          <div key={item} className={`flex items-center gap-2 ${step === item ? 'font-semibold text-brand' : ''}`}>
-            <span className="h-8 w-8 rounded-full border border-slate-300 text-center leading-8">{steps.indexOf(item) + 1}</span>
+          <div key={item} className={`flex items-center gap-2 ${step === item ? 'font-semibold text-primary-700' : ''}`}>
+            <span className="h-8 w-8 rounded-full border border-border-strong text-center leading-8">{steps.indexOf(item) + 1}</span>
             {item}
           </div>
         ))}
       </div>
       {step === 'Upload' && (
         <div className="space-y-4">
-          <label className="text-sm font-medium text-slate-600">
+          <label className="text-sm font-medium text-foreground-muted">
             Entity
             <select
-              className="mt-1 w-full rounded border border-slate-200 px-3 py-2"
+              className="mt-1 w-full rounded border border-border px-3 py-2"
               value={entity}
               onChange={(event) => setEntity(event.target.value as ImportEntity)}
             >
@@ -210,21 +210,21 @@ export function ImportWizard() {
             </select>
           </label>
           {entityDescription && (
-            <p className="text-xs text-slate-500">{entityDescription}</p>
+            <p className="text-xs text-foreground-subtle">{entityDescription}</p>
           )}
           <input type="file" accept=".csv,.xlsx,.xls,.zip" onChange={handleFileChange} />
         </div>
       )}
       {step === 'Map Fields' && (
         <div className="space-y-4">
-          <p className="text-sm text-slate-500">Map columns to CRM fields.</p>
+          <p className="text-sm text-foreground-subtle">Map columns to CRM fields.</p>
           {headers.map((header) => (
-            <div key={header} className="flex items-center justify-between gap-4 rounded border border-slate-200 px-3 py-2">
-              <span className="text-sm font-medium text-slate-700">{header}</span>
+            <div key={header} className="flex items-center justify-between gap-4 rounded border border-border px-3 py-2">
+              <span className="text-sm font-medium text-foreground-muted">{header}</span>
               <select
                 value={mapping[header] ?? ''}
                 onChange={(event) => handleMappingChange(header, event.target.value)}
-                className="rounded border border-slate-200 px-2 py-1 text-sm"
+                className="rounded border border-border px-2 py-1 text-sm"
               >
                 <option value="">Ignore</option>
                 {entityFields.map((field) => (
@@ -235,23 +235,23 @@ export function ImportWizard() {
               </select>
             </div>
           ))}
-          <div className="rounded border border-slate-200 bg-slate-50/50 p-4">
+          <div className="rounded border border-border bg-surface-muted/50 p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-sm font-semibold text-slate-700">Import Assistant</h2>
-                <p className="text-xs text-slate-500">AI suggestions to speed up mapping and data cleanup.</p>
+                <h2 className="text-sm font-semibold text-foreground-muted">Import Assistant</h2>
+                <p className="text-xs text-foreground-subtle">AI suggestions to speed up mapping and data cleanup.</p>
               </div>
               <button
                 type="button"
                 onClick={() => void fetchAssistantInsights()}
                 disabled={assistantLoading}
-                className="rounded border border-slate-300 px-3 py-1 text-xs font-medium text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded border border-border-strong px-3 py-1 text-xs font-medium text-foreground-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {assistantLoading ? 'Analyzing…' : 'Refresh'}
               </button>
             </div>
-            <div className="mt-3 space-y-3 text-sm text-slate-600">
-              {assistantLoading && <p className="text-slate-500">Analyzing sample rows…</p>}
+            <div className="mt-3 space-y-3 text-sm text-foreground-muted">
+              {assistantLoading && <p className="text-foreground-subtle">Analyzing sample rows…</p>}
               {!assistantLoading && assistantError && (
                 <div className="flex items-start justify-between gap-3">
                   <span className="text-sm text-red-600">{assistantError}</span>
@@ -268,23 +268,23 @@ export function ImportWizard() {
                 <>
                   {mappingSuggestionEntries.length > 0 ? (
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Suggested matches</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Suggested matches</p>
                       <ul className="mt-2 space-y-1 text-xs">
                         {mappingSuggestionEntries.map(([column, field]) => (
-                          <li key={column} className="flex items-center justify-between rounded border border-slate-200 bg-white px-2 py-1">
-                            <span className="font-medium text-slate-700">{column}</span>
-                            <span className="text-slate-500">→ {field}</span>
+                          <li key={column} className="flex items-center justify-between rounded border border-border bg-surface-raised px-2 py-1">
+                            <span className="font-medium text-foreground-muted">{column}</span>
+                            <span className="text-foreground-subtle">→ {field}</span>
                           </li>
                         ))}
                       </ul>
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-500">No mapping suggestions yet.</p>
+                    <p className="text-xs text-foreground-subtle">No mapping suggestions yet.</p>
                   )}
                   {assistantNotes.length > 0 && (
                     <div className="space-y-1">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Assistant notes</p>
-                      <ul className="list-disc space-y-1 pl-5 text-xs text-slate-600">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Assistant notes</p>
+                      <ul className="list-disc space-y-1 pl-5 text-xs text-foreground-muted">
                         {assistantNotes.map((note, index) => (
                           <li key={`${note}-${index}`}>{note}</li>
                         ))}
@@ -293,8 +293,8 @@ export function ImportWizard() {
                   )}
                   {rowIssues.length > 0 && (
                     <div className="space-y-1">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Flagged rows</p>
-                      <ul className="list-disc space-y-1 pl-5 text-xs text-slate-600">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Flagged rows</p>
+                      <ul className="list-disc space-y-1 pl-5 text-xs text-foreground-muted">
                         {rowIssues.map((issue) => (
                           <li key={`${issue.rowIndex}-${issue.message}`}>
                             Row {issue.rowIndex + 1}: {issue.message}
@@ -311,7 +311,7 @@ export function ImportWizard() {
                 type="button"
                 onClick={handleApplyMappingSuggestions}
                 disabled={assistantLoading || mappingSuggestionEntries.length === 0}
-                className="rounded bg-brand px-3 py-1 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded bg-primary-600 px-3 py-1 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Apply suggestions
               </button>
@@ -319,7 +319,7 @@ export function ImportWizard() {
           </div>
           <button
             type="button"
-            className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white"
+            className="rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white"
             onClick={() => setStep('Preview')}
           >
             Continue
@@ -329,12 +329,12 @@ export function ImportWizard() {
       {step === 'Preview' && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-slate-500">Preview first 20 rows.</p>
+            <p className="text-sm text-foreground-subtle">Preview first 20 rows.</p>
             {hasStandardizedRows && (
-              <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+              <label className="flex items-center gap-2 text-xs font-medium text-foreground-muted">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border border-slate-300"
+                  className="h-4 w-4 rounded border border-border-strong"
                   checked={useStandardizedPreview}
                   onChange={(event) => setUseStandardizedPreview(event.target.checked)}
                 />
@@ -342,12 +342,12 @@ export function ImportWizard() {
               </label>
             )}
           </div>
-          <div className="max-h-64 overflow-auto rounded border border-slate-200">
+          <div className="max-h-64 overflow-auto rounded border border-border">
             <table className="min-w-full text-sm">
               <thead>
                 <tr>
                   {headers.map((header) => (
-                    <th key={header} className="border-b bg-slate-50 px-2 py-1 text-left text-xs uppercase text-slate-500">
+                    <th key={header} className="border-b bg-surface-muted px-2 py-1 text-left text-xs uppercase text-foreground-subtle">
                       {header}
                     </th>
                   ))}
@@ -355,7 +355,7 @@ export function ImportWizard() {
               </thead>
               <tbody>
                 {previewRows.map((row, index) => (
-                  <tr key={index} className="odd:bg-white even:bg-slate-50">
+                  <tr key={index} className="odd:bg-surface-raised even:bg-surface-muted">
                     {headers.map((header) => (
                       <td key={header} className="px-2 py-1">
                         {row[header]}
@@ -367,10 +367,10 @@ export function ImportWizard() {
             </table>
           </div>
           {(rowIssues.length > 0 || assistantNotes.length > 0) && (
-            <div className="rounded border border-slate-200 bg-slate-50/50 p-4 text-xs text-slate-600">
+            <div className="rounded border border-border bg-surface-muted/50 p-4 text-xs text-foreground-muted">
               {assistantNotes.length > 0 && (
                 <div className="space-y-1">
-                  <p className="font-semibold uppercase tracking-wide text-slate-500">Assistant notes</p>
+                  <p className="font-semibold uppercase tracking-wide text-foreground-subtle">Assistant notes</p>
                   <ul className="list-disc space-y-1 pl-5">
                     {assistantNotes.map((note, index) => (
                       <li key={`preview-note-${index}`}>{note}</li>
@@ -380,7 +380,7 @@ export function ImportWizard() {
               )}
               {rowIssues.length > 0 && (
                 <div className="space-y-1">
-                  <p className="font-semibold uppercase tracking-wide text-slate-500">Flagged rows</p>
+                  <p className="font-semibold uppercase tracking-wide text-foreground-subtle">Flagged rows</p>
                   <ul className="list-disc space-y-1 pl-5">
                     {rowIssues.map((issue) => (
                       <li key={`preview-issue-${issue.rowIndex}-${issue.message}`}>
@@ -393,10 +393,10 @@ export function ImportWizard() {
             </div>
           )}
           <div className="flex items-center gap-3">
-            <button type="button" className="rounded border border-slate-300 px-4 py-2 text-sm" onClick={() => setStep('Map Fields')}>
+            <button type="button" className="rounded border border-border-strong px-4 py-2 text-sm" onClick={() => setStep('Map Fields')}>
               Back
             </button>
-            <button type="button" className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white" onClick={() => setStep('Confirm')}>
+            <button type="button" className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white" onClick={() => setStep('Confirm')}>
               Continue
             </button>
           </div>
@@ -404,11 +404,11 @@ export function ImportWizard() {
       )}
       {step === 'Confirm' && (
         <div className="space-y-4">
-          <p className="text-sm text-slate-500">Confirm mapping and start import.</p>
-          <pre className="max-h-40 overflow-auto rounded bg-slate-900 p-4 text-xs text-white">{JSON.stringify(mapping, null, 2)}</pre>
+          <p className="text-sm text-foreground-subtle">Confirm mapping and start import.</p>
+          <pre className="max-h-40 overflow-auto rounded bg-foreground p-4 text-xs text-white">{JSON.stringify(mapping, null, 2)}</pre>
           {assistantInsights && (
-            <div className="rounded border border-slate-200 bg-slate-50/50 p-4 text-xs text-slate-600">
-              <p className="font-semibold uppercase tracking-wide text-slate-500">Import assistant summary</p>
+            <div className="rounded border border-border bg-surface-muted/50 p-4 text-xs text-foreground-muted">
+              <p className="font-semibold uppercase tracking-wide text-foreground-subtle">Import assistant summary</p>
               <p className="mt-1">
                 {mappingSuggestionEntries.length > 0
                   ? `Passing ${mappingSuggestionEntries.length} mapping suggestion${mappingSuggestionEntries.length === 1 ? '' : 's'}`
@@ -423,10 +423,10 @@ export function ImportWizard() {
             </div>
           )}
           <div className="flex items-center gap-3">
-            <button type="button" className="rounded border border-slate-300 px-4 py-2 text-sm" onClick={() => setStep('Preview')}>
+            <button type="button" className="rounded border border-border-strong px-4 py-2 text-sm" onClick={() => setStep('Preview')}>
               Back
             </button>
-            <button type="button" className="rounded bg-brand px-4 py-2 text-sm font-semibold text-white" onClick={handleConfirm}>
+            <button type="button" className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white" onClick={handleConfirm}>
               Start import
             </button>
           </div>

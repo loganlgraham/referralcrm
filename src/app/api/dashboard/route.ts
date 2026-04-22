@@ -1016,6 +1016,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           pendingClosings: 0,
           pendingClosingsThisMonth: 0,
           pendingClosingsNextMonth: 0,
+          pendingClosingsList: [],
+          pendingClosingsThisMonthList: [],
+          pendingClosingsNextMonthList: [],
           closeRate: 0,
           afcDealsLost: 0,
           afcDealsLostList: [],
@@ -2143,6 +2146,40 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const ahaOosDealsLostList = ahaOosRelevant
     .filter((payment) => !payment.usedAssignedAgent)
     .map(serializeLostDeal);
+
+  const serializePendingClosing = (payment: AggregatedPayment) => {
+    const refId = payment.referral._id.toString();
+    const agentId = (payment.agentId ?? payment.referral?.assignedAgent)?.toString() ?? null;
+    const mcId = payment.referral?.lender?.toString() ?? null;
+    return {
+      id: payment._id.toString(),
+      referralId: refId,
+      borrowerName: referralBorrowerMap.get(refId) ?? 'Unknown',
+      agentName: agentId ? (agentNameMap.get(agentId) ?? 'Unknown') : null,
+      mcName: mcId ? (lenderNameMap.get(mcId) ?? 'Unknown') : null,
+      status: payment.status,
+      closingDate: payment.closingDate ? new Date(payment.closingDate).toISOString() : null,
+      expectedAmountCents: payment.expectedAmountCents ?? 0,
+    };
+  };
+
+  const sortByClosingDateAsc = <T extends { closingDate: string | null }>(list: T[]): T[] =>
+    [...list].sort((a, b) => {
+      if (!a.closingDate && !b.closingDate) return 0;
+      if (!a.closingDate) return 1;
+      if (!b.closingDate) return -1;
+      return a.closingDate.localeCompare(b.closingDate);
+    });
+
+  const pendingClosingsList = sortByClosingDateAsc(
+    pendingClosings.map(serializePendingClosing)
+  );
+  const pendingClosingsThisMonthList = sortByClosingDateAsc(
+    pendingClosingsThisMonth.map(serializePendingClosing)
+  );
+  const pendingClosingsNextMonthList = sortByClosingDateAsc(
+    pendingClosingsNextMonth.map(serializePendingClosing)
+  );
 
   const attachRateDebug = (() => {
     if (!attachDebugEnabled) return undefined;
@@ -4164,6 +4201,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         pendingClosings: pendingClosings.length,
         pendingClosingsThisMonth: pendingClosingsThisMonth.length,
         pendingClosingsNextMonth: pendingClosingsNextMonth.length,
+        pendingClosingsList,
+        pendingClosingsThisMonthList,
+        pendingClosingsNextMonthList,
         closeRate: closeRateForSummary,
         afcDealsLost,
         afcDealsLostList,

@@ -19,10 +19,10 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   }
 
   return (
-    <div className="min-h-[100dvh] w-full bg-slate-100 overflow-x-hidden">
-      <Sidebar session={session} className="hidden md:block" />
+    <div className="min-h-[100dvh] w-full bg-surface-muted overflow-x-hidden">
+      <Sidebar session={session} className="hidden md:flex" />
       <MobileNav session={session} />
-      <main className="px-4 py-6 md:ml-64 md:px-8 md:py-8">
+      <main className="px-4 pb-10 pt-6 md:ml-64 md:px-8 md:pb-12 md:pt-8">
         <DashboardClientShell>
           <div className="mx-auto max-w-7xl space-y-6">{children}</div>
         </DashboardClientShell>

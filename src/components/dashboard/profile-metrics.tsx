@@ -97,7 +97,7 @@ export function ProfileMetrics() {
     return (
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: placeholderCount }).map((_, index) => (
-          <div key={index} className="h-24 animate-pulse rounded-lg border border-slate-200 bg-white" />
+          <div key={index} className="h-24 animate-pulse rounded-lg border border-border bg-surface-raised" />
         ))}
       </div>
     );
@@ -148,7 +148,7 @@ export function ProfileMetrics() {
   return (
     <div className="mt-8 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <h2 className="text-lg font-semibold text-slate-900">Your performance snapshot</h2>
+        <h2 className="text-lg font-semibold text-foreground">Your performance snapshot</h2>
         <TimeframeDropdown
           timeframe={timeframe}
           rangeLabel={rangeLabel}
@@ -158,12 +158,12 @@ export function ProfileMetrics() {
           maxDate={maxSelectableDate}
         />
       </div>
-      <p className="text-xs uppercase tracking-wide text-slate-500">{rangeLabel}</p>
+      <p className="text-xs uppercase tracking-wide text-foreground-subtle">{rangeLabel}</p>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => (
-          <div key={card.label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{card.label}</p>
-            <p className="mt-2 text-xl font-semibold text-slate-900">{card.value}</p>
+          <div key={card.label} className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+            <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{card.label}</p>
+            <p className="mt-2 text-xl font-semibold text-foreground">{card.value}</p>
           </div>
         ))}
       </div>

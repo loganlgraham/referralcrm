@@ -40,8 +40,8 @@ function ComposeEmailContent() {
   }, [copyBody, gmailUrl]);
 
   return (
-    <main className="flex min-h-[60vh] items-center justify-center bg-slate-100 px-4 py-12">
-      <div className="w-full max-w-xl rounded-2xl bg-white p-8 shadow-lg ring-1 ring-slate-200">
+    <main className="flex min-h-[60vh] items-center justify-center bg-surface-subtle px-4 py-12">
+      <div className="w-full max-w-xl rounded-card bg-surface-raised p-8 shadow-lg ring-1 ring-border">
         <div className="space-y-4 text-center">
           {copyState === 'copying' && (
             <>
@@ -51,8 +51,8 @@ function ComposeEmailContent() {
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
               </div>
-              <h1 className="text-2xl font-semibold text-slate-900">Preparing email…</h1>
-              <p className="text-sm text-slate-600">Copying email body to clipboard.</p>
+              <h1 className="text-2xl font-semibold text-foreground">Preparing email…</h1>
+              <p className="text-sm text-foreground-muted">Copying email body to clipboard.</p>
             </>
           )}
 
@@ -63,9 +63,9 @@ function ComposeEmailContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h1 className="text-2xl font-semibold text-slate-900">Email body copied!</h1>
-              <p className="text-sm text-slate-600">
-                Opening Gmail… Just paste <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-xs">⌘V</kbd> into the compose window.
+              <h1 className="text-2xl font-semibold text-foreground">Email body copied!</h1>
+              <p className="text-sm text-foreground-muted">
+                Opening Gmail… Just paste <kbd className="rounded border border-border bg-surface-muted px-1.5 py-0.5 font-mono text-xs">⌘V</kbd> into the compose window.
               </p>
               <div className="pt-2">
                 <a
@@ -85,14 +85,14 @@ function ComposeEmailContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h1 className="text-2xl font-semibold text-slate-900">Couldn&apos;t auto-copy</h1>
-              <p className="text-sm text-slate-600">
+              <h1 className="text-2xl font-semibold text-foreground">Couldn&apos;t auto-copy</h1>
+              <p className="text-sm text-foreground-muted">
                 Click below to copy the email body, then open Gmail to compose.
               </p>
               <div className="flex items-center justify-center gap-3 pt-2">
                 <button
                   onClick={copyBody}
-                  className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+                  className="inline-flex items-center justify-center rounded-md border border-border-strong bg-surface-raised px-4 py-2 text-sm font-semibold text-foreground-muted shadow-sm transition hover:bg-surface-muted"
                 >
                   Copy Email Body
                 </button>
@@ -115,9 +115,9 @@ export default function ComposeEmailPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-[60vh] items-center justify-center bg-slate-100 px-4 py-12">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-8 shadow-lg ring-1 ring-slate-200">
-            <p className="text-center text-slate-700">Preparing email…</p>
+        <main className="flex min-h-[60vh] items-center justify-center bg-surface-subtle px-4 py-12">
+          <div className="w-full max-w-xl rounded-card bg-surface-raised p-8 shadow-lg ring-1 ring-border">
+            <p className="text-center text-foreground-muted">Preparing email…</p>
           </div>
         </main>
       }

@@ -44,7 +44,7 @@ export function SendWelcomeEmailButton({ endpoint, recipientEmail, recipientName
       type="button"
       onClick={handleSendWelcomeEmail}
       disabled={disabled}
-      className="inline-flex items-center rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+      className="inline-flex items-center rounded-md border border-border bg-surface-raised px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-70"
     >
       {sending ? 'Sending…' : 'Send welcome email'}
     </button>
