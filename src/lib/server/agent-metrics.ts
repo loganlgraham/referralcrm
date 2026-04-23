@@ -4,6 +4,7 @@ import { Types } from 'mongoose';
 
 import { Payment } from '@/models/payment';
 import { Referral } from '@/models/referral';
+import { computeCohortCloseRate } from '@/lib/server/dashboard-math';
 
 function resolvePaymentMetricDate(payment: any): Date {
   if (payment.status === 'paid' && payment.paidDate) {
@@ -232,7 +233,7 @@ export async function computeAgentMetrics(
 
     const dealsClosedAllTime = closedPayments.length;
 
-    const closingRate = totalReferrals === 0 ? 0 : (dealsClosedAllTime / totalReferrals) * 100;
+    const closingRate = computeCohortCloseRate(dealsClosedAllTime, totalReferrals);
 
     let closingsLast12Months = 0;
     let totalReferralFeesPaidCents = 0;

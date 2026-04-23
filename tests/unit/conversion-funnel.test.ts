@@ -240,4 +240,36 @@ describe('buildConversionFunnel', () => {
     expect(stages.map((s) => s.status)).not.toContain('Lost');
     expect(stages.map((s) => s.status)).not.toContain('Terminated');
   });
+
+  it('accepts dashboard route–shaped lean audit entries (real audit array, not re-mapped)', () => {
+    const referrals: FunnelReferralInput[] = [
+      {
+        _id: 'route-shaped',
+        status: 'In Communication',
+        createdAt: day('2026-01-01T00:00:00Z'),
+        statusLastUpdated: day('2026-01-05T00:00:00Z'),
+        referralDate: null,
+        audit: [
+          {
+            field: 'status',
+            previousValue: 'New Lead',
+            newValue: 'Paired',
+            timestamp: day('2026-01-02T00:00:00Z')
+          },
+          {
+            field: 'status',
+            previousValue: 'Paired',
+            newValue: 'In Communication',
+            timestamp: day('2026-01-05T00:00:00Z')
+          }
+        ],
+        sla: null
+      }
+    ];
+    const { stages } = buildConversionFunnel(referrals);
+    const countByStage = Object.fromEntries(stages.map((s) => [s.status, s.count]));
+    expect(countByStage['New Lead']).toBe(1);
+    expect(countByStage['Paired']).toBe(1);
+    expect(countByStage['In Communication']).toBe(1);
+  });
 });

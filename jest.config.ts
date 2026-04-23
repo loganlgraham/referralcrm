@@ -1,6 +1,7 @@
 import type { Config } from 'jest';
 
 const config: Config = {
+  watchman: false,
   testEnvironment: 'jsdom',
   // Force the node export conditions so `bson` resolves to its CommonJS build
   // instead of the browser ESM build (which Jest can't parse out of the box).

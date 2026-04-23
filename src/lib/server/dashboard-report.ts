@@ -15,6 +15,7 @@ import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
+import { getReferralDesignation as sharedGetReferralDesignation } from '@/lib/server/referral-designation';
 
 export const DASHBOARD_REPORT_METRICS = [
   { id: 'summary', label: 'Executive summary' },
@@ -274,6 +275,8 @@ type ReferralLite = {
   origin?: string;
   lender?: Types.ObjectId | null;
   assignedAgent?: Types.ObjectId | null;
+  buySideAgent?: Types.ObjectId | null;
+  sellSideAgent?: Types.ObjectId | null;
 };
 
 async function buildNetworkBreakdown(range: {
@@ -289,13 +292,17 @@ async function buildNetworkBreakdown(range: {
   }
 
   const referrals = await Referral.find(referralMatch)
-    .select('lender ahaBucket org assignedAgent')
+    .select('lender ahaBucket org assignedAgent buySideAgent sellSideAgent')
     .lean<ReferralLite[]>();
 
+  // C-13: mirror the live dashboard's getReferralDesignation traversal, which
+  // walks assignedAgent → buySideAgent → sellSideAgent rather than only using
+  // assignedAgent.
   const agentIds = Array.from(
     new Set(
       referrals
-        .map((r) => r.assignedAgent?.toString())
+        .flatMap((r) => [r.assignedAgent, r.buySideAgent, r.sellSideAgent])
+        .map((id) => id?.toString())
         .filter((id): id is string => Boolean(id))
     )
   );
@@ -322,9 +329,7 @@ async function buildNetworkBreakdown(range: {
       buckets.Unpaired += 1;
       continue;
     }
-    const designation = referral.assignedAgent
-      ? designationMap.get(referral.assignedAgent.toString()) ?? null
-      : null;
+    const designation = sharedGetReferralDesignation(referral, designationMap);
     if (designation === 'AHA_OOS') {
       buckets['AHA OOS'] += 1;
       continue;

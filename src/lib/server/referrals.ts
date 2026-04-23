@@ -17,6 +17,7 @@ import { DEAL_STATUS_LABELS } from '@/constants/deals';
 import { Zip } from '@/models/zip';
 import { buildDealStatusMap } from '@/lib/server/referral-deal-status';
 import { mapDealStatusToReferralStatus } from '@/lib/server/referral-deal-status-mapper';
+import { computeCohortCloseRate } from '@/lib/server/dashboard-math';
 import { type DealStatus } from '@/constants/deals';
 import { resolveAgentSideForReferral, pickPrimarySideForReferral } from '@/lib/server/referral-sides';
 import { mergeClosedStatusQuery } from '@/lib/server/merge-closed-status-query';
@@ -525,7 +526,7 @@ export async function getReferrals(params: GetReferralsParams) {
   ]);
 
   const closedDeals = closedDealAggregation[0]?.count ?? 0;
-  const closeRate = total === 0 ? 0 : (closedDeals / total) * 100;
+  const closeRate = computeCohortCloseRate(closedDeals, total);
 
   const referralIds = items.map((item) => item._id);
   const resolveAgent = (item: PopulatedReferral) => {

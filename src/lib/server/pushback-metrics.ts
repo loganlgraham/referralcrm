@@ -31,7 +31,12 @@ function isWithinTimeframe(value: Date | string | null | undefined, timeframe: P
 export function resolvePushbackMetricsInTimeframe(
   payment: PushbackPaymentLike,
   timeframe: PushbackTimeframeLike
-): { events: number; pushedBackDays: number } {
+): {
+  events: number;
+  pushedBackDays: number;
+  /** Subset of `events` that contributed measured days (excludes legacy count-only events). */
+  eventsWithDays: number;
+} {
   const pushbackCountRaw =
     typeof payment.closingDatePushbackCount === 'number' && payment.closingDatePushbackCount > 0
       ? payment.closingDatePushbackCount
@@ -54,5 +59,5 @@ export function resolvePushbackMetricsInTimeframe(
   const scopedEvents = scopedPushbackEntries.length + scopedLegacyEvents;
   const pushedBackDays = scopedPushbackEntries.reduce((sum, entry) => sum + entry.pushedBackDays, 0);
 
-  return { events: scopedEvents, pushedBackDays };
+  return { events: scopedEvents, pushedBackDays, eventsWithDays: scopedPushbackEntries.length };
 }
