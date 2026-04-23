@@ -196,6 +196,11 @@ export function DealsTable() {
   const [searchTerm, setSearchTerm] = useState(searchValue);
   const [debouncedSearch, setDebouncedSearch] = useState(searchValue);
   const isTypingRef = useRef(false);
+  const searchParamsStringRef = useRef(searchParamsString);
+
+  useEffect(() => {
+    searchParamsStringRef.current = searchParamsString;
+  }, [searchParamsString]);
   const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
   const [isDesignationMenuOpen, setIsDesignationMenuOpen] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
@@ -358,7 +363,7 @@ export function DealsTable() {
 
   // Push debouncedSearch to URL (with deduplication)
   useEffect(() => {
-    const params = new URLSearchParams(searchParamsString);
+    const params = new URLSearchParams(searchParamsStringRef.current);
     const existing = params.get('search') ?? '';
     const trimmed = debouncedSearch.trim();
     if (trimmed === existing.trim()) return;
@@ -372,7 +377,7 @@ export function DealsTable() {
       const queryString = params.toString();
       router.replace(queryString ? `/deals?${queryString}` : '/deals');
     });
-  }, [debouncedSearch, router, searchParamsString, startTransition]);
+  }, [debouncedSearch, router, startTransition]);
 
   const handleSearchInput = useCallback((value: string) => {
     isTypingRef.current = true;

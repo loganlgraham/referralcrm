@@ -393,6 +393,62 @@ describe('POST /api/inbound-email', () => {
     );
   });
 
+  it('appends Cobwr fields to initial notes and system note content when provided', async () => {
+    mockResendInboundFetch(
+      [
+        'First Name: Sarah',
+        'Last Name: Jordan',
+        'Email: sjordan3409@gmail.com',
+        'Deal Type: Buyer',
+        'Phone: 8637121067',
+        'Price: $425000.00',
+        'Area: 33811',
+        'Zipcode: 33811',
+        'Seller Address: 4342 Spring Lane, Lakeland, FL, 33811',
+        'Source: JaredD',
+        'Referrer: PNC-Pre-Approved',
+        'Notes: bwrs looking in Polk County.',
+        'Loan Number: 20130976807',
+        'LoanType:Conventional',
+        'LoanProgram:Conv Conf 30 Year Fixed',
+        'So: (Source):YouTube - Louder with Crowder',
+        'En: (Endorser):Steven Crowder',
+        'CobwrFirst: Justin',
+        'CobwrLast: Jordan',
+        'CobwrPhone: 8637121067',
+        'CobwrEmail: jjordon3409@gmail.com'
+      ].join('\n')
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedReferralCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialNotes: expect.stringContaining(
+          ['CobwrFirst: Justin', 'CobwrLast: Jordan', 'CobwrPhone: 863-712-1067', 'CobwrEmail: jjordon3409@gmail.com'].join(
+            '\n'
+          )
+        ),
+        notes: expect.arrayContaining([
+          expect.objectContaining({
+            content: [
+              'bwrs looking in Polk County.',
+              'CobwrFirst: Justin\nCobwrLast: Jordan\nCobwrPhone: 863-712-1067\nCobwrEmail: jjordon3409@gmail.com'
+            ].join('\n\n')
+          })
+        ])
+      })
+    );
+  });
+
   it('parses labels separated by literal <br> tags in plain-text body', async () => {
     mockResendInboundFetch(
       [
@@ -556,6 +612,92 @@ describe('POST /api/inbound-email', () => {
     expect(mockedLogReferralActivity).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('Auto-assigned mortgage consultant Karim Lopez')
+      })
+    );
+  });
+
+  it('assigns a matching mortgage consultant when Source token uses ChristopherL alias', async () => {
+    const lenderId = fakeObjectId('lender-chris');
+    mockLenderFindReturn([
+      { _id: lenderId, name: 'Chris Leo' },
+      { _id: fakeObjectId('lender-jane'), name: 'Jane Doe' }
+    ]);
+
+    mockResendInboundFetch(
+      [
+        'First Name: Danielle',
+        'Last Name: Geldart',
+        'Email: justinlounsbury05@gmail.com',
+        'Deal Type: Buyer',
+        'Phone: 8634406938',
+        'Area: 27910',
+        'Source: ChristopherL',
+        'Loan Number: 20130974679'
+      ].join('\n')
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedReferralCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lender: lenderId,
+        initialNotes: expect.stringContaining('MC: Chris Leo (source: ChristopherL)')
+      })
+    );
+    expect(mockedLogReferralActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('Auto-assigned mortgage consultant Chris Leo')
+      })
+    );
+  });
+
+  it('assigns a matching mortgage consultant when Source token uses JasonCr alias', async () => {
+    const lenderId = fakeObjectId('lender-jason');
+    mockLenderFindReturn([
+      { _id: lenderId, name: 'Jason Creech' },
+      { _id: fakeObjectId('lender-jane'), name: 'Jane Doe' }
+    ]);
+
+    mockResendInboundFetch(
+      [
+        'First Name: Danielle',
+        'Last Name: Geldart',
+        'Email: justinlounsbury05@gmail.com',
+        'Deal Type: Buyer',
+        'Phone: 8634406938',
+        'Area: 27910',
+        'Source: JasonCr',
+        'Loan Number: 20130974679'
+      ].join('\n')
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedReferralCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lender: lenderId,
+        initialNotes: expect.stringContaining('MC: Jason Creech (source: JasonCr)')
+      })
+    );
+    expect(mockedLogReferralActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('Auto-assigned mortgage consultant Jason Creech')
       })
     );
   });

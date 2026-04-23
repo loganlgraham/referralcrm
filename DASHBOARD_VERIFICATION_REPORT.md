@@ -1,369 +1,114 @@
-# Dashboard Metrics, SLAs, and Reporting Verification Report
+# Dashboard Metrics Audit — 2026-04-23 (remediation complete)
 
-**Date:** December 27, 2025  
-**Status:** ✅ Verified and Fixed
+**Date:** April 23, 2026  
+**Scope:** Main, MC, Agent, Admin, AGIT tabs on `/dashboard`  
+**Previous audits:** April 22, 2026 draft in-repo; December 27, 2025 (History below).
 
-## Executive Summary
-
-All four dashboards (Main, MC, Agent, Admin) have been thoroughly reviewed and verified. Two critical bugs were identified and fixed, comprehensive test coverage was added, and documentation was enhanced throughout the codebase.
-
----
-
-## Dashboard Architecture
-
-The application has 4 main dashboards accessible via the dashboard tabs component:
-
-1. **Main Dashboard** - Overall business metrics (revenue, close rates, pipeline)
-2. **MC Dashboard** - Mortgage consultant performance metrics
-3. **Agent Dashboard** - Real estate agent performance metrics  
-4. **Admin Dashboard** - SLA tracking and operational metrics
-
-### Data Flow
-
-```
-Frontend Components (dashboard-tabs.tsx)
-    ↓
-API Endpoints (/api/dashboard, /api/referrals, /api/profile/metrics)
-    ↓
-MongoDB Aggregations (Referrals, Payments, PreApprovalMetrics)
-    ↓
-SLA Calculations (sla-insights.ts)
-```
+This document is the canonical audit. The remediation plan in `.cursor/plans/` was executed without editing that plan file.
 
 ---
 
-## Critical Bugs Fixed
+## Executive summary — what shipped in this pass
 
-### 1. ✅ Missing `daysToClose` SLA Calculation
+| Area | Change |
+|------|--------|
+| **Timeframe module** | `src/lib/server/dashboard/timeframe.ts` — `parseTimeframe`, `deriveCustomBucketKey`, `groupTrendByTimeframe`, `buildTimeframeBuckets`, `getTimeframeBucketKey`, `isWithinTimeframe`, `getPreviousPeriodRange`, `getReferralTimeframeAnchor`. |
+| **Cohort close rate** | Main summary card, PoP `current`/`previous` close rate, trend buckets, monthly table, and agent close-rate leaderboard use `computeCohortCloseRate` from `dashboard-math.ts`. Removed weighted monthly blend for the headline summary. |
+| **PoP referrals** | Previous period filters referrals by `getReferralTimeframeAnchor` (min of `referralDate`, `createdAt`), matching current-period `filteredReferrals`. |
+| **PoP week (M-2)** | Prior week is a **rolling** window of the same duration as the current partial week (no longer full Mon–Sun vs partial current week). |
+| **Revenue UI parity (L-3)** | API adds `summary.revenueRealizationRatePercent` and `summary.closedNotPaidPercentOfExpected`; `dashboard-tabs` prefers server values with client fallback. |
+| **MC / AHA composite (M-11 / U-5)** | Neutral-filled KPIs no longer add weight to `totalWeight`; composite reflects measured KPIs only. |
+| **Admin SLA** | `daysToContract` fallback averages use `getReferralTimeframeAnchor`; `daysToClose` average excludes negative values. |
+| **Status route (M-26)** | First `Under Contract` transition sets `daysToContract` from `min(referralDate, createdAt)`. |
+| **Tests** | `tests/unit/dashboard-timeframe.test.ts`, `conversion-funnel.test.ts` (route-shaped audit), `tests/api/dashboard-route.test.ts` (401 smoke); `dashboard-bucket-key` imports timeframe module; Jest `watchman: false`; `jest.api.config` scopes `tests/api/**`. |
+| **Build fix** | Dashboard slow-log uses `timeframe.key`; `isWithinTimeframe` import aliased to avoid TDZ with local wrapper. |
 
-**Issue:** When a referral status changed to "Closed", the `sla.daysToClose` field was never calculated or stored, even though the admin dashboard attempted to display it.
-
-**Location:** `src/app/api/referrals/[id]/status/route.ts`
-
-**Fix Applied:**
-```typescript
-} else if (nextStatus === 'Closed') {
-  sla.lastClosedAt = now;
-  // Calculate and store daysToClose if we have lastUnderContractAt
-  if (sla.daysToClose == null && sla.lastUnderContractAt) {
-    const underContractAt = sla.lastUnderContractAt instanceof Date 
-      ? sla.lastUnderContractAt 
-      : new Date(sla.lastUnderContractAt);
-    if (!Number.isNaN(underContractAt.getTime())) {
-      sla.daysToClose = Math.max(differenceInDays(now, underContractAt), 0);
-    }
-  }
-  slaModified = true;
-}
-```
-
-**Impact:** Admin dashboard now correctly displays average days to close metric.
+**Still deferred (non-blocking):** full split of `route.ts` into `main-builder` / `mc-builder` / … (only timeframe extracted); Mongo `$match` push-down for referrals/payments (C-15); calendar vs rolling semantics for YTD PoP (U-8) documented as rolling in code.
 
 ---
 
-### 2. ✅ Close Rate Timeframe Inconsistency
+## Architecture (unchanged overview)
 
-**Issue:** The close rate calculation had a fundamental flaw:
-- `totalReferrals` was filtered by referral `createdAt` (referrals created in timeframe)
-- `dealsClosed` was filtered by payment `metricDate` (deals closed in timeframe)
+Single `GET /api/dashboard` returns `{ main, mc, agent, admin, agit }`. `DashboardTabs` renders per-tab UI. SWR ~60s refresh. Filters: **timeframe** + **network** (`ALL` / `AHA` / `AHA_OOS`).
 
-This meant a deal closed today from a referral created 6 months ago would be counted in the numerator but not the denominator, resulting in inflated close rates.
-
-**Location:** `src/app/api/dashboard/route.ts`
-
-**Fix Applied:**
-```typescript
-// Close rate calculation: For accurate close rate, we need to match deals to referrals
-// created in the timeframe, not just deals closed in the timeframe.
-// This ensures we're measuring "of referrals created this period, how many closed?"
-const filteredReferralIds = new Set(filteredReferrals.map((r) => r._id.toString()));
-
-const dealsClosed = filteredPaymentsByNetwork.filter(
-  (payment) =>
-    payment.agentAttribution !== 'OUTSIDE_AGENT' &&
-    (payment.status === 'closed' || payment.status === 'paid') &&
-    filteredReferralIds.has(payment.referral._id.toString())
-);
-```
-
-**Impact:** Close rates are now calculated correctly across all timeframes.
+Role gating (frontend): `main`, `admin`, `agit` → admin global; `mc` → mc or admin; `agent` → agent or admin.
 
 ---
 
-## Metrics Verification Summary
+## Metric inventory (abbreviated)
 
-### Main Dashboard ✅
+See **April 22** sections in git history for the full 44/38/14/7 line-by-line tables. Key data paths:
 
-| Metric | Status | Notes |
-|--------|--------|-------|
-| Total Referrals | ✅ Verified | Correctly filtered by `createdAt` and network |
-| Deals Closed | ✅ Fixed | Now matches referrals from same timeframe |
-| Close Rate | ✅ Fixed | Denominator and numerator now consistent |
-| Realized Revenue | ✅ Verified | Correctly excludes `OUTSIDE_AGENT` deals |
-| Expected Revenue | ✅ Verified | Uses `calculateOutstandingExpected()` logic |
-| Lost Revenue | ✅ Verified | Tracks revenue from lost deals |
-| Pipeline Value | ✅ Verified | Sums expected revenue from active deals |
-| Avg Days Closed to Paid | ✅ Verified | Uses stored SLA values with fallbacks |
-| Avg Days to Contract | ✅ Verified | Calculated from referral creation to contract |
-| AFC Attach Rate | ✅ Verified | Percentage of deals using AFC |
-| AHA Attach Rate | ✅ Verified | Percentage of deals using assigned agent |
-| AHA OOS Attach Rate | ✅ Verified | Network-specific attach rate |
-
-### MC Dashboard ✅
-
-| Metric | Status | Notes |
-|--------|--------|-------|
-| Request Trend | ✅ Verified | Groups by `createdAt`, network filter applied |
-| Revenue Leaderboard | ✅ Verified | Excludes outside agent deals |
-| Close Rate Leaderboard | ✅ Verified | Consistent with referral counts |
-| Request Leaderboard | ✅ Verified | Top 10 by referral count |
-| Network Filtering | ✅ Verified | AHA/AHA_OOS filters work correctly |
-
-### Agent Dashboard ✅
-
-| Metric | Status | Notes |
-|--------|--------|-------|
-| Referral Leaderboard | ✅ Verified | Counts assigned referrals |
-| Close Rate Leaderboard | ✅ Verified | Excludes outside agent deals |
-| Revenue Paid | ✅ Verified | Realized revenue per agent |
-| Revenue Expected | ✅ Verified | Outstanding expected revenue |
-| Average Commission % | ✅ Verified | Calculated from basis points |
-| Average Referral Fee % | ✅ Verified | Calculated from closed deals |
-| Net Revenue | ✅ Verified | Commission minus referral fees |
-| Lost Deals | ✅ Verified | Tracks `OUTSIDE_AGENT` attribution |
-| Average Closed Deal Size | ✅ Verified | Contract value / closed count |
-
-### Admin Dashboard (SLA Metrics) ✅
-
-| Metric | Status | Notes |
-|--------|--------|-------|
-| Time to First Contact | ✅ Verified | Stored in `sla.timeToFirstAgentContactHours` |
-| Time to Assignment | ✅ Verified | Stored in `sla.timeToAssignmentHours` |
-| Days to Contract | ✅ Verified | Stored in `sla.daysToContract` |
-| Days to Close | ✅ Fixed | Now properly calculated and stored |
-| Assignment Rate | ✅ Verified | Percentage of referrals with assigned agent |
-| First Contact <24h Rate | ✅ Verified | Percentage meeting SLA threshold |
-| Unassigned Referrals | ✅ Verified | Count of referrals without agent |
+- **Referrals:** `Referral.find(referralMatch).select(...)` including `audit` for funnel.
+- **Payments:** `Payment.aggregate` with `$lookup` referrals; `metricDate` for timeframe; `isRevenueEligiblePayment` excludes outside-agent + Glenn Beck on Main/MC revenue maps.
+- **Close eligibility:** `isClosedDealEligible` = closed-like payment status, not outside agent, `usedAssignedAgent !== false`.
 
 ---
 
-## SLA Calculation Details
+## Critical findings — resolution status
 
-### Business Hours vs Calendar Time
-
-The SLA system uses different time calculations for different stages:
-
-**Business Hours (8 AM - 5 PM MST, excluding weekends/holidays):**
-- New Lead → Paired
-- Paired → In Communication
-
-**Calendar Time (24/7):**
-- In Communication → Under Contract
-- Under Contract → Closed
-- Closed → Paid
-
-### SLA Thresholds
-
-```typescript
-const SLA_THRESHOLDS = {
-  minutesToAssignment: 120,           // 2 hours
-  hoursToFirstConversation: 24,       // 24 hours
-  daysToUnderContract: 14,            // 14 days
-  daysToClose: 45,                    // 45 days
-  daysWithoutTouchPoint: 3,           // 3 days
-  daysToPaymentAfterClose: 10,        // 10 days
-  adminHoursToCommunication: 24,      // 24 hours
-  activeLeadCheckInDays: 7,           // 7 days
-};
-```
-
-### SLA Storage Points
-
-| Event | SLA Fields Updated |
-|-------|-------------------|
-| Agent Assigned | `timeToAssignmentHours` |
-| Status → "In Communication" | `timeToFirstAgentContactHours` |
-| Status → "Paired" | `lastPairedAt` |
-| Status → "Under Contract" | `lastUnderContractAt`, `daysToContract` |
-| Status → "Closed" | `lastClosedAt`, `daysToClose` ✅ (newly fixed) |
-| Status → "Paid" | `lastPaidAt` |
+| ID | Topic | Status |
+|----|--------|--------|
+| C-1 | Funnel + `audit` in select | Fixed (select includes audit; tests with route-shaped payloads). |
+| C-2 | Custom timeframe bucket alignment | Fixed (`deriveCustomBucketKey` in timeframe module). |
+| C-3 / C-4 | Close rate definitions | Fixed — headline + PoP + trends use cohort `computeCohortCloseRate`. |
+| C-5 | Generated revenue list vs KPI | Fixed (closing-date cohort). |
+| C-6 | AGIT `isClosedDealEligible` | Fixed. |
+| C-7 | Agent lost deals label | Fixed (copy). |
+| C-8 | AGIT AFC helper copy | Fixed. |
+| C-9 / C-20 | Glenn Beck + MC revenue | Fixed (`isRevenueEligiblePayment` on MC maps). |
+| C-10 | MC close-rate denominators | Fixed (`eligibleClosedDealsInTimeframe`). |
+| C-13–C-19 | Network designation / aging / request trend | Fixed per prior pass. |
+| C-14 | Terminal status keys | Fixed (`TERMINAL_REFERRAL_STATUS_KEYS` vs payment keys). |
+| C-15 | DB push-down | Deferred. |
+| C-16 | State extraction batching | Fixed (parallel precompute). |
+| C-17 | AGIT missing-profile shape | Fixed (`referralRows` / `dealRows`). |
+| L-3 | Realization % client-only | Fixed (server fields + UI preference). |
 
 ---
 
-## Test Coverage Added
+## Unclear business logic — documented defaults (U-1 … U-8)
 
-### 1. Dashboard Metrics Tests (`tests/unit/dashboard-metrics.test.ts`)
-
-**New test file created with comprehensive coverage:**
-
-- ✅ Close rate calculations (normal, edge cases, empty data)
-- ✅ Revenue calculations (realized, expected, closed not paid)
-- ✅ Average calculations (days, percentages, commissions)
-- ✅ Network filtering (AHA, AHA_OOS, ALL)
-- ✅ Attach rate calculations (AFC, AHA, AHA_OOS)
-- ✅ Leaderboard calculations (sorting, tie-breaking)
-- ✅ Pre-approval conversion rates
-
-**Total:** 20+ test cases covering all major metric calculations
-
-### 2. Enhanced SLA Tests (`tests/unit/sla-insights.test.ts`)
-
-**Expanded existing test file with:**
-
-- ✅ Stored SLA value usage
-- ✅ Previous SLA value display when current is pending
-- ✅ Admin dashboard SLA averages
-- ✅ First contact within 24 hours rate
-- ✅ Business hours calculations
-- ✅ Multi-day business period handling
-- ✅ Weekend exclusion logic
-
-**Total:** 15+ test cases covering SLA calculation and storage
+| ID | Resolution applied in product |
+|----|-------------------------------|
+| U-1 | Generated revenue by **closing date**. |
+| U-2 | AGIT “used AFC” = attach on eligible closed buy-side deals. |
+| U-3 | MC close-rate denominators use **eligible** closed deals. |
+| U-4 | Agent “lost” table = referral **Lost** in timeframe. |
+| U-5 | Composite: **reweight** — neutral KPIs excluded from denominator. |
+| U-6 | MC revenue: sell-side rules unchanged (include unless excluded by domain rules). |
+| U-7 | AFC risk: historical factors labeled all-time where applicable. |
+| U-8 | Custom/year/ytd PoP: **same-length rolling** windows in `getPreviousPeriodRange` (except calendar month/week note: month uses prior calendar month; week uses rolling). |
 
 ---
 
-## Code Documentation Enhancements
+## Confirmed-correct (smoke + tests)
 
-Added comprehensive inline comments to:
-
-1. **`src/app/api/dashboard/route.ts`**
-   - MC leaderboard building logic
-   - Revenue and close rate tracking maps
-   - Agent performance metric aggregation
-   - Commission and referral fee calculations
-   - Outside agent deal handling
-
-2. **`src/app/api/referrals/[id]/status/route.ts`**
-   - SLA calculation on status change to "Closed"
-
-3. **`tests/unit/dashboard-metrics.test.ts`**
-   - Detailed test descriptions and scenarios
-
-4. **`tests/unit/sla-insights.test.ts`**
-   - Admin dashboard average calculations
-   - Business hours calculation edge cases
+- `computeCohortCloseRate`, `safePercent`, `deriveCustomBucketKey` boundaries.
+- `getReferralTimeframeAnchor`, week PoP ordering.
+- Funnel with lean-style `audit` arrays.
+- `GET /api/dashboard` returns 401 without session/cron.
 
 ---
 
-## Network Filtering Verification
+## Recommended next refactors
 
-All dashboards correctly implement network filtering:
-
-| Network Filter | Behavior |
-|---------------|----------|
-| ALL | Shows all referrals and payments |
-| AHA | Filters by `agentDesignation === 'AHA'` |
-| AHA_OOS | Filters by `agentDesignation === 'AHA_OOS'` |
-
-**Verification:** Network designation is determined by:
-- Agent's `designation` field for agent-based filtering
-- Referral's assigned agent's `designation` for referral-based filtering
+1. Continue extracting `route.ts`: `dashboard/revenue.ts`, `dashboard/mc-builder.ts`, etc.
+2. Mongo: `$match` on referral/payment date predicates where safe (watch anchor = min date).
+3. Optional: add `payment_sent` to `closedNotPaidCents` if product confirms (M-5).
 
 ---
 
-## Timeframe Filtering Verification
-
-All dashboards correctly implement timeframe filtering:
-
-| Timeframe | Date Range |
-|-----------|-----------|
-| Day | Last 24 hours |
-| Week | Last 7 days |
-| Month | Last 30 days |
-| Year | Last 365 days |
-| YTD | Jan 1 to today |
-| All Time | No filter |
-| Custom | User-specified start/end dates |
-
-**Verification:** 
-- Referrals filtered by `createdAt`
-- Payments filtered by `metricDate` (resolved from `paidDate`, `invoiceDate`, or `updatedAt`)
-- Close rate now correctly matches referrals to their payments ✅
-
----
-
-## Recommendations for Future Enhancements
-
-### 1. Integration Tests
-Consider adding integration tests that:
-- Mock MongoDB responses
-- Test full API endpoint responses
-- Verify dashboard component rendering with real data structures
-
-### 2. Performance Monitoring
-Add monitoring for:
-- Dashboard API response times
-- MongoDB aggregation query performance
-- Large dataset handling (1000+ referrals)
-
-### 3. Data Validation
-Consider adding validation for:
-- SLA values (ensure non-negative)
-- Revenue calculations (ensure no negative values)
-- Percentage calculations (ensure 0-100 range)
-
-### 4. Real-time Updates
-Consider implementing:
-- WebSocket updates for live dashboard metrics
-- Optimistic UI updates for status changes
-- Background refresh for stale data
-
----
-
-## Testing Instructions
-
-### Run Unit Tests
+## Test commands
 
 ```bash
-# Run all tests
-npm test
-
-# Run dashboard metrics tests only
-npm test tests/unit/dashboard-metrics.test.ts
-
-# Run SLA tests only
-npm test tests/unit/sla-insights.test.ts
-
-# Run with coverage
-npm test -- --coverage
+pnpm exec jest --config jest.config.ts --no-watchman --testPathPattern=dashboard
+pnpm test:api   # tests/api only; watchman disabled in config
+pnpm exec next build
 ```
-
-### Manual Verification Steps
-
-1. **Main Dashboard:**
-   - Select different timeframes and verify close rate consistency
-   - Toggle network filters (ALL, AHA, AHA_OOS) and verify metrics update
-   - Check that revenue excludes outside agent deals
-
-2. **MC Dashboard:**
-   - Verify leaderboards sort correctly
-   - Check that request trends match referral creation dates
-   - Confirm network filtering works for MC metrics
-
-3. **Agent Dashboard:**
-   - Verify agent leaderboards show correct data
-   - Check that lost deals are tracked separately
-   - Confirm commission calculations are accurate
-
-4. **Admin Dashboard:**
-   - Verify all SLA averages display (including days to close)
-   - Check that first contact <24h rate is calculated correctly
-   - Confirm unassigned referral count is accurate
 
 ---
 
-## Conclusion
+## History — December 27, 2025
 
-✅ **All dashboards are now working as intended.**
-
-**Summary of Changes:**
-- 2 critical bugs fixed
-- 35+ new test cases added
-- Comprehensive documentation added
-- Code comments enhanced throughout
-
-**Verified Metrics:** 40+ metrics across 4 dashboards  
-**Test Coverage:** Dashboard calculations, SLA logic, network filtering, timeframe filtering
-
-All metrics, SLAs, and reporting features have been thoroughly reviewed, tested, and documented. The system is production-ready with improved reliability and maintainability.
-
+Early audit fixed SLA `daysToClose` on Closed and began close-rate alignment; later drift motivated the 2026 audits and import-based tests.

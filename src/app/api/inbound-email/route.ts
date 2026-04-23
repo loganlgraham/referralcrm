@@ -614,10 +614,26 @@ interface ParsedInboundReferralFields {
   source: string;
   endorser: string;
   notes: string;
+  coborrowerNoteBlock: string;
   mcValue: string;
   loanFileNumber: string;
   clientType: 'Seller' | 'Buyer';
   hasRequiredFields: boolean;
+}
+
+function buildCoborrowerNoteBlock(fields: Record<string, string>): string {
+  const cobwrFirst = (fields.cobwrfirst || '').trim();
+  const cobwrLast = (fields.cobwrlast || '').trim();
+  const cobwrPhone = normalizeInboundPhone((fields.cobwrphone || '').trim());
+  const cobwrEmail = (fields.cobwremail || '').trim().toLowerCase();
+
+  if (!cobwrFirst && !cobwrLast && !cobwrPhone && !cobwrEmail) {
+    return '';
+  }
+
+  return ['CobwrFirst: ' + cobwrFirst, 'CobwrLast: ' + cobwrLast, 'CobwrPhone: ' + cobwrPhone, 'CobwrEmail: ' + cobwrEmail].join(
+    '\n'
+  );
 }
 
 function parseInboundReferralFields(fields: Record<string, string>): ParsedInboundReferralFields {
@@ -660,6 +676,7 @@ function parseInboundReferralFields(fields: Record<string, string>): ParsedInbou
         : '');
   const endorser = (fields.endorser || fields.enendorser || '').trim();
   const notes = (fields.notes || '').trim();
+  const coborrowerNoteBlock = buildCoborrowerNoteBlock(fields);
   const mcValue = (fields.mc || fields.source || '').trim();
   const rawLoanDigits = (fields.loannumber || fields.loannum || '').replace(/\D+/g, '');
   const loanFileNumber = rawLoanDigits.slice(0, 11);
@@ -687,6 +704,7 @@ function parseInboundReferralFields(fields: Record<string, string>): ParsedInbou
     source,
     endorser,
     notes,
+    coborrowerNoteBlock,
     mcValue,
     loanFileNumber,
     clientType,
@@ -879,6 +897,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     source,
     endorser,
     notes,
+    coborrowerNoteBlock,
     mcValue,
     loanFileNumber,
     clientType,
@@ -1022,7 +1041,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (cleanedNotes) {
     notesSections.push(cleanedNotes);
   }
+  if (coborrowerNoteBlock) {
+    notesSections.push(coborrowerNoteBlock);
+  }
   const initialNotes = notesSections.filter(Boolean).join('\n\n');
+  const referralNoteContent = [cleanedNotes, coborrowerNoteBlock].filter(Boolean).join('\n\n');
 
   try {
     const referral = await Referral.create({
@@ -1044,12 +1067,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       preApprovalAmountCents: estimatedPriceCents ?? undefined,
       estPurchasePriceCents: estimatedPriceCents ?? undefined,
       attachments,
-      notes: cleanedNotes
+      notes: referralNoteContent
         ? [
             {
               authorRole: 'system',
               authorName: 'Inbound Email Import',
-              content: cleanedNotes,
+              content: referralNoteContent,
               hiddenFromAgent: false,
               hiddenFromMc: false,
               createdAt: new Date(),

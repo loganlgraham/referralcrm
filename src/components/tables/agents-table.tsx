@@ -44,6 +44,7 @@ interface AgentRow {
   specialties?: string[];
   languages?: string[];
   ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
+  active?: boolean;
   metrics: {
     closingsLast12Months: number;
     closingRate: number;
@@ -88,6 +89,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
     : 25;
   const search = searchParams.get('search') || '';
   const ahaFilter = (searchParams.get('ahaFilter') || 'all') as 'all' | 'AHA' | 'AHA_OOS' | 'AGIT';
+  const activeFilter = (searchParams.get('activeFilter') || 'all') as 'all' | 'active' | 'inactive';
   const sortBy = searchParams.get('sortBy') || null;
   const sortDirection = (searchParams.get('sortDirection') as 'asc' | 'desc') || null;
   
@@ -97,6 +99,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
   apiParams.set('pageSize', pageSize.toString());
   if (search) apiParams.set('search', search);
   if (ahaFilter !== 'all') apiParams.set('ahaFilter', ahaFilter);
+  if (activeFilter !== 'all') apiParams.set('activeFilter', activeFilter);
   if (sortBy) apiParams.set('sortBy', sortBy);
   if (sortDirection) apiParams.set('sortDirection', sortDirection);
   
@@ -108,7 +111,14 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
   const isTypingRef = useRef(false);
 
   const updateParams = useCallback(
-    (updates: { search?: string; ahaFilter?: string; page?: number; sortBy?: string; sortDirection?: 'asc' | 'desc' }) => {
+    (updates: {
+      search?: string;
+      ahaFilter?: string;
+      activeFilter?: string;
+      page?: number;
+      sortBy?: string;
+      sortDirection?: 'asc' | 'desc';
+    }) => {
       const params = new URLSearchParams(searchParamsString);
       
       if (updates.search !== undefined) {
@@ -125,6 +135,16 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
           params.delete('ahaFilter');
         } else {
           params.set('ahaFilter', updates.ahaFilter);
+        }
+        params.delete('page');
+      }
+
+      if (updates.activeFilter !== undefined) {
+        const nextActiveFilter = updates.activeFilter;
+        if (!nextActiveFilter || nextActiveFilter === 'all') {
+          params.delete('activeFilter');
+        } else {
+          params.set('activeFilter', nextActiveFilter);
         }
         params.delete('page');
       }
@@ -292,6 +312,21 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
               <option value="AGIT">AGIT</option>
             </select>
           </label>
+          {isAdmin && (
+            <label className="text-xs font-semibold text-foreground-muted">
+              Status
+              <select
+                value={activeFilter}
+                onChange={(event) => updateParams({ activeFilter: event.target.value })}
+                disabled={isPending}
+                className="mt-1 rounded border border-border bg-surface-raised px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="all">All statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </label>
+          )}
         </div>
       </div>
 
@@ -302,6 +337,11 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Agent" sortKey="name" />
               </th>
+              {isAdmin && (
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+                  Status
+                </th>
+              )}
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Closings (12mo)" sortKey="closings" />
               </th>
@@ -325,7 +365,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
           <tbody className="divide-y divide-border">
             {agents.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-center text-sm text-foreground-subtle" colSpan={7}>
+                <td className="px-4 py-6 text-center text-sm text-foreground-subtle" colSpan={isAdmin ? 8 : 7}>
                   No agents match the selected filter.
                 </td>
               </tr>
@@ -359,6 +399,17 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
                       ) : '—'}
                     </div>
                   </td>
+                  {isAdmin && (
+                    <td className="px-4 py-3 text-sm text-foreground-muted">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                          agent.active === false ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'
+                        }`}
+                      >
+                        {agent.active === false ? 'Inactive' : 'Active'}
+                      </span>
+                    </td>
+                  )}
                   <td className="px-4 py-3 text-sm text-foreground-muted">{agent.metrics.closingsLast12Months}</td>
                   <td className="px-4 py-3 text-sm text-foreground-muted">
                     {(() => {

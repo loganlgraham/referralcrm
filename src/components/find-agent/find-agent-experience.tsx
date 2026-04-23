@@ -228,9 +228,9 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
             <button
               type="submit"
               disabled={isSearching || isLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-surface-subtle"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-primary-600/70"
             >
-              {isSearching ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <SearchIcon className="h-4 w-4" />}
+              {isSearching ? <Loader2Icon className="h-4 w-4 animate-spin text-white" /> : <SearchIcon className="h-4 w-4" />}
               {isSearching ? 'Searching...' : ctaLabel}
             </button>
           </div>

@@ -15,7 +15,6 @@ import {
   startOfWeek,
   startOfYear,
   subMonths,
-  subWeeks,
   subYears
 } from 'date-fns';
 import { connectMongo } from '@/lib/mongoose';
@@ -45,16 +44,27 @@ import {
   normalizeAhaKpiMap
 } from '@/lib/server/aha-leaderboard-scoring';
 import { resolvePushbackMetricsInTimeframe } from '@/lib/server/pushback-metrics';
+import { buildConversionFunnel, type FunnelReferralInput } from '@/lib/server/conversion-funnel';
+import { computeCohortCloseRate, safePercent } from '@/lib/server/dashboard-math';
+import { SLA_THRESHOLDS } from '@/utils/sla-insights';
+import {
+  getPaymentAgentDesignation as sharedGetPaymentAgentDesignation,
+  getReferralDesignation as sharedGetReferralDesignation,
+  type NetworkDesignation
+} from '@/lib/server/referral-designation';
+import {
+  buildTimeframeBuckets,
+  getPreviousPeriodRange,
+  getReferralTimeframeAnchor,
+  getTimeframeBucketKey,
+  groupTrendByTimeframe,
+  isWithinTimeframe as isDateWithinDashboardTimeframe,
+  parseTimeframe,
+  type TimeframeInfo,
+  type TrendPoint
+} from '@/lib/server/dashboard/timeframe';
 
-type TimeframeKey = 'day' | 'week' | 'month' | 'next_month' | 'year' | 'ytd' | 'all' | 'custom';
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
-
-interface TimeframeInfo {
-  key: TimeframeKey;
-  label: string;
-  start?: Date;
-  end?: Date;
-}
 
 interface DashboardRequestContext {
   referralMatch: Record<string, unknown>;
@@ -193,6 +203,12 @@ interface DashboardReferral {
     lastUnderContractAt?: Date | string | null;
     lastPairedAt?: Date | string | null;
   } | null;
+  audit?: Array<{
+    field?: string;
+    previousValue?: unknown;
+    newValue?: unknown;
+    timestamp?: Date | string | null;
+  }> | null;
 }
 
 const ACTIVE_PIPELINE_STATUSES = new Set<string>([
@@ -205,19 +221,24 @@ const ACTIVE_PIPELINE_STATUSES = new Set<string>([
 const ACTIVE_PIPELINE_STATUS_KEYS = new Set(
   Array.from(ACTIVE_PIPELINE_STATUSES, (status) => normalizeStatusKey(status))
 );
+// C-14: Referral-model terminals only. Payment-style values (payment_sent,
+// payment_received, paid) belong to TERMINAL_PAYMENT_STATUS_KEYS below and
+// never match against `referral.status` because `normalizeReferralStatus`
+// rejects them.
 const TERMINAL_REFERRAL_STATUS_KEYS = new Set<string>([
   'closed',
   'lost',
-  'terminated',
-  'payment_sent',
-  'payment_received',
-  'paid'
+  'terminated'
 ]);
 const TERMINAL_PAYMENT_STATUS_KEYS = new Set<string>(['closed', 'payment_sent', 'payment_received', 'paid']);
 const AFC_RISK_AT_RISK_SCORE_THRESHOLD = 40;
 const AFC_RISK_HIGH_OUTSIDE_LOSS_RATE_THRESHOLD = 0.3;
 const AFC_RISK_MC_LOSS_REASON_PREFIX = 'MC historical outside-lender loss';
 const AFC_RISK_OUTSIDE_NOTE_REASON_PREFIX = 'Notes mention outside/local lender intent';
+// M-16: soft-match phrasing for lender-shopping hints; treated as a weaker
+// outside-lender note signal so the `hasOutsideLenderNoteSignal` check still
+// trips when only soft matches are present.
+const AFC_RISK_OUTSIDE_NOTE_SOFT_REASON_PREFIX = 'Notes suggest lender-shopping';
 const AFC_RISK_COUNTER_SIGNAL_REASON_PREFIX = 'Counter-signal in notes';
 const NOTE_SIGNAL_STRONG_PHRASES = [
   'outside lender',
@@ -253,23 +274,6 @@ const TERMINATED_REASON_LABELS: Record<string, string> = {
   financing: 'Financing',
   changed_mind: 'Changed Mind',
   unknown: 'Unknown'
-};
-
-interface TrendPoint {
-  key: string;
-  label: string;
-  value: number;
-}
-
-const TIMEFRAME_LABELS: Record<TimeframeKey, string> = {
-  day: 'Today',
-  week: 'This Week',
-  month: 'This Month',
-  next_month: 'Next Month',
-  year: 'Last 12 Months',
-  ytd: 'Year to Date',
-  all: 'All time',
-  custom: 'Custom range'
 };
 
 const UNDER_CONTRACT_STATUSES = new Set<AggregatedPayment['status']>([
@@ -359,116 +363,6 @@ function prioritizeAfcRiskReasons(
     })
     .slice(0, 2)
     .map((reason) => reason.label);
-}
-
-function parseDateOnly(value: string | null): Date | null {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-  return parsed;
-}
-
-function parseTimeframe(
-  value: string | null,
-  startParam: string | null,
-  endParam: string | null
-): TimeframeInfo {
-  const now = new Date();
-  const normalizedKey: TimeframeKey =
-    value === 'day' ||
-    value === 'week' ||
-    value === 'month' ||
-    value === 'next_month' ||
-    value === 'year' ||
-    value === 'ytd' ||
-    value === 'all' ||
-    value === 'custom'
-      ? (value as TimeframeKey)
-      : 'month';
-
-  if (normalizedKey === 'custom') {
-    const startDate = parseDateOnly(startParam);
-    const endDate = parseDateOnly(endParam);
-
-    let start = startDate ? startOfDay(startDate) : null;
-    let end = endDate ? endOfDay(endDate) : null;
-
-    if (start && end && start > end) {
-      const temp = start;
-      start = end;
-      end = temp;
-    }
-
-    const fallbackStart = start ?? startOfMonth(now);
-    const fallbackEnd = end ?? endOfDay(now);
-    const label =
-      start && end
-        ? `Custom (${format(start, 'MMM d, yyyy')} – ${format(end, 'MMM d, yyyy')})`
-        : TIMEFRAME_LABELS.custom;
-
-    return {
-      key: 'custom',
-      label,
-      start: start ?? fallbackStart,
-      end: end ?? fallbackEnd
-    };
-  }
-
-  switch (normalizedKey) {
-    case 'day':
-      return {
-        key: 'day',
-        label: TIMEFRAME_LABELS.day,
-        start: startOfDay(now),
-        end: endOfDay(now)
-      };
-    case 'week':
-      return {
-        key: 'week',
-        label: TIMEFRAME_LABELS.week,
-        start: startOfWeek(now, { weekStartsOn: 1 }),
-        end: endOfDay(now)
-      };
-    case 'year':
-      return {
-        key: 'year',
-        label: TIMEFRAME_LABELS.year,
-        start: subYears(now, 1),
-        end: endOfDay(now)
-      };
-    case 'next_month': {
-      const nextMonth = addMonths(now, 1);
-      return {
-        key: 'next_month',
-        label: TIMEFRAME_LABELS.next_month,
-        start: startOfMonth(nextMonth),
-        end: endOfMonth(nextMonth)
-      };
-    }
-    case 'ytd':
-      return {
-        key: 'ytd',
-        label: TIMEFRAME_LABELS.ytd,
-        start: startOfYear(now),
-        end: endOfDay(now)
-      };
-    case 'all':
-      return {
-        key: 'all',
-        label: TIMEFRAME_LABELS.all,
-        end: endOfDay(now)
-      };
-    case 'month':
-    default:
-      return {
-        key: 'month',
-        label: TIMEFRAME_LABELS.month,
-        start: startOfMonth(now),
-        end: endOfMonth(now)
-      };
-  }
 }
 
 function calculateOutstandingExpected(payment: AggregatedPayment): number {
@@ -596,204 +490,6 @@ function createDashboardContext(request: NextRequest): DashboardRequestContext {
   };
 }
 
-function groupTrendByTimeframe(dates: Date[], timeframe: TimeframeInfo): TrendPoint[] {
-  if (dates.length === 0) return [];
-
-  if (timeframe.key === 'custom') {
-    const firstDate = new Date(dates[0]);
-    const earliest = dates.reduce((min, current) => {
-      const candidate = new Date(current);
-      return candidate < min ? candidate : min;
-    }, firstDate);
-    const latest = dates.reduce((max, current) => {
-      const candidate = new Date(current);
-      return candidate > max ? candidate : max;
-    }, firstDate);
-
-    const rangeStart = timeframe.start ?? earliest;
-    const rangeEnd = timeframe.end ?? latest;
-    const dayDiff = Math.max(differenceInCalendarDays(rangeEnd, rangeStart), 0);
-
-    const derivedKey: TimeframeKey =
-      dayDiff <= 1 ? 'day' : dayDiff <= 31 ? 'week' : dayDiff <= 180 ? 'month' : 'year';
-
-    return groupTrendByTimeframe(dates, { ...timeframe, key: derivedKey });
-  }
-
-  const buckets = new Map<string, { label: string; value: number; sort: number }>();
-
-  dates.forEach((date) => {
-    const d = new Date(date);
-    let key: string;
-    let label: string;
-    let sortValue: number;
-
-    switch (timeframe.key) {
-      case 'day': {
-        const hourStart = startOfHour(d);
-        key = format(hourStart, 'yyyy-MM-dd-HH');
-        label = format(hourStart, 'ha');
-        sortValue = hourStart.getTime();
-        break;
-      }
-      case 'week': {
-        const dayStart = startOfDay(d);
-        key = format(dayStart, 'yyyy-MM-dd');
-        label = format(dayStart, 'EEE dd');
-        sortValue = dayStart.getTime();
-        break;
-      }
-      case 'month':
-      case 'next_month': {
-        const weekStart = startOfWeek(d, { weekStartsOn: 1 });
-        key = `${format(weekStart, 'yyyy')}-W${format(weekStart, 'II')}`;
-        label = `${format(weekStart, 'MMM d')}`;
-        sortValue = weekStart.getTime();
-        break;
-      }
-      case 'year':
-      case 'ytd':
-      default: {
-        const monthStart = startOfMonth(d);
-        key = `${format(monthStart, 'yyyy-MM')}`;
-        label = format(monthStart, 'MMM yy');
-        sortValue = monthStart.getTime();
-        break;
-      }
-    }
-
-    const bucket = buckets.get(key);
-    if (bucket) {
-      bucket.value += 1;
-    } else {
-      buckets.set(key, { label, value: 1, sort: sortValue });
-    }
-  });
-
-  return Array.from(buckets.entries())
-    .map(([key, bucket]) => ({ key, label: bucket.label, value: bucket.value, sort: bucket.sort }))
-    .sort((a, b) => a.sort - b.sort)
-    .map(({ sort: _sort, ...rest }) => rest);
-}
-
-interface TimeframeBucket {
-  key: string;
-  label: string;
-  sort: number;
-}
-
-function buildTimeframeBuckets(timeframe: TimeframeInfo): TimeframeBucket[] {
-  const now = new Date();
-  let effectiveKey: TimeframeKey = timeframe.key;
-  let rangeStart: Date;
-  let rangeEnd: Date;
-
-  if (timeframe.key === 'custom') {
-    const start = timeframe.start ?? startOfMonth(now);
-    const end = timeframe.end ?? endOfDay(now);
-    const dayDiff = Math.max(differenceInCalendarDays(end, start), 0);
-    effectiveKey = dayDiff <= 1 ? 'day' : dayDiff <= 7 ? 'week' : dayDiff <= 31 ? 'month' : dayDiff <= 180 ? 'month' : 'year';
-    rangeStart = startOfDay(start);
-    rangeEnd = endOfDay(end);
-  } else if (timeframe.key === 'all') {
-    rangeStart = subYears(timeframe.end ?? now, 2);
-    rangeEnd = endOfDay(timeframe.end ?? now);
-    effectiveKey = 'year';
-  } else {
-    rangeStart = timeframe.start ? startOfDay(timeframe.start) : startOfDay(now);
-    rangeEnd = timeframe.end ? endOfDay(timeframe.end) : endOfDay(now);
-  }
-
-  const buckets: TimeframeBucket[] = [];
-  let cursor: Date;
-
-  switch (effectiveKey) {
-    case 'day': {
-      cursor = startOfHour(rangeStart);
-      const endHour = endOfDay(rangeEnd);
-      while (cursor <= endHour) {
-        buckets.push({
-          key: format(cursor, 'yyyy-MM-dd-HH'),
-          label: format(cursor, 'ha'),
-          sort: cursor.getTime()
-        });
-        cursor = addHours(cursor, 1);
-      }
-      break;
-    }
-    case 'week': {
-      cursor = startOfDay(rangeStart);
-      while (cursor <= rangeEnd) {
-        buckets.push({
-          key: format(cursor, 'yyyy-MM-dd'),
-          label: format(cursor, 'EEE dd'),
-          sort: cursor.getTime()
-        });
-        cursor = addDays(cursor, 1);
-      }
-      break;
-    }
-    case 'month':
-    case 'next_month': {
-      cursor = startOfWeek(rangeStart, { weekStartsOn: 1 });
-      const endWeek = startOfWeek(rangeEnd, { weekStartsOn: 1 });
-      while (cursor <= endWeek) {
-        buckets.push({
-          key: `${format(cursor, 'yyyy')}-W${format(cursor, 'II')}`,
-          label: format(cursor, 'MMM d'),
-          sort: cursor.getTime()
-        });
-        cursor = addWeeks(cursor, 1);
-      }
-      break;
-    }
-    case 'year':
-    case 'ytd':
-    default: {
-      cursor = startOfMonth(rangeStart);
-      const endMonth = startOfMonth(rangeEnd);
-      while (cursor <= endMonth) {
-        buckets.push({
-          key: format(cursor, 'yyyy-MM'),
-          label: format(cursor, 'MMM yy'),
-          sort: cursor.getTime()
-        });
-        cursor = addMonths(cursor, 1);
-      }
-      break;
-    }
-  }
-
-  return buckets;
-}
-
-function getTimeframeBucketKey(date: Date, timeframe: TimeframeInfo): string {
-  const now = new Date();
-  let effectiveKey: TimeframeKey = timeframe.key;
-
-  if (timeframe.key === 'custom' && timeframe.start && timeframe.end) {
-    const dayDiff = Math.max(differenceInCalendarDays(timeframe.end, timeframe.start), 0);
-    effectiveKey = dayDiff <= 1 ? 'day' : dayDiff <= 7 ? 'week' : dayDiff <= 31 ? 'month' : dayDiff <= 180 ? 'month' : 'year';
-  } else if (timeframe.key === 'all') {
-    effectiveKey = 'year';
-  }
-
-  const d = new Date(date);
-  switch (effectiveKey) {
-    case 'day':
-      return format(startOfHour(d), 'yyyy-MM-dd-HH');
-    case 'week':
-      return format(startOfDay(d), 'yyyy-MM-dd');
-    case 'month':
-    case 'next_month':
-      return `${format(startOfWeek(d, { weekStartsOn: 1 }), 'yyyy')}-W${format(startOfWeek(d, { weekStartsOn: 1 }), 'II')}`;
-    case 'year':
-    case 'ytd':
-    default:
-      return format(startOfMonth(d), 'yyyy-MM');
-  }
-}
-
 function computeAverage(values: number[]): number {
   if (!values.length) return 0;
   const total = values.reduce((sum, value) => sum + value, 0);
@@ -842,7 +538,7 @@ function scoreOutsideLenderNoteSignals(
   } else if (softMatches.length > 0) {
     const softScore = Math.min(18, 10 + (softMatches.length - 1) * 4);
     score += softScore;
-    reasons.push({ label: `Notes suggest lender-shopping (${softMatches[0]})`, score: softScore });
+    reasons.push({ label: `${AFC_RISK_OUTSIDE_NOTE_SOFT_REASON_PREFIX} (${softMatches[0]})`, score: softScore });
     confidence = 'medium';
   }
 
@@ -856,79 +552,6 @@ function scoreOutsideLenderNoteSignals(
   }
 
   return { score: Math.round(score * 10) / 10, reasons, confidence };
-}
-
-function isWithinTimeframe(date: Date | null | undefined, timeframe: TimeframeInfo): boolean {
-  if (!date) return false;
-  const value = new Date(date);
-  if (Number.isNaN(value.getTime())) return false;
-  if (timeframe.start && value < timeframe.start) return false;
-  if (timeframe.end && value > timeframe.end) return false;
-  return true;
-}
-
-function getPreviousPeriodRange(timeframe: TimeframeInfo): { start: Date; end: Date } | null {
-  const currentStart = timeframe.start;
-  const currentEnd = timeframe.end;
-  if (!currentStart || !currentEnd || currentStart.getTime() >= currentEnd.getTime()) {
-    return null;
-  }
-
-  switch (timeframe.key) {
-    case 'all':
-      return null;
-    case 'day': {
-      const previousDay = addDays(startOfDay(currentStart), -1);
-      return {
-        start: startOfDay(previousDay),
-        end: endOfDay(previousDay)
-      };
-    }
-    case 'week': {
-      const currentWeekStart = startOfWeek(currentStart, { weekStartsOn: 1 });
-      const previousWeekStart = startOfWeek(subWeeks(currentWeekStart, 1), { weekStartsOn: 1 });
-      return {
-        start: startOfDay(previousWeekStart),
-        end: endOfDay(addDays(previousWeekStart, 6))
-      };
-    }
-    case 'month': {
-      const currentMonthStart = startOfMonth(currentStart);
-      const previousMonthStart = startOfMonth(subMonths(currentMonthStart, 1));
-      return {
-        start: previousMonthStart,
-        end: endOfMonth(previousMonthStart)
-      };
-    }
-    case 'next_month': {
-      const currentMonthStart = startOfMonth(currentStart);
-      const previousMonthStart = startOfMonth(subMonths(currentMonthStart, 1));
-      return {
-        start: previousMonthStart,
-        end: endOfMonth(previousMonthStart)
-      };
-    }
-    case 'custom': {
-      const periodMs = currentEnd.getTime() - currentStart.getTime();
-      const previousEnd = new Date(currentStart.getTime() - 1);
-      const previousStart = new Date(previousEnd.getTime() - periodMs);
-      return {
-        start: previousStart,
-        end: previousEnd
-      };
-    }
-    case 'year':
-    case 'ytd':
-    default: {
-      const periodMs = currentEnd.getTime() - currentStart.getTime();
-      const previousEnd = new Date(currentStart.getTime() - 1);
-      const previousStart = new Date(previousEnd.getTime() - periodMs);
-      return {
-        start: previousStart,
-        end: previousEnd
-      };
-    }
-  }
 }
 
 function getSlaMetricDate(
@@ -956,6 +579,9 @@ function formatTerminatedAddress(referral: AggregatedPayment['referral']): strin
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
+  // Response-time instrumentation: log total wall-clock time for GET /api/dashboard
+  // so we can catch regressions without a heavy APM integration.
+  const requestStartedAt = Date.now();
   await connectMongo();
   const session = await getCurrentSession();
 
@@ -999,14 +625,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   if (missingProfile) {
-    return NextResponse.json({
+    const missingProfileDurationMs = Date.now() - requestStartedAt;
+    const missingProfileResponse = NextResponse.json({
       timeframe,
       permissions: {
         canViewGlobal: role === 'admin',
         role: role ?? null
       },
       main: {
-        funnel: { stages: [] },
+        funnel: { stages: [], terminal: { lostTotal: 0, terminatedTotal: 0 } },
         periodOverPeriod: null,
         summary: {
           totalReferrals: 0,
@@ -1038,6 +665,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           realizedRevenueCents: 0,
           generatedRevenueCents: 0,
           closedNotPaidCents: 0,
+          revenueRealizationRatePercent: null,
+          closedNotPaidPercentOfExpected: null,
           averageDaysNewLeadToContract: 0,
           averageDaysClosedToPaid: 0,
           averageClosedDealAmountCents: 0,
@@ -1136,9 +765,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         usedAfcRate: 0,
         lostReferrals: 0,
         closeRate: 0,
-        dealsClosed: 0
+        dealsClosed: 0,
+        referralRows: [],
+        dealRows: []
       }
     });
+    missingProfileResponse.headers.set('server-timing', `dashboard;dur=${missingProfileDurationMs}`);
+    return missingProfileResponse;
   }
 
   const paymentMatch = Object.entries(referralMatch).reduce<Record<string, unknown>>((acc, [key, value]) => {
@@ -1155,7 +788,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...referralMatch,
   })
     .select(
-      'createdAt updatedAt referralDate status statusLastUpdated referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents initialNotes notes.content notes.createdAt assignedAgent buySideAgent sellSideAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin dealSide clientType sla lookingInZip lookingInZips loanFileNumber borrower.name'
+      'createdAt updatedAt referralDate status statusLastUpdated referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents initialNotes notes.content notes.createdAt assignedAgent buySideAgent sellSideAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin dealSide clientType sla lookingInZip lookingInZips loanFileNumber borrower.name audit.field audit.previousValue audit.newValue audit.timestamp'
     )
     .lean<DashboardReferral[]>()
     .exec();
@@ -1355,21 +988,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     agentNpsMap.set(id, (agent as { npsScore?: number | null }).npsScore ?? null);
   });
 
-  const getAgentDesignation = (payment: AggregatedPayment): 'AHA' | 'AHA_OOS' | 'AGIT' | null => {
-    const agentId = payment.agentId ?? payment.referral?.assignedAgent;
-    if (!agentId) return null;
-    return agentDesignationMap.get(agentId.toString()) ?? null;
-  };
+  const getAgentDesignation = (payment: AggregatedPayment): NetworkDesignation | null =>
+    sharedGetPaymentAgentDesignation(payment, agentDesignationMap);
 
-  const getReferralDesignation = (referral: DashboardReferral): 'AHA' | 'AHA_OOS' | 'AGIT' | null => {
-    const slots = [referral.assignedAgent, referral.buySideAgent, referral.sellSideAgent];
-    for (const id of slots) {
-      if (!id) continue;
-      const des = agentDesignationMap.get(id.toString());
-      if (des) return des;
-    }
-    return null;
-  };
+  const getReferralDesignation = (referral: DashboardReferral): NetworkDesignation | null =>
+    sharedGetReferralDesignation(referral, agentDesignationMap);
 
   const matchesNetwork = (designation: 'AHA' | 'AHA_OOS' | 'AGIT' | null) => {
     if (context.networkFilter === 'ALL') return true;
@@ -1386,23 +1009,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       ? filteredPayments
       : filteredPayments.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
 
-  const isWithinTimeframe = (date: Date | string | null | undefined) => {
-    if (!date) return false;
-    const candidate = new Date(date);
-    if (Number.isNaN(candidate.getTime())) return false;
-    if (timeframeStart && candidate < timeframeStart) return false;
-    if (timeframeEnd && candidate > timeframeEnd) return false;
-    return true;
-  };
+  // M-37: delegate to the module-level helper; the local name is preserved.
+  const moduleIsWithinTimeframe = isDateWithinDashboardTimeframe;
+  const isWithinTimeframe = (date: Date | string | null | undefined) =>
+    moduleIsWithinTimeframe(date instanceof Date ? date : date ? new Date(date) : null, timeframe);
 
   const referralsByNetwork =
     context.networkFilter === 'ALL'
       ? referrals
       : referrals.filter((referral) => matchesNetwork(getReferralDesignation(referral)));
 
-  const filteredReferrals = referralsByNetwork.filter((referral) =>
-    isWithinTimeframe(referral.createdAt)
-  );
+  // M-1: anchor the referral-in-timeframe check on min(referralDate, createdAt)
+  // so a back-dated referralDate counts in the correct period per AGENTS.md.
+  const filteredReferrals = referralsByNetwork.filter((referral) => {
+    const anchor = getReferralTimeframeAnchor(referral);
+    return anchor ? isWithinTimeframe(anchor) : false;
+  });
 
   const terminatedWithinNetwork =
     context.networkFilter === 'ALL'
@@ -1413,12 +1035,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const referralRequestsBySourceMap = new Map<string, number>();
   const referralRequestsByEndorserMap = new Map<string, number>();
   const referralRequestsByStateMap = new Map<string, number>();
+  // C-16: precompute state once per referral id and reuse across both the
+  // referral-requests pass and the revenue-by-state pass below.
+  const referralStateCache = new Map<string, string>();
+  const resolveReferralState = async (referral: ReferralForState | undefined | null): Promise<string> => {
+    if (!referral) return 'Unknown';
+    const cacheKey = (referral as { _id?: { toString(): string } })._id?.toString();
+    if (cacheKey && referralStateCache.has(cacheKey)) {
+      return referralStateCache.get(cacheKey) as string;
+    }
+    const state = await extractStateAsync(referral);
+    if (cacheKey) referralStateCache.set(cacheKey, state);
+    return state;
+  };
   for (const referral of filteredReferrals) {
     const source = String(referral.source ?? 'Unknown');
     referralRequestsBySourceMap.set(source, (referralRequestsBySourceMap.get(source) ?? 0) + 1);
     const endorser = referral.endorser?.trim() || 'Unattributed';
     referralRequestsByEndorserMap.set(endorser, (referralRequestsByEndorserMap.get(endorser) ?? 0) + 1);
-    const state = await extractStateAsync(referral);
+    const state = await resolveReferralState(referral as ReferralForState);
     referralRequestsByStateMap.set(state, (referralRequestsByStateMap.get(state) ?? 0) + 1);
   }
   // Close rate calculation: For accurate close rate, we need to match deals to referrals
@@ -1502,18 +1137,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!closingDate) return false;
     return closingDate > endOfToday;
   });
-  const nonTerminatedStatuses = new Set([
+  // M-7: "pending" closings must be deals that are not yet closed, so exclude
+  // closed / payment_sent / paid from this/next month counts. Those deals have
+  // already resolved their closing event and don't belong in a "pending"
+  // bucket.
+  const pendingClosingStatuses = new Set([
     'under_contract',
     'past_inspection',
     'past_appraisal',
-    'clear_to_close',
-    'closed',
-    'payment_sent',
-    'paid'
+    'clear_to_close'
   ]);
   const pendingClosingsThisMonth = paymentsByNetwork.filter((payment) => {
-    if (payment.status === 'terminated') return false;
-    if (!nonTerminatedStatuses.has(payment.status)) return false;
+    if (!pendingClosingStatuses.has(payment.status)) return false;
     if (payment.usedAssignedAgent !== true) return false;
     const closingDate = payment.closingDate ? new Date(payment.closingDate) : null;
     return (
@@ -1523,8 +1158,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   });
   const pendingClosingsNextMonth = paymentsByNetwork.filter((payment) => {
-    if (payment.status === 'terminated') return false;
-    if (!nonTerminatedStatuses.has(payment.status)) return false;
+    if (!pendingClosingStatuses.has(payment.status)) return false;
     if (payment.usedAssignedAgent !== true) return false;
     const closingDate = payment.closingDate ? new Date(payment.closingDate) : null;
     return (
@@ -1533,7 +1167,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       closingDate <= endOfNextMonth
     );
   });
-  const closeRate = totalReferrals === 0 ? 0 : (dealsClosedForCloseRate.length / totalReferrals) * 100;
+  const cohortCloseRateSummary = computeCohortCloseRate(
+    dealsClosedForCloseRate.length,
+    totalReferrals
+  );
 
   // Identify Glenn Beck referrals early to exclude from revenue
   // Use referralsByNetwork (not filteredReferrals) to exclude all Glenn Beck referrals
@@ -1640,11 +1277,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           return storedDays;
         }
 
-        const leadStart = payment.referral?.referralDate
+        // M-26: anchor on the earliest of referralDate / createdAt so a
+        // referralDate backfilled later than createdAt doesn't shrink the
+        // days-to-contract window.
+        const referralDateValue = payment.referral?.referralDate
           ? new Date(payment.referral.referralDate)
-          : payment.referral?.createdAt
-            ? new Date(payment.referral.createdAt)
-            : null;
+          : null;
+        const createdAtValue = payment.referral?.createdAt
+          ? new Date(payment.referral.createdAt)
+          : null;
+        const leadStart = referralDateValue && createdAtValue
+          ? (referralDateValue.getTime() < createdAtValue.getTime() ? referralDateValue : createdAtValue)
+          : (referralDateValue ?? createdAtValue);
         const underContractAt = payment.referral?.sla?.lastUnderContractAt
           ? new Date(payment.referral.sla.lastUnderContractAt)
           : null;
@@ -1701,7 +1345,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const endorser = payment.referral?.endorser?.trim() || 'Unattributed';
     revenueByEndorserMap.set(endorser, (revenueByEndorserMap.get(endorser) ?? 0) + revenue);
 
-    const state = await extractStateAsync(payment.referral);
+    const state = await resolveReferralState(payment.referral as ReferralForState);
     revenueByStateMap.set(state, (revenueByStateMap.get(state) ?? 0) + revenue);
   }
 
@@ -1725,56 +1369,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ACTIVE_PIPELINE_STATUSES.has((referral.status as string | undefined) ?? '')
   ).length;
 
-  // Conversion funnel: stages in pipeline order; "Showing Homes" normalized to "Active Lead"
-  const FUNNEL_ORDER = [
-    'New Lead',
-    'Paired',
-    'In Communication',
-    'Active Lead',
-    'Under Contract',
-    'Closed',
-    'Lost',
-    'Terminated'
-  ] as const;
-  const normalizeFunnelStatus = (status: string | undefined): string => {
-    if (!status) return 'New Lead';
-    return status === 'Showing Homes' ? 'Active Lead' : status;
-  };
-  const funnelCountByStatus = new Map<string, number>();
-  FUNNEL_ORDER.forEach((s) => funnelCountByStatus.set(s, 0));
-  const funnelDaysInStageByStatus = new Map<string, number[]>();
-  filteredReferrals.forEach((referral) => {
-    let status = normalizeFunnelStatus(referral.status);
-    if (status !== 'Closed' && closedDealReferralIds.has(referral._id.toString())) {
-      status = 'Closed';
-    }
-    funnelCountByStatus.set(status, (funnelCountByStatus.get(status) ?? 0) + 1);
-    const statusLastUpdated = referral.statusLastUpdated ?? referral.createdAt;
-    if (statusLastUpdated) {
-      const d = new Date(statusLastUpdated);
-      if (!Number.isNaN(d.getTime())) {
-        const days = differenceInCalendarDays(new Date(), d);
-        const arr = funnelDaysInStageByStatus.get(status) ?? [];
-        arr.push(days);
-        funnelDaysInStageByStatus.set(status, arr);
-      }
-    }
-  });
-  const funnelStages = FUNNEL_ORDER.map((status, index) => {
-    const count = funnelCountByStatus.get(status) ?? 0;
-    const prevCount = index === 0 ? count : (funnelCountByStatus.get(FUNNEL_ORDER[index - 1]) ?? 0);
-    const conversionFromPrevious = prevCount === 0 ? null : (count / prevCount) * 100;
-    const dropOffPercent = prevCount === 0 ? null : 100 - (conversionFromPrevious ?? 0);
-    const daysArr = funnelDaysInStageByStatus.get(status) ?? [];
-    const avgDaysInStage = daysArr.length === 0 ? null : daysArr.reduce((a, b) => a + b, 0) / daysArr.length;
-    return {
-      status,
-      label: status,
-      count,
-      conversionFromPrevious: conversionFromPrevious != null ? Number(conversionFromPrevious.toFixed(1)) : null,
-      dropOffPercent: dropOffPercent != null ? Number(dropOffPercent.toFixed(1)) : null,
-      avgDaysInStage: avgDaysInStage != null ? Number(avgDaysInStage.toFixed(1)) : null
-    };
+  // Cohort conversion funnel: stage N's count = referrals whose max stage ever reached >= N.
+  // Derived from referral.audit status-transition entries, with SLA timestamps and the
+  // closed-deal override as fallbacks. "Showing Homes" normalizes to "Active Lead".
+  // Lost / Terminated are reported as branch totals, not funnel rows.
+  const funnelInputs: FunnelReferralInput[] = filteredReferrals.map((referral) => ({
+    _id: referral._id,
+    status: referral.status as string | undefined,
+    statusLastUpdated: referral.statusLastUpdated ?? null,
+    createdAt: referral.createdAt ?? null,
+    referralDate: referral.referralDate ?? null,
+    audit: referral.audit ?? null,
+    sla: referral.sla ?? null
+  }));
+  const conversionFunnel = buildConversionFunnel(funnelInputs, {
+    closedDealReferralIds
   });
 
   const revenueBySource = Array.from(revenueBySourceMap.entries())
@@ -1960,10 +1569,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const dealStats = dealTimeframeMap.get(bucket.key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
     const generatedStats = generatedByTimeframe.get(bucket.key) ?? { dealsClosed: 0, revenueGeneratedCents: 0 };
     const dealsClosedForCloseRate = dealsClosedByReferralBucket.get(bucket.key) ?? 0;
-    const closeRate =
-      referralStats.total === 0
-        ? 0
-        : (dealsClosedForCloseRate / Math.max(referralStats.total, 1)) * 100;
+    const closeRate = computeCohortCloseRate(dealsClosedForCloseRate, referralStats.total);
     return {
       key: bucket.key,
       label: bucket.label,
@@ -1998,9 +1604,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const cohortDeals = dealsFromCohort.get(bucket.key) ?? 0;
     const preApprovalStats =
       preApprovalMap.get(bucket.key) ?? { preApprovals: 0, ahaPreApprovals: 0, ahaOosPreApprovals: 0, updatedAt: undefined };
-    const monthlyCloseRate = referralStats.total === 0
-      ? 0
-      : (cohortDeals / referralStats.total) * 100;
+    const monthlyCloseRate = computeCohortCloseRate(cohortDeals, referralStats.total);
     const totalPreApprovals = preApprovalStats.preApprovals > 0
       ? preApprovalStats.preApprovals
       : preApprovalStats.ahaPreApprovals + preApprovalStats.ahaOosPreApprovals;
@@ -2060,21 +1664,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       if (stats) sum += stats.revenueGeneratedCents;
     }
     return sum;
-  })();
-
-  // Derive card close rate from same source as graph (monthlyReferrals)
-  const closeRateForSummary = (() => {
-    let sumDeals = 0;
-    let sumReferrals = 0;
-    for (const entry of monthlyReferrals) {
-      const [y, m] = entry.monthKey.split('-').map(Number);
-      const bucketStart = startOfMonth(new Date(y, m - 1, 1));
-      if (timeframeEnd && bucketStart > timeframeEnd) continue;
-      if (timeframeStart && bucketStart < timeframeStart) continue;
-      sumDeals += entry.totalReferrals === 0 ? 0 : (entry.closeRate / 100) * entry.totalReferrals;
-      sumReferrals += entry.totalReferrals;
-    }
-    return sumReferrals === 0 ? 0 : (sumDeals / sumReferrals) * 100;
   })();
 
   const closedInTimeframe = (payment: AggregatedPayment) => {
@@ -2230,8 +1819,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return b.paidDate.localeCompare(a.paidDate);
     });
 
+  // C-5: generatedRevenueList must mirror the KPI (payments bucketed by
+  // resolveClosingDate), not the dealsClosedInTimeframe (metricDate) list.
+  const dealsGeneratedInTimeframe = paymentsByNetwork.filter((payment) => {
+    if (!isClosedDealEligible(payment)) return false;
+    const closingDate = resolveClosingDate(payment);
+    if (!closingDate) return false;
+    if (timeframeStart && closingDate < timeframeStart) return false;
+    if (timeframeEnd && closingDate > timeframeEnd) return false;
+    return true;
+  });
   const generatedRevenueList = sortByClosingDateDesc(
-    dealsClosedInTimeframe.map((payment) => serializeClosedDeal(payment))
+    dealsGeneratedInTimeframe.map((payment) => serializeClosedDeal(payment))
   );
 
   const dealsClosedList = sortByClosingDateDesc(
@@ -2406,12 +2005,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   filteredPaymentsByNetwork.forEach((payment) => {
     const key = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     const current = mcRevenueMap.get(key) ?? { revenue: 0, expected: 0, closed: 0, totalReferrals: referralByMcMap.get(key) ?? 0 };
-    const isOutsideAgentDeal = payment.agentAttribution === 'OUTSIDE_AGENT';
-    if (!isOutsideAgentDeal) {
+    // C-9/C-20: MC revenue must use the same eligibility filter as Main
+    // (excludes outside-agent attributions AND Glenn Beck referrals).
+    const revenueEligible = isRevenueEligiblePayment(payment);
+    if (revenueEligible) {
       current.revenue += payment.receivedAmountCents ?? 0;
       current.expected += calculateOutstandingExpected(payment);
     }
-    if (!isOutsideAgentDeal && CLOSED_DEAL_STATUSES.has(payment.status)) {
+    if (revenueEligible && CLOSED_DEAL_STATUSES.has(payment.status)) {
       current.closed += 1;
     }
     current.totalReferrals = referralByMcMap.get(key) ?? current.totalReferrals;
@@ -2422,12 +2023,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // referrals created in timeframe (denominator) and those same referrals that reached closed-like statuses (numerator).
   const cohortClosedByMcMap = new Map<string, number>();
   const cohortClosedByAgentMap = new Map<string, number>();
+  // M-17: cohort-aligned revenue per MC — revenue from payments whose referral
+  // was created in the current timeframe, so revenuePerReferral's numerator
+  // and denominator share the same cohort.
+  const cohortRevenueByMcMap = new Map<string, number>();
   dealsClosedForCloseRate.forEach((payment) => {
     const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     cohortClosedByMcMap.set(mcKey, (cohortClosedByMcMap.get(mcKey) ?? 0) + 1);
 
     const agentKey = payment.referral?.assignedAgent ? payment.referral.assignedAgent.toString() : 'unassigned';
     cohortClosedByAgentMap.set(agentKey, (cohortClosedByAgentMap.get(agentKey) ?? 0) + 1);
+
+    if (isRevenueEligiblePayment(payment)) {
+      const revenue = payment.receivedAmountCents ?? 0;
+      if (revenue > 0) {
+        cohortRevenueByMcMap.set(mcKey, (cohortRevenueByMcMap.get(mcKey) ?? 0) + revenue);
+      }
+    }
   });
 
   const mcTotalClosedDealsMap = new Map<string, number>();
@@ -2435,7 +2047,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const mcOutsideLenderLossMap = new Map<string, number>();
   const mcNoAfcClosesMap = new Map<string, number>();
   const mcNoAssignedAgentClosesMap = new Map<string, number>();
-  allClosedDealsInTimeframe.forEach((payment) => {
+  // C-10: MC close-rate leaderboards must use `isClosedDealEligible` so that
+  // outside-agent / usedAssignedAgent=false payments don't inflate denominators.
+  const eligibleClosedDealsInTimeframe = allClosedDealsInTimeframe.filter((payment) =>
+    isClosedDealEligible(payment)
+  );
+  eligibleClosedDealsInTimeframe.forEach((payment) => {
     const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     mcTotalClosedDealsMap.set(mcKey, (mcTotalClosedDealsMap.get(mcKey) ?? 0) + 1);
     if (payment.usedAfc !== true) {
@@ -2482,14 +2099,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const totalClosedDeals = mcTotalClosedDealsMap.get(key) ?? 0;
       const assignedAgentCloses = mcAssignedAgentClosesMap.get(key) ?? 0;
       const outsideLenderLossCount = mcOutsideLenderLossMap.get(key) ?? 0;
-      const assignedAgentCloseRate =
-        totalClosedDeals === 0 ? 0 : (assignedAgentCloses / totalClosedDeals) * 100;
-      const outsideLenderLossRate =
-        totalClosedDeals === 0 ? 0 : (outsideLenderLossCount / totalClosedDeals) * 100;
+      const assignedAgentCloseRate = safePercent(assignedAgentCloses, totalClosedDeals);
+      const outsideLenderLossRate = safePercent(outsideLenderLossCount, totalClosedDeals);
       return {
         id: key,
         name: key === 'unassigned' ? 'Unassigned MC' : lenderNameMap.get(key) ?? 'Unknown MC',
-        closeRate: totalReferrals === 0 ? 0 : (dealsClosed / totalReferrals) * 100,
+        closeRate: computeCohortCloseRate(dealsClosed, totalReferrals),
         dealsClosed,
         totalReferrals,
         assignedAgentCloses,
@@ -2511,8 +2126,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         name: key === 'unassigned' ? 'Unassigned MC' : lenderNameMap.get(key) ?? 'Unknown MC',
         outsideLenderLossCount,
         totalClosedDeals,
-        outsideLenderLossRate:
-          totalClosedDeals === 0 ? 0 : (outsideLenderLossCount / totalClosedDeals) * 100
+        outsideLenderLossRate: safePercent(outsideLenderLossCount, totalClosedDeals)
       };
     })
     .sort((a, b) => b.outsideLenderLossRate - a.outsideLenderLossRate || b.outsideLenderLossCount - a.outsideLenderLossCount)
@@ -2658,6 +2272,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let mcDistinctDealsPushedBack = 0;
   let mcTotalPushbackEvents = 0;
   let mcTotalPushbackDays = 0;
+  // M-15: track events that actually contributed measured days so the
+  // avg-days-per-event denominator excludes legacy count-only events that
+  // have no pushedBackDays.
+  let mcTotalPushbackEventsWithDays = 0;
   let mcEligibleDealsForPushbackInScope = 0;
 
   // Closed-only pass: AFC capture, close velocity, and forecast accuracy only make
@@ -2667,7 +2285,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const pairedAtRaw = payment.referral?.sla?.lastPairedAt;
     const closingDate = resolveClosingDate(payment);
     const pairedAt = pairedAtRaw ? new Date(pairedAtRaw) : null;
+    // M-13: close-velocity must only include deals that actually used the
+    // assigned agent (matches isClosedDealEligible). Outside-agent closings
+    // don't represent the MC's velocity and were skewing the median.
     if (
+      isClosedDealEligible(payment) &&
       closingDate &&
       pairedAt &&
       !Number.isNaN(closingDate.getTime()) &&
@@ -2698,10 +2320,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       mcAfcCaptureMap.set(key, current);
     }
 
-    const forecastCurrent = mcForecastMap.get(key) ?? { expected: 0, realized: 0 };
-    forecastCurrent.expected += Math.max(payment.expectedAmountCents ?? 0, 0);
-    forecastCurrent.realized += Math.max(payment.receivedAmountCents ?? 0, 0);
-    mcForecastMap.set(key, forecastCurrent);
+    // M-14: forecast accuracy should align with the revenue-eligible deal
+    // set so outside-agent deals aren't counted against MC forecast.
+    if (isRevenueEligiblePayment(payment)) {
+      const forecastCurrent = mcForecastMap.get(key) ?? { expected: 0, realized: 0 };
+      forecastCurrent.expected += Math.max(payment.expectedAmountCents ?? 0, 0);
+      forecastCurrent.realized += Math.max(payment.receivedAmountCents ?? 0, 0);
+      mcForecastMap.set(key, forecastCurrent);
+    }
   });
 
   // Pushback pass: any non-terminated deal whose closing date was moved later counts,
@@ -2714,7 +2340,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       (mcEligibleDealsForPushbackRateMap.get(key) ?? 0) + 1
     );
 
-    const { events: pushbackEvents, pushedBackDays } = resolvePushbackMetricsInTimeframe(payment, timeframe);
+    const { events: pushbackEvents, pushedBackDays, eventsWithDays } = resolvePushbackMetricsInTimeframe(
+      payment,
+      timeframe
+    );
     if (pushbackEvents > 0) {
       const current = mcPushbackStatsMap.get(key) ?? {
         dealsWithPushback: 0,
@@ -2729,6 +2358,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       mcDistinctDealsPushedBack += 1;
       mcTotalPushbackEvents += pushbackEvents;
       mcTotalPushbackDays += pushedBackDays;
+      mcTotalPushbackEventsWithDays += eventsWithDays;
     }
   });
 
@@ -2736,11 +2366,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     string,
     { bucket0To30: number; bucket31To60: number; bucket61Plus: number; total: number }
   >();
-  const inactiveReferralStatuses = new Set(['closed', 'lost']);
+  // C-18: use `normalizeStatusKey` (same helper used elsewhere) and include
+  // 'terminated' in addition to 'closed' / 'lost' so terminal referrals don't
+  // appear as aging pipeline risk.
+  const inactiveReferralStatuses = new Set(['closed', 'lost', 'terminated']);
   const agingAnchorDate = timeframeEnd ?? new Date();
   filteredReferrals.forEach((referral) => {
     const key = referral.lender ? referral.lender.toString() : 'unassigned';
-    const normalizedStatus = (referral.status ?? '').trim().toLowerCase();
+    const normalizedStatus = normalizeStatusKey(referral.status ?? '');
     if (inactiveReferralStatuses.has(normalizedStatus)) {
       return;
     }
@@ -2882,7 +2515,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     mcKpiDisplayMap.referralCount.set(id, referralsForMc.toLocaleString());
 
     if (referralsForMc > 0) {
-      const revenuePerReferral = realizedRevenue / referralsForMc;
+      // M-17: use cohort-aligned revenue (revenue from referrals created in
+      // this timeframe) so the numerator matches the denominator cohort.
+      const cohortRevenue = cohortRevenueByMcMap.get(id) ?? 0;
+      const revenuePerReferral = cohortRevenue / referralsForMc;
       mcKpiRaw.revenuePerReferral.set(id, revenuePerReferral);
       mcKpiDisplayMap.revenuePerReferral.set(id, `$${Math.round(revenuePerReferral / 100).toLocaleString()}`);
     }
@@ -2953,11 +2589,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     if (totalClosedDeals > 0) {
-      const noAfcCloseRate = ((mcNoAfcClosesMap.get(id) ?? 0) / totalClosedDeals) * 100;
+      const noAfcCloseRate = safePercent(mcNoAfcClosesMap.get(id) ?? 0, totalClosedDeals);
       mcKpiRaw.noAfcCloseRate.set(id, noAfcCloseRate);
       mcKpiDisplayMap.noAfcCloseRate.set(id, `${noAfcCloseRate.toFixed(1)}%`);
 
-      const noAssignedAgentCloseRate = ((mcNoAssignedAgentClosesMap.get(id) ?? 0) / totalClosedDeals) * 100;
+      const noAssignedAgentCloseRate = safePercent(
+        mcNoAssignedAgentClosesMap.get(id) ?? 0,
+        totalClosedDeals
+      );
       mcKpiRaw.noAssignedAgentCloseRate.set(id, noAssignedAgentCloseRate);
       mcKpiDisplayMap.noAssignedAgentCloseRate.set(id, `${noAssignedAgentCloseRate.toFixed(1)}%`);
     }
@@ -3008,8 +2647,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         ? AHA_NEUTRAL_SCORE
         : mcKpiNormalized[key].get(id) ?? AHA_NEUTRAL_SCORE;
       const weight = MC_KPI_WEIGHTS[key];
-      weightedSum += normalizedScore * weight;
-      totalWeight += weight;
+      // M-11 / U-5: exclude neutral-filled KPIs from the composite denominator
+      // so the score reflects measured performance only.
+      if (!neutralFilled) {
+        weightedSum += normalizedScore * weight;
+        totalWeight += weight;
+      }
       kpis.push({
         label: MC_KPI_LABELS[key],
         key,
@@ -3223,8 +2866,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         normalizedRiskScore >= 70 ? 'high' : normalizedRiskScore >= 40 ? 'medium' : 'low';
 
       const topReasons = prioritizeAfcRiskReasons(reasons, outsideLossRate);
-      const hasOutsideLenderNoteSignal = noteSignal.reasons.some((reason) =>
-        reason.label.startsWith(AFC_RISK_OUTSIDE_NOTE_REASON_PREFIX)
+      const hasOutsideLenderNoteSignal = noteSignal.reasons.some(
+        (reason) =>
+          reason.label.startsWith(AFC_RISK_OUTSIDE_NOTE_REASON_PREFIX) ||
+          reason.label.startsWith(AFC_RISK_OUTSIDE_NOTE_SOFT_REASON_PREFIX)
       );
       const hasHighOutsideLenderLoss = outsideLossRate >= AFC_RISK_HIGH_OUTSIDE_LOSS_RATE_THRESHOLD;
 
@@ -3292,13 +2937,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       closedVolumeCents: number;
     }
   >();
-  // Track lost referrals per agent (referrals with status 'Lost')
+  // M-23: count referrals that entered the Lost status within this timeframe
+  // (same semantics as the AHA/AGIT lostDeals series) rather than referrals
+  // created in this timeframe that happen to be Lost today. This keeps the
+  // "Lost referrals by agent" table in-sync with a changing timeframe.
   const agentLostDealsMap = new Map<string, number>();
-  filteredReferrals.forEach((referral) => {
-    if (referral.status === 'Lost') {
-      const key = referral.assignedAgent ? referral.assignedAgent.toString() : 'unassigned';
-      agentLostDealsMap.set(key, (agentLostDealsMap.get(key) ?? 0) + 1);
-    }
+  referralsByNetwork.forEach((referral) => {
+    if (referral.status !== 'Lost') return;
+    const lostAt = referral.statusLastUpdated ?? referral.updatedAt ?? referral.createdAt;
+    if (!isWithinTimeframe(lostAt)) return;
+    const key = referral.assignedAgent ? referral.assignedAgent.toString() : 'unassigned';
+    agentLostDealsMap.set(key, (agentLostDealsMap.get(key) ?? 0) + 1);
   });
 
   // Aggregate agent metrics from payments
@@ -3322,13 +2971,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const isOutsideAgentDeal = payment.agentAttribution === 'OUTSIDE_AGENT';
     const contractPriceCents =
       payment.contractPriceCents ?? payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
-    
-    // Only count revenue for deals that stayed with assigned agent
-    if (!isOutsideAgentDeal) {
+
+    // M-20: Agent "Revenue Paid" leaderboard must only sum actually-paid payments.
+    // Any non-'paid' status with a receivedAmount value should not contribute.
+    if (!isOutsideAgentDeal && payment.status === 'paid') {
       current.revenue += payment.receivedAmountCents ?? 0;
+    }
+    if (!isOutsideAgentDeal) {
       current.expected += calculateOutstandingExpected(payment);
     }
-    
+
     if (CLOSED_DEAL_STATUSES.has(payment.status)) {
       if (!isOutsideAgentDeal) {
         current.closed += 1;
@@ -3388,7 +3040,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return {
       id: key,
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
-      closeRate: totalReferrals === 0 ? 0 : (dealsClosed / totalReferrals) * 100,
+      closeRate: computeCohortCloseRate(dealsClosed, totalReferrals),
       dealsClosed,
       totalReferrals
       };
@@ -3728,8 +3380,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           ? AHA_NEUTRAL_SCORE
           : kpiNorm[key].get(id) ?? AHA_NEUTRAL_SCORE;
         const w = AHA_KPI_WEIGHTS[key];
-        weightedSum += normalizedScore * w;
-        totalWeight += w;
+        if (!neutralFilled) {
+          weightedSum += normalizedScore * w;
+          totalWeight += w;
+        }
         kpis.push({
           label: AHA_KPI_LABELS[key],
           key,
@@ -3788,13 +3442,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // "Unassigned" = still in "New Lead" (not paired). "Assigned" = moved to Paired or beyond.
   const adminEligibleReferrals = filteredReferrals;
 
-  const unassignedReferrals = adminEligibleReferrals.filter(
-    (referral) => (referral.status ?? '').trim() === 'New Lead'
+  // M-29: assignment rate must be driven by `assignedAgent` presence, not by
+  // referral.status === 'New Lead' (which can be true after re-opens, etc).
+  const assignedReferrals = adminEligibleReferrals.filter(
+    (referral) => Boolean(referral.assignedAgent)
   ).length;
-  const assignedReferrals = adminEligibleReferrals.length - unassignedReferrals;
-  const assignmentRate = adminEligibleReferrals.length
-    ? (assignedReferrals / adminEligibleReferrals.length) * 100
-    : 0;
+  const unassignedReferrals = adminEligibleReferrals.length - assignedReferrals;
+  const assignmentRate = safePercent(assignedReferrals, adminEligibleReferrals.length);
 
   const slaFields = adminEligibleReferrals
     .map((referral) => referral.sla)
@@ -3803,10 +3457,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const firstContactRecords = slaFields
     .map((sla) => sla.timeToFirstAgentContactHours ?? null)
     .filter((value): value is number => value != null);
-  const firstContactWithin24HoursCount = firstContactRecords.filter((value) => value <= 24).length;
-  const firstContactWithin24HoursRate = firstContactRecords.length
-    ? (firstContactWithin24HoursCount / firstContactRecords.length) * 100
-    : 0;
+  // M-28: use SLA_THRESHOLDS.hoursToFirstConversation instead of a hard-coded 24.
+  const firstContactWithin24HoursCount = firstContactRecords.filter(
+    (value) => value <= SLA_THRESHOLDS.hoursToFirstConversation
+  ).length;
+  const firstContactWithin24HoursRate = safePercent(
+    firstContactWithin24HoursCount,
+    firstContactRecords.length
+  );
 
   const timeToFirstContactAvg = computeAverage(
     slaFields
@@ -3828,12 +3486,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const stored = referral.sla.daysToContract;
       if (stored != null && stored >= 0) return stored;
 
-      const referralDate = referral.referralDate ? new Date(referral.referralDate) : null;
+      const leadStart = getReferralTimeframeAnchor(referral);
       const lastUnderContractAt = referral.sla.lastUnderContractAt
         ? new Date(referral.sla.lastUnderContractAt)
         : null;
-      if (referralDate && lastUnderContractAt && lastUnderContractAt >= referralDate) {
-        return differenceInCalendarDays(lastUnderContractAt, referralDate);
+      if (leadStart && lastUnderContractAt && lastUnderContractAt >= leadStart) {
+        return differenceInCalendarDays(lastUnderContractAt, leadStart);
       }
       return null;
     })
@@ -3843,7 +3501,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const daysToCloseAvg = computeAverage(
     slaFields
       .map((sla) => sla.daysToClose ?? null)
-      .filter((value): value is number => value != null)
+      .filter((value): value is number => value != null && value >= 0)
   );
 
   const adminAverageLeadToContract = daysToContractAvg;
@@ -4122,10 +3780,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     (referral) => getReferralDesignation(referral) === 'AGIT'
   );
   const agitReferralIds = new Set(agitReferrals.map((r) => r._id.toString()));
-  const agitPercentage =
-    filteredReferrals.length === 0
-      ? 0
-      : (agitReferrals.length / filteredReferrals.length) * 100;
+  const agitPercentage = safePercent(agitReferrals.length, filteredReferrals.length);
 
   const agitFilteredPayments = filteredPaymentsByNetwork.filter((payment) =>
     agitReferralIds.has(payment.referral._id.toString())
@@ -4133,19 +3788,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   // Lost referrals (status === 'Lost')
   const agitLostReferrals = agitReferrals.filter(
-    (referral) => referral.status === 'Lost'
+    (referral) => normalizeStatusKey(referral.status ?? '') === 'lost'
   ).length;
 
-  // Closed/paid deals
-  const agitDealsClosed = agitFilteredPayments.filter(
-    (payment) =>
-      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
-      CLOSED_DEAL_STATUSES.has(payment.status)
-  ).length;
+  // C-6: mirror Main dashboard's isClosedDealEligible (which additionally
+  // excludes payments where usedAssignedAgent === false).
+  const agitDealsClosed = agitFilteredPayments.filter((payment) => isClosedDealEligible(payment))
+    .length;
 
-  // Close rate
-  const agitCloseRate =
-    agitReferrals.length === 0 ? 0 : (agitDealsClosed / agitReferrals.length) * 100;
+  const agitCloseRate = computeCohortCloseRate(agitDealsClosed, agitReferrals.length);
 
   // Used AFC / AFC Attach Rate
   const agitClosedOrPaidPayments = agitFilteredPayments.filter(
@@ -4224,11 +3875,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (previousPeriodRange) {
     const { start: previousStart, end: previousEnd } = previousPeriodRange;
     const prevReferrals = referralsByNetwork.filter((r) => {
-      const created = r.createdAt ? new Date(r.createdAt) : null;
-      if (!created) return false;
-      return created >= previousStart && created <= previousEnd;
+      const anchor = getReferralTimeframeAnchor(r);
+      if (!anchor) return false;
+      return anchor >= previousStart && anchor <= previousEnd;
     });
-    const prevDealsClosed = paymentsByNetwork.filter((payment) => {
+    const prevReferralIdSet = new Set(prevReferrals.map((r) => r._id.toString()));
+    // C-4: cohort-align close rate — prior period's closed-deal count must be
+    // referrals that were *created* in the prior window, not payments whose
+    // metricDate happens to fall in the prior window.
+    const prevCohortDealsClosed = paymentsByNetwork.filter((payment) => {
+      if (!isClosedDealEligible(payment)) return false;
+      return prevReferralIdSet.has(payment.referral._id.toString());
+    });
+    const prevDealsClosedByMetricDate = paymentsByNetwork.filter((payment) => {
       const metricDate = payment.metricDate ?? resolveMetricDate(payment);
       if (metricDate < previousStart || metricDate > previousEnd) return false;
       if (!isClosedDealEligible(payment)) return false;
@@ -4243,15 +3902,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     periodOverPeriod = {
       previous: {
         totalReferrals: prevReferrals.length,
-        dealsClosed: prevDealsClosed.length,
+        dealsClosed: prevDealsClosedByMetricDate.length,
         realizedRevenueCents: prevRealized,
-        closeRate: prevReferrals.length === 0 ? 0 : (prevDealsClosed.length / prevReferrals.length) * 100
+        closeRate: computeCohortCloseRate(prevCohortDealsClosed.length, prevReferrals.length)
       },
       current: {
         totalReferrals,
         dealsClosed: dealsClosedForSummary,
         realizedRevenueCents,
-        closeRate: closeRateForSummary
+        closeRate: cohortCloseRateSummary
       }
     };
   }
@@ -4270,7 +3929,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       role: role ?? null
     },
     main: {
-      funnel: { stages: funnelStages },
+      funnel: conversionFunnel,
       periodOverPeriod,
       ...(attachRateDebug ? { attachRateDebug } : {}),
       summary: {
@@ -4289,7 +3948,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         closedNotPaidList,
         dealsClosedList,
         averageDaysClosedToPaidList,
-        closeRate: closeRateForSummary,
+        closeRate: cohortCloseRateSummary,
+        revenueRealizationRatePercent:
+          realizedRevenueCents + expectedRevenueCents > 0
+            ? safePercent(realizedRevenueCents, realizedRevenueCents + expectedRevenueCents)
+            : null,
+        closedNotPaidPercentOfExpected:
+          expectedRevenueCents > 0 ? safePercent(closedNotPaidCents, expectedRevenueCents) : null,
         afcDealsLost,
         afcDealsLostList,
         afcAttachRate,
@@ -4357,8 +4022,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       pushbackSummary: {
         distinctDealsPushedBack: mcDistinctDealsPushedBack,
         totalPushbackEvents: mcTotalPushbackEvents,
+        // M-15: divide only by events that actually carry measured days.
         averageDaysPushedBackPerEvent:
-          mcTotalPushbackEvents > 0 ? mcTotalPushbackDays / mcTotalPushbackEvents : 0,
+          mcTotalPushbackEventsWithDays > 0 ? mcTotalPushbackDays / mcTotalPushbackEventsWithDays : 0,
         pushbackRatePercent:
           mcEligibleDealsForPushbackInScope > 0
             ? (mcDistinctDealsPushedBack / mcEligibleDealsForPushbackInScope) * 100
@@ -4380,7 +4046,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           .sort(
             (a, b) =>
               b.dealsPushedBack - a.dealsPushedBack ||
-              b.pushbackRatePercent - a.pushbackRatePercent
+              b.pushbackRatePercent - a.pushbackRatePercent ||
+              a.name.localeCompare(b.name) ||
+              a.id.localeCompare(b.id)
           )
       }
     },
@@ -4440,5 +4108,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   };
 
-  return NextResponse.json(responsePayload);
+  const durationMs = Date.now() - requestStartedAt;
+  const response = NextResponse.json(responsePayload);
+  response.headers.set('server-timing', `dashboard;dur=${durationMs}`);
+  if (durationMs > 5_000) {
+    console.warn(
+      `[dashboard] slow response: ${durationMs}ms role=${role ?? 'unknown'} timeframe=${timeframe.key} network=${context.networkFilter}`
+    );
+  }
+  return response;
 }

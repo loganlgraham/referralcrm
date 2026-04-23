@@ -218,10 +218,30 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       sla.lastClosedAt = null;
       sla.lastPaidAt = null;
       sla.lastUnderContractAt = now;
+      // M-25: when a referral re-enters Under Contract after a Closed, clear
+      // the stored daysToClose so it is recomputed from the new close date.
+      sla.daysToClose = null;
       if (sla.daysToContract == null) {
         const createdAt = referral.createdAt instanceof Date ? referral.createdAt : new Date(referral.createdAt ?? now);
-        if (!Number.isNaN(createdAt.getTime())) {
-          sla.daysToContract = Math.max(differenceInDays(now, createdAt), 0);
+        const refDateRaw = referral.referralDate
+          ? referral.referralDate instanceof Date
+            ? referral.referralDate
+            : new Date(referral.referralDate)
+          : null;
+        const createdOk = createdAt && !Number.isNaN(createdAt.getTime());
+        const refOk = refDateRaw && !Number.isNaN(refDateRaw.getTime());
+        const anchor =
+          createdOk && refOk
+            ? refDateRaw!.getTime() < createdAt!.getTime()
+              ? refDateRaw!
+              : createdAt!
+            : refOk
+              ? refDateRaw!
+              : createdOk
+                ? createdAt!
+                : null;
+        if (anchor && !Number.isNaN(anchor.getTime())) {
+          sla.daysToContract = Math.max(differenceInDays(now, anchor), 0);
         }
       }
       slaModified = true;
@@ -292,6 +312,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       sla.lastUnderContractAt = null;
       sla.lastClosedAt = null;
       sla.lastPaidAt = null;
+      // M-25: re-opening to a pre-contract status wipes the close-related
+      // stopwatches so future transitions recompute cleanly.
+      sla.daysToClose = null;
       slaModified = true;
     } else if (nextStatus === 'Closed') {
       sla.lastClosedAt = now;

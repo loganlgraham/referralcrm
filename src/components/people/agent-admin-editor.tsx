@@ -38,6 +38,7 @@ export interface AgentAdminEditorProps {
     ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
     npsScore?: number | null;
     source?: string;
+    active?: boolean;
   };
   variant?: 'standalone' | 'embedded';
   className?: string;
@@ -64,6 +65,7 @@ interface PatchResponse {
   languages: string[];
   ahaDesignation: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   source?: string;
+  active: boolean;
 }
 
 type FormState = {
@@ -85,6 +87,7 @@ type FormState = {
   languages: string[];
   ahaDesignation: '' | 'AHA' | 'AHA_OOS' | 'AGIT';
   source: string;
+  active: boolean;
 };
 
 const normalizeZipCode = (value: string) => {
@@ -186,6 +189,7 @@ const buildInitialFormState = (agent: AgentAdminEditorProps['agent']): FormState
     languages: Array.isArray(agent.languages) ? agent.languages : [],
     ahaDesignation: agent.ahaDesignation ?? '',
     source: agent.source ?? '',
+    active: agent.active ?? true,
   };
 };
 
@@ -301,6 +305,10 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
 
   const handleAhaChange = (event: ChangeEvent<HTMLSelectElement>) => {
     setForm((previous) => ({ ...previous, ahaDesignation: event.target.value as FormState['ahaDesignation'] }));
+  };
+
+  const handleActiveChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setForm((previous) => ({ ...previous, active: event.target.checked }));
   };
 
   const updateCoverageLocations = (updater: (current: CoverageLocation[]) => CoverageLocation[]) => {
@@ -428,6 +436,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
           languages: form.languages,
           ahaDesignation: form.ahaDesignation || null,
           source: isAdmin && form.source.trim() ? form.source.trim() : undefined,
+          active: isAdmin ? form.active : undefined,
         }),
       });
 
@@ -456,6 +465,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
         languages: payload.languages,
         ahaDesignation: payload.ahaDesignation ?? '',
         source: payload.source ?? '',
+        active: payload.active,
       });
 
       toast.success('Agent details updated');
@@ -477,7 +487,7 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
   return (
     <div className={wrapperClassName}>
       <h2 className="text-lg font-semibold text-foreground">Edit agent details</h2>
-      <p className="mt-1 text-sm text-foreground-subtle">Update contact info, coverage, specialties, and AHA designation.</p>
+      <p className="mt-1 text-sm text-foreground-subtle">Update contact info, coverage, specialties, AHA designation, and active status.</p>
       <form onSubmit={handleSubmit} className="mt-4 grid gap-4 md:grid-cols-2">
         <label className="text-xs font-semibold text-foreground-muted">
           Name
@@ -619,6 +629,18 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
             ))}
           </select>
         </label>
+        {isAdmin && (
+          <label className="flex items-center gap-2 text-xs font-semibold text-foreground-muted">
+            <input
+              type="checkbox"
+              checked={form.active}
+              onChange={handleActiveChange}
+              className="h-4 w-4 rounded border border-border"
+              disabled={formDisabled}
+            />
+            Agent is active
+          </label>
+        )}
         <label className="text-xs font-semibold text-foreground-muted">
           States (comma separated)
           <input

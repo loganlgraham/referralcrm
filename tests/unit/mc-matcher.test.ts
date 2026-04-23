@@ -68,6 +68,24 @@ describe('findMcByFirstNameLastInitialToken', () => {
     expect(result).toEqual({ id: lenderId, name: 'Karim Lopez' });
   });
 
+  it('supports alias token ChristopherL for Chris last-initial matching', async () => {
+    const lenderId = objectIdLike('lender-chris');
+    mockLenderFindReturn([{ _id: lenderId, name: 'Chris Leo' }]);
+
+    const result = await findMcByFirstNameLastInitialToken('ChristopherL');
+
+    expect(result).toEqual({ id: lenderId, name: 'Chris Leo' });
+  });
+
+  it('supports alias token JasonCr for Jason last-initial matching', async () => {
+    const lenderId = objectIdLike('lender-jason');
+    mockLenderFindReturn([{ _id: lenderId, name: 'Jason Creech' }]);
+
+    const result = await findMcByFirstNameLastInitialToken('JasonCr');
+
+    expect(result).toEqual({ id: lenderId, name: 'Jason Creech' });
+  });
+
   it('skips lenders with no last-name token', async () => {
     mockLenderFindReturn([{ _id: objectIdLike('lender-karim'), name: 'Karim' }]);
 
@@ -184,6 +202,21 @@ describe('findMcInFreeText', () => {
     const result = await findMcInFreeText(body);
 
     expect(result).toEqual({ id: lenderId, name: 'Karim Lopez' });
+  });
+
+  it('supports alias tokens found in free text', async () => {
+    const chrisId = objectIdLike('lender-chris');
+    const jasonId = objectIdLike('lender-jason');
+    mockLenderFindReturn([
+      { _id: chrisId, name: 'Chris Leo' },
+      { _id: jasonId, name: 'Jason Creech' }
+    ]);
+
+    const chrisResult = await findMcInFreeText('Source: ChristopherL');
+    const jasonResult = await findMcInFreeText('Source: JasonCr');
+
+    expect(chrisResult).toEqual({ id: chrisId, name: 'Chris Leo' });
+    expect(jasonResult).toEqual({ id: jasonId, name: 'Jason Creech' });
   });
 
   it('ignores strings like McDonald, NYC, and USA that do not fit FirstNameLastInitial', async () => {

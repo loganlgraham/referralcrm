@@ -74,7 +74,10 @@ describe('buildDashboardReport', () => {
           ahaOosAttachRate: 33,
           ahaOosDealsLost: 1
         },
-        funnel: { stages: [{ status: 'New Lead', count: 5 }] },
+        funnel: {
+          stages: [{ status: 'New Lead', count: 5, conversionFromPrevious: 100, dropOffPercent: 0, avgDaysInStage: null }],
+          terminal: { lostTotal: 0, terminatedTotal: 0 }
+        },
         revenueByState: [
           { label: 'CO', value: 800_000 },
           { label: 'GA', value: 200_000 },

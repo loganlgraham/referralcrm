@@ -50,6 +50,7 @@ interface AssignmentOption {
   name: string;
   email?: string;
   phone?: string;
+  active?: boolean;
 }
 
 interface PaginatedResponse<T> {
@@ -161,6 +162,11 @@ export function ContactAssignment({
       return nameA.localeCompare(nameB);
     });
   }, [options, searchTerm]);
+
+  const selectedOption = useMemo(
+    () => filteredOptions.find((option) => option._id === selected) ?? options.find((option) => option._id === selected),
+    [filteredOptions, options, selected]
+  );
 
   const handleSuggest = async () => {
     if (type !== 'agent') return;
@@ -328,10 +334,16 @@ export function ContactAssignment({
                 {filteredOptions.map((option) => (
                   <option key={option._id} value={option._id}>
                     {option.name}
+                    {option.active === false ? ' (Inactive)' : ''}
                   </option>
                 ))}
               </select>
             </label>
+            {type === 'agent' && selectedOption?.active === false && (
+              <p className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                This agent is marked inactive. You can still assign them, but verify this is intentional.
+              </p>
+            )}
             {type === 'agent' && (
               <div className="flex flex-col gap-2 rounded border border-dashed border-border p-3 text-xs text-foreground-muted">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

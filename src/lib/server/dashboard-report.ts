@@ -15,6 +15,7 @@ import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
+import { getReferralDesignation as sharedGetReferralDesignation } from '@/lib/server/referral-designation';
 
 export const DASHBOARD_REPORT_METRICS = [
   { id: 'summary', label: 'Executive summary' },
@@ -100,7 +101,16 @@ type DashboardApiResponse = {
       ahaOosAttachRate?: number;
       ahaOosDealsLost?: number;
     };
-    funnel?: { stages?: { status: string; count: number }[] };
+    funnel?: {
+      stages?: {
+        status: string;
+        count: number;
+        conversionFromPrevious?: number | null;
+        dropOffPercent?: number | null;
+        avgDaysInStage?: number | null;
+      }[];
+      terminal?: { lostTotal?: number; terminatedTotal?: number };
+    };
     revenueByState?: { label: string; value: number }[];
     trends?: {
       revenue?: { key: string; label: string; value: number }[];
@@ -265,6 +275,8 @@ type ReferralLite = {
   origin?: string;
   lender?: Types.ObjectId | null;
   assignedAgent?: Types.ObjectId | null;
+  buySideAgent?: Types.ObjectId | null;
+  sellSideAgent?: Types.ObjectId | null;
 };
 
 async function buildNetworkBreakdown(range: {
@@ -280,13 +292,17 @@ async function buildNetworkBreakdown(range: {
   }
 
   const referrals = await Referral.find(referralMatch)
-    .select('lender ahaBucket org assignedAgent')
+    .select('lender ahaBucket org assignedAgent buySideAgent sellSideAgent')
     .lean<ReferralLite[]>();
 
+  // C-13: mirror the live dashboard's getReferralDesignation traversal, which
+  // walks assignedAgent → buySideAgent → sellSideAgent rather than only using
+  // assignedAgent.
   const agentIds = Array.from(
     new Set(
       referrals
-        .map((r) => r.assignedAgent?.toString())
+        .flatMap((r) => [r.assignedAgent, r.buySideAgent, r.sellSideAgent])
+        .map((id) => id?.toString())
         .filter((id): id is string => Boolean(id))
     )
   );
@@ -313,9 +329,7 @@ async function buildNetworkBreakdown(range: {
       buckets.Unpaired += 1;
       continue;
     }
-    const designation = referral.assignedAgent
-      ? designationMap.get(referral.assignedAgent.toString()) ?? null
-      : null;
+    const designation = sharedGetReferralDesignation(referral, designationMap);
     if (designation === 'AHA_OOS') {
       buckets['AHA OOS'] += 1;
       continue;
@@ -546,10 +560,26 @@ function buildSections(args: {
       }
       case 'funnel': {
         const stages = args.dashboard.main?.funnel?.stages ?? [];
+        const terminal = args.dashboard.main?.funnel?.terminal ?? {};
+        const stageRows = stages.map((stage, index) => {
+          const extras: string[] = [];
+          if (index > 0 && stage.conversionFromPrevious != null) {
+            extras.push(`${stage.conversionFromPrevious.toFixed(0)}% conv`);
+          }
+          if (stage.avgDaysInStage != null) {
+            extras.push(`avg ${stage.avgDaysInStage}d → next`);
+          }
+          const suffix = extras.length > 0 ? ` (${extras.join(', ')})` : '';
+          return { label: stage.status, value: `${stage.count}${suffix}` };
+        });
+        const terminalRows = [
+          { label: 'Lost (total)', value: String(terminal.lostTotal ?? 0) },
+          { label: 'Terminated (total)', value: String(terminal.terminatedTotal ?? 0) }
+        ];
         sections.push({
           id: 'funnel',
           title: METRIC_LABEL_MAP.funnel,
-          rows: stages.map((stage) => ({ label: stage.status, value: String(stage.count) })),
+          rows: [...stageRows, ...terminalRows],
           emptyMessage: 'No funnel data available.'
         });
         break;

@@ -207,6 +207,10 @@ interface DashboardSummary {
   realizedRevenueCents: number;
   generatedRevenueCents: number;
   closedNotPaidCents: number;
+  /** Backend-calculated: realized / (realized + outstanding expected), or null. */
+  revenueRealizationRatePercent: number | null;
+  /** Backend-calculated: closedNotPaid / expected outstanding, or null. */
+  closedNotPaidPercentOfExpected: number | null;
   averageDaysNewLeadToContract: number;
   averageDaysClosedToPaid: number;
   averageClosedDealAmountCents: number;
@@ -227,6 +231,11 @@ interface FunnelStage {
   avgDaysInStage: number | null;
 }
 
+interface FunnelTerminalTotals {
+  lostTotal: number;
+  terminatedTotal: number;
+}
+
 interface PeriodOverPeriod {
   previous: { totalReferrals: number; dealsClosed: number; realizedRevenueCents: number; closeRate: number };
   current: { totalReferrals: number; dealsClosed: number; realizedRevenueCents: number; closeRate: number };
@@ -244,7 +253,7 @@ interface DashboardResponse {
     role: string | null;
   };
   main: {
-    funnel?: { stages: FunnelStage[] };
+    funnel?: { stages: FunnelStage[]; terminal?: FunnelTerminalTotals };
     periodOverPeriod?: PeriodOverPeriod | null;
     summary: DashboardSummary;
     trends: {
@@ -1160,41 +1169,61 @@ function TerminatedDealsList({
 
 function ConversionFunnelCard({
   stages,
+  terminal,
   networkFilter
 }: {
   stages: FunnelStage[];
+  terminal: FunnelTerminalTotals;
   networkFilter: NetworkFilter;
 }) {
-  const buildDrillDownUrl = (status: string) => {
-    const params = new URLSearchParams();
-    params.set('status', status);
+  const withNetworkParam = (params: URLSearchParams) => {
     if (networkFilter === 'AHA' || networkFilter === 'AHA_OOS') {
       params.set('ahaBucket', networkFilter);
     }
-    return `/referrals?${params.toString()}`;
+    return params;
+  };
+
+  const buildStageDrillDownUrl = (status: string) => {
+    const params = new URLSearchParams();
+    params.set('maxStageReached', status);
+    return `/referrals?${withNetworkParam(params).toString()}`;
+  };
+
+  const buildTerminalDrillDownUrl = (status: 'Lost' | 'Terminated') => {
+    const params = new URLSearchParams();
+    params.set('status', status);
+    return `/referrals?${withNetworkParam(params).toString()}`;
   };
 
   return (
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Conversion funnel</p>
-      <p className="mt-1 text-xs text-foreground-subtle">Referrals by stage — click any row to view list</p>
+      <p className="mt-1 text-xs text-foreground-subtle">
+        Cohort funnel: each stage counts referrals that ever reached that stage. Click a row to view the list.
+      </p>
       <div className="mt-4 space-y-1.5">
         {stages.length ? (
-          stages.map((stage) => {
+          stages.map((stage, index) => {
+            const isFirst = index === 0;
             return (
               <Link
                 key={stage.status}
-                href={buildDrillDownUrl(stage.status)}
+                href={buildStageDrillDownUrl(stage.status)}
                 className="group block rounded-md border border-border px-3 py-2 transition hover:border-primary-200 hover:bg-primary-50/40"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium text-foreground group-hover:text-sky-700">{stage.label}</span>
                   <div className="flex items-center gap-3 text-sm text-foreground-muted">
                     <span className="font-semibold text-foreground">{formatNumber(stage.count)}</span>
-                    {stage.avgDaysInStage != null ? (
-                      <span className="text-xs text-foreground-subtle">avg {stage.avgDaysInStage}d</span>
+                    {!isFirst && stage.conversionFromPrevious != null ? (
+                      <span className="text-xs text-foreground-subtle">
+                        {stage.conversionFromPrevious.toFixed(0)}% conv
+                      </span>
                     ) : null}
-                    {stage.dropOffPercent != null && stage.dropOffPercent > 0 ? (
+                    {stage.avgDaysInStage != null ? (
+                      <span className="text-xs text-foreground-subtle">avg {stage.avgDaysInStage}d → next</span>
+                    ) : null}
+                    {!isFirst && stage.dropOffPercent != null && stage.dropOffPercent > 0 ? (
                       <span className="text-xs font-medium text-amber-600">↓{stage.dropOffPercent.toFixed(0)}%</span>
                     ) : null}
                   </div>
@@ -1206,6 +1235,24 @@ function ConversionFunnelCard({
           <p className="py-4 text-center text-sm text-foreground-subtle">No referral data for this period.</p>
         )}
       </div>
+      {stages.length ? (
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3 text-xs text-foreground-subtle">
+          <span className="uppercase tracking-wide">Terminal outcomes:</span>
+          <Link
+            href={buildTerminalDrillDownUrl('Lost')}
+            className="font-medium text-foreground-muted hover:text-sky-700"
+          >
+            Lost {formatNumber(terminal.lostTotal)}
+          </Link>
+          <span aria-hidden="true">•</span>
+          <Link
+            href={buildTerminalDrillDownUrl('Terminated')}
+            className="font-medium text-foreground-muted hover:text-sky-700"
+          >
+            Terminated {formatNumber(terminal.terminatedTotal)}
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1713,11 +1760,7 @@ function PreApprovalConversionSection({
   );
 }
 
-function periodOverPeriodDelta(
-  current: number,
-  previous: number,
-  format: 'number' | 'currency' | 'percent'
-): string | null {
+function periodOverPeriodDelta(current: number, previous: number): string | null {
   if (previous === 0) return current > 0 ? '+100%' : null;
   const pct = ((current - previous) / previous) * 100;
   if (pct === 0) return '0%';
@@ -1747,20 +1790,20 @@ function MainDashboard({
   const closedNotPaidCents = Math.max(summary.closedNotPaidCents ?? 0, 0);
   const pop = data.periodOverPeriod ?? null;
 
-  // "Expected revenue" here is outstanding expected (not total), so use:
-  // realized / (realized + outstanding)
+  // Prefer server-computed rates (L-3) so UI matches API/email reports; fall back for older payloads.
   const revenueRealizationRate =
-    realizedRevenueCents + expectedRevenueCents > 0
+    summary.revenueRealizationRatePercent ??
+    (realizedRevenueCents + expectedRevenueCents > 0
       ? (realizedRevenueCents / (realizedRevenueCents + expectedRevenueCents)) * 100
-      : null;
+      : null);
 
-  // Share of outstanding expected that is already in a closed-but-not-paid state.
   const closedNotPaidPercentOfExpected =
-    expectedRevenueCents > 0 ? (closedNotPaidCents / expectedRevenueCents) * 100 : null;
+    summary.closedNotPaidPercentOfExpected ??
+    (expectedRevenueCents > 0 ? (closedNotPaidCents / expectedRevenueCents) * 100 : null);
 
-  const revenueVsPrev = pop ? periodOverPeriodDelta(realizedRevenueCents, pop.previous.realizedRevenueCents, 'currency') : null;
-  const referralsVsPrev = pop ? periodOverPeriodDelta(summary.totalReferrals, pop.previous.totalReferrals, 'number') : null;
-  const closeRateVsPrev = pop ? periodOverPeriodDelta(summary.closeRate, pop.previous.closeRate, 'percent') : null;
+  const revenueVsPrev = pop ? periodOverPeriodDelta(realizedRevenueCents, pop.previous.realizedRevenueCents) : null;
+  const referralsVsPrev = pop ? periodOverPeriodDelta(summary.totalReferrals, pop.previous.totalReferrals) : null;
+  const closeRateVsPrev = pop ? periodOverPeriodDelta(summary.closeRate, pop.previous.closeRate) : null;
 
   const highlights: {
     title: string;
@@ -1905,6 +1948,7 @@ function MainDashboard({
   ];
 
   const funnelStages = data.funnel?.stages ?? [];
+  const funnelTerminal = data.funnel?.terminal ?? { lostTotal: 0, terminatedTotal: 0 };
 
   return (
     <div className="space-y-6">
@@ -1923,7 +1967,11 @@ function MainDashboard({
       </div>
 
       {funnelStages.length > 0 ? (
-        <ConversionFunnelCard stages={funnelStages} networkFilter={networkFilter} />
+        <ConversionFunnelCard
+          stages={funnelStages}
+          terminal={funnelTerminal}
+          networkFilter={networkFilter}
+        />
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -2102,7 +2150,9 @@ function DealsLostTable({ deals }: { deals: LostDealEntry[] }) {
               </td>
               <td className="px-6 py-3 text-foreground-muted">{deal.agentName ?? '—'}</td>
               <td className="px-6 py-3 text-foreground-muted">{deal.mcName ?? '—'}</td>
-              <td className="px-6 py-3 text-foreground-muted">{deal.status}</td>
+              <td className="px-6 py-3 text-foreground-muted">
+                {DEAL_STATUS_LABELS[deal.status as DealStatus] ?? deal.status}
+              </td>
               <td className="px-6 py-3 text-right text-foreground-muted">{formatCurrency(deal.expectedAmountCents)}</td>
             </tr>
           ))}
@@ -2257,9 +2307,11 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
       <p className="mt-1 text-xs text-foreground-subtle">
-        Composite score blends weighted MC KPIs. Referral volume and NPS are top-tier factors, and closes without AFC
+        Composite score blends weighted MC KPIs. Referral volume and NPS (all-time) are top-tier factors, and closes without AFC
         or without the assigned agent are high-weight penalties. Financing-related terminations also count against MC
         score. MCs with fewer than 3 referrals are marked provisional and receive a reliability adjustment.
+        KPIs with no data this period are filled with a neutral 50 score and still contribute to the weighted total, so
+        partial-coverage MCs score closer to the median rather than being excluded.
       </p>
       {entries.length === 0 ? (
         <p className="py-8 text-center text-sm text-foreground-subtle">No MCs with data for this period.</p>
@@ -2390,6 +2442,7 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
       <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">AFC Loss Risk Call List</p>
       <p className="mt-1 text-xs text-foreground-subtle">
         All open buy-side AFC referrals currently at risk, ranked with outside-lender notes and MC outside-lender loss priority.
+        Historical (all-time) risk factors are blended with the current referral&rsquo;s signals; this table is not filtered by the selected timeframe.
       </p>
       {entries.length === 0 ? (
         <p className="py-8 text-center text-sm text-foreground-subtle">No qualifying referrals in the active AFC pipeline.</p>
@@ -2725,14 +2778,14 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
     data.averageCommissionPercent > 0 ? `${data.averageCommissionPercent.toFixed(2)}%` : '—';
   const commissionHelper =
     data.commissionSampleSize > 0
-      ? `Across ${formatNumber(data.commissionSampleSize)} closed/paid deals`
+      ? `Unweighted mean across ${formatNumber(data.commissionSampleSize)} closed/paid deals`
       : 'No closed or paid deals this period';
 
   const averageReferralFeeDisplay =
     data.averageReferralFeePercent > 0 ? `${data.averageReferralFeePercent.toFixed(2)}%` : '—';
   const referralFeeHelper =
     data.referralFeeSampleSize > 0
-      ? `Across ${formatNumber(data.referralFeeSampleSize)} closed/paid deals`
+      ? `Unweighted mean across ${formatNumber(data.referralFeeSampleSize)} closed/paid deals`
       : 'No closed or paid deals this period';
 
   return (
@@ -2762,7 +2815,7 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
       </div>
       <div className={`grid gap-4 lg:grid-cols-2${data.agentCreatedMcAssignments.length > 0 ? ' xl:grid-cols-3' : ''}`}>
         <LeaderboardTable title="Agent net earnings" entries={data.netRevenue} valueLabel="Net revenue" />
-        <LeaderboardTable title="Deals lost to outside agents" entries={data.lostDeals} valueLabel="Lost deals" />
+        <LeaderboardTable title="Lost referrals by agent" entries={data.lostDeals} valueLabel="Lost referrals" />
         {data.agentCreatedMcAssignments.length > 0 ? (
           <LeaderboardTable
             title="Agent-created referrals assigned to MCs"
@@ -2840,11 +2893,23 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
     {
       title: 'Avg. time to first agent contact',
       value: `${data.slaAverages.timeToFirstAgentContactHours.toFixed(1)} hours`,
-      helper: 'Goal ≤ 24 hours'
+      helper: 'Business hours · Goal ≤ 24 hours'
     },
-    { title: 'Avg. time to assignment', value: `${data.slaAverages.timeToAssignmentHours.toFixed(1)} hours` },
-    { title: 'Avg. days to contract', value: `${data.averageDaysNewLeadToContract.toFixed(1)} days` },
-    { title: 'Avg. days contract → close', value: `${data.averageDaysContractToClose.toFixed(1)} days` },
+    {
+      title: 'Avg. time to assignment',
+      value: `${data.slaAverages.timeToAssignmentHours.toFixed(1)} hours`,
+      helper: 'Business hours'
+    },
+    {
+      title: 'Avg. days to contract',
+      value: `${data.averageDaysNewLeadToContract.toFixed(1)} days`,
+      helper: 'Calendar days'
+    },
+    {
+      title: 'Avg. days contract → close',
+      value: `${data.averageDaysContractToClose.toFixed(1)} days`,
+      helper: 'Calendar days'
+    },
     { title: 'Assignment rate', value: `${assignmentRate.toFixed(1)}%`, helper: assignmentHelper },
     {
       title: 'First contact within 24h',
@@ -2948,7 +3013,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
         <SummaryCard
           title="Used AFC (Buy-side Attach Rate)"
           value={`${data.usedAfcRate.toFixed(1)}%`}
-          helper={`${formatNumber(data.usedAfcCount)} went to another lender`}
+          helper={`${formatNumber(data.usedAfcCount)} used AFC`}
         />
         <SummaryCard
           title="Lost Referrals"
@@ -3327,8 +3392,10 @@ export function DashboardTabs() {
 
       {showSkeleton ? (
         <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, index) => (
+          <div
+            className={`grid gap-4 md:grid-cols-2 ${activeTab === 'agit' ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}
+          >
+            {Array.from({ length: activeTab === 'agit' ? 5 : 4 }).map((_, index) => (
               <div key={index} className="h-28 animate-pulse rounded-card border border-border bg-surface-muted" />
             ))}
           </div>
