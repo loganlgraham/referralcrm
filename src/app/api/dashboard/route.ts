@@ -1134,29 +1134,32 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const dealsUnderContract = filteredPaymentsByNetwork.filter((payment) =>
     dealStatuses.includes(payment.status)
   );
-  // Main "Total Future Closings" count: all deals not in closed / payment_sent / paid
-  // / terminated (independent of dashboard timeframe — uses paymentsByNetwork).
-  const pendingClosings = paymentsByNetwork.filter((payment) =>
-    isTotalFutureClosingStatus(payment.status)
-  );
-  // This/next month: non-terminated deals with closingDate in the calendar month
-  // (include closed / payment_sent / paid when their closing falls in the month).
-  const pendingClosingsThisMonth = paymentsByNetwork.filter((payment) =>
-    isClosingInNonTerminatedMonth(
+  // Main "Total Future Closings" count: open pipeline (not closed / payment_sent / paid
+  // / terminated), used assigned agent only; not scoped to dashboard timeframe.
+  const pendingClosings = paymentsByNetwork.filter((payment) => {
+    if (payment.usedAssignedAgent !== true) return false;
+    return isTotalFutureClosingStatus(payment.status);
+  });
+  // This/next month: same month/status rules, used assigned agent only (include closed /
+  // payment_sent / paid when their closing falls in the month).
+  const pendingClosingsThisMonth = paymentsByNetwork.filter((payment) => {
+    if (payment.usedAssignedAgent !== true) return false;
+    return isClosingInNonTerminatedMonth(
       payment.status,
       payment.closingDate,
       startOfCurrentMonth,
       endOfCurrentMonth
-    )
-  );
-  const pendingClosingsNextMonth = paymentsByNetwork.filter((payment) =>
-    isClosingInNonTerminatedMonth(
+    );
+  });
+  const pendingClosingsNextMonth = paymentsByNetwork.filter((payment) => {
+    if (payment.usedAssignedAgent !== true) return false;
+    return isClosingInNonTerminatedMonth(
       payment.status,
       payment.closingDate,
       startOfNextMonth,
       endOfNextMonth
-    )
-  );
+    );
+  });
   const cohortCloseRateSummary = computeCohortCloseRate(
     dealsClosedForCloseRate.length,
     totalReferrals
