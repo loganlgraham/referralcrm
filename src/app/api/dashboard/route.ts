@@ -45,7 +45,12 @@ import {
 } from '@/lib/server/aha-leaderboard-scoring';
 import { resolvePushbackMetricsInTimeframe } from '@/lib/server/pushback-metrics';
 import { buildConversionFunnel, type FunnelReferralInput } from '@/lib/server/conversion-funnel';
-import { computeCohortCloseRate, safePercent } from '@/lib/server/dashboard-math';
+import {
+  computeCohortCloseRate,
+  isClosingInNonTerminatedMonth,
+  isTotalFutureClosingStatus,
+  safePercent
+} from '@/lib/server/dashboard-math';
 import { SLA_THRESHOLDS } from '@/utils/sla-insights';
 import {
   getPaymentAgentDesignation as sharedGetPaymentAgentDesignation,
@@ -1116,7 +1121,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return isWithinTimeframe(referral.statusLastUpdated ?? referral.updatedAt ?? referral.createdAt);
   });
   const now = new Date();
-  const endOfToday = endOfDay(new Date());
   const startOfCurrentMonth = startOfMonth(new Date());
   const endOfCurrentMonth = endOfMonth(new Date());
   const startOfNextMonth = startOfMonth(addMonths(new Date(), 1));
@@ -1130,43 +1134,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const dealsUnderContract = filteredPaymentsByNetwork.filter((payment) =>
     dealStatuses.includes(payment.status)
   );
-  const pendingClosings = paymentsByNetwork.filter((payment) => {
-    if (!dealStatuses.includes(payment.status)) return false;
-    if (payment.usedAssignedAgent !== true) return false;
-    const closingDate = payment.closingDate ? new Date(payment.closingDate) : null;
-    if (!closingDate) return false;
-    return closingDate > endOfToday;
-  });
-  // M-7: "pending" closings must be deals that are not yet closed, so exclude
-  // closed / payment_sent / paid from this/next month counts. Those deals have
-  // already resolved their closing event and don't belong in a "pending"
-  // bucket.
-  const pendingClosingStatuses = new Set([
-    'under_contract',
-    'past_inspection',
-    'past_appraisal',
-    'clear_to_close'
-  ]);
-  const pendingClosingsThisMonth = paymentsByNetwork.filter((payment) => {
-    if (!pendingClosingStatuses.has(payment.status)) return false;
-    if (payment.usedAssignedAgent !== true) return false;
-    const closingDate = payment.closingDate ? new Date(payment.closingDate) : null;
-    return (
-      closingDate &&
-      closingDate >= startOfCurrentMonth &&
-      closingDate <= endOfCurrentMonth
-    );
-  });
-  const pendingClosingsNextMonth = paymentsByNetwork.filter((payment) => {
-    if (!pendingClosingStatuses.has(payment.status)) return false;
-    if (payment.usedAssignedAgent !== true) return false;
-    const closingDate = payment.closingDate ? new Date(payment.closingDate) : null;
-    return (
-      closingDate &&
-      closingDate >= startOfNextMonth &&
-      closingDate <= endOfNextMonth
-    );
-  });
+  // Main "Total Future Closings" count: all deals not in closed / payment_sent / paid
+  // / terminated (independent of dashboard timeframe — uses paymentsByNetwork).
+  const pendingClosings = paymentsByNetwork.filter((payment) =>
+    isTotalFutureClosingStatus(payment.status)
+  );
+  // This/next month: non-terminated deals with closingDate in the calendar month
+  // (include closed / payment_sent / paid when their closing falls in the month).
+  const pendingClosingsThisMonth = paymentsByNetwork.filter((payment) =>
+    isClosingInNonTerminatedMonth(
+      payment.status,
+      payment.closingDate,
+      startOfCurrentMonth,
+      endOfCurrentMonth
+    )
+  );
+  const pendingClosingsNextMonth = paymentsByNetwork.filter((payment) =>
+    isClosingInNonTerminatedMonth(
+      payment.status,
+      payment.closingDate,
+      startOfNextMonth,
+      endOfNextMonth
+    )
+  );
   const cohortCloseRateSummary = computeCohortCloseRate(
     dealsClosedForCloseRate.length,
     totalReferrals

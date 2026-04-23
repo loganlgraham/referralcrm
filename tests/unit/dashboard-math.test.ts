@@ -1,8 +1,11 @@
+import { endOfMonth, startOfMonth } from 'date-fns';
 import { describe, expect, it } from '@jest/globals';
 import {
   clampPercent,
   computeCohortCloseRate,
-  safePercent,
+  isClosingInNonTerminatedMonth,
+  isTotalFutureClosingStatus,
+  safePercent
 } from '@/lib/server/dashboard-math';
 
 describe('computeCohortCloseRate', () => {
@@ -50,5 +53,60 @@ describe('clampPercent', () => {
 
   it('returns 0 for NaN', () => {
     expect(clampPercent(Number.NaN)).toBe(0);
+  });
+});
+
+describe('isTotalFutureClosingStatus', () => {
+  it('counts pre-close pipeline statuses', () => {
+    expect(isTotalFutureClosingStatus('under_contract')).toBe(true);
+    expect(isTotalFutureClosingStatus('past_inspection')).toBe(true);
+    expect(isTotalFutureClosingStatus('clear_to_close')).toBe(true);
+  });
+
+  it('excludes closed, payment_sent, paid, and terminated', () => {
+    expect(isTotalFutureClosingStatus('closed')).toBe(false);
+    expect(isTotalFutureClosingStatus('payment_sent')).toBe(false);
+    expect(isTotalFutureClosingStatus('paid')).toBe(false);
+    expect(isTotalFutureClosingStatus('terminated')).toBe(false);
+  });
+
+  it('excludes payment_received for forward compatibility', () => {
+    expect(isTotalFutureClosingStatus('payment_received')).toBe(false);
+  });
+});
+
+describe('isClosingInNonTerminatedMonth', () => {
+  const monthStart = startOfMonth(new Date(2026, 3, 1));
+  const monthEnd = endOfMonth(new Date(2026, 3, 1));
+  const closingInMonth = new Date(2026, 3, 15);
+
+  it('returns true for closed with closingDate in range', () => {
+    expect(
+      isClosingInNonTerminatedMonth('closed', closingInMonth, monthStart, monthEnd)
+    ).toBe(true);
+  });
+
+  it('returns true for under_contract with closingDate in range', () => {
+    expect(
+      isClosingInNonTerminatedMonth('under_contract', closingInMonth, monthStart, monthEnd)
+    ).toBe(true);
+  });
+
+  it('excludes terminated even when date would be in range', () => {
+    expect(
+      isClosingInNonTerminatedMonth('terminated', closingInMonth, monthStart, monthEnd)
+    ).toBe(false);
+  });
+
+  it('returns false when closingDate is missing', () => {
+    expect(
+      isClosingInNonTerminatedMonth('under_contract', null, monthStart, monthEnd)
+    ).toBe(false);
+  });
+
+  it('returns false when closingDate is outside range', () => {
+    expect(
+      isClosingInNonTerminatedMonth('closed', new Date(2026, 4, 1), monthStart, monthEnd)
+    ).toBe(false);
   });
 });
