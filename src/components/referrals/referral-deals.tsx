@@ -357,7 +357,12 @@ function DealCard({
       netReferralFeePaidCents = finalExpectedAmountCents;
     }
 
-    if (!agentCreatedReferral && !isNoFeeDeal && !finalExpectedAmountCents) {
+    if (
+      !agentCreatedReferral &&
+      !isNoFeeDeal &&
+      !finalExpectedAmountCents &&
+      referralFeeBasisPoints !== 0
+    ) {
       toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
       return;
     }
@@ -1252,7 +1257,12 @@ export function ReferralDeals({
       netReferralFeePaidCents = finalExpectedAmountCents;
     }
 
-    if (!isAgentOrigin && !isNoFeeDeal && !finalExpectedAmountCents) {
+    if (
+      !isAgentOrigin &&
+      !isNoFeeDeal &&
+      !finalExpectedAmountCents &&
+      referralFeeBasisPoints !== 0
+    ) {
       toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
       return;
     }

@@ -112,8 +112,11 @@ const deriveReferralFeeCents = (
   referralFeeBasisPoints?: number | null,
   commissionFlatFeeCents?: number | null,
 ) => {
-  if (!referralFeeBasisPoints || referralFeeBasisPoints <= 0) {
+  if (referralFeeBasisPoints == null || referralFeeBasisPoints < 0) {
     return null;
+  }
+  if (referralFeeBasisPoints === 0) {
+    return 0;
   }
 
   if (commissionFlatFeeCents && commissionFlatFeeCents > 0) {
@@ -392,6 +395,18 @@ export function DealCard({
     return formatted.endsWith('.00') ? formatted.slice(0, -3) : formatted;
   };
 
+  const formatReferralFeeDraftPercent = (bps?: number | null) => {
+    if (bps == null || bps < 0) {
+      return '';
+    }
+    if (bps === 0) {
+      return '0';
+    }
+    const value = bps / 100;
+    const formatted = value.toFixed(2);
+    return formatted.endsWith('.00') ? formatted.slice(0, -3) : formatted;
+  };
+
   const getDefaultDraft = useCallback(
     (deal: DealRecord): DealDraft => {
       const priceCents = deal.contractPriceCents ?? summaryContractPriceCents ?? null;
@@ -406,7 +421,7 @@ export function DealCard({
         commissionPercent: formatDraftPercent(commissionBps),
         commissionFlat: commissionMode === '$' ? formatDraftCurrency(flatFeeCents) : '',
         commissionMode,
-        referralFeePercent: formatDraftPercent(referralFeeBps),
+        referralFeePercent: formatReferralFeeDraftPercent(referralFeeBps),
         side,
       };
     },
@@ -459,6 +474,21 @@ export function DealCard({
     return Math.round(parsed * 100);
   };
 
+  const parseReferralFeePercentInput = (value: string): number | null => {
+    if (!value) {
+      return null;
+    }
+    const normalized = value.replace(/,/g, '').trim();
+    if (!normalized) {
+      return null;
+    }
+    const parsed = Number.parseFloat(normalized);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return null;
+    }
+    return Math.round(parsed * 100);
+  };
+
   const getStatusForDeal = (deal: DealRecord): DealStatus => {
     return statusMap[deal._id] ?? ((deal.status as DealStatus | undefined) ?? 'under_contract');
   };
@@ -470,7 +500,7 @@ export function DealCard({
     const contractPriceCents = parseCurrencyInput(draft.contractPrice);
     const commissionBasisPoints = isFlatFeeMode ? null : parsePercentInput(draft.commissionPercent);
     const commissionFlatFeeCents = isFlatFeeMode ? parseCurrencyInput(draft.commissionFlat) : null;
-    const referralFeeBasisPoints = isAgentOrigin ? 0 : parsePercentInput(draft.referralFeePercent);
+    const referralFeeBasisPoints = isAgentOrigin ? 0 : parseReferralFeePercentInput(draft.referralFeePercent);
 
     if (!isOutsideAgent) {
       if (isFlatFeeMode) {
@@ -495,7 +525,12 @@ export function DealCard({
       ? 0
       : deriveReferralFeeCents(contractPriceCents, commissionBasisPoints, referralFeeBasisPoints ?? 0, commissionFlatFeeCents);
 
-    if (!isAgentOrigin && !isOutsideAgent && (!expectedAmountCents || expectedAmountCents <= 0)) {
+    if (
+      !isAgentOrigin &&
+      !isOutsideAgent &&
+      referralFeeBasisPoints !== 0 &&
+      (!expectedAmountCents || expectedAmountCents <= 0)
+    ) {
       toast.error('Enter valid deal details to calculate the referral fee.');
       return;
     }
@@ -565,7 +600,7 @@ export function DealCard({
           commissionPercent: isOutsideAgent || isFlatFeeMode ? '' : formatDraftPercent(commissionBasisPoints),
           commissionFlat: isOutsideAgent || !isFlatFeeMode ? '' : formatDraftCurrency(commissionFlatFeeCents),
           commissionMode: isOutsideAgent ? '%' : draft.commissionMode,
-          referralFeePercent: isOutsideAgent ? '' : formatDraftPercent(referralFeeBasisPoints),
+          referralFeePercent: isOutsideAgent ? '' : formatReferralFeeDraftPercent(referralFeeBasisPoints),
           side: draft.side,
         },
       }));
@@ -711,7 +746,7 @@ export function DealCard({
       baseCommissionFlatFeeCents,
     );
 
-    if (derivedAmount && derivedAmount > 0) {
+    if (derivedAmount !== null) {
       return derivedAmount;
     }
 
@@ -1223,7 +1258,7 @@ export function DealCard({
     const draftIsFlatFeeMode = draft.commissionMode === '$';
     const draftCommissionBasisPoints = draftIsFlatFeeMode ? null : parsePercentInput(draft.commissionPercent);
     const draftCommissionFlatFeeCents = draftIsFlatFeeMode ? parseCurrencyInput(draft.commissionFlat) : null;
-    const draftReferralFeeBasisPoints = parsePercentInput(draft.referralFeePercent);
+    const draftReferralFeeBasisPoints = parseReferralFeePercentInput(draft.referralFeePercent);
     const draftReferralFeeCents =
       draftReferralFeeBasisPoints != null &&
       (draftIsFlatFeeMode

@@ -9,4 +9,8 @@ describe('calculateReferralFeeDue', () => {
     const result = calculateReferralFeeDue(500_000_00, 3000, 4000);
     expect(result).toBe(Math.round(((500_000_00 * 3000) / 10000) * (4000 / 10000)));
   });
+
+  it('returns zero when override basis points are explicitly 0 (no tier fallback)', () => {
+    expect(calculateReferralFeeDue(500_000_00, 3000, 0)).toBe(0);
+  });
 });

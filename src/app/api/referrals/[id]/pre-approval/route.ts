@@ -71,7 +71,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     );
   } else if (!['Under Contract', 'Closed', 'Terminated', 'Lost'].includes(referral.status as string)) {
     const commissionBasisPoints = referral.commissionBasisPoints || DEFAULT_AGENT_COMMISSION_BPS;
-    const referralFeeBasisPoints = referral.referralFeeBasisPoints || DEFAULT_REFERRAL_FEE_BPS;
+    const referralFeeBasisPoints = referral.referralFeeBasisPoints ?? DEFAULT_REFERRAL_FEE_BPS;
     referral.referralFeeDueCents = calculateReferralFeeDue(
       amountCents,
       commissionBasisPoints,

@@ -1,8 +1,15 @@
 import { ReferralDocument, ReferralStatus } from '@/models/referral';
 import { differenceInCalendarDays } from 'date-fns';
 
-export function calculateReferralFeeDue(closedPriceCents: number, commissionBasisPoints: number, referralFeeBasisPoints?: number) {
+export function calculateReferralFeeDue(
+  closedPriceCents: number,
+  commissionBasisPoints: number,
+  referralFeeBasisPoints?: number | null
+) {
   const commission = Math.round((closedPriceCents * commissionBasisPoints) / 10000);
+  if (referralFeeBasisPoints === 0) {
+    return 0;
+  }
   if (referralFeeBasisPoints !== undefined && referralFeeBasisPoints !== null && referralFeeBasisPoints > 0) {
     return Math.round((commission * referralFeeBasisPoints) / 10000);
   }

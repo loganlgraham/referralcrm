@@ -478,7 +478,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         );
       } else {
         const commissionBasisPoints = referral.commissionBasisPoints || DEFAULT_AGENT_COMMISSION_BPS;
-        const referralFeeBasisPoints = referral.referralFeeBasisPoints || DEFAULT_REFERRAL_FEE_BPS;
+        const referralFeeBasisPoints = referral.referralFeeBasisPoints ?? DEFAULT_REFERRAL_FEE_BPS;
         const baseAmount = referral.preApprovalAmountCents ?? 0;
         referral.referralFeeDueCents = calculateReferralFeeDue(
           baseAmount,

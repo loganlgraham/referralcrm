@@ -278,8 +278,13 @@ function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: Unde
             toast.error('Contract price is required.');
             return;
           }
-          if (!referralFeePercentage || parseNumericInput(referralFeePercentage) <= 0) {
+          if (!referralFeePercentage.trim()) {
             toast.error('Referral fee % is required.');
+            return;
+          }
+          const referralFeeParsed = parseNumericInput(referralFeePercentage);
+          if (!Number.isFinite(referralFeeParsed) || referralFeeParsed < 0) {
+            toast.error('Enter a valid referral fee % (0 or greater).');
             return;
           }
           const contractPriceCents = toCents(contractPrice);
@@ -292,9 +297,7 @@ function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: Unde
           const commissionFlatFeeCents = isFlatFeeMode
             ? (commissionFlat ? toCents(commissionFlat) : null)
             : null;
-          const referralFeeBasisPoints = referralFeePercentage
-            ? Math.round(parseNumericInput(referralFeePercentage) * 100)
-            : null;
+          const referralFeeBasisPoints = Math.round(referralFeeParsed * 100);
           const expectedAmountCents = toCents(expectedAmount);
           const computedExpectedAmountCents =
             !expectedAmountCents && referralFeeBasisPoints
