@@ -7,6 +7,7 @@ import { User } from '@/models/user';
 import { getCurrentSession } from '@/lib/auth';
 import { Payment } from '@/models/payment';
 import { Referral } from '@/models/referral';
+import { Activity } from '@/models/activity';
 import type { DealStatus } from '@/constants/deals';
 import {
   computeAgentMetrics,
@@ -41,6 +42,7 @@ type AgentProfile = {
   metrics: AgentMetricsSummary;
   notes: NoteSummary[];
   deals: PersonDealSnapshot[];
+  lastActivityAt: string | null;
   signupStatus?: {
     hasSignedUp: boolean;
     signedUpAfterWelcomeEmail: boolean | null;
@@ -177,6 +179,23 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
   });
 
   let deals: PersonDealSnapshot[] = [];
+  let lastActivityAt: string | null = null;
+
+  if (referralIds.length > 0) {
+    const latestActivity = await Activity.findOne({ referralId: { $in: referralIds } })
+      .sort({ createdAt: -1 })
+      .select('createdAt')
+      .lean<{ createdAt?: Date | string | null } | null>();
+    if (latestActivity?.createdAt) {
+      const parsed =
+        latestActivity.createdAt instanceof Date
+          ? latestActivity.createdAt
+          : new Date(latestActivity.createdAt);
+      if (!Number.isNaN(parsed.getTime())) {
+        lastActivityAt = parsed.toISOString();
+      }
+    }
+  }
 
   if (referralIds.length > 0) {
     const paymentDocs = await Payment.find({ referralId: { $in: referralIds } })
@@ -304,6 +323,7 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
     metrics,
     notes: serializeNotes(agent.notes),
     deals,
+    lastActivityAt,
     signupStatus
   };
 }

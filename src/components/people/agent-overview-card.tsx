@@ -7,11 +7,12 @@ import { toast } from 'sonner';
 import { AgentAdminEditor, type AgentAdminEditorProps } from '@/components/people/agent-admin-editor';
 import { SendWelcomeEmailButton } from '@/components/people/send-welcome-email-button';
 import { CopyButton } from '@/components/common/copy-button';
-import { formatPhoneNumber } from '@/utils/formatters';
+import { formatDateMST, formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 
 interface AgentOverviewCardProps {
   agent: AgentAdminEditorProps['agent'] & {
+    lastActivityAt?: string | null;
     signupStatus?: {
       hasSignedUp: boolean;
       signedUpAfterWelcomeEmail: boolean | null;
@@ -172,9 +173,14 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
               </button>
             </div>
             {signupStatusDisplay && (
-              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${signupStatusDisplay.color}`}>
-                {signupStatusDisplay.text}
-              </span>
+              <div className="flex flex-col items-end gap-1">
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${signupStatusDisplay.color}`}>
+                  {signupStatusDisplay.text}
+                </span>
+                <span className="inline-flex items-center rounded-full bg-surface-muted px-2.5 py-0.5 text-[11px] font-medium text-foreground-muted">
+                  Last activity: {agent.lastActivityAt ? formatDateMST(agent.lastActivityAt) : 'none yet'}
+                </span>
+              </div>
             )}
           </div>
         )}

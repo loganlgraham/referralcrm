@@ -2654,7 +2654,7 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
       <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
       <p className="mt-1 text-xs text-foreground-subtle">
         Composite score blends weighted KPIs. Agents with fewer than 3 referrals are marked provisional and receive a
-        reliability adjustment.
+        reliability adjustment. CRM usage is included as a low-weight tie-break style signal.
       </p>
       {data.rankedAgents.length === 0 ? (
         <p className="py-8 text-center text-sm text-foreground-subtle">No agents with data for this period.</p>
