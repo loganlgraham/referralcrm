@@ -169,6 +169,21 @@ if (!authSecret) {
 // Lazy initialization: MongoDBAdapter will call this function when it needs the connection
 const getAdapterClientPromise = () => getClientPromise();
 
+export async function persistUserLastLoginAt(input: { id?: string | null; email?: string | null }) {
+  const userId = typeof input.id === 'string' && input.id.length > 0 ? input.id : null;
+  const email =
+    typeof input.email === 'string' && input.email.trim().length > 0
+      ? input.email.trim().toLowerCase()
+      : null;
+  if (!userId && !email) {
+    return;
+  }
+
+  const query = userId ? { _id: userId } : { email };
+  await connectMongo();
+  await User.updateOne(query, { $set: { lastLoginAt: new Date() } });
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: MongoDBAdapter(getAdapterClientPromise() as any),
   session: { strategy: 'jwt' },
@@ -180,6 +195,21 @@ export const authOptions: NextAuthOptions = {
   secret: authSecret,
   providers,
   debug: process.env.NODE_ENV === 'development',
+  events: {
+    async signIn({ user }) {
+      try {
+        const signInUser = user as { id?: string | null; email?: string | null } | undefined;
+        await persistUserLastLoginAt({
+          id: signInUser?.id ?? null,
+          email: signInUser?.email ?? null
+        });
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[Auth] Unable to persist last login timestamp:', error);
+        }
+      }
+    }
+  },
   callbacks: {
     async jwt({ token, user, account }) {
       if (user) {

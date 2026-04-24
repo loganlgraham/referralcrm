@@ -43,6 +43,7 @@ type AgentProfile = {
   notes: NoteSummary[];
   deals: PersonDealSnapshot[];
   lastActivityAt: string | null;
+  lastLoggedOnAt: string | null;
   signupStatus?: {
     hasSignedUp: boolean;
     signedUpAfterWelcomeEmail: boolean | null;
@@ -282,14 +283,24 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
 
   // Calculate signup status
   let signupStatus: AgentProfile['signupStatus'] | null = null;
+  let lastLoggedOnAt: string | null = null;
   if (session.user.role === 'admin') {
     const hasSignedUp = Boolean(agent.userId);
     let signedUpAfterWelcomeEmail: boolean | null = null;
 
-    if (hasSignedUp && agent.userId && agent.welcomeEmailSentAt) {
-      const user = await User.findById(agent.userId).select('createdAt').lean<{ createdAt?: Date } | null>();
-      if (user?.createdAt) {
-        const userCreatedAt = user.createdAt instanceof Date ? user.createdAt : new Date(user.createdAt);
+    if (hasSignedUp && agent.userId) {
+      const user = await User.findById(agent.userId)
+        .select('createdAt lastLoginAt')
+        .lean<{ createdAt?: Date; lastLoginAt?: Date | null } | null>();
+      if (user?.lastLoginAt) {
+        const loginAt = user.lastLoginAt instanceof Date ? user.lastLoginAt : new Date(user.lastLoginAt);
+        if (!Number.isNaN(loginAt.getTime())) {
+          lastLoggedOnAt = loginAt.toISOString();
+        }
+      }
+      if (user?.createdAt && agent.welcomeEmailSentAt) {
+        const userCreatedAt =
+          user.createdAt instanceof Date ? user.createdAt : new Date(user.createdAt);
         const welcomeEmailSentAt = agent.welcomeEmailSentAt instanceof Date ? agent.welcomeEmailSentAt : new Date(agent.welcomeEmailSentAt);
         signedUpAfterWelcomeEmail = userCreatedAt >= welcomeEmailSentAt;
       }
@@ -324,6 +335,7 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
     notes: serializeNotes(agent.notes),
     deals,
     lastActivityAt,
+    lastLoggedOnAt,
     signupStatus
   };
 }

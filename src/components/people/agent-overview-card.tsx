@@ -13,6 +13,7 @@ import { buildGmailComposeUrl } from '@/utils/gmail';
 interface AgentOverviewCardProps {
   agent: AgentAdminEditorProps['agent'] & {
     lastActivityAt?: string | null;
+    lastLoggedOnAt?: string | null;
     signupStatus?: {
       hasSignedUp: boolean;
       signedUpAfterWelcomeEmail: boolean | null;
@@ -179,6 +180,9 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
                 </span>
                 <span className="inline-flex items-center rounded-full bg-surface-muted px-2.5 py-0.5 text-[11px] font-medium text-foreground-muted">
                   Last activity: {agent.lastActivityAt ? formatDateMST(agent.lastActivityAt) : 'none yet'}
+                </span>
+                <span className="inline-flex items-center rounded-full bg-surface-muted px-2.5 py-0.5 text-[11px] font-medium text-foreground-muted">
+                  Logged on: {agent.lastLoggedOnAt ? formatDateMST(agent.lastLoggedOnAt) : 'none yet'}
                 </span>
               </div>
             )}
