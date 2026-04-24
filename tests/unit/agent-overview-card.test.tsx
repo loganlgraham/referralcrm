@@ -40,8 +40,12 @@ describe('AgentOverviewCard pills', () => {
   it('shows logged-on fallback when there is no login timestamp', () => {
     render(<AgentOverviewCard agent={{ ...baseAgent, lastActivityAt: null, lastLoggedOnAt: null }} isAdmin />);
 
-    expect(screen.getByText('Last activity: none yet')).toBeInTheDocument();
-    expect(screen.getByText('Logged on: none yet')).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => element?.textContent === 'Last activity: none yet')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => element?.textContent === 'Logged on: none yet')
+    ).toBeInTheDocument();
   });
 
   it('shows logged-on date when timestamp is available', () => {
@@ -56,7 +60,11 @@ describe('AgentOverviewCard pills', () => {
       />
     );
 
-    expect(screen.getByText('Last activity: Jan 3, 2026')).toBeInTheDocument();
-    expect(screen.getByText('Logged on: Jan 4, 2026')).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => element?.textContent === 'Last activity: Jan 3, 2026')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => element?.textContent === 'Logged on: Jan 4, 2026')
+    ).toBeInTheDocument();
   });
 });
