@@ -46,6 +46,25 @@ export function computeAhaReliabilityFactor(
   return Math.min(1, Math.sqrt(referralCount / minReferralsForFullReliability));
 }
 
+export function computeCappedActivityUsageScore(
+  totalEvents: number,
+  activeDays: number,
+  maxEventsPerActiveDay = 2
+): number {
+  const safeTotalEvents = Number.isFinite(totalEvents) ? Math.max(0, Math.floor(totalEvents)) : 0;
+  const safeActiveDays = Number.isFinite(activeDays) ? Math.max(0, Math.floor(activeDays)) : 0;
+  const safeMaxEventsPerActiveDay = Number.isFinite(maxEventsPerActiveDay)
+    ? Math.max(1, Math.floor(maxEventsPerActiveDay))
+    : 1;
+  if (safeActiveDays === 0) {
+    return 0;
+  }
+
+  const cappedEvents = Math.min(safeTotalEvents, safeActiveDays * safeMaxEventsPerActiveDay);
+  const bonusEvents = Math.max(0, cappedEvents - safeActiveDays);
+  return safeActiveDays + bonusEvents;
+}
+
 export function compareAhaRankedAgents(a: AhaRankSortFields, b: AhaRankSortFields): number {
   if (b.score !== a.score) {
     return b.score - a.score;

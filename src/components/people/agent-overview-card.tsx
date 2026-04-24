@@ -7,11 +7,13 @@ import { toast } from 'sonner';
 import { AgentAdminEditor, type AgentAdminEditorProps } from '@/components/people/agent-admin-editor';
 import { SendWelcomeEmailButton } from '@/components/people/send-welcome-email-button';
 import { CopyButton } from '@/components/common/copy-button';
-import { formatPhoneNumber } from '@/utils/formatters';
+import { formatDateMST, formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 
 interface AgentOverviewCardProps {
   agent: AgentAdminEditorProps['agent'] & {
+    lastActivityAt?: string | null;
+    lastLoggedOnAt?: string | null;
     signupStatus?: {
       hasSignedUp: boolean;
       signedUpAfterWelcomeEmail: boolean | null;
@@ -66,18 +68,39 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
     const { hasSignedUp, signedUpAfterWelcomeEmail, welcomeEmailSentAt } = agent.signupStatus;
     if (hasSignedUp) {
       if (signedUpAfterWelcomeEmail === true) {
-        return { text: 'Signed up after welcome email', color: 'bg-emerald-50 text-emerald-700' };
+        return { text: 'Signed up after welcome email', tone: 'success' as const };
       } else if (signedUpAfterWelcomeEmail === false) {
-        return { text: 'Signed up before welcome email', color: 'bg-amber-50 text-amber-700' };
+        return { text: 'Signed up before welcome email', tone: 'warning' as const };
       } else {
-        return { text: 'Signed up', color: 'bg-blue-50 text-blue-700' };
+        return { text: 'Signed up', tone: 'info' as const };
       }
     } else if (welcomeEmailSentAt) {
-      return { text: 'Welcome email sent, not signed up', color: 'bg-amber-50 text-amber-700' };
+      return { text: 'Welcome email sent, not signed up', tone: 'warning' as const };
     } else {
-      return { text: 'No welcome email sent', color: 'bg-surface-muted text-foreground-muted' };
+      return { text: 'No welcome email sent', tone: 'muted' as const };
     }
   }, [isAdmin, agent.signupStatus]);
+
+  const pillToneClasses: Record<'success' | 'warning' | 'info' | 'muted', { container: string; dot: string }> = {
+    success: {
+      container: 'border-emerald-200 bg-emerald-50/80 text-emerald-700',
+      dot: 'bg-emerald-500',
+    },
+    warning: {
+      container: 'border-amber-200 bg-amber-50/80 text-amber-700',
+      dot: 'bg-amber-500',
+    },
+    info: {
+      container: 'border-blue-200 bg-blue-50/80 text-blue-700',
+      dot: 'bg-blue-500',
+    },
+    muted: {
+      container: 'border-border bg-surface-muted/80 text-foreground-muted',
+      dot: 'bg-foreground-subtle',
+    },
+  };
+  const pillBaseClass =
+    'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium shadow-sm';
 
   return (
     <div className="rounded-md bg-surface-raised p-6 shadow-sm">
@@ -172,9 +195,28 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
               </button>
             </div>
             {signupStatusDisplay && (
-              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${signupStatusDisplay.color}`}>
-                {signupStatusDisplay.text}
-              </span>
+              <div className="flex flex-col items-end gap-1.5">
+                <span
+                  className={`${pillBaseClass} ${pillToneClasses[signupStatusDisplay.tone].container}`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${pillToneClasses[signupStatusDisplay.tone].dot}`} />
+                  {signupStatusDisplay.text}
+                </span>
+                <div className="w-fit max-w-[260px] rounded-xl border border-border bg-surface-muted/50 px-3 py-2 text-right">
+                  <p className="text-[11px] font-medium text-foreground-muted">
+                    Last activity:{' '}
+                    <span className="font-semibold text-foreground">
+                      {agent.lastActivityAt ? formatDateMST(agent.lastActivityAt) : 'none yet'}
+                    </span>
+                  </p>
+                  <p className="mt-0.5 text-[11px] font-medium text-foreground-muted">
+                    Logged on:{' '}
+                    <span className="font-semibold text-foreground">
+                      {agent.lastLoggedOnAt ? formatDateMST(agent.lastLoggedOnAt) : 'none yet'}
+                    </span>
+                  </p>
+                </div>
+              </div>
             )}
           </div>
         )}

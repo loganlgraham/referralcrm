@@ -41,6 +41,7 @@ import {
   AHA_NEUTRAL_SCORE,
   compareAhaRankedAgents,
   computeAhaReliabilityFactor,
+  computeCappedActivityUsageScore,
   normalizeAhaKpiMap
 } from '@/lib/server/aha-leaderboard-scoring';
 import { resolvePushbackMetricsInTimeframe } from '@/lib/server/pushback-metrics';
@@ -959,7 +960,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       ? LenderMC.find({ _id: { $in: Array.from(lenderIds, (id) => new Types.ObjectId(id)) } }).select('name email phone npsScore')
       : Promise.resolve([]),
     agentIds.size
-      ? Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } }).select('name email phone ahaDesignation npsScore')
+      ? Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } }).select('name email phone ahaDesignation npsScore userId')
       : Promise.resolve([])
   ]);
 
@@ -978,11 +979,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const agentNameMap = new Map<string, string>();
   const agentEmailMap = new Map<string, string | null>();
   const agentPhoneMap = new Map<string, string | null>();
+  const agentUserIdToAgentIdMap = new Map<string, string>();
   agents.forEach((agent) => {
     const id = agent._id.toString();
     agentNameMap.set(id, agent.name || 'Unnamed Agent');
     agentEmailMap.set(id, agent.email ?? null);
     agentPhoneMap.set(id, agent.phone ?? null);
+    const userId = (agent as { userId?: Types.ObjectId | null }).userId;
+    if (userId) {
+      agentUserIdToAgentIdMap.set(userId.toString(), id);
+    }
   });
 
   const agentDesignationMap = new Map<string, 'AHA' | 'AHA_OOS' | 'AGIT' | null>();
@@ -3146,13 +3152,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     closeRate: 5,
     underContractRate: 3, afcAttachRate: 3, npsScore: 3, lostDeals: 3, avgDaysToContract: 3,
     revenuePaid: 2, avgTimeToFirstContact: 2,
-    avgDealSize: 1, netCommission: 1, referralCount: 1,
+    avgDealSize: 1, netCommission: 1, referralCount: 1, crmUsage: 1,
   };
   const AHA_KPI_TIERS: Record<string, 'high' | 'medium' | 'low'> = {
     closeRate: 'high', underContractRate: 'high', afcAttachRate: 'high', npsScore: 'high',
     lostDeals: 'high', avgDaysToContract: 'high',
     revenuePaid: 'medium', avgTimeToFirstContact: 'medium',
-    avgDealSize: 'low', netCommission: 'low', referralCount: 'low',
+    avgDealSize: 'low', netCommission: 'low', referralCount: 'low', crmUsage: 'low',
   };
   const AHA_KPI_LABELS: Record<string, string> = {
     closeRate: 'Close Rate', underContractRate: 'Under Contract Rate',
@@ -3160,12 +3166,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     lostDeals: 'Lost Deals', avgDaysToContract: 'Avg. Days to Contract',
     revenuePaid: 'Revenue Paid', avgTimeToFirstContact: 'Avg. Time to First Contact',
     avgDealSize: 'Avg. Deal Size', netCommission: 'Net Commission',
-    referralCount: 'Referral Count',
+    referralCount: 'Referral Count', crmUsage: 'CRM Usage',
   };
   const AHA_KPI_ORDER = [
     'closeRate', 'underContractRate', 'afcAttachRate', 'lostDeals',
     'avgDaysToContract', 'npsScore', 'revenuePaid', 'avgTimeToFirstContact',
-    'avgDealSize', 'netCommission', 'referralCount',
+    'avgDealSize', 'netCommission', 'referralCount', 'crmUsage',
+  ];
+  const CRM_USAGE_CHANNELS: Array<'note' | 'status' | 'update' | 'call' | 'sms' | 'email'> = [
+    'note',
+    'status',
+    'update',
+    'call',
+    'sms',
+    'email'
   ];
 
   const formatAhaKpiDisplay = (key: string, raw: number): string => {
@@ -3186,16 +3200,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         return `${Math.round(raw)} days`;
       case 'avgTimeToFirstContact':
         return `${raw.toFixed(1)} hrs`;
+      case 'crmUsage':
+        return `${Math.round(raw)} pts`;
       default:
         return String(Math.round(raw));
     }
   };
 
-  const buildAhaAgentLeaderboards = (
+  const buildAhaAgentLeaderboards = async (
     bucketReferrals: DashboardReferral[],
     bucketPayments: AggregatedPayment[],
     bucketAllNetworkPayments: AggregatedPayment[]
-  ): AhaLeaderboardsResult => {
+  ): Promise<AhaLeaderboardsResult> => {
     const getName = (key: string) =>
       key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent';
 
@@ -3251,6 +3267,49 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const key = payment.referral?.assignedAgent?.toString() ?? 'unassigned';
       cohortClosedCountMap.set(key, (cohortClosedCountMap.get(key) ?? 0) + 1);
     });
+
+    const bucketReferralObjectIds = Array.from(bucketReferralIds, (id) => new Types.ObjectId(id));
+    const activityMatch: {
+      referralId: { $in: Types.ObjectId[] };
+      actor: 'Agent';
+      actorId: { $exists: true; $ne: null };
+      channel: { $in: Array<'note' | 'status' | 'update' | 'call' | 'sms' | 'email'> };
+      createdAt?: { $gte?: Date; $lte?: Date };
+    } = {
+      referralId: { $in: bucketReferralObjectIds },
+      actor: 'Agent',
+      actorId: { $exists: true, $ne: null },
+      channel: { $in: CRM_USAGE_CHANNELS }
+    };
+    if (timeframeStart || timeframeEnd) {
+      activityMatch.createdAt = {};
+      if (timeframeStart) {
+        activityMatch.createdAt.$gte = timeframeStart;
+      }
+      if (timeframeEnd) {
+        activityMatch.createdAt.$lte = timeframeEnd;
+      }
+    }
+    const activityByAgentUser = bucketReferralObjectIds.length
+      ? await Activity.aggregate<{ _id: Types.ObjectId; totalEvents: number; activeDaysCount: number }>([
+          { $match: activityMatch },
+          {
+            $group: {
+              _id: '$actorId',
+              totalEvents: { $sum: 1 },
+              activeDays: {
+                $addToSet: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }
+              }
+            }
+          },
+          {
+            $project: {
+              totalEvents: 1,
+              activeDaysCount: { $size: '$activeDays' }
+            }
+          }
+        ])
+      : [];
 
     const agentPerfMap = new Map<
       string,
@@ -3313,8 +3372,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       referralCount: new Map(), closeRate: new Map(), underContractRate: new Map(),
       afcAttachRate: new Map(), revenuePaid: new Map(), avgDealSize: new Map(),
       netCommission: new Map(), lostDeals: new Map(), avgDaysToContract: new Map(),
-      avgTimeToFirstContact: new Map(), npsScore: new Map(),
+      avgTimeToFirstContact: new Map(), npsScore: new Map(), crmUsage: new Map(),
     };
+    const crmUsageByAgentId = new Map<string, number>();
+    activityByAgentUser.forEach((row) => {
+      const agentId = agentUserIdToAgentIdMap.get(row._id.toString());
+      if (!agentId) {
+        return;
+      }
+      const usage = computeCappedActivityUsageScore(row.totalEvents, row.activeDaysCount);
+      crmUsageByAgentId.set(agentId, (crmUsageByAgentId.get(agentId) ?? 0) + usage);
+    });
 
     for (const [id, count] of referralCountMap) {
       if (id === 'unassigned') continue;
@@ -3341,6 +3409,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
       const nps = agentNpsMap.get(id);
       if (nps != null) kpiRaw.npsScore.set(id, nps);
+      const crmUsage = crmUsageByAgentId.get(id);
+      if (crmUsage != null && crmUsage > 0) {
+        kpiRaw.crmUsage.set(id, crmUsage);
+      }
     }
 
     // Min-max normalize each KPI map
@@ -3356,6 +3428,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       avgDaysToContract:     normalizeAhaKpiMap(kpiRaw.avgDaysToContract, true),
       avgTimeToFirstContact: normalizeAhaKpiMap(kpiRaw.avgTimeToFirstContact, true),
       npsScore:              normalizeAhaKpiMap(kpiRaw.npsScore, false),
+      crmUsage:              normalizeAhaKpiMap(kpiRaw.crmUsage, false),
     };
 
     // Compute composite score per agent
@@ -3420,12 +3493,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const ahaAllNetworkPayments = paymentsByNetwork.filter((p) => getAgentDesignation(p) === 'AHA');
   const ahaOosAllNetworkPayments = paymentsByNetwork.filter((p) => getAgentDesignation(p) === 'AHA_OOS');
 
-  const ahaLeaderboards = buildAhaAgentLeaderboards(
+  const ahaLeaderboards = await buildAhaAgentLeaderboards(
     ahaFilteredReferrals,
     ahaFilteredPayments,
     ahaAllNetworkPayments
   );
-  const ahaOosLeaderboards = buildAhaAgentLeaderboards(
+  const ahaOosLeaderboards = await buildAhaAgentLeaderboards(
     ahaOosFilteredReferrals,
     ahaOosFilteredPayments,
     ahaOosAllNetworkPayments

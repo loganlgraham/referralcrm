@@ -7,6 +7,7 @@ import { User } from '@/models/user';
 import { getCurrentSession } from '@/lib/auth';
 import { Payment } from '@/models/payment';
 import { Referral } from '@/models/referral';
+import { Activity } from '@/models/activity';
 import type { DealStatus } from '@/constants/deals';
 import {
   computeAgentMetrics,
@@ -41,6 +42,8 @@ type AgentProfile = {
   metrics: AgentMetricsSummary;
   notes: NoteSummary[];
   deals: PersonDealSnapshot[];
+  lastActivityAt: string | null;
+  lastLoggedOnAt: string | null;
   signupStatus?: {
     hasSignedUp: boolean;
     signedUpAfterWelcomeEmail: boolean | null;
@@ -177,6 +180,23 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
   });
 
   let deals: PersonDealSnapshot[] = [];
+  let lastActivityAt: string | null = null;
+
+  if (referralIds.length > 0) {
+    const latestActivity = await Activity.findOne({ referralId: { $in: referralIds } })
+      .sort({ createdAt: -1 })
+      .select('createdAt')
+      .lean<{ createdAt?: Date | string | null } | null>();
+    if (latestActivity?.createdAt) {
+      const parsed =
+        latestActivity.createdAt instanceof Date
+          ? latestActivity.createdAt
+          : new Date(latestActivity.createdAt);
+      if (!Number.isNaN(parsed.getTime())) {
+        lastActivityAt = parsed.toISOString();
+      }
+    }
+  }
 
   if (referralIds.length > 0) {
     const paymentDocs = await Payment.find({ referralId: { $in: referralIds } })
@@ -263,14 +283,24 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
 
   // Calculate signup status
   let signupStatus: AgentProfile['signupStatus'] | null = null;
+  let lastLoggedOnAt: string | null = null;
   if (session.user.role === 'admin') {
     const hasSignedUp = Boolean(agent.userId);
     let signedUpAfterWelcomeEmail: boolean | null = null;
 
-    if (hasSignedUp && agent.userId && agent.welcomeEmailSentAt) {
-      const user = await User.findById(agent.userId).select('createdAt').lean<{ createdAt?: Date } | null>();
-      if (user?.createdAt) {
-        const userCreatedAt = user.createdAt instanceof Date ? user.createdAt : new Date(user.createdAt);
+    if (hasSignedUp && agent.userId) {
+      const user = await User.findById(agent.userId)
+        .select('createdAt lastLoginAt')
+        .lean<{ createdAt?: Date; lastLoginAt?: Date | null } | null>();
+      if (user?.lastLoginAt) {
+        const loginAt = user.lastLoginAt instanceof Date ? user.lastLoginAt : new Date(user.lastLoginAt);
+        if (!Number.isNaN(loginAt.getTime())) {
+          lastLoggedOnAt = loginAt.toISOString();
+        }
+      }
+      if (user?.createdAt && agent.welcomeEmailSentAt) {
+        const userCreatedAt =
+          user.createdAt instanceof Date ? user.createdAt : new Date(user.createdAt);
         const welcomeEmailSentAt = agent.welcomeEmailSentAt instanceof Date ? agent.welcomeEmailSentAt : new Date(agent.welcomeEmailSentAt);
         signedUpAfterWelcomeEmail = userCreatedAt >= welcomeEmailSentAt;
       }
@@ -304,6 +334,8 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
     metrics,
     notes: serializeNotes(agent.notes),
     deals,
+    lastActivityAt,
+    lastLoggedOnAt,
     signupStatus
   };
 }

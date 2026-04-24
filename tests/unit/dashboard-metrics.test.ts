@@ -14,6 +14,7 @@ import {
   AHA_NEUTRAL_SCORE,
   compareAhaRankedAgents,
   computeAhaReliabilityFactor,
+  computeCappedActivityUsageScore,
   normalizeAhaKpiMap
 } from '@/lib/server/aha-leaderboard-scoring';
 import { resolvePushbackMetricsInTimeframe } from '@/lib/server/pushback-metrics';
@@ -600,6 +601,49 @@ describe('Dashboard Metrics - Leaderboard Calculations', () => {
 });
 
 describe('Dashboard Metrics - AHA Composite Scoring', () => {
+  it('rewards more active CRM usage when other KPI inputs are equal', () => {
+    const crmUsageRaw = new Map([
+      ['agent-a', computeCappedActivityUsageScore(20, 10)],
+      ['agent-b', computeCappedActivityUsageScore(4, 4)]
+    ]);
+    const normalizedCrmUsage = normalizeAhaKpiMap(crmUsageRaw, false);
+
+    const closeRateWeight = 5;
+    const crmUsageWeight = 1;
+    const totalWeight = closeRateWeight + crmUsageWeight;
+
+    const scoreForAgentA =
+      ((50 * closeRateWeight) + ((normalizedCrmUsage.get('agent-a') ?? AHA_NEUTRAL_SCORE) * crmUsageWeight)) /
+      totalWeight;
+    const scoreForAgentB =
+      ((50 * closeRateWeight) + ((normalizedCrmUsage.get('agent-b') ?? AHA_NEUTRAL_SCORE) * crmUsageWeight)) /
+      totalWeight;
+
+    expect(scoreForAgentA).toBeGreaterThan(scoreForAgentB);
+  });
+
+  it('caps CRM usage event bonus to reduce spammy event volume impact', () => {
+    const moderateUsage = computeCappedActivityUsageScore(20, 10);
+    const spammyUsage = computeCappedActivityUsageScore(200, 10);
+
+    expect(moderateUsage).toBe(20);
+    expect(spammyUsage).toBe(20);
+  });
+
+  it('keeps CRM usage influence low relative to high-weight KPIs', () => {
+    const closeRateWeight = 5;
+    const crmUsageWeight = 1;
+    const totalWeight = closeRateWeight + crmUsageWeight;
+
+    const highCloseRateLowUsage =
+      ((100 * closeRateWeight) + (0 * crmUsageWeight)) / totalWeight;
+    const lowCloseRateHighUsage =
+      ((0 * closeRateWeight) + (100 * crmUsageWeight)) / totalWeight;
+
+    expect(highCloseRateLowUsage).toBeGreaterThan(lowCloseRateHighUsage);
+    expect(highCloseRateLowUsage - lowCloseRateHighUsage).toBeGreaterThan(60);
+  });
+
   it('uses neutral score when KPI values have no variance', () => {
     const rawMap = new Map([
       ['agent-a', 8],
