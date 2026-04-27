@@ -6,6 +6,7 @@ import type { NextAuthOptions } from 'next-auth';
 import { Resend } from 'resend';
 import { getClientPromise } from '@/lib/mongodb-client';
 import { connectMongo } from '@/lib/mongoose';
+import { Types } from 'mongoose';
 import { User } from '@/models/user';
 import { z } from 'zod';
 
@@ -179,9 +180,22 @@ export async function persistUserLastLoginAt(input: { id?: string | null; email?
     return;
   }
 
-  const query = userId ? { _id: userId } : { email };
+  const query =
+    userId && Types.ObjectId.isValid(userId)
+      ? { _id: new Types.ObjectId(userId) }
+      : userId
+        ? { _id: userId }
+        : { email: email as string };
+
   await connectMongo();
-  await User.updateOne(query, { $set: { lastLoginAt: new Date() } });
+  const result = await User.updateOne(query, { $set: { lastLoginAt: new Date() } });
+  if (result.matchedCount === 0 && process.env.NODE_ENV === 'development') {
+    console.warn('[Auth] lastLoginAt update matched no user for query:', {
+      usedObjectId: Boolean(userId && Types.ObjectId.isValid(userId)),
+      hasUserId: Boolean(userId),
+      hasEmail: Boolean(email)
+    });
+  }
 }
 
 export const authOptions: NextAuthOptions = {
@@ -211,10 +225,21 @@ export const authOptions: NextAuthOptions = {
     }
   },
   callbacks: {
-    async jwt({ token, user, account }) {
+    async jwt({ token, user }) {
       if (user) {
         // @ts-ignore
         token.role = (user as any).role ?? token.role;
+        try {
+          const jwtUser = user as { id?: string | null; email?: string | null };
+          await persistUserLastLoginAt({
+            id: jwtUser?.id ?? null,
+            email: jwtUser?.email ?? null
+          });
+        } catch (error) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('[Auth] Unable to persist last login timestamp from jwt:', error);
+          }
+        }
       }
 
       const role = (token as any).role;
