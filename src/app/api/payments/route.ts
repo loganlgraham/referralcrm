@@ -1452,7 +1452,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
               const agentSurveyUrl = `${origin}/nps/agent?token=${agentSurveyToken}`;
 
-              await sendTransactionalEmail({
+              const borrowerSurveySent = await sendTransactionalEmail({
                 to: [borrowerEmail],
                 subject: 'Congrats on Your New Home!',
                 html: `
@@ -1468,6 +1468,15 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
                 `,
                 text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best!\n\nRate your agent: ${agentSurveyUrl}`,
               });
+              if (borrowerSurveySent === true) {
+                await logReferralActivity({
+                  referralId: referral._id,
+                  actorRole: session.user.role,
+                  actorId: session.user.id,
+                  channel: 'email',
+                  content: `Satisfaction rating survey emailed to borrower for feedback on ${agentFullName}.`,
+                });
+              }
             }
 
             if (agent?.email && sendAgentClosedCongrats && shouldSendAgentNpsEmail) {
@@ -1513,7 +1522,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
                 ? `\n\n${mcQuestion}\n\nRate your mortgage consultant: ${lenderSurveyUrl}`
                 : '';
 
-              await sendTransactionalEmail({
+              const agentCloseSurveySent = await sendTransactionalEmail({
                 to: [agent.email],
                 subject: 'Congratulations on Your Closed Deal!',
                 html: `
@@ -1524,6 +1533,17 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
                 `,
                 text: `Hi ${agentFirstName},\n\nCongratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.${mcBlockText}`,
               });
+              if (agentCloseSurveySent === true && lenderSurveyUrl) {
+                const lenderPop = referral.lender as { name?: string | null } | null | undefined;
+                const lenderLabel = lenderPop?.name?.trim() || 'their mortgage consultant';
+                await logReferralActivity({
+                  referralId: referral._id,
+                  actorRole: session.user.role,
+                  actorId: session.user.id,
+                  channel: 'email',
+                  content: `Satisfaction rating survey emailed to agent for feedback on ${lenderLabel}.`,
+                });
+              }
             }
           }
         }
