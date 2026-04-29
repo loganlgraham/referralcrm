@@ -1185,7 +1185,9 @@ function ConversionFunnelCard({
 
   const buildStageDrillDownUrl = (status: string) => {
     const params = new URLSearchParams();
-    params.set('maxStageReached', status);
+    const statusFilter =
+      status === 'Active Lead' ? 'Active Lead,Showing Homes' : status;
+    params.set('status', statusFilter);
     return `/referrals?${withNetworkParam(params).toString()}`;
   };
 
@@ -1199,7 +1201,8 @@ function ConversionFunnelCard({
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Conversion funnel</p>
       <p className="mt-1 text-xs text-foreground-subtle">
-        Cohort funnel: each stage counts referrals that ever reached that stage. Click a row to view the list.
+        Cohort funnel: each stage counts referrals that ever reached that stage. Click a row to open referrals
+        currently in that status (row totals can differ from the list).
       </p>
       <div className="mt-4 space-y-1.5">
         {stages.length ? (

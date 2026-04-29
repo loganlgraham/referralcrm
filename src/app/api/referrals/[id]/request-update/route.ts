@@ -207,45 +207,44 @@ Referral CRM Team
       }
     }
 
-    // Update timestamp based on whether it's automated or manual
     const timestampField = isAutomated ? 'lastAutoReminderSentAt' : 'lastManualReminderSentAt';
     const now = new Date();
+    const hasSuccessfulSend = emailResults.sent.length > 0;
 
-    await Referral.findByIdAndUpdate(params.id, {
-      $set: { [timestampField]: now },
-      $push: {
-        audit: {
-          actorId: session?.user?.id || null,
-          actorRole: isAutomated ? 'system' : session?.user?.role || 'admin',
-          field: isAutomated ? 'auto_update_reminder' : 'update_requested',
-          previousValue: null,
-          newValue: agentIds,
-          timestamp: now,
+    if (hasSuccessfulSend) {
+      await Referral.findByIdAndUpdate(params.id, {
+        $set: { [timestampField]: now },
+        $push: {
+          audit: {
+            actorId: session?.user?.id || null,
+            actorRole: isAutomated ? 'system' : session?.user?.role || 'admin',
+            field: isAutomated ? 'auto_update_reminder' : 'update_requested',
+            previousValue: null,
+            newValue: agentIds,
+            timestamp: now,
+          },
         },
-      },
-    });
+      });
 
-    // Log activity
-    const actorRole = isAutomated ? 'system' : session?.user?.role;
-    const actorId = isAutomated ? null : session?.user?.id;
-    const agentNames = agents.map((a) => a.name).join(', ');
-    const activityContent = isAutomated
-      ? `Automated update reminder sent to ${agentNames}`
-      : `Update request sent to ${agentNames}`;
+      const deliveredNames = emailResults.sent.join(', ');
+      const activityContent = isAutomated
+        ? `Automated update reminder sent to ${deliveredNames}`
+        : `Update request sent to ${deliveredNames}`;
 
-    await logReferralActivity({
-      referralId: params.id,
-      actorRole,
-      actorId,
-      channel: 'email',
-      content: activityContent,
-    });
+      await logReferralActivity({
+        referralId: params.id,
+        actorRole: isAutomated ? 'system' : session?.user?.role,
+        actorId: isAutomated ? null : session?.user?.id,
+        channel: 'email',
+        content: activityContent,
+      });
+    }
 
     return NextResponse.json({
       success: true,
       sent: emailResults.sent,
       failed: emailResults.failed,
-      timestamp: now.toISOString(),
+      timestamp: hasSuccessfulSend ? now.toISOString() : null,
     });
   } catch (error) {
     console.error('Error sending update request emails:', error);

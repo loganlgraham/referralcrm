@@ -62,7 +62,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     .populate('assignedAgent', 'userId ahaDesignation')
     .populate('buySideAgent', 'userId ahaDesignation')
     .populate('sellSideAgent', 'userId ahaDesignation')
-    .populate('lender', 'userId');
+    .populate('lender', 'userId name');
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
   }
@@ -577,7 +577,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
               });
               const agentSurveyUrl = `${origin}/nps/agent?token=${agentSurveyToken}`;
 
-              await sendTransactionalEmail({
+              const borrowerSurveySentStatus = await sendTransactionalEmail({
                 to: [borrowerEmail],
                 subject: 'Congrats on Your New Home!',
                 html: `
@@ -593,6 +593,15 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
                 `,
                 text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentName}—your feedback means a lot and helps others tremendously. Wishing you all the best!\n\nRate your agent: ${agentSurveyUrl}`,
               });
+              if (borrowerSurveySentStatus === true) {
+                await logReferralActivity({
+                  referralId: referral._id,
+                  actorRole: session.user.role,
+                  actorId: session.user.id,
+                  channel: 'email',
+                  content: `Satisfaction rating survey emailed to borrower for feedback on ${agentName}.`,
+                });
+              }
             }
 
             if (shouldSendAgentNpsEmail && sendAgentClosedCongrats && agentEmail) {
@@ -631,7 +640,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
                 ? `\n\n${mcQuestion}\n\nRate your mortgage consultant: ${lenderSurveyUrl}`
                 : '';
 
-              await sendTransactionalEmail({
+              const agentCloseSurveySentStatus = await sendTransactionalEmail({
                 to: [agentEmail],
                 subject: 'Congratulations on Your Closed Deal!',
                 html: `
@@ -642,6 +651,17 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
                 `,
                 text: `Hi ${agentFirstName},\n\nCongratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.${mcBlockText}`,
               });
+              if (agentCloseSurveySentStatus === true && lenderSurveyUrl) {
+                const lenderPopStatus = referral.lender as { name?: string | null } | null | undefined;
+                const lenderLabelStatus = lenderPopStatus?.name?.trim() || 'their mortgage consultant';
+                await logReferralActivity({
+                  referralId: referral._id,
+                  actorRole: session.user.role,
+                  actorId: session.user.id,
+                  channel: 'email',
+                  content: `Satisfaction rating survey emailed to agent for feedback on ${lenderLabelStatus}.`,
+                });
+              }
             }
           } catch (emailError) {
             console.error('Failed to send close-status NPS emails:', emailError);

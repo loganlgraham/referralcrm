@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { connectMongo } from '@/lib/mongoose';
 import { NPSToken } from '@/models/nps-token';
+import { logReferralActivity } from '@/lib/server/activities';
 import { updateNPSScore } from '@/lib/server/nps';
 
 const submitSchema = z.object({
@@ -93,6 +94,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     actorName: targetName,
     content: `${surveyType} ${targetName} received NPS score: ${score}/10`,
   });
+
+  try {
+    const ratingContent =
+      npsToken.type === 'agent'
+        ? `Satisfaction rating received for agent ${targetName}: ${score}/10.`
+        : `Satisfaction rating received for mortgage consultant ${targetName}: ${score}/10.`;
+    await logReferralActivity({
+      referralId: npsToken.referralId,
+      actorRole: 'system',
+      actorId: null,
+      channel: 'update',
+      content: ratingContent,
+    });
+  } catch (activityError) {
+    console.error('Failed to log referral activity for NPS submit', activityError);
+  }
 
   return NextResponse.json({ success: true });
 }

@@ -7,6 +7,7 @@ import { createNPSToken } from '@/lib/server/nps';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { createAdminNotifications } from '@/lib/server/notifications';
 import { getReferralAppBaseUrl } from '@/lib/referral-links';
+import { logReferralActivity } from '@/lib/server/activities';
 
 let patchHandler: typeof import('@/app/api/payments/route').PATCH;
 
@@ -115,6 +116,7 @@ const mockedCreateAdminNotifications = createAdminNotifications as jest.MockedFu
   typeof createAdminNotifications
 >;
 const mockedGetReferralAppBaseUrl = getReferralAppBaseUrl as jest.MockedFunction<typeof getReferralAppBaseUrl>;
+const mockedLogReferralActivity = logReferralActivity as jest.MockedFunction<typeof logReferralActivity>;
 let referralDoc: any;
 
 const makeRequest = (body: Record<string, unknown>) =>
@@ -329,6 +331,7 @@ describe('Payments PATCH outside-agent normalization', () => {
 
   it('does not send agent close email when usedAfc is false', async () => {
     mockedIsTransactionalEmailConfigured.mockReturnValueOnce(true);
+    mockedSendTransactionalEmail.mockResolvedValue(true);
     mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
       _id: { toString: () => 'pay-1' },
       status: 'closed',
@@ -360,10 +363,17 @@ describe('Payments PATCH outside-agent normalization', () => {
         to: ['agent@example.com'],
       })
     );
+    expect(mockedLogReferralActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: 'email',
+        content: 'Satisfaction rating survey emailed to borrower for feedback on Assigned Agent Full.',
+      })
+    );
   });
 
   it('does not send agent close email when updated payment omits usedAfc', async () => {
     mockedIsTransactionalEmailConfigured.mockReturnValueOnce(true);
+    mockedSendTransactionalEmail.mockResolvedValue(true);
     mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
       _id: { toString: () => 'pay-1' },
       status: 'closed',
@@ -393,10 +403,17 @@ describe('Payments PATCH outside-agent normalization', () => {
         to: ['agent@example.com'],
       })
     );
+    expect(mockedLogReferralActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: 'email',
+        content: 'Satisfaction rating survey emailed to borrower for feedback on Assigned Agent Full.',
+      })
+    );
   });
 
   it('still sends agent close email when usedAfc is true', async () => {
     mockedIsTransactionalEmailConfigured.mockReturnValueOnce(true);
+    mockedSendTransactionalEmail.mockResolvedValue(true);
     mockedCreateNPSToken.mockResolvedValueOnce('nps-agent-token');
     mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
       _id: { toString: () => 'pay-1' },
@@ -436,6 +453,12 @@ describe('Payments PATCH outside-agent normalization', () => {
     );
     expect(agentEmailCall?.[0]?.html).toBeDefined();
     expect(String(agentEmailCall?.[0]?.html)).not.toContain('/nps/lender');
+    expect(mockedLogReferralActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: 'email',
+        content: 'Satisfaction rating survey emailed to borrower for feedback on Assigned Agent Full.',
+      })
+    );
   });
 
   it('includes MC NPS link in agent close email when lender is set and usedAfc is true', async () => {
@@ -445,6 +468,7 @@ describe('Payments PATCH outside-agent normalization', () => {
       email: 'mc@example.com',
     };
     mockedIsTransactionalEmailConfigured.mockReturnValueOnce(true);
+    mockedSendTransactionalEmail.mockResolvedValue(true);
     mockedCreateNPSToken.mockResolvedValueOnce('nps-agent-token').mockResolvedValueOnce('nps-lender-token');
     mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
       _id: { toString: () => 'pay-1' },
@@ -482,6 +506,18 @@ describe('Payments PATCH outside-agent normalization', () => {
       'https://app.test/nps/lender?token=nps-lender-token'
     );
     expect(String(agentEmailCall?.[0]?.text)).toContain('/nps/lender?token=nps-lender-token');
+    expect(mockedLogReferralActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: 'email',
+        content: 'Satisfaction rating survey emailed to borrower for feedback on Assigned Agent Full.',
+      })
+    );
+    expect(mockedLogReferralActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: 'email',
+        content: 'Satisfaction rating survey emailed to agent for feedback on MC One.',
+      })
+    );
   });
 
   it('rejects terminated status updates without terminatedReason', async () => {
