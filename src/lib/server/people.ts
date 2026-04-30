@@ -285,25 +285,46 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
   let signupStatus: AgentProfile['signupStatus'] | null = null;
   let lastLoggedOnAt: string | null = null;
   if (session.user.role === 'admin') {
-    const hasSignedUp = Boolean(agent.userId);
     let signedUpAfterWelcomeEmail: boolean | null = null;
 
-    if (hasSignedUp && agent.userId) {
-      const user = await User.findById(agent.userId)
+    type LinkedUserFields = { createdAt?: Date; lastLoginAt?: Date | null } | null;
+    let linkedUser: LinkedUserFields = null;
+
+    if (agent.userId) {
+      linkedUser = await User.findById(agent.userId)
         .select('createdAt lastLoginAt')
-        .lean<{ createdAt?: Date; lastLoginAt?: Date | null } | null>();
-      if (user?.lastLoginAt) {
-        const loginAt = user.lastLoginAt instanceof Date ? user.lastLoginAt : new Date(user.lastLoginAt);
-        if (!Number.isNaN(loginAt.getTime())) {
-          lastLoggedOnAt = loginAt.toISOString();
-        }
+        .lean<LinkedUserFields>();
+    }
+
+    const normalizedEmail =
+      typeof agent.email === 'string' && agent.email.trim().length > 0
+        ? agent.email.trim().toLowerCase()
+        : null;
+    if (!linkedUser && normalizedEmail) {
+      linkedUser = await User.findOne({ email: normalizedEmail })
+        .select('createdAt lastLoginAt')
+        .lean<LinkedUserFields>();
+    }
+
+    const hasSignedUp = Boolean(agent.userId || linkedUser);
+
+    if (linkedUser?.lastLoginAt) {
+      const loginAt =
+        linkedUser.lastLoginAt instanceof Date
+          ? linkedUser.lastLoginAt
+          : new Date(linkedUser.lastLoginAt);
+      if (!Number.isNaN(loginAt.getTime())) {
+        lastLoggedOnAt = loginAt.toISOString();
       }
-      if (user?.createdAt && agent.welcomeEmailSentAt) {
-        const userCreatedAt =
-          user.createdAt instanceof Date ? user.createdAt : new Date(user.createdAt);
-        const welcomeEmailSentAt = agent.welcomeEmailSentAt instanceof Date ? agent.welcomeEmailSentAt : new Date(agent.welcomeEmailSentAt);
-        signedUpAfterWelcomeEmail = userCreatedAt >= welcomeEmailSentAt;
-      }
+    }
+    if (linkedUser?.createdAt && agent.welcomeEmailSentAt) {
+      const userCreatedAt =
+        linkedUser.createdAt instanceof Date ? linkedUser.createdAt : new Date(linkedUser.createdAt);
+      const welcomeEmailSentAt =
+        agent.welcomeEmailSentAt instanceof Date
+          ? agent.welcomeEmailSentAt
+          : new Date(agent.welcomeEmailSentAt);
+      signedUpAfterWelcomeEmail = userCreatedAt >= welcomeEmailSentAt;
     }
 
     signupStatus = {
