@@ -2888,6 +2888,8 @@ function StaleReferralsTable({ referrals }: { referrals: StaleReferralEntry[] })
 }
 
 function NoOpenTaskReferralsTable({ referrals }: { referrals: NoOpenTaskReferralEntry[] }) {
+  const scrollMaxHeight = `${RANKED_LIST_PREVIEW_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
+
   return (
     <div className="overflow-hidden rounded-card border border-border bg-surface-raised shadow-card">
       <div className="border-b border-border bg-surface-muted px-4 py-3">
@@ -2903,7 +2905,7 @@ function NoOpenTaskReferralsTable({ referrals }: { referrals: NoOpenTaskReferral
           No referrals currently match this filter.
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: scrollMaxHeight }}>
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-surface-muted">
               <tr>
