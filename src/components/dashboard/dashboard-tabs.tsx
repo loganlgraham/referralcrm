@@ -1513,56 +1513,6 @@ function McOutsideLenderLossTable({ entries }: { entries: LeaderboardEntry[] }) 
   );
 }
 
-function StageOnTransferCard({
-  entries
-}: {
-  entries?: DashboardResponse['mc']['stageOnTransferSummary'];
-}) {
-  const safeEntries = entries ?? [];
-
-  return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Stage on Transfer</p>
-      <p className="mt-1 text-xs text-foreground-subtle">
-        Cohort view: referrals created in this period and how many reached a payment-driven close status.
-      </p>
-      <div className="mt-4 overflow-y-auto">
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
-            <tr className="text-left text-xs text-foreground-subtle">
-              <th className="py-1 font-medium">Category</th>
-              <th className="py-1 font-medium text-right">Referrals</th>
-              <th className="py-1 font-medium text-right">Close rate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {safeEntries.length ? (
-              safeEntries.map((entry) => (
-                <tr key={entry.category} className="border-t border-border text-foreground-muted">
-                  <td className="py-2 font-medium text-foreground">{entry.category}</td>
-                  <td className="py-2 text-right">{formatNumber(entry.totalReferrals)}</td>
-                  <td className="py-2 text-right">
-                    <p>{entry.closeRate.toFixed(1)}%</p>
-                    <p className="text-xs text-foreground-subtle">
-                      {`${formatNumber(entry.closedReferrals)} / ${formatNumber(entry.totalReferrals)}`}
-                    </p>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={3} className="py-6 text-center text-sm text-foreground-subtle">
-                  Nothing to display for this period.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 const TRANSFER_TIMING_MIN_GROUP_SAMPLE = 5;
 const TRANSFER_TIMING_GAP_NOISE_THRESHOLD = 1;
 
@@ -2714,8 +2664,7 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
         <McCloseEffectivenessTable entries={data.closeRateLeaderboard} />
         <McOutsideLenderLossTable entries={data.outsideLenderLossLeaderboard} />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <StageOnTransferCard entries={data.stageOnTransferSummary} />
+      <div>
         <TransferTimingCard entries={data.stageOnTransferSummary} />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
