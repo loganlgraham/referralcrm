@@ -1563,45 +1563,109 @@ function StageOnTransferCard({
   );
 }
 
-function PreApprovalUpliftCard({
+const TRANSFER_TIMING_MIN_GROUP_SAMPLE = 5;
+const TRANSFER_TIMING_GAP_NOISE_THRESHOLD = 1;
+
+function TransferTimingCard({
   entries
 }: {
   entries?: DashboardResponse['mc']['stageOnTransferSummary'];
 }) {
   const safeEntries = entries ?? [];
-  const preApproved = safeEntries.find((entry) => entry.category === 'Pre-approved');
-  const preApprovalTbd = safeEntries.find((entry) => entry.category === 'Pre-approval TBD');
+  const beforePreApproval = safeEntries.find((entry) => entry.category === 'Pre-approval TBD');
+  const afterPreApproval = safeEntries.find((entry) => entry.category === 'Pre-approved');
 
-  const preApprovedRate = preApproved?.closeRate ?? 0;
-  const tbdRate = preApprovalTbd?.closeRate ?? 0;
+  const beforeTotal = beforePreApproval?.totalReferrals ?? 0;
+  const afterTotal = afterPreApproval?.totalReferrals ?? 0;
+  const beforeClosed = beforePreApproval?.closedReferrals ?? 0;
+  const afterClosed = afterPreApproval?.closedReferrals ?? 0;
+  const beforeRate = beforePreApproval?.closeRate ?? 0;
+  const afterRate = afterPreApproval?.closeRate ?? 0;
 
-  const closeRateGapPoints = preApprovedRate - tbdRate;
-  const relativeLiftPercent = tbdRate > 0 ? ((preApprovedRate / tbdRate) - 1) * 100 : 0;
+  const hasEnoughData =
+    beforeTotal >= TRANSFER_TIMING_MIN_GROUP_SAMPLE &&
+    afterTotal >= TRANSFER_TIMING_MIN_GROUP_SAMPLE;
+  const gapPoints = afterRate - beforeRate;
+  const absGapPoints = Math.abs(gapPoints);
 
-  const estimatedMissedCloses = preApprovalTbd && preApprovedRate > tbdRate
-    ? Math.round(((preApprovedRate - tbdRate) / 100) * preApprovalTbd.totalReferrals)
-    : 0;
+  let winner: 'before' | 'after' | null = null;
+  if (hasEnoughData && absGapPoints >= TRANSFER_TIMING_GAP_NOISE_THRESHOLD) {
+    winner = gapPoints > 0 ? 'after' : 'before';
+  }
+
+  let conclusion: string;
+  if (!hasEnoughData) {
+    conclusion = `Not enough data yet — need at least ${TRANSFER_TIMING_MIN_GROUP_SAMPLE} referrals in each group.`;
+  } else if (winner === 'after') {
+    conclusion = `Transferring AFTER pre-approval closes ${absGapPoints.toFixed(1)} pts more often.`;
+  } else if (winner === 'before') {
+    conclusion = `Transferring BEFORE pre-approval closes ${absGapPoints.toFixed(1)} pts more often.`;
+  } else {
+    conclusion = 'Too close to call (gap < 1 pt).';
+  }
 
   return (
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Pre-approval uplift</p>
-      <div className="mt-2 flex items-baseline gap-3">
-        <p className="text-2xl font-semibold text-foreground">{closeRateGapPoints.toFixed(1)} pts</p>
-        <p className="text-sm font-medium text-foreground-subtle">close-rate gap</p>
-      </div>
-      <p className="mt-1 text-xs text-foreground-subtle">
-        Difference between Pre-approved and Pre-approval TBD close rates for referrals created in this period.
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+        When to transfer to the brokerage
       </p>
-      <dl className="mt-3 grid grid-cols-2 gap-2">
-        <div className="rounded-lg bg-surface-muted px-2 py-1">
-          <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Relative lift</dt>
-          <dd className="text-sm font-semibold text-foreground">{relativeLiftPercent.toFixed(1)}%</dd>
-        </div>
-        <div className="rounded-lg bg-surface-muted px-2 py-1">
-          <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Missed closes est.</dt>
-          <dd className="text-sm font-semibold text-foreground">{formatNumber(estimatedMissedCloses)}</dd>
-        </div>
-      </dl>
+      <p className="mt-1 text-xs text-foreground-subtle">
+        Compares close rates for clients transferred to an agent before pre-approval vs after pre-approval.
+      </p>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <TransferTimingPanel
+          label="Transferred BEFORE pre-approval"
+          rate={beforeRate}
+          closed={beforeClosed}
+          total={beforeTotal}
+          isWinner={winner === 'before'}
+        />
+        <TransferTimingPanel
+          label="Transferred AFTER pre-approval"
+          rate={afterRate}
+          closed={afterClosed}
+          total={afterTotal}
+          isWinner={winner === 'after'}
+        />
+      </div>
+
+      <p className="mt-3 text-sm font-medium text-foreground">{conclusion}</p>
+    </div>
+  );
+}
+
+function TransferTimingPanel({
+  label,
+  rate,
+  closed,
+  total,
+  isWinner
+}: {
+  label: string;
+  rate: number;
+  closed: number;
+  total: number;
+  isWinner: boolean;
+}) {
+  const containerClasses = isWinner
+    ? 'rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2'
+    : 'rounded-lg border border-border bg-surface-muted px-3 py-2';
+
+  return (
+    <div className={containerClasses}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{label}</p>
+        {isWinner ? (
+          <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+            Recommended
+          </span>
+        ) : null}
+      </div>
+      <p className="mt-1 text-2xl font-semibold text-foreground">{rate.toFixed(1)}%</p>
+      <p className="text-xs text-foreground-subtle">
+        {`${formatNumber(closed)} / ${formatNumber(total)} closed`}
+      </p>
     </div>
   );
 }
@@ -2652,7 +2716,7 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <StageOnTransferCard entries={data.stageOnTransferSummary} />
-        <PreApprovalUpliftCard entries={data.stageOnTransferSummary} />
+        <TransferTimingCard entries={data.stageOnTransferSummary} />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <PushbackSummaryCard summary={data.pushbackSummary} />
