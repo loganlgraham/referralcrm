@@ -115,6 +115,13 @@ interface McAfcRiskCallListEntry {
   reasons: string[];
 }
 
+interface StageOnTransferSummaryEntry {
+  category: 'Pre-approved' | 'Pre-approval TBD';
+  totalReferrals: number;
+  closedReferrals: number;
+  closeRate: number;
+}
+
 /** Target visible rows for scrollable dashboard lists (matches former collapsed preview). */
 const LIST_SCROLL_VISIBLE_ROWS = 5;
 const LEADERBOARD_ROW_HEIGHT_REM = 2.5;
@@ -322,6 +329,7 @@ interface DashboardResponse {
     };
     kpiLeaderboard: { rankedMcs: McRankedEntry[] };
     afcRiskCallList: McAfcRiskCallListEntry[];
+    stageOnTransferSummary: StageOnTransferSummaryEntry[];
     pushbackSummary: {
       distinctDealsPushedBack: number;
       totalPushbackEvents: number;
@@ -1505,6 +1513,84 @@ function McOutsideLenderLossTable({ entries }: { entries: LeaderboardEntry[] }) 
   );
 }
 
+function StageOnTransferCard({ entries }: { entries: DashboardResponse['mc']['stageOnTransferSummary'] }) {
+  return (
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Stage on Transfer</p>
+      <p className="mt-1 text-xs text-foreground-subtle">
+        Cohort view: referrals created in this period and how many reached a payment-driven close status.
+      </p>
+      <div className="mt-4 overflow-y-auto">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
+            <tr className="text-left text-xs text-foreground-subtle">
+              <th className="py-1 font-medium">Category</th>
+              <th className="py-1 font-medium text-right">Referrals</th>
+              <th className="py-1 font-medium text-right">Close rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((entry) => (
+              <tr key={entry.category} className="border-t border-border text-foreground-muted">
+                <td className="py-2 font-medium text-foreground">{entry.category}</td>
+                <td className="py-2 text-right">{formatNumber(entry.totalReferrals)}</td>
+                <td className="py-2 text-right">
+                  <p>{entry.closeRate.toFixed(1)}%</p>
+                  <p className="text-xs text-foreground-subtle">
+                    {`${formatNumber(entry.closedReferrals)} / ${formatNumber(entry.totalReferrals)}`}
+                  </p>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function PreApprovalUpliftCard({
+  entries
+}: {
+  entries: DashboardResponse['mc']['stageOnTransferSummary'];
+}) {
+  const preApproved = entries.find((entry) => entry.category === 'Pre-approved');
+  const preApprovalTbd = entries.find((entry) => entry.category === 'Pre-approval TBD');
+
+  const preApprovedRate = preApproved?.closeRate ?? 0;
+  const tbdRate = preApprovalTbd?.closeRate ?? 0;
+
+  const closeRateGapPoints = preApprovedRate - tbdRate;
+  const relativeLiftPercent = tbdRate > 0 ? ((preApprovedRate / tbdRate) - 1) * 100 : 0;
+
+  const estimatedMissedCloses = preApprovalTbd && preApprovedRate > tbdRate
+    ? Math.round(((preApprovedRate - tbdRate) / 100) * preApprovalTbd.totalReferrals)
+    : 0;
+
+  return (
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Pre-approval uplift</p>
+      <div className="mt-2 flex items-baseline gap-3">
+        <p className="text-2xl font-semibold text-foreground">{closeRateGapPoints.toFixed(1)} pts</p>
+        <p className="text-sm font-medium text-foreground-subtle">close-rate gap</p>
+      </div>
+      <p className="mt-1 text-xs text-foreground-subtle">
+        Difference between Pre-approved and Pre-approval TBD close rates for referrals created in this period.
+      </p>
+      <dl className="mt-3 grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-surface-muted px-2 py-1">
+          <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Relative lift</dt>
+          <dd className="text-sm font-semibold text-foreground">{relativeLiftPercent.toFixed(1)}%</dd>
+        </div>
+        <div className="rounded-lg bg-surface-muted px-2 py-1">
+          <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Missed closes est.</dt>
+          <dd className="text-sm font-semibold text-foreground">{formatNumber(estimatedMissedCloses)}</dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
 function PreApprovalConversionSection({
   monthlyReferrals,
   conversion,
@@ -2548,6 +2634,10 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
         <LeaderboardTable title="Revenue by MC" entries={data.revenueLeaderboard} valueLabel="Revenue" />
         <McCloseEffectivenessTable entries={data.closeRateLeaderboard} />
         <McOutsideLenderLossTable entries={data.outsideLenderLossLeaderboard} />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <StageOnTransferCard entries={data.stageOnTransferSummary} />
+        <PreApprovalUpliftCard entries={data.stageOnTransferSummary} />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <PushbackSummaryCard summary={data.pushbackSummary} />
