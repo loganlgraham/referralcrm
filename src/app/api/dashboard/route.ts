@@ -191,6 +191,7 @@ interface DashboardReferral {
   lender?: Types.ObjectId | null;
   status?: string;
   preApprovalAmountCents?: number;
+  stageOnTransfer?: string | null;
   initialNotes?: string;
   notes?: {
     content?: string;
@@ -306,6 +307,9 @@ const NON_TERMINATED_DEAL_STATUSES = new Set<AggregatedPayment['status']>([
   ...CLOSED_DEAL_STATUSES
 ]);
 
+type StageOnTransferCategory = 'Pre-approved' | 'Pre-approval TBD';
+const STAGE_ON_TRANSFER_CATEGORIES: readonly StageOnTransferCategory[] = ['Pre-approved', 'Pre-approval TBD'];
+
 const isClosedDealEligible = (payment: AggregatedPayment): boolean =>
   CLOSED_DEAL_STATUSES.has(payment.status) &&
   payment.agentAttribution !== 'OUTSIDE_AGENT' &&
@@ -324,6 +328,23 @@ function isTerminalReferralStatus(status: unknown): boolean {
 
 function isTerminalPaymentStatus(status: unknown): boolean {
   return TERMINAL_PAYMENT_STATUS_KEYS.has(normalizeStatusKey(status));
+}
+
+function normalizeStageOnTransfer(value: unknown): StageOnTransferCategory {
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z]/g, '');
+
+  if (normalized === 'preapproved' || normalized === 'pncpreapproved') {
+    return 'Pre-approved';
+  }
+
+  if (normalized === 'preapprovaltbd') {
+    return 'Pre-approval TBD';
+  }
+
+  return 'Pre-approval TBD';
 }
 
 function getOutcomeTuningMultiplier(
@@ -716,6 +737,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         requestLeaderboard: { all: [], aha: [], ahaOos: [] },
         kpiLeaderboard: { rankedMcs: [] },
         afcRiskCallList: [],
+        stageOnTransferSummary: STAGE_ON_TRANSFER_CATEGORIES.map((category) => ({
+          category,
+          totalReferrals: 0,
+          closedReferrals: 0,
+          closeRate: 0
+        })),
         pushbackSummary: {
           distinctDealsPushedBack: 0,
           totalPushbackEvents: 0,
@@ -795,7 +822,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...referralMatch,
   })
     .select(
-      'createdAt updatedAt referralDate status statusLastUpdated referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents initialNotes notes.content notes.createdAt assignedAgent buySideAgent sellSideAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin dealSide clientType sla lookingInZip lookingInZips loanFileNumber borrower.name audit.field audit.previousValue audit.newValue audit.timestamp'
+      'createdAt updatedAt referralDate status statusLastUpdated referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents stageOnTransfer initialNotes notes.content notes.createdAt assignedAgent buySideAgent sellSideAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin dealSide clientType sla lookingInZip lookingInZips loanFileNumber borrower.name audit.field audit.previousValue audit.newValue audit.timestamp'
     )
     .lean<DashboardReferral[]>()
     .exec();
@@ -1120,6 +1147,37 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const closedDealReferralIds = new Set(
     dealsClosedForCloseRate.map((payment) => payment.referral._id.toString())
   );
+
+  const stageOnTransferSummaryMap = new Map<
+    StageOnTransferCategory,
+    { category: StageOnTransferCategory; totalReferrals: number; closedReferrals: number }
+  >();
+  STAGE_ON_TRANSFER_CATEGORIES.forEach((category) => {
+    stageOnTransferSummaryMap.set(category, { category, totalReferrals: 0, closedReferrals: 0 });
+  });
+  filteredReferrals.forEach((referral) => {
+    const category = normalizeStageOnTransfer(referral.stageOnTransfer);
+    const categorySummary = stageOnTransferSummaryMap.get(category);
+    if (!categorySummary) {
+      return;
+    }
+    categorySummary.totalReferrals += 1;
+    if (closedDealReferralIds.has(referral._id.toString())) {
+      categorySummary.closedReferrals += 1;
+    }
+  });
+  const stageOnTransferSummary = STAGE_ON_TRANSFER_CATEGORIES.map((category) => {
+    const categorySummary = stageOnTransferSummaryMap.get(category);
+    if (!categorySummary) {
+      return { category, totalReferrals: 0, closedReferrals: 0, closeRate: 0 };
+    }
+    return {
+      category,
+      totalReferrals: categorySummary.totalReferrals,
+      closedReferrals: categorySummary.closedReferrals,
+      closeRate: safePercent(categorySummary.closedReferrals, categorySummary.totalReferrals)
+    };
+  });
   
   const lostReferrals = referralsByNetwork.filter((referral) => {
     if (referral.status !== 'Lost') {
@@ -4117,6 +4175,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       requestLeaderboard: mcRequestLeaderboard,
       kpiLeaderboard: { rankedMcs: mcKpiLeaderboard },
       afcRiskCallList: mcAfcRiskCallList,
+      stageOnTransferSummary,
       pushbackSummary: {
         distinctDealsPushedBack: mcDistinctDealsPushedBack,
         totalPushbackEvents: mcTotalPushbackEvents,
