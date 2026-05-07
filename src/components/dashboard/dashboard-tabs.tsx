@@ -1513,7 +1513,13 @@ function McOutsideLenderLossTable({ entries }: { entries: LeaderboardEntry[] }) 
   );
 }
 
-function StageOnTransferCard({ entries }: { entries: DashboardResponse['mc']['stageOnTransferSummary'] }) {
+function StageOnTransferCard({
+  entries
+}: {
+  entries?: DashboardResponse['mc']['stageOnTransferSummary'];
+}) {
+  const safeEntries = entries ?? [];
+
   return (
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Stage on Transfer</p>
@@ -1530,18 +1536,26 @@ function StageOnTransferCard({ entries }: { entries: DashboardResponse['mc']['st
             </tr>
           </thead>
           <tbody>
-            {entries.map((entry) => (
-              <tr key={entry.category} className="border-t border-border text-foreground-muted">
-                <td className="py-2 font-medium text-foreground">{entry.category}</td>
-                <td className="py-2 text-right">{formatNumber(entry.totalReferrals)}</td>
-                <td className="py-2 text-right">
-                  <p>{entry.closeRate.toFixed(1)}%</p>
-                  <p className="text-xs text-foreground-subtle">
-                    {`${formatNumber(entry.closedReferrals)} / ${formatNumber(entry.totalReferrals)}`}
-                  </p>
+            {safeEntries.length ? (
+              safeEntries.map((entry) => (
+                <tr key={entry.category} className="border-t border-border text-foreground-muted">
+                  <td className="py-2 font-medium text-foreground">{entry.category}</td>
+                  <td className="py-2 text-right">{formatNumber(entry.totalReferrals)}</td>
+                  <td className="py-2 text-right">
+                    <p>{entry.closeRate.toFixed(1)}%</p>
+                    <p className="text-xs text-foreground-subtle">
+                      {`${formatNumber(entry.closedReferrals)} / ${formatNumber(entry.totalReferrals)}`}
+                    </p>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={3} className="py-6 text-center text-sm text-foreground-subtle">
+                  Nothing to display for this period.
                 </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
@@ -1552,10 +1566,11 @@ function StageOnTransferCard({ entries }: { entries: DashboardResponse['mc']['st
 function PreApprovalUpliftCard({
   entries
 }: {
-  entries: DashboardResponse['mc']['stageOnTransferSummary'];
+  entries?: DashboardResponse['mc']['stageOnTransferSummary'];
 }) {
-  const preApproved = entries.find((entry) => entry.category === 'Pre-approved');
-  const preApprovalTbd = entries.find((entry) => entry.category === 'Pre-approval TBD');
+  const safeEntries = entries ?? [];
+  const preApproved = safeEntries.find((entry) => entry.category === 'Pre-approved');
+  const preApprovalTbd = safeEntries.find((entry) => entry.category === 'Pre-approval TBD');
 
   const preApprovedRate = preApproved?.closeRate ?? 0;
   const tbdRate = preApprovalTbd?.closeRate ?? 0;
