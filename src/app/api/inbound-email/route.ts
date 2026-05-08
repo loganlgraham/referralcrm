@@ -767,6 +767,18 @@ function extractRouteHint(to: string[]): { channel: 'AHA' | 'AHA_OOS'; routeHint
   return null;
 }
 
+function extractSubjectRouteHint(subject: string | undefined): { channel: 'AHA' | 'AHA_OOS'; routeHint: string } | null {
+  const normalizedSubject = subject?.trim().replace(/\s+/g, ' ').toLowerCase();
+  switch (normalizedSubject) {
+    case 'add contact':
+      return CHANNEL_MAP.aha;
+    case 'aha out of state agent needed':
+      return CHANNEL_MAP.ahaoos;
+    default:
+      return null;
+  }
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => {
     switch (char) {
@@ -855,7 +867,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Inbound email payload is missing required fields.' }, { status: 400 });
   }
 
-  const channelInfo = extractRouteHint(email.to);
+  const channelInfo = extractRouteHint(email.to) ?? extractSubjectRouteHint(email.subject);
   if (!channelInfo) {
     return NextResponse.json({ status: 'ignored', reason: 'route_hint_unmatched' }, { status: 202 });
   }

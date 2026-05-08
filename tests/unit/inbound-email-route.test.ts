@@ -137,12 +137,16 @@ function makeWebhookRequest(
   } as any;
 }
 
-function mockResendInboundFetch(emailText: string, wrapInData = false) {
+function mockResendInboundFetch(
+  emailText: string,
+  wrapInData = false,
+  overrides: Partial<{ to: string[]; subject: string }> = {}
+) {
   const payload = {
     id: 'resend-email-1',
     from: 'Sender <sender@example.com>',
-    to: ['routing+aha@inbound.example.com'],
-    subject: 'New Referral',
+    to: overrides.to ?? ['routing+aha@inbound.example.com'],
+    subject: overrides.subject ?? 'New Referral',
     text: emailText,
     attachments: []
   };
@@ -250,6 +254,86 @@ describe('POST /api/inbound-email', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ status: 'created', referralId: 'ref-1' });
+  });
+
+  it('falls back to AHA subject routing when forwarded email preserves original to address', async () => {
+    mockResendInboundFetch(
+      [
+        'First: Jane',
+        'Last: Doe',
+        'BorrowerEmail: jane@example.com',
+        'Phone: 303-555-1212',
+        'ZipLookingIn: 80202',
+        'LoanNumber: LN-111'
+      ].join('\n'),
+      false,
+      {
+        to: ['leads+americanhomeagents7530-o-2@kvcore.com'],
+        subject: 'Add Contact'
+      }
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ status: 'created', referralId: 'ref-1' });
+    expect(mockedReferralCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ahaBucket: 'AHA',
+        inboundEmail: expect.objectContaining({
+          routeHint: 'aha',
+          channel: 'AHA',
+          subject: 'Add Contact'
+        })
+      })
+    );
+  });
+
+  it('falls back to AHA OOS subject routing when forwarded email preserves original to address', async () => {
+    mockResendInboundFetch(
+      [
+        'First: Jane',
+        'Last: Doe',
+        'BorrowerEmail: jane@example.com',
+        'Phone: 303-555-1212',
+        'ZipLookingIn: 80202',
+        'LoanNumber: LN-111'
+      ].join('\n'),
+      false,
+      {
+        to: ['leads+americanhomeagents7530-o-2@kvcore.com'],
+        subject: 'AHA Out of State Agent Needed'
+      }
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ status: 'created', referralId: 'ref-1' });
+    expect(mockedReferralCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ahaBucket: 'AHA_OOS',
+        inboundEmail: expect.objectContaining({
+          routeHint: 'ahaoos',
+          channel: 'AHA_OOS',
+          subject: 'AHA Out of State Agent Needed'
+        })
+      })
+    );
   });
 
   it('maps source and alias labels from partner email format', async () => {
