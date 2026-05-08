@@ -309,6 +309,15 @@ const NON_TERMINATED_DEAL_STATUSES = new Set<AggregatedPayment['status']>([
 
 type StageOnTransferCategory = 'Pre-approved' | 'Pre-approval TBD';
 const STAGE_ON_TRANSFER_CATEGORIES: readonly StageOnTransferCategory[] = ['Pre-approved', 'Pre-approval TBD'];
+interface StageOnTransferDrilldownEntry {
+  referralId: string;
+  borrowerName: string;
+  referralStatus: string;
+  mcName: string;
+  agentName: string;
+  stageOnTransfer: StageOnTransferCategory;
+  hasClosedDeal: boolean;
+}
 
 const isClosedDealEligible = (payment: AggregatedPayment): boolean =>
   CLOSED_DEAL_STATUSES.has(payment.status) &&
@@ -743,6 +752,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           closedReferrals: 0,
           closeRate: 0
         })),
+        stageOnTransferDrilldown: STAGE_ON_TRANSFER_CATEGORIES.map((category) => ({
+          category,
+          rows: []
+        })),
         pushbackSummary: {
           distinctDealsPushedBack: 0,
           totalPushbackEvents: 0,
@@ -1152,19 +1165,41 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     StageOnTransferCategory,
     { category: StageOnTransferCategory; totalReferrals: number; closedReferrals: number }
   >();
+  const stageOnTransferDrilldownMap = new Map<
+    StageOnTransferCategory,
+    StageOnTransferDrilldownEntry[]
+  >();
   STAGE_ON_TRANSFER_CATEGORIES.forEach((category) => {
     stageOnTransferSummaryMap.set(category, { category, totalReferrals: 0, closedReferrals: 0 });
+    stageOnTransferDrilldownMap.set(category, []);
   });
   filteredReferrals.forEach((referral) => {
     const category = normalizeStageOnTransfer(referral.stageOnTransfer);
     const categorySummary = stageOnTransferSummaryMap.get(category);
+    const categoryDrilldown = stageOnTransferDrilldownMap.get(category);
     if (!categorySummary) {
       return;
     }
+    if (!categoryDrilldown) {
+      return;
+    }
+    const referralId = referral._id.toString();
+    const hasClosedDeal = closedDealReferralIds.has(referralId);
     categorySummary.totalReferrals += 1;
-    if (closedDealReferralIds.has(referral._id.toString())) {
+    if (hasClosedDeal) {
       categorySummary.closedReferrals += 1;
     }
+    const lenderId = referral.lender?.toString() ?? null;
+    const agentId = referral.assignedAgent?.toString() ?? null;
+    categoryDrilldown.push({
+      referralId,
+      borrowerName: referral.borrower?.name?.trim() || 'Unknown',
+      referralStatus: referral.status ?? 'Unknown',
+      mcName: lenderId ? (lenderNameMap.get(lenderId) ?? 'Unassigned MC') : 'Unassigned MC',
+      agentName: agentId ? (agentNameMap.get(agentId) ?? 'Unassigned Agent') : 'Unassigned Agent',
+      stageOnTransfer: category,
+      hasClosedDeal
+    });
   });
   const stageOnTransferSummary = STAGE_ON_TRANSFER_CATEGORIES.map((category) => {
     const categorySummary = stageOnTransferSummaryMap.get(category);
@@ -1176,6 +1211,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       totalReferrals: categorySummary.totalReferrals,
       closedReferrals: categorySummary.closedReferrals,
       closeRate: safePercent(categorySummary.closedReferrals, categorySummary.totalReferrals)
+    };
+  });
+  const stageOnTransferDrilldown = STAGE_ON_TRANSFER_CATEGORIES.map((category) => {
+    const rows = stageOnTransferDrilldownMap.get(category) ?? [];
+    return {
+      category,
+      rows: rows.sort(
+        (a, b) =>
+          Number(b.hasClosedDeal) - Number(a.hasClosedDeal) ||
+          a.borrowerName.localeCompare(b.borrowerName) ||
+          a.referralId.localeCompare(b.referralId)
+      )
     };
   });
   
@@ -4176,6 +4223,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       kpiLeaderboard: { rankedMcs: mcKpiLeaderboard },
       afcRiskCallList: mcAfcRiskCallList,
       stageOnTransferSummary,
+      stageOnTransferDrilldown,
       pushbackSummary: {
         distinctDealsPushedBack: mcDistinctDealsPushedBack,
         totalPushbackEvents: mcTotalPushbackEvents,
