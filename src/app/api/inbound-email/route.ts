@@ -282,22 +282,51 @@ async function fetchResendAttachment(
   attachmentId: string,
   apiKey: string
 ): Promise<string | null> {
-  const result = await fetchFromResend(
-    [
-      `${RESEND_API_BASE_URL}/inbound-emails/${emailId}/attachments/${attachmentId}`,
-      `${RESEND_API_BASE_URL}/emails/${emailId}/attachments/${attachmentId}`,
-      `${RESEND_API_BASE_URL}/attachments/${attachmentId}`
-    ],
+  // Resend's attachment endpoint returns JSON metadata containing a short-lived
+  // signed `download_url`, not the raw file bytes. We hit the metadata endpoint
+  // first, then fetch the binary from the signed URL (CloudFront-signed, no auth
+  // required, valid ~1 hour per Resend docs).
+  const metadata = await fetchFromResend(
+    [`${RESEND_API_BASE_URL}/emails/receiving/${emailId}/attachments/${attachmentId}`],
     apiKey,
-    'arrayBuffer'
+    'json'
   );
 
-  if (!(result instanceof ArrayBuffer)) {
+  if (!metadata || typeof metadata !== 'object') {
     return null;
   }
 
-  const buffer = Buffer.from(result);
-  return buffer.toString('base64');
+  const metadataRecord = metadata as Record<string, unknown>;
+  const attachmentRecord =
+    metadataRecord.data && typeof metadataRecord.data === 'object'
+      ? (metadataRecord.data as Record<string, unknown>)
+      : metadataRecord;
+
+  const downloadUrl =
+    (typeof attachmentRecord.download_url === 'string' && attachmentRecord.download_url) ||
+    (typeof attachmentRecord.downloadUrl === 'string' && attachmentRecord.downloadUrl) ||
+    undefined;
+
+  if (!downloadUrl) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(downloadUrl, { cache: 'no-store' });
+    if (!response.ok) {
+      console.warn('Resend attachment download failed', {
+        url: downloadUrl,
+        status: response.status
+      });
+      return null;
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    return buffer.toString('base64');
+  } catch (error) {
+    console.error('Failed to download Resend attachment', { url: downloadUrl, error });
+    return null;
+  }
 }
 
 async function hydrateEmailFromResend(
@@ -767,6 +796,18 @@ function extractRouteHint(to: string[]): { channel: 'AHA' | 'AHA_OOS'; routeHint
   return null;
 }
 
+function extractSubjectRouteHint(subject: string | undefined): { channel: 'AHA' | 'AHA_OOS'; routeHint: string } | null {
+  const normalizedSubject = subject?.trim().replace(/\s+/g, ' ').toLowerCase();
+  switch (normalizedSubject) {
+    case 'add contact':
+      return CHANNEL_MAP.aha;
+    case 'aha out of state agent needed':
+      return CHANNEL_MAP.ahaoos;
+    default:
+      return null;
+  }
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => {
     switch (char) {
@@ -855,7 +896,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Inbound email payload is missing required fields.' }, { status: 400 });
   }
 
-  const channelInfo = extractRouteHint(email.to);
+  const channelInfo = extractRouteHint(email.to) ?? extractSubjectRouteHint(email.subject);
   if (!channelInfo) {
     return NextResponse.json({ status: 'ignored', reason: 'route_hint_unmatched' }, { status: 202 });
   }

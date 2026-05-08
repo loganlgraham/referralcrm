@@ -115,6 +115,25 @@ interface McAfcRiskCallListEntry {
   reasons: string[];
 }
 
+interface StageOnTransferSummaryEntry {
+  category: 'Pre-approved' | 'Pre-approval TBD';
+  totalReferrals: number;
+  closedReferrals: number;
+  closeRate: number;
+}
+
+type StageOnTransferCategory = StageOnTransferSummaryEntry['category'];
+
+interface StageOnTransferDrilldownEntry {
+  referralId: string;
+  borrowerName: string;
+  referralStatus: string;
+  mcName: string;
+  agentName: string;
+  stageOnTransfer: StageOnTransferCategory;
+  hasClosedDeal: boolean;
+}
+
 /** Target visible rows for scrollable dashboard lists (matches former collapsed preview). */
 const LIST_SCROLL_VISIBLE_ROWS = 5;
 const LEADERBOARD_ROW_HEIGHT_REM = 2.5;
@@ -322,6 +341,11 @@ interface DashboardResponse {
     };
     kpiLeaderboard: { rankedMcs: McRankedEntry[] };
     afcRiskCallList: McAfcRiskCallListEntry[];
+    stageOnTransferSummary: StageOnTransferSummaryEntry[];
+    stageOnTransferDrilldown: Array<{
+      category: StageOnTransferCategory;
+      rows: StageOnTransferDrilldownEntry[];
+    }>;
     pushbackSummary: {
       distinctDealsPushedBack: number;
       totalPushbackEvents: number;
@@ -1505,6 +1529,190 @@ function McOutsideLenderLossTable({ entries }: { entries: LeaderboardEntry[] }) 
   );
 }
 
+const TRANSFER_TIMING_MIN_GROUP_SAMPLE = 5;
+const TRANSFER_TIMING_GAP_NOISE_THRESHOLD = 1;
+
+function TransferTimingCard({
+  entries,
+  onSelectCategory
+}: {
+  entries?: DashboardResponse['mc']['stageOnTransferSummary'];
+  onSelectCategory?: (category: StageOnTransferCategory) => void;
+}) {
+  const safeEntries = entries ?? [];
+  const beforePreApproval = safeEntries.find((entry) => entry.category === 'Pre-approval TBD');
+  const afterPreApproval = safeEntries.find((entry) => entry.category === 'Pre-approved');
+
+  const beforeTotal = beforePreApproval?.totalReferrals ?? 0;
+  const afterTotal = afterPreApproval?.totalReferrals ?? 0;
+  const beforeClosed = beforePreApproval?.closedReferrals ?? 0;
+  const afterClosed = afterPreApproval?.closedReferrals ?? 0;
+  const beforeRate = beforePreApproval?.closeRate ?? 0;
+  const afterRate = afterPreApproval?.closeRate ?? 0;
+
+  const hasEnoughData =
+    beforeTotal >= TRANSFER_TIMING_MIN_GROUP_SAMPLE &&
+    afterTotal >= TRANSFER_TIMING_MIN_GROUP_SAMPLE;
+  const gapPoints = afterRate - beforeRate;
+  const absGapPoints = Math.abs(gapPoints);
+
+  let winner: 'before' | 'after' | null = null;
+  if (hasEnoughData && absGapPoints >= TRANSFER_TIMING_GAP_NOISE_THRESHOLD) {
+    winner = gapPoints > 0 ? 'after' : 'before';
+  }
+
+  let conclusion: string;
+  if (!hasEnoughData) {
+    conclusion = `Not enough data yet — need at least ${TRANSFER_TIMING_MIN_GROUP_SAMPLE} referrals in each group.`;
+  } else if (winner === 'after') {
+    conclusion = `Transferring AFTER pre-approval closes ${absGapPoints.toFixed(1)} pts more often.`;
+  } else if (winner === 'before') {
+    conclusion = `Transferring BEFORE pre-approval closes ${absGapPoints.toFixed(1)} pts more often.`;
+  } else {
+    conclusion = 'Too close to call (gap < 1 pt).';
+  }
+
+  return (
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+        When to transfer to the brokerage
+      </p>
+      <p className="mt-1 text-xs text-foreground-subtle">
+        Compares close rates for clients transferred to an agent before pre-approval vs after pre-approval.
+      </p>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <TransferTimingPanel
+          label="Transferred BEFORE pre-approval"
+          rate={beforeRate}
+          closed={beforeClosed}
+          total={beforeTotal}
+          isWinner={winner === 'before'}
+          onClick={onSelectCategory ? () => onSelectCategory('Pre-approval TBD') : undefined}
+        />
+        <TransferTimingPanel
+          label="Transferred AFTER pre-approval"
+          rate={afterRate}
+          closed={afterClosed}
+          total={afterTotal}
+          isWinner={winner === 'after'}
+          onClick={onSelectCategory ? () => onSelectCategory('Pre-approved') : undefined}
+        />
+      </div>
+
+      <p className="mt-3 text-sm font-medium text-foreground">{conclusion}</p>
+    </div>
+  );
+}
+
+function TransferTimingPanel({
+  label,
+  rate,
+  closed,
+  total,
+  isWinner,
+  onClick
+}: {
+  label: string;
+  rate: number;
+  closed: number;
+  total: number;
+  isWinner: boolean;
+  onClick?: () => void;
+}) {
+  const containerClasses = isWinner
+    ? 'rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2'
+    : 'rounded-lg border border-border bg-surface-muted px-3 py-2';
+
+  return (
+    <div className={containerClasses}>
+      <div className="flex items-center justify-between gap-2">
+        {onClick ? (
+          <button
+            type="button"
+            onClick={onClick}
+            className="text-xs font-medium uppercase tracking-wide text-sky-600 underline decoration-dotted underline-offset-2 transition hover:text-sky-700"
+          >
+            {label}
+          </button>
+        ) : (
+          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{label}</p>
+        )}
+        {isWinner ? (
+          <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+            Recommended
+          </span>
+        ) : null}
+      </div>
+      <p className="mt-1 text-2xl font-semibold text-foreground">{rate.toFixed(1)}%</p>
+      <p className="text-xs text-foreground-subtle">
+        {`${formatNumber(closed)} / ${formatNumber(total)} closed`}
+      </p>
+    </div>
+  );
+}
+
+function TransferTimingDrilldownTable({
+  rows
+}: {
+  rows: StageOnTransferDrilldownEntry[];
+}) {
+  return (
+    <div className="overflow-x-auto p-4 sm:p-6">
+      <table className="w-full min-w-[680px] text-sm">
+        <thead>
+          <tr className="text-left text-xs text-foreground-subtle">
+            <th className="py-1 font-medium">Borrower</th>
+            <th className="py-1 font-medium">MC / Agent</th>
+            <th className="py-1 font-medium">Referral status</th>
+            <th className="py-1 font-medium text-right">Counted as closed deal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length ? (
+            rows.map((entry) => (
+              <tr key={entry.referralId} className="border-t border-border text-foreground-muted">
+                <td className="py-2">
+                  <Link
+                    href={`/referrals/${entry.referralId}`}
+                    className="font-medium text-sky-600 hover:text-sky-800 hover:underline"
+                  >
+                    {entry.borrowerName}
+                  </Link>
+                </td>
+                <td className="py-2">
+                  <div>{entry.mcName}</div>
+                  <div className="text-xs text-foreground-subtle">{entry.agentName}</div>
+                </td>
+                <td className="py-2">
+                  <span className="capitalize">{entry.referralStatus.replace(/_/g, ' ')}</span>
+                </td>
+                <td className="py-2 text-right">
+                  <span
+                    className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                      entry.hasClosedDeal
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-surface-subtle text-foreground-muted'
+                    }`}
+                  >
+                    {entry.hasClosedDeal ? 'Yes' : 'No'}
+                  </span>
+                </td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={4} className="py-8 text-center text-sm text-foreground-subtle">
+                Nothing to display for this period.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function PreApprovalConversionSection({
   monthlyReferrals,
   conversion,
@@ -2529,6 +2737,15 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
 }
 
 function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
+  const [selectedTransferCategory, setSelectedTransferCategory] = useState<StageOnTransferCategory | null>(null);
+  const selectedTransferRows = useMemo(
+    () =>
+      selectedTransferCategory
+        ? (data.stageOnTransferDrilldown.find((entry) => entry.category === selectedTransferCategory)?.rows ?? [])
+        : [],
+    [data.stageOnTransferDrilldown, selectedTransferCategory]
+  );
+
   return (
     <div className="space-y-6">
       <McRankedList title="MC Composite KPI Leaderboard" entries={data.kpiLeaderboard.rankedMcs} />
@@ -2549,10 +2766,30 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
         <McCloseEffectivenessTable entries={data.closeRateLeaderboard} />
         <McOutsideLenderLossTable entries={data.outsideLenderLossLeaderboard} />
       </div>
+      <div>
+        <TransferTimingCard
+          entries={data.stageOnTransferSummary}
+          onSelectCategory={setSelectedTransferCategory}
+        />
+      </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <PushbackSummaryCard summary={data.pushbackSummary} />
         <McPushbackLeaderboardTable entries={data.pushbackSummary.byMc} />
       </div>
+      <Modal
+        isOpen={selectedTransferCategory !== null}
+        onClose={() => setSelectedTransferCategory(null)}
+        title={
+          selectedTransferCategory === 'Pre-approval TBD'
+            ? 'Transferred BEFORE pre-approval'
+            : selectedTransferCategory === 'Pre-approved'
+              ? 'Transferred AFTER pre-approval'
+              : ''
+        }
+        size="lg"
+      >
+        <TransferTimingDrilldownTable rows={selectedTransferRows} />
+      </Modal>
     </div>
   );
 }
