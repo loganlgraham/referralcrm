@@ -1604,6 +1604,12 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
   return NextResponse.json({
     id: payment._id.toString(),
+    status: payment.status,
+    expectedAmountCents: payment.expectedAmountCents ?? 0,
+    receivedAmountCents: payment.receivedAmountCents ?? 0,
+    netReferralFeePaidCents: payment.netReferralFeePaidCents ?? 0,
+    closingDate: payment.closingDate ?? null,
+    paidDate: payment.paidDate ?? null,
     referralStatus: referralStatusSnapshot,
     referralStatusLastUpdated: referralStatusLastUpdatedSnapshot,
   });
