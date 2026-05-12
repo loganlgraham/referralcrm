@@ -16,7 +16,8 @@ interface LenderTokenEntry {
 const FREE_TEXT_TOKEN_PATTERN = /\b[A-Z][a-z]+[A-Z](?:[a-z])?\b/g;
 const MC_TOKEN_ALIASES: Record<string, string> = {
   christopherl: 'chrisl',
-  jasoncr: 'jasonc'
+  jasoncr: 'jasonc',
+  nebiyua: 'neba'
 };
 
 export function normalizeMcToken(value: string): string {
