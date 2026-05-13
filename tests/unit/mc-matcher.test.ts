@@ -86,6 +86,15 @@ describe('findMcByFirstNameLastInitialToken', () => {
     expect(result).toEqual({ id: lenderId, name: 'Jason Creech' });
   });
 
+  it('supports alias token NebiyuA for Neb last-initial matching', async () => {
+    const lenderId = objectIdLike('lender-neb');
+    mockLenderFindReturn([{ _id: lenderId, name: 'Neb Ayalew' }]);
+
+    const result = await findMcByFirstNameLastInitialToken('NebiyuA');
+
+    expect(result).toEqual({ id: lenderId, name: 'Neb Ayalew' });
+  });
+
   it('skips lenders with no last-name token', async () => {
     mockLenderFindReturn([{ _id: objectIdLike('lender-karim'), name: 'Karim' }]);
 

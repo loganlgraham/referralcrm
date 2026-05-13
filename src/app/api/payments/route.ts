@@ -437,11 +437,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   if (statusAllowsPaid) {
     const receivedRevenueFilter: Record<string, unknown> = { ...filter, status: 'paid' };
-    // Timeframe is closing-date only: keep filter.closingDate when set; do not use paidDate.
+    const { closingDate: _ignoredClosingDate, ...baseReceivedRevenueFilter } = receivedRevenueFilter;
+    const receivedRevenueSummaryFilter: Record<string, unknown> = timeframeStart
+      ? {
+          ...baseReceivedRevenueFilter,
+          $or: [
+            { paidDate: { $gte: timeframeStart, $lte: timeframeEnd } },
+            {
+              paidDate: null,
+              updatedAt: { $gte: timeframeStart, $lte: timeframeEnd },
+            },
+          ],
+        }
+      : baseReceivedRevenueFilter;
+    // Revenue received summary is anchored to payment-received timing (paidDate),
+    // with updatedAt fallback for legacy paid rows missing paidDate.
 
     if (search) {
       const summaryPipeline: PipelineStage[] = [
-        { $match: receivedRevenueFilter },
+        { $match: receivedRevenueSummaryFilter },
         ...buildSearchPipeline(search),
         {
           $group: {
@@ -454,7 +468,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       receivedRevenueCents = summaryResult[0]?.receivedRevenueCents ?? 0;
     } else {
       const summaryResult = await Payment.aggregate([
-        { $match: receivedRevenueFilter },
+        { $match: receivedRevenueSummaryFilter },
         {
           $group: {
             _id: null,
@@ -1604,6 +1618,12 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
   return NextResponse.json({
     id: payment._id.toString(),
+    status: payment.status,
+    expectedAmountCents: payment.expectedAmountCents ?? 0,
+    receivedAmountCents: payment.receivedAmountCents ?? 0,
+    netReferralFeePaidCents: payment.netReferralFeePaidCents ?? 0,
+    closingDate: payment.closingDate ?? null,
+    paidDate: payment.paidDate ?? null,
     referralStatus: referralStatusSnapshot,
     referralStatusLastUpdated: referralStatusLastUpdatedSnapshot,
   });

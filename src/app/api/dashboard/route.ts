@@ -497,6 +497,18 @@ function resolveMetricDate(payment: AggregatedPayment): Date {
   return payment.updatedAt;
 }
 
+function resolvePaymentReceivedDate(payment: AggregatedPayment): Date | null {
+  if (payment.status !== 'paid') {
+    return null;
+  }
+
+  if (payment.paidDate) {
+    return payment.paidDate;
+  }
+
+  return payment.updatedAt ?? null;
+}
+
 /** Closing date for bucketing "generated" revenue (when the deal closed). */
 function resolveClosingDate(payment: AggregatedPayment): Date | null {
   if (payment.closingDate) return payment.closingDate;
@@ -1065,6 +1077,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const moduleIsWithinTimeframe = isDateWithinDashboardTimeframe;
   const isWithinTimeframe = (date: Date | string | null | undefined) =>
     moduleIsWithinTimeframe(date instanceof Date ? date : date ? new Date(date) : null, timeframe);
+  const isPaymentReceivedInTimeframe = (payment: AggregatedPayment): boolean =>
+    isWithinTimeframe(resolvePaymentReceivedDate(payment));
 
   const referralsByNetwork =
     context.networkFilter === 'ALL'
@@ -1294,12 +1308,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const revenueEligiblePayments = filteredPaymentsByNetwork.filter((payment) =>
     isRevenueEligiblePayment(payment)
   );
+  const paidRevenueEligiblePaymentsInTimeframe = paymentsByNetwork.filter((payment) => {
+    if (!isRevenueEligiblePayment(payment)) {
+      return false;
+    }
+    if (payment.status !== 'paid') {
+      return false;
+    }
+    return isPaymentReceivedInTimeframe(payment);
+  });
 
   const expectedRevenueCents = revenueEligiblePayments.reduce(
     (sum, payment) => sum + calculateOutstandingExpected(payment),
     0
   );
-  const realizedRevenueCents = revenueEligiblePayments.reduce(
+  const realizedRevenueCents = paidRevenueEligiblePaymentsInTimeframe.reduce(
     (sum, payment) => sum + (payment.receivedAmountCents ?? 0),
     0
   );
@@ -1576,10 +1599,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   // Generated revenue: bucket by closing date (when deal actually closed). Expected fee from closed deals.
   const dealsByClosingDate = new Map<string, { dealsClosed: number; revenueGeneratedCents: number }>();
-  // Received revenue: bucket by metric date (when payment received/invoiced).
+  // Received revenue: bucket by payment-received date (paidDate, fallback updatedAt).
   const revenueReceivedByMonth = new Map<string, number>();
   paymentsByNetwork.forEach((payment) => {
-    const metricDate = payment.metricDate ?? resolveMetricDate(payment);
     const closingDate = resolveClosingDate(payment);
     if (!isClosedDealEligible(payment)) return;
 
@@ -1593,10 +1615,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       current.revenueGeneratedCents += expectedCents;
       dealsByClosingDate.set(closeKey, current);
     }
-    if (metricDate) {
-      const receivedKey = `${metricDate.getFullYear()}-${String(metricDate.getMonth() + 1).padStart(2, '0')}`;
-      revenueReceivedByMonth.set(receivedKey, (revenueReceivedByMonth.get(receivedKey) ?? 0) + receivedCents);
-    }
+  });
+  paymentsByNetwork.forEach((payment) => {
+    if (!isRevenueEligiblePayment(payment) || payment.status !== 'paid') return;
+    const receivedDate = resolvePaymentReceivedDate(payment);
+    if (!receivedDate) return;
+    const receivedCents = payment.receivedAmountCents ?? 0;
+    const receivedKey = `${receivedDate.getFullYear()}-${String(receivedDate.getMonth() + 1).padStart(2, '0')}`;
+    revenueReceivedByMonth.set(receivedKey, (revenueReceivedByMonth.get(receivedKey) ?? 0) + receivedCents);
   });
 
   // Close Rate: cohort-based (deals from referrals created in month X / referrals in month X)
@@ -1639,13 +1665,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!isClosedDealEligible(payment)) return;
 
     const expectedCents = Math.max(payment.expectedAmountCents ?? 0, 0);
-    const receivedCents = payment.receivedAmountCents ?? 0;
 
     if (metricDate) {
       const key = getTimeframeBucketKey(new Date(metricDate), context.timeframe);
       const current = dealTimeframeMap.get(key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
       current.dealsClosed += 1;
-      current.revenueReceivedCents += receivedCents;
       dealTimeframeMap.set(key, current);
     }
     if (closingDate) {
@@ -1655,6 +1679,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       current.revenueGeneratedCents += expectedCents;
       generatedByTimeframe.set(key, current);
     }
+  });
+  paidRevenueEligiblePaymentsInTimeframe.forEach((payment) => {
+    const receivedDate = resolvePaymentReceivedDate(payment);
+    if (!receivedDate) return;
+    const receivedCents = payment.receivedAmountCents ?? 0;
+    const key = getTimeframeBucketKey(new Date(receivedDate), context.timeframe);
+    const current = dealTimeframeMap.get(key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
+    current.revenueReceivedCents += receivedCents;
+    dealTimeframeMap.set(key, current);
   });
 
   // Close rate per bucket: deals whose referral was created in that bucket.
@@ -4097,8 +4130,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return true;
     });
     const prevRealized = paymentsByNetwork.reduce((sum, payment) => {
-      const metricDate = payment.metricDate ?? resolveMetricDate(payment);
-      if (metricDate < previousStart || metricDate > previousEnd) return sum;
+      const receivedDate = resolvePaymentReceivedDate(payment);
+      if (!receivedDate) return sum;
+      if (receivedDate < previousStart || receivedDate > previousEnd) return sum;
       if (!isRevenueEligiblePayment(payment)) return sum;
       return sum + (payment.receivedAmountCents ?? 0);
     }, 0);

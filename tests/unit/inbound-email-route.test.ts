@@ -786,6 +786,49 @@ describe('POST /api/inbound-email', () => {
     );
   });
 
+  it('assigns a matching mortgage consultant when Source token uses NebiyuA alias', async () => {
+    const lenderId = fakeObjectId('lender-neb');
+    mockLenderFindReturn([
+      { _id: lenderId, name: 'Neb Ayalew' },
+      { _id: fakeObjectId('lender-jane'), name: 'Jane Doe' }
+    ]);
+
+    mockResendInboundFetch(
+      [
+        'First Name: Danielle',
+        'Last Name: Geldart',
+        'Email: justinlounsbury05@gmail.com',
+        'Deal Type: Buyer',
+        'Phone: 8634406938',
+        'Area: 27910',
+        'Source: NebiyuA',
+        'Loan Number: 20130974679'
+      ].join('\n')
+    );
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: 'resend-email-1' }
+    });
+
+    const response: any = await postHandler(
+      makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedReferralCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lender: lenderId,
+        initialNotes: expect.stringContaining('MC: Neb Ayalew (source: NebiyuA)')
+      })
+    );
+    expect(mockedLogReferralActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('Auto-assigned mortgage consultant Neb Ayalew')
+      })
+    );
+  });
+
   it('leaves lender unassigned when Source token does not match any LenderMC', async () => {
     mockLenderFindReturn([{ _id: fakeObjectId('lender-jane'), name: 'Jane Doe' }]);
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);

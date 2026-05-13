@@ -67,6 +67,12 @@ type DealUpdatePayload = {
 
 type PaymentPatchResponse = {
   id: string;
+  status?: DealStatus;
+  expectedAmountCents?: number;
+  receivedAmountCents?: number;
+  netReferralFeePaidCents?: number;
+  closingDate?: string | null;
+  paidDate?: string | null;
   referralStatus?: ReferralStatus | null;
   referralStatusLastUpdated?: string | null;
 };
@@ -413,11 +419,13 @@ function DealCard({
   };
 
   const statusLabel = DEAL_STATUS_LABELS[(deal.status as DealStatus | undefined) ?? 'under_contract'];
-  const expected = formatCurrency(deal.status === 'paid' ? 0 : deal.expectedAmountCents ?? 0);
+  const expectedAmountCents = deal.expectedAmountCents ?? 0;
+  const reportedNetPaidCents = deal.netReferralFeePaidCents ?? deal.receivedAmountCents;
   const netPaidCents =
-    deal.netReferralFeePaidCents ??
-    deal.receivedAmountCents ??
-    (deal.status === 'paid' ? deal.expectedAmountCents ?? 0 : 0);
+    reportedNetPaidCents ??
+    (deal.status === 'paid' ? expectedAmountCents : 0);
+  const remainingExpectedCents = Math.max(expectedAmountCents - (reportedNetPaidCents ?? 0), 0);
+  const expected = formatCurrency(remainingExpectedCents);
   const netPaid = formatCurrency(netPaidCents ?? 0);
   const contractPriceValue = deal.contractPriceCents ? formatCurrency(deal.contractPriceCents) : '—';
   const dealSide = deal.side === 'sell' ? 'Sell-side' : 'Buy-side';
@@ -1453,13 +1461,20 @@ export function ReferralDeals({
         return false;
       }
       const patchResult = (await response.json()) as PaymentPatchResponse;
+      const resolvedPaidAmountCents =
+        patchResult.netReferralFeePaidCents ??
+        patchResult.receivedAmountCents ??
+        fallbackPaidCents;
 
       onDealUpdated?.({
         ...deal,
-        status: nextStatus,
+        status: patchResult.status ?? nextStatus,
+        expectedAmountCents: patchResult.expectedAmountCents ?? deal.expectedAmountCents,
+        receivedAmountCents: resolvedPaidAmountCents ?? deal.receivedAmountCents,
+        netReferralFeePaidCents: resolvedPaidAmountCents ?? deal.netReferralFeePaidCents,
         terminatedReason: nextStatus === 'terminated' ? terminationReason ?? null : null,
-        closingDate: closingDate ?? deal.closingDate ?? null,
-        paidDate: paidDate ?? deal.paidDate ?? null,
+        closingDate: patchResult.closingDate ?? closingDate ?? deal.closingDate ?? null,
+        paidDate: patchResult.paidDate ?? paidDate ?? deal.paidDate ?? null,
         updatedAt: new Date().toISOString(),
       }, {
         referralStatus: patchResult.referralStatus,
@@ -1532,10 +1547,10 @@ export function ReferralDeals({
         : null;
       onDealUpdated?.({
         ...deal,
-        status: payload.status ?? deal.status,
-        expectedAmountCents: payload.expectedAmountCents ?? deal.expectedAmountCents,
-        receivedAmountCents: payload.netReferralFeePaidCents,
-        netReferralFeePaidCents: payload.netReferralFeePaidCents,
+        status: patchResult.status ?? payload.status ?? deal.status,
+        expectedAmountCents: patchResult.expectedAmountCents ?? payload.expectedAmountCents ?? deal.expectedAmountCents,
+        receivedAmountCents: patchResult.receivedAmountCents ?? payload.netReferralFeePaidCents,
+        netReferralFeePaidCents: patchResult.netReferralFeePaidCents ?? payload.netReferralFeePaidCents,
         contractPriceCents: payload.contractPriceCents ?? null,
         commissionBasisPoints: payload.commissionBasisPoints ?? null,
         commissionFlatFeeCents: payload.commissionFlatFeeCents ?? null,
@@ -1543,7 +1558,7 @@ export function ReferralDeals({
         propertyAddress: payload.propertyAddress ?? null,
         propertyCity: payload.propertyCity ?? null,
         propertyState: payload.propertyState ?? null,
-        closingDate: payload.closingDate ?? null,
+        closingDate: patchResult.closingDate ?? payload.closingDate ?? null,
         underContractDate: payload.underContractDate ?? null,
         agentId: updatedAgentId,
         agent: updatedAgentId
@@ -1553,6 +1568,7 @@ export function ReferralDeals({
         usedAfc: (payload.side ?? deal.side) === 'sell' ? false : payload.usedAfc,
         usedAssignedAgent: payload.usedAssignedAgent,
         terminatedReason: payload.terminatedReason ?? null,
+        paidDate: patchResult.paidDate ?? deal.paidDate ?? null,
         updatedAt: new Date().toISOString(),
       }, {
         referralStatus: patchResult.referralStatus,
