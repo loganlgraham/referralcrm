@@ -333,21 +333,27 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       const oppositeAgentInfoHtml =
         oppositeAgentHtmlLines.length > 0 ? `<p>${oppositeAgentHtmlLines.join('<br>')}</p>` : null;
 
+      const afcManagerInfoHtml =
+        '<br><br><b>AFC Manager</b><br>Logan Graham<br>720-213-3038<br>logan.graham@americanfinancing.net<br><br>Please reach out to Logan if you or the buyer are not happy with AFC\'s services.';
+
+      const afcManagerInfoText =
+        'AFC Manager: Logan Graham | Phone: 720-213-3038 | Email: logan.graham@americanfinancing.net | Please reach out to Logan if you or the buyer are not happy with AFC\'s services.';
+
       const mcInfoHtml = isSellerOnly
         ? null
         : lenderContact
         ? `<p><b>Mortgage Consultant at American Financing:</b> ${lenderContact.name ?? 'Not provided'}<br><b>Email:</b> ${
             lenderContact.email ?? 'Not provided'
-          }<br><b>Phone:</b> ${lenderContact.phone ?? 'Not provided'}<br><b>Loan File Number:</b> ${loanFileNumber}</p>`
-        : `<p><b>Mortgage Consultant at American Financing:</b> Not provided<br><b>Loan File Number:</b> ${loanFileNumber}</p>`;
+          }<br><b>Phone:</b> ${lenderContact.phone ?? 'Not provided'}<br><b>Loan File Number:</b> ${loanFileNumber}${afcManagerInfoHtml}</p>`
+        : `<p><b>Mortgage Consultant at American Financing:</b> Not provided<br><b>Loan File Number:</b> ${loanFileNumber}${afcManagerInfoHtml}</p>`;
 
       const mcInfoText = isSellerOnly
         ? null
         : lenderContact
         ? `Mortgage Consultant at American Financing: ${lenderContact.name ?? 'Not provided'} | Email: ${
             lenderContact.email ?? 'Not provided'
-          } | Phone: ${lenderContact.phone ?? 'Not provided'} | Loan File Number: ${loanFileNumber}`
-        : `Mortgage Consultant at American Financing: Not provided | Loan File Number: ${loanFileNumber}`;
+          } | Phone: ${lenderContact.phone ?? 'Not provided'} | Loan File Number: ${loanFileNumber} | ${afcManagerInfoText}`
+        : `Mortgage Consultant at American Financing: Not provided | Loan File Number: ${loanFileNumber} | ${afcManagerInfoText}`;
 
       await trySendEmail(
         contact?.email ?? null,
