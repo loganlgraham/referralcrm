@@ -90,6 +90,7 @@ type PaymentWithReferral = {
   paidDate?: Date | null;
   createdAt?: Date | null;
   commissionBasisPoints?: number | null;
+  commissionFlatFeeCents?: number | null;
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
   agentId?: Types.ObjectId | AgentSummary | null;
@@ -675,6 +676,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
       paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
       commissionBasisPoints: payment.commissionBasisPoints ?? null,
+      commissionFlatFeeCents: payment.commissionFlatFeeCents ?? null,
       referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
       side: payment.side ?? 'buy',
       feeBreakdownEmailSentAt: payment.feeBreakdownEmailSentAt ? payment.feeBreakdownEmailSentAt.toISOString() : null,

@@ -54,6 +54,8 @@ interface DealRow {
   expectedAmountCents: number;
   receivedAmountCents: number;
   contractPriceCents?: number | null;
+  commissionBasisPoints?: number | null;
+  commissionFlatFeeCents?: number | null;
   propertyAddress?: string | null;
   terminatedReason?: TerminatedReason | null;
   closingDate?: string | null;
@@ -622,6 +624,25 @@ export function DealsTable() {
     return deal.side === 'sell' || deal.referral?.dealSide === 'sell' ? 'Seller' : 'Buyer';
   };
 
+  const formatCommissionRateDisplay = (deal: DealRow): string => {
+    if (deal.status === 'terminated') {
+      return '—';
+    }
+    const flatCents = deal.commissionFlatFeeCents ?? 0;
+    if (flatCents > 0) {
+      return formatCurrency(flatCents);
+    }
+    const bps = deal.commissionBasisPoints ?? deal.referral?.commissionBasisPoints ?? null;
+    if (bps && bps > 0) {
+      const percent = bps / 100;
+      const formatted = Number.isInteger(percent)
+        ? percent.toString()
+        : percent.toFixed(2).replace(/\.?0+$/, '');
+      return `${formatted}%`;
+    }
+    return '—';
+  };
+
   const renderAdminTable = () => (
     <div className="overflow-x-auto rounded-card border border-border bg-surface-raised shadow-sm">
       <table className="min-w-full divide-y divide-border">
@@ -651,7 +672,7 @@ export function DealsTable() {
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               <SortableHeader label="Purchase Price" sortKey="purchasePrice" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+            <th className="px-4 py-3 text-left text-xs font-semibold tracking-wide text-foreground-subtle">
               Commission
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
@@ -668,7 +689,7 @@ export function DealsTable() {
             const purchasePrice = isTerminated
               ? 0
               : deal.contractPriceCents ?? deal.referral?.estPurchasePriceCents ?? 0;
-            const commission = calculateCommission(deal);
+            const commissionDisplay = formatCommissionRateDisplay(deal);
 
             return (
               <tr key={deal._id} className="even:bg-surface-muted/50 hover:bg-surface-subtle">
@@ -691,9 +712,7 @@ export function DealsTable() {
                 <td className="px-4 py-3 text-sm text-foreground-muted">
                   {isTerminated || purchasePrice <= 0 ? '—' : formatCurrency(purchasePrice)}
                 </td>
-                <td className="px-4 py-3 text-sm text-foreground-muted">
-                  {isTerminated || commission <= 0 ? '—' : formatCurrency(commission)}
-                </td>
+                <td className="px-4 py-3 text-sm text-foreground-muted">{commissionDisplay}</td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(referralFee)}</td>
               </tr>
             );
