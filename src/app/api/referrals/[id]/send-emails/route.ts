@@ -334,10 +334,10 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         oppositeAgentHtmlLines.length > 0 ? `<p>${oppositeAgentHtmlLines.join('<br>')}</p>` : null;
 
       const afcManagerInfoHtml =
-        '<br><br><b>AFC Manager</b><br>Logan Graham<br>720-213-3038<br>logan.graham@americanfinancing.net<br><br>Please reach out to Logan if you or the buyer are not happy with AFC\'s services.';
+        "<br><br><b>Manager:</b> Logan Graham<br><b>Email:</b> logan.graham@americanfinancing.net<br><b>Phone:</b> 720-213-3038<br><br><b>Please reach out to Logan or Kristen if you or the buyer are not happy with AFC's services.<br><br>Please select one of the following after attempting to contact Logan:</b>";
 
       const afcManagerInfoText =
-        'AFC Manager: Logan Graham | Phone: 720-213-3038 | Email: logan.graham@americanfinancing.net | Please reach out to Logan if you or the buyer are not happy with AFC\'s services.';
+        "Manager: Logan Graham | Email: logan.graham@americanfinancing.net | Phone: 720-213-3038 | Please reach out to Logan or Kristen if you or the buyer are not happy with AFC's services. Please select one of the following after attempting to contact Logan:";
 
       const mcInfoHtml = isSellerOnly
         ? null
