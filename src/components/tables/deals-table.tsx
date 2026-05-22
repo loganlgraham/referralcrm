@@ -150,8 +150,7 @@ export function DealsTable() {
     if (customRange.end) apiParams.set('end', customRange.end);
   }
   if (search) apiParams.set('search', search);
-  // When a closing-date timeframe is active, do not send status so the API returns all deals by closing date.
-  if (timeframe === 'all' && statusFilters.length > 0) apiParams.set('status', statusFilters.join(','));
+  if (statusFilters.length > 0) apiParams.set('status', statusFilters.join(','));
   if (designationFilters.length > 0) apiParams.set('designation', designationFilters.join(','));
   if (usedAgentFilter !== 'all') apiParams.set('usedAgent', usedAgentFilter);
   if (usedAfcFilter !== 'all') apiParams.set('usedAfc', usedAfcFilter);
@@ -277,11 +276,8 @@ export function DealsTable() {
     (preset: TimeframePreset) => {
       setTimeframe(preset);
       setCustomRange(getPresetRange(preset === 'all' ? 'month' : preset));
-      if (preset !== 'all') {
-        updateParams({ status: '' });
-      }
     },
-    [updateParams]
+    []
   );
 
   const handleCustomRangeSelect = useCallback(
@@ -289,9 +285,8 @@ export function DealsTable() {
       if (!isDateRangeValid(range)) return;
       setCustomRange(range);
       setTimeframe('custom');
-      updateParams({ status: '' });
     },
-    [updateParams]
+    []
   );
 
   useEffect(() => {
@@ -1012,13 +1007,22 @@ export function DealsTable() {
                   <div className="absolute left-0 right-0 z-30 mt-1 max-h-60 w-full overflow-y-auto rounded border border-border bg-surface-raised py-1 shadow-lg">
                     <div className="mb-2 flex items-center justify-between px-3 pt-1 text-xs font-semibold text-foreground-muted">
                       <span>Filter statuses</span>
-                      <button
-                        type="button"
-                        className="text-primary-700 hover:text-primary-700/80"
-                        onClick={() => updateParams({ status: '' })}
-                      >
-                        Clear
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          className="text-primary-700 hover:text-primary-700/80"
+                          onClick={() => updateParams({ status: DEAL_STATUS_VALUES.join(',') })}
+                        >
+                          Select all
+                        </button>
+                        <button
+                          type="button"
+                          className="text-primary-700 hover:text-primary-700/80"
+                          onClick={() => updateParams({ status: '' })}
+                        >
+                          Clear
+                        </button>
+                      </div>
                     </div>
                     <div className="max-h-60 space-y-2 overflow-auto px-2 pb-2">
                       {STATUS_FILTER_OPTIONS.map(({ value, label }) => (

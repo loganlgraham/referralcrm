@@ -243,12 +243,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // When filtering by timeframe, show all deals with closing date in range (ignore status).
-  // When timeframeStart is set, status is intentionally not applied so the list is purely by closing date.
-  // Only apply status filter when no timeframe is selected.
-  if (statusList.length === 1 && !timeframeStart) {
+  if (statusList.length === 1) {
     filter.status = statusList[0];
-  } else if (statusList.length > 1 && !timeframeStart) {
+  } else if (statusList.length > 1) {
     filter.status = { $in: statusList };
   }
 
