@@ -5,7 +5,6 @@ import useSWR from 'swr';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { toast } from 'sonner';
 
 import {
   TimeframeDropdown,
@@ -54,6 +53,9 @@ interface DealRow {
   status: DealStatus;
   expectedAmountCents: number;
   receivedAmountCents: number;
+  contractPriceCents?: number | null;
+  commissionBasisPoints?: number | null;
+  commissionFlatFeeCents?: number | null;
   propertyAddress?: string | null;
   terminatedReason?: TerminatedReason | null;
   closingDate?: string | null;
@@ -67,6 +69,10 @@ interface DealRow {
     name: string | null;
   } | null;
   agentDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
+  mc?: {
+    id: string;
+    name: string | null;
+  } | null;
   referral?: {
     borrowerName?: string | null;
     propertyAddress?: string | null;
@@ -90,42 +96,6 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{label}</p>
       <p className="mt-1 text-2xl font-bold text-foreground">{value}</p>
     </div>
-  );
-}
-
-function ToggleSwitch({
-  checked,
-  label,
-  onChange,
-  disabled,
-}: {
-  checked: boolean;
-  label: string;
-  onChange: (nextValue: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => {
-        if (!disabled) {
-          onChange(!checked);
-        }
-      }}
-      disabled={disabled}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-        checked ? 'bg-primary-600' : 'bg-surface-subtle'
-      } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-    >
-      <span
-        className={`inline-block h-5 w-5 transform rounded-full bg-surface-raised shadow transition ${
-          checked ? 'translate-x-5' : 'translate-x-1'
-        }`}
-      />
-    </button>
   );
 }
 
@@ -180,8 +150,7 @@ export function DealsTable() {
     if (customRange.end) apiParams.set('end', customRange.end);
   }
   if (search) apiParams.set('search', search);
-  // When a closing-date timeframe is active, do not send status so the API returns all deals by closing date.
-  if (timeframe === 'all' && statusFilters.length > 0) apiParams.set('status', statusFilters.join(','));
+  if (statusFilters.length > 0) apiParams.set('status', statusFilters.join(','));
   if (designationFilters.length > 0) apiParams.set('designation', designationFilters.join(','));
   if (usedAgentFilter !== 'all') apiParams.set('usedAgent', usedAgentFilter);
   if (usedAfcFilter !== 'all') apiParams.set('usedAfc', usedAfcFilter);
@@ -189,9 +158,7 @@ export function DealsTable() {
   if (sortDirection) apiParams.set('sortDirection', sortDirection);
   
   const apiUrl = `/api/payments?${apiParams.toString()}`;
-  const { data, mutate } = useSWR<PaymentsResponse>(apiUrl, fetcher);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
+  const { data } = useSWR<PaymentsResponse>(apiUrl, fetcher);
   const searchValue = search;
   const [searchTerm, setSearchTerm] = useState(searchValue);
   const [debouncedSearch, setDebouncedSearch] = useState(searchValue);
@@ -309,11 +276,8 @@ export function DealsTable() {
     (preset: TimeframePreset) => {
       setTimeframe(preset);
       setCustomRange(getPresetRange(preset === 'all' ? 'month' : preset));
-      if (preset !== 'all') {
-        updateParams({ status: '' });
-      }
     },
-    [updateParams]
+    []
   );
 
   const handleCustomRangeSelect = useCallback(
@@ -321,9 +285,8 @@ export function DealsTable() {
       if (!isDateRangeValid(range)) return;
       setCustomRange(range);
       setTimeframe('custom');
-      updateParams({ status: '' });
     },
-    [updateParams]
+    []
   );
 
   useEffect(() => {
@@ -443,7 +406,8 @@ export function DealsTable() {
     | 'paid'
     | 'outcome'
     | 'commission'
-    | 'netCommission';
+    | 'netCommission'
+    | 'purchasePrice';
 
   const toggleSort = (key: SortKey) => {
     if (sortBy === key) {
@@ -578,203 +542,6 @@ export function DealsTable() {
     );
   })();
 
-  const updateDeal = async (
-    deal: DealRow,
-    updates: Partial<
-      Pick<
-        DealRow,
-        | 'status'
-        | 'expectedAmountCents'
-        | 'receivedAmountCents'
-        | 'terminatedReason'
-        | 'usedAfc'
-        | 'usedAssignedAgent'
-        | 'agentAttribution'
-      >
-    >,
-    successMessage: string
-  ) => {
-    const previousSnapshot = data;
-    const optimisticRow: DealRow = { ...deal, ...updates };
-    if ('expectedAmountCents' in updates && optimisticRow.referral) {
-      const nextReferralFee = updates.expectedAmountCents ?? optimisticRow.referral.referralFeeDueCents ?? 0;
-      optimisticRow.referral = {
-        ...optimisticRow.referral,
-        referralFeeDueCents: nextReferralFee,
-      };
-    }
-    const optimistic = deals.map((row) => (row._id === deal._id ? optimisticRow : row));
-
-    setUpdatingId(deal._id);
-    await mutate(
-      {
-        items: optimistic,
-        total: data?.total ?? optimistic.length,
-        page: data?.page ?? 1,
-        pageSize: data?.pageSize ?? 25,
-      },
-      false
-    );
-
-    try {
-      const payload: Record<string, unknown> = { id: deal._id };
-      if ('status' in updates && updates.status) {
-        payload.status = updates.status;
-      }
-      if ('expectedAmountCents' in updates) {
-        payload.expectedAmountCents = updates.expectedAmountCents ?? 0;
-      }
-      if ('receivedAmountCents' in updates) {
-        payload.receivedAmountCents = updates.receivedAmountCents ?? 0;
-      }
-      if ('terminatedReason' in updates) {
-        payload.terminatedReason = updates.terminatedReason ?? null;
-      }
-      if ('usedAfc' in updates) {
-        payload.usedAfc = updates.usedAfc ?? false;
-      }
-      if ('usedAssignedAgent' in updates) {
-        payload.usedAssignedAgent = updates.usedAssignedAgent ?? false;
-      }
-      if ('agentAttribution' in updates) {
-        payload.agentAttribution = updates.agentAttribution ?? null;
-      }
-
-      const response = await fetch('/api/payments', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error('Unable to update deal');
-      }
-
-      toast.success(successMessage);
-      await mutate();
-    } catch (error) {
-      console.error(error);
-      await mutate(previousSnapshot, false);
-      toast.error(error instanceof Error ? error.message : 'Unable to update deal');
-      await mutate();
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-  const handleAfcUsageChange = async (deal: DealRow, checked: boolean) => {
-    if (Boolean(deal.usedAfc) === checked) {
-      return;
-    }
-
-    await updateDeal(deal, { usedAfc: checked }, 'AFC usage updated');
-  };
-
-  const handleUsedAgentToggle = async (deal: DealRow, checked: boolean) => {
-    if (Boolean(deal.usedAssignedAgent) === checked) {
-      return;
-    }
-
-    const updates: Partial<
-      Pick<
-        DealRow,
-        'usedAssignedAgent' | 'expectedAmountCents' | 'receivedAmountCents' | 'agentAttribution'
-      >
-    > = { usedAssignedAgent: checked };
-    const agentAttribution: AgentAttribution = checked
-      ? (deal.referral?.ahaBucket === 'AHA' || deal.referral?.ahaBucket === 'AHA_OOS'
-          ? deal.referral.ahaBucket
-          : null)
-      : 'OUTSIDE_AGENT';
-    updates.agentAttribution = agentAttribution;
-
-    if (!checked) {
-      updates.expectedAmountCents = 0;
-      updates.receivedAmountCents = 0;
-    } else {
-      const fallbackAmount = deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
-      if (fallbackAmount > 0) {
-        updates.expectedAmountCents = fallbackAmount;
-      }
-    }
-
-    await updateDeal(deal, updates, 'Assigned agent usage updated');
-  };
-
-  const handlePaidToggle = async (deal: DealRow, checked: boolean) => {
-    if (deal.status === 'terminated') {
-      return;
-    }
-
-    if (!checked) {
-      return;
-    }
-
-    if (deal.status === 'paid') {
-      return;
-    }
-
-    const updates: Partial<Pick<DealRow, 'status' | 'expectedAmountCents'>> = {
-      status: 'paid',
-    };
-
-    const fallbackExpected = deal.referral?.referralFeeDueCents ?? deal.expectedAmountCents ?? 0;
-    if (fallbackExpected > 0) {
-      updates.expectedAmountCents = fallbackExpected;
-    }
-
-    await updateDeal(deal, updates, 'Deal status updated');
-  };
-
-  const handleAmountChange = (dealId: string, value: string) => {
-    setAmountDrafts((prev) => ({ ...prev, [dealId]: value }));
-  };
-
-  const handleAmountBlur = async (deal: DealRow) => {
-    const draft = amountDrafts[deal._id];
-    if (draft === undefined) {
-      return;
-    }
-
-    const trimmed = draft.trim();
-    if (!trimmed) {
-      setAmountDrafts((prev) => {
-        const next = { ...prev };
-        delete next[deal._id];
-        return next;
-      });
-      return;
-    }
-
-    const parsed = Number(trimmed.replace(/[^0-9.]/g, ''));
-    if (Number.isNaN(parsed) || parsed < 0) {
-      toast.error('Enter a valid received amount');
-      setAmountDrafts((prev) => {
-        const next = { ...prev };
-        delete next[deal._id];
-        return next;
-      });
-      return;
-    }
-
-    const cents = Math.round(parsed * 100);
-    if (cents === (deal.receivedAmountCents ?? 0)) {
-      setAmountDrafts((prev) => {
-        const next = { ...prev };
-        delete next[deal._id];
-        return next;
-      });
-      return;
-    }
-
-    await updateDeal(deal, { receivedAmountCents: cents }, 'Received amount updated');
-    setAmountDrafts((prev) => {
-      const next = { ...prev };
-      delete next[deal._id];
-      return next;
-    });
-  };
-
   const renderReferralLink = (deal: DealRow) => {
     const label = deal.referral?.borrowerName || 'Referral';
     const href = deal.referralId ? `/referrals/${deal.referralId}` : '#';
@@ -810,6 +577,22 @@ export function DealsTable() {
     );
   };
 
+  const renderMcLink = (deal: DealRow) => {
+    if (!deal.mc?.id) {
+      return <span className="text-sm text-foreground-subtle">Unassigned</span>;
+    }
+
+    return (
+      <Link
+        prefetch={false}
+        href={`/lenders/${deal.mc.id}`}
+        className="text-sm font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+      >
+        {deal.mc.name || 'MC'}
+      </Link>
+    );
+  };
+
   const renderStatusControl = (deal: DealRow) => {
     const isTerminated = deal.status === 'terminated';
     const statusLabel = normalizeStatusLabel(deal.status) || '—';
@@ -832,31 +615,27 @@ export function DealsTable() {
     return value ? formatDate(value) : '—';
   };
 
-  const formatCentsForInput = (value: number | null | undefined) => {
-    if (value === null || value === undefined) {
-      return '';
-    }
-    return (value / 100).toFixed(2);
-  };
-
-  const formatCentsForDisplay = (value: number | null | undefined) => {
-    if (value === null || value === undefined) {
-      return '';
-    }
-
-    const dollars = value / 100;
-    if (Number.isInteger(dollars)) {
-      return Number(dollars).toLocaleString('en-US', { maximumFractionDigits: 0 });
-    }
-
-    return Number(dollars).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  };
-
   const renderDealSide = (deal: DealRow) => {
     return deal.side === 'sell' || deal.referral?.dealSide === 'sell' ? 'Seller' : 'Buyer';
+  };
+
+  const formatCommissionRateDisplay = (deal: DealRow): string => {
+    if (deal.status === 'terminated') {
+      return '—';
+    }
+    const flatCents = deal.commissionFlatFeeCents ?? 0;
+    if (flatCents > 0) {
+      return formatCurrency(flatCents);
+    }
+    const bps = deal.commissionBasisPoints ?? deal.referral?.commissionBasisPoints ?? null;
+    if (bps && bps > 0) {
+      const percent = bps / 100;
+      const formatted = Number.isInteger(percent)
+        ? percent.toString()
+        : percent.toFixed(2).replace(/\.?0+$/, '');
+      return `${formatted}%`;
+    }
+    return '—';
   };
 
   const renderAdminTable = () => (
@@ -871,6 +650,9 @@ export function DealsTable() {
               <SortableHeader label="Agent" sortKey="agent" />
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+              MC
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               <SortableHeader label="Deal Side" sortKey="dealSide" />
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
@@ -883,38 +665,26 @@ export function DealsTable() {
               <SortableHeader label="Address" sortKey="address" />
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+              <SortableHeader label="Purchase Price" sortKey="purchasePrice" />
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold tracking-wide text-foreground-subtle">
+              Commission
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               <SortableHeader label="Referral Fee" sortKey="referralFee" />
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-              <SortableHeader label="Amount Received" sortKey="receivedAmount" />
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-              <SortableHeader label="Used AFC" sortKey="usedAfc" />
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-              <SortableHeader label="Used Agent" sortKey="usedAgent" />
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-              <SortableHeader label="Paid" sortKey="paid" />
             </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
           {deals.map((deal) => {
             const isTerminated = deal.status === 'terminated';
-            const isSellSideDeal = deal.side === 'sell' || deal.referral?.dealSide === 'sell';
             const referralFee = isTerminated
               ? 0
               : deal.expectedAmountCents ?? deal.referral?.referralFeeDueCents ?? 0;
-            const receivedDraft = amountDrafts[deal._id];
-            const receivedInputValue =
-              receivedDraft !== undefined
-                ? receivedDraft
-                : formatCentsForDisplay(deal.receivedAmountCents ?? 0);
-            const usedAfc = Boolean(deal.usedAfc);
-            const usedAssignedAgent = Boolean(deal.usedAssignedAgent);
-            const isPaid = deal.status === 'paid';
-            const isUpdating = updatingId === deal._id;
+            const purchasePrice = isTerminated
+              ? 0
+              : deal.contractPriceCents ?? deal.referral?.estPurchasePriceCents ?? 0;
+            const commissionDisplay = formatCommissionRateDisplay(deal);
 
             return (
               <tr key={deal._id} className="even:bg-surface-muted/50 hover:bg-surface-subtle">
@@ -927,104 +697,18 @@ export function DealsTable() {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">{renderAgentLink(deal)}</td>
+                <td className="px-4 py-3 text-sm text-foreground-muted">{renderMcLink(deal)}</td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">{renderDealSide(deal)}</td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">{renderStatusControl(deal)}</td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">{renderClosingDate(deal.closingDate)}</td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">
                   {getDealAddress(deal) || '—'}
                 </td>
+                <td className="px-4 py-3 text-sm text-foreground-muted">
+                  {isTerminated || purchasePrice <= 0 ? '—' : formatCurrency(purchasePrice)}
+                </td>
+                <td className="px-4 py-3 text-sm text-foreground-muted">{commissionDisplay}</td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(referralFee)}</td>
-                <td className="px-4 py-3 text-sm text-foreground-muted">
-                  {isTerminated ? (
-                    '—'
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <span className="text-foreground-subtle">$</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        min="0"
-                        step="0.01"
-                        value={receivedInputValue}
-                        onChange={(event) => handleAmountChange(deal._id, event.target.value)}
-                        onBlur={() => handleAmountBlur(deal)}
-                        onFocus={() => {
-                          setAmountDrafts((prev) => {
-                            if (prev[deal._id] !== undefined) {
-                              return prev;
-                            }
-                            return {
-                              ...prev,
-                              [deal._id]: formatCentsForInput(deal.receivedAmountCents ?? 0),
-                            };
-                          });
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.currentTarget.blur();
-                          }
-                          if (event.key === 'Escape') {
-                            setAmountDrafts((prev) => {
-                              const next = { ...prev };
-                              delete next[deal._id];
-                              return next;
-                            });
-                            event.currentTarget.blur();
-                          }
-                        }}
-                        className="w-28 rounded border border-border px-2 py-1 text-sm text-foreground-muted focus:border-primary-500 focus:outline-none"
-                        disabled={isUpdating}
-                      />
-                    </div>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-sm text-foreground-muted">
-                  {isTerminated ? (
-                    '—'
-                  ) : isSellSideDeal ? (
-                    'N/A'
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <ToggleSwitch
-                        label="Mark referral as using AFC"
-                        checked={usedAfc}
-                        onChange={(nextValue) => handleAfcUsageChange(deal, nextValue)}
-                        disabled={isUpdating || isSellSideDeal}
-                      />
-                      <span className="text-sm text-foreground-muted">{usedAfc ? 'Yes' : 'No'}</span>
-                    </div>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-sm text-foreground-muted">
-                  {isTerminated ? (
-                    '—'
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <ToggleSwitch
-                        label="Mark referral as using the assigned agent"
-                        checked={usedAssignedAgent}
-                        onChange={(nextValue) => handleUsedAgentToggle(deal, nextValue)}
-                        disabled={isUpdating}
-                      />
-                      <span className="text-sm text-foreground-muted">{usedAssignedAgent ? 'Yes' : 'No'}</span>
-                    </div>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-sm text-foreground-muted">
-                  {isTerminated ? (
-                    '—'
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <ToggleSwitch
-                        label="Mark deal as paid"
-                        checked={isPaid}
-                        onChange={(nextValue) => handlePaidToggle(deal, nextValue)}
-                        disabled={isUpdating || isPaid}
-                      />
-                      <span className="text-sm text-foreground-muted">{isPaid ? 'Yes' : 'No'}</span>
-                    </div>
-                  )}
-                </td>
               </tr>
             );
           })}
@@ -1323,13 +1007,22 @@ export function DealsTable() {
                   <div className="absolute left-0 right-0 z-30 mt-1 max-h-60 w-full overflow-y-auto rounded border border-border bg-surface-raised py-1 shadow-lg">
                     <div className="mb-2 flex items-center justify-between px-3 pt-1 text-xs font-semibold text-foreground-muted">
                       <span>Filter statuses</span>
-                      <button
-                        type="button"
-                        className="text-primary-700 hover:text-primary-700/80"
-                        onClick={() => updateParams({ status: '' })}
-                      >
-                        Clear
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          className="text-primary-700 hover:text-primary-700/80"
+                          onClick={() => updateParams({ status: DEAL_STATUS_VALUES.join(',') })}
+                        >
+                          Select all
+                        </button>
+                        <button
+                          type="button"
+                          className="text-primary-700 hover:text-primary-700/80"
+                          onClick={() => updateParams({ status: '' })}
+                        >
+                          Clear
+                        </button>
+                      </div>
                     </div>
                     <div className="max-h-60 space-y-2 overflow-auto px-2 pb-2">
                       {STATUS_FILTER_OPTIONS.map(({ value, label }) => (

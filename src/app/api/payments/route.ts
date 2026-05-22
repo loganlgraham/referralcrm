@@ -20,6 +20,7 @@ import { paymentSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { Agent } from '@/models/agent';
 import { Referral } from '@/models/referral';
+import { LenderMC } from '@/models/lender';
 import { User } from '@/models/user';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { logReferralActivity } from '@/lib/server/activities';
@@ -55,12 +56,18 @@ type ReferralSummary = {
   dealSide?: 'buy' | 'sell' | null;
   buySideAgent?: Types.ObjectId | string | null;
   sellSideAgent?: Types.ObjectId | string | null;
+  lender?: Types.ObjectId | string | null;
 };
 
 type AgentSummary = {
   _id: Types.ObjectId;
   name?: string | null;
   ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
+};
+
+type LenderSummary = {
+  _id: Types.ObjectId;
+  name?: string | null;
 };
 
 type PaymentWithReferral = {
@@ -190,6 +197,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       usedAgent: { usedAssignedAgent: direction },
       paid: { status: direction },
       outcome: { usedAfc: direction, usedAssignedAgent: direction },
+      purchasePrice: { contractPriceCents: direction },
     };
 
     return sortMap[sortBy] || defaultSort;
@@ -235,12 +243,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // When filtering by timeframe, show all deals with closing date in range (ignore status).
-  // When timeframeStart is set, status is intentionally not applied so the list is purely by closing date.
-  // Only apply status filter when no timeframe is selected.
-  if (statusList.length === 1 && !timeframeStart) {
+  if (statusList.length === 1) {
     filter.status = statusList[0];
-  } else if (statusList.length > 1 && !timeframeStart) {
+  } else if (statusList.length > 1) {
     filter.status = { $in: statusList };
   }
 
@@ -402,7 +407,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         .populate<{ referralId: ReferralSummary }>({
           path: 'referralId',
           select:
-            'borrower propertyAddress lookingInZip lookingInZips assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents ahaBucket loanFileNumber',
+            'borrower propertyAddress lookingInZip lookingInZips assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents ahaBucket loanFileNumber lender endorser dealSide',
         })
         .populate<{ agentId: AgentSummary | Types.ObjectId | null }>({ path: 'agentId', select: 'name' })
         .lean<PaymentWithReferral[]>();
@@ -425,7 +430,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         .populate<{ referralId: ReferralSummary }>({
           path: 'referralId',
           select:
-            'borrower propertyAddress lookingInZip lookingInZips assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents ahaBucket loanFileNumber',
+            'borrower propertyAddress lookingInZip lookingInZips assignedAgent commissionBasisPoints referralFeeBasisPoints estPurchasePriceCents preApprovalAmountCents referralFeeDueCents ahaBucket loanFileNumber lender endorser dealSide',
         })
         .populate<{ agentId: AgentSummary | Types.ObjectId | null }>({ path: 'agentId', select: 'name' })
         .lean<PaymentWithReferral[]>(),
@@ -518,6 +523,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     agentDesignationMap.set(id, agent.ahaDesignation ?? null);
   });
 
+  const lenderIds = new Set<string>();
+  payments.forEach((payment) => {
+    const rawLender = payment.referralId?.lender;
+    if (rawLender instanceof Types.ObjectId) {
+      lenderIds.add(rawLender.toString());
+    } else if (typeof rawLender === 'string' && rawLender) {
+      lenderIds.add(rawLender);
+    }
+  });
+
+  const lenders = lenderIds.size
+    ? await LenderMC.find({ _id: { $in: Array.from(lenderIds, (id) => new Types.ObjectId(id)) } })
+        .select('name')
+        .lean<LenderSummary[]>()
+    : [];
+
+  const lenderNameMap = new Map<string, string | null>();
+  lenders.forEach((lender) => {
+    lenderNameMap.set(lender._id.toString(), lender.name ?? null);
+  });
+
   const feeBreakdownSentByIds = [
     ...new Set(
       payments
@@ -600,6 +626,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return agentDesignationMap.get(id) ?? null;
     })();
 
+    const lenderField = referral?.lender ?? null;
+    const lenderId = (() => {
+      if (!lenderField) {
+        return '';
+      }
+      if (lenderField instanceof Types.ObjectId) {
+        return lenderField.toString();
+      }
+      if (typeof lenderField === 'string') {
+        return lenderField;
+      }
+      return '';
+    })();
+    const mcName = lenderId ? lenderNameMap.get(lenderId) ?? null : null;
+
     return {
       _id: payment._id.toString(),
       referralId,
@@ -652,6 +693,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         : null,
       agentId: agentId || null,
       agentDesignation,
+      mc: lenderId
+        ? {
+            id: lenderId,
+            name: mcName,
+          }
+        : null,
       referral: referral
         ? {
             borrowerName: referral.borrower?.name ?? null,

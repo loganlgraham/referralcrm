@@ -10,10 +10,13 @@ import { ACTIVE_REFERRAL_STATUS_VALUES } from '@/constants/referrals';
 
 type ExportReport = 'referrals' | 'agents' | 'mcs' | 'deals';
 
+type AhaDesignation = 'AHA' | 'AHA_OOS' | 'AGIT';
+
 // Populated document types for type safety
 interface PopulatedAgent {
   _id: unknown;
   name: string;
+  ahaDesignation?: AhaDesignation | null;
 }
 
 interface PopulatedReferral {
@@ -25,6 +28,7 @@ interface PopulatedReferral {
   origin?: string;
   loanFileNumber?: string;
   referralFeeBasisPoints?: number;
+  commissionBasisPoints?: number;
   closedPriceCents?: number;
 }
 
@@ -35,7 +39,9 @@ interface PopulatedPayment {
   receivedAmountCents?: number;
   contractPriceCents?: number;
   referralFeeBasisPoints?: number;
+  commissionBasisPoints?: number;
   referralId?: PopulatedReferral | null;
+  agentId?: PopulatedAgent | null;
   agentAttribution?: unknown;
 }
 
@@ -160,23 +166,55 @@ async function buildMcRows(): Promise<string[][]> {
 
 async function buildDealRows(): Promise<string[][]> {
   const payments = await Payment.find({})
-    .select('status expectedAmountCents receivedAmountCents contractPriceCents referralFeeBasisPoints referralId agentAttribution')
-    .populate({ path: 'referralId', select: 'assignedAgent referralFeeBasisPoints commissionBasisPoints closedPriceCents borrower status', populate: { path: 'assignedAgent', select: 'name' } })
+    .select('status expectedAmountCents receivedAmountCents contractPriceCents referralFeeBasisPoints commissionBasisPoints referralId agentId agentAttribution')
+    .populate({
+      path: 'referralId',
+      select: 'assignedAgent referralFeeBasisPoints commissionBasisPoints closedPriceCents borrower status loanFileNumber',
+      populate: { path: 'assignedAgent', select: 'name ahaDesignation' }
+    })
+    .populate({ path: 'agentId', select: 'name ahaDesignation' })
     .lean() as unknown as PopulatedPayment[];
 
-  const headers = ['Deal', 'Status', 'Volume', 'Referral fee %', 'Assigned agent'];
+  const headers = [
+    'Deal',
+    'Loan number',
+    'Status',
+    'Volume',
+    'Commission %',
+    'Referral fee %',
+    'Assigned agent',
+    'Agent designation',
+  ];
   const rows = payments.map((payment) => {
     const referral = payment.referralId;
     const id = referral?._id?.toString() ?? payment._id?.toString();
     const statusLabel = payment.status.replace(/_/g, ' ');
     const volumeCents = payment.contractPriceCents ?? referral?.closedPriceCents ?? 0;
-    const referralFeeBps = payment.referralFeeBasisPoints ?? referral?.referralFeeBasisPoints ?? null;
-    const referralFeePercentage = referralFeeBps != null ? `${(referralFeeBps / 100).toFixed(2)}%` : '—';
-    const assignedAgent = referral?.assignedAgent?.name ?? 'Unassigned';
-
     const volume = volumeCents ? `$${(volumeCents / 100).toLocaleString()}` : '—';
 
-    return [id || 'Unknown deal', statusLabel, volume, referralFeePercentage, assignedAgent];
+    const referralFeeBps = payment.referralFeeBasisPoints ?? referral?.referralFeeBasisPoints ?? null;
+    const referralFeePercentage = referralFeeBps != null ? `${(referralFeeBps / 100).toFixed(2)}%` : '—';
+
+    const commissionBps = payment.commissionBasisPoints ?? referral?.commissionBasisPoints ?? null;
+    const commissionPercentage = commissionBps != null ? `${(commissionBps / 100).toFixed(2)}%` : '—';
+
+    const resolvedAgent = payment.agentId ?? referral?.assignedAgent ?? null;
+    const assignedAgent = resolvedAgent?.name ?? 'Unassigned';
+    const designationRaw = resolvedAgent?.ahaDesignation ?? null;
+    const designation = designationRaw === 'AHA_OOS' ? 'AHA OOS' : designationRaw ?? '—';
+
+    const loanNumber = referral?.loanFileNumber || '—';
+
+    return [
+      id || 'Unknown deal',
+      loanNumber,
+      statusLabel,
+      volume,
+      commissionPercentage,
+      referralFeePercentage,
+      assignedAgent,
+      designation,
+    ];
   });
 
   return [headers, ...rows];
