@@ -1316,13 +1316,37 @@ export function DealCard({
     const handleCommissionModeToggle = (mode: '%' | '$') => {
       setDetailDraftMap((previous) => {
         const current = previous[deal._id] ?? getDefaultDraft(deal);
+        if (current.commissionMode === mode) {
+          return previous;
+        }
+
+        const contractCents = parseCurrencyInput(current.contractPrice);
+        let nextPercent = current.commissionPercent;
+        let nextFlat = current.commissionFlat;
+
+        if (mode === '$') {
+          const bps = parsePercentInput(current.commissionPercent);
+          if (contractCents != null && contractCents > 0 && bps != null) {
+            nextFlat = formatDraftCurrency(Math.round((contractCents * bps) / 10_000));
+          } else {
+            nextFlat = '';
+          }
+        } else {
+          const flatCents = parseCurrencyInput(current.commissionFlat);
+          if (contractCents != null && contractCents > 0 && flatCents != null && flatCents > 0) {
+            nextPercent = formatDraftPercent(Math.round((flatCents / contractCents) * 10_000));
+          } else {
+            nextPercent = '';
+          }
+        }
+
         return {
           ...previous,
           [deal._id]: {
             ...current,
             commissionMode: mode,
-            commissionPercent: mode === '%' ? current.commissionPercent : '',
-            commissionFlat: mode === '$' ? current.commissionFlat : '',
+            commissionPercent: nextPercent,
+            commissionFlat: nextFlat,
           },
         };
       });

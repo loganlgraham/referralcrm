@@ -244,6 +244,29 @@ function DealCard({
     }
   }, [populateFromDeal, editing]);
 
+  const handleCommissionModeToggle = (mode: '%' | '$') => {
+    if (mode === commissionMode) return;
+    const contractCents = toCents(contractPrice);
+    if (mode === '$') {
+      const pct = Number.parseFloat(commissionPercentage);
+      if (contractCents > 0 && Number.isFinite(pct) && pct > 0) {
+        const flatCents = Math.round((contractCents * pct) / 100);
+        setCommissionFlat(centsToDisplay(flatCents));
+      } else {
+        setCommissionFlat('');
+      }
+    } else {
+      const flatCents = toCents(commissionFlat);
+      if (contractCents > 0 && flatCents > 0) {
+        const bps = Math.round((flatCents / contractCents) * 10_000);
+        setCommissionPercentage(basisPointsToDisplay(bps));
+      } else {
+        setCommissionPercentage('');
+      }
+    }
+    setCommissionMode(mode);
+  };
+
   const handleSendFeeBreakdown = async () => {
     const message = deal.feeBreakdownEmailSentAt
       ? 'This fee breakdown was already sent. Resend it now?'
@@ -757,7 +780,7 @@ function DealCard({
               <div className="flex rounded border border-border-strong text-xs font-medium overflow-hidden">
                 <button
                   type="button"
-                  onClick={() => setCommissionMode('%')}
+                  onClick={() => handleCommissionModeToggle('%')}
                   disabled={saving || isNoFeeDeal}
                   className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                 >
@@ -765,7 +788,7 @@ function DealCard({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setCommissionMode('$')}
+                  onClick={() => handleCommissionModeToggle('$')}
                   disabled={saving || isNoFeeDeal}
                   className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                 >
@@ -1210,6 +1233,29 @@ export function ReferralDeals({
     }
   }, [side, usedAfc]);
 
+  const handleCommissionModeToggle = (mode: '%' | '$') => {
+    if (mode === commissionMode) return;
+    const contractCents = toCents(contractPrice);
+    if (mode === '$') {
+      const pct = Number.parseFloat(commissionPercentage);
+      if (contractCents > 0 && Number.isFinite(pct) && pct > 0) {
+        const flatCents = Math.round((contractCents * pct) / 100);
+        setCommissionFlat(centsToDisplay(flatCents));
+      } else {
+        setCommissionFlat('');
+      }
+    } else {
+      const flatCents = toCents(commissionFlat);
+      if (contractCents > 0 && flatCents > 0) {
+        const bps = Math.round((flatCents / contractCents) * 10_000);
+        setCommissionPercentage(basisPointsToDisplay(bps));
+      } else {
+        setCommissionPercentage('');
+      }
+    }
+    setCommissionMode(mode);
+  };
+
   const sortedDeals = useMemo(
     () => [...deals].sort((a, b) => {
       const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -1629,7 +1675,7 @@ export function ReferralDeals({
                   <div className="flex rounded border border-border-strong text-xs font-medium overflow-hidden">
                     <button
                       type="button"
-                      onClick={() => setCommissionMode('%')}
+                      onClick={() => handleCommissionModeToggle('%')}
                       disabled={submitting || !usedAssignedAgent || isAgitDeal}
                       className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                     >
@@ -1637,7 +1683,7 @@ export function ReferralDeals({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setCommissionMode('$')}
+                      onClick={() => handleCommissionModeToggle('$')}
                       disabled={submitting || !usedAssignedAgent || isAgitDeal}
                       className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                     >
