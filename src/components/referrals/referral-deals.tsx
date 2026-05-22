@@ -178,6 +178,9 @@ function DealCard({
   const [commissionMode, setCommissionMode] = useState<'%' | '$'>(
     deal.commissionFlatFeeCents ? '$' : '%'
   );
+  const [commissionCanonicalMode, setCommissionCanonicalMode] = useState<'%' | '$'>(
+    deal.commissionFlatFeeCents ? '$' : '%'
+  );
   const [commissionPercentage, setCommissionPercentage] = useState(
     basisPointsToDisplay(deal.commissionBasisPoints)
   );
@@ -219,6 +222,7 @@ function DealCard({
     setNetReferralFeePaid(centsToDisplay(deal.netReferralFeePaidCents ?? deal.receivedAmountCents));
     setContractPrice(centsToDisplay(deal.contractPriceCents));
     setCommissionMode(deal.commissionFlatFeeCents ? '$' : '%');
+    setCommissionCanonicalMode(deal.commissionFlatFeeCents ? '$' : '%');
     setCommissionPercentage(basisPointsToDisplay(deal.commissionBasisPoints));
     setCommissionFlat(deal.commissionFlatFeeCents ? centsToDisplay(deal.commissionFlatFeeCents) : '');
     setReferralFeePercentage(basisPointsToDisplay(deal.referralFeeBasisPoints));
@@ -246,6 +250,12 @@ function DealCard({
 
   const handleCommissionModeToggle = (mode: '%' | '$') => {
     if (mode === commissionMode) return;
+    setCommissionMode(mode);
+    // If the destination field is already the user's canonical input, leave it
+    // untouched so we don't lossily round-trip through a converted display value.
+    if (mode === commissionCanonicalMode) {
+      return;
+    }
     const contractCents = toCents(contractPrice);
     if (mode === '$') {
       const pct = Number.parseFloat(commissionPercentage);
@@ -264,7 +274,16 @@ function DealCard({
         setCommissionPercentage('');
       }
     }
-    setCommissionMode(mode);
+  };
+
+  const handleCommissionPercentageChange = (value: string) => {
+    setCommissionPercentage(value);
+    setCommissionCanonicalMode('%');
+  };
+
+  const handleCommissionFlatChange = (value: string) => {
+    setCommissionFlat(value);
+    setCommissionCanonicalMode('$');
   };
 
   const handleSendFeeBreakdown = async () => {
@@ -331,6 +350,7 @@ function DealCard({
     }
 
     setCommissionMode('%');
+    setCommissionCanonicalMode('%');
     setCommissionPercentage('');
     setCommissionFlat('');
     setReferralFeePercentage('');
@@ -803,7 +823,7 @@ function DealCard({
                 min="0"
                 step="0.01"
                 value={commissionPercentage}
-                onChange={(event) => setCommissionPercentage(event.target.value)}
+                onChange={(event) => handleCommissionPercentageChange(event.target.value)}
                 className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                 placeholder="0.00"
                 disabled={saving || isNoFeeDeal}
@@ -815,7 +835,7 @@ function DealCard({
                 min="0"
                 step="0.01"
                 value={commissionFlat}
-                onChange={(event) => setCommissionFlat(event.target.value)}
+                onChange={(event) => handleCommissionFlatChange(event.target.value)}
                 className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                 placeholder="0.00"
                 disabled={saving || isNoFeeDeal}
@@ -1101,6 +1121,7 @@ export function ReferralDeals({
   const [netReferralFeePaid, setNetReferralFeePaid] = useState('');
   const [contractPrice, setContractPrice] = useState('');
   const [commissionMode, setCommissionMode] = useState<'%' | '$'>('%');
+  const [commissionCanonicalMode, setCommissionCanonicalMode] = useState<'%' | '$'>('%');
   const [commissionPercentage, setCommissionPercentage] = useState('');
   const [commissionFlat, setCommissionFlat] = useState('');
   const [referralFeePercentage, setReferralFeePercentage] = useState('');
@@ -1219,6 +1240,7 @@ export function ReferralDeals({
 
     // Outside-agent and AGIT deals do not carry owed fee values.
     setCommissionMode('%');
+    setCommissionCanonicalMode('%');
     setCommissionPercentage('');
     setCommissionFlat('');
     setReferralFeePercentage('');
@@ -1235,6 +1257,10 @@ export function ReferralDeals({
 
   const handleCommissionModeToggle = (mode: '%' | '$') => {
     if (mode === commissionMode) return;
+    setCommissionMode(mode);
+    if (mode === commissionCanonicalMode) {
+      return;
+    }
     const contractCents = toCents(contractPrice);
     if (mode === '$') {
       const pct = Number.parseFloat(commissionPercentage);
@@ -1253,7 +1279,16 @@ export function ReferralDeals({
         setCommissionPercentage('');
       }
     }
-    setCommissionMode(mode);
+  };
+
+  const handleCommissionPercentageChange = (value: string) => {
+    setCommissionPercentage(value);
+    setCommissionCanonicalMode('%');
+  };
+
+  const handleCommissionFlatChange = (value: string) => {
+    setCommissionFlat(value);
+    setCommissionCanonicalMode('$');
   };
 
   const sortedDeals = useMemo(
@@ -1698,7 +1733,7 @@ export function ReferralDeals({
                     min="0"
                     step="0.01"
                     value={commissionPercentage}
-                    onChange={(event) => setCommissionPercentage(event.target.value)}
+                    onChange={(event) => handleCommissionPercentageChange(event.target.value)}
                     className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                     placeholder="0.00"
                     disabled={submitting || !usedAssignedAgent || isAgitDeal}
@@ -1710,7 +1745,7 @@ export function ReferralDeals({
                     min="0"
                     step="0.01"
                     value={commissionFlat}
-                    onChange={(event) => setCommissionFlat(event.target.value)}
+                    onChange={(event) => handleCommissionFlatChange(event.target.value)}
                     className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                     placeholder="0.00"
                     disabled={submitting || !usedAssignedAgent || isAgitDeal}

@@ -102,6 +102,7 @@ interface DealDraft {
   commissionPercent: string;
   commissionFlat: string;
   commissionMode: '%' | '$';
+  commissionCanonicalMode: '%' | '$';
   referralFeePercent: string;
   side: 'buy' | 'sell';
 }
@@ -421,6 +422,7 @@ export function DealCard({
         commissionPercent: formatDraftPercent(commissionBps),
         commissionFlat: commissionMode === '$' ? formatDraftCurrency(flatFeeCents) : '',
         commissionMode,
+        commissionCanonicalMode: commissionMode,
         referralFeePercent: formatReferralFeeDraftPercent(referralFeeBps),
         side,
       };
@@ -600,6 +602,7 @@ export function DealCard({
           commissionPercent: isOutsideAgent || isFlatFeeMode ? '' : formatDraftPercent(commissionBasisPoints),
           commissionFlat: isOutsideAgent || !isFlatFeeMode ? '' : formatDraftCurrency(commissionFlatFeeCents),
           commissionMode: isOutsideAgent ? '%' : draft.commissionMode,
+          commissionCanonicalMode: isOutsideAgent ? '%' : draft.commissionMode,
           referralFeePercent: isOutsideAgent ? '' : formatReferralFeeDraftPercent(referralFeeBasisPoints),
           side: draft.side,
         },
@@ -1296,11 +1299,18 @@ export function DealCard({
           } else {
             nextValue = rawValue.replace(/[^0-9.]/g, '');
           }
+          const nextCanonicalMode: '%' | '$' =
+            field === 'commissionPercent'
+              ? '%'
+              : field === 'commissionFlat'
+                ? '$'
+                : current.commissionCanonicalMode;
           return {
             ...previous,
             [deal._id]: {
               ...current,
               [field]: nextValue,
+              commissionCanonicalMode: nextCanonicalMode,
             },
           };
         });
@@ -1318,6 +1328,18 @@ export function DealCard({
         const current = previous[deal._id] ?? getDefaultDraft(deal);
         if (current.commissionMode === mode) {
           return previous;
+        }
+
+        // If the destination mode is the canonical one, leave its value intact
+        // so we don't lossily round-trip through a converted display value.
+        if (mode === current.commissionCanonicalMode) {
+          return {
+            ...previous,
+            [deal._id]: {
+              ...current,
+              commissionMode: mode,
+            },
+          };
         }
 
         const contractCents = parseCurrencyInput(current.contractPrice);
