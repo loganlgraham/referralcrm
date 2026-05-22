@@ -1004,7 +1004,7 @@ export function DealsTable() {
                   <span className="text-foreground-subtle">&#9662;</span>
                 </button>
                 {isStatusMenuOpen && (
-                  <div className="absolute left-0 right-0 z-30 mt-1 max-h-60 w-full overflow-y-auto rounded border border-border bg-surface-raised py-1 shadow-lg">
+                  <div className="absolute left-0 right-0 z-30 mt-1 w-full rounded border border-border bg-surface-raised py-1 shadow-lg">
                     <div className="mb-2 flex items-center justify-between px-3 pt-1 text-xs font-semibold text-foreground-muted">
                       <span>Filter statuses</span>
                       <div className="flex items-center gap-3">
@@ -1024,7 +1024,7 @@ export function DealsTable() {
                         </button>
                       </div>
                     </div>
-                    <div className="max-h-60 space-y-2 overflow-auto px-2 pb-2">
+                    <div className="space-y-2 px-2 pb-2">
                       {STATUS_FILTER_OPTIONS.map(({ value, label }) => (
                         <label
                           key={value}
