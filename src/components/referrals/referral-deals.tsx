@@ -178,6 +178,9 @@ function DealCard({
   const [commissionMode, setCommissionMode] = useState<'%' | '$'>(
     deal.commissionFlatFeeCents ? '$' : '%'
   );
+  const [commissionCanonicalMode, setCommissionCanonicalMode] = useState<'%' | '$'>(
+    deal.commissionFlatFeeCents ? '$' : '%'
+  );
   const [commissionPercentage, setCommissionPercentage] = useState(
     basisPointsToDisplay(deal.commissionBasisPoints)
   );
@@ -219,6 +222,7 @@ function DealCard({
     setNetReferralFeePaid(centsToDisplay(deal.netReferralFeePaidCents ?? deal.receivedAmountCents));
     setContractPrice(centsToDisplay(deal.contractPriceCents));
     setCommissionMode(deal.commissionFlatFeeCents ? '$' : '%');
+    setCommissionCanonicalMode(deal.commissionFlatFeeCents ? '$' : '%');
     setCommissionPercentage(basisPointsToDisplay(deal.commissionBasisPoints));
     setCommissionFlat(deal.commissionFlatFeeCents ? centsToDisplay(deal.commissionFlatFeeCents) : '');
     setReferralFeePercentage(basisPointsToDisplay(deal.referralFeeBasisPoints));
@@ -243,6 +247,44 @@ function DealCard({
       populateFromDeal();
     }
   }, [populateFromDeal, editing]);
+
+  const handleCommissionModeToggle = (mode: '%' | '$') => {
+    if (mode === commissionMode) return;
+    setCommissionMode(mode);
+    // If the destination field is already the user's canonical input, leave it
+    // untouched so we don't lossily round-trip through a converted display value.
+    if (mode === commissionCanonicalMode) {
+      return;
+    }
+    const contractCents = toCents(contractPrice);
+    if (mode === '$') {
+      const pct = Number.parseFloat(commissionPercentage);
+      if (contractCents > 0 && Number.isFinite(pct) && pct > 0) {
+        const flatCents = Math.round((contractCents * pct) / 100);
+        setCommissionFlat(centsToDisplay(flatCents));
+      } else {
+        setCommissionFlat('');
+      }
+    } else {
+      const flatCents = toCents(commissionFlat);
+      if (contractCents > 0 && flatCents > 0) {
+        const bps = Math.round((flatCents / contractCents) * 10_000);
+        setCommissionPercentage(basisPointsToDisplay(bps));
+      } else {
+        setCommissionPercentage('');
+      }
+    }
+  };
+
+  const handleCommissionPercentageChange = (value: string) => {
+    setCommissionPercentage(value);
+    setCommissionCanonicalMode('%');
+  };
+
+  const handleCommissionFlatChange = (value: string) => {
+    setCommissionFlat(value);
+    setCommissionCanonicalMode('$');
+  };
 
   const handleSendFeeBreakdown = async () => {
     const message = deal.feeBreakdownEmailSentAt
@@ -308,6 +350,7 @@ function DealCard({
     }
 
     setCommissionMode('%');
+    setCommissionCanonicalMode('%');
     setCommissionPercentage('');
     setCommissionFlat('');
     setReferralFeePercentage('');
@@ -757,7 +800,7 @@ function DealCard({
               <div className="flex rounded border border-border-strong text-xs font-medium overflow-hidden">
                 <button
                   type="button"
-                  onClick={() => setCommissionMode('%')}
+                  onClick={() => handleCommissionModeToggle('%')}
                   disabled={saving || isNoFeeDeal}
                   className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                 >
@@ -765,7 +808,7 @@ function DealCard({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setCommissionMode('$')}
+                  onClick={() => handleCommissionModeToggle('$')}
                   disabled={saving || isNoFeeDeal}
                   className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                 >
@@ -780,7 +823,7 @@ function DealCard({
                 min="0"
                 step="0.01"
                 value={commissionPercentage}
-                onChange={(event) => setCommissionPercentage(event.target.value)}
+                onChange={(event) => handleCommissionPercentageChange(event.target.value)}
                 className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                 placeholder="0.00"
                 disabled={saving || isNoFeeDeal}
@@ -792,7 +835,7 @@ function DealCard({
                 min="0"
                 step="0.01"
                 value={commissionFlat}
-                onChange={(event) => setCommissionFlat(event.target.value)}
+                onChange={(event) => handleCommissionFlatChange(event.target.value)}
                 className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                 placeholder="0.00"
                 disabled={saving || isNoFeeDeal}
@@ -1078,6 +1121,7 @@ export function ReferralDeals({
   const [netReferralFeePaid, setNetReferralFeePaid] = useState('');
   const [contractPrice, setContractPrice] = useState('');
   const [commissionMode, setCommissionMode] = useState<'%' | '$'>('%');
+  const [commissionCanonicalMode, setCommissionCanonicalMode] = useState<'%' | '$'>('%');
   const [commissionPercentage, setCommissionPercentage] = useState('');
   const [commissionFlat, setCommissionFlat] = useState('');
   const [referralFeePercentage, setReferralFeePercentage] = useState('');
@@ -1196,6 +1240,7 @@ export function ReferralDeals({
 
     // Outside-agent and AGIT deals do not carry owed fee values.
     setCommissionMode('%');
+    setCommissionCanonicalMode('%');
     setCommissionPercentage('');
     setCommissionFlat('');
     setReferralFeePercentage('');
@@ -1209,6 +1254,42 @@ export function ReferralDeals({
       setUsedAfc(false);
     }
   }, [side, usedAfc]);
+
+  const handleCommissionModeToggle = (mode: '%' | '$') => {
+    if (mode === commissionMode) return;
+    setCommissionMode(mode);
+    if (mode === commissionCanonicalMode) {
+      return;
+    }
+    const contractCents = toCents(contractPrice);
+    if (mode === '$') {
+      const pct = Number.parseFloat(commissionPercentage);
+      if (contractCents > 0 && Number.isFinite(pct) && pct > 0) {
+        const flatCents = Math.round((contractCents * pct) / 100);
+        setCommissionFlat(centsToDisplay(flatCents));
+      } else {
+        setCommissionFlat('');
+      }
+    } else {
+      const flatCents = toCents(commissionFlat);
+      if (contractCents > 0 && flatCents > 0) {
+        const bps = Math.round((flatCents / contractCents) * 10_000);
+        setCommissionPercentage(basisPointsToDisplay(bps));
+      } else {
+        setCommissionPercentage('');
+      }
+    }
+  };
+
+  const handleCommissionPercentageChange = (value: string) => {
+    setCommissionPercentage(value);
+    setCommissionCanonicalMode('%');
+  };
+
+  const handleCommissionFlatChange = (value: string) => {
+    setCommissionFlat(value);
+    setCommissionCanonicalMode('$');
+  };
 
   const sortedDeals = useMemo(
     () => [...deals].sort((a, b) => {
@@ -1629,7 +1710,7 @@ export function ReferralDeals({
                   <div className="flex rounded border border-border-strong text-xs font-medium overflow-hidden">
                     <button
                       type="button"
-                      onClick={() => setCommissionMode('%')}
+                      onClick={() => handleCommissionModeToggle('%')}
                       disabled={submitting || !usedAssignedAgent || isAgitDeal}
                       className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                     >
@@ -1637,7 +1718,7 @@ export function ReferralDeals({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setCommissionMode('$')}
+                      onClick={() => handleCommissionModeToggle('$')}
                       disabled={submitting || !usedAssignedAgent || isAgitDeal}
                       className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                     >
@@ -1652,7 +1733,7 @@ export function ReferralDeals({
                     min="0"
                     step="0.01"
                     value={commissionPercentage}
-                    onChange={(event) => setCommissionPercentage(event.target.value)}
+                    onChange={(event) => handleCommissionPercentageChange(event.target.value)}
                     className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                     placeholder="0.00"
                     disabled={submitting || !usedAssignedAgent || isAgitDeal}
@@ -1664,7 +1745,7 @@ export function ReferralDeals({
                     min="0"
                     step="0.01"
                     value={commissionFlat}
-                    onChange={(event) => setCommissionFlat(event.target.value)}
+                    onChange={(event) => handleCommissionFlatChange(event.target.value)}
                     className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
                     placeholder="0.00"
                     disabled={submitting || !usedAssignedAgent || isAgitDeal}

@@ -83,6 +83,7 @@ type PaymentWithReferral = {
   paidDate?: Date | null;
   createdAt?: Date | null;
   commissionBasisPoints?: number | null;
+  commissionFlatFeeCents?: number | null;
   referralFeeBasisPoints?: number | null;
   side?: 'buy' | 'sell' | null;
   agentId?: Types.ObjectId | AgentSummary | null;
@@ -631,6 +632,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       invoiceDate: payment.invoiceDate ? payment.invoiceDate.toISOString() : null,
       paidDate: payment.paidDate ? payment.paidDate.toISOString() : null,
       commissionBasisPoints: payment.commissionBasisPoints ?? null,
+      commissionFlatFeeCents: payment.commissionFlatFeeCents ?? null,
       referralFeeBasisPoints: payment.referralFeeBasisPoints ?? null,
       side: payment.side ?? 'buy',
       feeBreakdownEmailSentAt: payment.feeBreakdownEmailSentAt ? payment.feeBreakdownEmailSentAt.toISOString() : null,
@@ -801,6 +803,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     paidDate: parsed.data.paidDate,
     notes: parsed.data.notes,
     commissionBasisPoints: parsed.data.commissionBasisPoints ?? null,
+    commissionFlatFeeCents:
+      isAgentOrigin || isOutsideAgent ? null : parsed.data.commissionFlatFeeCents ?? null,
     referralFeeBasisPoints: isAgentOrigin ? null : parsed.data.referralFeeBasisPoints ?? null,
     side: resolvedSide,
     contractPriceCents: parsed.data.contractPriceCents ?? null,
@@ -977,6 +981,10 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     parsed.data.commissionBasisPoints !== undefined
       ? parsed.data.commissionBasisPoints ?? null
       : existingPayment.commissionBasisPoints ?? null;
+  let nextCommissionFlatFeeCents =
+    parsed.data.commissionFlatFeeCents !== undefined
+      ? parsed.data.commissionFlatFeeCents ?? null
+      : existingPayment.commissionFlatFeeCents ?? null;
   let nextReferralFeeBasisPoints =
     parsed.data.referralFeeBasisPoints !== undefined
       ? parsed.data.referralFeeBasisPoints ?? null
@@ -1013,10 +1021,22 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     parsed.data.expectedAmountCents === undefined &&
     (parsed.data.contractPriceCents !== undefined ||
       parsed.data.commissionBasisPoints !== undefined ||
+      parsed.data.commissionFlatFeeCents !== undefined ||
       parsed.data.referralFeeBasisPoints !== undefined);
 
   if (shouldRecalculateReferralFee && !isAgentOrigin) {
     if (
+      nextCommissionFlatFeeCents != null &&
+      nextCommissionFlatFeeCents > 0 &&
+      nextReferralFeeBasisPoints != null
+    ) {
+      const computed = Math.round(
+        (nextCommissionFlatFeeCents * nextReferralFeeBasisPoints) / 10_000
+      );
+      if (Number.isFinite(computed) && computed >= 0) {
+        nextExpectedAmountCents = computed;
+      }
+    } else if (
       nextContractPriceCents != null &&
       nextCommissionBasisPoints != null &&
       nextReferralFeeBasisPoints != null
@@ -1054,6 +1074,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const isOutsideAgentDeal = !isAgentOrigin && !nextUsedAssignedAgent;
   if (isOutsideAgentDeal) {
     nextCommissionBasisPoints = null;
+    nextCommissionFlatFeeCents = null;
     nextReferralFeeBasisPoints = null;
     nextExpectedAmountCents = 0;
     nextReceivedAmountCents = 0;
@@ -1061,6 +1082,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
   if (hasAgitAgent) {
     nextCommissionBasisPoints = null;
+    nextCommissionFlatFeeCents = null;
     nextReferralFeeBasisPoints = null;
     nextExpectedAmountCents = 0;
     nextReceivedAmountCents = 0;
@@ -1070,6 +1092,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   delete updatePayload.referralId;
   updatePayload.contractPriceCents = nextContractPriceCents ?? null;
   updatePayload.commissionBasisPoints = nextCommissionBasisPoints ?? null;
+  updatePayload.commissionFlatFeeCents = isAgentOrigin ? null : nextCommissionFlatFeeCents ?? null;
   updatePayload.referralFeeBasisPoints = isAgentOrigin ? null : nextReferralFeeBasisPoints ?? null;
   updatePayload.side = nextSide ?? 'buy';
   updatePayload.expectedAmountCents = isAgentOrigin ? 0 : nextExpectedAmountCents;

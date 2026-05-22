@@ -975,6 +975,7 @@ export async function getReferralById(id: string) {
         usedAfc: isCrossSideReadOnly ? undefined : Boolean(payment.usedAfc),
         usedAssignedAgent: isCrossSideReadOnly ? undefined : Boolean(payment.usedAssignedAgent),
         commissionBasisPoints: isCrossSideReadOnly ? null : payment.commissionBasisPoints ?? null,
+        commissionFlatFeeCents: isCrossSideReadOnly ? null : payment.commissionFlatFeeCents ?? null,
         referralFeeBasisPoints: isCrossSideReadOnly ? null : payment.referralFeeBasisPoints ?? null,
         contractPriceCents: payment.contractPriceCents ?? null,
         side: paymentSide,
