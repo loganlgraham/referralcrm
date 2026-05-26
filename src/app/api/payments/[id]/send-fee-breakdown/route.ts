@@ -10,6 +10,7 @@ import { Agent } from '@/models/agent';
 import { getCurrentSession } from '@/lib/auth';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { generateFeeBreakdownEmailHTML, generateFeeBreakdownSubject } from '@/lib/email-templates/fee-breakdown';
+import { buildReferralLink } from '@/lib/referral-links';
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 
@@ -159,10 +160,7 @@ export async function POST(
       return NextResponse.json({ error: 'Referral not found' }, { status: 404 });
     }
 
-    // Build platform URL
-    const origin = process.env.NEXT_PUBLIC_APP_URL || 
-                   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-    const platformUrl = `${origin}/referrals/${(referral._id as Types.ObjectId).toString()}`;
+    const platformUrl = buildReferralLink((referral._id as Types.ObjectId).toString());
 
     // Get borrower name for subject line
     const borrowerName = referral.borrower?.name || 'Unknown';
