@@ -135,6 +135,16 @@ const isAgentAttributedDeal = (
   agentAttribution: string | null | undefined
 ): boolean => usedAssignedAgent === true && agentAttribution !== 'OUTSIDE_AGENT';
 
+const EXPECTED_REVENUE_STATUSES: DealStatus[] = [
+  'under_contract',
+  'past_inspection',
+  'past_appraisal',
+  'clear_to_close',
+  'closed',
+  'payment_sent',
+  'paid',
+];
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session) {
@@ -438,54 +448,104 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ]);
   }
 
-  const statusAllowsPaid = statusList.length === 0 || statusList.includes('paid');
-  let receivedRevenueCents: number | null = null;
-
-  if (statusAllowsPaid) {
-    const receivedRevenueFilter: Record<string, unknown> = { ...filter, status: 'paid' };
-    const { closingDate: _ignoredClosingDate, ...baseReceivedRevenueFilter } = receivedRevenueFilter;
-    const receivedRevenueSummaryFilter: Record<string, unknown> = timeframeStart
-      ? {
-          ...baseReceivedRevenueFilter,
-          $or: [
-            { paidDate: { $gte: timeframeStart, $lte: timeframeEnd } },
-            {
-              paidDate: null,
-              updatedAt: { $gte: timeframeStart, $lte: timeframeEnd },
+  let expectedRevenueCents = 0;
+  let receivedRevenueCents = 0;
+  if (role === 'admin' || role === 'manager') {
+    const expectedRevenueBaseFilter: Record<string, unknown> = { ...filter };
+    const expectedPipeline: PipelineStage[] = search
+      ? [
+          { $match: expectedRevenueBaseFilter },
+          ...buildSearchPipeline(search),
+        ]
+      : [
+          { $match: expectedRevenueBaseFilter },
+          {
+            $lookup: {
+              from: 'referrals',
+              localField: 'referralId',
+              foreignField: '_id',
+              as: 'referral',
             },
-          ],
-        }
-      : baseReceivedRevenueFilter;
-    // Revenue received summary is anchored to payment-received timing (paidDate),
-    // with updatedAt fallback for legacy paid rows missing paidDate.
+          },
+          { $unwind: { path: '$referral', preserveNullAndEmptyArrays: true } },
+        ];
 
-    if (search) {
-      const summaryPipeline: PipelineStage[] = [
-        { $match: receivedRevenueSummaryFilter },
-        ...buildSearchPipeline(search),
-        {
-          $group: {
-            _id: null,
-            receivedRevenueCents: { $sum: { $ifNull: ['$receivedAmountCents', 0] } }
+    const expectedSummaryResult = await Payment.aggregate([
+      ...expectedPipeline,
+      {
+        $match: {
+          agentAttribution: { $ne: 'OUTSIDE_AGENT' },
+          $expr: {
+            $ne: [
+              { $toLower: { $trim: { input: { $ifNull: ['$referral.endorser', ''] } } } },
+              'glenn beck',
+            ],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          expectedRevenueCents: {
+            $sum: {
+              $cond: [
+                { $in: ['$status', EXPECTED_REVENUE_STATUSES] },
+                { $ifNull: ['$expectedAmountCents', 0] },
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]);
+    expectedRevenueCents = expectedSummaryResult[0]?.expectedRevenueCents ?? 0;
+
+    const statusAllowsPaid = statusList.length === 0 || statusList.includes('paid');
+    if (statusAllowsPaid) {
+      const receivedRevenueFilter: Record<string, unknown> = { ...filter, status: 'paid' };
+      const { closingDate: _ignoredClosingDate, ...baseReceivedRevenueFilter } = receivedRevenueFilter;
+      const receivedRevenueSummaryFilter: Record<string, unknown> = timeframeStart
+        ? {
+            ...baseReceivedRevenueFilter,
+            $or: [
+              { paidDate: { $gte: timeframeStart, $lte: timeframeEnd } },
+              {
+                paidDate: null,
+                updatedAt: { $gte: timeframeStart, $lte: timeframeEnd },
+              },
+            ],
           }
-        }
-      ];
-      const summaryResult = await Payment.aggregate(summaryPipeline);
-      receivedRevenueCents = summaryResult[0]?.receivedRevenueCents ?? 0;
-    } else {
-      const summaryResult = await Payment.aggregate([
-        { $match: receivedRevenueSummaryFilter },
-        {
-          $group: {
-            _id: null,
-            receivedRevenueCents: { $sum: { $ifNull: ['$receivedAmountCents', 0] } }
-          }
-        }
-      ]);
-      receivedRevenueCents = summaryResult[0]?.receivedRevenueCents ?? 0;
+        : baseReceivedRevenueFilter;
+      // Revenue received summary is anchored to payment-received timing (paidDate),
+      // with updatedAt fallback for legacy paid rows missing paidDate.
+
+      if (search) {
+        const summaryPipeline: PipelineStage[] = [
+          { $match: receivedRevenueSummaryFilter },
+          ...buildSearchPipeline(search),
+          {
+            $group: {
+              _id: null,
+              receivedRevenueCents: { $sum: { $ifNull: ['$receivedAmountCents', 0] } },
+            },
+          },
+        ];
+        const summaryResult = await Payment.aggregate(summaryPipeline);
+        receivedRevenueCents = summaryResult[0]?.receivedRevenueCents ?? 0;
+      } else {
+        const summaryResult = await Payment.aggregate([
+          { $match: receivedRevenueSummaryFilter },
+          {
+            $group: {
+              _id: null,
+              receivedRevenueCents: { $sum: { $ifNull: ['$receivedAmountCents', 0] } },
+            },
+          },
+        ]);
+        receivedRevenueCents = summaryResult[0]?.receivedRevenueCents ?? 0;
+      }
     }
   }
-
   const agentIds = new Set<string>();
 
   payments.forEach((payment) => {
@@ -730,13 +790,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     total,
     page,
     pageSize,
-    ...(receivedRevenueCents !== null
-      ? {
-          summary: {
-            receivedRevenueCents
-          }
-        }
-      : {})
+    summary: {
+      expectedRevenueCents,
+      receivedRevenueCents,
+    },
   });
 }
 
