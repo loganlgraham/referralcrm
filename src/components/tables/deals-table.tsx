@@ -107,7 +107,6 @@ interface PaymentsResponse {
   summary?: {
     expectedRevenueCents?: number;
     receivedRevenueCents?: number;
-    totalRevenueCents?: number;
   };
 }
 
@@ -514,18 +513,15 @@ export function DealsTable() {
   );
   const adminExpectedRevenue = data?.summary?.expectedRevenueCents ?? aggregates.expectedRevenue;
   const adminReceivedRevenue = data?.summary?.receivedRevenueCents ?? aggregates.receivedRevenue;
-  const adminTotalRevenue =
-    data?.summary?.totalRevenueCents ?? adminExpectedRevenue + adminReceivedRevenue;
 
   const totalCommission = aggregates.commissionEarned - aggregates.referralFeesPaid;
 
   const summarySection = (() => {
     if (isAdminView) {
       return (
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           <SummaryCard label="Expected Revenue" value={formatCurrency(adminExpectedRevenue)} />
           <SummaryCard label="Received Revenue" value={formatCurrency(adminReceivedRevenue)} />
-          <SummaryCard label="Total Revenue" value={formatCurrency(adminTotalRevenue)} />
         </div>
       );
     }

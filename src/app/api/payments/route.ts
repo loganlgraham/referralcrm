@@ -142,6 +142,7 @@ const EXPECTED_REVENUE_STATUSES: DealStatus[] = [
   'clear_to_close',
   'closed',
   'payment_sent',
+  'paid',
 ];
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -487,29 +488,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           _id: null,
           expectedRevenueCents: {
             $sum: {
-              $let: {
-                vars: {
-                  expected: { $ifNull: ['$expectedAmountCents', 0] },
-                  received: { $ifNull: ['$receivedAmountCents', 0] },
-                },
-                in: {
-                  $cond: [
-                    {
-                      $or: [
-                        { $in: ['$status', EXPECTED_REVENUE_STATUSES] },
-                        {
-                          $and: [
-                            { $eq: ['$status', 'paid'] },
-                            { $gt: [{ $subtract: ['$$expected', '$$received'] }, 0] },
-                          ],
-                        },
-                      ],
-                    },
-                    { $max: [{ $subtract: ['$$expected', '$$received'] }, 0] },
-                    0,
-                  ],
-                },
-              },
+              $cond: [
+                { $in: ['$status', EXPECTED_REVENUE_STATUSES] },
+                { $ifNull: ['$expectedAmountCents', 0] },
+                0,
+              ],
             },
           },
         },
@@ -563,8 +546,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
     }
   }
-  const totalRevenueCents = expectedRevenueCents + receivedRevenueCents;
-
   const agentIds = new Set<string>();
 
   payments.forEach((payment) => {
@@ -812,7 +793,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     summary: {
       expectedRevenueCents,
       receivedRevenueCents,
-      totalRevenueCents,
     },
   });
 }

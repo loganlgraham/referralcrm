@@ -220,12 +220,12 @@ describe('Payments GET role visibility', () => {
     expect(mockedReferralFind).not.toHaveBeenCalled();
   });
 
-  it('returns admin revenue summary fields for expected, received, and total', async () => {
+  it('returns admin revenue summary fields for expected and received only', async () => {
     mockedGetCurrentSession.mockResolvedValue({
       user: { id: 'admin-1', role: 'admin', name: 'Admin User' },
     } as any);
     mockedPaymentAggregate
-      .mockResolvedValueOnce([{ expectedRevenueCents: 1500 }])
+      .mockResolvedValueOnce([{ expectedRevenueCents: 4000 }])
       .mockResolvedValueOnce([{ receivedRevenueCents: 2500 }]);
 
     const response = await getHandler(makeRequest(''));
@@ -234,11 +234,11 @@ describe('Payments GET role visibility', () => {
     expect(response.body).toEqual(
       expect.objectContaining({
         summary: {
-          expectedRevenueCents: 1500,
+          expectedRevenueCents: 4000,
           receivedRevenueCents: 2500,
-          totalRevenueCents: 4000,
         },
       })
     );
+    expect(response.body.summary).not.toHaveProperty('totalRevenueCents');
   });
 });
