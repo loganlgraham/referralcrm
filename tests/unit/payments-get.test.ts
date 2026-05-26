@@ -68,6 +68,12 @@ jest.mock('@/models/referral', () => ({
   },
 }));
 
+jest.mock('@/models/lender', () => ({
+  LenderMC: {
+    find: jest.fn(),
+  },
+}));
+
 jest.mock('@/models/payment', () => ({
   Payment: {
     find: jest.fn(),
@@ -212,5 +218,27 @@ describe('Payments GET role visibility', () => {
       })
     );
     expect(mockedReferralFind).not.toHaveBeenCalled();
+  });
+
+  it('returns admin revenue summary fields for expected, received, and total', async () => {
+    mockedGetCurrentSession.mockResolvedValue({
+      user: { id: 'admin-1', role: 'admin', name: 'Admin User' },
+    } as any);
+    mockedPaymentAggregate
+      .mockResolvedValueOnce([{ expectedRevenueCents: 1500 }])
+      .mockResolvedValueOnce([{ receivedRevenueCents: 2500 }]);
+
+    const response = await getHandler(makeRequest(''));
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        summary: {
+          expectedRevenueCents: 1500,
+          receivedRevenueCents: 2500,
+          totalRevenueCents: 4000,
+        },
+      })
+    );
   });
 });
