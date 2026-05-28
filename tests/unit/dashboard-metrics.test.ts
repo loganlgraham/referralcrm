@@ -265,6 +265,53 @@ describe('Dashboard Metrics - Average Calculations', () => {
     
     expect(average).toBe(30); // Average of 30%, 25%, 35%
   });
+
+  it('resolves a commission percentage for every closed deal using payment->referral->flatFee->default precedence', () => {
+    const DEFAULT_AGENT_COMMISSION_BPS = 300; // 3% default from src/constants/referrals.ts
+
+    const resolveCommissionPercent = (payment: {
+      commissionBasisPoints?: number | null;
+      commissionFlatFeeCents?: number | null;
+      contractPriceCents?: number | null;
+      referral?: { commissionBasisPoints?: number | null } | null;
+    }): number => {
+      const contractPriceCents = payment.contractPriceCents ?? 0;
+      const flatFeeCents = payment.commissionFlatFeeCents ?? 0;
+      const resolvedBps =
+        (payment.commissionBasisPoints ?? 0) > 0
+          ? payment.commissionBasisPoints!
+          : (payment.referral?.commissionBasisPoints ?? 0) > 0
+            ? payment.referral!.commissionBasisPoints!
+            : flatFeeCents > 0 && contractPriceCents > 0
+              ? Math.round((flatFeeCents / contractPriceCents) * 10000)
+              : DEFAULT_AGENT_COMMISSION_BPS;
+      return resolvedBps / 100;
+    };
+
+    // Payment-level commission wins over referral-level.
+    expect(
+      resolveCommissionPercent({ commissionBasisPoints: 250, referral: { commissionBasisPoints: 300 } })
+    ).toBe(2.5);
+    // Falls back to referral when payment-level commission is missing.
+    expect(resolveCommissionPercent({ referral: { commissionBasisPoints: 350 } })).toBe(3.5);
+    // Derives a percent from a flat fee when no basis points are stored.
+    expect(
+      resolveCommissionPercent({ commissionFlatFeeCents: 1_000_000, contractPriceCents: 40_000_000 })
+    ).toBe(2.5);
+    // A closed deal with no commission data still contributes the 3% default.
+    expect(resolveCommissionPercent({ referral: null })).toBe(3);
+
+    // Every closed deal contributes exactly one sample, so the sample size matches the deal count.
+    const closedDeals = [
+      { commissionBasisPoints: 250, referral: { commissionBasisPoints: 300 } },
+      { referral: { commissionBasisPoints: 350 } },
+      { referral: null },
+    ];
+    const percentages = closedDeals.map(resolveCommissionPercent);
+    expect(percentages).toHaveLength(closedDeals.length);
+    const average = percentages.reduce((sum, value) => sum + value, 0) / percentages.length;
+    expect(average).toBeCloseTo((2.5 + 3.5 + 3) / 3, 5);
+  });
 });
 
 describe('Dashboard Metrics - Network Filtering', () => {
