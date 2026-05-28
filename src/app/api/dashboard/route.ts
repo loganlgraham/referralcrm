@@ -3225,21 +3225,32 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         if ((!referralFeePercent || referralFeePercent <= 0) && contractPriceCents > 0 && referralFeeCents > 0) {
           referralFeePercent = (referralFeeCents / contractPriceCents) * 100;
         }
+        // Resolve each closed deal's agent commission as a percentage so flat-fee
+        // (dollar) deals are converted to a percent and averaged in alongside
+        // percent-based deals. Flat fee wins because deals entered in "$" mode
+        // store the dollar amount and clear the basis points, while the referral
+        // still carries the default 3% — so checking basis points first would
+        // wrongly treat dollar deals as the default percentage.
         const flatFeeCents = payment.commissionFlatFeeCents ?? 0;
-        const resolvedCommissionBasisPoints =
-          (payment.commissionBasisPoints ?? 0) > 0
-            ? payment.commissionBasisPoints!
-            : (payment.referral?.commissionBasisPoints ?? 0) > 0
-              ? payment.referral!.commissionBasisPoints!
-              : flatFeeCents > 0 && contractPriceCents > 0
-                ? Math.round((flatFeeCents / contractPriceCents) * 10000)
+        let commissionPercent: number;
+        let commissionCents: number;
+        if (flatFeeCents > 0) {
+          commissionCents = flatFeeCents;
+          commissionPercent = contractPriceCents > 0 ? (flatFeeCents / contractPriceCents) * 100 : 0;
+        } else {
+          const resolvedCommissionBasisPoints =
+            (payment.commissionBasisPoints ?? 0) > 0
+              ? payment.commissionBasisPoints!
+              : (payment.referral?.commissionBasisPoints ?? 0) > 0
+                ? payment.referral!.commissionBasisPoints!
                 : DEFAULT_AGENT_COMMISSION_BPS;
-        const commissionPercent = resolvedCommissionBasisPoints / 100;
-        const commissionCents = flatFeeCents > 0
-          ? flatFeeCents
-          : (contractPriceCents * resolvedCommissionBasisPoints) / 10000;
+          commissionPercent = resolvedCommissionBasisPoints / 100;
+          commissionCents = (contractPriceCents * resolvedCommissionBasisPoints) / 10000;
+        }
 
-        current.commissionPercentages.push(commissionPercent);
+        if (commissionPercent > 0) {
+          current.commissionPercentages.push(commissionPercent);
+        }
         if (commissionCents > 0) {
           current.commissionCents.push(commissionCents);
         }
