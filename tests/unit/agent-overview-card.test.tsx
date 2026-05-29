@@ -9,7 +9,9 @@ jest.mock('next/navigation', () => ({
 jest.mock('sonner', () => {
   const toastFn = Object.assign(jest.fn(), {
     success: jest.fn(),
-    error: jest.fn()
+    error: jest.fn(),
+    custom: jest.fn(),
+    dismiss: jest.fn()
   });
   return { toast: toastFn };
 });
@@ -71,12 +73,11 @@ describe('AgentOverviewCard pills', () => {
   });
 
   it('excludes the agent from leaderboards when the inactive toast "Exclude" action is chosen', async () => {
-    const toastMock = toast as unknown as jest.Mock & {
-      success: jest.Mock;
-      error: jest.Mock;
+    const toastMock = toast as unknown as {
+      custom: jest.Mock;
+      dismiss: jest.Mock;
     };
-    toastMock.mockClear();
-    toastMock.success.mockClear();
+    toastMock.custom.mockClear();
 
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
@@ -93,13 +94,11 @@ describe('AgentOverviewCard pills', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Mark inactive' }));
 
-    expect(toastMock).toHaveBeenCalledTimes(1);
-    const toastOptions = toastMock.mock.calls[0][1] as {
-      action: { onClick: () => void };
-      cancel: { onClick: () => void };
-    };
+    expect(toastMock.custom).toHaveBeenCalledTimes(1);
+    const renderToast = toastMock.custom.mock.calls[0][0] as (id: string) => JSX.Element;
+    render(renderToast('toast-1'));
 
-    toastOptions.action.onClick();
+    fireEvent.click(screen.getByRole('button', { name: 'Exclude from leaderboards' }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const [, requestInit] = fetchMock.mock.calls[0];
