@@ -22,6 +22,8 @@ const lenderSchema = new Schema(
     licensedStates: [{ type: String, index: true }],
     team: String,
     region: String,
+    active: { type: Boolean, default: true },
+    includeInMetrics: { type: Boolean, default: true },
     npsScore: { type: Number, default: null },
     notes: { type: [lenderNoteSchema], default: [] }
   },

@@ -6,12 +6,14 @@ import { toast } from 'sonner';
 
 import { AgentAdminEditor, type AgentAdminEditorProps } from '@/components/people/agent-admin-editor';
 import { SendWelcomeEmailButton } from '@/components/people/send-welcome-email-button';
+import { promptInactiveMetricsChoice } from '@/components/people/inactive-metrics-toast';
 import { CopyButton } from '@/components/common/copy-button';
 import { formatDateMST, formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 
 interface AgentOverviewCardProps {
   agent: AgentAdminEditorProps['agent'] & {
+    includeInMetrics?: boolean;
     lastActivityAt?: string | null;
     lastLoggedOnAt?: string | null;
     signupStatus?: {
@@ -28,26 +30,48 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
   const [showEditor, setShowEditor] = useState(false);
   const [togglingActive, setTogglingActive] = useState(false);
 
-  const handleToggleActive = async () => {
+  const patchStatus = async (active: boolean, includeInMetrics: boolean) => {
     if (togglingActive) return;
     setTogglingActive(true);
     try {
       const response = await fetch(`/api/agents/${agent._id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: !agent.active }),
+        body: JSON.stringify({ active, includeInMetrics }),
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload?.message ?? 'Unable to update agent status');
       }
-      toast.success(!agent.active ? 'Agent marked active' : 'Agent marked inactive');
+      if (active) {
+        toast.success('Agent marked active');
+      } else {
+        toast.success(
+          includeInMetrics
+            ? 'Agent marked inactive (kept in leaderboards)'
+            : 'Agent marked inactive (excluded from leaderboards)'
+        );
+      }
       router.refresh();
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Unable to update agent status');
     } finally {
       setTogglingActive(false);
+    }
+  };
+
+  const handleToggleActive = () => {
+    if (togglingActive) return;
+    if (agent.active) {
+      promptInactiveMetricsChoice({
+        label: 'agent',
+        onChoose: (includeInMetrics) => {
+          void patchStatus(false, includeInMetrics);
+        },
+      });
+    } else {
+      void patchStatus(true, true);
     }
   };
 
@@ -115,6 +139,11 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
             >
               {agent.active ? 'Active' : 'Inactive'}
             </span>
+            {!agent.active && agent.includeInMetrics === false && (
+              <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                Excluded from leaderboards
+              </span>
+            )}
             <CopyButton value={agent.name} label="Copy name" />
           </div>
           <div className="mt-2 space-y-1 text-sm text-foreground-muted">

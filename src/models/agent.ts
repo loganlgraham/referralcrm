@@ -41,6 +41,7 @@ const agentSchema = new Schema(
     zipCoverage: [{ type: String, index: true }],
     coverageLocations: { type: [coverageLocationSchema], default: [] },
     active: { type: Boolean, default: true },
+    includeInMetrics: { type: Boolean, default: true },
     closings12mo: { type: Number, default: 0 },
     closingRatePercentage: { type: Number, default: null },
     npsScore: { type: Number, default: null },

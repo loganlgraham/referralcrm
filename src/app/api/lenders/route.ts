@@ -150,9 +150,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ? Number(pageSizeParam) 
     : 25;
   const search = searchParams.get('search')?.trim() || null;
-  
+  const activeFilter = searchParams.get('activeFilter');
+
   const filter: Record<string, unknown> = {};
-  
+
+  // Non-admins only ever see active mortgage consultants; admins can filter explicitly.
+  if (session.user.role !== 'admin') {
+    filter.active = { $ne: false };
+  } else if (activeFilter === 'active') {
+    filter.active = { $ne: false };
+  } else if (activeFilter === 'inactive') {
+    filter.active = false;
+  }
+
   // Add search filter if provided
   if (search) {
     const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -190,6 +200,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           region?: string;
           notes?: unknown[];
           userId?: Types.ObjectId | string | null;
+          active?: boolean;
+          includeInMetrics?: boolean;
           createdAt?: Date;
           updatedAt?: Date;
         }[]>()
@@ -204,6 +216,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           region?: string;
           notes?: unknown[];
           userId?: Types.ObjectId | string | null;
+          active?: boolean;
+          includeInMetrics?: boolean;
           createdAt?: Date;
           updatedAt?: Date;
         }[]>(),
@@ -224,6 +238,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const baseObj: any = {
       ...lender,
       _id: id,
+      active: lender.active !== false,
+      includeInMetrics: lender.includeInMetrics !== false,
     };
     if (!minimal) {
       baseObj.metrics = metrics.get(id) ?? EMPTY_LENDER_METRICS;

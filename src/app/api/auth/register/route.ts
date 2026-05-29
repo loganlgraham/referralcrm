@@ -117,6 +117,7 @@ export async function POST(request: Request) {
               closingRatePercentage: null,
               npsScore: null,
               avgResponseHours: null,
+              includeInMetrics: true,
             },
           },
           { upsert: true, new: true }
@@ -126,7 +127,7 @@ export async function POST(request: Request) {
           { $or: [{ userId: user._id }, { email }] },
           {
             $set: { userId: user._id, name, email },
-            $setOnInsert: { phone: '', nmlsId: '', licensedStates: [], team: '', region: '' },
+            $setOnInsert: { phone: '', nmlsId: '', licensedStates: [], team: '', region: '', active: true, includeInMetrics: true },
           },
           { upsert: true, new: true }
         );

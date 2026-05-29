@@ -16,6 +16,7 @@ interface LenderRow {
   phone: string;
   nmlsId: string;
   licensedStates?: string[];
+  active?: boolean;
   metrics?: {
     closingsLast12Months: number;
     closingRate: number;
@@ -62,12 +63,14 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
     ? Number(pageSizeParam) 
     : 25;
   const search = searchParams.get('search') || '';
+  const activeFilter = (searchParams.get('activeFilter') || 'all') as 'all' | 'active' | 'inactive';
   
   // Build API URL with filters
   const apiParams = new URLSearchParams();
   apiParams.set('page', page.toString());
   apiParams.set('pageSize', pageSize.toString());
   if (search) apiParams.set('search', search);
+  if (activeFilter !== 'all') apiParams.set('activeFilter', activeFilter);
   
   const apiUrl = `/api/lenders?${apiParams.toString()}`;
   const { data, mutate } = useSWR<LendersResponse>(apiUrl, fetcher);
@@ -92,7 +95,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
   );
   
   const updateParams = useCallback(
-    (updates: { search?: string; page?: number }) => {
+    (updates: { search?: string; activeFilter?: string; page?: number }) => {
       const params = new URLSearchParams(searchParamsString);
       
       if (updates.search !== undefined) {
@@ -100,6 +103,15 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
           params.delete('search');
         } else {
           params.set('search', updates.search.trim());
+        }
+        params.delete('page');
+      }
+
+      if (updates.activeFilter !== undefined) {
+        if (updates.activeFilter === 'all') {
+          params.delete('activeFilter');
+        } else {
+          params.set('activeFilter', updates.activeFilter);
         }
         params.delete('page');
       }
@@ -465,17 +477,32 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
         </form>
       )}
       {isAdmin && (
-        <label className="block text-xs font-semibold text-foreground-muted">
-          Search
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            disabled={isPending}
-            className="mt-2 w-full max-w-2xl rounded-lg border border-border px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
-            placeholder="Name, email, phone, NMLS ID"
-          />
-        </label>
+        <div className="flex flex-wrap items-end gap-4">
+          <label className="block flex-1 text-xs font-semibold text-foreground-muted">
+            Search
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              disabled={isPending}
+              className="mt-2 w-full max-w-2xl rounded-lg border border-border px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="Name, email, phone, NMLS ID"
+            />
+          </label>
+          <label className="text-xs font-semibold text-foreground-muted">
+            Status
+            <select
+              value={activeFilter}
+              onChange={(event) => updateParams({ activeFilter: event.target.value })}
+              disabled={isPending}
+              className="mt-2 block rounded border border-border bg-surface-raised px-3 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </label>
+        </div>
       )}
       <div className="overflow-x-auto rounded-card border border-border bg-surface-raised shadow-card">
         <table className="min-w-full divide-y divide-border">
@@ -484,6 +511,11 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Lender" sortKey="name" />
               </th>
+              {isAdmin && (
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+                  Status
+                </th>
+              )}
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="NMLS" sortKey="nmls" />
               </th>
@@ -504,6 +536,17 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
                   <div className="text-xs text-foreground-subtle">{lender.email}</div>
                   <div className="text-xs text-foreground-subtle">{lender.phone}</div>
                 </td>
+              {isAdmin && (
+                <td className="px-4 py-3 text-sm text-foreground-muted">
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                      lender.active === false ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'
+                    }`}
+                  >
+                    {lender.active === false ? 'Inactive' : 'Active'}
+                  </span>
+                </td>
+              )}
               <td className="px-4 py-3 text-sm text-foreground-muted">{lender.nmlsId}</td>
               <td className="px-4 py-3 text-sm text-foreground-muted">{(lender.licensedStates ?? []).join(', ') || '—'}</td>
             </tr>

@@ -13,6 +13,8 @@ interface LenderAdminEditorProps {
     nmlsId?: string;
     licensedStates?: string[];
     npsScore?: number | null;
+    active?: boolean;
+    includeInMetrics?: boolean;
   };
   className?: string;
   onSaved?: () => void;

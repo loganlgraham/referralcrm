@@ -39,6 +39,7 @@ type AgentProfile = {
   ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   source?: string;
   active: boolean;
+  includeInMetrics: boolean;
   metrics: AgentMetricsSummary;
   notes: NoteSummary[];
   deals: PersonDealSnapshot[];
@@ -58,6 +59,8 @@ type LenderProfile = {
   phone?: string;
   nmlsId?: string;
   licensedStates?: string[];
+  active: boolean;
+  includeInMetrics: boolean;
   npsScore?: number | null;
   notes: NoteSummary[];
   deals: PersonDealSnapshot[];
@@ -119,6 +122,7 @@ type AgentLean = {
   welcomeEmailSentAt?: Date | null;
   source?: string | null;
   active?: boolean | null;
+  includeInMetrics?: boolean | null;
 };
 
 type LenderLean = {
@@ -128,6 +132,8 @@ type LenderLean = {
   phone?: string | null;
   nmlsId?: string | null;
   licensedStates?: string[] | null;
+  active?: boolean | null;
+  includeInMetrics?: boolean | null;
   npsScore?: number | null;
   notes?: NoteRecord[] | null;
 };
@@ -140,7 +146,7 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
 
   await connectMongo();
   const agent = await Agent.findById(id)
-    .select('name email phone licenseNumber brokerage statesLicensed zipCoverage coverageLocations npsScore notes specialties languages ahaDesignation userId welcomeEmailSentAt source active')
+    .select('name email phone licenseNumber brokerage statesLicensed zipCoverage coverageLocations npsScore notes specialties languages ahaDesignation userId welcomeEmailSentAt source active includeInMetrics')
     .lean<AgentLean>();
   if (!agent) {
     return null;
@@ -351,7 +357,8 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
         ? agent.ahaDesignation
         : null,
     source: session.user.role === 'admin' ? (agent.source ?? undefined) : undefined,
-    active: Boolean(agent.active),
+    active: agent.active !== false,
+    includeInMetrics: agent.includeInMetrics !== false,
     metrics,
     notes: serializeNotes(agent.notes),
     deals,
@@ -529,6 +536,8 @@ export async function getLenderProfile(id: string): Promise<LenderProfile | null
     phone: lender.phone ?? undefined,
     nmlsId: lender.nmlsId ?? undefined,
     licensedStates: Array.isArray(lender.licensedStates) ? lender.licensedStates : undefined,
+    active: lender.active !== false,
+    includeInMetrics: lender.includeInMetrics !== false,
     npsScore: typeof lender.npsScore === 'number' ? lender.npsScore : null,
     notes: serializeNotes(lender.notes),
     deals,

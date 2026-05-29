@@ -1013,12 +1013,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const [lenders, agents] = await Promise.all([
     lenderIds.size
-      ? LenderMC.find({ _id: { $in: Array.from(lenderIds, (id) => new Types.ObjectId(id)) } }).select('name email phone npsScore')
+      ? LenderMC.find({ _id: { $in: Array.from(lenderIds, (id) => new Types.ObjectId(id)) } }).select('name email phone npsScore includeInMetrics')
       : Promise.resolve([]),
     agentIds.size
-      ? Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } }).select('name email phone ahaDesignation npsScore userId')
+      ? Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } }).select('name email phone ahaDesignation npsScore userId includeInMetrics')
       : Promise.resolve([])
   ]);
+
+  // People explicitly excluded from dashboard leaderboards (still counted in
+  // aggregate totals/funnel/revenue). Drives per-person leaderboard filtering only.
+  const excludedMcIds = new Set<string>();
+  lenders.forEach((lender) => {
+    if ((lender as { includeInMetrics?: boolean }).includeInMetrics === false) {
+      excludedMcIds.add(lender._id.toString());
+    }
+  });
+  const excludedAgentIds = new Set<string>();
+  agents.forEach((agent) => {
+    if ((agent as { includeInMetrics?: boolean }).includeInMetrics === false) {
+      excludedAgentIds.add(agent._id.toString());
+    }
+  });
+  const isMcIncludedInLeaderboards = (id: string) => !excludedMcIds.has(id);
+  const isAgentIncludedInLeaderboards = (id: string) => !excludedAgentIds.has(id);
 
   const lenderNameMap = new Map<string, string>();
   const lenderEmailMap = new Map<string, string | null>();
@@ -2105,6 +2122,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         name: key === 'unassigned' ? 'Unassigned MC' : lenderNameMap.get(key) ?? 'Unknown MC',
         referrals: value
       }))
+      .filter((entry) => isMcIncludedInLeaderboards(entry.id))
       .sort((a, b) => b.referrals - a.referrals)
       .slice(0, 10);
 
@@ -2254,6 +2272,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       revenueCents: value.revenue,
       expectedRevenueCents: value.expected
     }))
+    .filter((entry) => isMcIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.revenueCents - a.revenueCents)
     .slice(0, 10);
 
@@ -2280,6 +2299,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         outsideLenderLossRate
       };
     })
+    .filter((entry) => isMcIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.closeRate - a.closeRate || b.totalReferrals - a.totalReferrals)
     .slice(0, 10);
 
@@ -2295,6 +2315,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         outsideLenderLossRate: safePercent(outsideLenderLossCount, totalClosedDeals)
       };
     })
+    .filter((entry) => isMcIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.outsideLenderLossRate - a.outsideLenderLossRate || b.outsideLenderLossCount - a.outsideLenderLossCount)
     .slice(0, 10);
 
@@ -2692,6 +2713,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...mcAgingRiskMap.keys()
   ]);
   mcIdsForRanking.delete('unassigned');
+  for (const id of excludedMcIds) {
+    mcIdsForRanking.delete(id);
+  }
 
   for (const id of mcIdsForRanking) {
     const referralsForMc = referralByMcMap.get(id) ?? 0;
@@ -3275,6 +3299,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
       referrals: value
     }))
+    .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.referrals - a.referrals)
     .slice(0, 10);
 
@@ -3289,6 +3314,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       totalReferrals
       };
     })
+    .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.closeRate - a.closeRate)
     .slice(0, 10);
 
@@ -3298,6 +3324,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
       revenueCents: value.revenue
     }))
+    .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.revenueCents - a.revenueCents)
     .slice(0, 10);
 
@@ -3307,6 +3334,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
       revenueCents: value.expected
     }))
+    .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.revenueCents - a.revenueCents)
     .slice(0, 10);
 
@@ -3316,6 +3344,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
       revenueCents: value.closed > 0 ? value.closedVolumeCents / value.closed : 0,
     }))
+    .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => (b.revenueCents ?? 0) - (a.revenueCents ?? 0))
     .slice(0, 10);
 
@@ -3339,6 +3368,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
       revenueCents: value.netCommissionCents
     }))
+    .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.revenueCents - a.revenueCents)
     .slice(0, 10);
 
@@ -3348,6 +3378,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
       referrals: value
     }))
+    .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.referrals - a.referrals)
     .slice(0, 10);
 
@@ -3365,6 +3396,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
       referrals: value
     }))
+    .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.referrals - a.referrals)
     .slice(0, 10);
 
@@ -3677,7 +3709,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     };
 
     // Compute composite score per agent
-    const rankedAgents: AhaRankedAgent[] = Array.from(kpiRaw.referralCount.keys()).map((id) => {
+    const rankedAgents: AhaRankedAgent[] = Array.from(kpiRaw.referralCount.keys())
+      .filter((id) => id === 'unassigned' || isAgentIncludedInLeaderboards(id))
+      .map((id) => {
       let weightedSum = 0;
       let totalWeight = 0;
       const kpis: AhaRankedAgent['kpis'] = [];
@@ -4375,7 +4409,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             ? (mcDistinctDealsPushedBack / mcEligibleDealsForPushbackInScope) * 100
             : 0,
         byMc: Array.from(mcPushbackStatsMap.entries())
-          .filter(([id, stats]) => id !== 'unassigned' && stats.dealsWithPushback > 0)
+          .filter(([id, stats]) => id !== 'unassigned' && stats.dealsWithPushback > 0 && isMcIncludedInLeaderboards(id))
           .map(([id, stats]) => {
             const totalDeals = mcEligibleDealsForPushbackRateMap.get(id) ?? 0;
             const pushbackRatePercent =

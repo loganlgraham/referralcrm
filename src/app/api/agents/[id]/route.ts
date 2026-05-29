@@ -44,6 +44,7 @@ const updateAgentSchema = z.object({
   ahaDesignation: z.enum(['AHA', 'AHA_OOS', 'AGIT']).nullable().optional(),
   source: z.string().trim().optional(),
   active: z.boolean().optional(),
+  includeInMetrics: z.boolean().optional(),
 });
 
 interface Params {
@@ -174,6 +175,19 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     update.active = parsed.data.active;
   }
 
+  // Include-in-metrics flag requires admin
+  if (parsed.data.includeInMetrics !== undefined) {
+    if (!isAdmin) {
+      return new NextResponse('Forbidden', { status: 403 });
+    }
+    update.includeInMetrics = parsed.data.includeInMetrics;
+  }
+
+  // An active agent always counts toward dashboard leaderboards.
+  if (update.active === true) {
+    update.includeInMetrics = true;
+  }
+
   const updated = await Agent.findByIdAndUpdate(params.id, { $set: update }, { new: true });
 
   if (!updated) {
@@ -274,7 +288,8 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
         ? updatedAgent.ahaDesignation
         : null,
     source: isAdmin ? (updatedAgent.source ?? '') : undefined,
-    active: Boolean(updatedAgent.active),
+    active: updatedAgent.active !== false,
+    includeInMetrics: updatedAgent.includeInMetrics !== false,
     metrics,
     npsScore: metrics.npsScore,
   });
