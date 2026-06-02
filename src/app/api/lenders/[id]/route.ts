@@ -15,6 +15,8 @@ const updateLenderSchema = z.object({
   phone: z.string().trim().optional(),
   nmlsId: z.string().trim().optional(),
   licensedStates: z.array(z.string().trim().min(2)).optional(),
+  active: z.boolean().optional(),
+  includeInMetrics: z.boolean().optional(),
 });
 
 interface Params {
@@ -104,6 +106,25 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     update.licensedStates = parsed.data.licensedStates;
   }
 
+  // Active and include-in-metrics flags require admin
+  if (parsed.data.active !== undefined) {
+    if (!isAdmin) {
+      return new NextResponse('Forbidden', { status: 403 });
+    }
+    update.active = parsed.data.active;
+  }
+  if (parsed.data.includeInMetrics !== undefined) {
+    if (!isAdmin) {
+      return new NextResponse('Forbidden', { status: 403 });
+    }
+    update.includeInMetrics = parsed.data.includeInMetrics;
+  }
+
+  // An active mortgage consultant always counts toward dashboard leaderboards.
+  if (update.active === true) {
+    update.includeInMetrics = true;
+  }
+
   const updated = await LenderMC.findByIdAndUpdate(params.id, { $set: update }, { new: true });
 
   if (!updated) {
@@ -132,6 +153,8 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     phone: updatedLender.phone,
     nmlsId: updatedLender.nmlsId,
     licensedStates: updatedLender.licensedStates ?? [],
+    active: updatedLender.active !== false,
+    includeInMetrics: updatedLender.includeInMetrics !== false,
   });
 }
 

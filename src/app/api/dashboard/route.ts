@@ -19,6 +19,7 @@ import {
 } from 'date-fns';
 import { connectMongo } from '@/lib/mongoose';
 import { getCurrentSession } from '@/lib/auth';
+import { DEFAULT_AGENT_COMMISSION_BPS } from '@/constants/referrals';
 import { zipToState, inferStateFromLocationText } from '@/utils/location';
 import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
@@ -96,6 +97,7 @@ interface AggregatedPayment {
   receivedAmountCents: number;
   contractPriceCents?: number | null;
   commissionFlatFeeCents?: number | null;
+  commissionBasisPoints?: number | null;
   closingDate?: Date | null;
   closingDatePushbackCount?: number | null;
   closingDatePushbacks?: Array<{
@@ -888,6 +890,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         receivedAmountCents: 1,
         contractPriceCents: 1,
         commissionFlatFeeCents: 1,
+        commissionBasisPoints: 1,
         closingDate: 1,
         closingDatePushbackCount: 1,
         closingDatePushbacks: 1,
@@ -1010,12 +1013,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const [lenders, agents] = await Promise.all([
     lenderIds.size
-      ? LenderMC.find({ _id: { $in: Array.from(lenderIds, (id) => new Types.ObjectId(id)) } }).select('name email phone npsScore')
+      ? LenderMC.find({ _id: { $in: Array.from(lenderIds, (id) => new Types.ObjectId(id)) } }).select('name email phone npsScore includeInMetrics')
       : Promise.resolve([]),
     agentIds.size
-      ? Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } }).select('name email phone ahaDesignation npsScore userId')
+      ? Agent.find({ _id: { $in: Array.from(agentIds, (id) => new Types.ObjectId(id)) } }).select('name email phone ahaDesignation npsScore userId includeInMetrics')
       : Promise.resolve([])
   ]);
+
+  // People explicitly excluded from dashboard leaderboards (still counted in
+  // aggregate totals/funnel/revenue). Drives per-person leaderboard filtering only.
+  const excludedMcIds = new Set<string>();
+  lenders.forEach((lender) => {
+    if ((lender as { includeInMetrics?: boolean }).includeInMetrics === false) {
+      excludedMcIds.add(lender._id.toString());
+    }
+  });
+  const excludedAgentIds = new Set<string>();
+  agents.forEach((agent) => {
+    if ((agent as { includeInMetrics?: boolean }).includeInMetrics === false) {
+      excludedAgentIds.add(agent._id.toString());
+    }
+  });
+  const isMcIncludedInLeaderboards = (id: string) => !excludedMcIds.has(id);
+  const isAgentIncludedInLeaderboards = (id: string) => !excludedAgentIds.has(id);
 
   const lenderNameMap = new Map<string, string>();
   const lenderEmailMap = new Map<string, string | null>();
@@ -2102,6 +2122,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         name: key === 'unassigned' ? 'Unassigned MC' : lenderNameMap.get(key) ?? 'Unknown MC',
         referrals: value
       }))
+      .filter((entry) => isMcIncludedInLeaderboards(entry.id))
       .sort((a, b) => b.referrals - a.referrals)
       .slice(0, 10);
 
@@ -2219,6 +2240,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   });
 
+  // Per-MC AHA / AHA OOS attach rate: mirrors the top-level attach logic but
+  // grouped by the referral's lender (MC). Of closed-in-timeframe deals on
+  // AHA / AHA_OOS designated agents, the share that used the assigned agent.
+  const mcAhaAttachMap = new Map<string, { relevant: number; attached: number }>();
+  const mcAhaOosAttachMap = new Map<string, { relevant: number; attached: number }>();
+  attachClosedDealsInTimeframe.forEach((payment) => {
+    const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
+    const designation = getAgentDesignation(payment);
+    if (designation === 'AHA') {
+      const current = mcAhaAttachMap.get(mcKey) ?? { relevant: 0, attached: 0 };
+      current.relevant += 1;
+      if (payment.usedAssignedAgent === true) {
+        current.attached += 1;
+      }
+      mcAhaAttachMap.set(mcKey, current);
+    } else if (designation === 'AHA_OOS') {
+      const current = mcAhaOosAttachMap.get(mcKey) ?? { relevant: 0, attached: 0 };
+      current.relevant += 1;
+      if (payment.usedAssignedAgent === true) {
+        current.attached += 1;
+      }
+      mcAhaOosAttachMap.set(mcKey, current);
+    }
+  });
+
   const mcRevenueLeaderboard = Array.from(mcRevenueMap.entries())
     .map(([key, value]) => ({
       id: key,
@@ -2226,6 +2272,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       revenueCents: value.revenue,
       expectedRevenueCents: value.expected
     }))
+    .filter((entry) => isMcIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.revenueCents - a.revenueCents)
     .slice(0, 10);
 
@@ -2252,6 +2299,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         outsideLenderLossRate
       };
     })
+    .filter((entry) => isMcIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.closeRate - a.closeRate || b.totalReferrals - a.totalReferrals)
     .slice(0, 10);
 
@@ -2267,6 +2315,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         outsideLenderLossRate: safePercent(outsideLenderLossCount, totalClosedDeals)
       };
     })
+    .filter((entry) => isMcIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.outsideLenderLossRate - a.outsideLenderLossRate || b.outsideLenderLossCount - a.outsideLenderLossCount)
     .slice(0, 10);
 
@@ -2277,6 +2326,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   };
 
   type McKpiKey =
+    | 'closedDealsWithAfc'
+    | 'closedDealsWithoutAfc'
     | 'totalRevenueGenerated'
     | 'revenuePerReferral'
     | 'pipelineCashConversion'
@@ -2289,6 +2340,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     | 'agingPipelineRisk'
     | 'sourceQualityIndex'
     | 'afcCaptureRate'
+    | 'ahaAttachRate'
+    | 'ahaOosAttachRate'
     | 'forecastAccuracy'
     | 'npsScore';
 
@@ -2308,7 +2361,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       rawValue: number;
       displayValue: string;
       normalizedScore: number;
-      weight: 'high' | 'medium' | 'low';
+      weight: 'critical' | 'high' | 'medium' | 'low';
       neutralFilled: boolean;
     }[];
   };
@@ -2335,65 +2388,81 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const MC_MIN_REFERRALS_FOR_RANK = 3;
   const MC_KPI_WEIGHTS: Record<McKpiKey, number> = {
-    totalRevenueGenerated: 5,
-    revenuePerReferral: 4,
-    pipelineCashConversion: 3,
-    closeVelocityMedianDays: 3,
-    referralCount: 3,
-    dealPushbackRate: 3,
-    noAfcCloseRate: 3,
-    noAssignedAgentCloseRate: 3,
-    financingTerminationRate: 3,
-    agingPipelineRisk: 2,
-    sourceQualityIndex: 2,
-    afcCaptureRate: 3,
-    forecastAccuracy: 2,
-    npsScore: 3
+    closedDealsWithAfc: 8,
+    closedDealsWithoutAfc: 7,
+    totalRevenueGenerated: 6,
+    referralCount: 5,
+    revenuePerReferral: 2,
+    pipelineCashConversion: 2,
+    closeVelocityMedianDays: 2,
+    dealPushbackRate: 2,
+    noAfcCloseRate: 2,
+    noAssignedAgentCloseRate: 2,
+    financingTerminationRate: 2,
+    afcCaptureRate: 2,
+    ahaAttachRate: 2,
+    ahaOosAttachRate: 2,
+    npsScore: 2,
+    agingPipelineRisk: 1,
+    sourceQualityIndex: 1,
+    forecastAccuracy: 1
   };
-  const MC_KPI_TIERS: Record<McKpiKey, 'high' | 'medium' | 'low'> = {
-    totalRevenueGenerated: 'high',
-    revenuePerReferral: 'high',
-    pipelineCashConversion: 'high',
-    closeVelocityMedianDays: 'high',
-    referralCount: 'high',
-    dealPushbackRate: 'high',
-    noAfcCloseRate: 'high',
-    noAssignedAgentCloseRate: 'high',
-    financingTerminationRate: 'high',
-    agingPipelineRisk: 'medium',
-    sourceQualityIndex: 'medium',
-    afcCaptureRate: 'high',
-    forecastAccuracy: 'medium',
-    npsScore: 'high'
+  const MC_KPI_TIERS: Record<McKpiKey, 'critical' | 'high' | 'medium' | 'low'> = {
+    closedDealsWithAfc: 'critical',
+    closedDealsWithoutAfc: 'critical',
+    totalRevenueGenerated: 'critical',
+    referralCount: 'critical',
+    revenuePerReferral: 'medium',
+    pipelineCashConversion: 'medium',
+    closeVelocityMedianDays: 'medium',
+    dealPushbackRate: 'medium',
+    noAfcCloseRate: 'medium',
+    noAssignedAgentCloseRate: 'medium',
+    financingTerminationRate: 'medium',
+    afcCaptureRate: 'medium',
+    ahaAttachRate: 'medium',
+    ahaOosAttachRate: 'medium',
+    npsScore: 'medium',
+    agingPipelineRisk: 'low',
+    sourceQualityIndex: 'low',
+    forecastAccuracy: 'low'
   };
   const MC_KPI_LABELS: Record<McKpiKey, string> = {
+    closedDealsWithAfc: 'Closed Deals (AFC)',
+    closedDealsWithoutAfc: 'Closed Deals (No AFC)',
     totalRevenueGenerated: 'Total Revenue Generated',
+    referralCount: 'Referral Count',
     revenuePerReferral: 'Revenue per Referral',
     pipelineCashConversion: 'Pipeline to Cash',
     closeVelocityMedianDays: 'Median Days Pair -> Close',
-    referralCount: 'Referral Count',
     dealPushbackRate: 'Deals Pushed Back Rate',
     noAfcCloseRate: 'Closes Without AFC',
     noAssignedAgentCloseRate: 'Closes Without Assigned Agent',
     financingTerminationRate: 'Financing Terminations',
+    afcCaptureRate: 'AFC Capture Rate',
+    ahaAttachRate: 'AHA Attach Rate',
+    ahaOosAttachRate: 'AHA OOS Attach Rate',
     agingPipelineRisk: 'Aging Pipeline Risk',
     sourceQualityIndex: 'Source Quality Index',
-    afcCaptureRate: 'AFC Capture Rate',
     forecastAccuracy: 'Forecast Accuracy',
     npsScore: 'NPS Score'
   };
   const MC_KPI_ORDER: McKpiKey[] = [
+    'closedDealsWithAfc',
+    'closedDealsWithoutAfc',
     'totalRevenueGenerated',
+    'referralCount',
     'revenuePerReferral',
     'pipelineCashConversion',
     'closeVelocityMedianDays',
-    'referralCount',
     'dealPushbackRate',
     'noAfcCloseRate',
     'noAssignedAgentCloseRate',
     'financingTerminationRate',
-    'npsScore',
     'afcCaptureRate',
+    'ahaAttachRate',
+    'ahaOosAttachRate',
+    'npsScore',
     'agingPipelineRisk',
     'sourceQualityIndex',
     'forecastAccuracy',
@@ -2594,6 +2663,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const mcKpiRaw: Record<McKpiKey, Map<string, number>> = {
+    closedDealsWithAfc: new Map(),
+    closedDealsWithoutAfc: new Map(),
     totalRevenueGenerated: new Map(),
     revenuePerReferral: new Map(),
     pipelineCashConversion: new Map(),
@@ -2606,10 +2677,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     agingPipelineRisk: new Map(),
     sourceQualityIndex: new Map(),
     afcCaptureRate: new Map(),
+    ahaAttachRate: new Map(),
+    ahaOosAttachRate: new Map(),
     forecastAccuracy: new Map(),
     npsScore: new Map()
   };
   const mcKpiDisplayMap: Record<McKpiKey, Map<string, string>> = {
+    closedDealsWithAfc: new Map(),
+    closedDealsWithoutAfc: new Map(),
     totalRevenueGenerated: new Map(),
     revenuePerReferral: new Map(),
     pipelineCashConversion: new Map(),
@@ -2622,6 +2697,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     agingPipelineRisk: new Map(),
     sourceQualityIndex: new Map(),
     afcCaptureRate: new Map(),
+    ahaAttachRate: new Map(),
+    ahaOosAttachRate: new Map(),
     forecastAccuracy: new Map(),
     npsScore: new Map()
   };
@@ -2636,12 +2713,45 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...mcAgingRiskMap.keys()
   ]);
   mcIdsForRanking.delete('unassigned');
+  for (const id of excludedMcIds) {
+    mcIdsForRanking.delete(id);
+  }
 
   for (const id of mcIdsForRanking) {
     const referralsForMc = referralByMcMap.get(id) ?? 0;
     const mcRevenue = mcRevenueMap.get(id) ?? { revenue: 0, expected: 0, closed: 0, totalReferrals: 0 };
     const realizedRevenue = mcRevenue.revenue;
     const totalClosedDeals = mcTotalClosedDealsMap.get(id) ?? 0;
+
+    // Closed-deal volume split by AFC usage. Set explicitly for every ranked MC
+    // (including 0) so non-closers normalize to 0 on these drivers rather than
+    // receiving a neutral 50.
+    const closedDealsWithoutAfc = mcNoAfcClosesMap.get(id) ?? 0;
+    const closedDealsWithAfc = Math.max(0, totalClosedDeals - closedDealsWithoutAfc);
+    mcKpiRaw.closedDealsWithAfc.set(id, closedDealsWithAfc);
+    mcKpiDisplayMap.closedDealsWithAfc.set(id, closedDealsWithAfc.toLocaleString());
+    mcKpiRaw.closedDealsWithoutAfc.set(id, closedDealsWithoutAfc);
+    mcKpiDisplayMap.closedDealsWithoutAfc.set(id, closedDealsWithoutAfc.toLocaleString());
+
+    const ahaAttach = mcAhaAttachMap.get(id);
+    if (ahaAttach && ahaAttach.relevant > 0) {
+      const ahaAttachRate = (ahaAttach.attached / ahaAttach.relevant) * 100;
+      mcKpiRaw.ahaAttachRate.set(id, ahaAttachRate);
+      mcKpiDisplayMap.ahaAttachRate.set(
+        id,
+        `${ahaAttachRate.toFixed(1)}% (${ahaAttach.attached}/${ahaAttach.relevant})`
+      );
+    }
+
+    const ahaOosAttach = mcAhaOosAttachMap.get(id);
+    if (ahaOosAttach && ahaOosAttach.relevant > 0) {
+      const ahaOosAttachRate = (ahaOosAttach.attached / ahaOosAttach.relevant) * 100;
+      mcKpiRaw.ahaOosAttachRate.set(id, ahaOosAttachRate);
+      mcKpiDisplayMap.ahaOosAttachRate.set(
+        id,
+        `${ahaOosAttachRate.toFixed(1)}% (${ahaOosAttach.attached}/${ahaOosAttach.relevant})`
+      );
+    }
 
     mcKpiRaw.totalRevenueGenerated.set(id, realizedRevenue);
     mcKpiDisplayMap.totalRevenueGenerated.set(
@@ -2755,6 +2865,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const mcKpiNormalized: Record<McKpiKey, Map<string, number>> = {
+    closedDealsWithAfc: normalizeAhaKpiMap(mcKpiRaw.closedDealsWithAfc, false),
+    closedDealsWithoutAfc: normalizeAhaKpiMap(mcKpiRaw.closedDealsWithoutAfc, false),
+    ahaAttachRate: normalizeAhaKpiMap(mcKpiRaw.ahaAttachRate, false),
+    ahaOosAttachRate: normalizeAhaKpiMap(mcKpiRaw.ahaOosAttachRate, false),
     totalRevenueGenerated: normalizeAhaKpiMap(mcKpiRaw.totalRevenueGenerated, false),
     revenuePerReferral: normalizeAhaKpiMap(mcKpiRaw.revenuePerReferral, false),
     pipelineCashConversion: normalizeAhaKpiMap(mcKpiRaw.pipelineCashConversion, false),
@@ -3135,12 +3249,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         if ((!referralFeePercent || referralFeePercent <= 0) && contractPriceCents > 0 && referralFeeCents > 0) {
           referralFeePercent = (referralFeeCents / contractPriceCents) * 100;
         }
-        const commissionBasisPoints = payment.referral?.commissionBasisPoints ?? 0;
+        // Resolve each closed deal's agent commission as a percentage so flat-fee
+        // (dollar) deals are converted to a percent and averaged in alongside
+        // percent-based deals. Flat fee wins because deals entered in "$" mode
+        // store the dollar amount and clear the basis points, while the referral
+        // still carries the default 3% — so checking basis points first would
+        // wrongly treat dollar deals as the default percentage.
         const flatFeeCents = payment.commissionFlatFeeCents ?? 0;
-        const commissionPercent = commissionBasisPoints / 100;
-        const commissionCents = flatFeeCents > 0
-          ? flatFeeCents
-          : (contractPriceCents * commissionBasisPoints) / 10000;
+        let commissionPercent: number;
+        let commissionCents: number;
+        if (flatFeeCents > 0) {
+          commissionCents = flatFeeCents;
+          commissionPercent = contractPriceCents > 0 ? (flatFeeCents / contractPriceCents) * 100 : 0;
+        } else {
+          const resolvedCommissionBasisPoints =
+            (payment.commissionBasisPoints ?? 0) > 0
+              ? payment.commissionBasisPoints!
+              : (payment.referral?.commissionBasisPoints ?? 0) > 0
+                ? payment.referral!.commissionBasisPoints!
+                : DEFAULT_AGENT_COMMISSION_BPS;
+          commissionPercent = resolvedCommissionBasisPoints / 100;
+          commissionCents = (contractPriceCents * resolvedCommissionBasisPoints) / 10000;
+        }
 
         if (commissionPercent > 0) {
           current.commissionPercentages.push(commissionPercent);
@@ -3169,6 +3299,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
       referrals: value
     }))
+    .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.referrals - a.referrals)
     .slice(0, 10);
 
@@ -3183,6 +3314,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       totalReferrals
       };
     })
+    .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.closeRate - a.closeRate)
     .slice(0, 10);
 
@@ -3192,6 +3324,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
       revenueCents: value.revenue
     }))
+    .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.revenueCents - a.revenueCents)
     .slice(0, 10);
 
@@ -3201,6 +3334,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
       revenueCents: value.expected
     }))
+    .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.revenueCents - a.revenueCents)
     .slice(0, 10);
 
@@ -3210,6 +3344,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
       revenueCents: value.closed > 0 ? value.closedVolumeCents / value.closed : 0,
     }))
+    .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => (b.revenueCents ?? 0) - (a.revenueCents ?? 0))
     .slice(0, 10);
 
@@ -3233,6 +3368,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
       revenueCents: value.netCommissionCents
     }))
+    .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.revenueCents - a.revenueCents)
     .slice(0, 10);
 
@@ -3242,6 +3378,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
       referrals: value
     }))
+    .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.referrals - a.referrals)
     .slice(0, 10);
 
@@ -3259,6 +3396,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
       referrals: value
     }))
+    .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.referrals - a.referrals)
     .slice(0, 10);
 
@@ -3571,7 +3709,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     };
 
     // Compute composite score per agent
-    const rankedAgents: AhaRankedAgent[] = Array.from(kpiRaw.referralCount.keys()).map((id) => {
+    const rankedAgents: AhaRankedAgent[] = Array.from(kpiRaw.referralCount.keys())
+      .filter((id) => id === 'unassigned' || isAgentIncludedInLeaderboards(id))
+      .map((id) => {
       let weightedSum = 0;
       let totalWeight = 0;
       const kpis: AhaRankedAgent['kpis'] = [];
@@ -4269,7 +4409,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             ? (mcDistinctDealsPushedBack / mcEligibleDealsForPushbackInScope) * 100
             : 0,
         byMc: Array.from(mcPushbackStatsMap.entries())
-          .filter(([id, stats]) => id !== 'unassigned' && stats.dealsWithPushback > 0)
+          .filter(([id, stats]) => id !== 'unassigned' && stats.dealsWithPushback > 0 && isMcIncludedInLeaderboards(id))
           .map(([id, stats]) => {
             const totalDeals = mcEligibleDealsForPushbackRateMap.get(id) ?? 0;
             const pushbackRatePercent =

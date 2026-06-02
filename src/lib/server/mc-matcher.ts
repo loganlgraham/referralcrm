@@ -44,7 +44,7 @@ function buildLenderToken(name: string): string | null {
 }
 
 async function loadLenderTokenEntries(): Promise<LenderTokenEntry[]> {
-  const lenders = await LenderMC.find({})
+  const lenders = await LenderMC.find({ active: { $ne: false } })
     .select('_id name')
     .lean<{ _id: Types.ObjectId; name?: string | null }[]>();
 

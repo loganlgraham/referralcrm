@@ -339,9 +339,9 @@ export function ContactAssignment({
                 ))}
               </select>
             </label>
-            {type === 'agent' && selectedOption?.active === false && (
+            {selectedOption?.active === false && (
               <p className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-                This agent is marked inactive. You can still assign them, but verify this is intentional.
+                This {title.toLowerCase()} is marked inactive. You can still assign them, but verify this is intentional.
               </p>
             )}
             {type === 'agent' && (

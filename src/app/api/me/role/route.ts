@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
             closingRatePercentage: null,
             npsScore: null,
             avgResponseHours: null,
+            includeInMetrics: true,
           },
         },
         { upsert: true, new: true }
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest) {
             name: session.user.name ?? user.name ?? '',
             email: user.email,
           },
-          $setOnInsert: { phone: '', nmlsId: '', licensedStates: [], team: '', region: '' },
+          $setOnInsert: { phone: '', nmlsId: '', licensedStates: [], team: '', region: '', active: true, includeInMetrics: true },
         },
         { upsert: true, new: true }
       );

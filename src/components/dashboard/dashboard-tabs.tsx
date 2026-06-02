@@ -71,7 +71,7 @@ interface AhaRankedAgent {
     rawValue: number;
     displayValue: string;
     normalizedScore: number;
-    weight: 'high' | 'medium' | 'low';
+    weight: 'critical' | 'high' | 'medium' | 'low';
     neutralFilled: boolean;
   }[];
 }
@@ -91,7 +91,7 @@ interface McRankedEntry {
     rawValue: number;
     displayValue: string;
     normalizedScore: number;
-    weight: 'high' | 'medium' | 'low';
+    weight: 'critical' | 'high' | 'medium' | 'low';
     neutralFilled: boolean;
   }[];
 }
@@ -148,13 +148,15 @@ const getCompositeScoreStyle = (score: number) => {
   return 'bg-red-50 text-red-700';
 };
 
-const getKpiWeightBadge = (weight: 'high' | 'medium' | 'low') => {
+const getKpiWeightBadge = (weight: 'critical' | 'high' | 'medium' | 'low') => {
+  if (weight === 'critical') return 'bg-indigo-600 text-white';
   if (weight === 'high') return 'bg-[hsl(var(--text))] text-white';
   if (weight === 'medium') return 'bg-foreground-muted text-white';
   return 'bg-surface-subtle text-foreground-muted';
 };
 
-const getKpiWeightLabel = (weight: 'high' | 'medium' | 'low') => {
+const getKpiWeightLabel = (weight: 'critical' | 'high' | 'medium' | 'low') => {
+  if (weight === 'critical') return 'KEY';
   if (weight === 'high') return 'HIGH';
   if (weight === 'medium') return 'MED';
   return 'LOW';
@@ -2528,11 +2530,11 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
       <p className="mt-1 text-xs text-foreground-subtle">
-        Composite score blends weighted MC KPIs. Referral volume and NPS (all-time) are top-tier factors, and closes without AFC
-        or without the assigned agent are high-weight penalties. Financing-related terminations also count against MC
-        score. MCs with fewer than 3 referrals are marked provisional and receive a reliability adjustment.
-        KPIs with no data this period are filled with a neutral 50 score and still contribute to the weighted total, so
-        partial-coverage MCs score closer to the median rather than being excluded.
+        Composite score blends weighted MC KPIs scored relative to peers this period. The top drivers of rank are closed
+        deals using AFC (highest weight), closed deals without AFC, total revenue, and referral (transfer) volume. AFC
+        capture, AHA / AHA OOS attach, close speed, pushback, and NPS act as lower-weight quality guardrails. MCs with
+        fewer than 3 referrals are marked provisional and receive a reliability adjustment. KPIs with no data this period
+        are excluded from that MC's weighted average rather than dragging the score toward the median.
       </p>
       {entries.length === 0 ? (
         <p className="py-8 text-center text-sm text-foreground-subtle">No MCs with data for this period.</p>

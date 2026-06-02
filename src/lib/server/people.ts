@@ -12,6 +12,7 @@ import type { DealStatus } from '@/constants/deals';
 import {
   computeAgentMetrics,
   EMPTY_AGENT_METRICS,
+  resolvePaymentAgentIdForMetrics,
   type AgentMetricsSummary
 } from '@/lib/server/agent-metrics';
 
@@ -39,6 +40,7 @@ type AgentProfile = {
   ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   source?: string;
   active: boolean;
+  includeInMetrics: boolean;
   metrics: AgentMetricsSummary;
   notes: NoteSummary[];
   deals: PersonDealSnapshot[];
@@ -58,6 +60,8 @@ type LenderProfile = {
   phone?: string;
   nmlsId?: string;
   licensedStates?: string[];
+  active: boolean;
+  includeInMetrics: boolean;
   npsScore?: number | null;
   notes: NoteSummary[];
   deals: PersonDealSnapshot[];
@@ -119,6 +123,7 @@ type AgentLean = {
   welcomeEmailSentAt?: Date | null;
   source?: string | null;
   active?: boolean | null;
+  includeInMetrics?: boolean | null;
 };
 
 type LenderLean = {
@@ -128,6 +133,8 @@ type LenderLean = {
   phone?: string | null;
   nmlsId?: string | null;
   licensedStates?: string[] | null;
+  active?: boolean | null;
+  includeInMetrics?: boolean | null;
   npsScore?: number | null;
   notes?: NoteRecord[] | null;
 };
@@ -140,7 +147,7 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
 
   await connectMongo();
   const agent = await Agent.findById(id)
-    .select('name email phone licenseNumber brokerage statesLicensed zipCoverage coverageLocations npsScore notes specialties languages ahaDesignation userId welcomeEmailSentAt source active')
+    .select('name email phone licenseNumber brokerage statesLicensed zipCoverage coverageLocations npsScore notes specialties languages ahaDesignation userId welcomeEmailSentAt source active includeInMetrics')
     .lean<AgentLean>();
   if (!agent) {
     return null;
@@ -155,18 +162,35 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
     npsScore: agent.npsScore ?? null
   };
 
-  const referralDocs = await Referral.find({ assignedAgent: agent._id })
-    .select('_id borrower loanFileNumber propertyAddress')
+  const referralDocs = await Referral.find({
+    deletedAt: null,
+    $or: [
+      { assignedAgent: agent._id },
+      { buySideAgent: agent._id },
+      { sellSideAgent: agent._id },
+    ],
+  })
+    .select('_id borrower loanFileNumber propertyAddress assignedAgent buySideAgent sellSideAgent')
     .lean<{
       _id: Types.ObjectId;
       borrower?: { name?: string | null } | null;
       loanFileNumber?: string | null;
       propertyAddress?: string | null;
+      assignedAgent?: Types.ObjectId | string | null;
+      buySideAgent?: Types.ObjectId | string | null;
+      sellSideAgent?: Types.ObjectId | string | null;
     }[]>();
 
   const referralMeta = new Map<
     string,
-    { borrowerName: string | null; loanFileNumber: string | null; propertyAddress: string | null }
+    {
+      borrowerName: string | null;
+      loanFileNumber: string | null;
+      propertyAddress: string | null;
+      assignedAgent: Types.ObjectId | string | null;
+      buySideAgent: Types.ObjectId | string | null;
+      sellSideAgent: Types.ObjectId | string | null;
+    }
   >();
   const referralIds: Types.ObjectId[] = [];
 
@@ -176,6 +200,9 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
       borrowerName: doc.borrower?.name ?? null,
       loanFileNumber: doc.loanFileNumber ?? null,
       propertyAddress: doc.propertyAddress ?? null,
+      assignedAgent: doc.assignedAgent ?? null,
+      buySideAgent: doc.buySideAgent ?? null,
+      sellSideAgent: doc.sellSideAgent ?? null,
     });
   });
 
@@ -211,11 +238,13 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
         receivedAmountCents?: number | null;
         usedAfc?: boolean | null;
         usedAssignedAgent?: boolean | null;
+        side?: 'buy' | 'sell' | null;
+        agentAttribution?: 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT' | null;
         updatedAt?: Date | string | null;
         agentId?: Types.ObjectId | { _id: Types.ObjectId; name?: string | null } | null;
       }[]>();
 
-    deals = paymentDocs.map((payment) => {
+    deals = paymentDocs.flatMap((payment) => {
       const referralIdString =
         payment.referralId instanceof Types.ObjectId
           ? payment.referralId.toString()
@@ -223,6 +252,24 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
           ? payment.referralId
           : '';
       const meta = referralMeta.get(referralIdString);
+      const paymentAgentId = resolvePaymentAgentIdForMetrics({
+        agentId:
+          payment.agentId instanceof Types.ObjectId
+            ? payment.agentId
+            : payment.agentId && typeof payment.agentId === 'object'
+            ? payment.agentId._id
+            : null,
+        side: payment.side ?? null,
+        referral: {
+          assignedAgent: meta?.assignedAgent ?? null,
+          buySideAgent: meta?.buySideAgent ?? null,
+          sellSideAgent: meta?.sellSideAgent ?? null,
+        },
+      });
+
+      if (paymentAgentId !== agent._id.toString()) {
+        return [];
+      }
 
       const updatedAtIso = (() => {
         if (!payment.updatedAt) {
@@ -261,7 +308,7 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
         };
       })();
 
-      return {
+      return [{
         id: payment._id.toString(),
         referralId: referralIdString,
         borrowerName: meta?.borrowerName ?? null,
@@ -277,7 +324,7 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
           id: agent._id.toString(),
           name: agent.name ?? null,
         },
-      } satisfies PersonDealSnapshot;
+      } satisfies PersonDealSnapshot];
     });
   }
 
@@ -351,7 +398,8 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
         ? agent.ahaDesignation
         : null,
     source: session.user.role === 'admin' ? (agent.source ?? undefined) : undefined,
-    active: Boolean(agent.active),
+    active: agent.active !== false,
+    includeInMetrics: agent.includeInMetrics !== false,
     metrics,
     notes: serializeNotes(agent.notes),
     deals,
@@ -529,6 +577,8 @@ export async function getLenderProfile(id: string): Promise<LenderProfile | null
     phone: lender.phone ?? undefined,
     nmlsId: lender.nmlsId ?? undefined,
     licensedStates: Array.isArray(lender.licensedStates) ? lender.licensedStates : undefined,
+    active: lender.active !== false,
+    includeInMetrics: lender.includeInMetrics !== false,
     npsScore: typeof lender.npsScore === 'number' ? lender.npsScore : null,
     notes: serializeNotes(lender.notes),
     deals,
