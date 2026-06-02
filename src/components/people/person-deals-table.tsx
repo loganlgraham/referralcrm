@@ -35,6 +35,13 @@ const getStatusLabel = (status: PersonDealSummary['status']): string => {
   return DEAL_STATUS_LABELS[normalized] ?? status;
 };
 
+const resolveExpectedCents = (deal: PersonDealSummary): number => {
+  if (deal.status === 'terminated') {
+    return 0;
+  }
+  return deal.expectedAmountCents ?? 0;
+};
+
 const computeOutcome = (deal: PersonDealSummary, context: 'agent' | 'mc'): 'Won' | 'Lost' | 'Pending' => {
   if (deal.status === 'terminated') {
     return 'Lost';
@@ -71,7 +78,7 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
         {deals.map((deal) => {
           const outcome = computeOutcome(deal, context);
           const outcomeColor = outcomeClassName(outcome);
-          const expectedCents = deal.expectedAmountCents ?? 0;
+          const expectedCents = resolveExpectedCents(deal);
           const receivedCents = deal.receivedAmountCents ?? 0;
           const label = deal.borrowerName?.trim() || 'Referral';
           const detail = deal.propertyAddress?.trim()
@@ -172,7 +179,7 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
             {deals.map((deal) => {
               const outcome = computeOutcome(deal, context);
               const outcomeColor = outcomeClassName(outcome);
-              const expectedCents = deal.expectedAmountCents ?? 0;
+              const expectedCents = resolveExpectedCents(deal);
               const receivedCents = deal.receivedAmountCents ?? 0;
               const label = deal.borrowerName?.trim() || 'Referral';
               const detail = deal.propertyAddress?.trim()
