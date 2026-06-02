@@ -2,11 +2,18 @@ import { differenceInCalendarDays } from 'date-fns';
 import { subDays, subYears } from 'date-fns';
 import { Types } from 'mongoose';
 
+import { DEFAULT_AGENT_COMMISSION_BPS } from '@/constants/referrals';
 import { Payment } from '@/models/payment';
 import { Referral } from '@/models/referral';
 import { computeCohortCloseRate } from '@/lib/server/dashboard-math';
 
-function resolvePaymentMetricDate(payment: any): Date {
+function resolvePaymentMetricDate(payment: PaymentWithReferral): Date {
+  if (payment.closingDate) {
+    return new Date(payment.closingDate);
+  }
+  if (payment.referral?.sla?.lastClosedAt) {
+    return new Date(payment.referral.sla.lastClosedAt);
+  }
   if (payment.status === 'paid' && payment.paidDate) {
     return new Date(payment.paidDate);
   }
@@ -16,7 +23,14 @@ function resolvePaymentMetricDate(payment: any): Date {
   return new Date(payment.updatedAt ?? payment.createdAt ?? new Date());
 }
 
-const NON_ACTIVE_STATUSES = new Set(['Closed', 'Lost', 'Terminated']);
+const ACTIVE_PIPELINE_STATUSES = new Set([
+  'Paired',
+  'In Communication',
+  'Active Lead',
+  'Showing Homes',
+  'Under Contract',
+]);
+const CLOSED_DEAL_STATUSES = new Set(['closed', 'payment_sent', 'paid']);
 
 export interface AgentMetricsSummary {
   closingsLast12Months: number;
@@ -40,6 +54,8 @@ export interface AgentMetricsSummary {
 type ReferralLean = {
   _id: Types.ObjectId;
   assignedAgent?: Types.ObjectId | null;
+  buySideAgent?: Types.ObjectId | null;
+  sellSideAgent?: Types.ObjectId | null;
   status?: string | null;
   statusLastUpdated?: Date | null;
   sla?: {
@@ -60,10 +76,15 @@ type ReferralLean = {
 
 type PaymentWithReferral = {
   _id: Types.ObjectId;
+  agentId?: Types.ObjectId | null;
+  agentAttribution?: 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT' | null;
+  side?: 'buy' | 'sell' | null;
   status: string;
   expectedAmountCents?: number | null;
   receivedAmountCents?: number | null;
   commissionFlatFeeCents?: number | null;
+  commissionBasisPoints?: number | null;
+  referralFeeBasisPoints?: number | null;
   contractPriceCents?: number | null;
   paidDate?: Date | null;
   invoiceDate?: Date | null;
@@ -73,6 +94,59 @@ type PaymentWithReferral = {
   usedAssignedAgent?: boolean | null;
   referral: ReferralLean;
 };
+
+const toObjectIdString = (value: Types.ObjectId | string | null | undefined): string | null => {
+  if (!value) return null;
+  return typeof value === 'string' ? value : value.toString();
+};
+
+const resolveAttachedAgentIds = (referral: ReferralLean): string[] => {
+  const ids = [
+    toObjectIdString(referral.assignedAgent),
+    toObjectIdString(referral.buySideAgent),
+    toObjectIdString(referral.sellSideAgent),
+  ].filter((value): value is string => Boolean(value));
+  return Array.from(new Set(ids));
+};
+
+export const resolvePaymentAgentIdForMetrics = (payment: {
+  agentId?: Types.ObjectId | string | null;
+  side?: 'buy' | 'sell' | null;
+  referral?: {
+    assignedAgent?: Types.ObjectId | string | null;
+    buySideAgent?: Types.ObjectId | string | null;
+    sellSideAgent?: Types.ObjectId | string | null;
+  } | null;
+}): string | null => {
+  const explicitAgentId = toObjectIdString(payment.agentId);
+  if (explicitAgentId) {
+    return explicitAgentId;
+  }
+
+  const referral = payment.referral;
+  if (!referral) {
+    return null;
+  }
+
+  if (payment.side === 'sell') {
+    return toObjectIdString(referral.sellSideAgent) ?? toObjectIdString(referral.assignedAgent);
+  }
+
+  if (payment.side === 'buy') {
+    return toObjectIdString(referral.buySideAgent) ?? toObjectIdString(referral.assignedAgent);
+  }
+
+  return (
+    toObjectIdString(referral.assignedAgent) ??
+    toObjectIdString(referral.buySideAgent) ??
+    toObjectIdString(referral.sellSideAgent)
+  );
+};
+
+const isClosedDealEligible = (payment: PaymentWithReferral): boolean =>
+  CLOSED_DEAL_STATUSES.has(payment.status) &&
+  payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+  payment.usedAssignedAgent !== false;
 
 export const EMPTY_AGENT_METRICS: AgentMetricsSummary = {
   closingsLast12Months: 0,
@@ -103,11 +177,15 @@ export async function computeAgentMetrics(
 
   const [referrals, payments] = await Promise.all([
     Referral.find({
-      assignedAgent: { $in: agentIds },
+      $or: [
+        { assignedAgent: { $in: agentIds } },
+        { buySideAgent: { $in: agentIds } },
+        { sellSideAgent: { $in: agentIds } },
+      ],
       deletedAt: null
     })
       .select(
-        'assignedAgent status statusLastUpdated sla commissionBasisPoints referralFeeDueCents closedPriceCents estPurchasePriceCents createdAt'
+        'assignedAgent buySideAgent sellSideAgent status statusLastUpdated sla commissionBasisPoints referralFeeDueCents closedPriceCents estPurchasePriceCents createdAt'
       )
       .lean<ReferralLean[]>(),
     Payment.aggregate<PaymentWithReferral>([
@@ -137,16 +215,26 @@ export async function computeAgentMetrics(
       { $unwind: '$referral' },
       {
         $match: {
-          'referral.assignedAgent': { $in: agentIds }
+          $or: [
+            { 'referral.assignedAgent': { $in: agentIds } },
+            { 'referral.buySideAgent': { $in: agentIds } },
+            { 'referral.sellSideAgent': { $in: agentIds } },
+            { agentId: { $in: agentIds } },
+          ],
         }
       },
       {
         $project: {
           _id: 1,
+          agentId: 1,
+          agentAttribution: 1,
+          side: 1,
           status: 1,
           expectedAmountCents: 1,
           receivedAmountCents: 1,
           commissionFlatFeeCents: 1,
+          commissionBasisPoints: 1,
+          referralFeeBasisPoints: 1,
           contractPriceCents: 1,
           paidDate: 1,
           invoiceDate: 1,
@@ -157,6 +245,8 @@ export async function computeAgentMetrics(
           referral: {
             _id: '$referral._id',
             assignedAgent: '$referral.assignedAgent',
+            buySideAgent: '$referral.buySideAgent',
+            sellSideAgent: '$referral.sellSideAgent',
             status: '$referral.status',
             statusLastUpdated: '$referral.statusLastUpdated',
             sla: '$referral.sla',
@@ -173,17 +263,17 @@ export async function computeAgentMetrics(
 
   const referralMap = new Map<string, ReferralLean[]>();
   referrals.forEach((referral) => {
-    const agentId = referral.assignedAgent?.toString();
-    if (!agentId) return;
-    const bucket = referralMap.get(agentId) ?? [];
-    bucket.push(referral);
-    referralMap.set(agentId, bucket);
+    resolveAttachedAgentIds(referral).forEach((agentId) => {
+      const bucket = referralMap.get(agentId) ?? [];
+      bucket.push(referral);
+      referralMap.set(agentId, bucket);
+    });
   });
 
   const paymentMap = new Map<string, PaymentWithReferral[]>();
   payments.forEach((payment) => {
-    const agentId = payment.referral?.assignedAgent?.toString();
-    if (!agentId) return;
+    const agentId = resolvePaymentAgentIdForMetrics(payment);
+    if (!agentId || !agentIds.some((candidate) => candidate.toString() === agentId)) return;
     const bucket = paymentMap.get(agentId) ?? [];
     bucket.push(payment);
     paymentMap.set(agentId, bucket);
@@ -207,7 +297,7 @@ export async function computeAgentMetrics(
 
     const totalReferrals = agentReferrals.length;
     const activePipeline = agentReferrals.filter(
-      (referral) => !NON_ACTIVE_STATUSES.has((referral.status ?? '').trim())
+      (referral) => ACTIVE_PIPELINE_STATUSES.has((referral.status ?? '').trim())
     ).length;
 
     const referralsLast30Days = agentReferrals.filter((referral) => {
@@ -227,13 +317,12 @@ export async function computeAgentMetrics(
       ? (firstContactWithin24hCount / responseSamples.length) * 100
       : null;
 
-    const closedPayments = agentPayments.filter((payment) =>
-      ['closed', 'payment_sent', 'paid'].includes(payment.status)
-    );
+    const closedPayments = agentPayments.filter(isClosedDealEligible);
 
     const dealsClosedAllTime = closedPayments.length;
 
-    const closingRate = computeCohortCloseRate(dealsClosedAllTime, totalReferrals);
+    const closedReferralIds = new Set(closedPayments.map((payment) => payment.referral._id.toString()));
+    const closingRate = computeCohortCloseRate(closedReferralIds.size, totalReferrals);
 
     let closingsLast12Months = 0;
     let totalReferralFeesPaidCents = 0;
@@ -257,7 +346,6 @@ export async function computeAgentMetrics(
         referralFeesSamples += 1;
       }
 
-      const commissionBasisPoints = referral.commissionBasisPoints ?? 0;
       const flatFeeCents = payment.commissionFlatFeeCents ?? 0;
       const priceCents =
         payment.contractPriceCents && payment.contractPriceCents > 0
@@ -265,16 +353,30 @@ export async function computeAgentMetrics(
           : referral.closedPriceCents && referral.closedPriceCents > 0
             ? referral.closedPriceCents
             : referral.estPurchasePriceCents ?? 0;
-      const commissionCents = flatFeeCents > 0
-        ? flatFeeCents
-        : Math.round((priceCents * commissionBasisPoints) / 10000);
+      let commissionCents = 0;
+      let commissionPercent = 0;
+      if (flatFeeCents > 0) {
+        commissionCents = flatFeeCents;
+        commissionPercent = priceCents > 0 ? (flatFeeCents / priceCents) * 100 : 0;
+      } else {
+        const commissionBasisPoints =
+          (payment.commissionBasisPoints ?? 0) > 0
+            ? payment.commissionBasisPoints!
+            : (referral.commissionBasisPoints ?? 0) > 0
+              ? referral.commissionBasisPoints!
+              : DEFAULT_AGENT_COMMISSION_BPS;
+        commissionCents = Math.round((priceCents * commissionBasisPoints) / 10000);
+        commissionPercent = commissionBasisPoints / 100;
+      }
 
-      if (commissionBasisPoints > 0) {
-        commissionPercentSum += commissionBasisPoints / 100;
+      if (commissionPercent > 0) {
+        commissionPercentSum += commissionPercent;
         commissionPercentSamples += 1;
       }
 
-      totalNetIncomeCents += commissionCents - referralFeePaid;
+      if (payment.status === 'paid' && commissionCents > 0) {
+        totalNetIncomeCents += commissionCents - referralFeePaid;
+      }
     });
 
     const averageReferralFeePaidCents =
@@ -285,7 +387,10 @@ export async function computeAgentMetrics(
 
     // Calculate average days closed to paid (only for paid deals where usedAssignedAgent is true)
     const paidPaymentsWithAgent = agentPayments.filter(
-      (payment) => payment.status === 'paid' && payment.usedAssignedAgent === true
+      (payment) =>
+        payment.status === 'paid' &&
+        payment.usedAssignedAgent === true &&
+        payment.agentAttribution !== 'OUTSIDE_AGENT'
     );
     const closedToPaidDays = paidPaymentsWithAgent
       .map((payment) => {
@@ -297,7 +402,8 @@ export async function computeAgentMetrics(
           : null;
 
         if (end && closingDate) {
-          return differenceInCalendarDays(end, closingDate);
+          const days = differenceInCalendarDays(end, closingDate);
+          return days >= 0 ? days : null;
         }
 
         const storedMinutes =
@@ -309,7 +415,8 @@ export async function computeAgentMetrics(
         if (end) {
           const fallbackStart =
             closingDate ?? (payment.invoiceDate ? new Date(payment.invoiceDate) : new Date(payment.updatedAt ?? payment.createdAt ?? new Date()));
-          return differenceInCalendarDays(end, fallbackStart);
+          const days = differenceInCalendarDays(end, fallbackStart);
+          return days >= 0 ? days : null;
         }
 
         return null;

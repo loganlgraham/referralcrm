@@ -3,6 +3,8 @@ import { Types } from 'mongoose';
 import { getCurrentSession } from '@/lib/auth';
 import { connectMongo } from '@/lib/mongoose';
 import { Agent } from '@/models/agent';
+import { Activity } from '@/models/activity';
+import { Payment } from '@/models/payment';
 import { Referral } from '@/models/referral';
 import { User } from '@/models/user';
 import { computeAgentMetrics, EMPTY_AGENT_METRICS } from '@/lib/server/agent-metrics';
@@ -32,6 +34,14 @@ jest.mock('@/models/referral', () => ({
   Referral: { find: jest.fn() },
 }));
 
+jest.mock('@/models/payment', () => ({
+  Payment: { find: jest.fn() },
+}));
+
+jest.mock('@/models/activity', () => ({
+  Activity: { findOne: jest.fn() },
+}));
+
 jest.mock('@/models/user', () => ({
   User: { findById: jest.fn(), findOne: jest.fn() },
 }));
@@ -39,6 +49,8 @@ jest.mock('@/models/user', () => ({
 const mockGetCurrentSession = getCurrentSession as jest.MockedFunction<typeof getCurrentSession>;
 const mockComputeAgentMetrics = computeAgentMetrics as jest.MockedFunction<typeof computeAgentMetrics>;
 const mockAgentFindById = Agent.findById as jest.Mock;
+const mockActivityFindOne = Activity.findOne as jest.Mock;
+const mockPaymentFind = Payment.find as jest.Mock;
 const mockReferralFind = Referral.find as jest.Mock;
 const mockUserFindById = User.findById as jest.Mock;
 const mockUserFindOne = User.findOne as jest.Mock;
@@ -47,6 +59,28 @@ function chainLean<T>(result: T) {
   return {
     select: jest.fn().mockReturnValue({
       lean: jest.fn().mockResolvedValue(result),
+    }),
+  };
+}
+
+function chainActivityFindOne<T>(result: T) {
+  return {
+    sort: jest.fn().mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue(result),
+      }),
+    }),
+  };
+}
+
+function chainPaymentFind<T>(result: T) {
+  return {
+    sort: jest.fn().mockReturnValue({
+      limit: jest.fn().mockReturnValue({
+        populate: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue(result),
+        }),
+      }),
     }),
   };
 }
@@ -91,6 +125,12 @@ describe('getAgentProfile linked User / lastLoggedOnAt', () => {
     mockAgentFindById.mockImplementation(() => chainLean(agentLeanDoc));
     mockReferralFind.mockImplementation(() =>
       chainLean([] as unknown[]),
+    );
+    mockActivityFindOne.mockImplementation(() =>
+      chainActivityFindOne<{ createdAt?: Date | string | null } | null>(null),
+    );
+    mockPaymentFind.mockImplementation(() =>
+      chainPaymentFind([] as unknown[]),
     );
     mockUserFindById.mockImplementation(() =>
       chainLean<{ createdAt?: Date; lastLoginAt?: Date | null } | null>(null),
@@ -151,5 +191,78 @@ describe('getAgentProfile linked User / lastLoggedOnAt', () => {
     expect(profile!.lastLoggedOnAt).toBe(loginAt.toISOString());
     expect(profile!.signupStatus?.hasSignedUp).toBe(true);
     expect(mockUserFindOne).toHaveBeenCalledWith({ email: 'agent@example.com' });
+  });
+
+  it('includes only side-specific deals attributable to the viewed agent', async () => {
+    const buyReferralId = new Types.ObjectId();
+    const sellReferralId = new Types.ObjectId();
+    const otherAgentId = new Types.ObjectId();
+    mockReferralFind.mockImplementation(() =>
+      chainLean([
+        {
+          _id: buyReferralId,
+          borrower: { name: 'Buy Client' },
+          loanFileNumber: 'BUY-1',
+          propertyAddress: '1 Buy St',
+          assignedAgent: otherAgentId,
+          buySideAgent: agentId,
+          sellSideAgent: otherAgentId,
+        },
+        {
+          _id: sellReferralId,
+          borrower: { name: 'Sell Client' },
+          loanFileNumber: 'SELL-1',
+          propertyAddress: '1 Sell St',
+          assignedAgent: otherAgentId,
+          buySideAgent: otherAgentId,
+          sellSideAgent: agentId,
+        },
+      ]),
+    );
+    mockPaymentFind.mockImplementation(() =>
+      chainPaymentFind([
+        {
+          _id: new Types.ObjectId(),
+          referralId: buyReferralId,
+          status: 'paid',
+          expectedAmountCents: 10000,
+          receivedAmountCents: 10000,
+          usedAfc: true,
+          usedAssignedAgent: true,
+          side: 'buy',
+          agentId: null,
+          updatedAt: new Date('2026-01-05T00:00:00.000Z'),
+        },
+        {
+          _id: new Types.ObjectId(),
+          referralId: buyReferralId,
+          status: 'paid',
+          expectedAmountCents: 20000,
+          receivedAmountCents: 20000,
+          usedAfc: true,
+          usedAssignedAgent: true,
+          side: 'sell',
+          agentId: null,
+          updatedAt: new Date('2026-01-06T00:00:00.000Z'),
+        },
+        {
+          _id: new Types.ObjectId(),
+          referralId: sellReferralId,
+          status: 'closed',
+          expectedAmountCents: 30000,
+          receivedAmountCents: 0,
+          usedAfc: false,
+          usedAssignedAgent: true,
+          side: 'sell',
+          agentId: null,
+          updatedAt: new Date('2026-01-07T00:00:00.000Z'),
+        },
+      ]),
+    );
+
+    const profile = await getAgentProfile(agentId.toString());
+
+    expect(profile?.deals).toHaveLength(2);
+    expect(profile?.deals.map((deal) => deal.borrowerName)).toEqual(['Buy Client', 'Sell Client']);
   });
 });
