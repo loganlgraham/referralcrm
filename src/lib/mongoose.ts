@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { attachDatabasePool } from '@vercel/functions';
 
 const resolvedMongoUri =
   process.env.MONGODB_URI ??
@@ -181,11 +182,11 @@ export async function connectMongo(): Promise<typeof mongoose> {
     
     const connectionOptions: Parameters<typeof mongoose.connect>[1] = {
       bufferCommands: false,
-      serverSelectionTimeoutMS: 30000, // Increased from 15000 for serverless cold starts
+      serverSelectionTimeoutMS: 15000, // Generous for a cold Flex cluster wake; same-region so failover is fast
       socketTimeoutMS: 45000, // Add socket timeout
       connectTimeoutMS: 30000, // Add connection timeout
-      maxPoolSize: 10, // Increased from 1 to allow parallel queries within a single request
-      minPoolSize: 0, // Reduced from 1 to avoid keeping unnecessary connections open
+      maxPoolSize: 5, // Serverless-appropriate; low read volume needs nowhere near 10
+      minPoolSize: 0, // Avoid keeping unnecessary connections open between invocations
       maxIdleTimeMS: 30000,
       retryWrites: true,
       retryReads: true,
@@ -229,7 +230,13 @@ export async function connectMongo(): Promise<typeof mongoose> {
 
         // Ensure the underlying connection is actually ready.
         await waitForConnected(conn.connection, connectionOptions.serverSelectionTimeoutMS ?? 30000);
-        
+
+        // Let Fluid Compute drain pooled connections when the instance suspends,
+        // so idle connections don't accumulate against the Atlas connection cap.
+        if (process.env.VERCEL) {
+          attachDatabasePool(conn.connection.getClient());
+        }
+
         return conn;
       } catch (error) {
         // Clear the cached promise on failure so we can retry
