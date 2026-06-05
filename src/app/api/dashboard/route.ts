@@ -109,6 +109,7 @@ interface AggregatedPayment {
     timestamp?: Date | null;
   }> | null;
   terminatedReason?: 'inspection' | 'appraisal' | 'financing' | 'changed_mind' | null;
+  underContractDate?: Date | null;
   paidDate?: Date | null;
   invoiceDate?: Date | null;
   updatedAt: Date;
@@ -895,6 +896,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         closingDatePushbackCount: 1,
         closingDatePushbacks: 1,
         terminatedReason: 1,
+        underContractDate: 1,
         paidDate: 1,
         invoiceDate: 1,
         updatedAt: 1,
@@ -1006,7 +1008,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (payment.agentId) agentIds.add(payment.agentId.toString());
   });
 
-  terminatedWithinTimeframe.forEach((payment) => {
+  terminatedWithMetric.forEach((payment) => {
+    if (payment.referral?.lender) lenderIds.add(payment.referral.lender.toString());
     if (payment.referral?.assignedAgent) agentIds.add(payment.referral.assignedAgent.toString());
     if (payment.agentId) agentIds.add(payment.agentId.toString());
   });
@@ -1116,6 +1119,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     context.networkFilter === 'ALL'
       ? terminatedWithinTimeframe
       : terminatedWithinTimeframe.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
+  const terminatedByNetwork =
+    context.networkFilter === 'ALL'
+      ? terminatedWithMetric
+      : terminatedWithMetric.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
 
   const totalReferrals = filteredReferrals.length;
   const referralRequestsBySourceMap = new Map<string, number>();
@@ -2240,6 +2247,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   });
 
+  const mcAfcClosedDealCountMap = new Map<string, number>();
+  paymentsByNetwork.forEach((payment) => {
+    if (payment.usedAfc !== true || !CLOSED_DEAL_STATUSES.has(payment.status)) return;
+    if (!filteredReferralIds.has(payment.referral._id.toString())) return;
+    const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
+    mcAfcClosedDealCountMap.set(mcKey, (mcAfcClosedDealCountMap.get(mcKey) ?? 0) + 1);
+  });
+
+  const mcAfcDealCountMap = new Map<string, number>();
+  const allPaymentsWithTerminatedByNetwork = [...paymentsByNetwork, ...terminatedByNetwork];
+  allPaymentsWithTerminatedByNetwork.forEach((payment) => {
+    if (payment.usedAfc !== true) return;
+    const contractDate = payment.underContractDate ?? payment.metricDate ?? resolveMetricDate(payment);
+    if (!isWithinTimeframe(contractDate)) return;
+    const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
+    mcAfcDealCountMap.set(mcKey, (mcAfcDealCountMap.get(mcKey) ?? 0) + 1);
+  });
+
   const mcRevenueLeaderboard = Array.from(mcRevenueMap.entries())
     .map(([key, value]) => ({
       id: key,
@@ -2301,6 +2326,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   };
 
   type McKpiKey =
+    | 'afcCloseRate'
+    | 'afcDealCount'
     | 'closedDealsWithAfc'
     | 'closedDealsWithoutAfc'
     | 'totalRevenueGenerated'
@@ -2359,6 +2386,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const MC_MIN_REFERRALS_FOR_RANK = 3;
   const MC_MIN_RELIABILITY_FACTOR = 0.6;
   const MC_KPI_WEIGHTS: Record<McKpiKey, number> = {
+    afcCloseRate: 8,
+    afcDealCount: 8,
     closedDealsWithAfc: 8,
     closedDealsWithoutAfc: 7,
     totalRevenueGenerated: 6,
@@ -2374,6 +2403,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     forecastAccuracy: 1
   };
   const MC_KPI_TIERS: Record<McKpiKey, 'critical' | 'high' | 'medium' | 'low'> = {
+    afcCloseRate: 'critical',
+    afcDealCount: 'critical',
     closedDealsWithAfc: 'critical',
     closedDealsWithoutAfc: 'critical',
     totalRevenueGenerated: 'critical',
@@ -2389,6 +2420,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     forecastAccuracy: 'low'
   };
   const MC_KPI_LABELS: Record<McKpiKey, string> = {
+    afcCloseRate: 'AFC Close Rate',
+    afcDealCount: 'AFC Deals',
     closedDealsWithAfc: 'Closed Deals (AFC)',
     closedDealsWithoutAfc: 'Closed Deals (No AFC)',
     totalRevenueGenerated: 'Total Revenue Generated',
@@ -2404,6 +2437,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     npsScore: 'NPS Score'
   };
   const MC_KPI_ORDER: McKpiKey[] = [
+    'afcCloseRate',
+    'afcDealCount',
     'closedDealsWithAfc',
     'closedDealsWithoutAfc',
     'totalRevenueGenerated',
@@ -2595,6 +2630,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const mcKpiRaw: Record<McKpiKey, Map<string, number>> = {
+    afcCloseRate: new Map(),
+    afcDealCount: new Map(),
     closedDealsWithAfc: new Map(),
     closedDealsWithoutAfc: new Map(),
     totalRevenueGenerated: new Map(),
@@ -2610,6 +2647,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     npsScore: new Map()
   };
   const mcKpiDisplayMap: Record<McKpiKey, Map<string, string>> = {
+    afcCloseRate: new Map(),
+    afcDealCount: new Map(),
     closedDealsWithAfc: new Map(),
     closedDealsWithoutAfc: new Map(),
     totalRevenueGenerated: new Map(),
@@ -2629,6 +2668,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...referralByMcMap.keys(),
     ...mcRevenueMap.keys(),
     ...mcTotalClosedDealsMap.keys(),
+    ...mcAfcClosedDealCountMap.keys(),
+    ...mcAfcDealCountMap.keys(),
     ...mcPushbackStatsMap.keys(),
     ...mcTerminatedMap.keys(),
     ...sourceBreakdownByMc.keys(),
@@ -2644,6 +2685,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const mcRevenue = mcRevenueMap.get(id) ?? { revenue: 0, expected: 0, closed: 0, totalReferrals: 0 };
     const realizedRevenue = mcRevenue.revenue;
     const totalClosedDeals = mcTotalClosedDealsMap.get(id) ?? 0;
+    const afcClosedDeals = mcAfcClosedDealCountMap.get(id) ?? 0;
+    const afcDealCount = mcAfcDealCountMap.get(id) ?? 0;
+
+    if (referralsForMc > 0) {
+      const afcCloseRate = safePercent(afcClosedDeals, referralsForMc);
+      mcKpiRaw.afcCloseRate.set(id, afcCloseRate);
+      mcKpiDisplayMap.afcCloseRate.set(
+        id,
+        `${afcCloseRate.toFixed(1)}% (${afcClosedDeals}/${referralsForMc})`
+      );
+    }
+    mcKpiRaw.afcDealCount.set(id, afcDealCount);
+    mcKpiDisplayMap.afcDealCount.set(id, afcDealCount.toLocaleString());
 
     // Closed-deal volume split by AFC usage. Set explicitly for every ranked MC
     // (including 0) so non-closers normalize to 0 on these drivers rather than
@@ -2750,6 +2804,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const mcKpiNormalized: Record<McKpiKey, Map<string, number>> = {
+    afcCloseRate: normalizeAhaKpiMap(mcKpiRaw.afcCloseRate, false),
+    afcDealCount: normalizeAhaKpiMap(mcKpiRaw.afcDealCount, false),
     closedDealsWithAfc: normalizeAhaKpiMap(mcKpiRaw.closedDealsWithAfc, false),
     closedDealsWithoutAfc: normalizeAhaKpiMap(mcKpiRaw.closedDealsWithoutAfc, true),
     totalRevenueGenerated: normalizeAhaKpiMap(mcKpiRaw.totalRevenueGenerated, false),

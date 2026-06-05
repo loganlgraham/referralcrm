@@ -151,6 +151,87 @@ describe('Dashboard Metrics - Closed Deal Eligibility', () => {
   });
 });
 
+describe('Dashboard Metrics - MC AFC Leaderboard KPIs', () => {
+  it('calculates AFC close rate from AFC closed-like deals over all MC referrals', () => {
+    const referralByMcMap = new Map([['mcA', 4]]);
+    const filteredReferralIds = new Set(['ref-1', 'ref-2', 'ref-3', 'ref-4']);
+    const closedStatuses = new Set(['closed', 'payment_sent', 'paid']);
+    const payments = [
+      { status: 'closed', usedAfc: true, referral: { _id: 'ref-1', lender: 'mcA' } },
+      { status: 'payment_sent', usedAfc: true, referral: { _id: 'ref-2', lender: 'mcA' } },
+      { status: 'paid', usedAfc: false, referral: { _id: 'ref-3', lender: 'mcA' } },
+      { status: 'under_contract', usedAfc: true, referral: { _id: 'ref-4', lender: 'mcA' } }
+    ];
+
+    const afcClosedByMc = new Map<string, number>();
+    payments.forEach((payment) => {
+      if (payment.usedAfc !== true || !closedStatuses.has(payment.status)) return;
+      if (!filteredReferralIds.has(payment.referral._id)) return;
+      const mcKey = payment.referral.lender;
+      afcClosedByMc.set(mcKey, (afcClosedByMc.get(mcKey) ?? 0) + 1);
+    });
+
+    const afcClosedDeals = afcClosedByMc.get('mcA') ?? 0;
+    const totalReferrals = referralByMcMap.get('mcA') ?? 0;
+    const afcCloseRate = totalReferrals === 0 ? 0 : (afcClosedDeals / totalReferrals) * 100;
+
+    expect(afcClosedDeals).toBe(2);
+    expect(totalReferrals).toBe(4);
+    expect(afcCloseRate).toBe(50);
+  });
+
+  it('counts AFC deals across every payment status, including terminated', () => {
+    const timeframe = {
+      start: new Date('2026-01-01T00:00:00.000Z'),
+      end: new Date('2026-01-31T23:59:59.999Z')
+    };
+    const payments = [
+      {
+        status: 'under_contract',
+        usedAfc: true,
+        underContractDate: new Date('2026-01-05T00:00:00.000Z'),
+        referral: { lender: 'mcA' }
+      },
+      {
+        status: 'paid',
+        usedAfc: true,
+        underContractDate: new Date('2026-01-10T00:00:00.000Z'),
+        referral: { lender: 'mcA' }
+      },
+      {
+        status: 'terminated',
+        usedAfc: true,
+        underContractDate: new Date('2026-01-12T00:00:00.000Z'),
+        referral: { lender: 'mcA' }
+      },
+      {
+        status: 'terminated',
+        usedAfc: false,
+        underContractDate: new Date('2026-01-15T00:00:00.000Z'),
+        referral: { lender: 'mcA' }
+      },
+      {
+        status: 'closed',
+        usedAfc: true,
+        underContractDate: new Date('2025-12-31T00:00:00.000Z'),
+        referral: { lender: 'mcA' }
+      }
+    ];
+
+    const isWithinTimeframe = (date: Date) => date >= timeframe.start && date <= timeframe.end;
+    const afcDealsByMc = new Map<string, number>();
+
+    payments.forEach((payment) => {
+      if (payment.usedAfc !== true) return;
+      if (!isWithinTimeframe(payment.underContractDate)) return;
+      const mcKey = payment.referral.lender;
+      afcDealsByMc.set(mcKey, (afcDealsByMc.get(mcKey) ?? 0) + 1);
+    });
+
+    expect(afcDealsByMc.get('mcA')).toBe(3);
+  });
+});
+
 describe('Dashboard Metrics - Revenue Calculations', () => {
   it('calculates realized revenue from received amounts', () => {
     const payments = [
