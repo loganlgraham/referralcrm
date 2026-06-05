@@ -71,6 +71,8 @@ import {
   type TrendPoint
 } from '@/lib/server/dashboard/timeframe';
 
+export const dynamic = 'force-dynamic';
+
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
 
 interface DashboardRequestContext {
