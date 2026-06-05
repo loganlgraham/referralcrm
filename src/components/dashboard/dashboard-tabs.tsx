@@ -2534,10 +2534,11 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
       <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
       <p className="mt-1 text-xs text-foreground-subtle">
         Composite score blends weighted MC KPIs scored relative to peers this period. The top drivers of rank are closed
-        deals using AFC (highest weight), closed deals without AFC, total revenue, and referral (transfer) volume. AFC
-        capture, AHA / AHA OOS attach, close speed, pushback, and NPS act as lower-weight quality guardrails. MCs with
-        fewer than 3 referrals are marked provisional and receive a reliability adjustment. KPIs with no data this period
-        are excluded from that MC's weighted average rather than dragging the score toward the median.
+        deals using AFC (highest weight), fewer closed deals without AFC, total revenue, and referral (transfer) volume.
+        Close speed, pushed-back deals, closes without the assigned agent, financing terminations, NPS, pipeline aging,
+        source quality, and forecast accuracy act as lower-weight quality guardrails. MCs with fewer than 3 referrals are
+        marked provisional and receive a reliability adjustment. KPIs with no data this period are excluded from that MC's
+        weighted average rather than dragging the score toward the median.
       </p>
       {entries.length === 0 ? (
         <p className="py-8 text-center text-sm text-foreground-subtle">No MCs with data for this period.</p>
