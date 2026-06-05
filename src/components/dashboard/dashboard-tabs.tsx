@@ -2537,8 +2537,8 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
         deals using AFC (highest weight), fewer closed deals without AFC, total revenue, and referral (transfer) volume.
         Close speed, pushed-back deals, closes without the assigned agent, financing terminations, NPS, pipeline aging,
         source quality, and forecast accuracy act as lower-weight quality guardrails. MCs with fewer than 3 referrals are
-        marked provisional and receive a reliability adjustment. KPIs with no data this period are excluded from that MC's
-        weighted average rather than dragging the score toward the median.
+        marked provisional and receive a volume discount, but still keep a score. KPIs with no data this period are
+        excluded from that MC's weighted average rather than dragging the score toward the median.
       </p>
       {entries.length === 0 ? (
         <p className="py-8 text-center text-sm text-foreground-subtle">No MCs with data for this period.</p>
@@ -2611,7 +2611,7 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
                 <span className="font-semibold text-foreground">{formatNumber(selectedMc.referralCount)}</span>
               </p>
               {!selectedMc.qualified ? (
-                <p className="mt-1">Provisional ranking: fewer than 3 referrals in selected timeframe.</p>
+                <p className="mt-1">Provisional ranking: fewer than 3 referrals in selected timeframe, with a volume discount applied.</p>
               ) : null}
             </div>
             <div>

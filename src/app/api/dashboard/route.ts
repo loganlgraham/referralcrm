@@ -2357,6 +2357,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   type TerminatedReasonKey = NonNullable<AggregatedPayment['terminatedReason']> | 'unknown';
 
   const MC_MIN_REFERRALS_FOR_RANK = 3;
+  const MC_MIN_RELIABILITY_FACTOR = 0.6;
   const MC_KPI_WEIGHTS: Record<McKpiKey, number> = {
     closedDealsWithAfc: 8,
     closedDealsWithoutAfc: 7,
@@ -2798,7 +2799,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     const baseScore = totalWeight > 0 ? Math.round((weightedSum / totalWeight) * 10) / 10 : AHA_NEUTRAL_SCORE;
-    const reliabilityFactor = computeAhaReliabilityFactor(referralCount, MC_MIN_REFERRALS_FOR_RANK);
+    const reliabilityFactor = Math.max(
+      MC_MIN_RELIABILITY_FACTOR,
+      computeAhaReliabilityFactor(referralCount, MC_MIN_REFERRALS_FOR_RANK)
+    );
     const score = Math.round(baseScore * reliabilityFactor * 10) / 10;
 
     return {

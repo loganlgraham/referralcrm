@@ -763,6 +763,8 @@ describe('Dashboard Metrics - AHA Composite Scoring', () => {
 describe('Dashboard Metrics - MC Composite Scoring', () => {
   // Mirror of MC_KPI_WEIGHTS in src/app/api/dashboard/route.ts. The four
   // volume/revenue drivers carry the most weight; the rest are guardrails.
+  const MC_MIN_REFERRALS_FOR_RANK = 3;
+  const MC_MIN_RELIABILITY_FACTOR = 0.6;
   const MC_KPI_WEIGHTS = {
     closedDealsWithAfc: 8,
     closedDealsWithoutAfc: 7,
@@ -793,6 +795,13 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     'sourceQualityIndex',
     'forecastAccuracy'
   ] as const;
+  const mcScoreWithReliability = (baseScore: number, referralCount: number): number => {
+    const reliabilityFactor = Math.max(
+      MC_MIN_RELIABILITY_FACTOR,
+      computeAhaReliabilityFactor(referralCount, MC_MIN_REFERRALS_FOR_RANK)
+    );
+    return Math.round(baseScore * reliabilityFactor * 10) / 10;
+  };
 
   // Mirrors route.ts: KPIs with no data (null) are excluded from the
   // denominator rather than filled with a neutral 50.
@@ -872,6 +881,14 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
 
     expect(scoreForMcA).toBeCloseTo(100, 2);
     expect(scoreForMcB).toBeCloseTo(25, 2);
+  });
+
+  it('keeps zero-referral MCs scored with a provisional reliability floor', () => {
+    const baseScore = 76.1;
+
+    expect(computeAhaReliabilityFactor(0, MC_MIN_REFERRALS_FOR_RANK)).toBe(0);
+    expect(mcScoreWithReliability(baseScore, 0)).toBeCloseTo(45.7, 1);
+    expect(mcScoreWithReliability(baseScore, MC_MIN_REFERRALS_FOR_RANK)).toBeCloseTo(baseScore, 1);
   });
 
   it('excludes removed and redundant metrics from the composite', () => {
