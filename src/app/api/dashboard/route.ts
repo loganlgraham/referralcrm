@@ -2214,20 +2214,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const mcAssignedAgentClosesMap = new Map<string, number>();
   const mcOutsideLenderLossMap = new Map<string, number>();
   const mcNoAfcClosesMap = new Map<string, number>();
+  const mcAllClosedDealsForAssignedAgentRateMap = new Map<string, number>();
   const mcNoAssignedAgentClosesMap = new Map<string, number>();
   // C-10: MC close-rate leaderboards must use `isClosedDealEligible` so that
   // outside-agent / usedAssignedAgent=false payments don't inflate denominators.
   const eligibleClosedDealsInTimeframe = allClosedDealsInTimeframe.filter((payment) =>
     isClosedDealEligible(payment)
   );
+  allClosedDealsInTimeframe.forEach((payment) => {
+    const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
+    mcAllClosedDealsForAssignedAgentRateMap.set(
+      mcKey,
+      (mcAllClosedDealsForAssignedAgentRateMap.get(mcKey) ?? 0) + 1
+    );
+    if (payment.usedAssignedAgent === false) {
+      mcNoAssignedAgentClosesMap.set(mcKey, (mcNoAssignedAgentClosesMap.get(mcKey) ?? 0) + 1);
+    }
+  });
   eligibleClosedDealsInTimeframe.forEach((payment) => {
     const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     mcTotalClosedDealsMap.set(mcKey, (mcTotalClosedDealsMap.get(mcKey) ?? 0) + 1);
     if (payment.usedAfc !== true) {
       mcNoAfcClosesMap.set(mcKey, (mcNoAfcClosesMap.get(mcKey) ?? 0) + 1);
-    }
-    if (payment.usedAssignedAgent !== true) {
-      mcNoAssignedAgentClosesMap.set(mcKey, (mcNoAssignedAgentClosesMap.get(mcKey) ?? 0) + 1);
     }
     if (payment.usedAssignedAgent === true) {
       mcAssignedAgentClosesMap.set(mcKey, (mcAssignedAgentClosesMap.get(mcKey) ?? 0) + 1);
@@ -2780,10 +2788,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    if (totalClosedDeals > 0) {
+    const totalClosedDealsForAssignedAgentRate = mcAllClosedDealsForAssignedAgentRateMap.get(id) ?? 0;
+    if (totalClosedDealsForAssignedAgentRate > 0) {
       const noAssignedAgentCloseRate = safePercent(
         mcNoAssignedAgentClosesMap.get(id) ?? 0,
-        totalClosedDeals
+        totalClosedDealsForAssignedAgentRate
       );
       mcKpiRaw.noAssignedAgentCloseRate.set(id, noAssignedAgentCloseRate);
       mcKpiDisplayMap.noAssignedAgentCloseRate.set(id, `${noAssignedAgentCloseRate.toFixed(1)}%`);

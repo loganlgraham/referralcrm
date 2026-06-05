@@ -230,6 +230,37 @@ describe('Dashboard Metrics - MC AFC Leaderboard KPIs', () => {
   });
 });
 
+describe('Dashboard Metrics - MC Assigned Agent Guardrail', () => {
+  it('counts closes without assigned agent from all period closed-like deals', () => {
+    const allClosedDealsInTimeframe = [
+      { status: 'closed', usedAssignedAgent: true, referral: { lender: 'mcA' } },
+      { status: 'payment_sent', usedAssignedAgent: false, referral: { lender: 'mcA' } },
+      { status: 'paid', usedAssignedAgent: false, referral: { lender: 'mcA' } },
+      { status: 'closed', usedAssignedAgent: null, referral: { lender: 'mcA' } }
+    ];
+
+    const totalClosedDealsByMc = new Map<string, number>();
+    const noAssignedAgentClosesByMc = new Map<string, number>();
+
+    allClosedDealsInTimeframe.forEach((payment) => {
+      const mcKey = payment.referral.lender;
+      totalClosedDealsByMc.set(mcKey, (totalClosedDealsByMc.get(mcKey) ?? 0) + 1);
+      if (payment.usedAssignedAgent === false) {
+        noAssignedAgentClosesByMc.set(mcKey, (noAssignedAgentClosesByMc.get(mcKey) ?? 0) + 1);
+      }
+    });
+
+    const noAssignedAgentCloses = noAssignedAgentClosesByMc.get('mcA') ?? 0;
+    const totalClosedDeals = totalClosedDealsByMc.get('mcA') ?? 0;
+    const noAssignedAgentCloseRate =
+      totalClosedDeals === 0 ? 0 : (noAssignedAgentCloses / totalClosedDeals) * 100;
+
+    expect(noAssignedAgentCloses).toBe(2);
+    expect(totalClosedDeals).toBe(4);
+    expect(noAssignedAgentCloseRate).toBe(50);
+  });
+});
+
 describe('Dashboard Metrics - Revenue Calculations', () => {
   it('calculates realized revenue from received amounts', () => {
     const payments = [
