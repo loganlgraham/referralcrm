@@ -462,6 +462,9 @@ interface AgitDealRow {
   mcPhone: string | null;
   closingDate: string | null;
   usedAfc: boolean | null;
+  referralStatus: string | null;
+  usedAssignedAgent: boolean | null;
+  agentAttribution: 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT' | null;
 }
 
 interface StaleReferralEntry {
@@ -3463,7 +3466,22 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
 
       {/* AGIT Deals Table */}
       <div>
-        <h3 className="mb-3 text-lg font-semibold text-foreground">AGIT Deals</h3>
+        <h3 className="mb-3 text-lg font-semibold text-foreground">
+          AGIT Deals
+          {data.dealRows.length > 0 && (
+            <span className="ml-2 text-sm font-normal text-foreground-subtle">
+              {
+                data.dealRows.filter(
+                  (row) =>
+                    ['closed', 'payment_sent', 'paid'].includes(row.status) &&
+                    row.usedAssignedAgent !== false &&
+                    row.agentAttribution !== 'OUTSIDE_AGENT'
+                ).length
+              }{' '}
+              closed of {data.dealRows.length} total
+            </span>
+          )}
+        </h3>
         {data.dealRows.length === 0 ? (
           <p className="text-sm text-foreground-subtle">No deals for AGIT referrals in this timeframe.</p>
         ) : (
@@ -3478,6 +3496,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">MC</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Closing Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent Used</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Used AFC</th>
                 </tr>
               </thead>
@@ -3493,7 +3512,16 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                         {row.borrowerName}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted capitalize">{row.status.replace(/_/g, ' ')}</td>
+                    <td className="px-4 py-3 text-sm text-foreground-muted">
+                      <div className="flex flex-col gap-1">
+                        <span className="capitalize">{row.status.replace(/_/g, ' ')}</span>
+                        {(row.referralStatus === 'Lost' || row.usedAssignedAgent === false) && (
+                          <span className="inline-flex w-fit items-center rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700">
+                            {row.referralStatus === 'Lost' ? 'Lost - agent not used' : 'Agent not used'}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(row.expectedAmountCents)}</td>
                     <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(row.receivedAmountCents)}</td>
                     <td className="px-4 py-3 text-sm text-foreground-muted">
@@ -3544,6 +3572,9 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                     </td>
                     <td className="px-4 py-3 text-sm text-foreground-muted">
                       {row.closingDate ? formatDate(row.closingDate) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-foreground-muted">
+                      {row.usedAssignedAgent === null ? '—' : row.usedAssignedAgent ? 'Yes' : 'No'}
                     </td>
                     <td className="px-4 py-3 text-sm text-foreground-muted">
                       {row.usedAfc === null ? '—' : row.usedAfc ? 'Yes' : 'No'}

@@ -4178,6 +4178,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const agitClosedOrPaidPayments = agitFilteredPayments.filter(
     (payment) =>
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+      payment.usedAssignedAgent !== false &&
       CLOSED_DEAL_STATUSES.has(payment.status) &&
       resolveDealSideForMetrics(
         payment.side,
@@ -4238,7 +4239,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       mcEmail: mcId ? lenderEmailMap.get(mcId) ?? null : null,
       mcPhone: mcId ? lenderPhoneMap.get(mcId) ?? null : null,
       closingDate: payment.closingDate?.toISOString() ?? null,
-      usedAfc: payment.usedAfc ?? null
+      usedAfc: payment.usedAfc ?? null,
+      referralStatus: payment.referral?.status ?? null,
+      usedAssignedAgent: payment.usedAssignedAgent ?? null,
+      agentAttribution: payment.agentAttribution ?? null
     };
   });
 
