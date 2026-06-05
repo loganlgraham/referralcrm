@@ -1175,11 +1175,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return true;
   });
   const allClosedDealsInNetwork = paymentsByNetwork.filter((payment) => CLOSED_DEAL_STATUSES.has(payment.status));
+  // MC closed-deal leaderboards (close rate, outside-lender loss, KPI ranking) must
+  // count deals that actually *closed* within the timeframe, so bucket by the real
+  // closing date rather than metricDate (paid/invoice/updatedAt). resolveClosingDate
+  // falls back to metricDate only when a payment has no closingDate/lastClosedAt.
   const allClosedDealsInTimeframe = allClosedDealsInNetwork.filter((payment) => {
-    const metricDate = payment.metricDate ?? resolveMetricDate(payment);
-    if (!metricDate) return false;
-    if (timeframeStart && metricDate < timeframeStart) return false;
-    if (timeframeEnd && metricDate > timeframeEnd) return false;
+    const closingDate = resolveClosingDate(payment);
+    if (closingDate === null || Number.isNaN(closingDate.getTime())) return false;
+    if (timeframeStart && closingDate < timeframeStart) return false;
+    if (timeframeEnd && closingDate > timeframeEnd) return false;
     return true;
   });
   const allClosedDealsInPushbackWindow = allClosedDealsInNetwork.filter((payment) => {
