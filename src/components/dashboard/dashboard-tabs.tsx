@@ -3516,8 +3516,8 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                       <div className="flex flex-col gap-1">
                         <span className="capitalize">{row.status.replace(/_/g, ' ')}</span>
                         {(row.referralStatus === 'Lost' || row.usedAssignedAgent === false) && (
-                          <span className="inline-flex w-fit items-center rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700">
-                            {row.referralStatus === 'Lost' ? 'Lost - agent not used' : 'Agent not used'}
+                          <span className="inline-flex w-fit items-center justify-center whitespace-nowrap rounded-full bg-rose-100 px-2.5 py-0.5 text-center text-xs font-medium text-rose-700">
+                            Agent not used
                           </span>
                         )}
                       </div>
