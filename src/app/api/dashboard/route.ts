@@ -2248,9 +2248,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   const mcAfcClosedDealCountMap = new Map<string, number>();
-  paymentsByNetwork.forEach((payment) => {
-    if (payment.usedAfc !== true || !CLOSED_DEAL_STATUSES.has(payment.status)) return;
-    if (!filteredReferralIds.has(payment.referral._id.toString())) return;
+  eligibleClosedDealsInTimeframe.forEach((payment) => {
+    if (payment.usedAfc !== true) return;
     const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     mcAfcClosedDealCountMap.set(mcKey, (mcAfcClosedDealCountMap.get(mcKey) ?? 0) + 1);
   });
