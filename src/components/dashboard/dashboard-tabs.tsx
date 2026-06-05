@@ -16,8 +16,9 @@ import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatDate, formatNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
-import { Trash2 } from 'lucide-react';
+import { Info, Trash2 } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
+import { Tooltip } from '@/components/ui/tooltip';
 import { DEAL_STATUS_LABELS, type DealStatus } from '@/constants/deals';
 import {
   TimeframeDropdown,
@@ -2528,18 +2529,22 @@ function ClosedDealsTable({
 function McRankedList({ title, entries }: { title: string; entries: McRankedEntry[] }) {
   const [selectedMc, setSelectedMc] = useState<McRankedEntry | null>(null);
   const scrollMaxHeight = `${RANKED_LIST_PREVIEW_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
+  const description = "Composite score blends weighted MC KPIs scored relative to peers this period. The top drivers of rank are closed deals using AFC (highest weight), fewer closed deals without AFC, total revenue, and referral (transfer) volume. Close speed, pushed-back deals, closes without the assigned agent, financing terminations, NPS, pipeline aging, source quality, and forecast accuracy act as lower-weight quality guardrails. MCs with fewer than 3 referrals are marked provisional and receive a volume discount, but still keep a score. KPIs with no data this period are excluded from that MC's weighted average rather than dragging the score toward the median.";
 
   return (
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
-      <p className="mt-1 text-xs text-foreground-subtle">
-        Composite score blends weighted MC KPIs scored relative to peers this period. The top drivers of rank are closed
-        deals using AFC (highest weight), fewer closed deals without AFC, total revenue, and referral (transfer) volume.
-        Close speed, pushed-back deals, closes without the assigned agent, financing terminations, NPS, pipeline aging,
-        source quality, and forecast accuracy act as lower-weight quality guardrails. MCs with fewer than 3 referrals are
-        marked provisional and receive a volume discount, but still keep a score. KPIs with no data this period are
-        excluded from that MC's weighted average rather than dragging the score toward the median.
-      </p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+        <Tooltip content={description} side="bottom" className="w-80 max-w-[calc(100vw-3rem)] text-left leading-relaxed">
+          <button
+            type="button"
+            aria-label={`${title} details`}
+            className="inline-flex rounded-full text-foreground-subtle transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+          >
+            <Info className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </Tooltip>
+      </div>
       {entries.length === 0 ? (
         <p className="py-8 text-center text-sm text-foreground-subtle">No MCs with data for this period.</p>
       ) : (
