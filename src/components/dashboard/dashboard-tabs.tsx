@@ -3512,30 +3512,28 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                         {row.borrowerName}
                       </Link>
                     </td>
+                    <td className="px-4 py-3 text-sm text-foreground-muted capitalize">{row.status.replace(/_/g, ' ')}</td>
+                    <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(row.expectedAmountCents)}</td>
+                    <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(row.receivedAmountCents)}</td>
                     <td className="px-4 py-3 text-sm text-foreground-muted">
                       <div className="flex flex-col gap-1">
-                        <span className="capitalize">{row.status.replace(/_/g, ' ')}</span>
+                        {row.agentId ? (
+                          <Link
+                            prefetch={false}
+                            href={`/agents/${row.agentId}`}
+                            className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+                          >
+                            {row.agentName || 'Agent'}
+                          </Link>
+                        ) : (
+                          <span className="text-foreground-subtle">Unassigned</span>
+                        )}
                         {(row.referralStatus === 'Lost' || row.usedAssignedAgent === false) && (
                           <span className="inline-flex w-fit items-center justify-center whitespace-nowrap rounded-full bg-rose-100 px-2.5 py-0.5 text-center text-xs font-medium text-rose-700">
                             Agent not used
                           </span>
                         )}
                       </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(row.expectedAmountCents)}</td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(row.receivedAmountCents)}</td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {row.agentId ? (
-                        <Link
-                          prefetch={false}
-                          href={`/agents/${row.agentId}`}
-                          className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
-                        >
-                          {row.agentName || 'Agent'}
-                        </Link>
-                      ) : (
-                        <span className="text-foreground-subtle">Unassigned</span>
-                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-foreground-muted">
                       {row.mcId ? (
