@@ -769,20 +769,30 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     totalRevenueGenerated: 6,
     referralCount: 5,
     revenuePerReferral: 2,
-    pipelineCashConversion: 2,
     closeVelocityMedianDays: 2,
     dealPushbackRate: 2,
-    noAfcCloseRate: 2,
     noAssignedAgentCloseRate: 2,
     financingTerminationRate: 2,
-    afcCaptureRate: 2,
-    ahaAttachRate: 2,
-    ahaOosAttachRate: 2,
     npsScore: 2,
     agingPipelineRisk: 1,
     sourceQualityIndex: 1,
     forecastAccuracy: 1
   } as const;
+  const MC_KPI_ORDER = [
+    'closedDealsWithAfc',
+    'closedDealsWithoutAfc',
+    'totalRevenueGenerated',
+    'referralCount',
+    'revenuePerReferral',
+    'closeVelocityMedianDays',
+    'dealPushbackRate',
+    'noAssignedAgentCloseRate',
+    'financingTerminationRate',
+    'npsScore',
+    'agingPipelineRisk',
+    'sourceQualityIndex',
+    'forecastAccuracy'
+  ] as const;
 
   // Mirrors route.ts: KPIs with no data (null) are excluded from the
   // denominator rather than filled with a neutral 50.
@@ -808,10 +818,10 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
 
     const guardrailWeights = [
       MC_KPI_WEIGHTS.revenuePerReferral,
-      MC_KPI_WEIGHTS.noAfcCloseRate,
-      MC_KPI_WEIGHTS.afcCaptureRate,
-      MC_KPI_WEIGHTS.ahaAttachRate,
-      MC_KPI_WEIGHTS.ahaOosAttachRate,
+      MC_KPI_WEIGHTS.closeVelocityMedianDays,
+      MC_KPI_WEIGHTS.dealPushbackRate,
+      MC_KPI_WEIGHTS.noAssignedAgentCloseRate,
+      MC_KPI_WEIGHTS.financingTerminationRate,
       MC_KPI_WEIGHTS.npsScore,
       MC_KPI_WEIGHTS.agingPipelineRisk,
       MC_KPI_WEIGHTS.sourceQualityIndex,
@@ -835,19 +845,19 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     expect(scoreForMcB).toBeCloseTo(42.86, 2);
   });
 
-  it('rewards AFC-true closed deals over the same volume of no-AFC closes', () => {
+  it('penalizes closed-deal volume without AFC as a negative critical KPI', () => {
     const scoreForMcA = compositeScore([
       { weight: MC_KPI_WEIGHTS.closedDealsWithAfc, normalized: 100 },
-      { weight: MC_KPI_WEIGHTS.closedDealsWithoutAfc, normalized: 0 }
+      { weight: MC_KPI_WEIGHTS.closedDealsWithoutAfc, normalized: 100 }
     ]);
     const scoreForMcB = compositeScore([
       { weight: MC_KPI_WEIGHTS.closedDealsWithAfc, normalized: 0 },
-      { weight: MC_KPI_WEIGHTS.closedDealsWithoutAfc, normalized: 100 }
+      { weight: MC_KPI_WEIGHTS.closedDealsWithoutAfc, normalized: 0 }
     ]);
 
     expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
-    expect(scoreForMcA).toBeCloseTo(53.33, 2);
-    expect(scoreForMcB).toBeCloseTo(46.67, 2);
+    expect(scoreForMcA).toBeCloseTo(100, 2);
+    expect(scoreForMcB).toBeCloseTo(0, 2);
   });
 
   it('excludes KPIs with no data from the weighted denominator', () => {
@@ -864,19 +874,18 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     expect(scoreForMcB).toBeCloseTo(25, 2);
   });
 
-  it('feeds per-MC AHA and AHA OOS attach rate into the composite as guardrails', () => {
-    const scoreForMcA = compositeScore([
-      { weight: MC_KPI_WEIGHTS.totalRevenueGenerated, normalized: 50 },
-      { weight: MC_KPI_WEIGHTS.ahaAttachRate, normalized: 100 },
-      { weight: MC_KPI_WEIGHTS.ahaOosAttachRate, normalized: 100 }
-    ]);
-    const scoreForMcB = compositeScore([
-      { weight: MC_KPI_WEIGHTS.totalRevenueGenerated, normalized: 50 },
-      { weight: MC_KPI_WEIGHTS.ahaAttachRate, normalized: 0 },
-      { weight: MC_KPI_WEIGHTS.ahaOosAttachRate, normalized: 0 }
-    ]);
-
-    expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
+  it('excludes removed and redundant metrics from the composite', () => {
+    const removedKeys = [
+      'pipelineCashConversion',
+      'noAfcCloseRate',
+      'afcCaptureRate',
+      'ahaAttachRate',
+      'ahaOosAttachRate'
+    ];
+    for (const key of removedKeys) {
+      expect(key in MC_KPI_WEIGHTS).toBe(false);
+      expect(MC_KPI_ORDER).not.toContain(key);
+    }
   });
 
   it('rewards higher referral (transfer) counts when other KPI inputs are equal', () => {
@@ -896,32 +905,19 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
   });
 
-  it('lets high revenue outrank a better no-AFC guardrail when inputs are comparable', () => {
+  it('lets high revenue outrank a better without-assigned-agent guardrail when inputs are comparable', () => {
     const scoreForMcA = compositeScore([
       { weight: MC_KPI_WEIGHTS.totalRevenueGenerated, normalized: 100 },
-      { weight: MC_KPI_WEIGHTS.noAfcCloseRate, normalized: 0 }
+      { weight: MC_KPI_WEIGHTS.noAssignedAgentCloseRate, normalized: 0 }
     ]);
     const scoreForMcB = compositeScore([
       { weight: MC_KPI_WEIGHTS.totalRevenueGenerated, normalized: 0 },
-      { weight: MC_KPI_WEIGHTS.noAfcCloseRate, normalized: 100 }
+      { weight: MC_KPI_WEIGHTS.noAssignedAgentCloseRate, normalized: 100 }
     ]);
 
     expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
     expect(scoreForMcA).toBeCloseTo(75, 2);
     expect(scoreForMcB).toBeCloseTo(25, 2);
-  });
-
-  it('penalizes higher close-without-AFC rates as a negative guardrail KPI', () => {
-    const scoreForMcA = compositeScore([
-      { weight: MC_KPI_WEIGHTS.noAfcCloseRate, normalized: 100 },
-      { weight: MC_KPI_WEIGHTS.totalRevenueGenerated, normalized: 50 }
-    ]);
-    const scoreForMcB = compositeScore([
-      { weight: MC_KPI_WEIGHTS.noAfcCloseRate, normalized: 0 },
-      { weight: MC_KPI_WEIGHTS.totalRevenueGenerated, normalized: 50 }
-    ]);
-
-    expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
   });
 
   it('penalizes higher close-without-assigned-agent rates as a negative guardrail KPI', () => {
