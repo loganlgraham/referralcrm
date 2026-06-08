@@ -4,7 +4,6 @@ import EmailProvider from 'next-auth/providers/email';
 import bcrypt from 'bcryptjs';
 import type { NextAuthOptions } from 'next-auth';
 import { Resend } from 'resend';
-import { getClientPromise } from '@/lib/mongodb-client';
 import { connectMongo } from '@/lib/mongoose';
 import { Types } from 'mongoose';
 import { User } from '@/models/user';
@@ -167,8 +166,9 @@ if (!authSecret) {
   console.error('[Auth] WARNING: NEXTAUTH_SECRET or AUTH_SECRET environment variable is not set. Authentication may fail.');
 }
 
-// Lazy initialization: MongoDBAdapter will call this function when it needs the connection
-const getAdapterClientPromise = () => getClientPromise();
+// Reuse mongoose's underlying MongoClient so auth shares the single connection
+// pool instead of opening a second one (halves per-instance connections + monitoring).
+const getAdapterClientPromise = () => connectMongo().then((m) => m.connection.getClient());
 
 export async function persistUserLastLoginAt(input: { id?: string | null; email?: string | null }) {
   const userId = typeof input.id === 'string' && input.id.length > 0 ? input.id : null;

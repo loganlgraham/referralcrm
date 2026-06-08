@@ -16,8 +16,9 @@ import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatDate, formatNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
-import { Trash2 } from 'lucide-react';
+import { Info, Trash2 } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
+import { Tooltip } from '@/components/ui/tooltip';
 import { DEAL_STATUS_LABELS, type DealStatus } from '@/constants/deals';
 import {
   TimeframeDropdown,
@@ -219,6 +220,7 @@ interface DashboardSummary {
   afcDealsLostList: LostDealEntry[];
   afcAttachRate: number;
   ahaDealsLost: number;
+  ahaDealsLostList: LostDealEntry[];
   ahaAttachRate: number;
   ahaOosDealsLost: number;
   ahaOosDealsLostList: LostDealEntry[];
@@ -462,6 +464,9 @@ interface AgitDealRow {
   mcPhone: string | null;
   closingDate: string | null;
   usedAfc: boolean | null;
+  referralStatus: string | null;
+  usedAssignedAgent: boolean | null;
+  agentAttribution: 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT' | null;
 }
 
 interface StaleReferralEntry {
@@ -2002,7 +2007,7 @@ function MainDashboard({
   onPreApprovalSaved: () => void;
   networkFilter: NetworkFilter;
 }) {
-  const [dealsLostModal, setDealsLostModal] = useState<'afc' | 'ahaOos' | null>(null);
+  const [dealsLostModal, setDealsLostModal] = useState<'afc' | 'aha' | 'ahaOos' | null>(null);
   const [pendingClosingsModal, setPendingClosingsModal] = useState<'all' | 'thisMonth' | 'nextMonth' | null>(null);
   const [closedDealsModal, setClosedDealsModal] = useState<
     'generated' | 'closedNotPaid' | 'dealsClosed' | 'avgDaysPaid' | null
@@ -2142,7 +2147,12 @@ function MainDashboard({
       helper: `${formatNumber(summary.afcDealsLost)} buy-side deals lost`,
       onHelperClick: summary.afcDealsLost > 0 ? () => setDealsLostModal('afc') : undefined
     },
-    { label: 'AHA attach rate', value: `${summary.ahaAttachRate.toFixed(1)}%` },
+    {
+      label: 'AHA attach rate',
+      value: `${summary.ahaAttachRate.toFixed(1)}%`,
+      helper: `${formatNumber(summary.ahaDealsLost)} deals lost`,
+      onHelperClick: summary.ahaDealsLost > 0 ? () => setDealsLostModal('aha') : undefined
+    },
     {
       label: 'AHA OOS attach rate',
       value: `${summary.ahaOosAttachRate.toFixed(1)}%`,
@@ -2273,13 +2283,21 @@ function MainDashboard({
       <Modal
         isOpen={dealsLostModal !== null}
         onClose={() => setDealsLostModal(null)}
-        title={dealsLostModal === 'afc' ? 'AFC Deals Lost' : 'AHA OOS Deals Lost'}
+        title={
+          dealsLostModal === 'afc'
+            ? 'AFC Deals Lost'
+            : dealsLostModal === 'aha'
+              ? 'AHA Deals Lost'
+              : 'AHA OOS Deals Lost'
+        }
         size="lg"
       >
         <DealsLostTable
           deals={
             dealsLostModal === 'afc'
               ? summary.afcDealsLostList
+              : dealsLostModal === 'aha'
+                ? summary.ahaDealsLostList
               : dealsLostModal === 'ahaOos'
                 ? summary.ahaOosDealsLostList
                 : []
@@ -2525,17 +2543,22 @@ function ClosedDealsTable({
 function McRankedList({ title, entries }: { title: string; entries: McRankedEntry[] }) {
   const [selectedMc, setSelectedMc] = useState<McRankedEntry | null>(null);
   const scrollMaxHeight = `${RANKED_LIST_PREVIEW_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
+  const description = "Composite score blends weighted MC KPIs scored relative to peers this period. The top drivers of rank are AFC close rate, total AFC deal volume, closed deals using AFC, fewer closed deals without AFC, total revenue, and referral (transfer) volume. Close speed, pushed-back deals, closes without the assigned agent, financing terminations, NPS, pipeline aging, source quality, and forecast accuracy act as lower-weight quality guardrails. MCs with fewer than 3 referrals are marked provisional and receive a volume discount, but still keep a score. KPIs with no data this period are excluded from that MC's weighted average rather than dragging the score toward the median.";
 
   return (
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
-      <p className="mt-1 text-xs text-foreground-subtle">
-        Composite score blends weighted MC KPIs scored relative to peers this period. The top drivers of rank are closed
-        deals using AFC (highest weight), closed deals without AFC, total revenue, and referral (transfer) volume. AFC
-        capture, AHA / AHA OOS attach, close speed, pushback, and NPS act as lower-weight quality guardrails. MCs with
-        fewer than 3 referrals are marked provisional and receive a reliability adjustment. KPIs with no data this period
-        are excluded from that MC's weighted average rather than dragging the score toward the median.
-      </p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+        <Tooltip content={description} side="bottom" className="w-80 max-w-[calc(100vw-3rem)] text-left leading-relaxed">
+          <button
+            type="button"
+            aria-label={`${title} details`}
+            className="inline-flex rounded-full text-foreground-subtle transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+          >
+            <Info className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </Tooltip>
+      </div>
       {entries.length === 0 ? (
         <p className="py-8 text-center text-sm text-foreground-subtle">No MCs with data for this period.</p>
       ) : (
@@ -2607,7 +2630,7 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
                 <span className="font-semibold text-foreground">{formatNumber(selectedMc.referralCount)}</span>
               </p>
               {!selectedMc.qualified ? (
-                <p className="mt-1">Provisional ranking: fewer than 3 referrals in selected timeframe.</p>
+                <p className="mt-1">Provisional ranking: fewer than 3 referrals in selected timeframe, with a volume discount applied.</p>
               ) : null}
             </div>
             <div>
@@ -3463,7 +3486,22 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
 
       {/* AGIT Deals Table */}
       <div>
-        <h3 className="mb-3 text-lg font-semibold text-foreground">AGIT Deals</h3>
+        <h3 className="mb-3 text-lg font-semibold text-foreground">
+          AGIT Deals
+          {data.dealRows.length > 0 && (
+            <span className="ml-2 text-sm font-normal text-foreground-subtle">
+              {
+                data.dealRows.filter(
+                  (row) =>
+                    ['closed', 'payment_sent', 'paid'].includes(row.status) &&
+                    row.usedAssignedAgent !== false &&
+                    row.agentAttribution !== 'OUTSIDE_AGENT'
+                ).length
+              }{' '}
+              closed of {data.dealRows.length} total
+            </span>
+          )}
+        </h3>
         {data.dealRows.length === 0 ? (
           <p className="text-sm text-foreground-subtle">No deals for AGIT referrals in this timeframe.</p>
         ) : (
@@ -3478,6 +3516,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">MC</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Closing Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent Used</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Used AFC</th>
                 </tr>
               </thead>
@@ -3497,17 +3536,24 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                     <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(row.expectedAmountCents)}</td>
                     <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(row.receivedAmountCents)}</td>
                     <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {row.agentId ? (
-                        <Link
-                          prefetch={false}
-                          href={`/agents/${row.agentId}`}
-                          className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
-                        >
-                          {row.agentName || 'Agent'}
-                        </Link>
-                      ) : (
-                        <span className="text-foreground-subtle">Unassigned</span>
-                      )}
+                      <div className="flex flex-col gap-1">
+                        {row.agentId ? (
+                          <Link
+                            prefetch={false}
+                            href={`/agents/${row.agentId}`}
+                            className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+                          >
+                            {row.agentName || 'Agent'}
+                          </Link>
+                        ) : (
+                          <span className="text-foreground-subtle">Unassigned</span>
+                        )}
+                        {(row.referralStatus === 'Lost' || row.usedAssignedAgent === false) && (
+                          <span className="inline-flex w-fit items-center justify-center whitespace-nowrap rounded-full bg-rose-100 px-2.5 py-0.5 text-center text-xs font-medium text-rose-700">
+                            Agent not used
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-foreground-muted">
                       {row.mcId ? (
@@ -3544,6 +3590,9 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                     </td>
                     <td className="px-4 py-3 text-sm text-foreground-muted">
                       {row.closingDate ? formatDate(row.closingDate) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-foreground-muted">
+                      {row.usedAssignedAgent === null ? '—' : row.usedAssignedAgent ? 'Yes' : 'No'}
                     </td>
                     <td className="px-4 py-3 text-sm text-foreground-muted">
                       {row.usedAfc === null ? '—' : row.usedAfc ? 'Yes' : 'No'}

@@ -151,6 +151,116 @@ describe('Dashboard Metrics - Closed Deal Eligibility', () => {
   });
 });
 
+describe('Dashboard Metrics - MC AFC Leaderboard KPIs', () => {
+  it('calculates AFC close rate from period AFC closed-like deals over all MC referrals', () => {
+    const referralByMcMap = new Map([['mcA', 4]]);
+    const closedStatuses = new Set(['closed', 'payment_sent', 'paid']);
+    const eligibleClosedDealsInTimeframe = [
+      { status: 'closed', usedAfc: true, referral: { _id: 'ref-1', lender: 'mcA' } },
+      { status: 'payment_sent', usedAfc: true, referral: { _id: 'ref-2', lender: 'mcA' } },
+      { status: 'paid', usedAfc: true, referral: { _id: 'older-referral', lender: 'mcA' } },
+      { status: 'paid', usedAfc: false, referral: { _id: 'ref-3', lender: 'mcA' } }
+    ];
+
+    const afcClosedByMc = new Map<string, number>();
+    eligibleClosedDealsInTimeframe.forEach((payment) => {
+      if (payment.usedAfc !== true || !closedStatuses.has(payment.status)) return;
+      const mcKey = payment.referral.lender;
+      afcClosedByMc.set(mcKey, (afcClosedByMc.get(mcKey) ?? 0) + 1);
+    });
+
+    const afcClosedDeals = afcClosedByMc.get('mcA') ?? 0;
+    const totalReferrals = referralByMcMap.get('mcA') ?? 0;
+    const afcCloseRate = totalReferrals === 0 ? 0 : (afcClosedDeals / totalReferrals) * 100;
+
+    expect(afcClosedDeals).toBe(3);
+    expect(totalReferrals).toBe(4);
+    expect(afcCloseRate).toBe(75);
+  });
+
+  it('counts AFC deals across every payment status, including terminated', () => {
+    const timeframe = {
+      start: new Date('2026-01-01T00:00:00.000Z'),
+      end: new Date('2026-01-31T23:59:59.999Z')
+    };
+    const payments = [
+      {
+        status: 'under_contract',
+        usedAfc: true,
+        underContractDate: new Date('2026-01-05T00:00:00.000Z'),
+        referral: { lender: 'mcA' }
+      },
+      {
+        status: 'paid',
+        usedAfc: true,
+        underContractDate: new Date('2026-01-10T00:00:00.000Z'),
+        referral: { lender: 'mcA' }
+      },
+      {
+        status: 'terminated',
+        usedAfc: true,
+        underContractDate: new Date('2026-01-12T00:00:00.000Z'),
+        referral: { lender: 'mcA' }
+      },
+      {
+        status: 'terminated',
+        usedAfc: false,
+        underContractDate: new Date('2026-01-15T00:00:00.000Z'),
+        referral: { lender: 'mcA' }
+      },
+      {
+        status: 'closed',
+        usedAfc: true,
+        underContractDate: new Date('2025-12-31T00:00:00.000Z'),
+        referral: { lender: 'mcA' }
+      }
+    ];
+
+    const isWithinTimeframe = (date: Date) => date >= timeframe.start && date <= timeframe.end;
+    const afcDealsByMc = new Map<string, number>();
+
+    payments.forEach((payment) => {
+      if (payment.usedAfc !== true) return;
+      if (!isWithinTimeframe(payment.underContractDate)) return;
+      const mcKey = payment.referral.lender;
+      afcDealsByMc.set(mcKey, (afcDealsByMc.get(mcKey) ?? 0) + 1);
+    });
+
+    expect(afcDealsByMc.get('mcA')).toBe(3);
+  });
+});
+
+describe('Dashboard Metrics - MC Assigned Agent Guardrail', () => {
+  it('counts closes without assigned agent from all period closed-like deals', () => {
+    const allClosedDealsInTimeframe = [
+      { status: 'closed', usedAssignedAgent: true, referral: { lender: 'mcA' } },
+      { status: 'payment_sent', usedAssignedAgent: false, referral: { lender: 'mcA' } },
+      { status: 'paid', usedAssignedAgent: false, referral: { lender: 'mcA' } },
+      { status: 'closed', usedAssignedAgent: null, referral: { lender: 'mcA' } }
+    ];
+
+    const totalClosedDealsByMc = new Map<string, number>();
+    const noAssignedAgentClosesByMc = new Map<string, number>();
+
+    allClosedDealsInTimeframe.forEach((payment) => {
+      const mcKey = payment.referral.lender;
+      totalClosedDealsByMc.set(mcKey, (totalClosedDealsByMc.get(mcKey) ?? 0) + 1);
+      if (payment.usedAssignedAgent === false) {
+        noAssignedAgentClosesByMc.set(mcKey, (noAssignedAgentClosesByMc.get(mcKey) ?? 0) + 1);
+      }
+    });
+
+    const noAssignedAgentCloses = noAssignedAgentClosesByMc.get('mcA') ?? 0;
+    const totalClosedDeals = totalClosedDealsByMc.get('mcA') ?? 0;
+    const noAssignedAgentCloseRate =
+      totalClosedDeals === 0 ? 0 : (noAssignedAgentCloses / totalClosedDeals) * 100;
+
+    expect(noAssignedAgentCloses).toBe(2);
+    expect(totalClosedDeals).toBe(4);
+    expect(noAssignedAgentCloseRate).toBe(50);
+  });
+});
+
 describe('Dashboard Metrics - Revenue Calculations', () => {
   it('calculates realized revenue from received amounts', () => {
     const payments = [
@@ -763,26 +873,45 @@ describe('Dashboard Metrics - AHA Composite Scoring', () => {
 describe('Dashboard Metrics - MC Composite Scoring', () => {
   // Mirror of MC_KPI_WEIGHTS in src/app/api/dashboard/route.ts. The four
   // volume/revenue drivers carry the most weight; the rest are guardrails.
+  const MC_MIN_REFERRALS_FOR_RANK = 3;
+  const MC_MIN_RELIABILITY_FACTOR = 0.6;
   const MC_KPI_WEIGHTS = {
     closedDealsWithAfc: 8,
     closedDealsWithoutAfc: 7,
     totalRevenueGenerated: 6,
     referralCount: 5,
     revenuePerReferral: 2,
-    pipelineCashConversion: 2,
     closeVelocityMedianDays: 2,
     dealPushbackRate: 2,
-    noAfcCloseRate: 2,
     noAssignedAgentCloseRate: 2,
     financingTerminationRate: 2,
-    afcCaptureRate: 2,
-    ahaAttachRate: 2,
-    ahaOosAttachRate: 2,
     npsScore: 2,
     agingPipelineRisk: 1,
     sourceQualityIndex: 1,
     forecastAccuracy: 1
   } as const;
+  const MC_KPI_ORDER = [
+    'closedDealsWithAfc',
+    'closedDealsWithoutAfc',
+    'totalRevenueGenerated',
+    'referralCount',
+    'revenuePerReferral',
+    'closeVelocityMedianDays',
+    'dealPushbackRate',
+    'noAssignedAgentCloseRate',
+    'financingTerminationRate',
+    'npsScore',
+    'agingPipelineRisk',
+    'sourceQualityIndex',
+    'forecastAccuracy'
+  ] as const;
+  const mcScoreWithReliability = (baseScore: number, referralCount: number): number => {
+    const reliabilityFactor = Math.max(
+      MC_MIN_RELIABILITY_FACTOR,
+      computeAhaReliabilityFactor(referralCount, MC_MIN_REFERRALS_FOR_RANK)
+    );
+    return Math.round(baseScore * reliabilityFactor * 10) / 10;
+  };
 
   // Mirrors route.ts: KPIs with no data (null) are excluded from the
   // denominator rather than filled with a neutral 50.
@@ -808,10 +937,10 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
 
     const guardrailWeights = [
       MC_KPI_WEIGHTS.revenuePerReferral,
-      MC_KPI_WEIGHTS.noAfcCloseRate,
-      MC_KPI_WEIGHTS.afcCaptureRate,
-      MC_KPI_WEIGHTS.ahaAttachRate,
-      MC_KPI_WEIGHTS.ahaOosAttachRate,
+      MC_KPI_WEIGHTS.closeVelocityMedianDays,
+      MC_KPI_WEIGHTS.dealPushbackRate,
+      MC_KPI_WEIGHTS.noAssignedAgentCloseRate,
+      MC_KPI_WEIGHTS.financingTerminationRate,
       MC_KPI_WEIGHTS.npsScore,
       MC_KPI_WEIGHTS.agingPipelineRisk,
       MC_KPI_WEIGHTS.sourceQualityIndex,
@@ -835,19 +964,19 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     expect(scoreForMcB).toBeCloseTo(42.86, 2);
   });
 
-  it('rewards AFC-true closed deals over the same volume of no-AFC closes', () => {
+  it('penalizes closed-deal volume without AFC as a negative critical KPI', () => {
     const scoreForMcA = compositeScore([
       { weight: MC_KPI_WEIGHTS.closedDealsWithAfc, normalized: 100 },
-      { weight: MC_KPI_WEIGHTS.closedDealsWithoutAfc, normalized: 0 }
+      { weight: MC_KPI_WEIGHTS.closedDealsWithoutAfc, normalized: 100 }
     ]);
     const scoreForMcB = compositeScore([
       { weight: MC_KPI_WEIGHTS.closedDealsWithAfc, normalized: 0 },
-      { weight: MC_KPI_WEIGHTS.closedDealsWithoutAfc, normalized: 100 }
+      { weight: MC_KPI_WEIGHTS.closedDealsWithoutAfc, normalized: 0 }
     ]);
 
     expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
-    expect(scoreForMcA).toBeCloseTo(53.33, 2);
-    expect(scoreForMcB).toBeCloseTo(46.67, 2);
+    expect(scoreForMcA).toBeCloseTo(100, 2);
+    expect(scoreForMcB).toBeCloseTo(0, 2);
   });
 
   it('excludes KPIs with no data from the weighted denominator', () => {
@@ -864,19 +993,26 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     expect(scoreForMcB).toBeCloseTo(25, 2);
   });
 
-  it('feeds per-MC AHA and AHA OOS attach rate into the composite as guardrails', () => {
-    const scoreForMcA = compositeScore([
-      { weight: MC_KPI_WEIGHTS.totalRevenueGenerated, normalized: 50 },
-      { weight: MC_KPI_WEIGHTS.ahaAttachRate, normalized: 100 },
-      { weight: MC_KPI_WEIGHTS.ahaOosAttachRate, normalized: 100 }
-    ]);
-    const scoreForMcB = compositeScore([
-      { weight: MC_KPI_WEIGHTS.totalRevenueGenerated, normalized: 50 },
-      { weight: MC_KPI_WEIGHTS.ahaAttachRate, normalized: 0 },
-      { weight: MC_KPI_WEIGHTS.ahaOosAttachRate, normalized: 0 }
-    ]);
+  it('keeps zero-referral MCs scored with a provisional reliability floor', () => {
+    const baseScore = 76.1;
 
-    expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
+    expect(computeAhaReliabilityFactor(0, MC_MIN_REFERRALS_FOR_RANK)).toBe(0);
+    expect(mcScoreWithReliability(baseScore, 0)).toBeCloseTo(45.7, 1);
+    expect(mcScoreWithReliability(baseScore, MC_MIN_REFERRALS_FOR_RANK)).toBeCloseTo(baseScore, 1);
+  });
+
+  it('excludes removed and redundant metrics from the composite', () => {
+    const removedKeys = [
+      'pipelineCashConversion',
+      'noAfcCloseRate',
+      'afcCaptureRate',
+      'ahaAttachRate',
+      'ahaOosAttachRate'
+    ];
+    for (const key of removedKeys) {
+      expect(key in MC_KPI_WEIGHTS).toBe(false);
+      expect(MC_KPI_ORDER).not.toContain(key);
+    }
   });
 
   it('rewards higher referral (transfer) counts when other KPI inputs are equal', () => {
@@ -896,32 +1032,19 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
   });
 
-  it('lets high revenue outrank a better no-AFC guardrail when inputs are comparable', () => {
+  it('lets high revenue outrank a better without-assigned-agent guardrail when inputs are comparable', () => {
     const scoreForMcA = compositeScore([
       { weight: MC_KPI_WEIGHTS.totalRevenueGenerated, normalized: 100 },
-      { weight: MC_KPI_WEIGHTS.noAfcCloseRate, normalized: 0 }
+      { weight: MC_KPI_WEIGHTS.noAssignedAgentCloseRate, normalized: 0 }
     ]);
     const scoreForMcB = compositeScore([
       { weight: MC_KPI_WEIGHTS.totalRevenueGenerated, normalized: 0 },
-      { weight: MC_KPI_WEIGHTS.noAfcCloseRate, normalized: 100 }
+      { weight: MC_KPI_WEIGHTS.noAssignedAgentCloseRate, normalized: 100 }
     ]);
 
     expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
     expect(scoreForMcA).toBeCloseTo(75, 2);
     expect(scoreForMcB).toBeCloseTo(25, 2);
-  });
-
-  it('penalizes higher close-without-AFC rates as a negative guardrail KPI', () => {
-    const scoreForMcA = compositeScore([
-      { weight: MC_KPI_WEIGHTS.noAfcCloseRate, normalized: 100 },
-      { weight: MC_KPI_WEIGHTS.totalRevenueGenerated, normalized: 50 }
-    ]);
-    const scoreForMcB = compositeScore([
-      { weight: MC_KPI_WEIGHTS.noAfcCloseRate, normalized: 0 },
-      { weight: MC_KPI_WEIGHTS.totalRevenueGenerated, normalized: 50 }
-    ]);
-
-    expect(scoreForMcA).toBeGreaterThan(scoreForMcB);
   });
 
   it('penalizes higher close-without-assigned-agent rates as a negative guardrail KPI', () => {

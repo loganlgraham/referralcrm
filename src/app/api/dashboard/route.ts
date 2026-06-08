@@ -71,6 +71,8 @@ import {
   type TrendPoint
 } from '@/lib/server/dashboard/timeframe';
 
+export const dynamic = 'force-dynamic';
+
 type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
 
 interface DashboardRequestContext {
@@ -109,6 +111,7 @@ interface AggregatedPayment {
     timestamp?: Date | null;
   }> | null;
   terminatedReason?: 'inspection' | 'appraisal' | 'financing' | 'changed_mind' | null;
+  underContractDate?: Date | null;
   paidDate?: Date | null;
   invoiceDate?: Date | null;
   updatedAt: Date;
@@ -706,6 +709,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           afcDealsLostList: [],
           afcAttachRate: 0,
           ahaDealsLost: 0,
+          ahaDealsLostList: [],
           ahaAttachRate: 0,
           ahaOosDealsLost: 0,
           ahaOosDealsLostList: [],
@@ -895,6 +899,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         closingDatePushbackCount: 1,
         closingDatePushbacks: 1,
         terminatedReason: 1,
+        underContractDate: 1,
         paidDate: 1,
         invoiceDate: 1,
         updatedAt: 1,
@@ -1006,7 +1011,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (payment.agentId) agentIds.add(payment.agentId.toString());
   });
 
-  terminatedWithinTimeframe.forEach((payment) => {
+  terminatedWithMetric.forEach((payment) => {
+    if (payment.referral?.lender) lenderIds.add(payment.referral.lender.toString());
     if (payment.referral?.assignedAgent) agentIds.add(payment.referral.assignedAgent.toString());
     if (payment.agentId) agentIds.add(payment.agentId.toString());
   });
@@ -1116,6 +1122,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     context.networkFilter === 'ALL'
       ? terminatedWithinTimeframe
       : terminatedWithinTimeframe.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
+  const terminatedByNetwork =
+    context.networkFilter === 'ALL'
+      ? terminatedWithMetric
+      : terminatedWithMetric.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
 
   const totalReferrals = filteredReferrals.length;
   const referralRequestsBySourceMap = new Map<string, number>();
@@ -1166,11 +1176,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return true;
   });
   const allClosedDealsInNetwork = paymentsByNetwork.filter((payment) => CLOSED_DEAL_STATUSES.has(payment.status));
+  // MC closed-deal leaderboards (close rate, outside-lender loss, KPI ranking) must
+  // count deals that actually *closed* within the timeframe, so bucket by the real
+  // closing date rather than metricDate (paid/invoice/updatedAt). resolveClosingDate
+  // falls back to metricDate only when a payment has no closingDate/lastClosedAt.
   const allClosedDealsInTimeframe = allClosedDealsInNetwork.filter((payment) => {
-    const metricDate = payment.metricDate ?? resolveMetricDate(payment);
-    if (!metricDate) return false;
-    if (timeframeStart && metricDate < timeframeStart) return false;
-    if (timeframeEnd && metricDate > timeframeEnd) return false;
+    const closingDate = resolveClosingDate(payment);
+    if (closingDate === null || Number.isNaN(closingDate.getTime())) return false;
+    if (timeframeStart && closingDate < timeframeStart) return false;
+    if (timeframeEnd && closingDate > timeframeEnd) return false;
     return true;
   });
   const allClosedDealsInPushbackWindow = allClosedDealsInNetwork.filter((payment) => {
@@ -1893,6 +1907,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .filter((payment) => !payment.usedAfc)
     .map(serializeLostDeal);
 
+  const ahaDealsLostList = ahaRelevant
+    .filter((payment) => !payment.usedAssignedAgent)
+    .map(serializeLostDeal);
+
   const ahaOosDealsLostList = ahaOosRelevant
     .filter((payment) => !payment.usedAssignedAgent)
     .map(serializeLostDeal);
@@ -2205,20 +2223,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const mcAssignedAgentClosesMap = new Map<string, number>();
   const mcOutsideLenderLossMap = new Map<string, number>();
   const mcNoAfcClosesMap = new Map<string, number>();
+  const mcAllClosedDealsForAssignedAgentRateMap = new Map<string, number>();
   const mcNoAssignedAgentClosesMap = new Map<string, number>();
   // C-10: MC close-rate leaderboards must use `isClosedDealEligible` so that
   // outside-agent / usedAssignedAgent=false payments don't inflate denominators.
   const eligibleClosedDealsInTimeframe = allClosedDealsInTimeframe.filter((payment) =>
     isClosedDealEligible(payment)
   );
+  allClosedDealsInTimeframe.forEach((payment) => {
+    const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
+    mcAllClosedDealsForAssignedAgentRateMap.set(
+      mcKey,
+      (mcAllClosedDealsForAssignedAgentRateMap.get(mcKey) ?? 0) + 1
+    );
+    if (payment.usedAssignedAgent === false) {
+      mcNoAssignedAgentClosesMap.set(mcKey, (mcNoAssignedAgentClosesMap.get(mcKey) ?? 0) + 1);
+    }
+  });
   eligibleClosedDealsInTimeframe.forEach((payment) => {
     const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     mcTotalClosedDealsMap.set(mcKey, (mcTotalClosedDealsMap.get(mcKey) ?? 0) + 1);
     if (payment.usedAfc !== true) {
       mcNoAfcClosesMap.set(mcKey, (mcNoAfcClosesMap.get(mcKey) ?? 0) + 1);
-    }
-    if (payment.usedAssignedAgent !== true) {
-      mcNoAssignedAgentClosesMap.set(mcKey, (mcNoAssignedAgentClosesMap.get(mcKey) ?? 0) + 1);
     }
     if (payment.usedAssignedAgent === true) {
       mcAssignedAgentClosesMap.set(mcKey, (mcAssignedAgentClosesMap.get(mcKey) ?? 0) + 1);
@@ -2240,29 +2266,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   });
 
-  // Per-MC AHA / AHA OOS attach rate: mirrors the top-level attach logic but
-  // grouped by the referral's lender (MC). Of closed-in-timeframe deals on
-  // AHA / AHA_OOS designated agents, the share that used the assigned agent.
-  const mcAhaAttachMap = new Map<string, { relevant: number; attached: number }>();
-  const mcAhaOosAttachMap = new Map<string, { relevant: number; attached: number }>();
-  attachClosedDealsInTimeframe.forEach((payment) => {
+  const mcAfcClosedDealCountMap = new Map<string, number>();
+  eligibleClosedDealsInTimeframe.forEach((payment) => {
+    if (payment.usedAfc !== true) return;
     const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
-    const designation = getAgentDesignation(payment);
-    if (designation === 'AHA') {
-      const current = mcAhaAttachMap.get(mcKey) ?? { relevant: 0, attached: 0 };
-      current.relevant += 1;
-      if (payment.usedAssignedAgent === true) {
-        current.attached += 1;
-      }
-      mcAhaAttachMap.set(mcKey, current);
-    } else if (designation === 'AHA_OOS') {
-      const current = mcAhaOosAttachMap.get(mcKey) ?? { relevant: 0, attached: 0 };
-      current.relevant += 1;
-      if (payment.usedAssignedAgent === true) {
-        current.attached += 1;
-      }
-      mcAhaOosAttachMap.set(mcKey, current);
-    }
+    mcAfcClosedDealCountMap.set(mcKey, (mcAfcClosedDealCountMap.get(mcKey) ?? 0) + 1);
+  });
+
+  const mcAfcDealCountMap = new Map<string, number>();
+  const allPaymentsWithTerminatedByNetwork = [...paymentsByNetwork, ...terminatedByNetwork];
+  allPaymentsWithTerminatedByNetwork.forEach((payment) => {
+    if (payment.usedAfc !== true) return;
+    const contractDate = payment.underContractDate ?? payment.metricDate ?? resolveMetricDate(payment);
+    if (!isWithinTimeframe(contractDate)) return;
+    const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
+    mcAfcDealCountMap.set(mcKey, (mcAfcDealCountMap.get(mcKey) ?? 0) + 1);
   });
 
   const mcRevenueLeaderboard = Array.from(mcRevenueMap.entries())
@@ -2326,22 +2344,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   };
 
   type McKpiKey =
+    | 'afcCloseRate'
+    | 'afcDealCount'
     | 'closedDealsWithAfc'
     | 'closedDealsWithoutAfc'
     | 'totalRevenueGenerated'
     | 'revenuePerReferral'
-    | 'pipelineCashConversion'
     | 'closeVelocityMedianDays'
     | 'referralCount'
     | 'dealPushbackRate'
-    | 'noAfcCloseRate'
     | 'noAssignedAgentCloseRate'
     | 'financingTerminationRate'
     | 'agingPipelineRisk'
     | 'sourceQualityIndex'
-    | 'afcCaptureRate'
-    | 'ahaAttachRate'
-    | 'ahaOosAttachRate'
     | 'forecastAccuracy'
     | 'npsScore';
 
@@ -2387,81 +2402,70 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   type TerminatedReasonKey = NonNullable<AggregatedPayment['terminatedReason']> | 'unknown';
 
   const MC_MIN_REFERRALS_FOR_RANK = 3;
+  const MC_MIN_RELIABILITY_FACTOR = 0.6;
   const MC_KPI_WEIGHTS: Record<McKpiKey, number> = {
+    afcCloseRate: 8,
+    afcDealCount: 8,
     closedDealsWithAfc: 8,
     closedDealsWithoutAfc: 7,
     totalRevenueGenerated: 6,
     referralCount: 5,
     revenuePerReferral: 2,
-    pipelineCashConversion: 2,
     closeVelocityMedianDays: 2,
     dealPushbackRate: 2,
-    noAfcCloseRate: 2,
     noAssignedAgentCloseRate: 2,
     financingTerminationRate: 2,
-    afcCaptureRate: 2,
-    ahaAttachRate: 2,
-    ahaOosAttachRate: 2,
     npsScore: 2,
     agingPipelineRisk: 1,
     sourceQualityIndex: 1,
     forecastAccuracy: 1
   };
   const MC_KPI_TIERS: Record<McKpiKey, 'critical' | 'high' | 'medium' | 'low'> = {
+    afcCloseRate: 'critical',
+    afcDealCount: 'critical',
     closedDealsWithAfc: 'critical',
     closedDealsWithoutAfc: 'critical',
     totalRevenueGenerated: 'critical',
     referralCount: 'critical',
     revenuePerReferral: 'medium',
-    pipelineCashConversion: 'medium',
     closeVelocityMedianDays: 'medium',
     dealPushbackRate: 'medium',
-    noAfcCloseRate: 'medium',
     noAssignedAgentCloseRate: 'medium',
     financingTerminationRate: 'medium',
-    afcCaptureRate: 'medium',
-    ahaAttachRate: 'medium',
-    ahaOosAttachRate: 'medium',
     npsScore: 'medium',
     agingPipelineRisk: 'low',
     sourceQualityIndex: 'low',
     forecastAccuracy: 'low'
   };
   const MC_KPI_LABELS: Record<McKpiKey, string> = {
+    afcCloseRate: 'AFC Close Rate',
+    afcDealCount: 'AFC Deals',
     closedDealsWithAfc: 'Closed Deals (AFC)',
     closedDealsWithoutAfc: 'Closed Deals (No AFC)',
     totalRevenueGenerated: 'Total Revenue Generated',
     referralCount: 'Referral Count',
     revenuePerReferral: 'Revenue per Referral',
-    pipelineCashConversion: 'Pipeline to Cash',
     closeVelocityMedianDays: 'Median Days Pair -> Close',
     dealPushbackRate: 'Deals Pushed Back Rate',
-    noAfcCloseRate: 'Closes Without AFC',
     noAssignedAgentCloseRate: 'Closes Without Assigned Agent',
     financingTerminationRate: 'Financing Terminations',
-    afcCaptureRate: 'AFC Capture Rate',
-    ahaAttachRate: 'AHA Attach Rate',
-    ahaOosAttachRate: 'AHA OOS Attach Rate',
     agingPipelineRisk: 'Aging Pipeline Risk',
     sourceQualityIndex: 'Source Quality Index',
     forecastAccuracy: 'Forecast Accuracy',
     npsScore: 'NPS Score'
   };
   const MC_KPI_ORDER: McKpiKey[] = [
+    'afcCloseRate',
+    'afcDealCount',
     'closedDealsWithAfc',
     'closedDealsWithoutAfc',
     'totalRevenueGenerated',
     'referralCount',
     'revenuePerReferral',
-    'pipelineCashConversion',
     'closeVelocityMedianDays',
     'dealPushbackRate',
-    'noAfcCloseRate',
     'noAssignedAgentCloseRate',
     'financingTerminationRate',
-    'afcCaptureRate',
-    'ahaAttachRate',
-    'ahaOosAttachRate',
     'npsScore',
     'agingPipelineRisk',
     'sourceQualityIndex',
@@ -2469,7 +2473,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   ];
 
   const mcVelocityDaysMap = new Map<string, number[]>();
-  const mcAfcCaptureMap = new Map<string, { eligible: number; captured: number }>();
   const mcForecastMap = new Map<string, { expected: number; realized: number }>();
   const mcPushbackStatsMap = new Map<
     string,
@@ -2507,24 +2510,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const values = mcVelocityDaysMap.get(key) ?? [];
       values.push(days);
       mcVelocityDaysMap.set(key, values);
-    }
-
-    const side = resolveDealSideForMetrics(
-      payment.side,
-      payment.referral?.dealSide,
-      payment.referral?.clientType ?? null
-    );
-    if (
-      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
-      payment.usedAssignedAgent === true &&
-      isAfcEligibleDeal(payment.referral?.org ?? null, side)
-    ) {
-      const current = mcAfcCaptureMap.get(key) ?? { eligible: 0, captured: 0 };
-      current.eligible += 1;
-      if (payment.usedAfc === true) {
-        current.captured += 1;
-      }
-      mcAfcCaptureMap.set(key, current);
     }
 
     // M-14: forecast accuracy should align with the revenue-eligible deal
@@ -2663,42 +2648,36 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const mcKpiRaw: Record<McKpiKey, Map<string, number>> = {
+    afcCloseRate: new Map(),
+    afcDealCount: new Map(),
     closedDealsWithAfc: new Map(),
     closedDealsWithoutAfc: new Map(),
     totalRevenueGenerated: new Map(),
     revenuePerReferral: new Map(),
-    pipelineCashConversion: new Map(),
     closeVelocityMedianDays: new Map(),
     referralCount: new Map(),
     dealPushbackRate: new Map(),
-    noAfcCloseRate: new Map(),
     noAssignedAgentCloseRate: new Map(),
     financingTerminationRate: new Map(),
     agingPipelineRisk: new Map(),
     sourceQualityIndex: new Map(),
-    afcCaptureRate: new Map(),
-    ahaAttachRate: new Map(),
-    ahaOosAttachRate: new Map(),
     forecastAccuracy: new Map(),
     npsScore: new Map()
   };
   const mcKpiDisplayMap: Record<McKpiKey, Map<string, string>> = {
+    afcCloseRate: new Map(),
+    afcDealCount: new Map(),
     closedDealsWithAfc: new Map(),
     closedDealsWithoutAfc: new Map(),
     totalRevenueGenerated: new Map(),
     revenuePerReferral: new Map(),
-    pipelineCashConversion: new Map(),
     closeVelocityMedianDays: new Map(),
     referralCount: new Map(),
     dealPushbackRate: new Map(),
-    noAfcCloseRate: new Map(),
     noAssignedAgentCloseRate: new Map(),
     financingTerminationRate: new Map(),
     agingPipelineRisk: new Map(),
     sourceQualityIndex: new Map(),
-    afcCaptureRate: new Map(),
-    ahaAttachRate: new Map(),
-    ahaOosAttachRate: new Map(),
     forecastAccuracy: new Map(),
     npsScore: new Map()
   };
@@ -2707,6 +2686,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...referralByMcMap.keys(),
     ...mcRevenueMap.keys(),
     ...mcTotalClosedDealsMap.keys(),
+    ...mcAfcClosedDealCountMap.keys(),
+    ...mcAfcDealCountMap.keys(),
     ...mcPushbackStatsMap.keys(),
     ...mcTerminatedMap.keys(),
     ...sourceBreakdownByMc.keys(),
@@ -2722,6 +2703,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const mcRevenue = mcRevenueMap.get(id) ?? { revenue: 0, expected: 0, closed: 0, totalReferrals: 0 };
     const realizedRevenue = mcRevenue.revenue;
     const totalClosedDeals = mcTotalClosedDealsMap.get(id) ?? 0;
+    const afcClosedDeals = mcAfcClosedDealCountMap.get(id) ?? 0;
+    const afcDealCount = mcAfcDealCountMap.get(id) ?? 0;
+
+    if (referralsForMc > 0) {
+      const afcCloseRate = safePercent(afcClosedDeals, referralsForMc);
+      mcKpiRaw.afcCloseRate.set(id, afcCloseRate);
+      mcKpiDisplayMap.afcCloseRate.set(
+        id,
+        `${afcCloseRate.toFixed(1)}% (${afcClosedDeals}/${referralsForMc})`
+      );
+    }
+    mcKpiRaw.afcDealCount.set(id, afcDealCount);
+    mcKpiDisplayMap.afcDealCount.set(id, afcDealCount.toLocaleString());
 
     // Closed-deal volume split by AFC usage. Set explicitly for every ranked MC
     // (including 0) so non-closers normalize to 0 on these drivers rather than
@@ -2732,26 +2726,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     mcKpiDisplayMap.closedDealsWithAfc.set(id, closedDealsWithAfc.toLocaleString());
     mcKpiRaw.closedDealsWithoutAfc.set(id, closedDealsWithoutAfc);
     mcKpiDisplayMap.closedDealsWithoutAfc.set(id, closedDealsWithoutAfc.toLocaleString());
-
-    const ahaAttach = mcAhaAttachMap.get(id);
-    if (ahaAttach && ahaAttach.relevant > 0) {
-      const ahaAttachRate = (ahaAttach.attached / ahaAttach.relevant) * 100;
-      mcKpiRaw.ahaAttachRate.set(id, ahaAttachRate);
-      mcKpiDisplayMap.ahaAttachRate.set(
-        id,
-        `${ahaAttachRate.toFixed(1)}% (${ahaAttach.attached}/${ahaAttach.relevant})`
-      );
-    }
-
-    const ahaOosAttach = mcAhaOosAttachMap.get(id);
-    if (ahaOosAttach && ahaOosAttach.relevant > 0) {
-      const ahaOosAttachRate = (ahaOosAttach.attached / ahaOosAttach.relevant) * 100;
-      mcKpiRaw.ahaOosAttachRate.set(id, ahaOosAttachRate);
-      mcKpiDisplayMap.ahaOosAttachRate.set(
-        id,
-        `${ahaOosAttachRate.toFixed(1)}% (${ahaOosAttach.attached}/${ahaOosAttach.relevant})`
-      );
-    }
 
     mcKpiRaw.totalRevenueGenerated.set(id, realizedRevenue);
     mcKpiDisplayMap.totalRevenueGenerated.set(
@@ -2769,12 +2743,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const revenuePerReferral = cohortRevenue / referralsForMc;
       mcKpiRaw.revenuePerReferral.set(id, revenuePerReferral);
       mcKpiDisplayMap.revenuePerReferral.set(id, `$${Math.round(revenuePerReferral / 100).toLocaleString()}`);
-    }
-
-    if (realizedRevenue + mcRevenue.expected > 0) {
-      const conversion = (realizedRevenue / (realizedRevenue + mcRevenue.expected)) * 100;
-      mcKpiRaw.pipelineCashConversion.set(id, conversion);
-      mcKpiDisplayMap.pipelineCashConversion.set(id, `${conversion.toFixed(1)}%`);
     }
 
     const velocityValues = mcVelocityDaysMap.get(id) ?? [];
@@ -2817,13 +2785,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       mcKpiDisplayMap.sourceQualityIndex.set(id, `${sourceQuality.toFixed(1)} pts`);
     }
 
-    const afcCapture = mcAfcCaptureMap.get(id);
-    if (afcCapture && afcCapture.eligible > 0) {
-      const afcRate = (afcCapture.captured / afcCapture.eligible) * 100;
-      mcKpiRaw.afcCaptureRate.set(id, afcRate);
-      mcKpiDisplayMap.afcCaptureRate.set(id, `${afcRate.toFixed(1)}%`);
-    }
-
     const totalEligibleDealsForPushbackRate = mcEligibleDealsForPushbackRateMap.get(id) ?? 0;
     if (totalEligibleDealsForPushbackRate > 0) {
       const pushbackStats = mcPushbackStatsMap.get(id);
@@ -2836,14 +2797,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    if (totalClosedDeals > 0) {
-      const noAfcCloseRate = safePercent(mcNoAfcClosesMap.get(id) ?? 0, totalClosedDeals);
-      mcKpiRaw.noAfcCloseRate.set(id, noAfcCloseRate);
-      mcKpiDisplayMap.noAfcCloseRate.set(id, `${noAfcCloseRate.toFixed(1)}%`);
-
+    const totalClosedDealsForAssignedAgentRate = mcAllClosedDealsForAssignedAgentRateMap.get(id) ?? 0;
+    if (totalClosedDealsForAssignedAgentRate > 0) {
       const noAssignedAgentCloseRate = safePercent(
         mcNoAssignedAgentClosesMap.get(id) ?? 0,
-        totalClosedDeals
+        totalClosedDealsForAssignedAgentRate
       );
       mcKpiRaw.noAssignedAgentCloseRate.set(id, noAssignedAgentCloseRate);
       mcKpiDisplayMap.noAssignedAgentCloseRate.set(id, `${noAssignedAgentCloseRate.toFixed(1)}%`);
@@ -2865,22 +2823,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const mcKpiNormalized: Record<McKpiKey, Map<string, number>> = {
+    afcCloseRate: normalizeAhaKpiMap(mcKpiRaw.afcCloseRate, false),
+    afcDealCount: normalizeAhaKpiMap(mcKpiRaw.afcDealCount, false),
     closedDealsWithAfc: normalizeAhaKpiMap(mcKpiRaw.closedDealsWithAfc, false),
-    closedDealsWithoutAfc: normalizeAhaKpiMap(mcKpiRaw.closedDealsWithoutAfc, false),
-    ahaAttachRate: normalizeAhaKpiMap(mcKpiRaw.ahaAttachRate, false),
-    ahaOosAttachRate: normalizeAhaKpiMap(mcKpiRaw.ahaOosAttachRate, false),
+    closedDealsWithoutAfc: normalizeAhaKpiMap(mcKpiRaw.closedDealsWithoutAfc, true),
     totalRevenueGenerated: normalizeAhaKpiMap(mcKpiRaw.totalRevenueGenerated, false),
     revenuePerReferral: normalizeAhaKpiMap(mcKpiRaw.revenuePerReferral, false),
-    pipelineCashConversion: normalizeAhaKpiMap(mcKpiRaw.pipelineCashConversion, false),
     closeVelocityMedianDays: normalizeAhaKpiMap(mcKpiRaw.closeVelocityMedianDays, true),
     referralCount: normalizeAhaKpiMap(mcKpiRaw.referralCount, false),
     dealPushbackRate: normalizeAhaKpiMap(mcKpiRaw.dealPushbackRate, true),
-    noAfcCloseRate: normalizeAhaKpiMap(mcKpiRaw.noAfcCloseRate, true),
     noAssignedAgentCloseRate: normalizeAhaKpiMap(mcKpiRaw.noAssignedAgentCloseRate, true),
     financingTerminationRate: normalizeAhaKpiMap(mcKpiRaw.financingTerminationRate, true),
     agingPipelineRisk: normalizeAhaKpiMap(mcKpiRaw.agingPipelineRisk, true),
     sourceQualityIndex: normalizeAhaKpiMap(mcKpiRaw.sourceQualityIndex, false),
-    afcCaptureRate: normalizeAhaKpiMap(mcKpiRaw.afcCaptureRate, false),
     forecastAccuracy: normalizeAhaKpiMap(mcKpiRaw.forecastAccuracy, false),
     npsScore: normalizeAhaKpiMap(mcKpiRaw.npsScore, false)
   };
@@ -2919,7 +2874,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     const baseScore = totalWeight > 0 ? Math.round((weightedSum / totalWeight) * 10) / 10 : AHA_NEUTRAL_SCORE;
-    const reliabilityFactor = computeAhaReliabilityFactor(referralCount, MC_MIN_REFERRALS_FOR_RANK);
+    const reliabilityFactor = Math.max(
+      MC_MIN_RELIABILITY_FACTOR,
+      computeAhaReliabilityFactor(referralCount, MC_MIN_REFERRALS_FOR_RANK)
+    );
     const score = Math.round(baseScore * reliabilityFactor * 10) / 10;
 
     return {
@@ -4178,6 +4136,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const agitClosedOrPaidPayments = agitFilteredPayments.filter(
     (payment) =>
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
+      payment.usedAssignedAgent !== false &&
       CLOSED_DEAL_STATUSES.has(payment.status) &&
       resolveDealSideForMetrics(
         payment.side,
@@ -4238,7 +4197,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       mcEmail: mcId ? lenderEmailMap.get(mcId) ?? null : null,
       mcPhone: mcId ? lenderPhoneMap.get(mcId) ?? null : null,
       closingDate: payment.closingDate?.toISOString() ?? null,
-      usedAfc: payment.usedAfc ?? null
+      usedAfc: payment.usedAfc ?? null,
+      referralStatus: payment.referral?.status ?? null,
+      usedAssignedAgent: payment.usedAssignedAgent ?? null,
+      agentAttribution: payment.agentAttribution ?? null
     };
   });
 
@@ -4336,6 +4298,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         afcDealsLostList,
         afcAttachRate,
         ahaDealsLost,
+        ahaDealsLostList,
         ahaAttachRate,
         ahaOosDealsLost,
         ahaOosDealsLostList,

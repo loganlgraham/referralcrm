@@ -1,11 +1,9 @@
 import { Types } from 'mongoose';
 
 jest.mock('@/lib/mongoose', () => ({
-  connectMongo: jest.fn(async () => undefined),
-}));
-
-jest.mock('@/lib/mongodb-client', () => ({
-  getClientPromise: jest.fn(async () => ({}))
+  connectMongo: jest.fn(async () => ({
+    connection: { getClient: () => ({}) },
+  })),
 }));
 
 jest.mock('@/models/user', () => ({

@@ -16,6 +16,7 @@ import { sendTransactionalEmail, isTransactionalEmailConfigured } from '@/lib/em
 import { buildReferralLink } from '@/lib/referral-links';
 import { normalizePhoneNumber } from '@/utils/phone-utils';
 import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
+import { resolveOriginalLenderId } from '@/lib/server/referral-transfer';
 import {
   addWeeks,
   format,
@@ -630,26 +631,36 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const agentClosings: Record<string, any[]> = {};
     const agentReferralTotals: Record<string, any[]> = {};
 
+    // Transfers are credited to the original (first-assigned) MC, not whoever the
+    // referral was later reassigned to. We fetch the transfer referrals once and
+    // bucket them per timeframe in JS using the audit-derived original lender.
+    const transferReferrals = await Referral.find({
+      ...referralMatch,
+      origin: 'admin',
+      lender: { $ne: null }
+    })
+      .select('createdAt lender audit')
+      .lean<{ createdAt?: Date; lender?: Types.ObjectId | null; audit?: any[] }[]>();
+
+    (Object.entries(timeframes) as [keyof typeof timeframes, Date][]).forEach(([key, start]) => {
+      const counts = new Map<string, number>();
+      transferReferrals.forEach((referral) => {
+        if (!referral.createdAt || new Date(referral.createdAt) < start) {
+          return;
+        }
+        const originalLenderId = resolveOriginalLenderId(referral);
+        if (!originalLenderId) {
+          return;
+        }
+        counts.set(originalLenderId, (counts.get(originalLenderId) ?? 0) + 1);
+      });
+      mcTransfers[key] = Array.from(counts.entries())
+        .map(([id, transfers]) => ({ _id: id, transfers }))
+        .sort((a, b) => b.transfers - a.transfers);
+    });
+
     await Promise.all(
       (Object.entries(timeframes) as [keyof typeof timeframes, Date][]).map(async ([key, start]) => {
-        mcTransfers[key] = await Referral.aggregate([
-          {
-            $match: {
-              ...referralMatch,
-              createdAt: { $gte: start },
-              origin: 'admin',
-              lender: { $ne: null }
-            }
-          },
-          {
-            $group: {
-              _id: '$lender',
-              transfers: { $sum: 1 }
-            }
-          },
-          { $sort: { transfers: -1 } }
-        ]);
-
         agentClosings[key] = await Payment.aggregate([
           {
             $lookup: {

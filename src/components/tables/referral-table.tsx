@@ -824,11 +824,10 @@ function NoteComposer({
 
     setSaving(true);
     try {
-      const response = await fetch(`/api/referrals/${referralId}/activities`, {
+      const response = await fetch(`/api/referrals/${referralId}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          channel: 'note',
           content: note.trim(),
           emailTargets: emailMc && hasMcEmail ? ['mc'] : undefined
         })

@@ -22,6 +22,7 @@ import { DEFAULT_AGENT_COMMISSION_BPS } from '@/constants/referrals';
 import { Pagination } from '@/components/tables/pagination';
 import { StatusPill } from '@/components/ui/status-pill';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip } from '@/components/ui/tooltip';
 import { fetcher } from '@/utils/fetcher';
 import { addYears } from 'date-fns';
 import { formatCurrency, formatDate } from '@/utils/formatters';
@@ -58,6 +59,7 @@ interface DealRow {
   commissionFlatFeeCents?: number | null;
   propertyAddress?: string | null;
   terminatedReason?: TerminatedReason | null;
+  underContractDate?: string | null;
   closingDate?: string | null;
   invoiceDate?: string | null;
   paidDate?: string | null;
@@ -398,8 +400,8 @@ export function DealsTable() {
     | 'agent'
     | 'dealSide'
     | 'status'
+    | 'underContractDate'
     | 'closingDate'
-    | 'address'
     | 'referralFee'
     | 'receivedAmount'
     | 'usedAfc'
@@ -563,19 +565,54 @@ export function DealsTable() {
     );
   };
 
+  const renderUsedIndicator = (used: boolean | null | undefined, kind: 'agent' | 'mc') => {
+    const subject = kind === 'agent' ? 'Assigned agent' : 'Preferred lender (AFC)';
+
+    if (used === true) {
+      return (
+        <Tooltip content={`${subject} was used in this deal`}>
+          <Badge variant="success" size="sm" dot>
+            Used
+          </Badge>
+        </Tooltip>
+      );
+    }
+
+    if (used === false) {
+      return (
+        <Tooltip content={`${subject} was not used in this deal`}>
+          <Badge variant="danger" size="sm" dot>
+            Not used
+          </Badge>
+        </Tooltip>
+      );
+    }
+
+    return (
+      <Tooltip content="Outcome not recorded yet">
+        <Badge variant="outline" size="sm" dot>
+          Pending
+        </Badge>
+      </Tooltip>
+    );
+  };
+
   const renderAgentLink = (deal: DealRow) => {
     if (!deal.agent?.id) {
       return <span className="text-sm text-foreground-subtle">Unassigned</span>;
     }
 
     return (
-      <Link
-        prefetch={false}
-        href={`/agents/${deal.agent.id}`}
-        className="text-sm font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
-      >
-        {deal.agent.name || 'Agent'}
-      </Link>
+      <span className="flex flex-wrap items-center gap-1.5">
+        <Link
+          prefetch={false}
+          href={`/agents/${deal.agent.id}`}
+          className="text-sm font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+        >
+          {deal.agent.name || 'Agent'}
+        </Link>
+        {renderUsedIndicator(deal.usedAssignedAgent, 'agent')}
+      </span>
     );
   };
 
@@ -584,14 +621,19 @@ export function DealsTable() {
       return <span className="text-sm text-foreground-subtle">Unassigned</span>;
     }
 
+    const isSellSideDeal = deal.side === 'sell' || deal.referral?.dealSide === 'sell';
+
     return (
-      <Link
-        prefetch={false}
-        href={`/lenders/${deal.mc.id}`}
-        className="text-sm font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
-      >
-        {deal.mc.name || 'MC'}
-      </Link>
+      <span className="flex flex-wrap items-center gap-1.5">
+        <Link
+          prefetch={false}
+          href={`/lenders/${deal.mc.id}`}
+          className="text-sm font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+        >
+          {deal.mc.name || 'MC'}
+        </Link>
+        {!isSellSideDeal && renderUsedIndicator(deal.usedAfc, 'mc')}
+      </span>
     );
   };
 
@@ -661,10 +703,10 @@ export function DealsTable() {
               <SortableHeader label="Status" sortKey="status" />
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-              <SortableHeader label="Closing date" sortKey="closingDate" />
+              <SortableHeader label="Under contract date" sortKey="underContractDate" />
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-              <SortableHeader label="Address" sortKey="address" />
+              <SortableHeader label="Closing date" sortKey="closingDate" />
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               <SortableHeader label="Purchase Price" sortKey="purchasePrice" />
@@ -702,10 +744,8 @@ export function DealsTable() {
                 <td className="px-4 py-3 text-sm text-foreground-muted">{renderMcLink(deal)}</td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">{renderDealSide(deal)}</td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">{renderStatusControl(deal)}</td>
+                <td className="px-4 py-3 text-sm text-foreground-muted">{renderClosingDate(deal.underContractDate)}</td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">{renderClosingDate(deal.closingDate)}</td>
-                <td className="px-4 py-3 text-sm text-foreground-muted">
-                  {getDealAddress(deal) || '—'}
-                </td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">
                   {isTerminated || purchasePrice <= 0 ? '—' : formatCurrency(purchasePrice)}
                 </td>
@@ -804,6 +844,10 @@ export function DealsTable() {
                       <div className="text-sm text-foreground">{renderStatusControl(deal)}</div>
                     </div>
                     <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Under contract date</p>
+                      <p className="text-sm text-foreground">{renderClosingDate(deal.underContractDate)}</p>
+                    </div>
+                    <div className="space-y-1">
                       <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Closing date</p>
                       <p className="text-sm text-foreground">{renderClosingDate(deal.closingDate)}</p>
                     </div>
@@ -853,6 +897,10 @@ export function DealsTable() {
                   <div className="text-sm text-foreground">{renderStatusControl(deal)}</div>
                 </div>
                 <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Under contract date</p>
+                  <p className="text-sm text-foreground">{renderClosingDate(deal.underContractDate)}</p>
+                </div>
+                <div className="space-y-1">
                   <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Closing date</p>
                   <p className="text-sm text-foreground">{renderClosingDate(deal.closingDate)}</p>
                 </div>
@@ -891,6 +939,9 @@ export function DealsTable() {
                 <SortableHeader label="Status" sortKey="status" />
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+                <SortableHeader label="Under contract date" sortKey="underContractDate" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Closing date" sortKey="closingDate" />
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
@@ -923,6 +974,7 @@ export function DealsTable() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-foreground-muted">{renderStatusControl(deal)}</td>
+                  <td className="px-4 py-3 text-sm text-foreground-muted">{renderClosingDate(deal.underContractDate)}</td>
                   <td className="px-4 py-3 text-sm text-foreground-muted">{renderClosingDate(deal.closingDate)}</td>
                   <td className={`px-4 py-3 text-sm font-medium ${outcomeColor}`}>{outcome}</td>
                   <td className="px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</td>

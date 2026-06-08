@@ -16,6 +16,7 @@ import { Payment } from '@/models/payment';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { getReferralDesignation as sharedGetReferralDesignation } from '@/lib/server/referral-designation';
+import { resolveOriginalLenderId } from '@/lib/server/referral-transfer';
 
 export const DASHBOARD_REPORT_METRICS = [
   { id: 'summary', label: 'Executive summary' },
@@ -374,23 +375,33 @@ async function buildMcTransfers(range: {
     match.createdAt = window;
   }
 
-  const grouped = await Referral.aggregate<{ _id: Types.ObjectId; total: number }>([
-    { $match: match },
-    { $group: { _id: '$lender', total: { $sum: 1 } } }
-  ]);
+  // Credit each transfer to the original (first-assigned) MC rather than whoever
+  // the referral was later reassigned to, derived from the lender audit trail.
+  const transferReferrals = await Referral.find(match)
+    .select('lender audit')
+    .lean<{ lender?: Types.ObjectId | null; audit?: any[] }[]>();
 
-  if (grouped.length === 0) return [];
+  if (transferReferrals.length === 0) return [];
 
-  const lenderIds = grouped.map((entry) => entry._id);
+  const counts = new Map<string, number>();
+  transferReferrals.forEach((referral) => {
+    const originalLenderId = resolveOriginalLenderId(referral);
+    if (!originalLenderId) return;
+    counts.set(originalLenderId, (counts.get(originalLenderId) ?? 0) + 1);
+  });
+
+  if (counts.size === 0) return [];
+
+  const lenderIds = Array.from(counts.keys(), (id) => new Types.ObjectId(id));
   const lenders = await LenderMC.find({ _id: { $in: lenderIds } })
     .select('name')
     .lean<LenderLite[]>();
   const nameMap = new Map(lenders.map((lender) => [lender._id.toString(), lender.name]));
 
-  return grouped
-    .map((entry) => ({
-      name: nameMap.get(entry._id.toString()) ?? 'Unknown MC',
-      transfers: entry.total
+  return Array.from(counts.entries())
+    .map(([id, total]) => ({
+      name: nameMap.get(id) ?? 'Unknown MC',
+      transfers: total
     }))
     .sort((a, b) => b.transfers - a.transfers || a.name.localeCompare(b.name));
 }

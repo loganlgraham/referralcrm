@@ -167,15 +167,38 @@ describe('buildDashboardReport', () => {
     });
   });
 
-  it('lists mortgage consultants with their transfer counts', async () => {
+  it('lists mortgage consultants with their transfer counts, crediting the original MC on reassignment', async () => {
     mockDashboardResponse();
     const lenderAId = new Types.ObjectId();
     const lenderBId = new Types.ObjectId();
 
-    referralAggregateMock.mockResolvedValueOnce([
-      { _id: lenderAId, total: 7 },
-      { _id: lenderBId, total: 3 }
-    ]);
+    referralFindMock.mockReturnValueOnce(
+      buildLeanQuery([
+        // 6 transfers that stayed with Karim L
+        { lender: lenderAId },
+        { lender: lenderAId },
+        { lender: lenderAId },
+        { lender: lenderAId },
+        { lender: lenderAId },
+        { lender: lenderAId },
+        // Reassigned from Karim L -> Umed Y, but still credited to Karim L
+        {
+          lender: lenderBId,
+          audit: [
+            {
+              field: 'lender',
+              previousValue: lenderAId.toString(),
+              newValue: lenderBId.toString(),
+              timestamp: '2026-02-01'
+            }
+          ]
+        },
+        // 3 transfers that stayed with Umed Y
+        { lender: lenderBId },
+        { lender: lenderBId },
+        { lender: lenderBId }
+      ])
+    );
 
     lenderFindMock.mockReturnValueOnce(
       buildLeanQuery([
