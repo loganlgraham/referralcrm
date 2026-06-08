@@ -709,6 +709,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           afcDealsLostList: [],
           afcAttachRate: 0,
           ahaDealsLost: 0,
+          ahaDealsLostList: [],
           ahaAttachRate: 0,
           ahaOosDealsLost: 0,
           ahaOosDealsLostList: [],
@@ -1904,6 +1905,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const afcDealsLostList = afcRelevant
     .filter((payment) => !payment.usedAfc)
+    .map(serializeLostDeal);
+
+  const ahaDealsLostList = ahaRelevant
+    .filter((payment) => !payment.usedAssignedAgent)
     .map(serializeLostDeal);
 
   const ahaOosDealsLostList = ahaOosRelevant
@@ -4293,6 +4298,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         afcDealsLostList,
         afcAttachRate,
         ahaDealsLost,
+        ahaDealsLostList,
         ahaAttachRate,
         ahaOosDealsLost,
         ahaOosDealsLostList,

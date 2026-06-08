@@ -220,6 +220,7 @@ interface DashboardSummary {
   afcDealsLostList: LostDealEntry[];
   afcAttachRate: number;
   ahaDealsLost: number;
+  ahaDealsLostList: LostDealEntry[];
   ahaAttachRate: number;
   ahaOosDealsLost: number;
   ahaOosDealsLostList: LostDealEntry[];
@@ -2006,7 +2007,7 @@ function MainDashboard({
   onPreApprovalSaved: () => void;
   networkFilter: NetworkFilter;
 }) {
-  const [dealsLostModal, setDealsLostModal] = useState<'afc' | 'ahaOos' | null>(null);
+  const [dealsLostModal, setDealsLostModal] = useState<'afc' | 'aha' | 'ahaOos' | null>(null);
   const [pendingClosingsModal, setPendingClosingsModal] = useState<'all' | 'thisMonth' | 'nextMonth' | null>(null);
   const [closedDealsModal, setClosedDealsModal] = useState<
     'generated' | 'closedNotPaid' | 'dealsClosed' | 'avgDaysPaid' | null
@@ -2146,7 +2147,12 @@ function MainDashboard({
       helper: `${formatNumber(summary.afcDealsLost)} buy-side deals lost`,
       onHelperClick: summary.afcDealsLost > 0 ? () => setDealsLostModal('afc') : undefined
     },
-    { label: 'AHA attach rate', value: `${summary.ahaAttachRate.toFixed(1)}%` },
+    {
+      label: 'AHA attach rate',
+      value: `${summary.ahaAttachRate.toFixed(1)}%`,
+      helper: `${formatNumber(summary.ahaDealsLost)} deals lost`,
+      onHelperClick: summary.ahaDealsLost > 0 ? () => setDealsLostModal('aha') : undefined
+    },
     {
       label: 'AHA OOS attach rate',
       value: `${summary.ahaOosAttachRate.toFixed(1)}%`,
@@ -2277,13 +2283,21 @@ function MainDashboard({
       <Modal
         isOpen={dealsLostModal !== null}
         onClose={() => setDealsLostModal(null)}
-        title={dealsLostModal === 'afc' ? 'AFC Deals Lost' : 'AHA OOS Deals Lost'}
+        title={
+          dealsLostModal === 'afc'
+            ? 'AFC Deals Lost'
+            : dealsLostModal === 'aha'
+              ? 'AHA Deals Lost'
+              : 'AHA OOS Deals Lost'
+        }
         size="lg"
       >
         <DealsLostTable
           deals={
             dealsLostModal === 'afc'
               ? summary.afcDealsLostList
+              : dealsLostModal === 'aha'
+                ? summary.ahaDealsLostList
               : dealsLostModal === 'ahaOos'
                 ? summary.ahaOosDealsLostList
                 : []
