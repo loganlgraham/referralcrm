@@ -197,7 +197,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       agent: { 'agent.name': direction, 'assignedAgent.name': direction },
       status: { status: direction },
       closingDate: { closingDate: direction },
-      address: { propertyAddress: direction, 'referral.propertyAddress': direction },
+      underContractDate: { underContractDate: direction },
       referralFee: { expectedAmountCents: direction },
       receivedAmount: { receivedAmountCents: direction },
       commission: { expectedAmountCents: direction }, // Simplified - commission is computed
@@ -713,6 +713,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       netReferralFeePaidCents: payment.netReferralFeePaidCents ?? null,
       propertyAddress: payment.propertyAddress ?? null,
       terminatedReason: payment.terminatedReason ?? null,
+      underContractDate: payment.underContractDate ? payment.underContractDate.toISOString() : null,
       closingDate: payment.closingDate ? payment.closingDate.toISOString() : null,
       closingDatePushbackCount: payment.closingDatePushbackCount ?? 0,
       closingDatePushbacks: Array.isArray(payment.closingDatePushbacks)

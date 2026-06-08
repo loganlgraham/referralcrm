@@ -58,6 +58,7 @@ interface DealRow {
   commissionFlatFeeCents?: number | null;
   propertyAddress?: string | null;
   terminatedReason?: TerminatedReason | null;
+  underContractDate?: string | null;
   closingDate?: string | null;
   invoiceDate?: string | null;
   paidDate?: string | null;
@@ -398,8 +399,8 @@ export function DealsTable() {
     | 'agent'
     | 'dealSide'
     | 'status'
+    | 'underContractDate'
     | 'closingDate'
-    | 'address'
     | 'referralFee'
     | 'receivedAmount'
     | 'usedAfc'
@@ -661,10 +662,10 @@ export function DealsTable() {
               <SortableHeader label="Status" sortKey="status" />
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-              <SortableHeader label="Closing date" sortKey="closingDate" />
+              <SortableHeader label="Under contract date" sortKey="underContractDate" />
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-              <SortableHeader label="Address" sortKey="address" />
+              <SortableHeader label="Closing date" sortKey="closingDate" />
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
               <SortableHeader label="Purchase Price" sortKey="purchasePrice" />
@@ -702,10 +703,8 @@ export function DealsTable() {
                 <td className="px-4 py-3 text-sm text-foreground-muted">{renderMcLink(deal)}</td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">{renderDealSide(deal)}</td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">{renderStatusControl(deal)}</td>
+                <td className="px-4 py-3 text-sm text-foreground-muted">{renderClosingDate(deal.underContractDate)}</td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">{renderClosingDate(deal.closingDate)}</td>
-                <td className="px-4 py-3 text-sm text-foreground-muted">
-                  {getDealAddress(deal) || '—'}
-                </td>
                 <td className="px-4 py-3 text-sm text-foreground-muted">
                   {isTerminated || purchasePrice <= 0 ? '—' : formatCurrency(purchasePrice)}
                 </td>
@@ -804,6 +803,10 @@ export function DealsTable() {
                       <div className="text-sm text-foreground">{renderStatusControl(deal)}</div>
                     </div>
                     <div className="space-y-1">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Under contract date</p>
+                      <p className="text-sm text-foreground">{renderClosingDate(deal.underContractDate)}</p>
+                    </div>
+                    <div className="space-y-1">
                       <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Closing date</p>
                       <p className="text-sm text-foreground">{renderClosingDate(deal.closingDate)}</p>
                     </div>
@@ -853,6 +856,10 @@ export function DealsTable() {
                   <div className="text-sm text-foreground">{renderStatusControl(deal)}</div>
                 </div>
                 <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Under contract date</p>
+                  <p className="text-sm text-foreground">{renderClosingDate(deal.underContractDate)}</p>
+                </div>
+                <div className="space-y-1">
                   <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Closing date</p>
                   <p className="text-sm text-foreground">{renderClosingDate(deal.closingDate)}</p>
                 </div>
@@ -891,6 +898,9 @@ export function DealsTable() {
                 <SortableHeader label="Status" sortKey="status" />
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+                <SortableHeader label="Under contract date" sortKey="underContractDate" />
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
                 <SortableHeader label="Closing date" sortKey="closingDate" />
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
@@ -923,6 +933,7 @@ export function DealsTable() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-foreground-muted">{renderStatusControl(deal)}</td>
+                  <td className="px-4 py-3 text-sm text-foreground-muted">{renderClosingDate(deal.underContractDate)}</td>
                   <td className="px-4 py-3 text-sm text-foreground-muted">{renderClosingDate(deal.closingDate)}</td>
                   <td className={`px-4 py-3 text-sm font-medium ${outcomeColor}`}>{outcome}</td>
                   <td className="px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</td>
