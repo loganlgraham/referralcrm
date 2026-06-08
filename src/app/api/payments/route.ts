@@ -80,6 +80,7 @@ type PaymentWithReferral = {
   propertyCity?: string | null;
   propertyState?: string | null;
   terminatedReason?: string | null;
+  underContractDate?: Date | null;
   closingDate?: Date | null;
   agentAttribution?: string | null;
   usedAfc?: boolean | null;
