@@ -24,7 +24,7 @@ interface AgentGroup {
   referralCards: ReferralTaskCardData[];
 }
 
-type GroupByMode = 'due' | 'agent' | 'similar';
+type GroupByMode = 'due' | 'agent' | 'similar' | 'stage';
 type ViewMode = 'urgent' | 'upcoming' | 'no-tasks';
 
 const DEFAULT_VIEW: ViewMode = 'urgent';
@@ -35,7 +35,7 @@ function parseView(value: string | null): ViewMode {
 }
 
 function parseGroupBy(value: string | null): GroupByMode {
-  return value === 'agent' || value === 'similar' ? value : DEFAULT_GROUP_BY;
+  return value === 'agent' || value === 'similar' || value === 'stage' ? value : DEFAULT_GROUP_BY;
 }
 
 interface AdminTaskBoardProps {
@@ -88,7 +88,7 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
   const boardUrl = isBoardView ? `/api/admin/tasks/board?${params.toString()}` : null;
   const { data, mutate } = useSWR<ReferralTaskCardData[] | AgentGroup[]>(boardUrl, fetcher);
 
-  const isGroupedMode = groupBy === 'agent' || groupBy === 'similar';
+  const isGroupedMode = groupBy === 'agent' || groupBy === 'similar' || groupBy === 'stage';
   const referralCards: ReferralTaskCardData[] =
     isGroupedMode
       ? (data as AgentGroup[] | undefined)?.flatMap((g) => g.referralCards ?? []) ?? []
@@ -188,6 +188,9 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
                 <SegmentedButton active={groupBy === 'similar'} onClick={() => setGroupBy('similar')}>
                   Similar task
                 </SegmentedButton>
+                <SegmentedButton active={groupBy === 'stage'} onClick={() => setGroupBy('stage')}>
+                  Stage
+                </SegmentedButton>
               </div>
             </ToolbarGroup>
 
@@ -238,7 +241,13 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
         ) : (
           <div className="space-y-4">
             {referralCards.map((card) => (
-              <ReferralTaskCard key={card.referralId} card={card} view={view} onMutate={() => void mutate()} />
+              <ReferralTaskCard
+                key={card.referralId}
+                card={card}
+                view={view}
+                selectedDate={selectedDate || undefined}
+                onMutate={() => void mutate()}
+              />
             ))}
           </div>
         )
@@ -260,7 +269,13 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
               </h2>
               <div className="space-y-4">
                 {group.referralCards.map((card) => (
-                  <ReferralTaskCard key={card.referralId} card={card} view={view} onMutate={() => void mutate()} />
+                  <ReferralTaskCard
+                    key={card.referralId}
+                    card={card}
+                    view={view}
+                    selectedDate={selectedDate || undefined}
+                    onMutate={() => void mutate()}
+                  />
                 ))}
               </div>
             </section>
