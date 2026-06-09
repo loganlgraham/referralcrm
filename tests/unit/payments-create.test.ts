@@ -64,6 +64,12 @@ jest.mock('@/models/agent', () => ({
   },
 }));
 
+jest.mock('@/models/lender', () => ({
+  LenderMC: {
+    find: jest.fn(),
+  },
+}));
+
 jest.mock('@/models/user', () => ({
   User: {
     find: jest.fn(),
