@@ -820,8 +820,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           created: []
         },
         stalePipelineCount: 0,
-        stalePipelineList: [],
-        noOpenTaskReferrals: []
+        stalePipelineList: []
       },
       agit: {
         agitReferrals: 0,
@@ -4002,37 +4001,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     })
     .sort((a, b) => b.daysSinceActivity - a.daysSinceActivity);
 
-  const openTaskReferralIds = new Set(
-    openTasks
-      .map((task) => task.referralId?.toString())
-      .filter((id): id is string => Boolean(id))
-  );
-  const noOpenTaskReferrals = referralsByNetwork
-    .filter((referral) => {
-      const normalizedStatus = normalizeStatusKey(referral.status ?? '');
-      if (normalizedStatus === 'closed' || normalizedStatus === 'lost') return false;
-      return !openTaskReferralIds.has(referral._id.toString());
-    })
-    .map((referral) => {
-      const agentId = referral.assignedAgent?.toString() ?? null;
-      const mcId = referral.lender?.toString() ?? null;
-      const lastActivityAt = referral.updatedAt ?? referral.referralDate ?? referral.createdAt;
-      return {
-        id: referral._id.toString(),
-        borrowerName: referral.borrower?.name ?? 'Unknown',
-        status: referral.status ?? 'New Lead',
-        agentName: agentId ? (agentNameMap.get(agentId) ?? null) : null,
-        mcName: mcId ? (lenderNameMap.get(mcId) ?? null) : null,
-        lastActivityAt: lastActivityAt ? new Date(lastActivityAt).toISOString() : null
-      };
-    })
-    .sort((a, b) => {
-      const aTime = a.lastActivityAt ? new Date(a.lastActivityAt).getTime() : 0;
-      const bTime = b.lastActivityAt ? new Date(b.lastActivityAt).getTime() : 0;
-      return bTime - aTime;
-    })
-    .slice(0, 10);
-
   const terminatedDealsByReason = terminatedWithinNetwork.reduce((map, payment) => {
     const reason = payment.terminatedReason;
     if (!reason) return map;
@@ -4435,8 +4403,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       totalOpenTasks,
       taskActivityTrend,
       stalePipelineCount: staleReferrals.length,
-      stalePipelineList,
-      noOpenTaskReferrals
+      stalePipelineList
     },
     agit: {
       agitReferrals: agitReferrals.length,

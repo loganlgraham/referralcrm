@@ -1,16 +1,37 @@
 export const dynamic = 'force-dynamic';
 
+import { Suspense } from 'react';
 import { Metadata } from 'next';
 import { redirect } from 'next/navigation';
+import { Types } from 'mongoose';
 import { getCurrentSession } from '@/lib/auth';
 import { classifyDueDayBucket } from '@/lib/admin-task-day';
 import { connectMongo } from '@/lib/mongoose';
 import { AdminTask, getEffectiveDueDate, type AdminTaskLean } from '@/models/admin-task';
+import { Referral } from '@/models/referral';
 import { AdminTaskBoard } from '@/components/admin/admin-task-board';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export const metadata: Metadata = {
   title: 'Admin Tasks | Referral CRM',
 };
+
+// Referrals in these states no longer need follow-up tasks.
+const TERMINAL_REFERRAL_STATUSES = ['Closed', 'Lost', 'Terminated'];
+
+function BoardFallback() {
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <Skeleton key={index} className="h-24 rounded-card" />
+        ))}
+      </div>
+      <Skeleton className="h-12 rounded-card" />
+      <Skeleton className="h-48 rounded-card" />
+    </div>
+  );
+}
 
 export default async function AdminTasksPage() {
   const session = await getCurrentSession();
@@ -20,7 +41,7 @@ export default async function AdminTasksPage() {
 
   await connectMongo();
   const tasks = await AdminTask.find({ status: 'open' })
-    .select('dueAt dueAtOverride snoozedUntil status')
+    .select('referralId dueAt dueAtOverride snoozedUntil status')
     .lean<AdminTaskLean[]>();
 
   const { dueTodayCount, overdueCount } = tasks.reduce((acc, task) => {
@@ -37,25 +58,35 @@ export default async function AdminTasksPage() {
     return acc;
   }, { dueTodayCount: 0, overdueCount: 0 });
 
+  const openTaskReferralIds = [
+    ...new Set(
+      tasks
+        .map((task) => task.referralId?.toString())
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
+
+  const noOpenTaskCount = await Referral.countDocuments({
+    deletedAt: null,
+    status: { $nin: TERMINAL_REFERRAL_STATUSES },
+    _id: { $nin: openTaskReferralIds.map((id) => new Types.ObjectId(id)) },
+  });
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Admin Tasks</h1>
-          <p className="text-sm text-foreground-subtle">
-            Shared tasks across all referrals. All admins see the same task state.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 text-sm font-semibold text-foreground-muted">
-          <span className="rounded-full border border-border bg-surface-raised px-3 py-1 shadow-sm">
-            Due today: {dueTodayCount}
-          </span>
-          <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-rose-700 shadow-sm">
-            Overdue: {overdueCount}
-          </span>
-        </div>
+      <div>
+        <h1 className="text-2xl font-semibold text-foreground">Admin Tasks</h1>
+        <p className="text-sm text-foreground-subtle">
+          Shared tasks across all referrals. All admins see the same task state.
+        </p>
       </div>
-      <AdminTaskBoard />
+      <Suspense fallback={<BoardFallback />}>
+        <AdminTaskBoard
+          overdueCount={overdueCount}
+          dueTodayCount={dueTodayCount}
+          noOpenTaskCount={noOpenTaskCount}
+        />
+      </Suspense>
     </div>
   );
 }
