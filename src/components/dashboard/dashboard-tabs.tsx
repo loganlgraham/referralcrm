@@ -417,7 +417,6 @@ interface DashboardResponse {
     };
     stalePipelineCount: number;
     stalePipelineList: StaleReferralEntry[];
-    noOpenTaskReferrals: NoOpenTaskReferralEntry[];
   };
   agit: {
     agitReferrals: number;
@@ -477,15 +476,6 @@ interface StaleReferralEntry {
   mcName: string | null;
   lastActivityAt: string | null;
   daysSinceActivity: number;
-}
-
-interface NoOpenTaskReferralEntry {
-  id: string;
-  borrowerName: string;
-  status: string;
-  agentName: string | null;
-  mcName: string | null;
-  lastActivityAt: string | null;
 }
 
 const TAB_OPTIONS = [
@@ -3149,73 +3139,6 @@ function StaleReferralsTable({ referrals }: { referrals: StaleReferralEntry[] })
   );
 }
 
-function NoOpenTaskReferralsTable({ referrals }: { referrals: NoOpenTaskReferralEntry[] }) {
-  const scrollMaxHeight = `${RANKED_LIST_PREVIEW_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
-
-  return (
-    <div className="overflow-hidden rounded-card border border-border bg-surface-raised shadow-card">
-      <div className="border-b border-border bg-surface-muted px-4 py-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-          Referrals with no open tasks
-        </h3>
-        <p className="mt-1 text-xs text-foreground-subtle">
-          Active pipeline referrals missing open follow-up tasks
-        </p>
-      </div>
-      {referrals.length === 0 ? (
-        <p className="px-4 py-6 text-sm text-foreground-subtle">
-          No referrals currently match this filter.
-        </p>
-      ) : (
-        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: scrollMaxHeight }}>
-          <table className="min-w-full divide-y divide-border">
-            <thead className="bg-surface-muted">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                  Borrower
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                  Agent
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                  MC
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                  Last Activity
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {referrals.map((row) => (
-                <tr key={row.id} className="hover:bg-surface-muted">
-                  <td className="px-4 py-3 text-sm text-foreground-muted">
-                    <Link
-                      prefetch={false}
-                      href={`/referrals/${row.id}`}
-                      className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
-                    >
-                      {row.borrowerName}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-foreground-muted">{row.status}</td>
-                  <td className="px-4 py-3 text-sm text-foreground-muted">{row.agentName ?? '—'}</td>
-                  <td className="px-4 py-3 text-sm text-foreground-muted">{row.mcName ?? '—'}</td>
-                  <td className="px-4 py-3 text-sm text-foreground-muted">
-                    {row.lastActivityAt ? formatDate(new Date(row.lastActivityAt)) : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
   const [showStaleModal, setShowStaleModal] = useState(false);
   const assignmentRate = data.totalReferrals
@@ -3335,7 +3258,6 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
           ]}
         />
       ) : null}
-      <NoOpenTaskReferralsTable referrals={data.noOpenTaskReferrals} />
     </div>
   );
 }

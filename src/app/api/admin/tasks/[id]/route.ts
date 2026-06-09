@@ -167,6 +167,10 @@ export async function PATCH(
           }
           set.dueAt = date;
         }
+        // Like set_due_override: an explicit due-date change supersedes any
+        // active snooze, otherwise the snooze keeps winning and the edit
+        // appears to have no effect.
+        unset.snoozedUntil = '';
       }
       break;
     }

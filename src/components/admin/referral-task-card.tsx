@@ -5,19 +5,22 @@ import Link from 'next/link';
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { getTodayEightAmMountainDateTimeLocal } from '@/lib/admin-task-day';
+import { getMountainDayKey, getTodayEightAmMountainDateTimeLocal } from '@/lib/admin-task-day';
 import { TaskItem, type TaskItemData } from './task-item';
 import type { ReferralTaskCard as ReferralTaskCardType } from '@/app/api/admin/tasks/board/route';
 
 const GMAIL_COMPOSE_BASE = 'https://mail.google.com/mail/?view=cm&to=';
 
+type CardTask = ReferralTaskCardType['upcomingTasks'][number];
+
 interface ReferralTaskCardProps {
   card: ReferralTaskCardType;
   view?: 'urgent' | 'upcoming';
+  selectedDate?: string;
   onMutate: () => void;
 }
 
-export function ReferralTaskCard({ card, view = 'urgent', onMutate }: ReferralTaskCardProps) {
+export function ReferralTaskCard({ card, view = 'urgent', selectedDate, onMutate }: ReferralTaskCardProps) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [addTitle, setAddTitle] = useState('');
   const [addDueAt, setAddDueAt] = useState(() => getTodayEightAmMountainDateTimeLocal());
@@ -30,7 +33,24 @@ export function ReferralTaskCard({ card, view = 'urgent', onMutate }: ReferralTa
     setShowUpcoming(false);
     setShowOverdueToday(false);
     setShowCompleted(false);
-  }, [view]);
+  }, [view, selectedDate]);
+
+  const isOnSelectedDay = (task: CardTask) =>
+    Boolean(
+      selectedDate &&
+      task.effectiveDueAt &&
+      getMountainDayKey(new Date(task.effectiveDueAt)) === selectedDate
+    );
+
+  const selectedDayTasks = selectedDate
+    ? [...card.overdueTasks, ...card.todayTasks, ...card.upcomingTasks].filter(isOnSelectedDay)
+    : [];
+  const otherOverdueTodayTasks = selectedDate
+    ? [...card.overdueTasks, ...card.todayTasks].filter((task) => !isOnSelectedDay(task))
+    : [];
+  const otherUpcomingTasks = selectedDate
+    ? card.upcomingTasks.filter((task) => !isOnSelectedDay(task))
+    : [];
 
   const handleComplete = async (taskId: string) => {
     try {
@@ -275,7 +295,81 @@ export function ReferralTaskCard({ card, view = 'urgent', onMutate }: ReferralTa
         </form>
       )}
 
-      {view === 'upcoming' ? (
+      {selectedDate ? (
+        <>
+          <ul className="space-y-2">
+            {selectedDayTasks.map((task) => renderTask(task, false))}
+          </ul>
+
+          {(otherOverdueTodayTasks.length > 0 || otherUpcomingTasks.length > 0 || card.completedTasks.length > 0) && (
+            <div className="mt-4 space-y-2 border-t border-border pt-4">
+              {otherOverdueTodayTasks.length > 0 && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowOverdueToday(!showOverdueToday)}
+                    className="flex items-center gap-1 text-sm font-semibold text-foreground-muted hover:text-foreground"
+                  >
+                    {showOverdueToday ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                    Overdue / today tasks ({otherOverdueTodayTasks.length})
+                  </button>
+                  {showOverdueToday && (
+                    <ul className="mt-2 space-y-2">
+                      {otherOverdueTodayTasks.map((task) => renderTask(task, false))}
+                    </ul>
+                  )}
+                </div>
+              )}
+              {otherUpcomingTasks.length > 0 && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowUpcoming(!showUpcoming)}
+                    className="flex items-center gap-1 text-sm font-semibold text-foreground-muted hover:text-foreground"
+                  >
+                    {showUpcoming ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                    Upcoming tasks ({otherUpcomingTasks.length})
+                  </button>
+                  {showUpcoming && (
+                    <ul className="mt-2 space-y-2">
+                      {otherUpcomingTasks.map((task) => renderTask(task, false))}
+                    </ul>
+                  )}
+                </div>
+              )}
+              {card.completedTasks.length > 0 && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCompleted(!showCompleted)}
+                    className="flex items-center gap-1 text-sm font-semibold text-foreground-muted hover:text-foreground"
+                  >
+                    {showCompleted ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                    Completed tasks ({card.completedTasks.length})
+                  </button>
+                  {showCompleted && (
+                    <ul className="mt-2 space-y-2">
+                      {card.completedTasks.map((task) => renderTask(task, true))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      ) : view === 'upcoming' ? (
         <>
           <ul className="space-y-2">
             {card.upcomingTasks.map((task) => renderTask(task, false))}

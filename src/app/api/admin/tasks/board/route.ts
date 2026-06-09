@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { connectMongo } from '@/lib/mongoose';
 import { requireAdmin } from '@/lib/auth';
-import { classifyDueDayBucket } from '@/lib/admin-task-day';
+import { classifyDueDayBucket, getMountainDayKey } from '@/lib/admin-task-day';
 import { AdminTask, getEffectiveDueDate, type AdminTaskLean } from '@/models/admin-task';
 import { Referral } from '@/models/referral';
+import { normalizeReferralStatus, REFERRAL_STATUSES } from '@/constants/referrals';
 
 const NO_CACHE_HEADERS = {
   'Cache-Control': 'no-store, no-cache, must-revalidate',
@@ -12,9 +13,8 @@ const NO_CACHE_HEADERS = {
 };
 
 type TaskBucket = 'overdue' | 'today' | 'upcoming' | 'completed';
-type BoardGroupBy = 'due' | 'agent' | 'similar';
+type BoardGroupBy = 'due' | 'agent' | 'similar' | 'stage';
 type BoardView = 'urgent' | 'upcoming';
-type DateParts = { year: number; month: number; day: number };
 
 interface TaskWithEffective {
   _id: string;
@@ -97,7 +97,7 @@ function getFocalTask(card: ReferralTaskCard, view: BoardView): TaskWithEffectiv
   return card.overdueTasks[0] ?? card.todayTasks[0] ?? card.upcomingTasks[0] ?? card.completedTasks[0] ?? null;
 }
 
-function parseDueDateParam(dueDateParam: string | null): DateParts | null {
+function parseDueDateParam(dueDateParam: string | null): string | null {
   if (!dueDateParam) return null;
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dueDateParam);
   if (!match) return null;
@@ -113,16 +113,12 @@ function parseDueDateParam(dueDateParam: string | null): DateParts | null {
   );
   if (!isValid) return null;
 
-  return { year, month, day };
+  return dueDateParam;
 }
 
-function isTaskDueOnSelectedDay(task: TaskWithEffective, selectedDay: DateParts): boolean {
+function isTaskDueOnSelectedDay(task: TaskWithEffective, selectedDayKey: string): boolean {
   if (!task.effectiveDue) return false;
-  return (
-    task.effectiveDue.getFullYear() === selectedDay.year &&
-    task.effectiveDue.getMonth() === selectedDay.month - 1 &&
-    task.effectiveDue.getDate() === selectedDay.day
-  );
+  return getMountainDayKey(task.effectiveDue) === selectedDayKey;
 }
 
 export interface ReferralTaskCard {
@@ -157,7 +153,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
   const groupByParam = searchParams.get('groupBy');
   const groupBy: BoardGroupBy =
-    groupByParam === 'agent' || groupByParam === 'similar' || groupByParam === 'due'
+    groupByParam === 'agent' || groupByParam === 'similar' || groupByParam === 'stage' || groupByParam === 'due'
       ? groupByParam
       : 'due';
 
@@ -342,6 +338,35 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       groupLabel: agentName,
       referralCards: byAgent.get(agentName)!.sort(cardSorter),
     }));
+
+    return NextResponse.json(payload, { headers: NO_CACHE_HEADERS });
+  }
+
+  if (groupBy === 'stage') {
+    const byStage = new Map<string, ReferralTaskCard[]>();
+
+    for (const card of visibleCards) {
+      const stage = normalizeReferralStatus(card.status) ?? card.status ?? 'Unknown';
+      if (!byStage.has(stage)) byStage.set(stage, []);
+      byStage.get(stage)!.push(card);
+    }
+
+    const stageOrder = (stage: string): number => {
+      const index = REFERRAL_STATUSES.indexOf(stage as (typeof REFERRAL_STATUSES)[number]);
+      return index === -1 ? REFERRAL_STATUSES.length : index;
+    };
+
+    const payload: GroupSection[] = [...byStage.keys()]
+      .sort((a, b) => {
+        const orderDiff = stageOrder(a) - stageOrder(b);
+        if (orderDiff !== 0) return orderDiff;
+        return a.localeCompare(b);
+      })
+      .map((stage) => ({
+        groupKey: stage,
+        groupLabel: stage,
+        referralCards: byStage.get(stage)!.sort(cardSorter),
+      }));
 
     return NextResponse.json(payload, { headers: NO_CACHE_HEADERS });
   }

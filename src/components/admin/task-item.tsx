@@ -9,12 +9,15 @@ import { toast } from 'sonner';
 const SLA_TIME_ZONE = 'America/Denver';
 
 function getSnoozeBaseDate(task: TaskItemData): Date {
+  const now = new Date();
   const effective = task.effectiveDueAt ?? task.dueAt;
   if (effective) {
     const d = new Date(effective);
-    if (!Number.isNaN(d.getTime())) return d;
+    // Overdue tasks snooze relative to now; otherwise a "+N days" preset
+    // could land in the past and silently have no effect.
+    if (!Number.isNaN(d.getTime()) && d > now) return d;
   }
-  return new Date();
+  return now;
 }
 
 export interface TaskItemData {
