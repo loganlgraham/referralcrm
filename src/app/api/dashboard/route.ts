@@ -230,9 +230,6 @@ const ACTIVE_PIPELINE_STATUSES = new Set<string>([
   'Showing Homes',
   'Under Contract',
 ]);
-const ACTIVE_PIPELINE_STATUS_KEYS = new Set(
-  Array.from(ACTIVE_PIPELINE_STATUSES, (status) => normalizeStatusKey(status))
-);
 // C-14: Referral-model terminals only. Payment-style values (payment_sent,
 // payment_received, paid) belong to TERMINAL_PAYMENT_STATUS_KEYS below and
 // never match against `referral.status` because `normalizeReferralStatus`
@@ -245,7 +242,14 @@ const TERMINAL_REFERRAL_STATUS_KEYS = new Set<string>([
 const TERMINAL_PAYMENT_STATUS_KEYS = new Set<string>(['closed', 'payment_sent', 'payment_received', 'paid']);
 const AFC_RISK_AT_RISK_SCORE_THRESHOLD = 40;
 const AFC_RISK_HIGH_OUTSIDE_LOSS_RATE_THRESHOLD = 0.3;
+const AFC_RISK_LOW_ATTACH_RATE_THRESHOLD = 0.7;
+const AFC_RISK_MIN_HISTORICAL_SAMPLE = 3;
+const AFC_RISK_STALE_DAYS = 7;
+const AFC_RISK_RESURFACE_DAYS = 14;
+const AFC_RISK_TARGET_STATUS_KEYS = new Set(['active_lead', 'in_communication']);
 const AFC_RISK_MC_LOSS_REASON_PREFIX = 'MC historical outside-lender loss';
+const AFC_RISK_MC_ASSIGNED_AGENT_LOSS_REASON_PREFIX = 'MC keeps agent but loses AFC';
+const AFC_RISK_SOURCE_PATTERN_REASON_PREFIX = 'Source/network low AFC attach';
 const AFC_RISK_OUTSIDE_NOTE_REASON_PREFIX = 'Notes mention outside/local lender intent';
 // M-16: soft-match phrasing for lender-shopping hints; treated as a weaker
 // outside-lender note signal so the `hasOutsideLenderNoteSignal` check still
@@ -260,24 +264,65 @@ const NOTE_SIGNAL_STRONG_PHRASES = [
   'credit union',
   'using own lender',
   'already with',
+  'my lender',
+  'their lender',
+  'family lender',
+  'banker',
+  'loan officer',
+  'already working with',
+  'existing pre-approval',
+  'preferred lender',
+  'builder lender',
+  'in-house lender',
+  'seller concession',
+  'shopping rates',
+  'better rate',
+  'locked rate',
+  'lender credit',
+  'cash to close',
+  'putting in an offer',
+  'writing an offer',
+  'offer due',
+  'offer deadline',
+  'going to see homes',
+  'showing homes',
+  'touring',
+  'needs lender asap',
+  'underwriting',
+  'appraisal ordered',
+  'closing soon',
   'moving to',
   'switched lender',
   'switching lender'
 ];
 const NOTE_SIGNAL_SOFT_PHRASES = [
   'shopping rates',
+  'rate shopping',
+  'quoted',
+  'apr',
+  'points',
+  'fees',
   'rate quote elsewhere',
   'asked about another lender',
   'considering another lender',
   'mentioned local lender',
-  'comparing lenders'
+  'comparing lenders',
+  'put in an offer',
+  'make an offer',
+  'see homes',
+  'tour homes',
+  'deadline'
 ];
 const NOTE_SIGNAL_SUPPRESSOR_PHRASES = [
   'staying with afc',
   'confirmed afc',
   'kept afc',
   'using afc',
-  'sticking with afc'
+  'sticking with afc',
+  'sent to afc',
+  'afc pre-approved',
+  'afc preapproved',
+  'loan file opened'
 ];
 
 const TERMINATED_REASON_LABELS: Record<string, string> = {
@@ -378,13 +423,6 @@ function computeHistoricalRiskBoost(outsideLossRate: number, sampleSize: number)
   return Math.round(tunedBoost * 10) / 10;
 }
 
-function computeSourceFragilityBoost(sourceCloseRate: number, sampleSize: number): number {
-  const baseBoost = Math.min(10, ((100 - sourceCloseRate) / 100) * 10);
-  const tuningMultiplier = getOutcomeTuningMultiplier(sampleSize, 15, 0.75, 1.1);
-  const tunedBoost = Math.min(10, baseBoost * tuningMultiplier);
-  return Math.round(tunedBoost * 10) / 10;
-}
-
 function prioritizeAfcRiskReasons(
   reasons: { label: string; score: number }[],
   outsideLossRate: number
@@ -395,9 +433,13 @@ function prioritizeAfcRiskReasons(
     .sort((a, b) => {
       const aPriority =
         (isHighOutsideLoss && a.label.startsWith(AFC_RISK_MC_LOSS_REASON_PREFIX) ? 2 : 0) +
+        (isHighOutsideLoss && a.label.startsWith(AFC_RISK_MC_ASSIGNED_AGENT_LOSS_REASON_PREFIX) ? 2 : 0) +
+        (a.label.startsWith(AFC_RISK_SOURCE_PATTERN_REASON_PREFIX) ? 1 : 0) +
         (a.label.startsWith(AFC_RISK_OUTSIDE_NOTE_REASON_PREFIX) ? 1 : 0);
       const bPriority =
         (isHighOutsideLoss && b.label.startsWith(AFC_RISK_MC_LOSS_REASON_PREFIX) ? 2 : 0) +
+        (isHighOutsideLoss && b.label.startsWith(AFC_RISK_MC_ASSIGNED_AGENT_LOSS_REASON_PREFIX) ? 2 : 0) +
+        (b.label.startsWith(AFC_RISK_SOURCE_PATTERN_REASON_PREFIX) ? 1 : 0) +
         (b.label.startsWith(AFC_RISK_OUTSIDE_NOTE_REASON_PREFIX) ? 1 : 0);
       if (bPriority !== aPriority) return bPriority - aPriority;
       return b.score - a.score;
@@ -2252,16 +2294,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       mcOutsideLenderLossMap.set(mcKey, (mcOutsideLenderLossMap.get(mcKey) ?? 0) + 1);
     }
   });
-  const allClosedDealsForAfcRisk = paymentsByNetwork.filter((payment) =>
-    CLOSED_DEAL_STATUSES.has(payment.status)
-  );
+  const allClosedDealsForAfcRisk = paymentsByNetwork.filter((payment) => {
+    if (!CLOSED_DEAL_STATUSES.has(payment.status)) return false;
+    const dealSide = resolveDealSideForMetrics(
+      payment.side ?? null,
+      payment.referral?.dealSide ?? null,
+      payment.referral?.clientType ?? null
+    );
+    return isAfcEligibleDeal(payment.referral?.org ?? null, dealSide);
+  });
   const mcTotalClosedDealsForAfcRiskMap = new Map<string, number>();
   const mcOutsideLenderLossForAfcRiskMap = new Map<string, number>();
+  const mcAssignedAgentOutsideLenderLossForAfcRiskMap = new Map<string, number>();
   allClosedDealsForAfcRisk.forEach((payment) => {
     const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     mcTotalClosedDealsForAfcRiskMap.set(mcKey, (mcTotalClosedDealsForAfcRiskMap.get(mcKey) ?? 0) + 1);
-    if (payment.usedAssignedAgent === true && payment.usedAfc === false) {
+    if (payment.usedAfc === false) {
       mcOutsideLenderLossForAfcRiskMap.set(mcKey, (mcOutsideLenderLossForAfcRiskMap.get(mcKey) ?? 0) + 1);
+    }
+    if (payment.usedAssignedAgent === true && payment.usedAfc === false) {
+      mcAssignedAgentOutsideLenderLossForAfcRiskMap.set(
+        mcKey,
+        (mcAssignedAgentOutsideLenderLossForAfcRiskMap.get(mcKey) ?? 0) + 1
+      );
     }
   });
 
@@ -2388,10 +2443,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     agentId: string | null;
     agentName: string | null;
     status: string;
-    source: string;
-    closingDate: string | null;
-    daysToClose: number | null;
-    daysSinceActivity: number;
+    loanFileNumber: string | null;
+    lastUpdatedAt: string | null;
+    daysSinceLastUpdated: number;
+    daysInStatus: number;
     usedAfc: boolean | null;
     riskScore: number;
     riskTier: 'high' | 'medium' | 'low';
@@ -2626,25 +2681,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   for (const [source, total] of sourceTotals) {
     sourceCloseRateMap.set(source, total > 0 ? ((sourceClosedTotals.get(source) ?? 0) / total) * 100 : 0);
   }
-  const sourceTotalsForAfcRisk = new Map<string, number>();
-  const sourceClosedTotalsForAfcRisk = new Map<string, number>();
-  const closedReferralIdsForAfcRisk = new Set(
-    allClosedDealsForAfcRisk.map((payment) => payment.referral._id.toString())
-  );
-  referralsByNetwork.forEach((referral) => {
-    const source = String(referral.source ?? 'Unknown');
-    sourceTotalsForAfcRisk.set(source, (sourceTotalsForAfcRisk.get(source) ?? 0) + 1);
-    if (closedReferralIdsForAfcRisk.has(referral._id.toString())) {
-      sourceClosedTotalsForAfcRisk.set(source, (sourceClosedTotalsForAfcRisk.get(source) ?? 0) + 1);
+  const buildSourceNetworkKey = (source: string, designation: NetworkDesignation | null): string =>
+    `${source || 'Unknown'}::${designation ?? 'Unpaired'}`;
+  const sourceNetworkTotalsForAfcRisk = new Map<string, number>();
+  const sourceNetworkAfcAttachedForAfcRisk = new Map<string, number>();
+  allClosedDealsForAfcRisk.forEach((payment) => {
+    const source = String(payment.referral?.source ?? 'Unknown');
+    const key = buildSourceNetworkKey(source, getAgentDesignation(payment));
+    sourceNetworkTotalsForAfcRisk.set(key, (sourceNetworkTotalsForAfcRisk.get(key) ?? 0) + 1);
+    if (payment.usedAfc === true) {
+      sourceNetworkAfcAttachedForAfcRisk.set(key, (sourceNetworkAfcAttachedForAfcRisk.get(key) ?? 0) + 1);
     }
   });
-  const sourceCloseRateForAfcRiskMap = new Map<string, number>();
-  for (const [source, total] of sourceTotalsForAfcRisk) {
-    sourceCloseRateForAfcRiskMap.set(
-      source,
-      total > 0 ? ((sourceClosedTotalsForAfcRisk.get(source) ?? 0) / total) * 100 : 0
+  const sourceNetworkAttachRateForAfcRiskMap = new Map<string, number>();
+  for (const [key, total] of sourceNetworkTotalsForAfcRisk) {
+    sourceNetworkAttachRateForAfcRiskMap.set(
+      key,
+      total > 0 ? (sourceNetworkAfcAttachedForAfcRisk.get(key) ?? 0) / total : 0
     );
   }
+  const baselineAfcAttachRateForRisk =
+    allClosedDealsForAfcRisk.length > 0
+      ? allClosedDealsForAfcRisk.filter((payment) => payment.usedAfc === true).length / allClosedDealsForAfcRisk.length
+      : 1;
 
   const mcKpiRaw: Record<McKpiKey, Map<string, number>> = {
     afcCloseRate: new Map(),
@@ -2923,32 +2982,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const linkedPayment = latestPaymentByReferralId.get(referralId);
     if (isTerminalReferralStatus(referral.status)) return false;
     if (linkedPayment && isTerminalPaymentStatus(linkedPayment.status)) return false;
-    if (!ACTIVE_PIPELINE_STATUS_KEYS.has(normalizedStatus)) return false;
+    if (linkedPayment && UNDER_CONTRACT_STATUSES.has(linkedPayment.status)) return false;
+    if (!AFC_RISK_TARGET_STATUS_KEYS.has(normalizedStatus)) return false;
     const inferredDealSide = resolveDealSideForMetrics(
       null,
       referral.dealSide ?? null,
       referral.clientType ?? null
     );
     if ((referral.org ?? null) !== 'AFC') return false;
+    if (referral.clientType === 'Seller') return false;
     if (inferredDealSide === 'sell') return false;
     return true;
   });
   const mcRiskReferralIds = new Set(mcCandidateReferrals.map((referral) => referral._id.toString()));
 
-  const mcRiskActivities =
-    mcRiskReferralIds.size > 0
-      ? await Activity.aggregate<{ _id: Types.ObjectId; lastActivityAt: Date }>([
-          {
-            $match: {
-              referralId: { $in: Array.from(mcRiskReferralIds, (id) => new Types.ObjectId(id)) }
-            }
-          },
-          { $group: { _id: '$referralId', lastActivityAt: { $max: '$createdAt' } } }
-        ])
-      : [];
-  const mcRiskLastActivityMap = new Map(
-    mcRiskActivities.map((item) => [item._id.toString(), item.lastActivityAt])
-  );
   const mcRiskActivityTextRows =
     mcRiskReferralIds.size > 0
       ? await Activity.find({
@@ -2985,24 +3032,37 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const linkedPayment = latestPaymentByReferralId.get(referralId);
       const mcId = referral.lender?.toString() ?? null;
       const agentId = referral.assignedAgent?.toString() ?? null;
-      const closingDate = linkedPayment?.closingDate ? new Date(linkedPayment.closingDate) : null;
-      const daysToClose = closingDate ? differenceInCalendarDays(closingDate, now) : null;
-      const lastActivity =
-        mcRiskLastActivityMap.get(referralId) ??
-        referral.statusLastUpdated ??
-        referral.updatedAt ??
-        referral.createdAt;
-      const lastActivityDate = new Date(lastActivity);
-      const daysSinceActivity = Number.isNaN(lastActivityDate.getTime())
+      const normalizedStatus = normalizeStatusKey(referral.status);
+      const statusUpdatedAt = new Date(referral.statusLastUpdated ?? referral.createdAt);
+      const lastUpdatedAt = new Date(referral.updatedAt ?? referral.statusLastUpdated ?? referral.createdAt);
+      const statusUpdatedTime = statusUpdatedAt.getTime();
+      const lastUpdatedTime = lastUpdatedAt.getTime();
+      const daysInStatus = Number.isNaN(statusUpdatedTime)
         ? 0
-        : Math.max(0, differenceInCalendarDays(now, lastActivityDate));
+        : Math.max(0, differenceInCalendarDays(now, statusUpdatedAt));
+      const daysSinceLastUpdated = Number.isNaN(lastUpdatedTime)
+        ? 0
+        : Math.max(0, differenceInCalendarDays(now, lastUpdatedAt));
+      const editedAfterStatus =
+        !Number.isNaN(statusUpdatedTime) && !Number.isNaN(lastUpdatedTime) && lastUpdatedTime - statusUpdatedTime > 60_000;
+      const stalePageTrigger = editedAfterStatus
+        ? daysSinceLastUpdated >= AFC_RISK_RESURFACE_DAYS
+        : daysInStatus >= AFC_RISK_STALE_DAYS;
+      const statusAgeEligible =
+        normalizedStatus === 'active_lead' ||
+        (normalizedStatus === 'in_communication' && daysInStatus >= AFC_RISK_STALE_DAYS);
+      if (!statusAgeEligible) {
+        return null;
+      }
 
       let riskScore = 0;
       const reasons: { label: string; score: number }[] = [];
+      let hasQualifyingTrigger = false;
 
       if (linkedPayment && linkedPayment.usedAfc !== true) {
         riskScore += 35;
         reasons.push({ label: 'AFC not attached on deal record', score: 35 });
+        hasQualifyingTrigger = true;
       }
 
       if (!agentId) {
@@ -3010,38 +3070,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         reasons.push({ label: 'No assigned agent', score: 12 });
       }
 
-      if (daysSinceActivity >= 30) {
-        riskScore += 25;
-        reasons.push({ label: `${daysSinceActivity} days since last activity`, score: 25 });
-      } else if (daysSinceActivity >= 14) {
-        riskScore += 15;
-        reasons.push({ label: `${daysSinceActivity} days since last activity`, score: 15 });
-      } else if (daysSinceActivity >= 7) {
-        riskScore += 8;
-        reasons.push({ label: `${daysSinceActivity} days since last activity`, score: 8 });
+      if (stalePageTrigger) {
+        hasQualifyingTrigger = true;
+        if (daysSinceLastUpdated >= 30) {
+          riskScore += 25;
+          reasons.push({ label: `${daysSinceLastUpdated} days since referral page update`, score: 25 });
+        } else if (daysSinceLastUpdated >= 14) {
+          riskScore += 18;
+          reasons.push({ label: `${daysSinceLastUpdated} days since referral page update`, score: 18 });
+        } else {
+          riskScore += 12;
+          reasons.push({ label: `${daysSinceLastUpdated} days since referral page update`, score: 12 });
+        }
       }
 
       const noteSignal = scoreOutsideLenderNoteSignals(mcRiskTextByReferralId.get(referralId) ?? []);
       if (noteSignal.score > 0) {
         riskScore += noteSignal.score;
+        hasQualifyingTrigger = true;
       }
       if (noteSignal.reasons.length > 0) {
         noteSignal.reasons.forEach((reason) => {
           reasons.push(reason);
         });
-      }
-
-      if (daysToClose != null) {
-        if (daysToClose <= 7) {
-          riskScore += 20;
-          reasons.push({ label: `${daysToClose} days to close`, score: 20 });
-        } else if (daysToClose <= 14) {
-          riskScore += 14;
-          reasons.push({ label: `${daysToClose} days to close`, score: 14 });
-        } else if (daysToClose <= 30) {
-          riskScore += 8;
-          reasons.push({ label: `${daysToClose} days to close`, score: 8 });
-        }
       }
 
       const outsideLossRate = mcId
@@ -3050,29 +3101,68 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         : 0;
       const mcClosedSampleSize = mcId ? mcTotalClosedDealsForAfcRiskMap.get(mcId) ?? 0 : 0;
       const historicalRiskBoost = computeHistoricalRiskBoost(outsideLossRate, mcClosedSampleSize);
-      if (historicalRiskBoost > 0) {
+      if (
+        mcClosedSampleSize >= AFC_RISK_MIN_HISTORICAL_SAMPLE &&
+        outsideLossRate >= AFC_RISK_HIGH_OUTSIDE_LOSS_RATE_THRESHOLD &&
+        historicalRiskBoost > 0
+      ) {
         riskScore += historicalRiskBoost;
+        hasQualifyingTrigger = true;
         reasons.push({
           label: `${AFC_RISK_MC_LOSS_REASON_PREFIX} ${(outsideLossRate * 100).toFixed(1)}% (${mcClosedSampleSize} closed)`,
           score: historicalRiskBoost
         });
       }
 
-      const source = String(referral.source ?? 'Unknown');
-      const sourceCloseRate = sourceCloseRateForAfcRiskMap.get(source) ?? 0;
-      const sourceSampleSize = sourceTotalsForAfcRisk.get(source) ?? 0;
-      const sourceFragilityBoost = computeSourceFragilityBoost(sourceCloseRate, sourceSampleSize);
-      if (sourceFragilityBoost >= 4) {
-        riskScore += sourceFragilityBoost;
+      const assignedAgentOutsideLossCount = mcId ? mcAssignedAgentOutsideLenderLossForAfcRiskMap.get(mcId) ?? 0 : 0;
+      const assignedAgentOutsideLossRate = mcClosedSampleSize > 0 ? assignedAgentOutsideLossCount / mcClosedSampleSize : 0;
+      if (
+        mcClosedSampleSize >= AFC_RISK_MIN_HISTORICAL_SAMPLE &&
+        assignedAgentOutsideLossRate >= 0.2 &&
+        assignedAgentOutsideLossCount > 0
+      ) {
+        const assignedAgentLossBoost = Math.min(20, Math.round(assignedAgentOutsideLossRate * 100 * 0.4 * 10) / 10);
+        riskScore += assignedAgentLossBoost;
+        hasQualifyingTrigger = true;
         reasons.push({
-          label: `Source close-rate baseline ${sourceCloseRate.toFixed(1)}% (${sourceSampleSize} referrals)`,
-          score: sourceFragilityBoost
+          label: `${AFC_RISK_MC_ASSIGNED_AGENT_LOSS_REASON_PREFIX} ${(assignedAgentOutsideLossRate * 100).toFixed(1)}% (${assignedAgentOutsideLossCount})`,
+          score: assignedAgentLossBoost
         });
+      }
+
+      const source = String(referral.source ?? 'Unknown');
+      const sourceNetworkKey = buildSourceNetworkKey(source, getReferralDesignation(referral));
+      const sourceNetworkSampleSize = sourceNetworkTotalsForAfcRisk.get(sourceNetworkKey) ?? 0;
+      const sourceNetworkAttachRate = sourceNetworkAttachRateForAfcRiskMap.get(sourceNetworkKey) ?? 1;
+      const sourceNetworkThreshold = Math.min(
+        AFC_RISK_LOW_ATTACH_RATE_THRESHOLD,
+        Math.max(0, baselineAfcAttachRateForRisk - 0.1)
+      );
+      if (
+        sourceNetworkSampleSize >= AFC_RISK_MIN_HISTORICAL_SAMPLE &&
+        sourceNetworkAttachRate <= sourceNetworkThreshold
+      ) {
+        const sourcePatternBoost = Math.min(
+          15,
+          Math.round((baselineAfcAttachRateForRisk - sourceNetworkAttachRate) * 100 * 0.5 * 10) / 10
+        );
+        if (sourcePatternBoost > 0) {
+          riskScore += sourcePatternBoost;
+          hasQualifyingTrigger = true;
+          reasons.push({
+            label: `${AFC_RISK_SOURCE_PATTERN_REASON_PREFIX} ${(sourceNetworkAttachRate * 100).toFixed(1)}% (${sourceNetworkSampleSize} closed)`,
+            score: sourcePatternBoost
+          });
+        }
       }
 
       const normalizedRiskScore = Math.min(100, Math.round(riskScore * 10) / 10);
       const riskTier: McAfcRiskCallListEntry['riskTier'] =
-        normalizedRiskScore >= 70 ? 'high' : normalizedRiskScore >= 40 ? 'medium' : 'low';
+        normalizedRiskScore >= 70
+          ? 'high'
+          : normalizedRiskScore >= AFC_RISK_AT_RISK_SCORE_THRESHOLD
+            ? 'medium'
+            : 'low';
 
       const topReasons = prioritizeAfcRiskReasons(reasons, outsideLossRate);
       const hasOutsideLenderNoteSignal = noteSignal.reasons.some(
@@ -3092,27 +3182,30 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           agentId,
           agentName: agentId ? (agentNameMap.get(agentId) ?? null) : null,
           status: (referral.status ?? 'New Lead').replace(/_/g, ' '),
-          source,
-          closingDate: closingDate ? closingDate.toISOString() : null,
-          daysToClose,
-          daysSinceActivity,
+          loanFileNumber: referral.loanFileNumber?.trim() || null,
+          lastUpdatedAt: Number.isNaN(lastUpdatedTime) ? null : lastUpdatedAt.toISOString(),
+          daysSinceLastUpdated,
+          daysInStatus,
           usedAfc: linkedPayment?.usedAfc ?? null,
           riskScore: normalizedRiskScore,
           riskTier,
           reasons: topReasons
         },
         hasHighOutsideLenderLoss,
-        hasOutsideLenderNoteSignal
+        hasOutsideLenderNoteSignal,
+        hasQualifyingTrigger,
+        stalePageTrigger
       };
     })
-    .filter((item) => item.entry.riskScore >= AFC_RISK_AT_RISK_SCORE_THRESHOLD)
+    .filter((item): item is NonNullable<typeof item> => item !== null && item.hasQualifyingTrigger)
     .sort(
       (a, b) =>
         Number(b.hasHighOutsideLenderLoss) - Number(a.hasHighOutsideLenderLoss) ||
         Number(b.hasOutsideLenderNoteSignal) - Number(a.hasOutsideLenderNoteSignal) ||
+        Number(b.stalePageTrigger) - Number(a.stalePageTrigger) ||
         b.entry.riskScore - a.entry.riskScore ||
-        (a.entry.daysToClose ?? Number.POSITIVE_INFINITY) -
-          (b.entry.daysToClose ?? Number.POSITIVE_INFINITY)
+        b.entry.daysSinceLastUpdated - a.entry.daysSinceLastUpdated ||
+        a.entry.borrowerName.localeCompare(b.entry.borrowerName)
     )
     .map((item) => item.entry);
 
