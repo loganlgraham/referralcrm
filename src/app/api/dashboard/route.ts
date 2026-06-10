@@ -3034,19 +3034,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (inferredDealSide === 'sell') return false;
     return true;
   });
-  const mcRiskReferralIds = new Set(mcCandidateReferrals.map((referral) => referral._id.toString()));
-
-  const mcRiskActivityTextRows =
-    mcRiskReferralIds.size > 0
-      ? await Activity.find({
-          referralId: { $in: Array.from(mcRiskReferralIds, (id) => new Types.ObjectId(id)) },
-          content: { $exists: true, $ne: '' },
-          channel: { $in: ['note', 'status', 'update', 'call', 'sms', 'email'] }
-        })
-          .select('referralId content createdAt')
-          .lean<{ referralId: Types.ObjectId; content?: string | null; createdAt?: Date }[]>()
-          .exec()
-      : [];
   const mcRiskTextByReferralId = new Map<string, string[]>();
   const appendRiskText = (referralId: string, value: string | null | undefined) => {
     const text = (value ?? '').trim();
@@ -3059,11 +3046,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   };
   mcCandidateReferrals.forEach((referral) => {
     const referralId = referral._id.toString();
-    appendRiskText(referralId, referral.initialNotes);
     (referral.notes ?? []).forEach((note) => appendRiskText(referralId, note.content));
-  });
-  mcRiskActivityTextRows.forEach((activity) => {
-    appendRiskText(activity.referralId.toString(), activity.content);
   });
 
   const mcAfcRiskCallList: McAfcRiskCallListEntry[] = mcCandidateReferrals

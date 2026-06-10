@@ -1502,6 +1502,20 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     };
   };
 
+  const collectVisibleRiskTexts = ({
+    notes,
+    initialNotes,
+    activityTexts
+  }: {
+    notes: string[];
+    initialNotes?: string;
+    activityTexts?: string[];
+  }) => {
+    void initialNotes;
+    void activityTexts;
+    return notes.map((note) => note.trim()).filter(Boolean);
+  };
+
   const prioritizeAfcRiskReasons = (
     reasons: { label: string; score: number }[],
     outsideLossRatePct: number
@@ -1717,6 +1731,45 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     signals.forEach((signal) => {
       expect(scoreOutsideLenderNoteSignals(signal).score).toBeGreaterThan(0);
     });
+  });
+
+  it('uses stored visible notes for outside-lender risk signals', () => {
+    const visibleTexts = collectVisibleRiskTexts({
+      notes: ['Borrower mentioned an outside lender.'],
+      initialNotes: '',
+      activityTexts: []
+    });
+    const signal = scoreOutsideLenderNoteSignals(visibleTexts.join(' '));
+
+    expect(signal.score).toBeGreaterThan(0);
+    expect(signal.reason).toBe('Notes mention outside/local lender intent (outside lender)');
+  });
+
+  it('does not use activity text or legacy initial notes for visible note risk signals', () => {
+    const visibleTexts = collectVisibleRiskTexts({
+      notes: ['Buyer prefers AFC.'],
+      initialNotes: 'outside lender',
+      activityTexts: ['Admin emailed outside lender note to team']
+    });
+    const signal = scoreOutsideLenderNoteSignals(visibleTexts.join(' '));
+
+    expect(signal.score).toBe(0);
+    expect(signal.reason).toBeNull();
+  });
+
+  it('only treats active buyer phrases as risk when they are in stored visible notes', () => {
+    const activityOnlyTexts = collectVisibleRiskTexts({
+      notes: [],
+      activityTexts: ['Buyer is writing an offer.']
+    });
+    const visibleNoteTexts = collectVisibleRiskTexts({
+      notes: ['Buyer is writing an offer.']
+    });
+
+    expect(scoreOutsideLenderNoteSignals(activityOnlyTexts.join(' ')).score).toBe(0);
+    expect(scoreOutsideLenderNoteSignals(visibleNoteTexts.join(' ')).reason).toBe(
+      'Notes show active buyer activity (writing an offer)'
+    );
   });
 
   it('categorizes showing homes and writing offers as active buyer activity, not outside lender intent', () => {
