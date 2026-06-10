@@ -106,10 +106,10 @@ interface McAfcRiskCallListEntry {
   agentId: string | null;
   agentName: string | null;
   status: string;
-  source: string;
-  closingDate: string | null;
-  daysToClose: number | null;
-  daysSinceActivity: number;
+  loanFileNumber: string | null;
+  lastUpdatedAt: string | null;
+  daysSinceLastUpdated: number;
+  daysInStatus: number;
   usedAfc: boolean | null;
   riskScore: number;
   riskTier: 'high' | 'medium' | 'low';
@@ -142,6 +142,7 @@ const LEADERBOARD_HEADER_HEIGHT_REM = 1.75;
 const TERMINATED_DEAL_ROW_HEIGHT_REM = 4;
 const RANKED_LIST_ROW_HEIGHT_REM = 3.25;
 const RANKED_LIST_PREVIEW_ROWS = 10;
+const AFC_RISK_VISIBLE_ROWS = 7;
 
 const getCompositeScoreStyle = (score: number) => {
   if (score >= 75) return 'bg-emerald-50 text-emerald-700';
@@ -2664,24 +2665,78 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
   );
 }
 
+type McAfcRiskSortKey = 'borrower' | 'mc' | 'agent' | 'status' | 'lastUpdated' | 'risk' | 'reasons';
+type SortDirection = 'asc' | 'desc';
+
+function getMcAfcRiskSortValue(entry: McAfcRiskCallListEntry, key: McAfcRiskSortKey): string | number {
+  if (key === 'borrower') return entry.borrowerName.toLowerCase();
+  if (key === 'mc') return (entry.mcName ?? '').toLowerCase();
+  if (key === 'agent') return (entry.agentName ?? '').toLowerCase();
+  if (key === 'status') return entry.status.toLowerCase();
+  if (key === 'lastUpdated') return entry.lastUpdatedAt ? new Date(entry.lastUpdatedAt).getTime() : 0;
+  if (key === 'risk') return entry.riskScore;
+  if (key === 'reasons') return entry.reasons.join(' ').toLowerCase();
+  return '';
+}
+
 function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[] }) {
+  const [sortConfig, setSortConfig] = useState<{ key: McAfcRiskSortKey; direction: SortDirection }>({
+    key: 'risk',
+    direction: 'desc'
+  });
+
   const getRiskTierBadge = (tier: McAfcRiskCallListEntry['riskTier']) => {
     if (tier === 'high') return 'bg-rose-100 text-rose-700';
     if (tier === 'medium') return 'bg-amber-100 text-amber-700';
     return 'bg-emerald-100 text-emerald-700';
   };
-  const shouldScroll = entries.length > RANKED_LIST_PREVIEW_ROWS;
-  const scrollMaxHeight = `${RANKED_LIST_PREVIEW_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
+  const sortedEntries = useMemo(() => {
+    return [...entries].sort((a, b) => {
+      const aValue = getMcAfcRiskSortValue(a, sortConfig.key);
+      const bValue = getMcAfcRiskSortValue(b, sortConfig.key);
+      let comparison = 0;
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        comparison = aValue - bValue;
+      } else {
+        comparison = String(aValue).localeCompare(String(bValue));
+      }
+      return sortConfig.direction === 'asc' ? comparison : -comparison;
+    });
+  }, [entries, sortConfig]);
+  const handleSort = (key: McAfcRiskSortKey) => {
+    setSortConfig((current) => ({
+      key,
+      direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+  const renderSortHeader = (key: McAfcRiskSortKey, label: string, className = 'px-3 py-2') => {
+    const isActive = sortConfig.key === key;
+    const indicator = isActive ? (sortConfig.direction === 'asc' ? ' asc' : ' desc') : '';
+    return (
+      <th className={className} aria-sort={isActive ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 text-left font-medium uppercase tracking-wide hover:text-foreground"
+          onClick={() => handleSort(key)}
+        >
+          {label}
+          <span aria-hidden="true">{indicator}</span>
+        </button>
+      </th>
+    );
+  };
+  const shouldScroll = entries.length > AFC_RISK_VISIBLE_ROWS;
+  const scrollMaxHeight = `${AFC_RISK_VISIBLE_ROWS * RANKED_LIST_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">AFC Loss Risk Call List</p>
       <p className="mt-1 text-xs text-foreground-subtle">
-        All open buy-side AFC referrals currently at risk, ranked with outside-lender notes and MC outside-lender loss priority.
-        Historical (all-time) risk factors are blended with the current referral&rsquo;s signals; this table is not filtered by the selected timeframe.
+        AHA OOS buyer referrals in Active Lead or aged In Communication status with outside-lender risk signals.
+        Under-contract referrals are excluded; rows can resurface after 14 days without a page update.
       </p>
       {entries.length === 0 ? (
-        <p className="py-8 text-center text-sm text-foreground-subtle">No qualifying referrals in the active AFC pipeline.</p>
+        <p className="py-8 text-center text-sm text-foreground-subtle">No qualifying AHA OOS Active Lead or In Communication buyer referrals.</p>
       ) : (
         <div
           className="mt-4 overflow-x-auto overflow-y-auto"
@@ -2690,38 +2745,39 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
           <table className="w-full text-left text-sm">
             <thead className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
               <tr>
-                <th className="px-3 py-2">Borrower</th>
-                <th className="px-3 py-2">MC / Agent</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Closing</th>
-                <th className="px-3 py-2">Risk</th>
-                <th className="px-3 py-2">Top reasons</th>
+                {renderSortHeader('borrower', 'Borrower')}
+                {renderSortHeader('mc', 'MC')}
+                {renderSortHeader('agent', 'Agent')}
+                {renderSortHeader('status', 'Status')}
+                {renderSortHeader('lastUpdated', 'Last updated')}
+                {renderSortHeader('risk', 'Risk')}
+                {renderSortHeader('reasons', 'Top reasons')}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {entries.map((entry) => (
+              {sortedEntries.map((entry) => (
                 <tr key={entry.rowId} className="hover:bg-surface-muted">
                   <td className="px-3 py-2">
                     <div className="flex flex-col">
                       <Link href={`/referrals/${entry.referralId}`} className="font-medium text-primary-700 hover:underline">
                         {entry.borrowerName}
                       </Link>
-                      <span className="text-xs text-foreground-subtle">{entry.source}</span>
+                      <span className="text-xs text-foreground-subtle">Loan # {entry.loanFileNumber ?? '—'}</span>
                     </div>
                   </td>
                   <td className="px-3 py-2 text-foreground-muted">
-                    <div>{entry.mcName ?? 'Unassigned MC'}</div>
-                    <div className="text-xs text-foreground-subtle">{entry.agentName ?? 'Unassigned Agent'}</div>
+                    {entry.mcName ?? 'Unassigned MC'}
+                  </td>
+                  <td className="px-3 py-2 text-foreground-muted">
+                    {entry.agentName ?? 'Unassigned Agent'}
                   </td>
                   <td className="px-3 py-2 text-foreground-muted">
                     <div className="capitalize">{entry.status}</div>
-                    <div className="text-xs text-foreground-subtle">{entry.daysSinceActivity}d since activity</div>
+                    <div className="text-xs text-foreground-subtle">{entry.daysInStatus}d in status</div>
                   </td>
                   <td className="px-3 py-2 text-foreground-muted">
-                    <div>{entry.closingDate ? formatDate(entry.closingDate) : '—'}</div>
-                    <div className="text-xs text-foreground-subtle">
-                      {entry.daysToClose != null ? `${entry.daysToClose}d to close` : 'No closing date'}
-                    </div>
+                    <div>{formatDate(entry.lastUpdatedAt)}</div>
+                    <div className="text-xs text-foreground-subtle">{entry.daysSinceLastUpdated}d since update</div>
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">

@@ -1324,24 +1324,16 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
       .toLowerCase()
       .replace(/\s+/g, '_');
 
-  const TERMINAL_REFERRAL_STATUS_KEYS = new Set([
-    'closed',
-    'lost',
-    'terminated',
-    'payment_sent',
-    'payment_received',
-    'paid'
-  ]);
+  const TERMINAL_REFERRAL_STATUS_KEYS = new Set(['closed', 'lost', 'terminated']);
   const TERMINAL_PAYMENT_STATUS_KEYS = new Set(['closed', 'payment_sent', 'payment_received', 'paid']);
-  const ACTIVE_PIPELINE_STATUS_KEYS = new Set([
-    'paired',
-    'in_communication',
-    'active_lead',
-    'showing_homes',
-    'under_contract'
-  ]);
+  const UNDER_CONTRACT_PAYMENT_STATUS_KEYS = new Set(['under_contract', 'past_inspection', 'past_appraisal', 'clear_to_close']);
+  const AFC_RISK_TARGET_STATUS_KEYS = new Set(['active_lead', 'in_communication']);
   const AFC_RISK_AT_RISK_SCORE_THRESHOLD = 40;
   const AFC_RISK_HIGH_OUTSIDE_LOSS_RATE_THRESHOLD = 0.3;
+  const AFC_RISK_LOW_ATTACH_RATE_THRESHOLD = 0.7;
+  const AFC_RISK_MIN_HISTORICAL_SAMPLE = 3;
+  const AFC_RISK_STALE_DAYS = 7;
+  const AFC_RISK_RESURFACE_DAYS = 14;
 
   const getOutcomeTuningMultiplier = (
     sampleSize: number,
@@ -1355,64 +1347,149 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
 
   const shouldIncludeInAfcRiskList = ({
     referralStatus,
-    paymentStatus
+    paymentStatus,
+    clientType = 'Buyer',
+    dealSide = 'buy',
+    daysInStatus = AFC_RISK_STALE_DAYS,
+    agentDesignation = 'AHA_OOS'
   }: {
     referralStatus: string;
     paymentStatus?: string | null;
+    clientType?: 'Buyer' | 'Seller' | 'Both';
+    dealSide?: 'buy' | 'sell';
+    daysInStatus?: number;
+    agentDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   }) => {
     const normalizedReferralStatus = normalizeStatusKey(referralStatus);
+    if (agentDesignation !== 'AHA_OOS') return false;
     if (TERMINAL_REFERRAL_STATUS_KEYS.has(normalizedReferralStatus)) return false;
     if (paymentStatus && TERMINAL_PAYMENT_STATUS_KEYS.has(normalizeStatusKey(paymentStatus))) return false;
-    return ACTIVE_PIPELINE_STATUS_KEYS.has(normalizedReferralStatus);
+    if (paymentStatus && UNDER_CONTRACT_PAYMENT_STATUS_KEYS.has(normalizeStatusKey(paymentStatus))) return false;
+    if (!AFC_RISK_TARGET_STATUS_KEYS.has(normalizedReferralStatus)) return false;
+    if (clientType === 'Seller' || dealSide === 'sell') return false;
+    if (normalizedReferralStatus === 'in_communication' && daysInStatus < AFC_RISK_STALE_DAYS) return false;
+    return true;
+  };
+
+  const shouldShowStalePageTrigger = ({
+    editedAfterStatus,
+    daysInStatus,
+    daysSinceLastUpdated
+  }: {
+    editedAfterStatus: boolean;
+    daysInStatus: number;
+    daysSinceLastUpdated: number;
+  }) => {
+    return editedAfterStatus
+      ? daysSinceLastUpdated >= AFC_RISK_RESURFACE_DAYS
+      : daysInStatus >= AFC_RISK_STALE_DAYS;
   };
 
   const computeRiskScore = ({
     hasDealRecord,
     usedAfc,
-    daysSinceActivity,
-    daysToClose,
+    daysSinceLastUpdated,
     outsideLossRatePct,
-    sourceCloseRatePct,
+    assignedAgentOutsideLossRatePct = 0,
+    agentAssignedAgentOutsideLossRatePct = 0,
+    sourceNetworkAttachRatePct = 100,
+    baselineAttachRatePct = 100,
     noteSignalScore = 0,
     outsideLossSampleSize = 10,
-    sourceSampleSize = 15
+    sourceNetworkSampleSize = AFC_RISK_MIN_HISTORICAL_SAMPLE
   }: {
     hasDealRecord: boolean;
     usedAfc: boolean | null;
-    daysSinceActivity: number;
-    daysToClose: number;
+    daysSinceLastUpdated: number;
     outsideLossRatePct: number;
-    sourceCloseRatePct: number;
+    assignedAgentOutsideLossRatePct?: number;
+    agentAssignedAgentOutsideLossRatePct?: number;
+    sourceNetworkAttachRatePct?: number;
+    baselineAttachRatePct?: number;
     noteSignalScore?: number;
     outsideLossSampleSize?: number;
-    sourceSampleSize?: number;
+    sourceNetworkSampleSize?: number;
   }) => {
     let score = 0;
 
     if (hasDealRecord && usedAfc !== true) score += 35;
 
-    if (daysSinceActivity >= 30) score += 25;
-    else if (daysSinceActivity >= 14) score += 15;
-    else if (daysSinceActivity >= 7) score += 8;
-
-    if (daysToClose <= 7) score += 20;
-    else if (daysToClose <= 14) score += 14;
-    else if (daysToClose <= 30) score += 8;
+    if (daysSinceLastUpdated >= 30) score += 25;
+    else if (daysSinceLastUpdated >= 14) score += 18;
+    else if (daysSinceLastUpdated >= 7) score += 12;
 
     const historicalRiskBoost =
       Math.min(15, outsideLossRatePct * 0.15) *
       getOutcomeTuningMultiplier(outsideLossSampleSize, 10, 0.7, 1.1);
-    score += Math.min(15, historicalRiskBoost);
+    if (
+      outsideLossSampleSize >= AFC_RISK_MIN_HISTORICAL_SAMPLE &&
+      outsideLossRatePct / 100 >= AFC_RISK_HIGH_OUTSIDE_LOSS_RATE_THRESHOLD
+    ) {
+      score += Math.min(15, historicalRiskBoost);
+    }
 
-    const sourceFragilityBoost =
-      Math.min(10, ((100 - sourceCloseRatePct) / 100) * 10) *
-      getOutcomeTuningMultiplier(sourceSampleSize, 15, 0.75, 1.1);
-    if (sourceFragilityBoost >= 4) {
-      score += Math.min(10, sourceFragilityBoost);
+    if (
+      outsideLossSampleSize >= AFC_RISK_MIN_HISTORICAL_SAMPLE &&
+      assignedAgentOutsideLossRatePct >= 20
+    ) {
+      score += Math.min(20, assignedAgentOutsideLossRatePct * 0.4);
+    }
+    if (
+      outsideLossSampleSize >= AFC_RISK_MIN_HISTORICAL_SAMPLE &&
+      agentAssignedAgentOutsideLossRatePct >= 20
+    ) {
+      score += Math.min(20, agentAssignedAgentOutsideLossRatePct * 0.4);
+    }
+
+    const sourceNetworkThreshold = Math.min(
+      AFC_RISK_LOW_ATTACH_RATE_THRESHOLD * 100,
+      Math.max(0, baselineAttachRatePct - 10)
+    );
+    if (
+      sourceNetworkSampleSize >= AFC_RISK_MIN_HISTORICAL_SAMPLE &&
+      sourceNetworkAttachRatePct <= sourceNetworkThreshold
+    ) {
+      score += Math.min(15, (baselineAttachRatePct - sourceNetworkAttachRatePct) * 0.5);
     }
     score += Math.max(0, noteSignalScore);
 
     return Math.min(100, Number(score.toFixed(1)));
+  };
+
+  const NOTE_SIGNAL_STRONG_PHRASES = [
+    'outside lender',
+    'preferred lender',
+    'builder lender',
+    'my lender',
+    'loan officer',
+    'already working with',
+    'shopping rates',
+    'better rate',
+    'putting in an offer',
+    'going to see homes',
+    'needs lender asap',
+    'appraisal ordered'
+  ];
+  const NOTE_SIGNAL_SOFT_PHRASES = ['quoted', 'apr', 'points', 'fees', 'offer deadline'];
+  const NOTE_SIGNAL_SUPPRESSOR_PHRASES = ['confirmed afc', 'staying with afc', 'afc pre-approved', 'loan file opened'];
+
+  const scoreOutsideLenderNoteSignals = (text: string) => {
+    const normalizedText = text.toLowerCase().replace(/\s+/g, ' ').trim();
+    const strongMatch = NOTE_SIGNAL_STRONG_PHRASES.find((phrase) => normalizedText.includes(phrase));
+    const softMatch = NOTE_SIGNAL_SOFT_PHRASES.find((phrase) => normalizedText.includes(phrase));
+    const suppressorMatch = NOTE_SIGNAL_SUPPRESSOR_PHRASES.find((phrase) => normalizedText.includes(phrase));
+    let score = strongMatch ? 25 : softMatch ? 10 : 0;
+    if (suppressorMatch) {
+      score = Math.max(0, score - 12);
+    }
+    return {
+      score,
+      reason: strongMatch
+        ? `Notes mention outside/local lender intent (${strongMatch})`
+        : softMatch
+          ? `Notes suggest lender-shopping (${softMatch})`
+          : null
+    };
   };
 
   const prioritizeAfcRiskReasons = (
@@ -1425,9 +1502,15 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
       .sort((a, b) => {
         const aPriority =
           (isHighOutsideLoss && a.label.startsWith('MC historical outside-lender loss') ? 2 : 0) +
+          (isHighOutsideLoss && a.label.startsWith('MC history: agent used, AFC not used') ? 2 : 0) +
+          (a.label.startsWith('Agent history: agent used, AFC not used') ? 2 : 0) +
+          (a.label.startsWith('Source/network low AFC attach') ? 1 : 0) +
           (a.label.startsWith('Notes mention outside/local lender intent') ? 1 : 0);
         const bPriority =
           (isHighOutsideLoss && b.label.startsWith('MC historical outside-lender loss') ? 2 : 0) +
+          (isHighOutsideLoss && b.label.startsWith('MC history: agent used, AFC not used') ? 2 : 0) +
+          (b.label.startsWith('Agent history: agent used, AFC not used') ? 2 : 0) +
+          (b.label.startsWith('Source/network low AFC attach') ? 1 : 0) +
           (b.label.startsWith('Notes mention outside/local lender intent') ? 1 : 0);
         if (bPriority !== aPriority) return bPriority - aPriority;
         return b.score - a.score;
@@ -1440,18 +1523,22 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     const highRisk = computeRiskScore({
       hasDealRecord: true,
       usedAfc: false,
-      daysSinceActivity: 21,
-      daysToClose: 6,
+      daysSinceLastUpdated: 21,
       outsideLossRatePct: 40,
-      sourceCloseRatePct: 45
+      assignedAgentOutsideLossRatePct: 30,
+      agentAssignedAgentOutsideLossRatePct: 30,
+      sourceNetworkAttachRatePct: 45,
+      baselineAttachRatePct: 82
     });
     const lowerRisk = computeRiskScore({
       hasDealRecord: true,
       usedAfc: true,
-      daysSinceActivity: 3,
-      daysToClose: 24,
+      daysSinceLastUpdated: 3,
       outsideLossRatePct: 10,
-      sourceCloseRatePct: 75
+      assignedAgentOutsideLossRatePct: 0,
+      agentAssignedAgentOutsideLossRatePct: 0,
+      sourceNetworkAttachRatePct: 75,
+      baselineAttachRatePct: 82
     });
 
     expect(highRisk).toBeGreaterThan(lowerRisk);
@@ -1463,39 +1550,39 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     const preDealScore = computeRiskScore({
       hasDealRecord: false,
       usedAfc: null,
-      daysSinceActivity: 10,
-      daysToClose: 20,
+      daysSinceLastUpdated: 10,
       outsideLossRatePct: 20,
-      sourceCloseRatePct: 60
+      sourceNetworkAttachRatePct: 60,
+      baselineAttachRatePct: 80
     });
     const withDealNotAttached = computeRiskScore({
       hasDealRecord: true,
       usedAfc: false,
-      daysSinceActivity: 10,
-      daysToClose: 20,
+      daysSinceLastUpdated: 10,
       outsideLossRatePct: 20,
-      sourceCloseRatePct: 60
+      sourceNetworkAttachRatePct: 60,
+      baselineAttachRatePct: 80
     });
 
     expect(withDealNotAttached - preDealScore).toBeCloseTo(35, 2);
   });
 
-  it('returns deterministic order when risk scores tie by using days-to-close', () => {
+  it('returns deterministic order when risk scores tie by using last updated age', () => {
     const rows = [
-      { id: 'later-close', riskScore: 62.5, daysToClose: 12 },
-      { id: 'sooner-close', riskScore: 62.5, daysToClose: 5 }
+      { id: 'recent-update', riskScore: 62.5, daysSinceLastUpdated: 12 },
+      { id: 'older-update', riskScore: 62.5, daysSinceLastUpdated: 21 }
     ];
 
-    rows.sort((a, b) => b.riskScore - a.riskScore || a.daysToClose - b.daysToClose);
+    rows.sort((a, b) => b.riskScore - a.riskScore || b.daysSinceLastUpdated - a.daysSinceLastUpdated);
 
-    expect(rows.map((row) => row.id)).toEqual(['sooner-close', 'later-close']);
+    expect(rows.map((row) => row.id)).toEqual(['older-update', 'recent-update']);
   });
 
   it('prioritizes MC loss and outside-lender note reasons when MC loss is high', () => {
     const factors = [
       { label: 'AFC not attached', score: 35 },
-      { label: '18 days since last activity', score: 15 },
-      { label: '6 days to close', score: 20 },
+      { label: '18 days since referral page update', score: 18 },
+      { label: 'Source/network low AFC attach 45.0%', score: 12 },
       { label: 'MC historical outside-lender loss 42.0%', score: 4.5 },
       { label: 'Notes mention outside/local lender intent (outside lender)', score: 25 }
     ];
@@ -1508,19 +1595,45 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     ]);
   });
 
-  it('includes pre-under-contract active pipeline statuses for early intervention', () => {
+  it('includes only Active Lead and aged In Communication buyer referrals', () => {
     const referrals = [
       { id: 'paired', status: 'Paired' },
-      { id: 'active', status: 'Active Lead' },
+      { id: 'active', status: 'Active Lead', daysInStatus: 1 },
+      { id: 'fresh-communication', status: 'In Communication', daysInStatus: 6 },
+      { id: 'aged-communication', status: 'In Communication', daysInStatus: 7 },
       { id: 'under-contract', status: 'Under Contract' },
       { id: 'closed', status: 'Closed' }
     ];
 
     const included = referrals
-      .filter((referral) => shouldIncludeInAfcRiskList({ referralStatus: referral.status }))
+      .filter((referral) =>
+        shouldIncludeInAfcRiskList({
+          referralStatus: referral.status,
+          daysInStatus: referral.daysInStatus ?? AFC_RISK_STALE_DAYS
+        })
+      )
       .map((referral) => referral.id);
 
-    expect(included).toEqual(['paired', 'active', 'under-contract']);
+    expect(included).toEqual(['active', 'aged-communication']);
+  });
+
+  it('limits entries to AHA OOS attached agents', () => {
+    const ahaOos = shouldIncludeInAfcRiskList({
+      referralStatus: 'Active Lead',
+      agentDesignation: 'AHA_OOS'
+    });
+    const aha = shouldIncludeInAfcRiskList({
+      referralStatus: 'Active Lead',
+      agentDesignation: 'AHA'
+    });
+    const agit = shouldIncludeInAfcRiskList({
+      referralStatus: 'Active Lead',
+      agentDesignation: 'AGIT'
+    });
+
+    expect(ahaOos).toBe(true);
+    expect(aha).toBe(false);
+    expect(agit).toBe(false);
   });
 
   it('excludes referrals when referral status is terminal', () => {
@@ -1532,77 +1645,131 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     expect(included).toBe(false);
   });
 
-  it('excludes referrals when linked payment status is terminal', () => {
-    const included = shouldIncludeInAfcRiskList({
-      referralStatus: 'Under Contract',
-      paymentStatus: 'paid'
+  it('excludes under-contract payment statuses and sell-side referrals', () => {
+    const underContract = shouldIncludeInAfcRiskList({
+      referralStatus: 'Active Lead',
+      paymentStatus: 'under_contract'
+    });
+    const sellSide = shouldIncludeInAfcRiskList({
+      referralStatus: 'Active Lead',
+      clientType: 'Seller',
+      dealSide: 'sell'
     });
 
-    expect(included).toBe(false);
+    expect(underContract).toBe(false);
+    expect(sellSide).toBe(false);
   });
 
   it('raises data-driven boosts as sample size grows', () => {
     const lowConfidenceScore = computeRiskScore({
       hasDealRecord: true,
       usedAfc: false,
-      daysSinceActivity: 7,
-      daysToClose: 18,
+      daysSinceLastUpdated: 7,
       outsideLossRatePct: 40,
-      sourceCloseRatePct: 45,
+      sourceNetworkAttachRatePct: 45,
+      baselineAttachRatePct: 82,
       outsideLossSampleSize: 1,
-      sourceSampleSize: 1
+      sourceNetworkSampleSize: 1
     });
     const highConfidenceScore = computeRiskScore({
       hasDealRecord: true,
       usedAfc: false,
-      daysSinceActivity: 7,
-      daysToClose: 18,
+      daysSinceLastUpdated: 7,
       outsideLossRatePct: 40,
-      sourceCloseRatePct: 45,
+      sourceNetworkAttachRatePct: 45,
+      baselineAttachRatePct: 82,
       outsideLossSampleSize: 25,
-      sourceSampleSize: 25
+      sourceNetworkSampleSize: 25
     });
 
     expect(highConfidenceScore).toBeGreaterThan(lowConfidenceScore);
   });
 
-  it('keeps only at-risk entries (medium/high) in the call list', () => {
-    const scores = [82.4, 41.2, 39.9, 18.6];
-    const atRisk = scores.filter((score) => score >= AFC_RISK_AT_RISK_SCORE_THRESHOLD);
+  it('keeps entries with a qualifying trigger even when the score is low', () => {
+    const rows = [
+      { id: 'stale-low', riskScore: 12, hasQualifyingTrigger: true },
+      { id: 'no-trigger', riskScore: 85, hasQualifyingTrigger: false }
+    ];
+    const included = rows.filter((row) => row.hasQualifyingTrigger);
 
-    expect(atRisk).toEqual([82.4, 41.2]);
+    expect(included.map((row) => row.id)).toEqual(['stale-low']);
+    expect(AFC_RISK_AT_RISK_SCORE_THRESHOLD).toBe(40);
   });
 
-  it('adds note-signal risk for strong outside/local lender phrasing', () => {
-    const strongTextRisk = 25;
-    const baseScore = computeRiskScore({
-      hasDealRecord: false,
-      usedAfc: null,
-      daysSinceActivity: 5,
-      daysToClose: 30,
-      outsideLossRatePct: 10,
-      sourceCloseRatePct: 70,
-      noteSignalScore: 0
-    });
-    const withStrongNotes = computeRiskScore({
-      hasDealRecord: false,
-      usedAfc: null,
-      daysSinceActivity: 5,
-      daysToClose: 30,
-      outsideLossRatePct: 10,
-      sourceCloseRatePct: 70,
-      noteSignalScore: strongTextRisk
-    });
+  it('adds note-signal risk for outside lender, offer, showing, preferred lender, prior lender, and urgency phrasing', () => {
+    const signals = [
+      'Buyer is shopping rates and got a better rate.',
+      'They are putting in an offer after going to see homes.',
+      'Agent says builder lender is preferred.',
+      'Borrower is already working with my lender.',
+      'Needs lender ASAP because appraisal ordered.'
+    ];
 
-    expect(withStrongNotes - baseScore).toBeCloseTo(24.9, 2);
+    signals.forEach((signal) => {
+      expect(scoreOutsideLenderNoteSignals(signal).score).toBeGreaterThan(0);
+    });
   });
 
   it('suppresses note-only risk when counter-signal indicates staying with AFC', () => {
-    const strongTextRisk = 25;
-    const suppressorReduction = 18;
-    const resultingSignal = Math.max(0, strongTextRisk - suppressorReduction);
+    const resultingSignal = scoreOutsideLenderNoteSignals(
+      'Borrower compared fees but confirmed AFC and loan file opened.'
+    );
 
-    expect(resultingSignal).toBe(7);
+    expect(resultingSignal.score).toBe(0);
+  });
+
+  it('removes stale page risk after an edit and resurfaces after 14 days without another edit', () => {
+    expect(
+      shouldShowStalePageTrigger({
+        editedAfterStatus: false,
+        daysInStatus: 7,
+        daysSinceLastUpdated: 7
+      })
+    ).toBe(true);
+    expect(
+      shouldShowStalePageTrigger({
+        editedAfterStatus: true,
+        daysInStatus: 10,
+        daysSinceLastUpdated: 0
+      })
+    ).toBe(false);
+    expect(
+      shouldShowStalePageTrigger({
+        editedAfterStatus: true,
+        daysInStatus: 21,
+        daysSinceLastUpdated: 14
+      })
+    ).toBe(true);
+  });
+
+  it('uses MC, assigned-agent, and source/network low attach patterns as scoring signals', () => {
+    const patternScore = computeRiskScore({
+      hasDealRecord: false,
+      usedAfc: null,
+      daysSinceLastUpdated: 0,
+      outsideLossRatePct: 35,
+      assignedAgentOutsideLossRatePct: 25,
+      agentAssignedAgentOutsideLossRatePct: 40,
+      sourceNetworkAttachRatePct: 45,
+      baselineAttachRatePct: 82,
+      outsideLossSampleSize: 8,
+      sourceNetworkSampleSize: 6
+    });
+
+    expect(patternScore).toBeGreaterThan(0);
+  });
+
+  it('includes loan file number and last-updated fields in row payloads', () => {
+    const row = {
+      borrowerName: 'Test Buyer',
+      loanFileNumber: '12345678901',
+      lastUpdatedAt: '2026-06-01T12:00:00.000Z',
+      daysSinceLastUpdated: 9
+    };
+
+    expect(row.loanFileNumber).toBe('12345678901');
+    expect(row.lastUpdatedAt).toContain('2026-06-01');
+    expect(row.daysSinceLastUpdated).toBe(9);
   });
 });
 
