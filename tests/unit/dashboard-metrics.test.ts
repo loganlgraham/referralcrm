@@ -1350,15 +1350,18 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     paymentStatus,
     clientType = 'Buyer',
     dealSide = 'buy',
-    daysInStatus = AFC_RISK_STALE_DAYS
+    daysInStatus = AFC_RISK_STALE_DAYS,
+    agentDesignation = 'AHA_OOS'
   }: {
     referralStatus: string;
     paymentStatus?: string | null;
     clientType?: 'Buyer' | 'Seller' | 'Both';
     dealSide?: 'buy' | 'sell';
     daysInStatus?: number;
+    agentDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   }) => {
     const normalizedReferralStatus = normalizeStatusKey(referralStatus);
+    if (agentDesignation !== 'AHA_OOS') return false;
     if (TERMINAL_REFERRAL_STATUS_KEYS.has(normalizedReferralStatus)) return false;
     if (paymentStatus && TERMINAL_PAYMENT_STATUS_KEYS.has(normalizeStatusKey(paymentStatus))) return false;
     if (paymentStatus && UNDER_CONTRACT_PAYMENT_STATUS_KEYS.has(normalizeStatusKey(paymentStatus))) return false;
@@ -1388,6 +1391,7 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     daysSinceLastUpdated,
     outsideLossRatePct,
     assignedAgentOutsideLossRatePct = 0,
+    agentAssignedAgentOutsideLossRatePct = 0,
     sourceNetworkAttachRatePct = 100,
     baselineAttachRatePct = 100,
     noteSignalScore = 0,
@@ -1399,6 +1403,7 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     daysSinceLastUpdated: number;
     outsideLossRatePct: number;
     assignedAgentOutsideLossRatePct?: number;
+    agentAssignedAgentOutsideLossRatePct?: number;
     sourceNetworkAttachRatePct?: number;
     baselineAttachRatePct?: number;
     noteSignalScore?: number;
@@ -1428,6 +1433,12 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
       assignedAgentOutsideLossRatePct >= 20
     ) {
       score += Math.min(20, assignedAgentOutsideLossRatePct * 0.4);
+    }
+    if (
+      outsideLossSampleSize >= AFC_RISK_MIN_HISTORICAL_SAMPLE &&
+      agentAssignedAgentOutsideLossRatePct >= 20
+    ) {
+      score += Math.min(20, agentAssignedAgentOutsideLossRatePct * 0.4);
     }
 
     const sourceNetworkThreshold = Math.min(
@@ -1491,12 +1502,14 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
       .sort((a, b) => {
         const aPriority =
           (isHighOutsideLoss && a.label.startsWith('MC historical outside-lender loss') ? 2 : 0) +
-          (isHighOutsideLoss && a.label.startsWith('MC keeps agent but loses AFC') ? 2 : 0) +
+          (isHighOutsideLoss && a.label.startsWith('MC history: agent used, AFC not used') ? 2 : 0) +
+          (a.label.startsWith('Agent history: agent used, AFC not used') ? 2 : 0) +
           (a.label.startsWith('Source/network low AFC attach') ? 1 : 0) +
           (a.label.startsWith('Notes mention outside/local lender intent') ? 1 : 0);
         const bPriority =
           (isHighOutsideLoss && b.label.startsWith('MC historical outside-lender loss') ? 2 : 0) +
-          (isHighOutsideLoss && b.label.startsWith('MC keeps agent but loses AFC') ? 2 : 0) +
+          (isHighOutsideLoss && b.label.startsWith('MC history: agent used, AFC not used') ? 2 : 0) +
+          (b.label.startsWith('Agent history: agent used, AFC not used') ? 2 : 0) +
           (b.label.startsWith('Source/network low AFC attach') ? 1 : 0) +
           (b.label.startsWith('Notes mention outside/local lender intent') ? 1 : 0);
         if (bPriority !== aPriority) return bPriority - aPriority;
@@ -1513,6 +1526,7 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
       daysSinceLastUpdated: 21,
       outsideLossRatePct: 40,
       assignedAgentOutsideLossRatePct: 30,
+      agentAssignedAgentOutsideLossRatePct: 30,
       sourceNetworkAttachRatePct: 45,
       baselineAttachRatePct: 82
     });
@@ -1522,6 +1536,7 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
       daysSinceLastUpdated: 3,
       outsideLossRatePct: 10,
       assignedAgentOutsideLossRatePct: 0,
+      agentAssignedAgentOutsideLossRatePct: 0,
       sourceNetworkAttachRatePct: 75,
       baselineAttachRatePct: 82
     });
@@ -1600,6 +1615,25 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
       .map((referral) => referral.id);
 
     expect(included).toEqual(['active', 'aged-communication']);
+  });
+
+  it('limits entries to AHA OOS attached agents', () => {
+    const ahaOos = shouldIncludeInAfcRiskList({
+      referralStatus: 'Active Lead',
+      agentDesignation: 'AHA_OOS'
+    });
+    const aha = shouldIncludeInAfcRiskList({
+      referralStatus: 'Active Lead',
+      agentDesignation: 'AHA'
+    });
+    const agit = shouldIncludeInAfcRiskList({
+      referralStatus: 'Active Lead',
+      agentDesignation: 'AGIT'
+    });
+
+    expect(ahaOos).toBe(true);
+    expect(aha).toBe(false);
+    expect(agit).toBe(false);
   });
 
   it('excludes referrals when referral status is terminal', () => {
@@ -1708,13 +1742,14 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     ).toBe(true);
   });
 
-  it('uses MC assigned-agent AFC loss and source/network low attach patterns as scoring signals', () => {
+  it('uses MC, assigned-agent, and source/network low attach patterns as scoring signals', () => {
     const patternScore = computeRiskScore({
       hasDealRecord: false,
       usedAfc: null,
       daysSinceLastUpdated: 0,
       outsideLossRatePct: 35,
       assignedAgentOutsideLossRatePct: 25,
+      agentAssignedAgentOutsideLossRatePct: 40,
       sourceNetworkAttachRatePct: 45,
       baselineAttachRatePct: 82,
       outsideLossSampleSize: 8,

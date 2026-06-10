@@ -248,7 +248,8 @@ const AFC_RISK_STALE_DAYS = 7;
 const AFC_RISK_RESURFACE_DAYS = 14;
 const AFC_RISK_TARGET_STATUS_KEYS = new Set(['active_lead', 'in_communication']);
 const AFC_RISK_MC_LOSS_REASON_PREFIX = 'MC historical outside-lender loss';
-const AFC_RISK_MC_ASSIGNED_AGENT_LOSS_REASON_PREFIX = 'MC keeps agent but loses AFC';
+const AFC_RISK_MC_ASSIGNED_AGENT_LOSS_REASON_PREFIX = 'MC history: agent used, AFC not used';
+const AFC_RISK_AGENT_ASSIGNED_AGENT_LOSS_REASON_PREFIX = 'Agent history: agent used, AFC not used';
 const AFC_RISK_SOURCE_PATTERN_REASON_PREFIX = 'Source/network low AFC attach';
 const AFC_RISK_OUTSIDE_NOTE_REASON_PREFIX = 'Notes mention outside/local lender intent';
 // M-16: soft-match phrasing for lender-shopping hints; treated as a weaker
@@ -434,11 +435,13 @@ function prioritizeAfcRiskReasons(
       const aPriority =
         (isHighOutsideLoss && a.label.startsWith(AFC_RISK_MC_LOSS_REASON_PREFIX) ? 2 : 0) +
         (isHighOutsideLoss && a.label.startsWith(AFC_RISK_MC_ASSIGNED_AGENT_LOSS_REASON_PREFIX) ? 2 : 0) +
+          (a.label.startsWith(AFC_RISK_AGENT_ASSIGNED_AGENT_LOSS_REASON_PREFIX) ? 2 : 0) +
         (a.label.startsWith(AFC_RISK_SOURCE_PATTERN_REASON_PREFIX) ? 1 : 0) +
         (a.label.startsWith(AFC_RISK_OUTSIDE_NOTE_REASON_PREFIX) ? 1 : 0);
       const bPriority =
         (isHighOutsideLoss && b.label.startsWith(AFC_RISK_MC_LOSS_REASON_PREFIX) ? 2 : 0) +
         (isHighOutsideLoss && b.label.startsWith(AFC_RISK_MC_ASSIGNED_AGENT_LOSS_REASON_PREFIX) ? 2 : 0) +
+          (b.label.startsWith(AFC_RISK_AGENT_ASSIGNED_AGENT_LOSS_REASON_PREFIX) ? 2 : 0) +
         (b.label.startsWith(AFC_RISK_SOURCE_PATTERN_REASON_PREFIX) ? 1 : 0) +
         (b.label.startsWith(AFC_RISK_OUTSIDE_NOTE_REASON_PREFIX) ? 1 : 0);
       if (bPriority !== aPriority) return bPriority - aPriority;
@@ -2306,6 +2309,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const mcTotalClosedDealsForAfcRiskMap = new Map<string, number>();
   const mcOutsideLenderLossForAfcRiskMap = new Map<string, number>();
   const mcAssignedAgentOutsideLenderLossForAfcRiskMap = new Map<string, number>();
+  const agentAssignedAgentClosedDealsForAfcRiskMap = new Map<string, number>();
+  const agentAssignedAgentOutsideLenderLossForAfcRiskMap = new Map<string, number>();
   allClosedDealsForAfcRisk.forEach((payment) => {
     const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     mcTotalClosedDealsForAfcRiskMap.set(mcKey, (mcTotalClosedDealsForAfcRiskMap.get(mcKey) ?? 0) + 1);
@@ -2317,6 +2322,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         mcKey,
         (mcAssignedAgentOutsideLenderLossForAfcRiskMap.get(mcKey) ?? 0) + 1
       );
+    }
+    const agentKey = payment.agentId?.toString() ?? payment.referral?.assignedAgent?.toString() ?? null;
+    if (agentKey && payment.usedAssignedAgent === true) {
+      agentAssignedAgentClosedDealsForAfcRiskMap.set(
+        agentKey,
+        (agentAssignedAgentClosedDealsForAfcRiskMap.get(agentKey) ?? 0) + 1
+      );
+      if (payment.usedAfc === false) {
+        agentAssignedAgentOutsideLenderLossForAfcRiskMap.set(
+          agentKey,
+          (agentAssignedAgentOutsideLenderLossForAfcRiskMap.get(agentKey) ?? 0) + 1
+        );
+      }
     }
   });
 
@@ -2977,6 +2995,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const mcCandidateReferrals = referralsByNetwork.filter((referral) => {
     if (!referral.lender) return false;
+    if (getReferralDesignation(referral) !== 'AHA_OOS') return false;
     const normalizedStatus = normalizeStatusKey(referral.status);
     const referralId = referral._id.toString();
     const linkedPayment = latestPaymentByReferralId.get(referralId);
@@ -3127,6 +3146,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         reasons.push({
           label: `${AFC_RISK_MC_ASSIGNED_AGENT_LOSS_REASON_PREFIX} ${(assignedAgentOutsideLossRate * 100).toFixed(1)}% (${assignedAgentOutsideLossCount})`,
           score: assignedAgentLossBoost
+        });
+      }
+
+      const agentClosedSampleSize = agentId ? agentAssignedAgentClosedDealsForAfcRiskMap.get(agentId) ?? 0 : 0;
+      const agentAssignedAgentOutsideLossCount = agentId
+        ? agentAssignedAgentOutsideLenderLossForAfcRiskMap.get(agentId) ?? 0
+        : 0;
+      const agentAssignedAgentOutsideLossRate =
+        agentClosedSampleSize > 0 ? agentAssignedAgentOutsideLossCount / agentClosedSampleSize : 0;
+      if (
+        agentClosedSampleSize >= AFC_RISK_MIN_HISTORICAL_SAMPLE &&
+        agentAssignedAgentOutsideLossRate >= 0.2 &&
+        agentAssignedAgentOutsideLossCount > 0
+      ) {
+        const agentHistoryBoost = Math.min(
+          20,
+          Math.round(agentAssignedAgentOutsideLossRate * 100 * 0.4 * 10) / 10
+        );
+        riskScore += agentHistoryBoost;
+        hasQualifyingTrigger = true;
+        reasons.push({
+          label: `${AFC_RISK_AGENT_ASSIGNED_AGENT_LOSS_REASON_PREFIX} ${(agentAssignedAgentOutsideLossRate * 100).toFixed(1)}% (${agentAssignedAgentOutsideLossCount})`,
+          score: agentHistoryBoost
         });
       }
 

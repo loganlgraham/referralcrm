@@ -2732,11 +2732,11 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">AFC Loss Risk Call List</p>
       <p className="mt-1 text-xs text-foreground-subtle">
-        Buyer referrals in Active Lead or aged In Communication status with outside-lender risk signals.
+        AHA OOS buyer referrals in Active Lead or aged In Communication status with outside-lender risk signals.
         Under-contract referrals are excluded; rows can resurface after 14 days without a page update.
       </p>
       {entries.length === 0 ? (
-        <p className="py-8 text-center text-sm text-foreground-subtle">No qualifying Active Lead or In Communication buyer referrals.</p>
+        <p className="py-8 text-center text-sm text-foreground-subtle">No qualifying AHA OOS Active Lead or In Communication buyer referrals.</p>
       ) : (
         <div
           className="mt-4 overflow-x-auto overflow-y-auto"
