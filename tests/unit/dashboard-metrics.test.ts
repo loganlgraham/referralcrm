@@ -1465,22 +1465,30 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     'already working with',
     'shopping rates',
     'better rate',
-    'putting in an offer',
-    'going to see homes',
     'needs lender asap',
     'appraisal ordered'
   ];
-  const NOTE_SIGNAL_SOFT_PHRASES = ['quoted', 'apr', 'points', 'fees', 'offer deadline'];
+  const NOTE_SIGNAL_SOFT_PHRASES = ['quoted', 'apr', 'points', 'fees'];
+  const NOTE_SIGNAL_ACTIVE_BUYER_PHRASES = [
+    'putting in an offer',
+    'writing an offer',
+    'offer deadline',
+    'going to see homes',
+    'showing homes'
+  ];
   const NOTE_SIGNAL_SUPPRESSOR_PHRASES = ['confirmed afc', 'staying with afc', 'afc pre-approved', 'loan file opened'];
 
   const scoreOutsideLenderNoteSignals = (text: string) => {
     const normalizedText = text.toLowerCase().replace(/\s+/g, ' ').trim();
     const strongMatch = NOTE_SIGNAL_STRONG_PHRASES.find((phrase) => normalizedText.includes(phrase));
     const softMatch = NOTE_SIGNAL_SOFT_PHRASES.find((phrase) => normalizedText.includes(phrase));
+    const activeBuyerMatch = NOTE_SIGNAL_ACTIVE_BUYER_PHRASES.find((phrase) => normalizedText.includes(phrase));
     const suppressorMatch = NOTE_SIGNAL_SUPPRESSOR_PHRASES.find((phrase) => normalizedText.includes(phrase));
-    let score = strongMatch ? 25 : softMatch ? 10 : 0;
+    const outsideScore = strongMatch ? 25 : softMatch ? 10 : 0;
+    const activeBuyerScore = activeBuyerMatch ? 12 : 0;
+    let score = outsideScore + activeBuyerScore;
     if (suppressorMatch) {
-      score = Math.max(0, score - 12);
+      score -= Math.min(12, outsideScore);
     }
     return {
       score,
@@ -1488,6 +1496,8 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
         ? `Notes mention outside/local lender intent (${strongMatch})`
         : softMatch
           ? `Notes suggest lender-shopping (${softMatch})`
+          : activeBuyerMatch
+            ? `Notes show active buyer activity (${activeBuyerMatch})`
           : null
     };
   };
@@ -1696,10 +1706,9 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     expect(AFC_RISK_AT_RISK_SCORE_THRESHOLD).toBe(40);
   });
 
-  it('adds note-signal risk for outside lender, offer, showing, preferred lender, prior lender, and urgency phrasing', () => {
+  it('adds note-signal risk for outside lender, preferred lender, prior lender, and urgency phrasing', () => {
     const signals = [
       'Buyer is shopping rates and got a better rate.',
-      'They are putting in an offer after going to see homes.',
       'Agent says builder lender is preferred.',
       'Borrower is already working with my lender.',
       'Needs lender ASAP because appraisal ordered.'
@@ -1710,12 +1719,33 @@ describe('Dashboard Metrics - MC AFC Risk Call List', () => {
     });
   });
 
+  it('categorizes showing homes and writing offers as active buyer activity, not outside lender intent', () => {
+    const offerSignal = scoreOutsideLenderNoteSignals(
+      'They are writing an offer after going to see homes.'
+    );
+    const showingSignal = scoreOutsideLenderNoteSignals('Buyer is showing homes this weekend.');
+
+    expect(offerSignal.score).toBeGreaterThan(0);
+    expect(offerSignal.reason).toBe('Notes show active buyer activity (writing an offer)');
+    expect(showingSignal.score).toBeGreaterThan(0);
+    expect(showingSignal.reason).toBe('Notes show active buyer activity (showing homes)');
+  });
+
   it('suppresses note-only risk when counter-signal indicates staying with AFC', () => {
     const resultingSignal = scoreOutsideLenderNoteSignals(
       'Borrower compared fees but confirmed AFC and loan file opened.'
     );
 
     expect(resultingSignal.score).toBe(0);
+  });
+
+  it('keeps active buyer activity risk even when notes confirm AFC', () => {
+    const resultingSignal = scoreOutsideLenderNoteSignals(
+      'Borrower is writing an offer and confirmed AFC.'
+    );
+
+    expect(resultingSignal.score).toBeGreaterThan(0);
+    expect(resultingSignal.reason).toBe('Notes show active buyer activity (writing an offer)');
   });
 
   it('removes stale page risk after an edit and resurfaces after 14 days without another edit', () => {

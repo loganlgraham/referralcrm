@@ -252,6 +252,7 @@ const AFC_RISK_MC_ASSIGNED_AGENT_LOSS_REASON_PREFIX = 'MC history: agent used, A
 const AFC_RISK_AGENT_ASSIGNED_AGENT_LOSS_REASON_PREFIX = 'Agent history: agent used, AFC not used';
 const AFC_RISK_SOURCE_PATTERN_REASON_PREFIX = 'Source/network low AFC attach';
 const AFC_RISK_OUTSIDE_NOTE_REASON_PREFIX = 'Notes mention outside/local lender intent';
+const AFC_RISK_ACTIVE_BUYER_NOTE_REASON_PREFIX = 'Notes show active buyer activity';
 // M-16: soft-match phrasing for lender-shopping hints; treated as a weaker
 // outside-lender note signal so the `hasOutsideLenderNoteSignal` check still
 // trips when only soft matches are present.
@@ -281,13 +282,6 @@ const NOTE_SIGNAL_STRONG_PHRASES = [
   'locked rate',
   'lender credit',
   'cash to close',
-  'putting in an offer',
-  'writing an offer',
-  'offer due',
-  'offer deadline',
-  'going to see homes',
-  'showing homes',
-  'touring',
   'needs lender asap',
   'underwriting',
   'appraisal ordered',
@@ -307,9 +301,18 @@ const NOTE_SIGNAL_SOFT_PHRASES = [
   'asked about another lender',
   'considering another lender',
   'mentioned local lender',
-  'comparing lenders',
+  'comparing lenders'
+];
+const NOTE_SIGNAL_ACTIVE_BUYER_PHRASES = [
+  'putting in an offer',
+  'writing an offer',
+  'offer due',
+  'offer deadline',
   'put in an offer',
   'make an offer',
+  'going to see homes',
+  'showing homes',
+  'touring',
   'see homes',
   'tour homes',
   'deadline'
@@ -622,6 +625,7 @@ function scoreOutsideLenderNoteSignals(
 
   const strongMatches = NOTE_SIGNAL_STRONG_PHRASES.filter((phrase) => normalizedText.includes(phrase));
   const softMatches = NOTE_SIGNAL_SOFT_PHRASES.filter((phrase) => normalizedText.includes(phrase));
+  const activeBuyerMatches = NOTE_SIGNAL_ACTIVE_BUYER_PHRASES.filter((phrase) => normalizedText.includes(phrase));
   const suppressorMatches = NOTE_SIGNAL_SUPPRESSOR_PHRASES.filter((phrase) => normalizedText.includes(phrase));
 
   let score = 0;
@@ -640,9 +644,26 @@ function scoreOutsideLenderNoteSignals(
     confidence = 'medium';
   }
 
+  if (activeBuyerMatches.length > 0) {
+    const activeBuyerScore = Math.min(18, 12 + (activeBuyerMatches.length - 1) * 3);
+    score += activeBuyerScore;
+    reasons.push({
+      label: `${AFC_RISK_ACTIVE_BUYER_NOTE_REASON_PREFIX} (${activeBuyerMatches[0]})`,
+      score: activeBuyerScore
+    });
+    confidence = confidence ?? 'medium';
+  }
+
   if (suppressorMatches.length > 0) {
     const reduction = Math.min(20, 12 + (suppressorMatches.length - 1) * 4);
-    score = Math.max(0, score - reduction);
+    const outsideLenderScore = reasons
+      .filter(
+        (reason) =>
+          reason.label.startsWith(AFC_RISK_OUTSIDE_NOTE_REASON_PREFIX) ||
+          reason.label.startsWith(AFC_RISK_OUTSIDE_NOTE_SOFT_REASON_PREFIX)
+      )
+      .reduce((sum, reason) => sum + Math.max(0, reason.score), 0);
+    score -= Math.min(reduction, outsideLenderScore);
     reasons.push({ label: `Counter-signal in notes (${suppressorMatches[0]})`, score: -reduction });
     if (score === 0) {
       confidence = 'low';
