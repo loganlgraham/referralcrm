@@ -376,7 +376,7 @@ interface StageOnTransferDrilldownEntry {
 const isClosedDealEligible = (payment: AggregatedPayment): boolean =>
   CLOSED_DEAL_STATUSES.has(payment.status) &&
   payment.agentAttribution !== 'OUTSIDE_AGENT' &&
-  payment.usedAssignedAgent !== false;
+  payment.usedAssignedAgent === true;
 
 function normalizeStatusKey(value: unknown): string {
   return String(value ?? '')
@@ -2291,7 +2291,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const mcAllClosedDealsForAssignedAgentRateMap = new Map<string, number>();
   const mcNoAssignedAgentClosesMap = new Map<string, number>();
   // C-10: MC close-rate leaderboards must use `isClosedDealEligible` so that
-  // outside-agent / usedAssignedAgent=false payments don't inflate denominators.
+  // outside-agent / non-assigned-agent payments don't inflate denominators.
   const eligibleClosedDealsInTimeframe = allClosedDealsInTimeframe.filter((payment) =>
     isClosedDealEligible(payment)
   );
@@ -4233,7 +4233,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   ).length;
 
   // C-6: mirror Main dashboard's isClosedDealEligible (which additionally
-  // excludes payments where usedAssignedAgent === false).
+  // requires usedAssignedAgent === true).
   const agitDealsClosed = agitFilteredPayments.filter((payment) => isClosedDealEligible(payment))
     .length;
 
