@@ -63,7 +63,7 @@ describe('Dashboard Metrics - Close Rate Calculation', () => {
     const isClosedDealEligible = (payment: (typeof paymentsByNetwork)[number]) =>
       ['closed', 'payment_sent', 'paid'].includes(payment.status) &&
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
-      payment.usedAssignedAgent !== false;
+      payment.usedAssignedAgent === true;
 
     const cohortClosedByMc = new Map<string, number>();
     paymentsByNetwork
@@ -107,7 +107,7 @@ describe('Dashboard Metrics - Close Rate Calculation', () => {
     const isClosedDealEligible = (payment: (typeof paymentsByNetwork)[number]) =>
       ['closed', 'payment_sent', 'paid'].includes(payment.status) &&
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
-      payment.usedAssignedAgent !== false;
+      payment.usedAssignedAgent === true;
 
     const cohortClosedByAgent = new Map<string, number>();
     paymentsByNetwork
@@ -132,22 +132,23 @@ describe('Dashboard Metrics - Close Rate Calculation', () => {
 });
 
 describe('Dashboard Metrics - Closed Deal Eligibility', () => {
-  it('counts closed-like deals, excludes outside agent, and allows null usedAssignedAgent', () => {
+  it('counts only closed-like deals with usedAssignedAgent=true and excludes terminated deals', () => {
     const payments = [
       { status: 'closed', agentAttribution: 'AHA', usedAssignedAgent: true },
       { status: 'payment_sent', agentAttribution: 'AHA', usedAssignedAgent: null },
       { status: 'paid', agentAttribution: 'AHA_OOS', usedAssignedAgent: undefined },
       { status: 'paid', agentAttribution: 'OUTSIDE_AGENT', usedAssignedAgent: true },
       { status: 'closed', agentAttribution: 'AHA', usedAssignedAgent: false },
+      { status: 'terminated', agentAttribution: 'AHA', usedAssignedAgent: true },
     ];
 
     const isClosedEligible = (payment: (typeof payments)[number]) =>
       ['closed', 'payment_sent', 'paid'].includes(payment.status) &&
       payment.agentAttribution !== 'OUTSIDE_AGENT' &&
-      payment.usedAssignedAgent !== false;
+      payment.usedAssignedAgent === true;
 
     const closedCount = payments.filter(isClosedEligible).length;
-    expect(closedCount).toBe(3);
+    expect(closedCount).toBe(1);
   });
 });
 
