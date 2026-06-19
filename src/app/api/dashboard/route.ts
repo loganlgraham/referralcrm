@@ -1637,7 +1637,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const monthCandidates: Date[] = [];
   referralsByNetwork.forEach((referral) => {
-    if (referral.createdAt) monthCandidates.push(new Date(referral.createdAt));
+    const cohortAnchor = getReferralTimeframeAnchor(referral);
+    if (cohortAnchor) monthCandidates.push(cohortAnchor);
   });
   paymentsByNetwork.forEach((payment) => {
     if (payment.metricDate) monthCandidates.push(payment.metricDate);
@@ -1675,9 +1676,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   >();
   const referralIdsByMonth = new Map<string, Set<string>>();
   referralsByNetwork.forEach((referral) => {
-    if (!referral.createdAt) return;
-    const createdAt = new Date(referral.createdAt);
-    const key = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
+    const cohortAnchor = getReferralTimeframeAnchor(referral);
+    if (!cohortAnchor) return;
+    const key = `${cohortAnchor.getFullYear()}-${String(cohortAnchor.getMonth() + 1).padStart(2, '0')}`;
     const current =
       referralMonthlyMap.get(key) ?? { total: 0, transfers: 0, ahaReferrals: 0, ahaOosReferrals: 0 };
     current.total += 1;
@@ -1724,16 +1725,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     revenueReceivedByMonth.set(receivedKey, (revenueReceivedByMonth.get(receivedKey) ?? 0) + receivedCents);
   });
 
-  // Close Rate: cohort-based (deals from referrals created in month X / referrals in month X)
+  // Close Rate: cohort-based (deals from referrals anchored in month X / referrals in month X)
   // Count closed, payment sent, and paid deals for a consistent closed-deal definition.
   const dealsFromCohort = new Map<string, number>();
   paymentsByNetwork.forEach((payment) => {
     if (!isClosedDealEligible(payment)) return;
 
-    const referralCreatedAt = payment.referral?.createdAt ? new Date(payment.referral.createdAt) : null;
-    if (!referralCreatedAt) return;
+    const cohortAnchor = getReferralTimeframeAnchor(payment.referral);
+    if (!cohortAnchor) return;
 
-    const key = `${referralCreatedAt.getFullYear()}-${String(referralCreatedAt.getMonth() + 1).padStart(2, '0')}`;
+    const key = `${cohortAnchor.getFullYear()}-${String(cohortAnchor.getMonth() + 1).padStart(2, '0')}`;
     const referralIds = referralIdsByMonth.get(key);
     if (!referralIds?.has(payment.referral._id.toString())) return;
 
@@ -1746,8 +1747,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     { total: number; transfers: number }
   >();
   filteredReferrals.forEach((referral) => {
-    if (!referral.createdAt) return;
-    const key = getTimeframeBucketKey(new Date(referral.createdAt), context.timeframe);
+    const cohortAnchor = getReferralTimeframeAnchor(referral);
+    if (!cohortAnchor) return;
+    const key = getTimeframeBucketKey(cohortAnchor, context.timeframe);
     const current = referralTimeframeMap.get(key) ?? { total: 0, transfers: 0 };
     current.total += 1;
     if (referral.origin === 'admin' && referral.lender) {
@@ -1789,15 +1791,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     dealTimeframeMap.set(key, current);
   });
 
-  // Close rate per bucket: deals whose referral was created in that bucket.
-  // Use paymentsByNetwork (all payments) to count deals from referrals created in each bucket,
+  // Close rate per bucket: deals whose referral is anchored in that bucket.
+  // Use paymentsByNetwork (all payments) to count deals from referrals anchored in each bucket,
   // regardless of when the deal closed (cohort-based calculation)
   const dealsClosedByReferralBucket = new Map<string, number>();
   paymentsByNetwork.forEach((payment) => {
     if (!isClosedDealEligible(payment)) return;
-    const createdAt = payment.referral?.createdAt;
-    if (!createdAt) return;
-    const key = getTimeframeBucketKey(new Date(createdAt), context.timeframe);
+    const cohortAnchor = getReferralTimeframeAnchor(payment.referral);
+    if (!cohortAnchor) return;
+    const key = getTimeframeBucketKey(cohortAnchor, context.timeframe);
     dealsClosedByReferralBucket.set(key, (dealsClosedByReferralBucket.get(key) ?? 0) + 1);
   });
 
