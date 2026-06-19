@@ -169,8 +169,8 @@ interface DashboardReferral {
   updatedAt?: Date;
   referralDate?: Date | null;
   statusLastUpdated?: Date;
-  source: 'Lender' | 'MC';
-  endorser?: string;
+  source?: 'Lender' | 'MC' | string | null;
+  endorser?: string | null;
   origin?: 'agent' | 'mc' | 'admin' | '';
   org?: 'AFC' | 'AHA';
   lookingInZip?: string;
@@ -383,6 +383,11 @@ function normalizeStatusKey(value: unknown): string {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, '_');
+}
+
+function normalizeOptionalText(value: unknown): string | null {
+  const trimmed = String(value ?? '').trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 function isTerminalReferralStatus(status: unknown): boolean {
@@ -885,6 +890,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           completed: [],
           created: []
         },
+        missingAttributionReferrals: [],
         stalePipelineCount: 0,
         stalePipelineList: []
       },
@@ -3884,6 +3890,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // Admin metrics: referrals created within timeframe and network only.
   // "Unassigned" = still in "New Lead" (not paired). "Assigned" = moved to Paired or beyond.
   const adminEligibleReferrals = filteredReferrals;
+  const missingAttributionReferrals = adminEligibleReferrals
+    .filter((referral) => !normalizeOptionalText(referral.source) || !normalizeOptionalText(referral.endorser))
+    .map((referral) => {
+      const agentId = referral.assignedAgent?.toString() ?? null;
+      const mcId = referral.lender?.toString() ?? null;
+      return {
+        id: referral._id.toString(),
+        borrowerName: referral.borrower?.name?.trim() || 'Unknown',
+        status: referral.status ?? 'New Lead',
+        agentName: agentId ? (agentNameMap.get(agentId) ?? null) : null,
+        mcName: mcId ? (lenderNameMap.get(mcId) ?? null) : null,
+        source: normalizeOptionalText(referral.source),
+        endorser: normalizeOptionalText(referral.endorser),
+        createdAt: referral.createdAt.toISOString(),
+        referralDate: referral.referralDate ? new Date(referral.referralDate).toISOString() : null
+      };
+    })
+    .sort((a, b) => {
+      const aDate = new Date(a.referralDate ?? a.createdAt).getTime();
+      const bDate = new Date(b.referralDate ?? b.createdAt).getTime();
+      return bDate - aDate || a.borrowerName.localeCompare(b.borrowerName) || a.id.localeCompare(b.id);
+    });
 
   // M-29: assignment rate must be driven by `assignedAgent` presence, not by
   // referral.status === 'New Lead' (which can be true after re-opens, etc).
@@ -4543,6 +4571,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       onTimeTaskCompletionSampleSize,
       totalOpenTasks,
       taskActivityTrend,
+      missingAttributionReferrals,
       stalePipelineCount: staleReferrals.length,
       stalePipelineList
     },
