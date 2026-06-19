@@ -416,6 +416,7 @@ interface DashboardResponse {
       completed: TrendPoint[];
       created: TrendPoint[];
     };
+    missingAttributionReferrals: MissingAttributionReferralEntry[];
     stalePipelineCount: number;
     stalePipelineList: StaleReferralEntry[];
   };
@@ -477,6 +478,18 @@ interface StaleReferralEntry {
   mcName: string | null;
   lastActivityAt: string | null;
   daysSinceActivity: number;
+}
+
+interface MissingAttributionReferralEntry {
+  id: string;
+  borrowerName: string;
+  status: string;
+  agentName: string | null;
+  mcName: string | null;
+  source: string | null;
+  endorser: string | null;
+  createdAt: string;
+  referralDate: string | null;
 }
 
 const TAB_OPTIONS = [
@@ -3195,6 +3208,54 @@ function StaleReferralsTable({ referrals }: { referrals: StaleReferralEntry[] })
   );
 }
 
+function MissingAttributionReferralsTable({ referrals }: { referrals: MissingAttributionReferralEntry[] }) {
+  if (!referrals.length) {
+    return (
+      <p className="px-6 py-8 text-center text-sm text-foreground-subtle">
+        All referrals in this view have Source and Endorser.
+      </p>
+    );
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead>
+          <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
+            <th className="px-6 py-3">Borrower</th>
+            <th className="px-6 py-3">Status</th>
+            <th className="px-6 py-3">Agent</th>
+            <th className="px-6 py-3">MC</th>
+            <th className="px-6 py-3">Missing</th>
+            <th className="px-6 py-3">Referral Date</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {referrals.map((row) => {
+            const missingFields = [
+              row.source ? null : 'Source',
+              row.endorser ? null : 'Endorser'
+            ].filter((field): field is string => Boolean(field));
+            return (
+              <tr key={row.id} className="hover:bg-surface-muted">
+                <td className="px-6 py-3 font-medium text-foreground-muted">
+                  <Link href={`/referrals/${row.id}`} className="hover:text-sky-600 hover:underline">
+                    {row.borrowerName}
+                  </Link>
+                </td>
+                <td className="px-6 py-3 text-foreground-muted">{row.status}</td>
+                <td className="px-6 py-3 text-foreground-muted">{row.agentName ?? '—'}</td>
+                <td className="px-6 py-3 text-foreground-muted">{row.mcName ?? '—'}</td>
+                <td className="px-6 py-3 font-medium text-foreground-muted">{missingFields.join(', ')}</td>
+                <td className="px-6 py-3 text-foreground-muted">{formatDate(row.referralDate ?? row.createdAt)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
   const [showStaleModal, setShowStaleModal] = useState(false);
   const assignmentRate = data.totalReferrals
@@ -3314,6 +3375,17 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
           ]}
         />
       ) : null}
+      <div className="rounded-card border border-border bg-surface-raised shadow-card">
+        <div className="border-b border-border px-6 py-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+            Missing Source or Endorser
+          </p>
+          <p className="mt-1 text-sm text-foreground-subtle">
+            {formatNumber(data.missingAttributionReferrals.length)} referrals need attribution details in this view
+          </p>
+        </div>
+        <MissingAttributionReferralsTable referrals={data.missingAttributionReferrals} />
+      </div>
     </div>
   );
 }
