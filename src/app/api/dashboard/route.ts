@@ -3602,17 +3602,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const slaContractDaysMap = new Map<string, number[]>();
     const slaFirstContactMap = new Map<string, number[]>();
     const bucketReferralIds = new Set(bucketReferrals.map((r) => r._id.toString()));
+    const referralIdToAgentKey = new Map<string, string>();
     const cohortClosedCountMap = new Map<string, number>();
 
     bucketReferrals.forEach((r) => {
       const key = r.assignedAgent?.toString() ?? 'unassigned';
+      referralIdToAgentKey.set(r._id.toString(), key);
       referralCountMap.set(key, (referralCountMap.get(key) ?? 0) + 1);
       const lostAt = r.statusLastUpdated ?? r.updatedAt ?? r.createdAt;
       if (r.status === 'Lost' && isWithinTimeframe(lostAt)) {
         lostDealsMap.set(key, (lostDealsMap.get(key) ?? 0) + 1);
-      }
-      if ((r.status ?? '').trim() === 'Under Contract') {
-        underContractCountMap.set(key, (underContractCountMap.get(key) ?? 0) + 1);
       }
       if (r.sla) {
         const stored = r.sla.daysToContract;
@@ -3650,6 +3649,34 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
 
     const bucketReferralObjectIds = Array.from(bucketReferralIds, (id) => new Types.ObjectId(id));
+
+    // Under Contract Rate: distinct referrals that ever had a deal/payment in any
+    // status (including terminated) attributed to the assigned agent. A dedicated
+    // query is needed because the shared payment aggregation excludes 'terminated'.
+    const ANY_DEAL_STATUSES: Array<AggregatedPayment['status']> = [
+      'under_contract',
+      'past_inspection',
+      'past_appraisal',
+      'clear_to_close',
+      'closed',
+      'payment_sent',
+      'paid',
+      'terminated',
+    ];
+    const referralIdsWithAttributedDeal = bucketReferralObjectIds.length
+      ? await Payment.distinct('referralId', {
+          referralId: { $in: bucketReferralObjectIds },
+          status: { $in: ANY_DEAL_STATUSES },
+          usedAssignedAgent: true,
+          agentAttribution: { $ne: 'OUTSIDE_AGENT' },
+        })
+      : [];
+    for (const refId of referralIdsWithAttributedDeal) {
+      const key = referralIdToAgentKey.get(refId.toString());
+      if (!key) continue;
+      underContractCountMap.set(key, (underContractCountMap.get(key) ?? 0) + 1);
+    }
+
     const activityMatch: {
       referralId: { $in: Types.ObjectId[] };
       actor: 'Agent';
