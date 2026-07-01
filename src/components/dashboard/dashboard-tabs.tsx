@@ -228,6 +228,7 @@ interface DashboardSummary {
   ahaOosAttachRate: number;
   activePipeline: number;
   expectedRevenueCents: number;
+  nextMonthExpectedRevenueCents: number;
   realizedRevenueCents: number;
   generatedRevenueCents: number;
   closedNotPaidCents: number;
@@ -2167,7 +2168,11 @@ function MainDashboard({
   ];
 
   const revenueMetrics = [
-    { label: 'Expected revenue', value: formatCurrency(summary.expectedRevenueCents) },
+    { 
+      label: 'Expected revenue', 
+      value: formatCurrency(summary.expectedRevenueCents),
+      helper: `Next month: ${formatCurrency(summary.nextMonthExpectedRevenueCents)}`
+    },
     { label: 'Closed, not paid', value: formatCurrency(summary.closedNotPaidCents) },
     {
       label: 'Revenue realization rate',

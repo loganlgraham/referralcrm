@@ -1423,7 +1423,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return isPaymentReceivedInTimeframe(payment);
   });
 
-  const expectedRevenueCents = revenueEligiblePayments.reduce(
+  // Expected revenue: deals closing this month (uses existing pendingClosingsThisMonth)
+  const expectedRevenueCents = pendingClosingsThisMonth.reduce(
+    (sum, payment) => sum + calculateOutstandingExpected(payment),
+    0
+  );
+
+  // Next month expected revenue: deals closing next month (uses existing pendingClosingsNextMonth)
+  const nextMonthExpectedRevenueCents = pendingClosingsNextMonth.reduce(
     (sum, payment) => sum + calculateOutstandingExpected(payment),
     0
   );
@@ -4442,6 +4449,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         ahaOosAttachRate,
     activePipeline,
     expectedRevenueCents,
+    nextMonthExpectedRevenueCents,
     realizedRevenueCents,
     generatedRevenueCents: generatedRevenueCentsForSummary,
     closedNotPaidCents,
