@@ -16,6 +16,7 @@ import { Payment } from '@/models/payment';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
 import { getReferralDesignation as sharedGetReferralDesignation } from '@/lib/server/referral-designation';
+import { resolveDealSideForMetrics } from '@/lib/server/referral-sides';
 import { resolveOriginalLenderId } from '@/lib/server/referral-transfer';
 
 export const DASHBOARD_REPORT_METRICS = [
@@ -163,8 +164,9 @@ function resolveDateRange(
 
 function reportTimeframeToDashboardKey(reportTimeframe: string): string {
   switch (reportTimeframe) {
-    case 'This week':
-      return 'week';
+    // 'This week' maps to custom (explicit Mon–Sun range): the dashboard's
+    // native `week` timeframe ends at endOfDay(now), which would disagree with
+    // the calendar-week range the report's own UC counts use.
     case 'This month':
       return 'month';
     case 'Year to date':
@@ -409,14 +411,21 @@ async function buildMcTransfers(range: {
 type UnderContractCounts = {
   withAssignedAgent: number;
   total: number;
-  attachedByDesignation: { AHA: number; 'AHA OOS': number; AGIT: number };
+  attachedByDesignation: { AHA: number; 'AHA OOS': number; AGIT: number; Unclassified: number };
+};
+
+const EMPTY_ATTACHED_BY_DESIGNATION: UnderContractCounts['attachedByDesignation'] = {
+  AHA: 0,
+  'AHA OOS': 0,
+  AGIT: 0,
+  Unclassified: 0
 };
 
 async function countReferralsEnteredUnderContract(range: {
   start: Date | null;
   end: Date | null;
 }): Promise<UnderContractCounts> {
-  const filter: Record<string, unknown> =
+  const dateFilter: Record<string, unknown> =
     !range.start && !range.end
       ? { underContractDate: { $ne: null } }
       : (() => {
@@ -425,20 +434,27 @@ async function countReferralsEnteredUnderContract(range: {
           if (range.end) window.$lte = range.end;
           return { underContractDate: window };
         })();
+  // Terminated deals that once went under contract are not "entered under
+  // contract" outcomes for the report.
+  const filter = { ...dateFilter, status: { $ne: 'terminated' } };
 
   const payments = await Payment.find(filter)
-    .select('referralId usedAssignedAgent agentId')
+    .select('referralId usedAssignedAgent agentId side')
     .lean<
       {
         referralId: Types.ObjectId;
         usedAssignedAgent?: boolean;
         agentId?: Types.ObjectId | null;
+        side?: 'buy' | 'sell' | null;
       }[]
     >();
 
-  const emptyAttachedByDesignation = { AHA: 0, 'AHA OOS': 0, AGIT: 0 };
   if (payments.length === 0) {
-    return { withAssignedAgent: 0, total: 0, attachedByDesignation: emptyAttachedByDesignation };
+    return {
+      withAssignedAgent: 0,
+      total: 0,
+      attachedByDesignation: { ...EMPTY_ATTACHED_BY_DESIGNATION }
+    };
   }
 
   const referralIdStrings = Array.from(new Set(payments.map((p) => p.referralId.toString())));
@@ -446,15 +462,50 @@ async function countReferralsEnteredUnderContract(range: {
     ? await Referral.find({
         _id: { $in: referralIdStrings.map((id) => new Types.ObjectId(id)) }
       })
-        .select('assignedAgent')
-        .lean<{ _id: Types.ObjectId; assignedAgent?: Types.ObjectId | null }[]>()
+        .select('assignedAgent dealSide clientType')
+        .lean<
+          {
+            _id: Types.ObjectId;
+            assignedAgent?: Types.ObjectId | null;
+            dealSide?: 'buy' | 'sell' | null;
+            clientType?: string | null;
+          }[]
+        >()
     : [];
   const assignedAgentByReferral = new Map<string, string | null>(
     referrals.map((r) => [r._id.toString(), r.assignedAgent?.toString() ?? null])
   );
+  const sideContextByReferral = new Map<
+    string,
+    { dealSide: 'buy' | 'sell' | null; clientType: string | null }
+  >(
+    referrals.map((r) => [
+      r._id.toString(),
+      { dealSide: r.dealSide ?? null, clientType: r.clientType ?? null }
+    ])
+  );
+
+  // MC/report under-contract KPIs are buy-side only: sell-side payment rows
+  // (Seller referrals or the sell side of a Both referral) are excluded.
+  const buySidePayments = payments.filter((p) => {
+    const context = sideContextByReferral.get(p.referralId.toString());
+    const side = resolveDealSideForMetrics(
+      p.side ?? null,
+      context?.dealSide ?? null,
+      context?.clientType ?? null
+    );
+    return side !== 'sell';
+  });
+  if (buySidePayments.length === 0) {
+    return {
+      withAssignedAgent: 0,
+      total: 0,
+      attachedByDesignation: { ...EMPTY_ATTACHED_BY_DESIGNATION }
+    };
+  }
 
   const agentIds = new Set<string>();
-  for (const p of payments) {
+  for (const p of buySidePayments) {
     if (p.agentId) agentIds.add(p.agentId.toString());
     const fallback = assignedAgentByReferral.get(p.referralId.toString());
     if (fallback) agentIds.add(fallback);
@@ -471,7 +522,7 @@ async function countReferralsEnteredUnderContract(range: {
 
   const totalIds = new Set<string>();
   const attachedByReferral = new Map<string, 'AHA' | 'AHA_OOS' | 'AGIT' | null>();
-  for (const p of payments) {
+  for (const p of buySidePayments) {
     const refId = p.referralId.toString();
     totalIds.add(refId);
     if (!p.usedAssignedAgent) continue;
@@ -484,11 +535,14 @@ async function countReferralsEnteredUnderContract(range: {
     }
   }
 
-  const attachedByDesignation = { AHA: 0, 'AHA OOS': 0, AGIT: 0 };
+  const attachedByDesignation = { ...EMPTY_ATTACHED_BY_DESIGNATION };
   for (const des of attachedByReferral.values()) {
     if (des === 'AHA') attachedByDesignation.AHA += 1;
     else if (des === 'AHA_OOS') attachedByDesignation['AHA OOS'] += 1;
     else if (des === 'AGIT') attachedByDesignation.AGIT += 1;
+    // Referrals attached to an agent we can't classify still count toward the
+    // parent row; surface them so sub-rows reconcile to the total.
+    else attachedByDesignation.Unclassified += 1;
   }
 
   return {
@@ -533,6 +587,14 @@ function buildSections(args: {
             { label: '  - AHA', value: String(args.underContract.attachedByDesignation.AHA) },
             { label: '  - AHA OOS', value: String(args.underContract.attachedByDesignation['AHA OOS']) },
             { label: '  - AGIT', value: String(args.underContract.attachedByDesignation.AGIT) },
+            ...(args.underContract.attachedByDesignation.Unclassified > 0
+              ? [
+                  {
+                    label: '  - Unclassified',
+                    value: String(args.underContract.attachedByDesignation.Unclassified)
+                  }
+                ]
+              : []),
             {
               label: 'Referrals that entered Under Contract (total)',
               value: String(args.underContract.total)
@@ -780,7 +842,7 @@ export async function buildDashboardReport(
   const emptyUnderContract: UnderContractCounts = {
     withAssignedAgent: 0,
     total: 0,
-    attachedByDesignation: { AHA: 0, 'AHA OOS': 0, AGIT: 0 }
+    attachedByDesignation: { ...EMPTY_ATTACHED_BY_DESIGNATION }
   };
 
   const [dashboard, networkBreakdown, mcTransfers, underContract] = await Promise.all([

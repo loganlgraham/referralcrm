@@ -1147,7 +1147,9 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     expect(scopedPushback.pushedBackDays).toBe(5);
   });
 
-  it('falls back to updatedAt when pushback history is incomplete', () => {
+  it('ignores the legacy count remainder when dated entries exist', () => {
+    // The dated entry is the anchor; the extra legacy count must not be pulled
+    // into the timeframe just because updatedAt happens to fall in the window.
     const timeframe = {
       start: new Date('2026-04-01T00:00:00.000Z'),
       end: new Date('2026-04-30T23:59:59.999Z')
@@ -1161,8 +1163,44 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
       timeframe
     );
 
-    expect(scopedPushback.events).toBe(2);
+    expect(scopedPushback.events).toBe(1);
     expect(scopedPushback.pushedBackDays).toBe(3);
+  });
+
+  it('falls back to updatedAt for legacy counts when no dated entries exist', () => {
+    const timeframe = {
+      start: new Date('2026-04-01T00:00:00.000Z'),
+      end: new Date('2026-04-30T23:59:59.999Z')
+    };
+    const scopedPushback = resolvePushbackMetricsInTimeframe(
+      {
+        updatedAt: new Date('2026-04-13T10:00:00.000Z'),
+        closingDatePushbackCount: 2,
+        closingDatePushbacks: []
+      },
+      timeframe
+    );
+
+    expect(scopedPushback.events).toBe(2);
+    expect(scopedPushback.pushedBackDays).toBe(0);
+    expect(scopedPushback.eventsWithDays).toBe(0);
+  });
+
+  it('does not attribute legacy counts when updatedAt is outside the timeframe', () => {
+    const timeframe = {
+      start: new Date('2026-04-01T00:00:00.000Z'),
+      end: new Date('2026-04-30T23:59:59.999Z')
+    };
+    const scopedPushback = resolvePushbackMetricsInTimeframe(
+      {
+        updatedAt: new Date('2026-06-13T10:00:00.000Z'),
+        closingDatePushbackCount: 2,
+        closingDatePushbacks: []
+      },
+      timeframe
+    );
+
+    expect(scopedPushback.events).toBe(0);
   });
 
   it('counts a five-day pushback as a non-zero in-range event', () => {

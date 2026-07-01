@@ -54,8 +54,13 @@ export function resolvePushbackMetricsInTimeframe(
   );
 
   // Legacy rows may have a positive count but incomplete/empty pushback entries.
+  // Only attribute the legacy remainder to this timeframe when we have no dated
+  // entries to anchor on — otherwise an unrelated save (updatedAt in window)
+  // would pull old pushbacks into the wrong period.
   const legacyEventCount = Math.max(pushbackCountRaw - pushbackEntries.length, 0);
-  const scopedLegacyEvents = paymentUpdatedInTimeframe ? legacyEventCount : 0;
+  const hasDatedEntries = pushbackEntries.some((entry) => toValidDate(entry.timestamp ?? null) !== null);
+  const scopedLegacyEvents =
+    paymentUpdatedInTimeframe && !hasDatedEntries ? legacyEventCount : 0;
   const scopedEvents = scopedPushbackEntries.length + scopedLegacyEvents;
   const pushedBackDays = scopedPushbackEntries.reduce((sum, entry) => sum + entry.pushedBackDays, 0);
 

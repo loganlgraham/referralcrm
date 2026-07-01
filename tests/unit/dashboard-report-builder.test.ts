@@ -276,4 +276,116 @@ describe('buildDashboardReport', () => {
     expect(rows['Revenue received']).toBe('$12,000');
     expect(rows['Expected revenue (outstanding)']).toBe('$46,208');
   });
+
+  it('excludes terminated payments from Under Contract counts via the query filter', async () => {
+    mockDashboardResponse();
+
+    const { buildDashboardReport } = await import('@/lib/server/dashboard-report');
+
+    await buildDashboardReport({
+      reportName: 'Test',
+      reportTimeframe: 'This month',
+      metrics: ['summary'],
+      origin: 'http://localhost:3000',
+      auth: { kind: 'cookie', cookie: '' }
+    });
+
+    expect(paymentFindMock).toHaveBeenCalledWith(
+      expect.objectContaining({ status: { $ne: 'terminated' } })
+    );
+  });
+
+  it('excludes sell-side payments from Under Contract counts', async () => {
+    mockDashboardResponse();
+
+    const referralBuyId = new Types.ObjectId();
+    const referralSellId = new Types.ObjectId();
+    const agentAhaId = new Types.ObjectId();
+
+    paymentFindMock.mockReturnValueOnce(
+      buildLeanQuery([
+        { referralId: referralBuyId, usedAssignedAgent: true, agentId: agentAhaId, side: 'buy' },
+        { referralId: referralSellId, usedAssignedAgent: true, agentId: agentAhaId, side: 'sell' }
+      ])
+    );
+
+    referralFindMock.mockReturnValueOnce(
+      buildLeanQuery([
+        { _id: referralBuyId, assignedAgent: agentAhaId, dealSide: 'buy', clientType: 'Buyer' },
+        { _id: referralSellId, assignedAgent: agentAhaId, dealSide: 'sell', clientType: 'Seller' }
+      ])
+    );
+
+    agentFindMock.mockReturnValueOnce(buildLeanQuery([{ _id: agentAhaId, ahaDesignation: 'AHA' }]));
+
+    const { buildDashboardReport } = await import('@/lib/server/dashboard-report');
+
+    const report = await buildDashboardReport({
+      reportName: 'Test',
+      reportTimeframe: 'This month',
+      metrics: ['summary'],
+      origin: 'http://localhost:3000',
+      auth: { kind: 'cookie', cookie: '' }
+    });
+
+    const summary = report.sections.find((s) => s.id === 'summary');
+    const rows = Object.fromEntries((summary?.rows ?? []).map((row) => [row.label, row.value]));
+    expect(rows['Referrals that entered Under Contract (used assigned agent)']).toBe('1');
+    expect(rows['Referrals that entered Under Contract (total)']).toBe('1');
+    expect(rows['  - AHA']).toBe('1');
+  });
+
+  it('surfaces an Unclassified sub-row when an attached agent has no designation', async () => {
+    mockDashboardResponse();
+
+    const referralId = new Types.ObjectId();
+    const agentId = new Types.ObjectId();
+
+    paymentFindMock.mockReturnValueOnce(
+      buildLeanQuery([{ referralId, usedAssignedAgent: true, agentId }])
+    );
+    referralFindMock.mockReturnValueOnce(
+      buildLeanQuery([{ _id: referralId, assignedAgent: agentId }])
+    );
+    agentFindMock.mockReturnValueOnce(buildLeanQuery([{ _id: agentId, ahaDesignation: null }]));
+
+    const { buildDashboardReport } = await import('@/lib/server/dashboard-report');
+
+    const report = await buildDashboardReport({
+      reportName: 'Test',
+      reportTimeframe: 'This month',
+      metrics: ['summary'],
+      origin: 'http://localhost:3000',
+      auth: { kind: 'cookie', cookie: '' }
+    });
+
+    const summary = report.sections.find((s) => s.id === 'summary');
+    const rows = Object.fromEntries((summary?.rows ?? []).map((row) => [row.label, row.value]));
+    expect(rows['Referrals that entered Under Contract (used assigned agent)']).toBe('1');
+    expect(rows['  - AHA']).toBe('0');
+    expect(rows['  - Unclassified']).toBe('1');
+  });
+
+  it('requests the dashboard with an explicit custom range for "This week"', async () => {
+    mockDashboardResponse();
+
+    const { buildDashboardReport } = await import('@/lib/server/dashboard-report');
+
+    await buildDashboardReport({
+      reportName: 'Test',
+      reportTimeframe: 'This week',
+      metrics: ['summary'],
+      origin: 'http://localhost:3000',
+      auth: { kind: 'cookie', cookie: '' }
+    });
+
+    const fetchMock = global.fetch as unknown as jest.Mock;
+    expect(fetchMock).toHaveBeenCalled();
+    const requestedUrl = new URL(String(fetchMock.mock.calls[0][0]));
+    // The dashboard's native `week` timeframe ends at endOfDay(now); the report
+    // must instead pin the full Mon–Sun calendar week via custom start/end.
+    expect(requestedUrl.searchParams.get('timeframe')).toBe('custom');
+    expect(requestedUrl.searchParams.get('start')).toBeTruthy();
+    expect(requestedUrl.searchParams.get('end')).toBeTruthy();
+  });
 });

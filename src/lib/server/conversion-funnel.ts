@@ -121,8 +121,16 @@ function analyzeReferral(
 ): PerReferralAnalysis {
   const enteredAt: Partial<Record<FunnelStageName, Date>> = {};
 
+  // Anchor on min(referralDate, createdAt): a referralDate backfilled *after*
+  // createdAt must not shrink stage-duration windows for imported referrals.
+  const referralDateValue = toDate(referral.referralDate ?? null);
+  const createdAtValue = toDate(referral.createdAt ?? null);
   const seededStart =
-    toDate(referral.referralDate ?? null) ?? toDate(referral.createdAt ?? null);
+    referralDateValue && createdAtValue
+      ? referralDateValue.getTime() < createdAtValue.getTime()
+        ? referralDateValue
+        : createdAtValue
+      : referralDateValue ?? createdAtValue;
   if (seededStart) {
     enteredAt['New Lead'] = seededStart;
   }

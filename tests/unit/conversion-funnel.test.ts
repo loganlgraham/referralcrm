@@ -126,6 +126,24 @@ describe('buildConversionFunnel', () => {
     expect(inComm?.avgDaysInStage).toBeCloseTo(2, 1);
   });
 
+  it('seeds New Lead from min(referralDate, createdAt) when referralDate is backfilled later', () => {
+    // referralDate (01-10) is later than createdAt (01-01): the New Lead entry
+    // must anchor on createdAt so stage durations are not shrunk.
+    const referrals: FunnelReferralInput[] = [
+      referral('backfilled', {
+        status: 'Paired',
+        createdAt: day('2026-01-01T00:00:00Z'),
+        referralDate: day('2026-01-10T00:00:00Z'),
+        audit: [statusChange('New Lead', 'Paired', '2026-01-06T00:00:00Z')]
+      })
+    ];
+    const { stages } = buildConversionFunnel(referrals);
+    const newLead = stages.find((s) => s.status === 'New Lead');
+    // New Lead -> Paired duration: 01-06 minus 01-01 = 5 days. With the old
+    // referralDate-first seed (01-10 > 01-06) the transition would be dropped.
+    expect(newLead?.avgDaysInStage).toBeCloseTo(5, 1);
+  });
+
   it('normalizes "Showing Homes" audit entries to Active Lead', () => {
     const referrals: FunnelReferralInput[] = [
       referral('a', {
