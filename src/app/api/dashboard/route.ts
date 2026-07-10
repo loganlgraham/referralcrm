@@ -246,7 +246,9 @@ const AFC_RISK_LOW_ATTACH_RATE_THRESHOLD = 0.7;
 const AFC_RISK_MIN_HISTORICAL_SAMPLE = 3;
 const AFC_RISK_STALE_DAYS = 7;
 const AFC_RISK_RESURFACE_DAYS = 14;
-const AFC_RISK_TARGET_STATUS_KEYS = new Set(['active_lead', 'in_communication']);
+// Showing Homes is an active pre-contract buyer stage (normalizeReferralStatus
+// folds it into Active Lead elsewhere), so it must be risk-eligible too.
+const AFC_RISK_TARGET_STATUS_KEYS = new Set(['active_lead', 'showing_homes', 'in_communication']);
 const AFC_RISK_MC_LOSS_REASON_PREFIX = 'MC historical outside-lender loss';
 const AFC_RISK_MC_ASSIGNED_AGENT_LOSS_REASON_PREFIX = 'MC history: agent used, AFC not used';
 const AFC_RISK_AGENT_ASSIGNED_AGENT_LOSS_REASON_PREFIX = 'Agent history: agent used, AFC not used';
@@ -361,8 +363,12 @@ const NON_TERMINATED_DEAL_STATUSES = new Set<AggregatedPayment['status']>([
   ...CLOSED_DEAL_STATUSES
 ]);
 
-type StageOnTransferCategory = 'Pre-approved' | 'Pre-approval TBD';
-const STAGE_ON_TRANSFER_CATEGORIES: readonly StageOnTransferCategory[] = ['Pre-approved', 'Pre-approval TBD'];
+type StageOnTransferCategory = 'Pre-approved' | 'Pre-approval TBD' | 'Unknown';
+const STAGE_ON_TRANSFER_CATEGORIES: readonly StageOnTransferCategory[] = [
+  'Pre-approved',
+  'Pre-approval TBD',
+  'Unknown'
+];
 interface StageOnTransferDrilldownEntry {
   referralId: string;
   borrowerName: string;
@@ -408,11 +414,14 @@ function normalizeStageOnTransfer(value: unknown): StageOnTransferCategory {
     return 'Pre-approved';
   }
 
-  if (normalized === 'preapprovaltbd') {
+  // Missing values fall back to the schema default (Pre-approval TBD), but
+  // unrecognized non-empty values go to an explicit Unknown bucket so typos
+  // and legacy data don't skew the before/after pre-approval comparison.
+  if (normalized === 'preapprovaltbd' || normalized === '') {
     return 'Pre-approval TBD';
   }
 
-  return 'Pre-approval TBD';
+  return 'Unknown';
 }
 
 function getOutcomeTuningMultiplier(
@@ -1258,22 +1267,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (timeframeEnd && closingDate > timeframeEnd) return false;
     return true;
   });
-  const allClosedDealsInPushbackWindow = allClosedDealsInNetwork.filter((payment) => {
-    // Pushback metrics should react to recent activity, not only close/invoice/paid dates.
-    return isWithinTimeframe(payment.updatedAt);
-  });
   // Pushback metrics must count any non-terminated deal whose closing date was moved,
   // not just already-closed deals. Include events where the pushback timestamp falls in
-  // the timeframe even if the payment itself hasn't been updated since.
+  // the timeframe even if the payment itself hasn't been updated since. Entries without
+  // a timestamp (legacy rows) fall back to the payment's updatedAt, mirroring
+  // resolvePushbackMetricsInTimeframe.
   const pushbackEventInTimeframe = (payment: AggregatedPayment): boolean => {
     if (!Array.isArray(payment.closingDatePushbacks)) return false;
     return payment.closingDatePushbacks.some((entry) =>
-      entry?.timestamp ? isWithinTimeframe(entry.timestamp) : false
+      entry?.timestamp
+        ? isWithinTimeframe(entry.timestamp)
+        : isWithinTimeframe(payment.updatedAt)
     );
   };
+  // Pushback-rate denominator: non-terminated deals from referrals in the
+  // timeframe cohort, plus any deal with a pushback event in the window (so a
+  // pushed-back deal always appears in its own denominator). Using "payment
+  // touched in window" (updatedAt) made the rate drift with unrelated edits.
   const allDealsInPushbackWindow = paymentsByNetwork.filter((payment) => {
     if (!NON_TERMINATED_DEAL_STATUSES.has(payment.status)) return false;
-    return isWithinTimeframe(payment.updatedAt) || pushbackEventInTimeframe(payment);
+    return (
+      filteredReferralIds.has(payment.referral._id.toString()) ||
+      pushbackEventInTimeframe(payment)
+    );
   });
 
   const closedDealReferralIds = new Set(
@@ -1432,16 +1448,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     0
   );
 
+  // Outstanding balance applies to closed AND payment_sent deals (money still
+  // owed while the check is in the mail), plus partially-paid deals.
+  const hasOutstandingBalance = (payment: AggregatedPayment): boolean => {
+    const outstanding = (payment.expectedAmountCents ?? 0) - (payment.receivedAmountCents ?? 0);
+    if (outstanding <= 0) return false;
+    return (
+      payment.status === 'closed' ||
+      payment.status === 'payment_sent' ||
+      payment.status === 'paid'
+    );
+  };
   const closedNotPaidCents = revenueEligiblePayments.reduce((sum, payment) => {
-    if (payment.status === 'closed') {
-      const outstanding = (payment.expectedAmountCents ?? 0) - (payment.receivedAmountCents ?? 0);
-      return sum + Math.max(outstanding, 0);
-    }
-    if (payment.status === 'paid' && (payment.receivedAmountCents ?? 0) < (payment.expectedAmountCents ?? 0)) {
-      const outstanding = (payment.expectedAmountCents ?? 0) - (payment.receivedAmountCents ?? 0);
-      return sum + Math.max(outstanding, 0);
-    }
-    return sum;
+    if (!hasOutstandingBalance(payment)) return sum;
+    const outstanding = (payment.expectedAmountCents ?? 0) - (payment.receivedAmountCents ?? 0);
+    return sum + outstanding;
   }, 0);
 
   // Avg. days closed → paid should consider all paid deals where usedAssignedAgent is true
@@ -1551,8 +1572,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       null
     )
     .filter((value): value is number => value != null && value > 0);
-  const averageRevenuePerDealCents = revenueContributingClosedDeals.length
-    ? realizedRevenueCents / revenueContributingClosedDeals.length
+  // Average revenue per deal: numerator and denominator must share the same
+  // population (paid deals whose received date is in the timeframe).
+  const paidDealsWithRevenueInTimeframe = paidRevenueEligiblePaymentsInTimeframe.filter(
+    (payment) => (payment.receivedAmountCents ?? 0) > 0
+  );
+  const averageRevenuePerDealCents = paidDealsWithRevenueInTimeframe.length
+    ? realizedRevenueCents / paidDealsWithRevenueInTimeframe.length
     : 0;
   const totalVolumeClosedCents = dealsClosedInTimeframe.reduce((sum, payment) => {
     const price =
@@ -1888,18 +1914,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     };
   });
 
-  // Derive card deals closed from same source as graph (dealsByClosingDate)
-  const dealsClosedForSummary = (() => {
-    let sum = 0;
-    for (const [key, stats] of dealsByClosingDate) {
-      const [y, m] = key.split('-').map(Number);
-      const bucketStart = startOfMonth(new Date(y, m - 1, 1));
-      if (timeframeEnd && bucketStart > timeframeEnd) continue;
-      if (timeframeStart && bucketStart < timeframeStart) continue;
-      sum += stats.dealsClosed;
-    }
-    return sum;
-  })();
+  // C-5: generatedRevenueList must mirror the KPI (payments bucketed by
+  // resolveClosingDate), not the dealsClosedInTimeframe (metricDate) list.
+  const dealsGeneratedInTimeframe = paymentsByNetwork.filter((payment) => {
+    if (!isClosedDealEligible(payment)) return false;
+    const closingDate = resolveClosingDate(payment);
+    if (!closingDate) return false;
+    if (timeframeStart && closingDate < timeframeStart) return false;
+    if (timeframeEnd && closingDate > timeframeEnd) return false;
+    return true;
+  });
+
+  // Card deals closed: per-deal closing-date filter so partial-month and
+  // week/custom timeframes count correctly (month buckets would over/undercount).
+  const dealsClosedForSummary = dealsGeneratedInTimeframe.length;
 
   // Generated revenue in timeframe (by closing date)
   const generatedRevenueCentsForSummary = (() => {
@@ -2068,16 +2096,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return b.paidDate.localeCompare(a.paidDate);
     });
 
-  // C-5: generatedRevenueList must mirror the KPI (payments bucketed by
-  // resolveClosingDate), not the dealsClosedInTimeframe (metricDate) list.
-  const dealsGeneratedInTimeframe = paymentsByNetwork.filter((payment) => {
-    if (!isClosedDealEligible(payment)) return false;
-    const closingDate = resolveClosingDate(payment);
-    if (!closingDate) return false;
-    if (timeframeStart && closingDate < timeframeStart) return false;
-    if (timeframeEnd && closingDate > timeframeEnd) return false;
-    return true;
-  });
   const generatedRevenueList = sortByClosingDateDesc(
     dealsGeneratedInTimeframe.map((payment) => serializeClosedDeal(payment))
   );
@@ -2086,19 +2104,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     dealsClosedInTimeframe.map((payment) => serializeClosedDeal(payment))
   );
 
-  const closedNotPaidPayments = revenueEligiblePayments.filter((payment) => {
-    if (payment.status === 'closed') {
-      const outstanding = (payment.expectedAmountCents ?? 0) - (payment.receivedAmountCents ?? 0);
-      return outstanding > 0;
-    }
-    if (
-      payment.status === 'paid' &&
-      (payment.receivedAmountCents ?? 0) < (payment.expectedAmountCents ?? 0)
-    ) {
-      return true;
-    }
-    return false;
-  });
+  const closedNotPaidPayments = revenueEligiblePayments.filter((payment) =>
+    hasOutstandingBalance(payment)
+  );
   const closedNotPaidList = sortByClosingDateDesc(
     closedNotPaidPayments.map((payment) => serializeClosedDeal(payment))
   );
@@ -2224,20 +2232,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const referralByMcMap = new Map<string, number>();
   const referralByMcAhaMap = new Map<string, number>();
   const referralByMcAhaOosMap = new Map<string, number>();
-  const allReferralDates = filteredReferrals.map((referral) => referral.createdAt);
+  // Trend buckets must use the same cohort anchor (min of referralDate /
+  // createdAt) as timeframe membership, or back-dated imports show up in the
+  // totals but chart in the wrong bucket.
+  const allReferralDates: Date[] = [];
   const ahaReferralDates: Date[] = [];
   const ahaOosReferralDates: Date[] = [];
   filteredReferrals.forEach((referral) => {
     const key = referral.lender ? referral.lender.toString() : 'unassigned';
     referralByMcMap.set(key, (referralByMcMap.get(key) ?? 0) + 1);
 
+    const trendAnchor = getReferralTimeframeAnchor(referral) ?? referral.createdAt;
+    allReferralDates.push(trendAnchor);
+
     const designation = getReferralDesignation(referral);
     if (designation === 'AHA') {
       referralByMcAhaMap.set(key, (referralByMcAhaMap.get(key) ?? 0) + 1);
-      ahaReferralDates.push(referral.createdAt);
+      ahaReferralDates.push(trendAnchor);
     } else if (designation === 'AHA_OOS') {
       referralByMcAhaOosMap.set(key, (referralByMcAhaOosMap.get(key) ?? 0) + 1);
-      ahaOosReferralDates.push(referral.createdAt);
+      ahaOosReferralDates.push(trendAnchor);
     }
   });
 
@@ -2249,23 +2263,41 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const referralsTrend = groupTrendByTimeframe(allReferralDates, timeframe);
 
+  // MC KPIs are buy-side only: sell-side payment rows (Seller referrals or the
+  // sell side of a Both referral) must not enter MC payment aggregations.
+  const isSellSideMetricsPayment = (payment: AggregatedPayment): boolean =>
+    resolveDealSideForMetrics(
+      payment.side ?? null,
+      payment.referral?.dealSide ?? null,
+      payment.referral?.clientType ?? null
+    ) === 'sell';
+
   // Aggregate MC metrics from payments
   // Excludes deals attributed to outside agents from revenue calculations.
   // Close-rate leaderboards are computed below from cohort-matched deals.
   filteredPaymentsByNetwork.forEach((payment) => {
+    if (isSellSideMetricsPayment(payment)) return;
     const key = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     const current = mcRevenueMap.get(key) ?? { revenue: 0, expected: 0, closed: 0, totalReferrals: referralByMcMap.get(key) ?? 0 };
     // C-9/C-20: MC revenue must use the same eligibility filter as Main
     // (excludes outside-agent attributions AND Glenn Beck referrals).
     const revenueEligible = isRevenueEligiblePayment(payment);
     if (revenueEligible) {
-      current.revenue += payment.receivedAmountCents ?? 0;
       current.expected += calculateOutstandingExpected(payment);
     }
     if (revenueEligible && CLOSED_DEAL_STATUSES.has(payment.status)) {
       current.closed += 1;
     }
     current.totalReferrals = referralByMcMap.get(key) ?? current.totalReferrals;
+    mcRevenueMap.set(key, current);
+  });
+  // MC realized revenue must match Main/agent semantics: only `paid` payments
+  // whose received date lands in the timeframe count as revenue.
+  paidRevenueEligiblePaymentsInTimeframe.forEach((payment) => {
+    if (isSellSideMetricsPayment(payment)) return;
+    const key = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
+    const current = mcRevenueMap.get(key) ?? { revenue: 0, expected: 0, closed: 0, totalReferrals: referralByMcMap.get(key) ?? 0 };
+    current.revenue += payment.receivedAmountCents ?? 0;
     mcRevenueMap.set(key, current);
   });
 
@@ -2277,14 +2309,34 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // was created in the current timeframe, so revenuePerReferral's numerator
   // and denominator share the same cohort.
   const cohortRevenueByMcMap = new Map<string, number>();
+  // Close rate numerators must count unique referrals, not payments: a `Both`
+  // referral with buy + sell closed payments would otherwise count twice
+  // against a referral-count denominator (rates could exceed 100%).
+  const cohortClosedReferralsByMc = new Set<string>();
+  const cohortClosedReferralsByAgent = new Set<string>();
   dealsClosedForCloseRate.forEach((payment) => {
+    const referralId = payment.referral._id.toString();
     const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
-    cohortClosedByMcMap.set(mcKey, (cohortClosedByMcMap.get(mcKey) ?? 0) + 1);
+    const mcDedupeKey = `${mcKey}:${referralId}`;
+    if (!cohortClosedReferralsByMc.has(mcDedupeKey)) {
+      cohortClosedReferralsByMc.add(mcDedupeKey);
+      cohortClosedByMcMap.set(mcKey, (cohortClosedByMcMap.get(mcKey) ?? 0) + 1);
+    }
 
     const agentKey = payment.referral?.assignedAgent ? payment.referral.assignedAgent.toString() : 'unassigned';
-    cohortClosedByAgentMap.set(agentKey, (cohortClosedByAgentMap.get(agentKey) ?? 0) + 1);
+    const agentDedupeKey = `${agentKey}:${referralId}`;
+    if (!cohortClosedReferralsByAgent.has(agentDedupeKey)) {
+      cohortClosedReferralsByAgent.add(agentDedupeKey);
+      cohortClosedByAgentMap.set(agentKey, (cohortClosedByAgentMap.get(agentKey) ?? 0) + 1);
+    }
 
-    if (isRevenueEligiblePayment(payment)) {
+    // Cohort revenue: only money actually received (paid) counts, matching the
+    // MC leaderboard revenue semantics; sell-side rows are excluded from MC KPIs.
+    if (
+      isRevenueEligiblePayment(payment) &&
+      payment.status === 'paid' &&
+      !isSellSideMetricsPayment(payment)
+    ) {
       const revenue = payment.receivedAmountCents ?? 0;
       if (revenue > 0) {
         cohortRevenueByMcMap.set(mcKey, (cohortRevenueByMcMap.get(mcKey) ?? 0) + revenue);
@@ -2300,10 +2352,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const mcNoAssignedAgentClosesMap = new Map<string, number>();
   // C-10: MC close-rate leaderboards must use `isClosedDealEligible` so that
   // outside-agent / non-assigned-agent payments don't inflate denominators.
-  const eligibleClosedDealsInTimeframe = allClosedDealsInTimeframe.filter((payment) =>
+  // MC KPIs are buy-side only, so sell-side rows are excluded up front.
+  const buySideClosedDealsInTimeframe = allClosedDealsInTimeframe.filter(
+    (payment) => !isSellSideMetricsPayment(payment)
+  );
+  const eligibleClosedDealsInTimeframe = buySideClosedDealsInTimeframe.filter((payment) =>
     isClosedDealEligible(payment)
   );
-  allClosedDealsInTimeframe.forEach((payment) => {
+  buySideClosedDealsInTimeframe.forEach((payment) => {
+    // "Closes Without Assigned Agent" compares explicit true/false flags:
+    // outside-agent attributions and unknown (null) flags belong to neither
+    // side of the rate, so they must stay out of the denominator too.
+    if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
+    if (payment.usedAssignedAgent !== true && payment.usedAssignedAgent !== false) return;
     const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     mcAllClosedDealsForAssignedAgentRateMap.set(
       mcKey,
@@ -2378,6 +2439,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const allPaymentsWithTerminatedByNetwork = [...paymentsByNetwork, ...terminatedByNetwork];
   allPaymentsWithTerminatedByNetwork.forEach((payment) => {
     if (payment.usedAfc !== true) return;
+    if (isSellSideMetricsPayment(payment)) return;
     const contractDate = payment.underContractDate ?? payment.metricDate ?? resolveMetricDate(payment);
     if (!isWithinTimeframe(contractDate)) return;
     const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
@@ -2589,9 +2651,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let mcTotalPushbackEventsWithDays = 0;
   let mcEligibleDealsForPushbackInScope = 0;
 
-  // Closed-only pass: AFC capture, close velocity, and forecast accuracy only make
-  // sense once a deal has actually closed, so leave them scoped to CLOSED_DEAL_STATUSES.
-  allClosedDealsInPushbackWindow.forEach((payment) => {
+  // Closed-only pass: close velocity and forecast accuracy only make sense once
+  // a deal has actually closed. Bucket by closing date in the timeframe (like the
+  // other MC closed-deal KPIs) — using `updatedAt` here let years-old deals with a
+  // recent touch (note edit, status sync) skew the medians and forecast accuracy.
+  buySideClosedDealsInTimeframe.forEach((payment) => {
     const key = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     const pairedAtRaw = payment.referral?.sla?.lastPairedAt;
     const closingDate = resolveClosingDate(payment);
@@ -2626,6 +2690,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // Pushback pass: any non-terminated deal whose closing date was moved later counts,
   // whether the deal is still under contract or already closed.
   allDealsInPushbackWindow.forEach((payment) => {
+    // MC pushback KPIs are buy-side only, like the rest of the MC leaderboard.
+    if (isSellSideMetricsPayment(payment)) return;
     mcEligibleDealsForPushbackInScope += 1;
     const key = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     mcEligibleDealsForPushbackRateMap.set(
@@ -2696,7 +2762,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       reasons: Record<TerminatedReasonKey, number>;
     }
   >();
-  terminatedWithinNetwork.forEach((payment) => {
+  // Financing termination rate pairs terminations with closes as "outcome
+  // events in the window": anchor terminations on updatedAt (when the status
+  // flipped to terminated) rather than metricDate (invoice/paid dates predate
+  // the termination), matching the closing-date anchoring of mcTotalClosedDealsMap.
+  terminatedByNetwork.forEach((payment) => {
+    if (!isWithinTimeframe(payment.updatedAt)) return;
+    if (isSellSideMetricsPayment(payment)) return;
     const key = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     const reason = payment.terminatedReason ?? 'unknown';
     const current = mcTerminatedMap.get(key) ?? {
@@ -3079,9 +3151,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const stalePageTrigger = editedAfterStatus
         ? daysSinceLastUpdated >= AFC_RISK_RESURFACE_DAYS
         : daysInStatus >= AFC_RISK_STALE_DAYS;
+      // Note signals are computed up front: a fresh In Communication referral
+      // whose notes already show outside-lender intent must not be filtered out
+      // by the stale-days gate.
+      const noteSignal = scoreOutsideLenderNoteSignals(mcRiskTextByReferralId.get(referralId) ?? []);
       const statusAgeEligible =
         normalizedStatus === 'active_lead' ||
-        (normalizedStatus === 'in_communication' && daysInStatus >= AFC_RISK_STALE_DAYS);
+        normalizedStatus === 'showing_homes' ||
+        (normalizedStatus === 'in_communication' &&
+          (daysInStatus >= AFC_RISK_STALE_DAYS || noteSignal.score > 0));
       if (!statusAgeEligible) {
         return null;
       }
@@ -3115,7 +3193,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         }
       }
 
-      const noteSignal = scoreOutsideLenderNoteSignals(mcRiskTextByReferralId.get(referralId) ?? []);
       if (noteSignal.score > 0) {
         riskScore += noteSignal.score;
         hasQualifyingTrigger = true;
@@ -3602,17 +3679,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const slaContractDaysMap = new Map<string, number[]>();
     const slaFirstContactMap = new Map<string, number[]>();
     const bucketReferralIds = new Set(bucketReferrals.map((r) => r._id.toString()));
+    const referralIdToAgentKey = new Map<string, string>();
     const cohortClosedCountMap = new Map<string, number>();
 
     bucketReferrals.forEach((r) => {
       const key = r.assignedAgent?.toString() ?? 'unassigned';
+      referralIdToAgentKey.set(r._id.toString(), key);
       referralCountMap.set(key, (referralCountMap.get(key) ?? 0) + 1);
       const lostAt = r.statusLastUpdated ?? r.updatedAt ?? r.createdAt;
       if (r.status === 'Lost' && isWithinTimeframe(lostAt)) {
         lostDealsMap.set(key, (lostDealsMap.get(key) ?? 0) + 1);
-      }
-      if ((r.status ?? '').trim() === 'Under Contract') {
-        underContractCountMap.set(key, (underContractCountMap.get(key) ?? 0) + 1);
       }
       if (r.sla) {
         const stored = r.sla.daysToContract;
@@ -3620,10 +3696,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         if (stored != null && stored >= 0) {
           daysToContract = stored;
         } else {
-          const referralDate = r.referralDate ? new Date(r.referralDate) : null;
+          // Anchor on min(referralDate, createdAt), matching the admin SLA path,
+          // so a referralDate backfilled after createdAt doesn't inflate the metric.
+          const leadStart = getReferralTimeframeAnchor(r);
           const lastUC = r.sla.lastUnderContractAt ? new Date(r.sla.lastUnderContractAt) : null;
-          if (referralDate && lastUC && lastUC >= referralDate) {
-            daysToContract = differenceInCalendarDays(lastUC, referralDate);
+          if (leadStart && lastUC && lastUC >= leadStart) {
+            daysToContract = differenceInCalendarDays(lastUC, leadStart);
           }
         }
         if (daysToContract != null && daysToContract >= 0) {
@@ -3650,6 +3728,34 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
 
     const bucketReferralObjectIds = Array.from(bucketReferralIds, (id) => new Types.ObjectId(id));
+
+    // Under Contract Rate: distinct referrals that ever had a deal/payment in any
+    // status (including terminated) attributed to the assigned agent. A dedicated
+    // query is needed because the shared payment aggregation excludes 'terminated'.
+    const ANY_DEAL_STATUSES: Array<AggregatedPayment['status']> = [
+      'under_contract',
+      'past_inspection',
+      'past_appraisal',
+      'clear_to_close',
+      'closed',
+      'payment_sent',
+      'paid',
+      'terminated',
+    ];
+    const referralIdsWithAttributedDeal = bucketReferralObjectIds.length
+      ? await Payment.distinct('referralId', {
+          referralId: { $in: bucketReferralObjectIds },
+          status: { $in: ANY_DEAL_STATUSES },
+          usedAssignedAgent: true,
+          agentAttribution: { $ne: 'OUTSIDE_AGENT' },
+        })
+      : [];
+    for (const refId of referralIdsWithAttributedDeal) {
+      const key = referralIdToAgentKey.get(refId.toString());
+      if (!key) continue;
+      underContractCountMap.set(key, (underContractCountMap.get(key) ?? 0) + 1);
+    }
+
     const activityMatch: {
       referralId: { $in: Types.ObjectId[] };
       actor: 'Agent';
@@ -4264,8 +4370,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   // C-6: mirror Main dashboard's isClosedDealEligible (which additionally
   // requires usedAssignedAgent === true).
-  const agitDealsClosed = agitFilteredPayments.filter((payment) => isClosedDealEligible(payment))
-    .length;
+  // Cohort semantics: the numerator must count AGIT referrals from the cohort
+  // that ever closed (like dealsClosedForCloseRate), not payments whose
+  // metricDate happens to fall in the window — and dedupe by referral so a
+  // Both referral with two closed payments counts once.
+  const agitClosedReferralIds = new Set(
+    paymentsByNetwork
+      .filter(
+        (payment) =>
+          isClosedDealEligible(payment) &&
+          agitReferralIds.has(payment.referral._id.toString())
+      )
+      .map((payment) => payment.referral._id.toString())
+  );
+  const agitDealsClosed = agitClosedReferralIds.size;
 
   const agitCloseRate = computeCohortCloseRate(agitDealsClosed, agitReferrals.length);
 
@@ -4362,11 +4480,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       if (!isClosedDealEligible(payment)) return false;
       return prevReferralIdSet.has(payment.referral._id.toString());
     });
-    const prevDealsClosedByMetricDate = paymentsByNetwork.filter((payment) => {
-      const metricDate = payment.metricDate ?? resolveMetricDate(payment);
-      if (metricDate < previousStart || metricDate > previousEnd) return false;
+    // Previous-period deals closed must use the same definition as the current
+    // period's dealsClosedForSummary (closing date in window), not metricDate.
+    const prevDealsClosedByClosingDate = paymentsByNetwork.filter((payment) => {
       if (!isClosedDealEligible(payment)) return false;
-      return true;
+      const closingDate = resolveClosingDate(payment);
+      if (closingDate === null || Number.isNaN(closingDate.getTime())) return false;
+      return closingDate >= previousStart && closingDate <= previousEnd;
     });
     const prevRealized = paymentsByNetwork.reduce((sum, payment) => {
       const receivedDate = resolvePaymentReceivedDate(payment);
@@ -4378,7 +4498,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     periodOverPeriod = {
       previous: {
         totalReferrals: prevReferrals.length,
-        dealsClosed: prevDealsClosedByMetricDate.length,
+        dealsClosed: prevDealsClosedByClosingDate.length,
         realizedRevenueCents: prevRealized,
         closeRate: computeCohortCloseRate(prevCohortDealsClosed.length, prevReferrals.length)
       },

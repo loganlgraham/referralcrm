@@ -117,7 +117,7 @@ interface McAfcRiskCallListEntry {
 }
 
 interface StageOnTransferSummaryEntry {
-  category: 'Pre-approved' | 'Pre-approval TBD';
+  category: 'Pre-approved' | 'Pre-approval TBD' | 'Unknown';
   totalReferrals: number;
   closedReferrals: number;
   closeRate: number;
@@ -2898,7 +2898,7 @@ function PushbackSummaryCard({
       </div>
       <p className="mt-1 text-xs text-foreground-subtle">
         Any deal whose closing date was moved to a later date in this timeframe/network view.
-        Rate = pushed-back deals / all active or closed deals.
+        Rate = pushed-back deals / non-terminated deals from referrals in this timeframe.
       </p>
       <dl className="mt-3 grid grid-cols-2 gap-2">
         <div className="rounded-lg bg-surface-muted px-2 py-1">
