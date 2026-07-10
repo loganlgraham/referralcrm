@@ -452,38 +452,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let expectedRevenueCents = 0;
   let receivedRevenueCents = 0;
   if (role === 'admin' || role === 'manager') {
-    const expectedRevenueBaseFilter: Record<string, unknown> = { ...filter };
-    const expectedPipeline: PipelineStage[] = search
-      ? [
-          { $match: expectedRevenueBaseFilter },
-          ...buildSearchPipeline(search),
-        ]
-      : [
-          { $match: expectedRevenueBaseFilter },
-          {
-            $lookup: {
-              from: 'referrals',
-              localField: 'referralId',
-              foreignField: '_id',
-              as: 'referral',
-            },
-          },
-          { $unwind: { path: '$referral', preserveNullAndEmptyArrays: true } },
-        ];
+    // Summary cards must total exactly the deals shown in the table, so both
+    // aggregations run over the same `filter` (status, timeframe/closing-date
+    // window, designation, etc.) and the same search pipeline. Received revenue
+    // is the money actually collected on those deals; expected revenue is the
+    // fee due on the same deals (terminated deals carry no fee, matching the
+    // table's "Referral Fee" column showing "—").
+    const summaryMatchStages: PipelineStage[] = search
+      ? [{ $match: filter }, ...buildSearchPipeline(search)]
+      : [{ $match: filter }];
 
-    const expectedSummaryResult = await Payment.aggregate([
-      ...expectedPipeline,
-      {
-        $match: {
-          agentAttribution: { $ne: 'OUTSIDE_AGENT' },
-          $expr: {
-            $ne: [
-              { $toLower: { $trim: { input: { $ifNull: ['$referral.endorser', ''] } } } },
-              'glenn beck',
-            ],
-          },
-        },
-      },
+    const summaryResult = await Payment.aggregate([
+      ...summaryMatchStages,
       {
         $group: {
           _id: null,
@@ -496,56 +476,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
               ],
             },
           },
+          receivedRevenueCents: { $sum: { $ifNull: ['$receivedAmountCents', 0] } },
         },
       },
     ]);
-    expectedRevenueCents = expectedSummaryResult[0]?.expectedRevenueCents ?? 0;
-
-    const statusAllowsPaid = statusList.length === 0 || statusList.includes('paid');
-    if (statusAllowsPaid) {
-      const receivedRevenueFilter: Record<string, unknown> = { ...filter, status: 'paid' };
-      const { closingDate: _ignoredClosingDate, ...baseReceivedRevenueFilter } = receivedRevenueFilter;
-      const receivedRevenueSummaryFilter: Record<string, unknown> = timeframeStart
-        ? {
-            ...baseReceivedRevenueFilter,
-            $or: [
-              { paidDate: { $gte: timeframeStart, $lte: timeframeEnd } },
-              {
-                paidDate: null,
-                updatedAt: { $gte: timeframeStart, $lte: timeframeEnd },
-              },
-            ],
-          }
-        : baseReceivedRevenueFilter;
-      // Revenue received summary is anchored to payment-received timing (paidDate),
-      // with updatedAt fallback for legacy paid rows missing paidDate.
-
-      if (search) {
-        const summaryPipeline: PipelineStage[] = [
-          { $match: receivedRevenueSummaryFilter },
-          ...buildSearchPipeline(search),
-          {
-            $group: {
-              _id: null,
-              receivedRevenueCents: { $sum: { $ifNull: ['$receivedAmountCents', 0] } },
-            },
-          },
-        ];
-        const summaryResult = await Payment.aggregate(summaryPipeline);
-        receivedRevenueCents = summaryResult[0]?.receivedRevenueCents ?? 0;
-      } else {
-        const summaryResult = await Payment.aggregate([
-          { $match: receivedRevenueSummaryFilter },
-          {
-            $group: {
-              _id: null,
-              receivedRevenueCents: { $sum: { $ifNull: ['$receivedAmountCents', 0] } },
-            },
-          },
-        ]);
-        receivedRevenueCents = summaryResult[0]?.receivedRevenueCents ?? 0;
-      }
-    }
+    expectedRevenueCents = summaryResult[0]?.expectedRevenueCents ?? 0;
+    receivedRevenueCents = summaryResult[0]?.receivedRevenueCents ?? 0;
   }
   const agentIds = new Set<string>();
 
