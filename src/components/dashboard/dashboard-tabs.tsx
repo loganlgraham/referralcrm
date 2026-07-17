@@ -1305,14 +1305,22 @@ function ConversionFunnelCard({
   );
 }
 
-function RankedList({
-  title,
+interface RankedListView {
+  id: string;
+  label: string;
+  items: { label: string; value: number }[];
+  formatValue?: (value: number) => string;
+  emptyMessage?: string;
+}
+
+function RankedListBody({
   items,
+  scrollLabel,
   formatValue = formatCurrency,
   emptyMessage = 'No data recorded.'
 }: {
-  title: string;
   items: { label: string; value: number }[];
+  scrollLabel: string;
   formatValue?: (value: number) => string;
   emptyMessage?: string;
 }) {
@@ -1320,38 +1328,74 @@ function RankedList({
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * RANKED_LIST_ROW_HEIGHT_REM}rem`;
 
   return (
+    <div
+      className={items.length ? 'overflow-y-auto' : undefined}
+      style={items.length ? { maxHeight: scrollMaxHeight } : undefined}
+      aria-label={items.length ? `Scrollable list: ${scrollLabel}` : undefined}
+    >
+      <ul className="space-y-2.5">
+        {items.length ? (
+          items.map((item) => {
+            const barPct = Math.max((item.value / maxValue) * 100, item.value > 0 ? 2 : 0);
+            return (
+              <li key={item.label}>
+                <div className="flex items-center justify-between text-sm text-foreground-muted">
+                  <span className="font-medium text-foreground">{item.label}</span>
+                  <span className="text-foreground-muted">{formatValue(item.value)}</span>
+                </div>
+                <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface-subtle">
+                  <div
+                    className="h-full rounded-full bg-sky-400"
+                    style={{ width: `${barPct}%` }}
+                  />
+                </div>
+              </li>
+            );
+          })
+        ) : (
+          <li className="text-sm text-foreground-subtle">{emptyMessage}</li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
+function RankedListTabs({ views }: { views: RankedListView[] }) {
+  const [activeId, setActiveId] = useState(views[0]?.id ?? '');
+  const activeView = views.find((view) => view.id === activeId) ?? views[0];
+
+  if (!activeView) {
+    return null;
+  }
+
+  return (
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        {views.map((view) => {
+          const isActive = view.id === activeView.id;
+          return (
+            <button
+              key={view.id}
+              type="button"
+              onClick={() => setActiveId(view.id)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                isActive
+                  ? 'border-transparent bg-primary-600 text-white shadow-sm'
+                  : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
+              }`}
+            >
+              {view.label}
+            </button>
+          );
+        })}
+      </div>
       <div className="mt-4">
-        <div
-          className={items.length ? 'overflow-y-auto' : undefined}
-          style={items.length ? { maxHeight: scrollMaxHeight } : undefined}
-          aria-label={items.length ? `Scrollable list: ${title}` : undefined}
-        >
-          <ul className="space-y-2.5">
-            {items.length ? (
-              items.map((item) => {
-                const barPct = Math.max((item.value / maxValue) * 100, item.value > 0 ? 2 : 0);
-                return (
-                  <li key={item.label}>
-                    <div className="flex items-center justify-between text-sm text-foreground-muted">
-                      <span className="font-medium text-foreground">{item.label}</span>
-                      <span className="text-foreground-muted">{formatValue(item.value)}</span>
-                    </div>
-                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface-subtle">
-                      <div
-                        className="h-full rounded-full bg-sky-400"
-                        style={{ width: `${barPct}%` }}
-                      />
-                    </div>
-                  </li>
-                );
-              })
-            ) : (
-              <li className="text-sm text-foreground-subtle">{emptyMessage}</li>
-            )}
-          </ul>
-        </div>
+        <RankedListBody
+          items={activeView.items}
+          scrollLabel={activeView.label}
+          formatValue={activeView.formatValue}
+          emptyMessage={activeView.emptyMessage}
+        />
       </div>
     </div>
   );
@@ -2238,29 +2282,38 @@ function MainDashboard({
         <LineChartCard title="Referrals received" data={data.trends.referrals} formatValue={(value) => formatNumber(Math.round(value))} color="#0ea5e9" />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-4">
-        <RankedList title="Revenue by source" items={data.revenueBySource} />
-        <RankedList
-          title="Referral requests by source"
-          items={data.referralRequestsBySource}
-          formatValue={(value) => formatNumber(value)}
-          emptyMessage="No referral requests recorded."
-        />
-        <RankedList title="Revenue by endorser" items={data.revenueByEndorser} />
-        <RankedList
-          title="Referral requests by endorser"
-          items={data.referralRequestsByEndorser}
-          formatValue={(value) => formatNumber(value)}
-          emptyMessage="No referral requests recorded."
-        />
-      </div>
       <div className="grid gap-4 lg:grid-cols-2">
-        <RankedList title="Revenue by state" items={data.revenueByState} />
-        <RankedList
-          title="Referral requests by state"
-          items={data.referralRequestsByState}
-          formatValue={(value) => formatNumber(value)}
-          emptyMessage="No referral requests recorded."
+        <RankedListTabs
+          views={[
+            { id: 'revenue-source', label: 'Revenue by source', items: data.revenueBySource },
+            {
+              id: 'requests-source',
+              label: 'Requests by source',
+              items: data.referralRequestsBySource,
+              formatValue: (value) => formatNumber(value),
+              emptyMessage: 'No referral requests recorded.'
+            },
+            { id: 'revenue-endorser', label: 'Revenue by endorser', items: data.revenueByEndorser },
+            {
+              id: 'requests-endorser',
+              label: 'Requests by endorser',
+              items: data.referralRequestsByEndorser,
+              formatValue: (value) => formatNumber(value),
+              emptyMessage: 'No referral requests recorded.'
+            }
+          ]}
+        />
+        <RankedListTabs
+          views={[
+            { id: 'revenue-state', label: 'Revenue by state', items: data.revenueByState },
+            {
+              id: 'requests-state',
+              label: 'Requests by state',
+              items: data.referralRequestsByState,
+              formatValue: (value) => formatNumber(value),
+              emptyMessage: 'No referral requests recorded.'
+            }
+          ]}
         />
       </div>
 
