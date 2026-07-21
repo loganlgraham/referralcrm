@@ -2437,6 +2437,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const mcAfcDealCountMap = new Map<string, number>();
   const allPaymentsWithTerminatedByNetwork = [...paymentsByNetwork, ...terminatedByNetwork];
+  const contractReferralIds = new Set<string>();
+  for (const payment of allPaymentsWithTerminatedByNetwork) {
+    if (payment.underContractDate && isWithinTimeframe(payment.underContractDate)) {
+      contractReferralIds.add(payment.referral._id.toString());
+    }
+  }
+  const contractsInTimeframe = contractReferralIds.size;
   allPaymentsWithTerminatedByNetwork.forEach((payment) => {
     if (payment.usedAfc !== true) return;
     if (isSellSideMetricsPayment(payment)) return;
@@ -4530,6 +4537,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       ...(attachRateDebug ? { attachRateDebug } : {}),
       summary: {
         totalReferrals,
+        contractsInTimeframe,
         dealsClosed: dealsClosedForSummary,
         dealsClosedInTimeframe: dealsClosedInTimeframe.length,
         dealsUnderContract: dealsUnderContract.length,

@@ -202,6 +202,7 @@ interface ClosedDealEntry {
 
 interface DashboardSummary {
   totalReferrals: number;
+  contractsInTimeframe: number;
   dealsClosed: number;
   dealsClosedInTimeframe: number;
   dealsUnderContract: number;
@@ -2147,6 +2148,10 @@ function MainDashboard({
       value: formatNumber(summary.totalReferrals),
       helper: referralsVsPrev != null ? `vs previous period: ${referralsVsPrev}` : undefined,
       extraStats: [
+        {
+          label: 'Contracts',
+          value: formatNumber(summary.contractsInTimeframe)
+        },
         {
           label: 'Deals closed',
           value: formatNumber(summary.dealsClosedInTimeframe),
