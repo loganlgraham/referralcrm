@@ -770,6 +770,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         periodOverPeriod: null,
         summary: {
           totalReferrals: 0,
+          contractsInTimeframe: 0,
+          contractsList: [],
           dealsClosed: 0,
           dealsClosedInTimeframe: 0,
           dealsUnderContract: 0,
@@ -2072,6 +2074,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       mcName: mcId ? (lenderNameMap.get(mcId) ?? 'Unknown') : null,
       status: payment.status,
       closingDate: payment.closingDate ? new Date(payment.closingDate).toISOString() : null,
+      underContractDate: payment.underContractDate
+        ? new Date(payment.underContractDate).toISOString()
+        : null,
       paidDate: payment.paidDate ? new Date(payment.paidDate).toISOString() : null,
       expectedAmountCents,
       receivedAmountCents,
@@ -2438,11 +2443,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const mcAfcDealCountMap = new Map<string, number>();
   const allPaymentsWithTerminatedByNetwork = [...paymentsByNetwork, ...terminatedByNetwork];
   const contractReferralIds = new Set<string>();
+  const contractsList: ReturnType<typeof serializeClosedDeal>[] = [];
   for (const payment of allPaymentsWithTerminatedByNetwork) {
-    if (payment.underContractDate && isWithinTimeframe(payment.underContractDate)) {
-      contractReferralIds.add(payment.referral._id.toString());
-    }
+    if (!payment.underContractDate || !isWithinTimeframe(payment.underContractDate)) continue;
+    const refId = payment.referral._id.toString();
+    if (contractReferralIds.has(refId)) continue;
+    contractReferralIds.add(refId);
+    contractsList.push(serializeClosedDeal(payment));
   }
+  contractsList.sort((a, b) => {
+    if (!a.underContractDate && !b.underContractDate) return 0;
+    if (!a.underContractDate) return 1;
+    if (!b.underContractDate) return -1;
+    return b.underContractDate.localeCompare(a.underContractDate);
+  });
   const contractsInTimeframe = contractReferralIds.size;
   allPaymentsWithTerminatedByNetwork.forEach((payment) => {
     if (payment.usedAfc !== true) return;
@@ -4538,6 +4552,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       summary: {
         totalReferrals,
         contractsInTimeframe,
+        contractsList,
         dealsClosed: dealsClosedForSummary,
         dealsClosedInTimeframe: dealsClosedInTimeframe.length,
         dealsUnderContract: dealsUnderContract.length,

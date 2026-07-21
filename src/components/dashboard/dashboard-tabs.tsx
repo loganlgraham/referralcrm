@@ -193,6 +193,7 @@ interface ClosedDealEntry {
   mcName: string | null;
   status: string;
   closingDate: string | null;
+  underContractDate: string | null;
   paidDate: string | null;
   expectedAmountCents: number;
   receivedAmountCents: number;
@@ -203,6 +204,7 @@ interface ClosedDealEntry {
 interface DashboardSummary {
   totalReferrals: number;
   contractsInTimeframe: number;
+  contractsList: ClosedDealEntry[];
   dealsClosed: number;
   dealsClosedInTimeframe: number;
   dealsUnderContract: number;
@@ -2059,7 +2061,7 @@ function MainDashboard({
   const [dealsLostModal, setDealsLostModal] = useState<'afc' | 'aha' | 'ahaOos' | null>(null);
   const [pendingClosingsModal, setPendingClosingsModal] = useState<'all' | 'thisMonth' | 'nextMonth' | null>(null);
   const [closedDealsModal, setClosedDealsModal] = useState<
-    'generated' | 'closedNotPaid' | 'dealsClosed' | 'avgDaysPaid' | null
+    'generated' | 'closedNotPaid' | 'dealsClosed' | 'avgDaysPaid' | 'contracts' | null
   >(null);
   const summary = data.summary;
   const realizedRevenueCents = Math.max(summary.realizedRevenueCents ?? 0, 0);
@@ -2150,7 +2152,11 @@ function MainDashboard({
       extraStats: [
         {
           label: 'Contracts',
-          value: formatNumber(summary.contractsInTimeframe)
+          value: formatNumber(summary.contractsInTimeframe),
+          onClick:
+            summary.contractsList.length > 0
+              ? () => setClosedDealsModal('contracts')
+              : undefined
         },
         {
           label: 'Deals closed',
@@ -2404,7 +2410,9 @@ function MainDashboard({
                 ? 'Deals Closed'
                 : closedDealsModal === 'avgDaysPaid'
                   ? 'Avg. Days Closed → Paid'
-                  : ''
+                  : closedDealsModal === 'contracts'
+                    ? 'Contracts (Under Contract This Period)'
+                    : ''
         }
         size="lg"
       >
@@ -2419,7 +2427,9 @@ function MainDashboard({
                   ? summary.dealsClosedList
                   : closedDealsModal === 'avgDaysPaid'
                     ? summary.averageDaysClosedToPaidList
-                    : []
+                    : closedDealsModal === 'contracts'
+                      ? summary.contractsList
+                      : []
           }
         />
       </Modal>
@@ -2518,7 +2528,7 @@ function PendingClosingsTable({ deals }: { deals: PendingClosingEntry[] }) {
   );
 }
 
-type ClosedDealsTableVariant = 'generated' | 'closedNotPaid' | 'dealsClosed' | 'avgDaysPaid';
+type ClosedDealsTableVariant = 'generated' | 'closedNotPaid' | 'dealsClosed' | 'avgDaysPaid' | 'contracts';
 
 function ClosedDealsTable({
   variant,
@@ -2536,6 +2546,8 @@ function ClosedDealsTable({
   }
 
   const showStatus = variant !== 'avgDaysPaid';
+  const isContracts = variant === 'contracts';
+  const dateHeader = isContracts ? 'Under contract date' : 'Closing date';
   const trailingHeader =
     variant === 'closedNotPaid'
       ? 'Outstanding'
@@ -2552,7 +2564,7 @@ function ClosedDealsTable({
             <th className="px-6 py-3">Agent</th>
             <th className="px-6 py-3">MC</th>
             {showStatus ? <th className="px-6 py-3">Status</th> : null}
-            <th className="px-6 py-3">Closing date</th>
+            <th className="px-6 py-3">{dateHeader}</th>
             {variant === 'avgDaysPaid' ? <th className="px-6 py-3">Paid date</th> : null}
             <th className="px-6 py-3 text-right">{trailingHeader}</th>
           </tr>
@@ -2585,7 +2597,13 @@ function ClosedDealsTable({
                   <td className="px-6 py-3 text-foreground-muted">{statusLabel}</td>
                 ) : null}
                 <td className="px-6 py-3 text-foreground-muted">
-                  {deal.closingDate ? formatDate(deal.closingDate) : '—'}
+                  {isContracts
+                    ? deal.underContractDate
+                      ? formatDate(deal.underContractDate)
+                      : '—'
+                    : deal.closingDate
+                      ? formatDate(deal.closingDate)
+                      : '—'}
                 </td>
                 {variant === 'avgDaysPaid' ? (
                   <td className="px-6 py-3 text-foreground-muted">
