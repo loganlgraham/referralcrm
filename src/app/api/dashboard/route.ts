@@ -2355,6 +2355,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const mcNoAfcClosesMap = new Map<string, number>();
   const mcAllClosedDealsForAssignedAgentRateMap = new Map<string, number>();
   const mcNoAssignedAgentClosesMap = new Map<string, number>();
+  // MC Close Effectiveness card: share of an MC's closed deals that kept AFC even
+  // though the assigned agent was not used, over every closed deal for that MC.
+  const mcAfcOnlyClosesMap = new Map<string, number>();
+  const mcAllBuySideClosesMap = new Map<string, number>();
   // C-10: MC close-rate leaderboards must use `isClosedDealEligible` so that
   // outside-agent / non-assigned-agent payments don't inflate denominators.
   // MC KPIs are buy-side only, so sell-side rows are excluded up front.
@@ -2365,6 +2369,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     isClosedDealEligible(payment)
   );
   buySideClosedDealsInTimeframe.forEach((payment) => {
+    // Close Effectiveness card denominator is every buy-side closed deal for the MC,
+    // regardless of agent/lender flags. The numerator is closes that kept AFC but
+    // did not use the assigned agent.
+    const denomKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
+    mcAllBuySideClosesMap.set(denomKey, (mcAllBuySideClosesMap.get(denomKey) ?? 0) + 1);
+    if (payment.usedAfc === true && payment.usedAssignedAgent === false) {
+      mcAfcOnlyClosesMap.set(denomKey, (mcAfcOnlyClosesMap.get(denomKey) ?? 0) + 1);
+    }
     // "Closes Without Assigned Agent" compares explicit true/false flags:
     // outside-agent attributions and unknown (null) flags belong to neither
     // side of the rate, so they must stay out of the denominator too.
@@ -2478,16 +2490,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .sort((a, b) => b.revenueCents - a.revenueCents)
     .slice(0, 10);
 
-  const mcLeaderboardKeys = new Set<string>([...referralByMcMap.keys(), ...mcTotalClosedDealsMap.keys()]);
+  const mcLeaderboardKeys = new Set<string>([
+    ...referralByMcMap.keys(),
+    ...mcTotalClosedDealsMap.keys(),
+    ...mcAllBuySideClosesMap.keys()
+  ]);
   const mcCloseRateLeaderboard = Array.from(mcLeaderboardKeys)
     .map((key) => {
       const totalReferrals = referralByMcMap.get(key) ?? 0;
       const dealsClosed = cohortClosedByMcMap.get(key) ?? 0;
       const totalClosedDeals = mcTotalClosedDealsMap.get(key) ?? 0;
-      const assignedAgentCloses = mcAssignedAgentClosesMap.get(key) ?? 0;
       const outsideLenderLossCount = mcOutsideLenderLossMap.get(key) ?? 0;
-      const assignedAgentCloseRate = safePercent(assignedAgentCloses, totalClosedDeals);
       const outsideLenderLossRate = safePercent(outsideLenderLossCount, totalClosedDeals);
+      // AFC-only close rate: closed deals that kept AFC but not the assigned agent,
+      // over all of the MC's closed deals.
+      const assignedAgentCloses = mcAfcOnlyClosesMap.get(key) ?? 0;
+      const assignedCloseTotal = mcAllBuySideClosesMap.get(key) ?? 0;
+      const assignedAgentCloseRate = safePercent(assignedAgentCloses, assignedCloseTotal);
       return {
         id: key,
         name: key === 'unassigned' ? 'Unassigned MC' : lenderNameMap.get(key) ?? 'Unknown MC',
@@ -2496,6 +2515,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         totalReferrals,
         assignedAgentCloses,
         totalClosedDeals,
+        assignedCloseTotal,
         assignedAgentCloseRate,
         outsideLenderLossCount,
         outsideLenderLossRate
@@ -3502,8 +3522,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       referrals: value
     }))
     .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
-    .sort((a, b) => b.referrals - a.referrals)
-    .slice(0, 10);
+    .sort((a, b) => b.referrals - a.referrals);
 
   const agentCloseRateLeaderboard = Array.from(agentReferralCount.entries())
     .map(([key, totalReferrals]) => {
@@ -3517,8 +3536,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       };
     })
     .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
-    .sort((a, b) => b.closeRate - a.closeRate)
-    .slice(0, 10);
+    .sort((a, b) => b.closeRate - a.closeRate);
 
   const agentRevenuePaid = Array.from(agentRevenueMap.entries())
     .map(([key, value]) => ({
@@ -3527,8 +3545,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       revenueCents: value.revenue
     }))
     .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
-    .sort((a, b) => b.revenueCents - a.revenueCents)
-    .slice(0, 10);
+    .sort((a, b) => b.revenueCents - a.revenueCents);
 
   const agentRevenueExpected = Array.from(agentRevenueMap.entries())
     .map(([key, value]) => ({
@@ -3537,8 +3554,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       revenueCents: value.expected
     }))
     .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
-    .sort((a, b) => b.revenueCents - a.revenueCents)
-    .slice(0, 10);
+    .sort((a, b) => b.revenueCents - a.revenueCents);
 
   const agentAverageClosedDeal = Array.from(agentRevenueMap.entries())
     .map(([key, value]) => ({
@@ -3547,8 +3563,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       revenueCents: value.closed > 0 ? value.closedVolumeCents / value.closed : 0,
     }))
     .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
-    .sort((a, b) => (b.revenueCents ?? 0) - (a.revenueCents ?? 0))
-    .slice(0, 10);
+    .sort((a, b) => (b.revenueCents ?? 0) - (a.revenueCents ?? 0));
 
   const agentCommissionValues = Array.from(agentRevenueMap.values())
     .flatMap((value) => value.commissionCents);
@@ -3571,8 +3586,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       revenueCents: value.netCommissionCents
     }))
     .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
-    .sort((a, b) => b.revenueCents - a.revenueCents)
-    .slice(0, 10);
+    .sort((a, b) => b.revenueCents - a.revenueCents);
 
   const agentLostDeals = Array.from(agentLostDealsMap.entries())
     .map(([key, value]) => ({
@@ -3581,8 +3595,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       referrals: value
     }))
     .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
-    .sort((a, b) => b.referrals - a.referrals)
-    .slice(0, 10);
+    .sort((a, b) => b.referrals - a.referrals);
 
   const agentCreatedMcAssignmentCount = new Map<string, number>();
   filteredReferrals.forEach((referral) => {
@@ -3599,8 +3612,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       referrals: value
     }))
     .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
-    .sort((a, b) => b.referrals - a.referrals)
-    .slice(0, 10);
+    .sort((a, b) => b.referrals - a.referrals);
 
   // AHA / AHA OOS agent leaderboards — composite score (0–100) per agent
   type AhaRankedAgent = {

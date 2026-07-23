@@ -50,6 +50,7 @@ interface LeaderboardEntry {
   totalReferrals?: number;
   assignedAgentCloses?: number;
   assignedAgentCloseRate?: number;
+  assignedCloseTotal?: number;
   totalClosedDeals?: number;
   outsideLenderLossCount?: number;
   outsideLenderLossRate?: number;
@@ -1471,6 +1472,93 @@ function LeaderboardTable({
   );
 }
 
+type AgentLeaderboardView = {
+  id: string;
+  label: string;
+  valueLabel: string;
+  entries: LeaderboardEntry[];
+};
+
+function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
+  const [activeId, setActiveId] = useState(views[0]?.id ?? '');
+  const activeView = views.find((view) => view.id === activeId) ?? views[0];
+  const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
+
+  if (!activeView) {
+    return null;
+  }
+
+  const { entries, valueLabel } = activeView;
+
+  return (
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <div className="flex flex-wrap items-center gap-2">
+        {views.map((view) => {
+          const isActive = view.id === activeView.id;
+          return (
+            <button
+              key={view.id}
+              type="button"
+              onClick={() => setActiveId(view.id)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                isActive
+                  ? 'border-transparent bg-primary-600 text-white shadow-sm'
+                  : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
+              }`}
+            >
+              {view.label}
+            </button>
+          );
+        })}
+      </div>
+      <div
+        className="mt-4 overflow-y-auto"
+        style={entries.length ? { maxHeight: scrollMaxHeight } : undefined}
+        aria-label={entries.length ? `Scrollable list: ${activeView.label}` : undefined}
+      >
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
+            <tr className="text-left text-xs text-foreground-subtle">
+              <th className="py-1 font-medium">Rank</th>
+              <th className="py-1 font-medium">Name</th>
+              <th className="py-1 font-medium text-right">{valueLabel}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.length ? (
+              entries.map((entry, index) => (
+                <tr key={`${entry.id}-${index}`} className="border-t border-border text-foreground-muted">
+                  <td className="py-2 text-foreground-subtle">#{index + 1}</td>
+                  <td className="py-2 font-medium text-foreground">{entry.name}</td>
+                  <td className="py-2 text-right">
+                    {entry.revenueCents != null
+                      ? formatCurrency(entry.revenueCents)
+                      : entry.expectedRevenueCents != null
+                        ? formatCurrency(entry.expectedRevenueCents)
+                        : entry.closeRate != null
+                          ? `${entry.closeRate.toFixed(1)}%`
+                          : entry.referrals != null
+                            ? formatNumber(entry.referrals)
+                            : entry.dealsClosed != null
+                              ? `${formatNumber(entry.dealsClosed)} / ${formatNumber(entry.totalReferrals ?? 0)}`
+                              : '—'}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={3} className="py-6 text-center text-sm text-foreground-subtle">
+                  Nothing to display for this period.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function McCloseEffectivenessTable({ entries }: { entries: LeaderboardEntry[] }) {
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
@@ -1478,7 +1566,8 @@ function McCloseEffectivenessTable({ entries }: { entries: LeaderboardEntry[] })
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">MC Close Effectiveness</p>
       <p className="mt-1 text-xs text-foreground-subtle">
-        Overall close rate uses cohort closes/referrals. Assigned close rate uses assigned-agent closes/total closed.
+        Overall close rate uses cohort closes/referrals. AFC-only close rate is the share of the MC&apos;s closed deals
+        that still used AFC even though the assigned agent was not used.
       </p>
       <div
         className="mt-4 overflow-y-auto"
@@ -1491,7 +1580,7 @@ function McCloseEffectivenessTable({ entries }: { entries: LeaderboardEntry[] })
               <th className="py-1 font-medium">Rank</th>
               <th className="py-1 font-medium">MC</th>
               <th className="py-1 font-medium text-right">Overall close rate</th>
-              <th className="py-1 font-medium text-right">Assigned close rate</th>
+              <th className="py-1 font-medium text-right">AFC-only close rate</th>
             </tr>
           </thead>
           <tbody>
@@ -1512,7 +1601,7 @@ function McCloseEffectivenessTable({ entries }: { entries: LeaderboardEntry[] })
                     <td className="py-2 text-right">
                       <p>{`${assignedCloseRate.toFixed(1)}%`}</p>
                       <p className="text-xs text-foreground-subtle">
-                        {`${formatNumber(entry.assignedAgentCloses ?? 0)} / ${formatNumber(entry.totalClosedDeals ?? 0)}`}
+                        {`${formatNumber(entry.assignedAgentCloses ?? 0)} / ${formatNumber(entry.assignedCloseTotal ?? 0)}`}
                       </p>
                     </td>
                   </tr>
@@ -3210,30 +3299,37 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
         <SummaryCard title="Average agent commission" value={averageCommissionDisplay} helper={commissionHelper} />
         <SummaryCard title="Average referral fee" value={averageReferralFeeDisplay} helper={referralFeeHelper} />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <LeaderboardTable title="Referrals by agent" entries={data.referralLeaderboard} valueLabel="Referrals" />
-        <LeaderboardTable title="Close rate by agent" entries={data.closeRateLeaderboard} valueLabel="Close rate" />
-      </div>
-      <div className="grid gap-4 lg:grid-cols-3">
-        <LeaderboardTable
-          title="Avg. closed deal amount by agent"
-          entries={data.averageClosedDealAmount}
-          valueLabel="Avg. closed deal"
-        />
-        <LeaderboardTable title="Revenue paid by agent" entries={data.revenuePaid} valueLabel="Revenue" />
-        <LeaderboardTable title="Outstanding revenue by agent" entries={data.revenueExpected} valueLabel="Outstanding" />
-      </div>
-      <div className={`grid gap-4 lg:grid-cols-2${data.agentCreatedMcAssignments.length > 0 ? ' xl:grid-cols-3' : ''}`}>
-        <LeaderboardTable title="Agent net earnings" entries={data.netRevenue} valueLabel="Net revenue" />
-        <LeaderboardTable title="Lost referrals by agent" entries={data.lostDeals} valueLabel="Lost referrals" />
-        {data.agentCreatedMcAssignments.length > 0 ? (
-          <LeaderboardTable
-            title="Agent-created referrals assigned to MCs"
-            entries={data.agentCreatedMcAssignments}
-            valueLabel="Referrals"
-          />
-        ) : null}
-      </div>
+      <AgentLeaderboardCard
+        views={[
+          { id: 'referrals', label: 'Referrals by agent', valueLabel: 'Referrals', entries: data.referralLeaderboard },
+          { id: 'close-rate', label: 'Close rate by agent', valueLabel: 'Close rate', entries: data.closeRateLeaderboard },
+          {
+            id: 'avg-closed-deal',
+            label: 'Avg. closed deal amount by agent',
+            valueLabel: 'Avg. closed deal',
+            entries: data.averageClosedDealAmount
+          },
+          { id: 'revenue-paid', label: 'Revenue paid by agent', valueLabel: 'Revenue', entries: data.revenuePaid },
+          {
+            id: 'revenue-expected',
+            label: 'Outstanding revenue by agent',
+            valueLabel: 'Outstanding',
+            entries: data.revenueExpected
+          },
+          { id: 'net-earnings', label: 'Agent net earnings', valueLabel: 'Net revenue', entries: data.netRevenue },
+          { id: 'lost-referrals', label: 'Lost referrals by agent', valueLabel: 'Lost referrals', entries: data.lostDeals },
+          ...(data.agentCreatedMcAssignments.length > 0
+            ? [
+                {
+                  id: 'agent-created-mc',
+                  label: 'Agent-created referrals assigned to MCs',
+                  valueLabel: 'Referrals',
+                  entries: data.agentCreatedMcAssignments
+                }
+              ]
+            : [])
+        ]}
+      />
     </div>
   );
 }
