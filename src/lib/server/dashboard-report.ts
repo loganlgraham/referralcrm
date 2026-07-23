@@ -601,7 +601,7 @@ function buildSections(args: {
             },
             { label: 'Close rate', value: formatPercent(summary.closeRate) },
             { label: 'Revenue received', value: formatCents(summary.realizedRevenueCents) },
-            { label: 'Expected revenue (outstanding)', value: formatCents(summary.expectedRevenueCents) }
+            { label: 'Outstanding revenue (owed)', value: formatCents(summary.expectedRevenueCents) }
           ]
         });
         break;

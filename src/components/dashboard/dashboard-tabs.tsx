@@ -2222,14 +2222,14 @@ function MainDashboard({
   ];
 
   const revenueMetrics = [
-    { label: 'Expected revenue', value: formatCurrency(summary.expectedRevenueCents) },
+    { label: 'Outstanding revenue (owed)', value: formatCurrency(summary.expectedRevenueCents) },
     { label: 'Closed, not paid', value: formatCurrency(summary.closedNotPaidCents) },
     {
-      label: 'Revenue realization rate',
+      label: 'Collection rate',
       value: revenueRealizationRate == null ? '—' : `${revenueRealizationRate.toFixed(1)}%`
     },
     {
-      label: 'Closed-not-paid % of expected',
+      label: 'Closed-not-paid % of outstanding',
       value:
         closedNotPaidPercentOfExpected == null ? '—' : `${closedNotPaidPercentOfExpected.toFixed(1)}%`
     },
@@ -3221,7 +3221,7 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
           valueLabel="Avg. closed deal"
         />
         <LeaderboardTable title="Revenue paid by agent" entries={data.revenuePaid} valueLabel="Revenue" />
-        <LeaderboardTable title="Revenue expected by agent" entries={data.revenueExpected} valueLabel="Expected" />
+        <LeaderboardTable title="Outstanding revenue by agent" entries={data.revenueExpected} valueLabel="Outstanding" />
       </div>
       <div className={`grid gap-4 lg:grid-cols-2${data.agentCreatedMcAssignments.length > 0 ? ' xl:grid-cols-3' : ''}`}>
         <LeaderboardTable title="Agent net earnings" entries={data.netRevenue} valueLabel="Net revenue" />

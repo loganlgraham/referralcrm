@@ -274,7 +274,7 @@ describe('buildDashboardReport', () => {
     expect(rows['Referrals that entered Under Contract (total)']).toBe('2');
     expect(rows['Close rate']).toBe('7.5%');
     expect(rows['Revenue received']).toBe('$12,000');
-    expect(rows['Expected revenue (outstanding)']).toBe('$46,208');
+    expect(rows['Outstanding revenue (owed)']).toBe('$46,208');
   });
 
   it('excludes terminated payments from Under Contract counts via the query filter', async () => {
