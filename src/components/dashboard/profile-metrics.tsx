@@ -159,11 +159,11 @@ export function ProfileMetrics() {
         />
       </div>
       <p className="text-xs uppercase tracking-wide text-foreground-subtle">{rangeLabel}</p>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => (
           <div key={card.label} className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
             <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{card.label}</p>
-            <p className="mt-2 text-xl font-semibold text-foreground">{card.value}</p>
+            <p className="mt-1.5 text-[1.375rem] font-semibold leading-7 tracking-tight tabular-nums text-foreground">{card.value}</p>
           </div>
         ))}
       </div>

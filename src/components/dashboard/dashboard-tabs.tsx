@@ -16,9 +16,9 @@ import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatDate, formatNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
-import { Info, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
-import { Tooltip } from '@/components/ui/tooltip';
+import { DashCard, DashCardEmpty, DashCardHeader } from '@/components/dashboard/dashboard-ui';
 import { DEAL_STATUS_LABELS, type DealStatus } from '@/constants/deals';
 import {
   TimeframeDropdown,
@@ -578,8 +578,8 @@ function SummaryCard({
   const headerContent = (
     <>
       <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
-      <p className="mt-2 text-2xl font-semibold text-foreground">{value}</p>
-      {helper ? <p className="mt-1 text-xs text-foreground-subtle">{helper}</p> : null}
+      <p className="mt-1.5 text-[1.375rem] font-semibold leading-7 tracking-tight tabular-nums text-foreground">{value}</p>
+      {helper ? <p className="mt-0.5 text-xs text-foreground-subtle">{helper}</p> : null}
     </>
   );
   const headerInteractiveClass =
@@ -601,9 +601,9 @@ function SummaryCard({
     headerNode = <div className="block w-full text-left">{headerContent}</div>;
   }
   const extraStatsNode = extraStats?.length ? (
-    <dl className="mt-3 grid grid-cols-2 gap-2">
+    <dl className="mt-2.5 grid grid-cols-2 gap-1.5">
       {extraStats.map((stat) => {
-        const tileBase = 'rounded-lg bg-surface-muted px-2 py-1 text-left transition min-h-[3.6rem] flex flex-col justify-between';
+        const tileBase = 'rounded-lg bg-surface-muted px-2.5 py-1.5 text-left transition flex flex-col gap-0.5';
         if (stat.onClick) {
           return (
             <button
@@ -616,15 +616,15 @@ function SummaryCard({
               }}
               className={`${tileBase} cursor-pointer hover:bg-surface-subtle hover:ring-1 hover:ring-sky-300`}
             >
-              <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle leading-tight min-h-[1.8rem]">{stat.label}</dt>
-              <dd className="text-sm font-semibold text-foreground">{stat.value}</dd>
+              <dt className="text-[11px] font-medium uppercase tracking-wide text-foreground-subtle leading-tight">{stat.label}</dt>
+              <dd className="text-sm font-semibold tabular-nums text-foreground">{stat.value}</dd>
             </button>
           );
         }
         return (
           <div key={`${title}-${stat.label}`} className={tileBase}>
-            <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle leading-tight min-h-[1.8rem]">{stat.label}</dt>
-            <dd className="text-sm font-semibold text-foreground">{stat.value}</dd>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-foreground-subtle leading-tight">{stat.label}</dt>
+            <dd className="text-sm font-semibold tabular-nums text-foreground">{stat.value}</dd>
           </div>
         );
       })}
@@ -639,22 +639,34 @@ function SummaryCard({
   );
 }
 
+interface MetricGroupMetric {
+  label: string;
+  value: string;
+  helper?: string;
+  onHelperClick?: () => void;
+  helperHref?: string;
+}
+
 function MetricGroupCard({
   title,
-  metrics
+  metrics,
+  info,
+  emphasizeCount = 2
 }: {
   title: string;
-  metrics: { label: string; value: string; helper?: string; onHelperClick?: () => void }[];
+  metrics: MetricGroupMetric[];
+  info?: string;
+  emphasizeCount?: number;
 }) {
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
-      <dl className="mt-3 divide-y divide-border">
+    <DashCard>
+      <DashCardHeader title={title} info={info} />
+      <dl className="mt-2.5 divide-y divide-border">
         {metrics.map((metric, index) => (
-          <div key={`${title}-${metric.label}`} className="space-y-0.5 py-2.5 first:pt-0 last:pb-0">
+          <div key={`${title}-${metric.label}`} className="space-y-0.5 py-2 first:pt-0 last:pb-0">
             <div className="flex items-baseline justify-between gap-3">
-              <dt className={index < 2 ? 'text-sm font-medium text-foreground-muted' : 'text-sm text-foreground-subtle'}>{metric.label}</dt>
-              <dd className={index < 2 ? 'text-base font-bold text-foreground' : 'text-sm font-semibold text-foreground'}>{metric.value}</dd>
+              <dt className={index < emphasizeCount ? 'text-sm font-medium text-foreground-muted' : 'text-sm text-foreground-subtle'}>{metric.label}</dt>
+              <dd className={`tabular-nums ${index < emphasizeCount ? 'text-base font-bold text-foreground' : 'text-sm font-semibold text-foreground'}`}>{metric.value}</dd>
             </div>
             {metric.helper ? (
               metric.onHelperClick ? (
@@ -665,6 +677,13 @@ function MetricGroupCard({
                 >
                   {metric.helper}
                 </button>
+              ) : metric.helperHref ? (
+                <Link
+                  href={metric.helperHref}
+                  className="text-xs text-sky-600 underline decoration-sky-300 underline-offset-2 hover:text-sky-800"
+                >
+                  {metric.helper}
+                </Link>
               ) : (
                 <p className="text-xs text-foreground-subtle">{metric.helper}</p>
               )
@@ -672,7 +691,7 @@ function MetricGroupCard({
           </div>
         ))}
       </dl>
-    </div>
+    </DashCard>
   );
 }
 
@@ -681,6 +700,7 @@ function LineChartCard({
   data,
   formatValue,
   helper,
+  info,
   actions,
   color = '#0ea5e9'
 }: {
@@ -688,6 +708,7 @@ function LineChartCard({
   data: TrendPoint[];
   formatValue: (value: number) => string;
   helper?: string;
+  info?: string;
   actions?: ReactNode;
   color?: string;
 }) {
@@ -764,27 +785,27 @@ function LineChartCard({
   };
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <DashCard>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+          <DashCardHeader title={title} info={info} />
           {helper ? <p className="text-xs text-foreground-subtle">{helper}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
           {activePoint ? (
-            <div className="text-right text-sm text-foreground-muted">
+            <div className="text-right text-sm tabular-nums text-foreground-muted">
               <p className="font-semibold">{formatValue(activePoint.value)}</p>
               <p className="text-xs text-foreground-subtle">{activePoint.label}</p>
             </div>
           ) : null}
         </div>
       </div>
-      <div className="mt-4">
+      <div className="mt-3">
         {hasData ? (
           <svg
             viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-            className="h-48 w-full"
+            className="h-40 w-full"
             role="img"
             aria-label={`${title} trend chart`}
             onMouseMove={handleMouseMove}
@@ -877,12 +898,12 @@ function LineChartCard({
             </text>
           </svg>
         ) : (
-          <div className="flex h-48 w-full items-center justify-center rounded-md bg-surface-muted text-sm text-foreground-subtle">
+          <div className="flex h-40 w-full items-center justify-center rounded-md bg-surface-muted text-sm text-foreground-subtle">
             No data for this period.
           </div>
         )}
       </div>
-    </div>
+    </DashCard>
   );
 }
 
@@ -901,13 +922,18 @@ function MultiLineChartCard({
   series,
   formatValue,
   helper,
-  actions
+  info,
+  actions,
+  plain = false
 }: {
   title: string;
   series: { label: string; color: string; data: TrendPoint[] }[];
   formatValue: (value: number) => string;
   helper?: string;
+  info?: string;
   actions?: ReactNode;
+  /** Render without card chrome, for embedding inside another card. */
+  plain?: boolean;
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const safeSeries = series.map((entry) => ({ ...entry, data: entry.data ?? [] }));
@@ -964,11 +990,11 @@ function MultiLineChartCard({
     setHoverIndex(closestIndex);
   };
 
-  return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+  const body = (
+    <>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+          <DashCardHeader title={title} info={info} />
           {helper ? <p className="text-xs text-foreground-subtle">{helper}</p> : null}
         </div>
         <div className="flex items-center gap-4">
@@ -977,7 +1003,7 @@ function MultiLineChartCard({
             <div className="flex items-center gap-3">
               <span className="text-xs text-foreground-subtle">{labelText}</span>
               {activeValues.map((item, index) => (
-                <span key={index} className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                <span key={index} className="flex items-center gap-1.5 text-sm font-semibold tabular-nums text-foreground">
                   <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
                   {formatValue(item.value)}
                 </span>
@@ -987,10 +1013,10 @@ function MultiLineChartCard({
         </div>
       </div>
       {hasData ? (
-        <div className="mt-4">
+        <div className="mt-3">
           <svg
             viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-            className="h-48 w-full"
+            className="h-40 w-full"
             onMouseMove={handleMouseMove}
             onMouseLeave={() => setHoverIndex(null)}
           >
@@ -1076,10 +1102,15 @@ function MultiLineChartCard({
           </div>
         </div>
       ) : (
-        <div className="mt-3 text-sm text-foreground-subtle">No data available.</div>
+        <DashCardEmpty className="mt-2 py-4" />
       )}
-    </div>
+    </>
   );
+
+  if (plain) {
+    return <div>{body}</div>;
+  }
+  return <DashCard>{body}</DashCard>;
 }
 
 function PieChartCard({
@@ -1110,18 +1141,18 @@ function PieChartCard({
   let currentAngle = -Math.PI / 2;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <DashCard>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
           {helper ? <p className="text-xs text-foreground-subtle">{helper}</p> : null}
         </div>
-        <p className="text-xs font-semibold text-foreground-muted">{total > 0 ? `${formatNumber(total)} deals` : '—'}</p>
+        <p className="text-xs font-semibold tabular-nums text-foreground-muted">{total > 0 ? `${formatNumber(total)} deals` : '—'}</p>
       </div>
       {total > 0 ? (
-        <div className="mt-4 grid gap-4 sm:grid-cols-[1fr,1.2fr] sm:items-center">
+        <div className="mt-3 grid gap-4 sm:grid-cols-[1fr,1.2fr] sm:items-center">
           <div className="flex justify-center">
-            <svg viewBox="0 0 160 160" className="h-48 w-48">
+            <svg viewBox="0 0 160 160" className="h-40 w-40">
               {data.map((item, index) => {
                 const sliceAngle = (item.value / total) * Math.PI * 2;
                 const startAngle = currentAngle;
@@ -1153,18 +1184,18 @@ function PieChartCard({
                     />
                     <span className="font-medium text-foreground">{item.label}</span>
                   </div>
-                  <span className="text-foreground-muted">{`${formatNumber(item.value)} (${resolvedPercentage.toFixed(1)}%)`}</span>
+                  <span className="tabular-nums text-foreground-muted">{`${formatNumber(item.value)} (${resolvedPercentage.toFixed(1)}%)`}</span>
                 </div>
               );
             })}
           </div>
         </div>
       ) : (
-        <div className="mt-6 flex h-40 items-center justify-center rounded-md bg-surface-muted text-sm text-foreground-subtle">
+        <div className="mt-4 flex h-32 items-center justify-center rounded-md bg-surface-muted text-sm text-foreground-subtle">
           No terminated deals recorded this period.
         </div>
       )}
-    </div>
+    </DashCard>
   );
 }
 
@@ -1180,16 +1211,16 @@ function TerminatedDealsList({
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * TERMINATED_DEAL_ROW_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <DashCard>
       <div className="flex items-baseline justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Terminated deals</p>
-          <p className="mt-2 text-2xl font-semibold text-foreground">{formatCurrency(totalLostReferralFeeCents)}</p>
+          <p className="mt-1.5 text-[1.375rem] font-semibold leading-7 tracking-tight tabular-nums text-foreground">{formatCurrency(totalLostReferralFeeCents)}</p>
           <p className="text-xs text-foreground-subtle">{formatNumber(totalDeals)} lost deals</p>
         </div>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-3">
         {deals.length ? (
           <div
             className="divide-y divide-border overflow-y-auto"
@@ -1197,22 +1228,22 @@ function TerminatedDealsList({
             aria-label="Scrollable list: terminated deals"
           >
             {deals.map((deal) => (
-              <div key={deal.id} className="flex items-start justify-between gap-3 py-3">
+              <div key={deal.id} className="flex items-start justify-between gap-3 py-2.5">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-foreground">{deal.mcName}, {deal.agentName}</p>
                   <p className="text-xs text-foreground-subtle">{deal.reasonLabel}</p>
                 </div>
-                <p className="whitespace-nowrap text-sm font-semibold text-rose-600">
+                <p className="whitespace-nowrap text-sm font-semibold tabular-nums text-rose-600">
                   {formatCurrency(deal.lostReferralFeeCents)}
                 </p>
               </div>
             ))}
           </div>
         ) : (
-          <p className="py-6 text-center text-sm text-foreground-subtle">No terminated deals this period.</p>
+          <DashCardEmpty message="No terminated deals this period." />
         )}
       </div>
-    </div>
+    </DashCard>
   );
 }
 
@@ -1247,13 +1278,12 @@ function ConversionFunnelCard({
   };
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Conversion funnel</p>
-      <p className="mt-1 text-xs text-foreground-subtle">
-        Cohort funnel: each stage counts referrals that ever reached that stage. Click a row to open referrals
-        currently in that status (row totals can differ from the list).
-      </p>
-      <div className="mt-4 space-y-1.5">
+    <DashCard>
+      <DashCardHeader
+        title="Conversion funnel"
+        info="Cohort funnel: each stage counts referrals that ever reached that stage. Click a row to open referrals currently in that status (row totals can differ from the list)."
+      />
+      <div className="mt-3 space-y-1.5">
         {stages.length ? (
           stages.map((stage, index) => {
             const isFirst = index === 0;
@@ -1265,7 +1295,7 @@ function ConversionFunnelCard({
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium text-foreground group-hover:text-sky-700">{stage.label}</span>
-                  <div className="flex items-center gap-3 text-sm text-foreground-muted">
+                  <div className="flex items-center gap-3 text-sm tabular-nums text-foreground-muted">
                     <span className="font-semibold text-foreground">{formatNumber(stage.count)}</span>
                     {!isFirst && stage.conversionFromPrevious != null ? (
                       <span className="text-xs text-foreground-subtle">
@@ -1284,7 +1314,7 @@ function ConversionFunnelCard({
             );
           })
         ) : (
-          <p className="py-4 text-center text-sm text-foreground-subtle">No referral data for this period.</p>
+          <DashCardEmpty className="py-4" />
         )}
       </div>
       {stages.length ? (
@@ -1305,7 +1335,7 @@ function ConversionFunnelCard({
           </Link>
         </div>
       ) : null}
-    </div>
+    </DashCard>
   );
 }
 
@@ -1345,7 +1375,7 @@ function RankedListBody({
               <li key={item.label}>
                 <div className="flex items-center justify-between text-sm text-foreground-muted">
                   <span className="font-medium text-foreground">{item.label}</span>
-                  <span className="text-foreground-muted">{formatValue(item.value)}</span>
+                  <span className="tabular-nums text-foreground-muted">{formatValue(item.value)}</span>
                 </div>
                 <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface-subtle">
                   <div
@@ -1357,7 +1387,7 @@ function RankedListBody({
             );
           })
         ) : (
-          <li className="text-sm text-foreground-subtle">{emptyMessage}</li>
+          <li className="py-3 text-center text-sm text-foreground-subtle">{emptyMessage}</li>
         )}
       </ul>
     </div>
@@ -1373,7 +1403,7 @@ function RankedListTabs({ views }: { views: RankedListView[] }) {
   }
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <DashCard>
       <div className="flex flex-wrap items-center gap-2">
         {views.map((view) => {
           const isActive = view.id === activeView.id;
@@ -1393,7 +1423,7 @@ function RankedListTabs({ views }: { views: RankedListView[] }) {
           );
         })}
       </div>
-      <div className="mt-4">
+      <div className="mt-3">
         <RankedListBody
           items={activeView.items}
           scrollLabel={activeView.label}
@@ -1401,7 +1431,7 @@ function RankedListTabs({ views }: { views: RankedListView[] }) {
           emptyMessage={activeView.emptyMessage}
         />
       </div>
-    </div>
+    </DashCard>
   );
 }
 
@@ -1419,17 +1449,14 @@ function LeaderboardTable({
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
-        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
-      </div>
+    <DashCard>
+      <DashCardHeader title={title} actions={actions} />
       <div
-        className="mt-4 overflow-y-auto"
+        className="mt-3 overflow-y-auto"
         style={entries.length ? { maxHeight: scrollMaxHeight } : undefined}
         aria-label={entries.length ? `Scrollable list: ${title}` : undefined}
       >
-        <table className="w-full text-sm">
+        <table className="w-full text-sm tabular-nums">
           <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
             <tr className="text-left text-xs text-foreground-subtle">
               <th className="py-1 font-medium">Rank</th>
@@ -1460,15 +1487,15 @@ function LeaderboardTable({
               ))
             ) : (
               <tr>
-                <td colSpan={3} className="py-6 text-center text-sm text-foreground-subtle">
-                  Nothing to display for this period.
+                <td colSpan={3}>
+                  <DashCardEmpty />
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
-    </div>
+    </DashCard>
   );
 }
 
@@ -1491,7 +1518,7 @@ function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
   const { entries, valueLabel } = activeView;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <DashCard>
       <div className="flex flex-wrap items-center gap-2">
         {views.map((view) => {
           const isActive = view.id === activeView.id;
@@ -1512,11 +1539,11 @@ function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
         })}
       </div>
       <div
-        className="mt-4 overflow-y-auto"
+        className="mt-3 overflow-y-auto"
         style={entries.length ? { maxHeight: scrollMaxHeight } : undefined}
         aria-label={entries.length ? `Scrollable list: ${activeView.label}` : undefined}
       >
-        <table className="w-full text-sm">
+        <table className="w-full text-sm tabular-nums">
           <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
             <tr className="text-left text-xs text-foreground-subtle">
               <th className="py-1 font-medium">Rank</th>
@@ -1547,15 +1574,15 @@ function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
               ))
             ) : (
               <tr>
-                <td colSpan={3} className="py-6 text-center text-sm text-foreground-subtle">
-                  Nothing to display for this period.
+                <td colSpan={3}>
+                  <DashCardEmpty />
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
-    </div>
+    </DashCard>
   );
 }
 
@@ -1563,18 +1590,17 @@ function McCloseEffectivenessTable({ entries }: { entries: LeaderboardEntry[] })
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">MC Close Effectiveness</p>
-      <p className="mt-1 text-xs text-foreground-subtle">
-        Overall close rate uses cohort closes/referrals. AFC-only close rate is the share of the MC&apos;s closed deals
-        that still used AFC even though the assigned agent was not used.
-      </p>
+    <DashCard>
+      <DashCardHeader
+        title="MC Close Effectiveness"
+        info="Overall close rate uses cohort closes/referrals. AFC-only close rate is the share of the MC's closed deals that still used AFC even though the assigned agent was not used."
+      />
       <div
-        className="mt-4 overflow-y-auto"
+        className="mt-3 overflow-y-auto"
         style={entries.length ? { maxHeight: scrollMaxHeight } : undefined}
         aria-label={entries.length ? 'Scrollable list: MC Close Effectiveness' : undefined}
       >
-        <table className="w-full text-sm">
+        <table className="w-full text-sm tabular-nums">
           <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
             <tr className="text-left text-xs text-foreground-subtle">
               <th className="py-1 font-medium">Rank</th>
@@ -1609,15 +1635,15 @@ function McCloseEffectivenessTable({ entries }: { entries: LeaderboardEntry[] })
               })
             ) : (
               <tr>
-                <td colSpan={4} className="py-6 text-center text-sm text-foreground-subtle">
-                  Nothing to display for this period.
+                <td colSpan={4}>
+                  <DashCardEmpty />
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
-    </div>
+    </DashCard>
   );
 }
 
@@ -1625,17 +1651,17 @@ function McOutsideLenderLossTable({ entries }: { entries: LeaderboardEntry[] }) 
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">MC Outside Lender Loss Signal</p>
-      <p className="mt-1 text-xs text-foreground-subtle">
-        Share of closed deals where the assigned agent was used, but AFC was not.
-      </p>
+    <DashCard>
+      <DashCardHeader
+        title="MC Outside Lender Loss Signal"
+        info="Share of closed deals where the assigned agent was used, but AFC was not."
+      />
       <div
-        className="mt-4 overflow-y-auto"
+        className="mt-3 overflow-y-auto"
         style={entries.length ? { maxHeight: scrollMaxHeight } : undefined}
         aria-label={entries.length ? 'Scrollable list: MC Outside Lender Loss Signal' : undefined}
       >
-        <table className="w-full text-sm">
+        <table className="w-full text-sm tabular-nums">
           <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
             <tr className="text-left text-xs text-foreground-subtle">
               <th className="py-1 font-medium">Rank</th>
@@ -1664,15 +1690,15 @@ function McOutsideLenderLossTable({ entries }: { entries: LeaderboardEntry[] }) 
               })
             ) : (
               <tr>
-                <td colSpan={4} className="py-6 text-center text-sm text-foreground-subtle">
-                  Nothing to display for this period.
+                <td colSpan={4}>
+                  <DashCardEmpty />
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
-    </div>
+    </DashCard>
   );
 }
 
@@ -1720,15 +1746,13 @@ function TransferTimingCard({
   }
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
-        When to transfer to the brokerage
-      </p>
-      <p className="mt-1 text-xs text-foreground-subtle">
-        Compares close rates for clients transferred to an agent before pre-approval vs after pre-approval.
-      </p>
+    <DashCard>
+      <DashCardHeader
+        title="When to transfer to the brokerage"
+        info="Compares close rates for clients transferred to an agent before pre-approval vs after pre-approval."
+      />
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <TransferTimingPanel
           label="Transferred BEFORE pre-approval"
           rate={beforeRate}
@@ -1748,7 +1772,7 @@ function TransferTimingCard({
       </div>
 
       <p className="mt-3 text-sm font-medium text-foreground">{conclusion}</p>
-    </div>
+    </DashCard>
   );
 }
 
@@ -1791,8 +1815,8 @@ function TransferTimingPanel({
           </span>
         ) : null}
       </div>
-      <p className="mt-1 text-2xl font-semibold text-foreground">{rate.toFixed(1)}%</p>
-      <p className="text-xs text-foreground-subtle">
+      <p className="mt-1 text-[1.375rem] font-semibold leading-7 tracking-tight tabular-nums text-foreground">{rate.toFixed(1)}%</p>
+      <p className="text-xs tabular-nums text-foreground-subtle">
         {`${formatNumber(closed)} / ${formatNumber(total)} closed`}
       </p>
     </div>
@@ -1994,14 +2018,12 @@ function PreApprovalConversionSection({
   };
 
   return (
-    <div className="space-y-4 rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <DashCard className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Pre-approval conversion</p>
-          <p className="text-xs text-foreground-subtle">
-            Track how referral volume compares with AHA and AHA OOS pre-approvals issued each month.
-          </p>
-        </div>
+        <DashCardHeader
+          title="Pre-approval conversion"
+          info="Track how referral volume compares with AHA and AHA OOS pre-approvals issued each month."
+        />
         {canEdit ? (
           <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col text-xs font-medium text-foreground-muted">
@@ -2066,15 +2088,16 @@ function PreApprovalConversionSection({
       {status === 'saved' && !errorMessage ? (
         <p className="text-sm text-foreground-muted">Pre-approvals saved.</p>
       ) : null}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <MultiLineChartCard
           title="Conversion trend"
           series={conversionSeries}
           formatValue={(value) => `${value.toFixed(1)}%`}
           helper="Referrals ÷ pre-approvals across recorded months by network"
+          plain
         />
-        <div className="overflow-x-auto rounded-card border border-border">
-          <table className="min-w-full text-sm">
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="min-w-full text-sm tabular-nums">
             <thead className="bg-surface-muted text-xs text-foreground-subtle">
               <tr className="text-left">
                 <th className="px-3 py-2 font-medium">Month</th>
@@ -2124,7 +2147,7 @@ function PreApprovalConversionSection({
           </table>
         </div>
       </div>
-    </div>
+    </DashCard>
   );
 }
 
@@ -2332,8 +2355,8 @@ function MainDashboard({
   const funnelTerminal = data.funnel?.terminal ?? { lostTotal: 0, terminatedTotal: 0 };
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {highlights.map((card) => (
           <SummaryCard
             key={card.title}
@@ -2348,19 +2371,25 @@ function MainDashboard({
       </div>
 
       {funnelStages.length > 0 ? (
-        <ConversionFunnelCard
-          stages={funnelStages}
-          terminal={funnelTerminal}
-          networkFilter={networkFilter}
-        />
-      ) : null}
+        <div className="grid gap-3 xl:grid-cols-2 xl:items-start">
+          <ConversionFunnelCard
+            stages={funnelStages}
+            terminal={funnelTerminal}
+            networkFilter={networkFilter}
+          />
+          <div className="grid gap-3">
+            <MetricGroupCard title="Pipeline health" metrics={pipelineMetrics} />
+            <MetricGroupCard title="Revenue performance" metrics={revenueMetrics} />
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-3 lg:grid-cols-2">
+          <MetricGroupCard title="Pipeline health" metrics={pipelineMetrics} />
+          <MetricGroupCard title="Revenue performance" metrics={revenueMetrics} />
+        </div>
+      )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <MetricGroupCard title="Pipeline health" metrics={pipelineMetrics} />
-        <MetricGroupCard title="Revenue performance" metrics={revenueMetrics} />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <MultiLineChartCard
           title="Revenue"
           series={[
@@ -2382,7 +2411,7 @@ function MainDashboard({
         <LineChartCard title="Referrals received" data={data.trends.referrals} formatValue={(value) => formatNumber(Math.round(value))} color="#0ea5e9" />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <RankedListTabs
           views={[
             { id: 'revenue-source', label: 'Revenue by source', items: data.revenueBySource },
@@ -2424,7 +2453,7 @@ function MainDashboard({
         onSaved={onPreApprovalSaved}
       />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <PieChartCard
           title="Terminated deals by reason"
           data={data.terminatedDeals.breakdown}
@@ -2532,7 +2561,7 @@ function DealsLostTable({ deals }: { deals: LostDealEntry[] }) {
   }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
+      <table className="w-full text-left text-sm tabular-nums">
         <thead>
           <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
             <th className="px-6 py-3">Borrower</th>
@@ -2574,7 +2603,7 @@ function PendingClosingsTable({ deals }: { deals: PendingClosingEntry[] }) {
   }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
+      <table className="w-full text-left text-sm tabular-nums">
         <thead>
           <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
             <th className="px-6 py-3">Borrower</th>
@@ -2646,7 +2675,7 @@ function ClosedDealsTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
+      <table className="w-full text-left text-sm tabular-nums">
         <thead>
           <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
             <th className="px-6 py-3">Borrower</th>
@@ -2715,24 +2744,13 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
   const description = "Composite score blends weighted MC KPIs scored relative to peers this period. The top drivers of rank are AFC close rate, total AFC deal volume, closed deals using AFC, fewer closed deals without AFC, total revenue, and referral (transfer) volume. Close speed, pushed-back deals, closes without the assigned agent, financing terminations, NPS, pipeline aging, source quality, and forecast accuracy act as lower-weight quality guardrails. MCs with fewer than 3 referrals are marked provisional and receive a volume discount, but still keep a score. KPIs with no data this period are excluded from that MC's weighted average rather than dragging the score toward the median.";
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <div className="flex items-center gap-1.5">
-        <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
-        <Tooltip content={description} side="bottom" className="w-80 max-w-[calc(100vw-3rem)] text-left leading-relaxed">
-          <button
-            type="button"
-            aria-label={`${title} details`}
-            className="inline-flex rounded-full text-foreground-subtle transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-          >
-            <Info className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-        </Tooltip>
-      </div>
+    <DashCard>
+      <DashCardHeader title={title} info={description} />
       {entries.length === 0 ? (
-        <p className="py-8 text-center text-sm text-foreground-subtle">No MCs with data for this period.</p>
+        <DashCardEmpty message="No MCs with data for this period." />
       ) : (
-        <div className="mt-4 overflow-y-auto" style={{ maxHeight: scrollMaxHeight }}>
-          <table className="w-full text-sm">
+        <div className="mt-3 overflow-y-auto" style={{ maxHeight: scrollMaxHeight }}>
+          <table className="w-full text-sm tabular-nums">
             <thead className="sticky top-0 bg-surface-raised">
               <tr className="text-left text-xs text-foreground-subtle">
                 <th className="py-1 font-medium w-10">Rank</th>
@@ -2839,7 +2857,7 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
           </div>
         )}
       </Modal>
-    </div>
+    </DashCard>
   );
 }
 
@@ -2907,20 +2925,19 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
   const scrollMaxHeight = `${AFC_RISK_VISIBLE_ROWS * RANKED_LIST_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">AFC Loss Risk Call List</p>
-      <p className="mt-1 text-xs text-foreground-subtle">
-        AHA OOS buyer referrals in Active Lead or aged In Communication status with outside-lender risk signals.
-        Under-contract referrals are excluded; rows can resurface after 14 days without a page update.
-      </p>
+    <DashCard>
+      <DashCardHeader
+        title="AFC Loss Risk Call List"
+        info="AHA OOS buyer referrals in Active Lead or aged In Communication status with outside-lender risk signals. Under-contract referrals are excluded; rows can resurface after 14 days without a page update."
+      />
       {entries.length === 0 ? (
-        <p className="py-8 text-center text-sm text-foreground-subtle">No qualifying AHA OOS Active Lead or In Communication buyer referrals.</p>
+        <DashCardEmpty message="No qualifying AHA OOS Active Lead or In Communication buyer referrals." />
       ) : (
         <div
-          className="mt-4 overflow-x-auto overflow-y-auto"
+          className="mt-3 overflow-x-auto overflow-y-auto"
           style={shouldScroll ? { maxHeight: scrollMaxHeight } : undefined}
         >
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-left text-sm tabular-nums">
             <thead className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
               <tr>
                 {renderSortHeader('borrower', 'Borrower')}
@@ -2981,7 +2998,7 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
           </table>
         </div>
       )}
-    </div>
+    </DashCard>
   );
 }
 
@@ -2996,16 +3013,22 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <McRankedList title="MC Composite KPI Leaderboard" entries={data.kpiLeaderboard.rankedMcs} />
       <McAfcRiskCallListTable entries={data.afcRiskCallList} />
-      <LineChartCard
-        title="Requests received"
-        data={data.requestTrend.all}
-        formatValue={(value) => formatNumber(Math.round(value))}
-        helper="Trend of referral requests routed to MCs (network filter applied above)"
-      />
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2 lg:items-start">
+        <LineChartCard
+          title="Requests received"
+          data={data.requestTrend.all}
+          formatValue={(value) => formatNumber(Math.round(value))}
+          info="Trend of referral requests routed to MCs (network filter applied above)."
+        />
+        <TransferTimingCard
+          entries={data.stageOnTransferSummary}
+          onSelectCategory={setSelectedTransferCategory}
+        />
+      </div>
+      <div className="grid gap-3 lg:grid-cols-2">
         <LeaderboardTable
           title="Referral requests by MC"
           entries={data.requestLeaderboard.all}
@@ -3015,13 +3038,7 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
         <McCloseEffectivenessTable entries={data.closeRateLeaderboard} />
         <McOutsideLenderLossTable entries={data.outsideLenderLossLeaderboard} />
       </div>
-      <div>
-        <TransferTimingCard
-          entries={data.stageOnTransferSummary}
-          onSelectCategory={setSelectedTransferCategory}
-        />
-      </div>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <PushbackSummaryCard summary={data.pushbackSummary} />
         <McPushbackLeaderboardTable entries={data.pushbackSummary.byMc} />
       </div>
@@ -3051,37 +3068,34 @@ function PushbackSummaryCard({
   const rate = summary.pushbackRatePercent.toFixed(1);
   const avgDays = summary.averageDaysPushedBackPerEvent.toFixed(1);
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
-        Deals pushed back
-      </p>
-      <div className="mt-2 flex items-baseline gap-3">
-        <p className="text-2xl font-semibold text-foreground">
+    <DashCard>
+      <DashCardHeader
+        title="Deals pushed back"
+        info="Any deal whose closing date was moved to a later date in this timeframe/network view. Rate = pushed-back deals / non-terminated deals from referrals in this timeframe."
+      />
+      <div className="mt-1.5 flex items-baseline gap-3">
+        <p className="text-[1.375rem] font-semibold leading-7 tracking-tight tabular-nums text-foreground">
           {formatNumber(summary.distinctDealsPushedBack)}
         </p>
-        <p className="text-sm font-medium text-foreground-subtle">{rate}% pushback rate</p>
+        <p className="text-sm font-medium tabular-nums text-foreground-subtle">{rate}% pushback rate</p>
       </div>
-      <p className="mt-1 text-xs text-foreground-subtle">
-        Any deal whose closing date was moved to a later date in this timeframe/network view.
-        Rate = pushed-back deals / non-terminated deals from referrals in this timeframe.
-      </p>
-      <dl className="mt-3 grid grid-cols-2 gap-2">
-        <div className="rounded-lg bg-surface-muted px-2 py-1">
-          <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+      <dl className="mt-2.5 grid grid-cols-2 gap-1.5">
+        <div className="rounded-lg bg-surface-muted px-2.5 py-1.5">
+          <dt className="text-[11px] font-medium uppercase tracking-wide text-foreground-subtle">
             Total pushback events
           </dt>
-          <dd className="text-sm font-semibold text-foreground">
+          <dd className="text-sm font-semibold tabular-nums text-foreground">
             {formatNumber(summary.totalPushbackEvents)}
           </dd>
         </div>
-        <div className="rounded-lg bg-surface-muted px-2 py-1">
-          <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+        <div className="rounded-lg bg-surface-muted px-2.5 py-1.5">
+          <dt className="text-[11px] font-medium uppercase tracking-wide text-foreground-subtle">
             Avg. days pushed back
           </dt>
-          <dd className="text-sm font-semibold text-foreground">{avgDays} days</dd>
+          <dd className="text-sm font-semibold tabular-nums text-foreground">{avgDays} days</dd>
         </div>
       </dl>
-    </div>
+    </DashCard>
   );
 }
 
@@ -3093,19 +3107,17 @@ function McPushbackLeaderboardTable({
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
-        Pushbacks by MC
-      </p>
-      <p className="mt-1 text-xs text-foreground-subtle">
-        MCs with at least one deal whose closing date was moved later in this timeframe.
-      </p>
+    <DashCard>
+      <DashCardHeader
+        title="Pushbacks by MC"
+        info="MCs with at least one deal whose closing date was moved later in this timeframe."
+      />
       <div
-        className="mt-4 overflow-y-auto"
+        className="mt-3 overflow-y-auto"
         style={entries.length ? { maxHeight: scrollMaxHeight } : undefined}
         aria-label={entries.length ? 'Scrollable list: Pushbacks by MC' : undefined}
       >
-        <table className="w-full text-sm">
+        <table className="w-full text-sm tabular-nums">
           <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
             <tr className="text-left text-xs text-foreground-subtle">
               <th className="py-1 font-medium">Rank</th>
@@ -3132,15 +3144,15 @@ function McPushbackLeaderboardTable({
               ))
             ) : (
               <tr>
-                <td colSpan={3} className="py-6 text-center text-sm text-foreground-subtle">
-                  No deals have been pushed back in this timeframe.
+                <td colSpan={3}>
+                  <DashCardEmpty message="No deals have been pushed back in this timeframe." />
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
-    </div>
+    </DashCard>
   );
 }
 
@@ -3149,18 +3161,17 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
   const scrollMaxHeight = `${RANKED_LIST_PREVIEW_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
-      <p className="mt-1 text-xs text-foreground-subtle">
-        Composite score blends weighted KPIs. Agents with fewer than 3 referrals are marked provisional and receive a
-        reliability adjustment. CRM usage is included as a low-weight tie-break style signal.
-      </p>
+    <DashCard>
+      <DashCardHeader
+        title={title}
+        info="Composite score blends weighted KPIs. Agents with fewer than 3 referrals are marked provisional and receive a reliability adjustment. CRM usage is included as a low-weight tie-break style signal."
+      />
       {data.rankedAgents.length === 0 ? (
-        <p className="py-8 text-center text-sm text-foreground-subtle">No agents with data for this period.</p>
+        <DashCardEmpty message="No agents with data for this period." />
       ) : (
         <>
-          <div className="mt-4 overflow-y-auto" style={{ maxHeight: scrollMaxHeight }}>
-            <table className="w-full text-sm">
+          <div className="mt-3 overflow-y-auto" style={{ maxHeight: scrollMaxHeight }}>
+            <table className="w-full text-sm tabular-nums">
               <thead className="sticky top-0 bg-surface-raised">
                 <tr className="text-left text-xs text-foreground-subtle">
                   <th className="py-1 font-medium w-10">Rank</th>
@@ -3268,34 +3279,36 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
           </div>
         )}
       </Modal>
-    </div>
+    </DashCard>
   );
 }
 
 function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
   const averageCommissionDisplay =
-    data.averageCommissionPercent > 0 ? `${data.averageCommissionPercent.toFixed(2)}%` : '—';
+    data.averageCommissionPercent > 0 ? `${data.averageCommissionPercent.toFixed(1)}%` : '—';
   const commissionHelper =
     data.commissionSampleSize > 0
       ? `Unweighted mean across ${formatNumber(data.commissionSampleSize)} closed/paid deals`
       : 'No closed or paid deals this period';
 
   const averageReferralFeeDisplay =
-    data.averageReferralFeePercent > 0 ? `${data.averageReferralFeePercent.toFixed(2)}%` : '—';
+    data.averageReferralFeePercent > 0 ? `${data.averageReferralFeePercent.toFixed(1)}%` : '—';
   const referralFeeHelper =
     data.referralFeeSampleSize > 0
       ? `Unweighted mean across ${formatNumber(data.referralFeeSampleSize)} closed/paid deals`
       : 'No closed or paid deals this period';
 
   return (
-    <div className="space-y-6">
-      {data.ahaLeaderboards && (
-        <AhaRankedList title="AHA Agent Leaderboard" data={data.ahaLeaderboards} />
-      )}
-      {data.ahaOosLeaderboards && (
-        <AhaRankedList title="AHA OOS Agent Leaderboard" data={data.ahaOosLeaderboards} />
-      )}
-      <div className="grid gap-4 md:grid-cols-2">
+    <div className="space-y-4">
+      <div className="grid gap-3 lg:grid-cols-2 lg:items-start">
+        {data.ahaLeaderboards && (
+          <AhaRankedList title="AHA Agent Leaderboard" data={data.ahaLeaderboards} />
+        )}
+        {data.ahaOosLeaderboards && (
+          <AhaRankedList title="AHA OOS Agent Leaderboard" data={data.ahaOosLeaderboards} />
+        )}
+      </div>
+      <div className="grid gap-3 md:grid-cols-2">
         <SummaryCard title="Average agent commission" value={averageCommissionDisplay} helper={commissionHelper} />
         <SummaryCard title="Average referral fee" value={averageReferralFeeDisplay} helper={referralFeeHelper} />
       </div>
@@ -3340,7 +3353,7 @@ function StaleReferralsTable({ referrals }: { referrals: StaleReferralEntry[] })
   }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
+      <table className="w-full text-left text-sm tabular-nums">
         <thead>
           <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
             <th className="px-6 py-3">Borrower</th>
@@ -3363,13 +3376,7 @@ function StaleReferralsTable({ referrals }: { referrals: StaleReferralEntry[] })
               <td className="px-6 py-3 text-foreground-muted">{row.agentName ?? '—'}</td>
               <td className="px-6 py-3 text-foreground-muted">{row.mcName ?? '—'}</td>
               <td className="px-6 py-3 text-foreground-muted">
-                {row.lastActivityAt
-                  ? new Date(row.lastActivityAt).toLocaleDateString(undefined, {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric'
-                    })
-                  : '—'}
+                {row.lastActivityAt ? formatDate(row.lastActivityAt) : '—'}
               </td>
               <td className="px-6 py-3 text-right font-medium text-foreground-muted">{row.daysSinceActivity}</td>
             </tr>
@@ -3390,15 +3397,15 @@ function MissingAttributionReferralsTable({ referrals }: { referrals: MissingAtt
   }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
+      <table className="w-full text-left text-sm tabular-nums">
         <thead>
           <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
-            <th className="px-6 py-3">Borrower</th>
-            <th className="px-6 py-3">Status</th>
-            <th className="px-6 py-3">Agent</th>
-            <th className="px-6 py-3">MC</th>
-            <th className="px-6 py-3">Missing</th>
-            <th className="px-6 py-3">Referral Date</th>
+            <th className="px-4 py-2">Borrower</th>
+            <th className="px-4 py-2">Status</th>
+            <th className="px-4 py-2">Agent</th>
+            <th className="px-4 py-2">MC</th>
+            <th className="px-4 py-2">Missing</th>
+            <th className="px-4 py-2">Referral Date</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -3409,16 +3416,16 @@ function MissingAttributionReferralsTable({ referrals }: { referrals: MissingAtt
             ].filter((field): field is string => Boolean(field));
             return (
               <tr key={row.id} className="hover:bg-surface-muted">
-                <td className="px-6 py-3 font-medium text-foreground-muted">
+                <td className="px-4 py-2 font-medium text-foreground-muted">
                   <Link href={`/referrals/${row.id}`} className="hover:text-sky-600 hover:underline">
                     {row.borrowerName}
                   </Link>
                 </td>
-                <td className="px-6 py-3 text-foreground-muted">{row.status}</td>
-                <td className="px-6 py-3 text-foreground-muted">{row.agentName ?? '—'}</td>
-                <td className="px-6 py-3 text-foreground-muted">{row.mcName ?? '—'}</td>
-                <td className="px-6 py-3 font-medium text-foreground-muted">{missingFields.join(', ')}</td>
-                <td className="px-6 py-3 text-foreground-muted">{formatDate(row.referralDate ?? row.createdAt)}</td>
+                <td className="px-4 py-2 text-foreground-muted">{row.status}</td>
+                <td className="px-4 py-2 text-foreground-muted">{row.agentName ?? '—'}</td>
+                <td className="px-4 py-2 text-foreground-muted">{row.mcName ?? '—'}</td>
+                <td className="px-4 py-2 font-medium text-foreground-muted">{missingFields.join(', ')}</td>
+                <td className="px-4 py-2 text-foreground-muted">{formatDate(row.referralDate ?? row.createdAt)}</td>
               </tr>
             );
           })}
@@ -3443,66 +3450,74 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
     ? (data.onTimeTaskCompletionCount / data.onTimeTaskCompletionSampleSize) * 100
     : null;
 
-  const cards = [
+  const responseMetrics: MetricGroupMetric[] = [
     {
-      title: 'Avg. time to first agent contact',
-      value: `${data.slaAverages.timeToFirstAgentContactHours.toFixed(1)} hours`,
+      label: 'Avg. time to first agent contact',
+      value: `${data.slaAverages.timeToFirstAgentContactHours.toFixed(1)} hrs`,
       helper: 'Business hours · Goal ≤ 24 hours'
     },
     {
-      title: 'Avg. time to assignment',
-      value: `${data.slaAverages.timeToAssignmentHours.toFixed(1)} hours`,
+      label: 'Avg. time to assignment',
+      value: `${data.slaAverages.timeToAssignmentHours.toFixed(1)} hrs`,
       helper: 'Business hours'
     },
     {
-      title: 'Avg. days to contract',
+      label: 'First contact within 24h',
+      value: `${data.firstContactWithin24HoursRate.toFixed(1)}%`,
+      helper: firstContactHelper
+    }
+  ];
+
+  const dealTimelineMetrics: MetricGroupMetric[] = [
+    {
+      label: 'Avg. days to contract',
       value: `${data.averageDaysNewLeadToContract.toFixed(1)} days`,
       helper: 'Calendar days'
     },
     {
-      title: 'Avg. days contract → close',
+      label: 'Avg. days contract → close',
       value: `${data.averageDaysContractToClose.toFixed(1)} days`,
       helper: 'Calendar days'
-    },
-    { title: 'Assignment rate', value: `${assignmentRate.toFixed(1)}%`, helper: assignmentHelper },
+    }
+  ];
+
+  const assignmentMetrics: MetricGroupMetric[] = [
+    { label: 'Assignment rate', value: `${assignmentRate.toFixed(1)}%`, helper: assignmentHelper },
     {
-      title: 'First contact within 24h',
-      value: `${data.firstContactWithin24HoursRate.toFixed(1)}%`,
-      helper: firstContactHelper
-    },
-    {
-      title: 'Unassigned referrals',
+      label: 'Unassigned referrals',
       value: formatNumber(data.unassignedReferrals),
       helper: data.unassignedReferrals > 0 ? 'Needs follow-up' : 'All referrals paired'
     },
     {
-      title: 'Stale active pipeline',
+      label: 'Stale active pipeline',
       value: formatNumber(data.stalePipelineCount),
-      helper: 'No activity in 14+ days',
-      onClick: data.stalePipelineCount > 0 ? () => setShowStaleModal(true) : undefined
-    },
+      helper: data.stalePipelineCount > 0 ? 'No activity in 14+ days · View list' : 'No activity in 14+ days',
+      onHelperClick: data.stalePipelineCount > 0 ? () => setShowStaleModal(true) : undefined
+    }
+  ];
+
+  const taskMetrics: MetricGroupMetric[] = [
     {
-      title: 'Overdue tasks',
+      label: 'Overdue tasks',
       value: formatNumber(data.overdueTaskCount),
-      helper: 'Open tasks past due date',
-      drillDownHref: '/admin/tasks'
+      helper: 'Open tasks past due date · Manage tasks',
+      helperHref: '/admin/tasks'
     },
     {
-      title: 'Due today',
-      value: formatNumber(data.dueTodayTaskCount),
-      helper: 'Tasks due today'
+      label: 'Due today',
+      value: formatNumber(data.dueTodayTaskCount)
     },
     {
-      title: 'Tasks completed',
+      label: 'Completed in period',
       value: formatNumber(data.completedInTimeframeCount),
-      helper: 'Tasks completed or dismissed in period'
+      helper: 'Completed or dismissed'
     },
     {
-      title: 'On Time Task Completion',
+      label: 'On-time completion',
       value: onTimeTaskCompletionRate != null ? `${onTimeTaskCompletionRate.toFixed(1)}%` : '—',
       helper:
         data.onTimeTaskCompletionSampleSize > 0
-          ? `${formatNumber(data.onTimeTaskCompletionCount)} of ${formatNumber(data.onTimeTaskCompletionSampleSize)} resolved on or before due date`
+          ? `${formatNumber(data.onTimeTaskCompletionCount)} of ${formatNumber(data.onTimeTaskCompletionSampleSize)} resolved on time`
           : 'No resolved tasks with due dates in period'
     }
   ];
@@ -3514,18 +3529,12 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
     (taskTrend.created?.length ?? 0) > 0;
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {cards.map((card) => (
-          <SummaryCard
-            key={card.title}
-            title={card.title}
-            value={card.value}
-            helper={card.helper}
-            drillDownHref={'drillDownHref' in card ? card.drillDownHref : undefined}
-            onClick={'onClick' in card ? card.onClick : undefined}
-          />
-        ))}
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 xl:items-start">
+        <MetricGroupCard title="Response speed" metrics={responseMetrics} emphasizeCount={1} />
+        <MetricGroupCard title="Deal timeline" metrics={dealTimelineMetrics} emphasizeCount={1} />
+        <MetricGroupCard title="Assignment health" metrics={assignmentMetrics} emphasizeCount={1} />
+        <MetricGroupCard title="Tasks" metrics={taskMetrics} emphasizeCount={1} />
       </div>
       <Modal
         isOpen={showStaleModal}
@@ -3539,7 +3548,7 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
         <MultiLineChartCard
           title="Task activity (30 days)"
           helper="Outstanding open tasks and daily completed/created"
-          formatValue={(v) => String(Math.round(v))}
+          formatValue={(v) => formatNumber(Math.round(v))}
           series={[
             { label: 'Outstanding', color: '#0ea5e9', data: taskTrend.outstanding ?? [] },
             { label: 'Completed', color: '#22c55e', data: taskTrend.completed ?? [] },
@@ -3547,25 +3556,30 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
           ]}
         />
       ) : null}
-      <div className="rounded-card border border-border bg-surface-raised shadow-card">
-        <div className="border-b border-border px-6 py-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
-            Missing Source or Endorser
-          </p>
-          <p className="mt-1 text-sm text-foreground-subtle">
+      <DashCard className="p-0">
+        <div className="border-b border-border px-4 py-3">
+          <DashCardHeader title="Missing Source or Endorser" />
+          <p className="mt-0.5 text-xs tabular-nums text-foreground-subtle">
             {formatNumber(data.missingAttributionReferrals.length)} referrals need attribution details in this view
           </p>
         </div>
         <MissingAttributionReferralsTable referrals={data.missingAttributionReferrals} />
-      </div>
+      </DashCard>
     </div>
   );
 }
 
 function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
+  const closedDealCount = data.dealRows.filter(
+    (row) =>
+      ['closed', 'payment_sent', 'paid'].includes(row.status) &&
+      row.usedAssignedAgent !== false &&
+      row.agentAttribution !== 'OUTSIDE_AGENT'
+  ).length;
+
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="space-y-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <SummaryCard
           title="AGIT Percentage"
           value={`${data.agitPercentage.toFixed(1)}%`}
@@ -3590,28 +3604,29 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
         />
       </div>
 
-      {/* AGIT Referrals Table */}
-      <div>
-        <h3 className="mb-3 text-lg font-semibold text-foreground">AGIT Referrals</h3>
+      <DashCard className="overflow-hidden p-0">
+        <div className="border-b border-border px-4 py-3">
+          <DashCardHeader title="AGIT Referrals" />
+        </div>
         {data.referralRows.length === 0 ? (
-          <p className="text-sm text-foreground-subtle">No AGIT referrals in this timeframe.</p>
+          <DashCardEmpty message="No AGIT referrals in this timeframe." />
         ) : (
-          <div className="overflow-hidden rounded-card border border-border bg-surface-raised shadow-card">
-            <table className="min-w-full divide-y divide-border">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-border tabular-nums">
               <thead className="bg-surface-muted">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Borrower</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">MC</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Created</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Last Updated</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Borrower</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Status</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">MC</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Created</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Last Updated</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {data.referralRows.map((row) => (
                   <tr key={row.id} className="hover:bg-surface-muted">
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
+                    <td className="px-3 py-2 text-sm text-foreground-muted">
                       <div className="flex flex-col">
                         <Link
                           prefetch={false}
@@ -3625,8 +3640,8 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">{row.status}</td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
+                    <td className="px-3 py-2 text-sm text-foreground-muted">{row.status}</td>
+                    <td className="px-3 py-2 text-sm text-foreground-muted">
                       {row.agentId ? (
                         <div className="flex flex-col">
                           <Link
@@ -3659,7 +3674,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                         <span className="text-foreground-subtle">Unassigned</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
+                    <td className="px-3 py-2 text-sm text-foreground-muted">
                       {row.mcId ? (
                         <div className="flex flex-col">
                           <Link
@@ -3692,10 +3707,10 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                         <span className="text-foreground-subtle">Unassigned</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
+                    <td className="px-3 py-2 text-sm text-foreground-muted">
                       {formatDate(row.createdAt)}
                     </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
+                    <td className="px-3 py-2 text-sm text-foreground-muted">
                       {formatDate(row.updatedAt)}
                     </td>
                   </tr>
@@ -3704,48 +3719,43 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
             </table>
           </div>
         )}
-      </div>
+      </DashCard>
 
-      {/* AGIT Deals Table */}
-      <div>
-        <h3 className="mb-3 text-lg font-semibold text-foreground">
-          AGIT Deals
-          {data.dealRows.length > 0 && (
-            <span className="ml-2 text-sm font-normal text-foreground-subtle">
-              {
-                data.dealRows.filter(
-                  (row) =>
-                    ['closed', 'payment_sent', 'paid'].includes(row.status) &&
-                    row.usedAssignedAgent !== false &&
-                    row.agentAttribution !== 'OUTSIDE_AGENT'
-                ).length
-              }{' '}
-              closed of {data.dealRows.length} total
-            </span>
-          )}
-        </h3>
+      <DashCard className="overflow-hidden p-0">
+        <div className="border-b border-border px-4 py-3">
+          <DashCardHeader
+            title="AGIT Deals"
+            actions={
+              data.dealRows.length > 0 ? (
+                <span className="text-xs tabular-nums text-foreground-subtle">
+                  {closedDealCount} closed of {data.dealRows.length} total
+                </span>
+              ) : undefined
+            }
+          />
+        </div>
         {data.dealRows.length === 0 ? (
-          <p className="text-sm text-foreground-subtle">No deals for AGIT referrals in this timeframe.</p>
+          <DashCardEmpty message="No deals for AGIT referrals in this timeframe." />
         ) : (
-          <div className="overflow-hidden rounded-card border border-border bg-surface-raised shadow-card">
-            <table className="min-w-full divide-y divide-border">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-border tabular-nums">
               <thead className="bg-surface-muted">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Referral</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Expected</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Received</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">MC</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Closing Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent Used</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Used AFC</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Referral</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Status</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Expected</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Received</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">MC</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Closing Date</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent Used</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Used AFC</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {data.dealRows.map((row) => (
                   <tr key={row.id} className="hover:bg-surface-muted">
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
+                    <td className="px-3 py-2 text-sm text-foreground-muted">
                       <Link
                         prefetch={false}
                         href={`/referrals/${row.referralId}`}
@@ -3754,10 +3764,10 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                         {row.borrowerName}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted capitalize">{row.status.replace(/_/g, ' ')}</td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(row.expectedAmountCents)}</td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(row.receivedAmountCents)}</td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
+                    <td className="px-3 py-2 text-sm text-foreground-muted capitalize">{row.status.replace(/_/g, ' ')}</td>
+                    <td className="px-3 py-2 text-sm text-foreground-muted">{formatCurrency(row.expectedAmountCents)}</td>
+                    <td className="px-3 py-2 text-sm text-foreground-muted">{formatCurrency(row.receivedAmountCents)}</td>
+                    <td className="px-3 py-2 text-sm text-foreground-muted">
                       <div className="flex flex-col gap-1">
                         {row.agentId ? (
                           <Link
@@ -3777,7 +3787,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
+                    <td className="px-3 py-2 text-sm text-foreground-muted">
                       {row.mcId ? (
                         <div className="flex flex-col">
                           <Link
@@ -3810,13 +3820,13 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                         <span className="text-foreground-subtle">Unassigned</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
+                    <td className="px-3 py-2 text-sm text-foreground-muted">
                       {row.closingDate ? formatDate(row.closingDate) : '—'}
                     </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
+                    <td className="px-3 py-2 text-sm text-foreground-muted">
                       {row.usedAssignedAgent === null ? '—' : row.usedAssignedAgent ? 'Yes' : 'No'}
                     </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
+                    <td className="px-3 py-2 text-sm text-foreground-muted">
                       {row.usedAfc === null ? '—' : row.usedAfc ? 'Yes' : 'No'}
                     </td>
                   </tr>
@@ -3825,7 +3835,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
             </table>
           </div>
         )}
-      </div>
+      </DashCard>
     </div>
   );
 }
@@ -3936,10 +3946,10 @@ export function DashboardTabs() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Performance dashboards</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Performance dashboards</h1>
           <p className="text-sm text-foreground-subtle">{timeframeLabel}</p>
         </div>
         <div className="flex flex-wrap items-start justify-end gap-6">
@@ -3984,20 +3994,19 @@ export function DashboardTabs() {
       {showSkeleton ? (
         <div className="space-y-4">
           <div
-            className={`grid gap-4 md:grid-cols-2 ${activeTab === 'agit' ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}
+            className={`grid gap-3 md:grid-cols-2 ${activeTab === 'agit' ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}
           >
             {Array.from({ length: activeTab === 'agit' ? 5 : 4 }).map((_, index) => (
-              <div key={index} className="h-28 animate-pulse rounded-card border border-border bg-surface-muted" />
+              <div key={index} className="h-24 animate-pulse rounded-card border border-border bg-surface-muted" />
             ))}
           </div>
-          <div className="h-40 animate-pulse rounded-card border border-border bg-surface-muted" />
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-3 lg:grid-cols-2">
             <div className="h-52 animate-pulse rounded-card border border-border bg-surface-muted" />
             <div className="h-52 animate-pulse rounded-card border border-border bg-surface-muted" />
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="h-48 animate-pulse rounded-card border border-border bg-surface-muted" />
-            <div className="h-48 animate-pulse rounded-card border border-border bg-surface-muted" />
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="h-44 animate-pulse rounded-card border border-border bg-surface-muted" />
+            <div className="h-44 animate-pulse rounded-card border border-border bg-surface-muted" />
           </div>
         </div>
       ) : null}
@@ -4007,7 +4016,7 @@ export function DashboardTabs() {
           Select a start and end date to load dashboard metrics.
         </div>
       ) : data ? (
-        <div>
+        <div key={activeTab} className="animate-fade-in">
           {activeTab === 'main' ? (
             <MainDashboard
               data={data.main}

@@ -16,9 +16,5 @@ export default async function DashboardPage() {
     redirect('/referrals');
   }
 
-  return (
-    <div className="space-y-8">
-      <DashboardTabs />
-    </div>
-  );
+  return <DashboardTabs />;
 }

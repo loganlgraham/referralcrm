@@ -1,0 +1,244 @@
+- generic [ref=f2e1]:
+  - region "Notifications alt+T"
+  - generic [ref=f2e2]:
+    - complementary [ref=f2e3]:
+      - generic [ref=f2e4]:
+        - link "R Referrio AFC · AHA Network" [ref=f2e5] [cursor=pointer]:
+          - /url: /dashboard
+          - generic [ref=f2e6]: R
+          - generic [ref=f2e7]:
+            - generic [ref=f2e8]: Referrio
+            - generic [ref=f2e9]: AFC · AHA Network
+        - button "Notifications" [ref=f2e11] [cursor=pointer]
+      - navigation [ref=f2e15]:
+        - generic [ref=f2e16]:
+          - paragraph [ref=f2e17]: Work
+          - list [ref=f2e18]:
+            - listitem [ref=f2e19]:
+              - link "Dashboard" [ref=f2e20] [cursor=pointer]:
+                - /url: /dashboard
+            - listitem [ref=f2e27]:
+              - link "Referrals" [ref=f2e28] [cursor=pointer]:
+                - /url: /referrals
+            - listitem [ref=f2e32]:
+              - link "Deals" [ref=f2e33] [cursor=pointer]:
+                - /url: /deals
+            - listitem [ref=f2e37]:
+              - link "Admin Tasks" [ref=f2e38] [cursor=pointer]:
+                - /url: /admin/tasks
+        - generic [ref=f2e40]:
+          - paragraph [ref=f2e41]: People
+          - list [ref=f2e42]:
+            - listitem [ref=f2e43]:
+              - link "Agents" [ref=f2e44] [cursor=pointer]:
+                - /url: /agents
+            - listitem [ref=f2e50]:
+              - link "Mortgage Consultants" [ref=f2e51] [cursor=pointer]:
+                - /url: /lenders
+        - generic [ref=f2e56]:
+          - paragraph [ref=f2e57]: Account
+          - list [ref=f2e58]:
+            - listitem [ref=f2e59]:
+              - link "Imports" [ref=f2e60] [cursor=pointer]:
+                - /url: /imports
+            - listitem [ref=f2e64]:
+              - link "Settings" [ref=f2e65] [cursor=pointer]:
+                - /url: /settings
+      - button [ref=f2e70] [cursor=pointer]:
+        - generic [ref=f2e71]: LA
+        - generic [ref=f2e72]:
+          - paragraph [ref=f2e73]: Local Admin
+          - paragraph [ref=f2e74]: Admin
+    - main [ref=f2e75]:
+      - generic [ref=f2e77]:
+        - generic [ref=f2e78]:
+          - generic [ref=f2e79]:
+            - heading "Performance dashboards" [level=1] [ref=f2e80]
+            - paragraph [ref=f2e81]: This Month
+          - generic [ref=f2e82]:
+            - generic [ref=f2e83]:
+              - generic [ref=f2e84]: Timeframe
+              - button "This Month ▾" [ref=f2e113] [cursor=pointer]:
+                - generic [ref=f2e86]: This Month
+                - generic [ref=f2e87]: ▾
+            - generic [ref=f2e88]:
+              - generic [ref=f2e89]: Network
+              - generic [ref=f2e90]:
+                - button "All" [ref=f2e91] [cursor=pointer]
+                - button "AHA" [ref=f2e92] [cursor=pointer]
+                - button "AHA OOS" [ref=f2e93] [cursor=pointer]
+        - generic [ref=f2e94]:
+          - button "Main" [ref=f2e95] [cursor=pointer]
+          - button "MC" [active] [ref=f2e96] [cursor=pointer]
+          - button "Agent" [ref=f2e97] [cursor=pointer]
+          - button "Admin" [ref=f2e98] [cursor=pointer]
+          - button "AGIT" [ref=f2e99] [cursor=pointer]
+        - generic [ref=f2e509]:
+          - generic [ref=f2e510]:
+            - generic [ref=f2e512]:
+              - paragraph [ref=f2e513]: MC Composite KPI Leaderboard
+              - generic [ref=f2e514]:
+                - button "MC Composite KPI Leaderboard details" [ref=f2e515] [cursor=pointer]
+                - tooltip "Composite score blends weighted MC KPIs scored relative to peers this period. The top drivers of rank are AFC close rate, total AFC deal volume, closed deals using AFC, fewer closed deals without AFC, total revenue, and referral (transfer) volume. Close speed, pushed-back deals, closes without the assigned agent, financing terminations, NPS, pipeline aging, source quality, and forecast accuracy act as lower-weight quality guardrails. MCs with fewer than 3 referrals are marked provisional and receive a volume discount, but still keep a score. KPIs with no data this period are excluded from that MC's weighted average rather than dragging the score toward the median."
+            - table [ref=f2e519]:
+              - rowgroup [ref=f2e520]:
+                - row [ref=f2e521]:
+                  - columnheader "Rank" [ref=f2e522]
+                  - columnheader "MC" [ref=f2e523]
+                  - columnheader "Score" [ref=f2e524]
+              - rowgroup [ref=f2e525]:
+                - row [ref=f2e526]:
+                  - cell "#1" [ref=f2e527]
+                  - cell "Morgan Consultant Provisional" [ref=f2e528]:
+                    - button "Morgan Consultant" [ref=f2e529] [cursor=pointer]
+                    - generic [ref=f2e530]: Provisional
+                  - cell "30.0" [ref=f2e531]
+          - generic [ref=f2e533]:
+            - generic [ref=f2e535]:
+              - paragraph [ref=f2e536]: AFC Loss Risk Call List
+              - generic [ref=f2e537]:
+                - button "AFC Loss Risk Call List details" [ref=f2e538] [cursor=pointer]
+                - tooltip "AHA OOS buyer referrals in Active Lead or aged In Communication status with outside-lender risk signals. Under-contract referrals are excluded; rows can resurface after 14 days without a page update."
+            - paragraph [ref=f2e541]: No qualifying AHA OOS Active Lead or In Communication buyer referrals.
+          - generic [ref=f2e542]:
+            - generic [ref=f2e543]:
+              - generic [ref=f2e544]:
+                - generic [ref=f2e547]:
+                  - paragraph [ref=f2e548]: Requests received
+                  - generic [ref=f2e549]:
+                    - button "Requests received details" [ref=f2e550] [cursor=pointer]
+                    - tooltip "Trend of referral requests routed to MCs (network filter applied above)."
+                - generic [ref=f2e554]:
+                  - paragraph [ref=f2e555]: "1"
+                  - paragraph [ref=f2e556]: Jul 20
+              - img "Requests received trend chart" [ref=f2e558]:
+                - generic:
+                  - generic: "1"
+                  - generic: Jul 20
+                - generic [ref=f2e561]: "0"
+                - generic [ref=f2e562]: "1"
+            - generic [ref=f2e563]:
+              - generic [ref=f2e565]:
+                - paragraph [ref=f2e566]: When to transfer to the brokerage
+                - generic [ref=f2e567]:
+                  - button "When to transfer to the brokerage details" [ref=f2e568] [cursor=pointer]
+                  - tooltip "Compares close rates for clients transferred to an agent before pre-approval vs after pre-approval."
+              - generic [ref=f2e571]:
+                - generic [ref=f2e572]:
+                  - button "Transferred BEFORE pre-approval" [ref=f2e574] [cursor=pointer]
+                  - paragraph [ref=f2e575]: 0.0%
+                  - paragraph [ref=f2e576]: 0 / 1 closed
+                - generic [ref=f2e577]:
+                  - button "Transferred AFTER pre-approval" [ref=f2e579] [cursor=pointer]
+                  - paragraph [ref=f2e580]: 0.0%
+                  - paragraph [ref=f2e581]: 0 / 0 closed
+              - paragraph [ref=f2e582]: Not enough data yet — need at least 5 referrals in each group.
+          - generic [ref=f2e583]:
+            - generic [ref=f2e584]:
+              - paragraph [ref=f2e587]: Referral requests by MC
+              - 'generic "Scrollable list: Referral requests by MC" [ref=f2e588]':
+                - table [ref=f2e589]:
+                  - rowgroup [ref=f2e590]:
+                    - row [ref=f2e591]:
+                      - columnheader "Rank" [ref=f2e592]
+                      - columnheader "Name" [ref=f2e593]
+                      - columnheader "Requests" [ref=f2e594]
+                  - rowgroup [ref=f2e595]:
+                    - row [ref=f2e596]:
+                      - cell "#1" [ref=f2e597]
+                      - cell "Morgan Consultant" [ref=f2e598]
+                      - cell "1" [ref=f2e599]
+            - generic [ref=f2e600]:
+              - paragraph [ref=f2e603]: Revenue by MC
+              - 'generic "Scrollable list: Revenue by MC" [ref=f2e604]':
+                - table [ref=f2e605]:
+                  - rowgroup [ref=f2e606]:
+                    - row [ref=f2e607]:
+                      - columnheader "Rank" [ref=f2e608]
+                      - columnheader "Name" [ref=f2e609]
+                      - columnheader "Revenue" [ref=f2e610]
+                  - rowgroup [ref=f2e611]:
+                    - row [ref=f2e612]:
+                      - cell "#1" [ref=f2e613]
+                      - cell "Morgan Consultant" [ref=f2e614]
+                      - cell "$0.00" [ref=f2e615]
+            - generic [ref=f2e616]:
+              - generic [ref=f2e618]:
+                - paragraph [ref=f2e619]: MC Close Effectiveness
+                - generic [ref=f2e620]:
+                  - button "MC Close Effectiveness details" [ref=f2e621] [cursor=pointer]
+                  - tooltip "Overall close rate uses cohort closes/referrals. AFC-only close rate is the share of the MC's closed deals that still used AFC even though the assigned agent was not used."
+              - 'generic "Scrollable list: MC Close Effectiveness" [ref=f2e624]':
+                - table [ref=f2e625]:
+                  - rowgroup [ref=f2e626]:
+                    - row [ref=f2e627]:
+                      - columnheader "Rank" [ref=f2e628]
+                      - columnheader "MC" [ref=f2e629]
+                      - columnheader "Overall close rate" [ref=f2e630]
+                      - columnheader "AFC-only close rate" [ref=f2e631]
+                  - rowgroup [ref=f2e632]:
+                    - row [ref=f2e633]:
+                      - cell "#1" [ref=f2e634]
+                      - cell "Morgan Consultant" [ref=f2e635]
+                      - cell [ref=f2e636]:
+                        - paragraph [ref=f2e637]: 0.0%
+                        - paragraph [ref=f2e638]: 0 / 1
+                      - cell [ref=f2e639]:
+                        - paragraph [ref=f2e640]: 0.0%
+                        - paragraph [ref=f2e641]: 0 / 0
+            - generic [ref=f2e642]:
+              - generic [ref=f2e644]:
+                - paragraph [ref=f2e645]: MC Outside Lender Loss Signal
+                - generic [ref=f2e646]:
+                  - button "MC Outside Lender Loss Signal details" [ref=f2e647] [cursor=pointer]
+                  - tooltip "Share of closed deals where the assigned agent was used, but AFC was not."
+              - 'generic "Scrollable list: MC Outside Lender Loss Signal" [ref=f2e650]':
+                - table [ref=f2e651]:
+                  - rowgroup [ref=f2e652]:
+                    - row [ref=f2e653]:
+                      - columnheader "Rank" [ref=f2e654]
+                      - columnheader "MC" [ref=f2e655]
+                      - columnheader "Loss signal rate" [ref=f2e656]
+                      - columnheader "Count" [ref=f2e657]
+                  - rowgroup [ref=f2e658]:
+                    - row [ref=f2e659]:
+                      - cell "#1" [ref=f2e660]
+                      - cell "Morgan Consultant" [ref=f2e661]
+                      - cell [ref=f2e662]:
+                        - paragraph [ref=f2e663]: 0.0%
+                        - paragraph [ref=f2e664]: 0 / 0
+                      - cell "0" [ref=f2e665]
+          - generic [ref=f2e666]:
+            - generic [ref=f2e667]:
+              - generic [ref=f2e669]:
+                - paragraph [ref=f2e670]: Deals pushed back
+                - generic [ref=f2e671]:
+                  - button "Deals pushed back details" [ref=f2e672] [cursor=pointer]
+                  - tooltip "Any deal whose closing date was moved to a later date in this timeframe/network view. Rate = pushed-back deals / non-terminated deals from referrals in this timeframe."
+              - generic [ref=f2e675]:
+                - paragraph [ref=f2e676]: "0"
+                - paragraph [ref=f2e677]: 0.0% pushback rate
+              - generic [ref=f2e678]:
+                - generic [ref=f2e679]:
+                  - term [ref=f2e680]: Total pushback events
+                  - definition [ref=f2e681]: "0"
+                - generic [ref=f2e682]:
+                  - term [ref=f2e683]: Avg. days pushed back
+                  - definition [ref=f2e684]: 0.0 days
+            - generic [ref=f2e685]:
+              - generic [ref=f2e687]:
+                - paragraph [ref=f2e688]: Pushbacks by MC
+                - generic [ref=f2e689]:
+                  - button "Pushbacks by MC details" [ref=f2e690] [cursor=pointer]
+                  - tooltip "MCs with at least one deal whose closing date was moved later in this timeframe."
+              - table [ref=f2e694]:
+                - rowgroup [ref=f2e695]:
+                  - row [ref=f2e696]:
+                    - columnheader "Rank" [ref=f2e697]
+                    - columnheader "MC" [ref=f2e698]
+                    - columnheader "Deals pushed back" [ref=f2e699]
+                - rowgroup [ref=f2e700]:
+                  - row [ref=f2e701]:
+                    - cell [ref=f2e702]:
+                      - paragraph [ref=f2e703]: No deals have been pushed back in this timeframe.
+  - alert [ref=f2e112]

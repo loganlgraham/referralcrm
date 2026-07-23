@@ -1,0 +1,39 @@
+- generic [active] [ref=e1]:
+  - region "Notifications alt+T"
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e5]:
+        - paragraph [ref=e6]: AFC · AHA
+        - heading "Referral relationships, coordinated in one workspace." [level=2] [ref=e7]
+        - paragraph [ref=e8]: Manage referrals, follow-ups, and lender partnerships with the tools your teams already trust.
+      - generic [ref=e9]:
+        - generic [ref=e10]: R
+        - generic [ref=e11]:
+          - paragraph [ref=e12]: Referrio
+          - paragraph [ref=e13]: Built for the AFC & AHA network.
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - paragraph [ref=e17]: AFC · AHA
+        - heading "Sign in to Referrio" [level=1] [ref=e18]
+        - paragraph [ref=e19]: Use your Referrio credentials to sign in.
+      - generic [ref=e20]:
+        - generic [ref=e21]:
+          - generic [ref=e22]: Username or email
+          - textbox "Username or email" [ref=e23]:
+            - /placeholder: yourname or you@example.com
+        - generic [ref=e24]:
+          - generic [ref=e25]: Password
+          - textbox "Password" [ref=e26]:
+            - /placeholder: Enter your password
+          - paragraph [ref=e27]:
+            - link "Forgot password?" [ref=e29] [cursor=pointer]:
+              - /url: /reset-password
+        - button "Sign in" [ref=e30] [cursor=pointer]
+      - paragraph [ref=e31]:
+        - text: Don't have an account?
+        - link "Sign up" [ref=e32] [cursor=pointer]:
+          - /url: /signup
+      - paragraph [ref=e33]:
+        - text: Need help?
+        - link "Contact support" [ref=e34] [cursor=pointer]:
+          - /url: https://mail.google.com/mail/?view=cm&fs=1&to=logan.graham%40americanfinancing.net
