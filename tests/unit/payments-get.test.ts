@@ -224,9 +224,10 @@ describe('Payments GET role visibility', () => {
     mockedGetCurrentSession.mockResolvedValue({
       user: { id: 'admin-1', role: 'admin', name: 'Admin User' },
     } as any);
-    mockedPaymentAggregate
-      .mockResolvedValueOnce([{ expectedRevenueCents: 4000 }])
-      .mockResolvedValueOnce([{ receivedRevenueCents: 2500 }]);
+    // The route computes both figures in a single combined aggregation.
+    mockedPaymentAggregate.mockResolvedValueOnce([
+      { expectedRevenueCents: 4000, receivedRevenueCents: 2500 },
+    ]);
 
     const response = await getHandler(makeRequest(''));
 
