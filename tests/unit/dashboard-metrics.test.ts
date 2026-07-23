@@ -496,8 +496,19 @@ describe('Dashboard Metrics - Attach Rate Calculations', () => {
     closingDateIso: string;
   };
 
-  const computeAttachRates = (payments: AttachPayment[], startIso: string, endIso: string) => {
-    const closedDealsInTimeframe = payments.filter(
+  const computeAttachRates = (
+    payments: AttachPayment[],
+    startIso: string,
+    endIso: string,
+    networkFilter: 'ALL' | 'AHA' | 'AHA_OOS' = 'ALL'
+  ) => {
+    // Mirror the route's paymentsByNetwork scoping: when a network filter is
+    // active, the attach-rate denominators only see payments in that network.
+    const paymentsByNetwork = payments.filter((payment) =>
+      networkFilter === 'ALL' ? true : payment.designation === networkFilter
+    );
+
+    const closedDealsInTimeframe = paymentsByNetwork.filter(
       (payment) =>
         CLOSED_DEAL_STATUSES.has(payment.status) &&
         closedInTimeframe(payment.closingDateIso, startIso, endIso)
@@ -511,8 +522,10 @@ describe('Dashboard Metrics - Attach Rate Calculations', () => {
       return null;
     };
 
+    // AFC attach rate (buy-side) counts every closed buy-side deal as eligible,
+    // regardless of referral org.
     const afcRelevant = closedDealsInTimeframe.filter(
-      (payment) => payment.referralOrg === 'AFC' && resolveSide(payment) === 'buy'
+      (payment) => resolveSide(payment) === 'buy'
     );
     const afcAttached = afcRelevant.filter((payment) => Boolean(payment.usedAfc));
 
@@ -569,7 +582,7 @@ describe('Dashboard Metrics - Attach Rate Calculations', () => {
     expect(rates.ahaAttachRate).toBe(100);
   });
 
-  it('keeps AFC split based on referral org', () => {
+  it('counts buy-side deals as AFC-eligible regardless of referral org', () => {
     const rates = computeAttachRates(
       [
         {
@@ -583,9 +596,10 @@ describe('Dashboard Metrics - Attach Rate Calculations', () => {
         },
         {
           status: 'paid',
-          usedAfc: true,
+          usedAfc: false,
           usedAssignedAgent: true,
           referralOrg: 'AHA',
+          side: 'buy',
           designation: 'AHA',
           closingDateIso: '2026-03-10T12:00:00.000Z',
         },
@@ -594,9 +608,41 @@ describe('Dashboard Metrics - Attach Rate Calculations', () => {
       '2026-03-31T23:59:59.999Z'
     );
 
-    expect(rates.afcAttachRate).toBe(100);
+    // Both buy-side deals count toward the AFC denominator even though one is org=AHA.
+    expect(rates.afcAttachRate).toBe(50);
+    expect(rates.afcDealsLost).toBe(1);
     expect(rates.ahaAttachRate).toBe(100);
     expect(rates.ahaDealsLost).toBe(0);
+  });
+
+  it('constrains AFC buy-side attach rate to the selected network', () => {
+    const payments: AttachPayment[] = [
+      {
+        status: 'paid',
+        usedAfc: true,
+        referralOrg: 'AHA',
+        side: 'buy',
+        designation: 'AHA',
+        closingDateIso: '2026-03-10T12:00:00.000Z',
+      },
+      {
+        status: 'paid',
+        usedAfc: false,
+        referralOrg: 'AHA',
+        side: 'buy',
+        designation: 'AHA_OOS',
+        closingDateIso: '2026-03-10T12:00:00.000Z',
+      },
+    ];
+    const start = '2026-03-01T00:00:00.000Z';
+    const end = '2026-03-31T23:59:59.999Z';
+
+    // ALL: both buy-side deals count -> 1 of 2 attached.
+    expect(computeAttachRates(payments, start, end, 'ALL').afcAttachRate).toBe(50);
+    // AHA: only the AHA-designation buy-side deal counts -> attached.
+    expect(computeAttachRates(payments, start, end, 'AHA').afcAttachRate).toBe(100);
+    // AHA_OOS: only the AHA_OOS-designation buy-side deal counts -> not attached.
+    expect(computeAttachRates(payments, start, end, 'AHA_OOS').afcAttachRate).toBe(0);
   });
 
   it('computes all attach-rate buckets from same closed-deal set', () => {

@@ -1949,9 +1949,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return true;
   };
 
-  const attachClosedDeals = paymentsWithMetric.filter((payment) => CLOSED_DEAL_STATUSES.has(payment.status));
+  // Pipeline-health attach rates honor the dashboard network filter (ALL / AHA /
+  // AHA_OOS) by sourcing from paymentsByNetwork rather than the network-agnostic
+  // paymentsWithMetric list.
+  const attachClosedDeals = paymentsByNetwork.filter((payment) => CLOSED_DEAL_STATUSES.has(payment.status));
   const attachClosedDealsInTimeframe = attachClosedDeals.filter((payment) => closedInTimeframe(payment));
 
+  // AFC attach rate (buy-side) counts every closed buy-side deal as AFC-eligible,
+  // regardless of the referral org, so the denominator is all closed buy-side deals.
   const afcRelevant = attachClosedDealsInTimeframe.filter(
     (payment) => {
       const dealSide = resolveDealSideForMetrics(
@@ -1959,7 +1964,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         payment.referral?.dealSide,
         payment.referral?.clientType ?? null
       );
-      return isAfcEligibleDeal(payment.referral?.org ?? null, dealSide);
+      return dealSide === 'buy';
     }
   );
   const afcDealsLost = afcRelevant.filter((payment) => !payment.usedAfc).length;
