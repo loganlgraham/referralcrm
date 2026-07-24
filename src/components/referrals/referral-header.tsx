@@ -967,12 +967,12 @@ export function ReferralHeader({
         : 'grid items-start gap-2.5';
 
   return (
-    <div className="space-y-5 rounded-card bg-surface-raised p-4 shadow-sm ring-1 ring-border sm:p-5">
-      <div className="grid gap-4 rounded-xl bg-gradient-to-r from-slate-50 via-white to-slate-50 p-4 lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-center">
+    <div className="route-surface space-y-5 overflow-hidden rounded-card bg-surface-raised p-4 pl-5 shadow-card ring-1 ring-border sm:p-5 sm:pl-6">
+      <div className="grid gap-5 rounded-xl border border-border bg-surface-muted/65 p-4 lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-center">
         <div className="space-y-2 lg:self-center">
           <div>
             <div className="flex items-center gap-1.5">
-              <h1 className="text-2xl font-semibold text-foreground">{borrowerName}</h1>
+              <h1 className="font-display text-2xl font-semibold tracking-[-0.035em] text-foreground">{borrowerName}</h1>
               <CopyButton value={borrowerName} label="Copy name" />
             </div>
             {hasBorrowerContact ? (
@@ -1012,9 +1012,9 @@ export function ReferralHeader({
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
-            <span className="rounded-full bg-primary-600/15 px-3 py-1 text-primary-700">{status}</span>
+            <span className="rounded-full bg-primary-600 px-3 py-1 text-white">{status}</span>
             <span className="rounded-full bg-surface-subtle px-3 py-1 text-foreground-muted">{propertyLabel}</span>
-            <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-700">{daysInStatus} days in stage</span>
+            <span className="rounded-full bg-signal-soft px-3 py-1 text-signal-dark">{daysInStatus} days in stage</span>
           </div>
         </div>
         <div
@@ -1022,7 +1022,7 @@ export function ReferralHeader({
             isAgentView ? 'lg:justify-start' : ''
           }`}
         >
-          <section className="w-full rounded-lg border border-border bg-surface-raised p-3 shadow-sm">
+          <section className="w-full rounded-lg border border-border border-l-primary-600 border-l-[3px] bg-surface-raised p-3 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">Status &amp; progress</h2>
               <span className="text-xs uppercase tracking-wide text-foreground-subtle">Pipeline</span>

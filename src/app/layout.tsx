@@ -1,6 +1,6 @@
 import '@/app/globals.css';
 import { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Archivo, IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google';
 import { ReactNode, Suspense } from 'react';
 import { Toaster } from 'sonner';
 import { Analytics } from '@vercel/analytics/react';
@@ -8,17 +8,27 @@ import { SpeedInsights } from '@vercel/speed-insights/next';
 import { NavigationProgress } from '@/components/layout/navigation-progress';
 import { NextAuthProvider } from '@/components/providers/next-auth-provider';
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
+const archivo = Archivo({ subsets: ['latin'], variable: '--font-display' });
+const ibmPlexSans = IBM_Plex_Sans({
+  subsets: ['latin'],
+  variable: '--font-sans',
+  weight: ['400', '500', '600']
+});
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
+  weight: ['400', '500', '600']
+});
 
 export const metadata: Metadata = {
-  title: 'Referral CRM',
-  description: 'Referral routing and tracking for AFC & AHA',
-  metadataBase: new URL('https://referralcrm.example.com')
+  title: 'Referrio',
+  description: 'The handoff workspace for the AFC and AHA referral network',
+  metadataBase: new URL('https://referrio.app')
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${archivo.variable} ${ibmPlexSans.variable} ${ibmPlexMono.variable}`}>
       <body className="min-h-screen bg-surface-muted text-foreground antialiased">
         <Suspense
           fallback={(

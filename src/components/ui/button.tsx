@@ -6,11 +6,11 @@ export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'subtle' | 'dang
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
 
 const base =
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60';
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-display text-sm font-medium tracking-[-0.01em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 disabled:active:translate-y-0';
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    'bg-primary-600 text-white shadow-sm hover:bg-primary-700 active:bg-primary-700 focus-visible:ring-primary-500',
+    'bg-primary-600 text-white shadow-[0_1px_2px_rgba(19,34,56,0.12),0_6px_16px_-8px_rgba(36,87,214,0.65)] hover:bg-primary-700 active:bg-primary-700 focus-visible:ring-primary-500',
   secondary:
     'bg-surface text-foreground ring-1 ring-inset ring-border shadow-sm hover:bg-surface-muted focus-visible:ring-primary-500',
   outline:
@@ -58,7 +58,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       className={cn(base, variantStyles[variant], sizeStyles[size], className)}
       {...props}
     >
-      {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : leadingIcon}
+      {loading ? (
+        <span className="animate-spin" aria-hidden>
+          <Loader2 className="h-4 w-4" />
+        </span>
+      ) : leadingIcon}
       {children}
       {!loading && trailingIcon}
     </button>

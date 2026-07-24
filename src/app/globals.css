@@ -4,27 +4,29 @@
 
 @layer base {
   :root {
-    --font-sans: 'Inter', sans-serif;
+    --font-sans: 'IBM Plex Sans', sans-serif;
+    --font-display: 'Archivo', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
     color-scheme: light;
 
     /* Semantic tokens (HSL triplets so `hsl(var(--x) / <alpha>)` works in Tailwind) */
-    --surface: 0 0% 100%;
+    --surface: 210 25% 99%;
     --surface-raised: 0 0% 100%;
-    --surface-muted: 210 40% 96%;
-    --surface-subtle: 210 40% 98%;
+    --surface-muted: 204 29% 97%;
+    --surface-subtle: 207 31% 95%;
 
-    --border: 220 14% 91%;
-    --border-strong: 220 13% 82%;
+    --border: 207 25% 89%;
+    --border-strong: 209 21% 77%;
 
-    --text: 222 47% 11%;
-    --text-muted: 215 16% 37%;
-    --text-subtle: 215 14% 50%;
+    --text: 216 43% 14%;
+    --text-muted: 214 24% 32%;
+    --text-subtle: 211 14% 48%;
 
-    /* Primary = original slate brand (#1F2937). */
-    --primary: 217 33% 17%;
+    /* Relay blue identifies work that moves a handoff forward. */
+    --primary: 222 71% 49%;
     --primary-foreground: 0 0% 100%;
 
-    --ring: 217 33% 32%;
+    --ring: 222 71% 49%;
 
     --success: 152 56% 35%;
     --success-foreground: 0 0% 100%;
@@ -50,7 +52,12 @@
 
   body {
     background-color: hsl(var(--surface-muted));
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.28) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.2) 1px, transparent 1px);
+    background-size: 32px 32px;
     color: hsl(var(--text));
+    font-family: var(--font-sans);
     font-feature-settings: 'cv11', 'ss01';
     min-height: 100%;
     overflow-x: hidden;
@@ -78,7 +85,13 @@
     color: hsl(var(--text));
   }
 
-  /* Inputs inherit the warm ring by default for a consistent focus style. */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+  }
+
+  /* Inputs inherit the route-blue ring for a consistent focus style. */
   :where(input, textarea, select, button):focus-visible {
     outline: none;
   }
@@ -86,11 +99,33 @@
 
 @layer utilities {
   .text-eyebrow {
+    font-family: var(--font-mono);
     font-size: 0.6875rem;
     line-height: 1rem;
     letter-spacing: 0.18em;
     text-transform: uppercase;
     font-weight: 600;
+  }
+
+  .route-label {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .route-surface {
+    position: relative;
+  }
+
+  .route-surface::before {
+    background: linear-gradient(180deg, #2457d6 0%, #2457d6 58%, #e4684a 58%, #e4684a 100%);
+    border-radius: 9999px;
+    content: '';
+    inset: 14px auto 14px 0;
+    position: absolute;
+    width: 3px;
   }
 
   .scrollbar-thin {
@@ -133,6 +168,21 @@
 
 .top-progress-finish {
   animation: top-progress-finish 0.35s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @keyframes top-progress {

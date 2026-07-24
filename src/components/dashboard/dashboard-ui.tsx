@@ -44,7 +44,7 @@ export function DashCardHeader({
   return (
     <div className={cn('flex flex-wrap items-center justify-between gap-3', className)}>
       <div className="flex items-center gap-1.5">
-        <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+        <p className="font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-subtle">{title}</p>
         {info ? <DashInfoTip label={`${title} details`} content={info} /> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}

@@ -12,32 +12,37 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['var(--font-sans)', ...fontFamily.sans]
+        sans: ['var(--font-sans)', ...fontFamily.sans],
+        display: ['var(--font-display)', ...fontFamily.sans],
+        mono: ['var(--font-mono)', ...fontFamily.mono]
       },
       colors: {
         // Legacy brand token kept for backwards compatibility with any
         // component that still references `bg-brand` / `text-brand`.
         brand: {
-          DEFAULT: '#1F2937',
-          light: '#334155',
-          dark: '#0F172A'
+          DEFAULT: '#2457D6',
+          light: '#4D76DF',
+          dark: '#132238'
         },
-        // Primary = slate brand. primary-600 (#1F2937) matches the original
-        // `brand.DEFAULT`; tints above/below are the Tailwind gray scale so
-        // `bg-primary-50` / `text-primary-700` read the way the old brand did.
+        // Relay blue gives interactive work a consistent, recognizable signal.
         primary: {
           DEFAULT: 'hsl(var(--primary) / <alpha-value>)',
           foreground: 'hsl(var(--primary-foreground) / <alpha-value>)',
-          50: '#F9FAFB',
-          100: '#F3F4F6',
-          200: '#E5E7EB',
-          300: '#D1D5DB',
-          400: '#9CA3AF',
-          500: '#4B5563',
-          600: '#1F2937',
-          700: '#111827',
-          800: '#0B1220',
-          900: '#030712'
+          50: '#EEF3FF',
+          100: '#DCE6FF',
+          200: '#B9CDFF',
+          300: '#8EACF8',
+          400: '#5E83E8',
+          500: '#3764DC',
+          600: '#2457D6',
+          700: '#1D46B5',
+          800: '#1A3C91',
+          900: '#183573'
+        },
+        signal: {
+          DEFAULT: '#E4684A',
+          soft: '#FFF0EB',
+          dark: '#B9472E'
         },
         // Semantic tokens backed by CSS variables declared in globals.css.
         surface: {
@@ -82,13 +87,13 @@ const config: Config = {
         pill: '9999px'
       },
       boxShadow: {
-        card: '0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -12px rgba(15, 23, 42, 0.12)',
-        raised: '0 4px 12px rgba(15, 23, 42, 0.06), 0 20px 40px -16px rgba(15, 23, 42, 0.18)',
+        card: '0 1px 2px rgba(19, 34, 56, 0.04), 0 10px 28px -18px rgba(19, 34, 56, 0.22)',
+        raised: '0 8px 20px rgba(19, 34, 56, 0.08), 0 28px 56px -24px rgba(19, 34, 56, 0.24)',
         focus: '0 0 0 4px hsl(var(--ring) / 0.25)'
       },
       fontSize: {
         eyebrow: ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.18em', fontWeight: '600' }],
-        display: ['2rem', { lineHeight: '2.4rem', letterSpacing: '-0.02em', fontWeight: '600' }],
+        display: ['2rem', { lineHeight: '2.3rem', letterSpacing: '-0.035em', fontWeight: '650' }],
         title: ['1.25rem', { lineHeight: '1.6rem', letterSpacing: '-0.01em', fontWeight: '600' }]
       },
       keyframes: {
