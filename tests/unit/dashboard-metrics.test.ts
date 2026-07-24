@@ -918,11 +918,12 @@ describe('Dashboard Metrics - AHA Composite Scoring', () => {
 });
 
 describe('Dashboard Metrics - MC Composite Scoring', () => {
-  // Mirror of MC_KPI_WEIGHTS in src/app/api/dashboard/route.ts. The five
-  // KEY management metrics carry the most weight; the rest are MED guardrails.
+  // Mirror of MC_KPI_WEIGHTS in src/app/api/dashboard/route.ts. The KEY
+  // management metrics carry the most weight; the rest are MED guardrails.
   const MC_MIN_REFERRALS_FOR_RANK = 3;
   const MC_MIN_RELIABILITY_FACTOR = 0.6;
   const MC_KPI_WEIGHTS = {
+    closedDealsWithAfc: 8,
     dealsWithoutAfc: 8,
     dealsWithoutAssignedAgent: 8,
     dealCount: 7,
@@ -935,6 +936,7 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     npsScore: 2
   } as const;
   const MC_KPI_ORDER = [
+    'closedDealsWithAfc',
     'dealsWithoutAfc',
     'dealsWithoutAssignedAgent',
     'dealCount',
@@ -971,11 +973,13 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     return totalWeight > 0 ? weightedSum / totalWeight : AHA_NEUTRAL_SCORE;
   };
 
-  it('orders the five KEY management metrics above every MED guardrail KPI', () => {
+  it('orders the KEY management metrics above every MED guardrail KPI', () => {
+    expect(MC_KPI_WEIGHTS.closedDealsWithAfc).toBe(MC_KPI_WEIGHTS.dealsWithoutAfc);
     expect(MC_KPI_WEIGHTS.dealsWithoutAfc).toBe(MC_KPI_WEIGHTS.dealsWithoutAssignedAgent);
     expect(MC_KPI_WEIGHTS.dealsWithoutAfc).toBeGreaterThan(MC_KPI_WEIGHTS.dealCount);
     expect(MC_KPI_WEIGHTS.dealCount).toBeGreaterThan(MC_KPI_WEIGHTS.referralCount);
     expect(MC_KPI_WEIGHTS.referralCount).toBe(MC_KPI_WEIGHTS.totalRevenueGenerated);
+    expect(MC_KPI_ORDER[0]).toBe('closedDealsWithAfc');
 
     const guardrailWeights = [
       MC_KPI_WEIGHTS.revenuePerReferral,
@@ -1048,7 +1052,6 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
       'ahaOosAttachRate',
       'afcCloseRate',
       'afcDealCount',
-      'closedDealsWithAfc',
       'closedDealsWithoutAfc',
       'noAssignedAgentCloseRate',
       'agingPipelineRisk',

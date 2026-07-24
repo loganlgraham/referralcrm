@@ -2717,7 +2717,7 @@ function ClosedDealsTable({
 function McRankedList({ title, entries }: { title: string; entries: McRankedEntry[] }) {
   const [selectedMc, setSelectedMc] = useState<McRankedEntry | null>(null);
   const scrollMaxHeight = `${RANKED_LIST_PREVIEW_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
-  const description = "Composite score blends weighted MC KPIs scored relative to peers this period. The top drivers of rank are AFC close rate, total AFC deal volume, closed deals using AFC, fewer closed deals without AFC, total revenue, and referral (transfer) volume. Close speed, pushed-back deals, closes without the assigned agent, financing terminations, NPS, pipeline aging, source quality, and forecast accuracy act as lower-weight quality guardrails. MCs with fewer than 3 referrals are marked provisional and receive a volume discount, but still keep a score. KPIs with no data this period are excluded from that MC's weighted average rather than dragging the score toward the median.";
+  const description = "Composite score blends weighted MC KPIs scored relative to peers this period. The top drivers of rank are closed deals with AFC, fewer closed deals without AFC, fewer closes without the assigned agent, deals created, referral (transfer) volume, and total revenue. Close speed, pushed-back deals, financing terminations, NPS, and revenue per referral act as lower-weight quality guardrails. MCs with fewer than 3 referrals are marked provisional and receive a volume discount, but still keep a score. KPIs with no data this period are excluded from that MC's weighted average rather than dragging the score toward the median.";
 
   return (
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
