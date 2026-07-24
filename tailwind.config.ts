@@ -22,7 +22,7 @@ const config: Config = {
         brand: {
           DEFAULT: '#2457D6',
           light: '#4D76DF',
-          dark: '#132238'
+          dark: '#0F172A'
         },
         // Relay blue gives interactive work a consistent, recognizable signal.
         primary: {

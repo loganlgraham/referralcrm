@@ -20,8 +20,7 @@ export function AuthShell({ hero, children, wide = false }: AuthShellProps) {
   return (
     <div className="flex min-h-screen flex-col bg-surface-muted lg:flex-row">
       {hero && (
-        <div className="relative isolate hidden w-full flex-col justify-between overflow-hidden bg-[#132238] p-12 text-white lg:flex lg:max-w-xl xl:max-w-2xl">
-          <div aria-hidden className="pointer-events-none absolute inset-y-0 left-20 -z-10 w-px bg-white/10" />
+        <div className="relative isolate hidden w-full flex-col justify-between overflow-hidden bg-[#0F172A] p-12 text-white lg:flex lg:max-w-xl xl:max-w-2xl">
           <div aria-hidden className="pointer-events-none absolute -bottom-32 -right-32 -z-10 h-96 w-96 rounded-full border border-white/[0.06]" />
           <div className="space-y-8">
             <BrandMark inverted />
@@ -33,29 +32,29 @@ export function AuthShell({ hero, children, wide = false }: AuthShellProps) {
               {hero.title}
             </h2>
             {hero.description && (
-              <p className="max-w-md text-base leading-relaxed text-white/66">{hero.description}</p>
+              <p className="max-w-md text-base leading-relaxed text-white/70">{hero.description}</p>
             )}
             </div>
           </div>
 
           <div className="relative ml-1 space-y-0">
-            <p className="route-label mb-5 text-white/38">One connected handoff</p>
+            <p className="route-label mb-5 text-white/40">One connected handoff</p>
             {[
               ['Mortgage consultant', 'Client ready'],
               ['Referral desk', 'Match confirmed'],
               ['Trusted agent', 'Relationship active']
             ].map(([label, detail], index) => (
               <div key={label} className="relative flex min-h-16 items-start gap-4 pl-8">
-                {index < 2 ? <span aria-hidden className="absolute left-[5px] top-3 h-full w-px bg-white/18" /> : null}
+                {index < 2 ? <span aria-hidden className="absolute left-[5px] top-3 h-full w-px bg-white/20" /> : null}
                 <span
                   aria-hidden
-                  className={`absolute left-0 top-1.5 h-[11px] w-[11px] rounded-full ring-4 ring-[#132238] ${
+                  className={`absolute left-0 top-1.5 h-[11px] w-[11px] rounded-full ring-4 ring-[#0F172A] ${
                     index === 2 ? 'bg-signal' : 'bg-primary-400'
                   }`}
                 />
                 <div>
                   <p className="font-display text-sm font-medium text-white">{label}</p>
-                  <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-white/38">{detail}</p>
+                  <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-white/40">{detail}</p>
                 </div>
             </div>
             ))}

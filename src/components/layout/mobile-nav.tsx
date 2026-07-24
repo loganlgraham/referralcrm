@@ -54,7 +54,7 @@ export function MobileNav({ session }: MobileNavProps) {
 
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#132238]/95 text-white backdrop-blur md:hidden">
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#0F172A]/95 text-white backdrop-blur md:hidden">
         <div className="flex h-16 items-center justify-between px-4">
           <Link href={role === 'admin' ? '/dashboard' : '/referrals'} className="flex items-center gap-2 no-underline">
             <BrandMark inverted />
@@ -64,7 +64,7 @@ export function MobileNav({ session }: MobileNavProps) {
             <button
               type="button"
               onClick={() => setOpen((prev) => !prev)}
-              className="inline-flex items-center rounded-md border border-white/15 bg-white/5 p-2 text-white/70 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              className="inline-flex items-center rounded-md border border-white/20 bg-white/5 p-2 text-white/70 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
               aria-label={open ? 'Close navigation' : 'Open navigation'}
               aria-expanded={open}
             >
@@ -91,7 +91,7 @@ export function MobileNav({ session }: MobileNavProps) {
         />
         <aside
           className={cn(
-            'absolute inset-y-0 right-0 flex w-[82%] max-w-sm flex-col border-l border-white/10 bg-[#132238] text-white shadow-raised transition-transform duration-200',
+            'absolute inset-y-0 right-0 flex w-[82%] max-w-sm flex-col border-l border-white/10 bg-[#0F172A] text-white shadow-raised transition-transform duration-200',
             open ? 'translate-x-0' : 'translate-x-full'
           )}
           role="dialog"
@@ -102,7 +102,7 @@ export function MobileNav({ session }: MobileNavProps) {
               <Avatar name={name} highlighted />
               <div className="leading-tight">
                 <p className="text-sm font-medium text-white">{name}</p>
-                <p className="text-[11px] text-white/45 capitalize">
+                <p className="text-[11px] text-white/50 capitalize">
                   {role === 'mc' ? 'Mortgage Consultant' : role}
                 </p>
               </div>
@@ -110,7 +110,7 @@ export function MobileNav({ session }: MobileNavProps) {
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded-md p-2 text-white/45 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              className="rounded-md p-2 text-white/50 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
               aria-label="Close navigation"
             >
               <XIcon className="h-5 w-5" />
@@ -120,7 +120,7 @@ export function MobileNav({ session }: MobileNavProps) {
           <nav className="flex-1 overflow-y-auto scrollbar-thin px-3 py-4">
             {sections.map((section) => (
               <div key={section.label} className="mb-4 last:mb-0">
-                <p className="route-label px-3 pb-1.5 text-[9px] text-white/35">
+                <p className="route-label px-3 pb-1.5 text-[9px] text-white/40">
                   {section.label}
                 </p>
                 <ul className="space-y-0.5">
@@ -138,13 +138,13 @@ export function MobileNav({ session }: MobileNavProps) {
                           className={cn(
                             'relative flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium no-underline transition',
                             active
-                              ? 'bg-white text-[#132238]'
-                              : 'text-white/64 hover:bg-white/[0.07] hover:text-white'
+                              ? 'bg-white text-[#0F172A]'
+                              : 'text-white/70 hover:bg-white/10 hover:text-white'
                           )}
                         >
                           <Icon
                             aria-hidden
-                            className={cn('h-4 w-4 shrink-0', active ? 'text-primary-600' : 'text-white/35')}
+                            className={cn('h-4 w-4 shrink-0', active ? 'text-primary-600' : 'text-white/40')}
                           />
                           {item.label}
                         </Link>
@@ -160,7 +160,7 @@ export function MobileNav({ session }: MobileNavProps) {
             <button
               type="button"
               onClick={handleSignOut}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-white/[0.07] px-4 py-2.5 text-sm font-medium text-white/75 transition hover:bg-white/10 hover:text-white"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-medium text-white/75 transition hover:bg-white/20 hover:text-white"
             >
               <LogOutIcon className="h-4 w-4" />
               Sign out

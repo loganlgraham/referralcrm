@@ -968,7 +968,7 @@ export function ReferralHeader({
 
   return (
     <div className="route-surface space-y-5 overflow-hidden rounded-card bg-surface-raised p-4 pl-5 shadow-card ring-1 ring-border sm:p-5 sm:pl-6">
-      <div className="grid gap-5 rounded-xl border border-border bg-surface-muted/65 p-4 lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-center">
+      <div className="grid gap-5 rounded-xl border border-border bg-surface-muted/60 p-4 lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-center">
         <div className="space-y-2 lg:self-center">
           <div>
             <div className="flex items-center gap-1.5">

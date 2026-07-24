@@ -102,9 +102,9 @@ function LoginForm() {
     <AuthShell
       hero={{
         eyebrow: 'AFC · AHA',
-        title: 'Referral relationships, coordinated in one workspace.',
+        title: 'Every referral, one seamless handoff.',
         description:
-          'Manage referrals, follow-ups, and lender partnerships with the tools your teams already trust.',
+          'Keep your consultants, coordinators, and agents in sync — from first intro to closed deal.',
       }}
     >
       <AuthHeading

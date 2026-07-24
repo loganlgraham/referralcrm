@@ -1,0 +1,50 @@
+- generic [active] [ref=f11e1]:
+  - region "Notifications alt+T"
+  - generic [ref=f11e2]:
+    - generic [ref=f11e3]:
+      - generic [ref=f11e4]:
+        - generic [ref=f11e11]:
+          - generic [ref=f11e12]: Referrio
+          - generic [ref=f11e13]: Handoff desk
+        - generic [ref=f11e14]:
+          - paragraph [ref=f11e15]: AFC · AHA
+          - heading "Every referral, one seamless handoff." [level=2] [ref=f11e16]
+          - paragraph [ref=f11e17]: Keep your consultants, coordinators, and agents in sync — from first intro to closed deal.
+      - generic [ref=f11e18]:
+        - paragraph [ref=f11e19]: One connected handoff
+        - generic [ref=f11e23]:
+          - paragraph [ref=f11e24]: Mortgage consultant
+          - paragraph [ref=f11e25]: Client ready
+        - generic [ref=f11e29]:
+          - paragraph [ref=f11e30]: Referral desk
+          - paragraph [ref=f11e31]: Match confirmed
+        - generic [ref=f11e34]:
+          - paragraph [ref=f11e35]: Trusted agent
+          - paragraph [ref=f11e36]: Relationship active
+    - generic [ref=f11e38]:
+      - generic [ref=f11e39]:
+        - paragraph [ref=f11e40]: AFC · AHA
+        - heading "Sign in to Referrio" [level=1] [ref=f11e41]
+        - paragraph [ref=f11e42]: Use your Referrio credentials to sign in.
+      - generic [ref=f11e43]:
+        - generic [ref=f11e44]:
+          - generic [ref=f11e45]: Username or email
+          - textbox "Username or email" [ref=f11e46]:
+            - /placeholder: yourname or you@example.com
+        - generic [ref=f11e47]:
+          - generic [ref=f11e48]: Password
+          - textbox "Password" [ref=f11e49]:
+            - /placeholder: Enter your password
+          - paragraph [ref=f11e50]:
+            - link "Forgot password?" [ref=f11e52] [cursor=pointer]:
+              - /url: /reset-password
+        - button "Sign in" [ref=f11e53] [cursor=pointer]
+      - paragraph [ref=f11e54]:
+        - text: Don't have an account?
+        - link "Sign up" [ref=f11e55] [cursor=pointer]:
+          - /url: /signup
+      - paragraph [ref=f11e56]:
+        - text: Need help?
+        - link "Contact support" [ref=f11e57] [cursor=pointer]:
+          - /url: https://mail.google.com/mail/?view=cm&fs=1&to=logan.graham%40americanfinancing.net
+  - alert [ref=f11e58]

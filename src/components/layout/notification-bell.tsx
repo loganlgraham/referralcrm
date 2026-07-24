@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Bell } from 'lucide-react';
 import useSWR from 'swr';
 import { Session } from 'next-auth';
@@ -16,6 +16,7 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export function NotificationBell({ session, inverted = false }: NotificationBellProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   
   // Only render for admin users
   if (session.user.role !== 'admin') {
@@ -49,6 +50,7 @@ export function NotificationBell({ session, inverted = false }: NotificationBell
   return (
     <div className="relative">
       <button
+        ref={buttonRef}
         type="button"
         onClick={handleToggle}
         className={cn(
@@ -69,6 +71,7 @@ export function NotificationBell({ session, inverted = false }: NotificationBell
 
       {isOpen && (
         <NotificationDropdown
+          anchorRef={buttonRef}
           notifications={data?.notifications || []}
           onClose={handleClose}
           onNotificationsChanged={handleNotificationsChanged}

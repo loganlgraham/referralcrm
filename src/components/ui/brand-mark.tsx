@@ -35,7 +35,7 @@ export function BrandMark({ className, compact = false, inverted = false }: Bran
           <span className={cn('truncate font-display text-[15px] font-semibold tracking-[-0.025em]', inverted ? 'text-white' : 'text-foreground')}>
             Referrio
           </span>
-          <span className={cn('route-label mt-1 truncate text-[9px] tracking-[0.1em]', inverted ? 'text-white/65' : 'text-foreground-subtle')}>
+          <span className={cn('route-label mt-1 truncate text-[9px] tracking-[0.1em]', inverted ? 'text-white/70' : 'text-foreground-subtle')}>
             Handoff desk
           </span>
         </span>

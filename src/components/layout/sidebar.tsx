@@ -105,11 +105,10 @@ export function Sidebar({ session, className }: { session: Session; className?: 
   return (
     <aside
       className={cn(
-        'fixed inset-y-0 left-0 z-40 flex w-64 flex-col overflow-hidden border-r border-white/10 bg-[#132238] text-white',
+        'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-white/10 bg-[#0F172A] text-white',
         className
       )}
     >
-      <div aria-hidden className="absolute inset-y-0 left-[27px] w-px bg-white/[0.07]" />
       <div className="relative flex h-[72px] items-center justify-between gap-2 border-b border-white/10 px-5">
         <Link
           href={role === 'admin' ? '/dashboard' : '/referrals'}
@@ -120,15 +119,15 @@ export function Sidebar({ session, className }: { session: Session; className?: 
         <NotificationBell session={session} inverted />
       </div>
 
-      <div className="relative mx-5 mt-5 border-l border-signal/70 pl-3">
-        <p className="route-label text-[9px] text-white/45">AFC · AHA network</p>
+      <div className="relative mx-5 mt-5 border-l-2 border-signal/70 pl-3">
+        <p className="route-label text-[9px] text-white/50">AFC · AHA network</p>
         <p className="mt-1 font-display text-sm font-medium text-white/90">Referral operations</p>
       </div>
 
       <nav className="relative flex-1 overflow-y-auto scrollbar-thin px-3 py-5">
         {sections.map((section) => (
           <div key={section.label} className="mb-5 last:mb-0">
-            <p className="route-label px-3 pb-2 text-[9px] text-white/35">
+            <p className="route-label px-3 pb-2 text-[9px] text-white/40">
               {section.label}
             </p>
             <ul className="space-y-0.5">
@@ -146,21 +145,21 @@ export function Sidebar({ session, className }: { session: Session; className?: 
                       className={cn(
                         'group relative flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium no-underline transition',
                         active
-                          ? 'bg-white text-[#132238] shadow-sm'
-                          : 'text-white/64 hover:bg-white/[0.07] hover:text-white'
+                          ? 'bg-white text-[#0F172A] shadow-sm'
+                          : 'text-white/70 hover:bg-white/10 hover:text-white'
                       )}
                     >
                       {active && (
                         <span
                           aria-hidden
-                          className="absolute -left-[3px] top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full border-[3px] border-[#132238] bg-signal"
+                          className="absolute -left-[3px] top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full border-[3px] border-[#0F172A] bg-signal"
                         />
                       )}
                       <Icon
                         aria-hidden
                         className={cn(
                           'h-4 w-4 shrink-0',
-                          active ? 'text-primary-600' : 'text-white/35 group-hover:text-white/75'
+                          active ? 'text-primary-600' : 'text-white/40 group-hover:text-white/75'
                         )}
                       />
                       {item.label}
@@ -193,19 +192,19 @@ function UserChip({ session }: { session: Session }) {
       <button
         type="button"
         onClick={() => setMenuOpen((prev) => !prev)}
-        className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+        className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
       >
         <Avatar name={name} highlighted size="md" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-white">{name}</p>
-          <p className="truncate text-[11px] text-white/45">
+          <p className="truncate text-[11px] text-white/50">
             <RoleLabel role={role} />
           </p>
         </div>
       </button>
       {menuOpen && (
         <div
-          className="absolute bottom-full left-3 right-3 mb-2 overflow-hidden rounded-lg border border-white/10 bg-[#1B2C46] shadow-raised animate-fade-in"
+          className="absolute bottom-full left-3 right-3 mb-2 overflow-hidden rounded-lg border border-white/10 bg-[#1E293B] shadow-raised animate-fade-in"
           onMouseLeave={() => setMenuOpen(false)}
         >
           <button
@@ -213,7 +212,7 @@ function UserChip({ session }: { session: Session }) {
             onClick={handleSignOut}
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-white/80 transition hover:bg-white/10 hover:text-white"
           >
-            <LogOut className="h-4 w-4 text-white/45" />
+            <LogOut className="h-4 w-4 text-white/50" />
             Sign out
           </button>
         </div>
