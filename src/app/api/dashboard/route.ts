@@ -2544,7 +2544,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   };
 
   type McKpiKey =
-    | 'closedDealsWithAfc'
+    | 'afcCloseRate'
+    | 'afcContractCloseRate'
     | 'dealsWithoutAfc'
     | 'dealsWithoutAssignedAgent'
     | 'dealCount'
@@ -2600,7 +2601,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const MC_MIN_REFERRALS_FOR_RANK = 3;
   const MC_MIN_RELIABILITY_FACTOR = 0.6;
   const MC_KPI_WEIGHTS: Record<McKpiKey, number> = {
-    closedDealsWithAfc: 8,
+    afcCloseRate: 8,
+    afcContractCloseRate: 8,
     dealsWithoutAfc: 8,
     dealsWithoutAssignedAgent: 8,
     dealCount: 7,
@@ -2613,7 +2615,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     npsScore: 2
   };
   const MC_KPI_TIERS: Record<McKpiKey, 'critical' | 'high' | 'medium' | 'low'> = {
-    closedDealsWithAfc: 'critical',
+    afcCloseRate: 'critical',
+    afcContractCloseRate: 'critical',
     dealsWithoutAfc: 'critical',
     dealsWithoutAssignedAgent: 'critical',
     dealCount: 'critical',
@@ -2626,7 +2629,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     npsScore: 'medium'
   };
   const MC_KPI_LABELS: Record<McKpiKey, string> = {
-    closedDealsWithAfc: 'Closed Deals With AFC',
+    afcCloseRate: 'AFC Close Rate',
+    afcContractCloseRate: 'AFC Contract Close Rate',
     dealsWithoutAfc: 'Closed Deals Without AFC',
     dealsWithoutAssignedAgent: 'Closed Deals Without Assigned Agent',
     dealCount: 'Deals Created',
@@ -2639,7 +2643,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     npsScore: 'NPS Score'
   };
   const MC_KPI_ORDER: McKpiKey[] = [
-    'closedDealsWithAfc',
+    'afcCloseRate',
+    'afcContractCloseRate',
     'dealsWithoutAfc',
     'dealsWithoutAssignedAgent',
     'dealCount',
@@ -2777,7 +2782,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       : 1;
 
   const mcKpiRaw: Record<McKpiKey, Map<string, number>> = {
-    closedDealsWithAfc: new Map(),
+    afcCloseRate: new Map(),
+    afcContractCloseRate: new Map(),
     dealsWithoutAfc: new Map(),
     dealsWithoutAssignedAgent: new Map(),
     dealCount: new Map(),
@@ -2790,7 +2796,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     npsScore: new Map()
   };
   const mcKpiDisplayMap: Record<McKpiKey, Map<string, string>> = {
-    closedDealsWithAfc: new Map(),
+    afcCloseRate: new Map(),
+    afcContractCloseRate: new Map(),
     dealsWithoutAfc: new Map(),
     dealsWithoutAssignedAgent: new Map(),
     dealCount: new Map(),
@@ -2825,10 +2832,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const dealsWithoutAfc = mcDealsWithoutAfcMap.get(id) ?? 0;
     const dealsWithoutAssignedAgent = mcDealsWithoutAssignedAgentMap.get(id) ?? 0;
 
+    // AFC conversion rates: period AFC closings over period referrals / deals
+    // created. Omit when denom is 0 so composite uses neutral fill.
+    if (referralsForMc > 0) {
+      const afcCloseRate = (closedDealsWithAfc / referralsForMc) * 100;
+      mcKpiRaw.afcCloseRate.set(id, afcCloseRate);
+      mcKpiDisplayMap.afcCloseRate.set(
+        id,
+        `${afcCloseRate.toFixed(1)}% (${closedDealsWithAfc}/${referralsForMc})`
+      );
+    }
+    if (dealCount > 0) {
+      const afcContractCloseRate = (closedDealsWithAfc / dealCount) * 100;
+      mcKpiRaw.afcContractCloseRate.set(id, afcContractCloseRate);
+      mcKpiDisplayMap.afcContractCloseRate.set(
+        id,
+        `${afcContractCloseRate.toFixed(1)}% (${closedDealsWithAfc}/${dealCount})`
+      );
+    }
+
     // Set KEY deal counts for every ranked MC (including 0) so non-dealers
     // normalize to floor scores rather than receiving a neutral fill.
-    mcKpiRaw.closedDealsWithAfc.set(id, closedDealsWithAfc);
-    mcKpiDisplayMap.closedDealsWithAfc.set(id, closedDealsWithAfc.toLocaleString());
     mcKpiRaw.dealsWithoutAfc.set(id, dealsWithoutAfc);
     mcKpiDisplayMap.dealsWithoutAfc.set(id, dealsWithoutAfc.toLocaleString());
     mcKpiRaw.dealsWithoutAssignedAgent.set(id, dealsWithoutAssignedAgent);
@@ -2894,7 +2918,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const mcKpiNormalized: Record<McKpiKey, Map<string, number>> = {
-    closedDealsWithAfc: normalizeAhaKpiMap(mcKpiRaw.closedDealsWithAfc, false),
+    afcCloseRate: normalizeAhaKpiMap(mcKpiRaw.afcCloseRate, false),
+    afcContractCloseRate: normalizeAhaKpiMap(mcKpiRaw.afcContractCloseRate, false),
     dealsWithoutAfc: normalizeAhaKpiMap(mcKpiRaw.dealsWithoutAfc, true),
     dealsWithoutAssignedAgent: normalizeAhaKpiMap(mcKpiRaw.dealsWithoutAssignedAgent, true),
     dealCount: normalizeAhaKpiMap(mcKpiRaw.dealCount, false),

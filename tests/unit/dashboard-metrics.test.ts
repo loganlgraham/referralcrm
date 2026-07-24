@@ -172,11 +172,56 @@ describe('Dashboard Metrics - MC AFC Leaderboard KPIs', () => {
 
     const afcClosedDeals = afcClosedByMc.get('mcA') ?? 0;
     const totalReferrals = referralByMcMap.get('mcA') ?? 0;
-    const afcCloseRate = totalReferrals === 0 ? 0 : (afcClosedDeals / totalReferrals) * 100;
+    const afcCloseRate = totalReferrals === 0 ? null : (afcClosedDeals / totalReferrals) * 100;
+    const displayValue =
+      afcCloseRate == null ? 'No data (neutral)' : `${afcCloseRate.toFixed(1)}% (${afcClosedDeals}/${totalReferrals})`;
 
     expect(afcClosedDeals).toBe(3);
     expect(totalReferrals).toBe(4);
     expect(afcCloseRate).toBe(75);
+    expect(displayValue).toBe('75.0% (3/4)');
+  });
+
+  it('calculates AFC contract close rate from period AFC closings over deals created', () => {
+    const dealCountByMc = new Map([['mcA', 5]]);
+    const closedStatuses = new Set(['closed', 'payment_sent', 'paid']);
+    const eligibleClosedDealsInTimeframe = [
+      { status: 'closed', usedAfc: true, referral: { lender: 'mcA' } },
+      { status: 'payment_sent', usedAfc: true, referral: { lender: 'mcA' } },
+      { status: 'paid', usedAfc: false, referral: { lender: 'mcA' } }
+    ];
+
+    const afcClosedByMc = new Map<string, number>();
+    eligibleClosedDealsInTimeframe.forEach((payment) => {
+      if (payment.usedAfc !== true || !closedStatuses.has(payment.status)) return;
+      const mcKey = payment.referral.lender;
+      afcClosedByMc.set(mcKey, (afcClosedByMc.get(mcKey) ?? 0) + 1);
+    });
+
+    const afcClosedDeals = afcClosedByMc.get('mcA') ?? 0;
+    const dealCount = dealCountByMc.get('mcA') ?? 0;
+    const afcContractCloseRate = dealCount === 0 ? null : (afcClosedDeals / dealCount) * 100;
+    const displayValue =
+      afcContractCloseRate == null
+        ? 'No data (neutral)'
+        : `${afcContractCloseRate.toFixed(1)}% (${afcClosedDeals}/${dealCount})`;
+
+    expect(afcClosedDeals).toBe(2);
+    expect(dealCount).toBe(5);
+    expect(afcContractCloseRate).toBe(40);
+    expect(displayValue).toBe('40.0% (2/5)');
+  });
+
+  it('omits AFC conversion rates when the denominator is zero', () => {
+    const afcClosedDeals = 0;
+    const referralsForMc = 0;
+    const dealCount = 0;
+
+    const afcCloseRate = referralsForMc > 0 ? (afcClosedDeals / referralsForMc) * 100 : null;
+    const afcContractCloseRate = dealCount > 0 ? (afcClosedDeals / dealCount) * 100 : null;
+
+    expect(afcCloseRate).toBeNull();
+    expect(afcContractCloseRate).toBeNull();
   });
 
   it('counts AFC deals across every payment status, including terminated', () => {
@@ -923,7 +968,8 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
   const MC_MIN_REFERRALS_FOR_RANK = 3;
   const MC_MIN_RELIABILITY_FACTOR = 0.6;
   const MC_KPI_WEIGHTS = {
-    closedDealsWithAfc: 8,
+    afcCloseRate: 8,
+    afcContractCloseRate: 8,
     dealsWithoutAfc: 8,
     dealsWithoutAssignedAgent: 8,
     dealCount: 7,
@@ -936,7 +982,8 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
     npsScore: 2
   } as const;
   const MC_KPI_ORDER = [
-    'closedDealsWithAfc',
+    'afcCloseRate',
+    'afcContractCloseRate',
     'dealsWithoutAfc',
     'dealsWithoutAssignedAgent',
     'dealCount',
@@ -974,12 +1021,14 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
   };
 
   it('orders the KEY management metrics above every MED guardrail KPI', () => {
-    expect(MC_KPI_WEIGHTS.closedDealsWithAfc).toBe(MC_KPI_WEIGHTS.dealsWithoutAfc);
+    expect(MC_KPI_WEIGHTS.afcCloseRate).toBe(MC_KPI_WEIGHTS.afcContractCloseRate);
+    expect(MC_KPI_WEIGHTS.afcCloseRate).toBe(MC_KPI_WEIGHTS.dealsWithoutAfc);
     expect(MC_KPI_WEIGHTS.dealsWithoutAfc).toBe(MC_KPI_WEIGHTS.dealsWithoutAssignedAgent);
     expect(MC_KPI_WEIGHTS.dealsWithoutAfc).toBeGreaterThan(MC_KPI_WEIGHTS.dealCount);
     expect(MC_KPI_WEIGHTS.dealCount).toBeGreaterThan(MC_KPI_WEIGHTS.referralCount);
     expect(MC_KPI_WEIGHTS.referralCount).toBe(MC_KPI_WEIGHTS.totalRevenueGenerated);
-    expect(MC_KPI_ORDER[0]).toBe('closedDealsWithAfc');
+    expect(MC_KPI_ORDER[0]).toBe('afcCloseRate');
+    expect(MC_KPI_ORDER[1]).toBe('afcContractCloseRate');
 
     const guardrailWeights = [
       MC_KPI_WEIGHTS.revenuePerReferral,
@@ -1050,7 +1099,7 @@ describe('Dashboard Metrics - MC Composite Scoring', () => {
       'afcCaptureRate',
       'ahaAttachRate',
       'ahaOosAttachRate',
-      'afcCloseRate',
+      'closedDealsWithAfc',
       'afcDealCount',
       'closedDealsWithoutAfc',
       'noAssignedAgentCloseRate',
