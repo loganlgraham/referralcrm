@@ -140,7 +140,6 @@ interface StageOnTransferDrilldownEntry {
 const LIST_SCROLL_VISIBLE_ROWS = 5;
 const LEADERBOARD_ROW_HEIGHT_REM = 2.5;
 const LEADERBOARD_HEADER_HEIGHT_REM = 1.75;
-const TERMINATED_DEAL_ROW_HEIGHT_REM = 4;
 const RANKED_LIST_ROW_HEIGHT_REM = 3.25;
 const RANKED_LIST_PREVIEW_ROWS = 10;
 const AFC_RISK_VISIBLE_ROWS = 7;
@@ -1177,10 +1176,8 @@ function TerminatedDealsList({
   totalLostReferralFeeCents: number;
   totalDeals: number;
 }) {
-  const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * TERMINATED_DEAL_ROW_HEIGHT_REM}rem`;
-
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className="flex h-full min-h-0 flex-col rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <div className="flex items-baseline justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Terminated deals</p>
@@ -1189,11 +1186,10 @@ function TerminatedDealsList({
         </div>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4 min-h-0 flex-1">
         {deals.length ? (
           <div
-            className="divide-y divide-border overflow-y-auto"
-            style={{ maxHeight: scrollMaxHeight }}
+            className="h-full divide-y divide-border overflow-y-auto"
             aria-label="Scrollable list: terminated deals"
           >
             {deals.map((deal) => (
@@ -2073,9 +2069,13 @@ function PreApprovalConversionSection({
           formatValue={(value) => `${value.toFixed(1)}%`}
           helper="Referrals ÷ pre-approvals across recorded months by network"
         />
-        <div className="overflow-x-auto rounded-card border border-border">
-          <table className="min-w-full text-sm">
-            <thead className="bg-surface-muted text-xs text-foreground-subtle">
+        <div className="min-w-0 lg:relative lg:min-h-0">
+          <div
+            className="overflow-x-auto rounded-card border border-border lg:absolute lg:inset-0 lg:overflow-auto"
+            aria-label="Scrollable table: pre-approval conversion history"
+          >
+            <table className="min-w-full text-sm">
+              <thead className="bg-surface-muted text-xs text-foreground-subtle lg:sticky lg:top-0 lg:z-10">
               <tr className="text-left">
                 <th className="px-3 py-2 font-medium">Month</th>
                 <th className="px-3 py-2 font-medium text-right">Referrals</th>
@@ -2086,8 +2086,8 @@ function PreApprovalConversionSection({
                 <th className="px-3 py-2 font-medium text-right">Conversion (AHA OOS)</th>
                 {canEdit ? <th className="px-3 py-2 font-medium text-right">Actions</th> : null}
               </tr>
-            </thead>
-            <tbody>
+              </thead>
+              <tbody>
               {sortedEntries.length ? (
                 sortedEntries.map((entry) => (
                   <tr key={entry.monthKey} className="border-t border-border text-foreground-muted">
@@ -2120,8 +2120,9 @@ function PreApprovalConversionSection({
                   </td>
                 </tr>
               )}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -2430,11 +2431,15 @@ function MainDashboard({
           data={data.terminatedDeals.breakdown}
           helper="Distribution of terminated deals"
         />
-        <TerminatedDealsList
-          deals={data.terminatedDeals.deals}
-          totalLostReferralFeeCents={data.terminatedDeals.totalLostReferralFeeCents}
-          totalDeals={data.terminatedDeals.totalDeals}
-        />
+        <div className="min-w-0 lg:relative lg:min-h-0">
+          <div className="lg:absolute lg:inset-0">
+            <TerminatedDealsList
+              deals={data.terminatedDeals.deals}
+              totalLostReferralFeeCents={data.terminatedDeals.totalLostReferralFeeCents}
+              totalDeals={data.terminatedDeals.totalDeals}
+            />
+          </div>
+        </div>
       </div>
 
       <Modal
