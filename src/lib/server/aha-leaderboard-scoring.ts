@@ -23,7 +23,13 @@ export function normalizeAhaKpiMap(
 
   for (const [id, rawValue] of rawMap) {
     if (max === min) {
-      normalized.set(id, neutralScore);
+      // Perfect ties on a lower-is-better floor (everyone at 0 bad events)
+      // should read as full credit, not a middling neutral 50.
+      if (lowerIsBetter && rawValue === 0) {
+        normalized.set(id, 100);
+      } else {
+        normalized.set(id, neutralScore);
+      }
       continue;
     }
 
