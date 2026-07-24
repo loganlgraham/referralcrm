@@ -18,6 +18,13 @@ import { formatCurrency, formatDate, formatNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { Info, Trash2 } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
 import { Tooltip } from '@/components/ui/tooltip';
 import { DEAL_STATUS_LABELS, type DealStatus } from '@/constants/deals';
 import {
@@ -1555,119 +1562,106 @@ function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
   );
 }
 
-function McCloseEffectivenessTable({ entries }: { entries: LeaderboardEntry[] }) {
+const DEFAULT_MC_KPI_METRIC_KEY = 'referralCount';
+
+function McKpiMetricLeaderboardCard({ entries }: { entries: McRankedEntry[] }) {
+  const metricOptions = useMemo(() => {
+    const firstWithKpis = entries.find((entry) => entry.kpis.length > 0);
+    if (!firstWithKpis) return [];
+    return firstWithKpis.kpis.map((kpi) => ({ key: kpi.key, label: kpi.label }));
+  }, [entries]);
+
+  const [activeKey, setActiveKey] = useState(DEFAULT_MC_KPI_METRIC_KEY);
+  const resolvedKey = metricOptions.some((option) => option.key === activeKey)
+    ? activeKey
+    : metricOptions[0]?.key ?? DEFAULT_MC_KPI_METRIC_KEY;
+
+  const rankedRows = useMemo(() => {
+    return entries
+      .map((entry) => {
+        const kpi = entry.kpis.find((item) => item.key === resolvedKey);
+        if (!kpi || kpi.neutralFilled) return null;
+        return {
+          id: entry.id,
+          name: entry.name,
+          displayValue: kpi.displayValue,
+          normalizedScore: kpi.normalizedScore,
+          rawValue: kpi.rawValue
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row != null)
+      .toSorted(
+        (a, b) =>
+          b.normalizedScore - a.normalizedScore || b.rawValue - a.rawValue || a.name.localeCompare(b.name)
+      );
+  }, [entries, resolvedKey]);
+
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
+  const activeLabel = metricOptions.find((option) => option.key === resolvedKey)?.label ?? 'Value';
 
   return (
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">MC Close Effectiveness</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">MC KPI by metric</p>
       <p className="mt-1 text-xs text-foreground-subtle">
-        Overall close rate uses cohort closes/referrals. AFC-only close rate is the share of the MC&apos;s closed deals
-        that still used AFC even though the assigned agent was not used.
+        Rank mortgage consultants on one Composite Leaderboard measure at a time for this period.
       </p>
-      <div
-        className="mt-4 overflow-y-auto"
-        style={entries.length ? { maxHeight: scrollMaxHeight } : undefined}
-        aria-label={entries.length ? 'Scrollable list: MC Close Effectiveness' : undefined}
-      >
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
-            <tr className="text-left text-xs text-foreground-subtle">
-              <th className="py-1 font-medium">Rank</th>
-              <th className="py-1 font-medium">MC</th>
-              <th className="py-1 font-medium text-right">Overall close rate</th>
-              <th className="py-1 font-medium text-right">AFC-only close rate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.length ? (
-              entries.map((entry, index) => {
-                const overallCloseRate = entry.closeRate ?? 0;
-                const assignedCloseRate = entry.assignedAgentCloseRate ?? 0;
-                return (
-                  <tr key={`${entry.id}-${index}`} className="border-t border-border text-foreground-muted">
+      {metricOptions.length > 0 ? (
+        <div className="mt-3">
+          <Select value={resolvedKey} onValueChange={setActiveKey}>
+            <SelectTrigger aria-label="Choose KPI" className="h-9">
+              <SelectValue placeholder="Choose KPI" />
+            </SelectTrigger>
+            <SelectContent>
+              {metricOptions.map((option) => (
+                <SelectItem key={option.key} value={option.key}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+      {entries.length === 0 ? (
+        <p className="py-8 text-center text-sm text-foreground-subtle">No MCs with data for this period.</p>
+      ) : (
+        <div
+          className="mt-4 overflow-y-auto"
+          style={rankedRows.length ? { maxHeight: scrollMaxHeight } : undefined}
+          aria-label={rankedRows.length ? `Scrollable list: ${activeLabel}` : undefined}
+        >
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
+              <tr className="text-left text-xs text-foreground-subtle">
+                <th className="py-1 font-medium">Rank</th>
+                <th className="py-1 font-medium">MC</th>
+                <th className="py-1 font-medium text-right">{activeLabel}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rankedRows.length ? (
+                rankedRows.map((row, index) => (
+                  <tr key={`${row.id}-${resolvedKey}`} className="border-t border-border text-foreground-muted">
                     <td className="py-2 text-foreground-subtle">#{index + 1}</td>
-                    <td className="py-2 font-medium text-foreground">{entry.name}</td>
+                    <td className="py-2 font-medium text-foreground">{row.name}</td>
                     <td className="py-2 text-right">
-                      <p>{`${overallCloseRate.toFixed(1)}%`}</p>
-                      <p className="text-xs text-foreground-subtle">
-                        {`${formatNumber(entry.dealsClosed ?? 0)} / ${formatNumber(entry.totalReferrals ?? 0)}`}
-                      </p>
-                    </td>
-                    <td className="py-2 text-right">
-                      <p>{`${assignedCloseRate.toFixed(1)}%`}</p>
-                      <p className="text-xs text-foreground-subtle">
-                        {`${formatNumber(entry.assignedAgentCloses ?? 0)} / ${formatNumber(entry.assignedCloseTotal ?? 0)}`}
+                      <p className="tabular-nums text-foreground">{row.displayValue}</p>
+                      <p className="text-xs tabular-nums text-foreground-subtle">
+                        {`${row.normalizedScore.toFixed(0)}/100`}
                       </p>
                     </td>
                   </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td colSpan={4} className="py-6 text-center text-sm text-foreground-subtle">
-                  Nothing to display for this period.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function McOutsideLenderLossTable({ entries }: { entries: LeaderboardEntry[] }) {
-  const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
-
-  return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">MC Outside Lender Loss Signal</p>
-      <p className="mt-1 text-xs text-foreground-subtle">
-        Share of closed deals where the assigned agent was used, but AFC was not.
-      </p>
-      <div
-        className="mt-4 overflow-y-auto"
-        style={entries.length ? { maxHeight: scrollMaxHeight } : undefined}
-        aria-label={entries.length ? 'Scrollable list: MC Outside Lender Loss Signal' : undefined}
-      >
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
-            <tr className="text-left text-xs text-foreground-subtle">
-              <th className="py-1 font-medium">Rank</th>
-              <th className="py-1 font-medium">MC</th>
-              <th className="py-1 font-medium text-right">Loss signal rate</th>
-              <th className="py-1 font-medium text-right">Count</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.length ? (
-              entries.map((entry, index) => {
-                const count = entry.outsideLenderLossCount ?? 0;
-                const totalClosedDeals = entry.totalClosedDeals ?? 0;
-                const rate = entry.outsideLenderLossRate ?? 0;
-                return (
-                  <tr key={`${entry.id}-${index}`} className="border-t border-border text-foreground-muted">
-                    <td className="py-2 text-foreground-subtle">#{index + 1}</td>
-                    <td className="py-2 font-medium text-foreground">{entry.name}</td>
-                    <td className="py-2 text-right">
-                      <p>{`${rate.toFixed(1)}%`}</p>
-                      <p className="text-xs text-foreground-subtle">{`${formatNumber(count)} / ${formatNumber(totalClosedDeals)}`}</p>
-                    </td>
-                    <td className="py-2 text-right">{formatNumber(count)}</td>
-                  </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td colSpan={4} className="py-6 text-center text-sm text-foreground-subtle">
-                  Nothing to display for this period.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={3} className="py-6 text-center text-sm text-foreground-subtle">
+                    Nothing to display for this measure.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -3004,21 +2998,14 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
     <div className="space-y-6">
       <McRankedList title="MC Composite KPI Leaderboard" entries={data.kpiLeaderboard.rankedMcs} />
       <McAfcRiskCallListTable entries={data.afcRiskCallList} />
-      <LineChartCard
-        title="Requests received"
-        data={data.requestTrend.all}
-        formatValue={(value) => formatNumber(Math.round(value))}
-        helper="Trend of referral requests routed to MCs (network filter applied above)"
-      />
       <div className="grid gap-4 lg:grid-cols-2">
-        <LeaderboardTable
-          title="Referral requests by MC"
-          entries={data.requestLeaderboard.all}
-          valueLabel="Requests"
+        <LineChartCard
+          title="Requests received"
+          data={data.requestTrend.all}
+          formatValue={(value) => formatNumber(Math.round(value))}
+          helper="Trend of referral requests routed to MCs (network filter applied above)"
         />
-        <LeaderboardTable title="Revenue by MC" entries={data.revenueLeaderboard} valueLabel="Revenue" />
-        <McCloseEffectivenessTable entries={data.closeRateLeaderboard} />
-        <McOutsideLenderLossTable entries={data.outsideLenderLossLeaderboard} />
+        <McKpiMetricLeaderboardCard entries={data.kpiLeaderboard.rankedMcs} />
       </div>
       <div>
         <TransferTimingCard
