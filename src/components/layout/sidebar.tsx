@@ -56,7 +56,7 @@ export const navSections: NavSection[] = [
     items: [
       { href: '/agents', label: 'Agents', icon: Users, roles: ['admin'] },
       { href: '/find-agent', label: 'Find Referral Agent', icon: Search, roles: ['agent'] },
-      { href: '/lenders', label: 'Mortgage Consultants', icon: Building2, roles: ['admin', 'agent'] }
+      { href: '/lenders', label: 'Mortgage Consultants', icon: Building2, roles: ['admin'] }
     ]
   },
   {
