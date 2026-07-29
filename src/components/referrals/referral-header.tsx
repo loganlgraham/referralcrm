@@ -499,7 +499,7 @@ export function ReferralHeader({
     viewerRole !== 'agent' && viewerRole !== 'admin' && viewerRole !== 'mc';
   const pendingMcHelper =
     isAgentView && isAgentOrigin
-      ? 'AFC has received your referral — thank you! You will get an email once your referral has been paired with a Mortgage Consultant.'
+      ? 'AFC has received your intro — thank you! You’ll get an email once you’re paired with a mortgage consultant.'
       : undefined;
 
   const locationLabel = useMemo(() => {

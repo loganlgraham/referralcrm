@@ -103,7 +103,7 @@ export default async function ReferralsPage({
                 />
               </span>
               <span className="relative text-sm font-semibold leading-tight tracking-tight">
-                Refer a client to AFC
+                Introduce a client to AFC
               </span>
             </Link>
           )
@@ -132,7 +132,7 @@ export default async function ReferralsPage({
       ) : (
         <div className="rounded-xl border border-dashed border-border-strong bg-surface-raised p-10 text-center text-sm text-foreground-subtle">
           {tableMode === 'agent'
-            ? 'No referrals yet. When you have a buyer ready for financing, refer them to AFC and we will pair them with a mortgage consultant.'
+            ? 'No referrals yet. When you have a buyer ready for financing, introduce them to AFC and we will pair them with a mortgage consultant.'
             : 'No referrals yet. Add your first referral to get started.'}
         </div>
       )}

@@ -83,6 +83,8 @@ export const updateStatusSchema = z.object({
   closingDate: z.string().optional(),
   sendClosedEmails: z.boolean().optional(),
   sendAgentNpsEmail: z.boolean().optional(),
+  /** Buy-side client outcome: financing with AFC vs another lender. Sell-side forced false server-side. */
+  usedAfc: z.boolean().optional(),
   contractDetails: z
     .object({
       propertyAddress: z.string().min(1),

@@ -221,7 +221,7 @@ function UnderContractDealToast({
   const [closingDate, setClosingDate] = useState('');
   const [underContractDate, setUnderContractDate] = useState('');
   const [side, setSide] = useState<'buy' | 'sell'>(defaultSide);
-  const [usedAfc, setUsedAfc] = useState(false);
+  const [usedAfc, setUsedAfc] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   const handleDateInputClick = useCallback((event: React.MouseEvent<HTMLInputElement>) => {
@@ -467,18 +467,36 @@ function UnderContractDealToast({
           </select>
         </label>
         {side !== 'sell' && (
-          <div className="rounded border border-primary-500/40 bg-primary-600/5 px-3 py-2 sm:col-span-2">
-            <label className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <input
-                type="checkbox"
-                className="h-4 w-4 accent-brand"
-                checked={usedAfc}
-                onChange={(e) => setUsedAfc(e.target.checked)}
-              />
-              Used AFC
-            </label>
-            <p className="mt-1 text-xs text-foreground-muted">Check this when AFC handled this deal.</p>
-          </div>
+          <fieldset className="rounded border border-primary-500/40 bg-primary-600/5 px-3 py-2 sm:col-span-2">
+            <legend className="px-1 text-sm font-semibold text-foreground">
+              Is this client financing with AFC?
+            </legend>
+            <p className="mt-1 text-xs text-foreground-muted">
+              Keeps the client outcome accurate for coordination with your mortgage consultant.
+            </p>
+            <div className="mt-2 flex flex-col gap-2 text-sm text-foreground-muted">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="underContractUsedAfc"
+                  className="h-4 w-4 accent-brand"
+                  checked={usedAfc}
+                  onChange={() => setUsedAfc(true)}
+                />
+                Yes — financing with AFC
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="underContractUsedAfc"
+                  className="h-4 w-4 accent-brand"
+                  checked={!usedAfc}
+                  onChange={() => setUsedAfc(false)}
+                />
+                No — financing with another lender
+              </label>
+            </div>
+          </fieldset>
         )}
         <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
           <button type="button" className="w-full rounded border border-border-strong px-3 py-1.5 text-xs font-semibold text-foreground-muted sm:w-auto" onClick={onClose} disabled={submitting}>Cancel</button>
@@ -554,6 +572,10 @@ function StatusSelect({
               side: contractDetails.dealSide,
               contractDetails,
               createNewDeal: false,
+              usedAfc:
+                contractDetails.dealSide === 'sell'
+                  ? false
+                  : Boolean(paymentPayload.usedAfc),
             }),
           });
           if (!statusResponse.ok) {
@@ -585,7 +607,9 @@ function StatusSelect({
       return;
     }
 
+    let closedUsedAfc: boolean | undefined;
     if (nextStatus === 'Closed' && roleMode === 'agent') {
+      const askUsedAfc = side !== 'sell';
       const confirmation = await confirmCloseStatusDate({
         initialDateIso: null,
         canSendClosedEmails: false,
@@ -593,12 +617,17 @@ function StatusSelect({
         canSendAgentNpsEmail: false,
         defaultSendAgentNpsEmail: false,
         showEmailPreference: false,
+        askUsedAfc,
+        defaultUsedAfc: true,
       });
       if (!confirmation.confirmed) {
         applyResolvedStatus(value);
         return;
       }
       closingDateIso = confirmation.closingDateIso;
+      if (askUsedAfc && typeof confirmation.usedAfc === 'boolean') {
+        closedUsedAfc = confirmation.usedAfc;
+      }
     }
 
     applyResolvedStatus(nextStatus);
@@ -616,6 +645,7 @@ function StatusSelect({
           closingDate: closingDateIso,
           sendClosedEmails: nextStatus === 'Closed' && roleMode === 'agent',
           sendAgentNpsEmail: nextStatus === 'Closed' && roleMode === 'agent',
+          ...(typeof closedUsedAfc === 'boolean' ? { usedAfc: closedUsedAfc } : {}),
         })
       });
 

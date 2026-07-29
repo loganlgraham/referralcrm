@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
+import { AfcFollowUpCta } from '@/components/mortgage/afc-follow-up-cta';
 import { MarketIntelWidget } from '@/components/mortgage/market-intel-widget';
 import { getCurrentSession } from '@/lib/auth';
 
@@ -19,6 +20,7 @@ export default async function MortgageMarketPage() {
   return (
     <div className="space-y-6">
       <MarketIntelWidget />
+      <AfcFollowUpCta notesHint="Introduced after reviewing current mortgage market conditions." />
     </div>
   );
 }

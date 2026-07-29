@@ -782,11 +782,13 @@ export function DealCard({
     let paidDateIso: string | undefined;
     let sendClosedEmails = false;
     let sendAgentNpsEmail = false;
+    let confirmedUsedAfc: boolean | undefined;
 
     if (nextStatus === 'closed') {
       const usedAssignedAgent = deal.usedAssignedAgent ?? false;
       const closeUsedAfc =
         deal.side === 'sell' ? false : (afcMap[deal._id] ?? Boolean(deal.usedAfc));
+      const askUsedAfc = deal.side !== 'sell' && (viewerRole === 'admin' || viewerRole === 'agent');
 
       if (viewerRole === 'admin' || viewerRole === 'agent') {
         const confirmation = await confirmCloseStatusDate({
@@ -796,6 +798,8 @@ export function DealCard({
           canSendAgentNpsEmail: viewerRole === 'admin' ? closeUsedAfc : false,
           defaultSendAgentNpsEmail: viewerRole === 'admin' ? closeUsedAfc : false,
           showEmailPreference: viewerRole === 'admin',
+          askUsedAfc,
+          defaultUsedAfc: closeUsedAfc,
         });
 
         if (!confirmation.confirmed) {
@@ -808,6 +812,9 @@ export function DealCard({
           viewerRole === 'admin' ? confirmation.sendClosedEmails : true;
         sendAgentNpsEmail =
           viewerRole === 'admin' ? confirmation.sendAgentNpsEmail : true;
+        if (askUsedAfc && typeof confirmation.usedAfc === 'boolean') {
+          confirmedUsedAfc = confirmation.usedAfc;
+        }
 
         if (sendClosedEmails) {
           toast.success('A referral rating email will be sent to the referral.');
@@ -839,7 +846,11 @@ export function DealCard({
 
       if (nextStatus === 'closed') {
         payload.usedAfc =
-          deal.side === 'sell' ? false : (afcMap[deal._id] ?? Boolean(deal.usedAfc));
+          deal.side === 'sell'
+            ? false
+            : typeof confirmedUsedAfc === 'boolean'
+              ? confirmedUsedAfc
+              : (afcMap[deal._id] ?? Boolean(deal.usedAfc));
         payload.sendAgentNpsEmail = sendAgentNpsEmail;
         if (closingDateIso) {
           payload.closingDate = closingDateIso;
@@ -1665,10 +1676,12 @@ export function DealCard({
                         onChange={handleAfcToggle(deal)}
                         disabled={isSaving}
                       />
-                      Used AFC
+                      Client is financing with AFC
                     </label>
                     {!usedAfc && (
-                      <p className="mt-2 text-xs text-foreground-subtle">Track whether AFC handled this deal.</p>
+                      <p className="mt-2 text-xs text-foreground-subtle">
+                        Financing with another lender
+                      </p>
                     )}
                   </>
                 )}

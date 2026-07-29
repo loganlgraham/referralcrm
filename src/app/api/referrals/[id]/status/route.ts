@@ -340,7 +340,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   if (shouldPersistReferralStatus && parsed.data.status === 'Under Contract') {
     const details = parsed.data.contractDetails;
     const underContractSide: ReferralSide = details?.dealSide ?? requestSide;
-    const underContractUsedAfc = !isSellSide(underContractSide);
+    const underContractUsedAfc = isSellSide(underContractSide)
+      ? false
+      : typeof parsed.data.usedAfc === 'boolean'
+        ? parsed.data.usedAfc
+        : true;
 
     if (details) {
       const propertyAddress = details.propertyAddress.trim();
@@ -618,6 +622,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         latestAttributedDeal.closingDate = parsed.data.closingDate
           ? new Date(parsed.data.closingDate)
           : latestAttributedDeal.closingDate ?? now;
+        if (isSellSide(requestSide)) {
+          latestAttributedDeal.usedAfc = false;
+        } else if (typeof parsed.data.usedAfc === 'boolean') {
+          latestAttributedDeal.usedAfc = parsed.data.usedAfc;
+        }
       }
       if (mappedDealStatus === 'terminated') {
         latestAttributedDeal.terminatedReason = parsed.data.terminatedReason ?? latestAttributedDeal.terminatedReason;

@@ -677,7 +677,13 @@ function DealCard({
               </p>
               <p>
                 <span className="text-xs uppercase text-foreground-subtle">Used AFC: </span>
-                <span className="font-semibold">{deal.side === 'sell' ? 'N/A' : deal.usedAfc ? 'Yes' : 'No'}</span>
+                <span className="font-semibold">
+                  {deal.side === 'sell'
+                    ? 'N/A'
+                    : deal.usedAfc
+                      ? 'Financing with AFC'
+                      : 'Financing with another lender'}
+                </span>
               </p>
               <p>
                 <span className="text-xs uppercase text-foreground-subtle">Used Agent: </span>
@@ -1035,7 +1041,7 @@ function DealCard({
                   onChange={(event) => setUsedAfc(event.target.checked)}
                   disabled={saving}
                 />
-                Used AFC
+                Client is financing with AFC
               </label>
             )}
             <label className="flex items-center gap-2 text-foreground-muted">
@@ -1136,7 +1142,7 @@ export function ReferralDeals({
   const [underContractDate, setUnderContractDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [agentId, setAgentId] = useState('');
   const [side, setSide] = useState<'buy' | 'sell'>(defaultSide);
-  const [usedAfc, setUsedAfc] = useState(false);
+  const [usedAfc, setUsedAfc] = useState(true);
   const [usedAssignedAgent, setUsedAssignedAgent] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | null>(null);
@@ -1393,7 +1399,7 @@ export function ReferralDeals({
           closingDate: closingDateToSend,
           underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : new Date().toISOString(),
           agentId: agentId || null,
-          usedAfc: isAgentOrigin ? false : effectiveCreateSide === 'sell' ? false : usedAfc,
+          usedAfc: effectiveCreateSide === 'sell' ? false : usedAfc,
           usedAssignedAgent: isAgentOrigin ? true : usedAssignedAgent,
           agentAttribution: isOutsideAgent ? 'OUTSIDE_AGENT' : null,
           side: effectiveCreateSide,
@@ -1424,7 +1430,7 @@ export function ReferralDeals({
           underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : new Date().toISOString(),
           agent: agentId ? { id: agentId, name: agents.find((option) => option.id === agentId)?.name ?? null } : null,
           agentId: agentId || null,
-          usedAfc: isAgentOrigin ? false : effectiveCreateSide === 'sell' ? false : usedAfc,
+          usedAfc: effectiveCreateSide === 'sell' ? false : usedAfc,
           usedAssignedAgent: isAgentOrigin ? true : usedAssignedAgent,
           side: effectiveCreateSide,
           terminatedReason: statusToSend === 'terminated' ? terminatedReason : undefined,
@@ -1461,9 +1467,11 @@ export function ReferralDeals({
     let sendClosedEmails = false;
     let sendAgentNpsEmail = false;
 
+    let confirmedUsedAfc: boolean | undefined;
     if (nextStatus === 'closed') {
       const usedAssignedAgent = deal.usedAssignedAgent ?? false;
       const closeUsedAfc = deal.side === 'sell' ? false : Boolean(deal.usedAfc);
+      const askUsedAfc = deal.side !== 'sell' && (viewerRole === 'admin' || viewerRole === 'agent');
 
       if (viewerRole === 'admin' || viewerRole === 'agent') {
         const confirmation = await confirmCloseStatusDate({
@@ -1473,6 +1481,8 @@ export function ReferralDeals({
           canSendAgentNpsEmail: viewerRole === 'admin' ? closeUsedAfc : false,
           defaultSendAgentNpsEmail: viewerRole === 'admin' ? closeUsedAfc : false,
           showEmailPreference: viewerRole === 'admin',
+          askUsedAfc,
+          defaultUsedAfc: closeUsedAfc,
         });
 
         if (!confirmation.confirmed) {
@@ -1484,6 +1494,9 @@ export function ReferralDeals({
           viewerRole === 'admin' ? confirmation.sendClosedEmails : true;
         sendAgentNpsEmail =
           viewerRole === 'admin' ? confirmation.sendAgentNpsEmail : true;
+        if (askUsedAfc && typeof confirmation.usedAfc === 'boolean') {
+          confirmedUsedAfc = confirmation.usedAfc;
+        }
 
         if (sendClosedEmails) {
           toast.success('A referral rating email will be sent to the referral.');
@@ -1529,7 +1542,12 @@ export function ReferralDeals({
         sendAgentNpsEmail,
       };
       if (nextStatus === 'closed') {
-        patchPayload.usedAfc = deal.side === 'sell' ? false : Boolean(deal.usedAfc);
+        patchPayload.usedAfc =
+          deal.side === 'sell'
+            ? false
+            : typeof confirmedUsedAfc === 'boolean'
+              ? confirmedUsedAfc
+              : Boolean(deal.usedAfc);
       }
       if (nextStatus === 'terminated') {
         patchPayload.terminatedReason = terminationReason ?? null;
@@ -1949,7 +1967,7 @@ export function ReferralDeals({
                   onChange={(event) => setUsedAfc(event.target.checked)}
                   disabled={submitting}
                 />
-                Used AFC
+                Client is financing with AFC
               </label>
             )}
             <label className="flex items-center gap-2 text-foreground-muted">

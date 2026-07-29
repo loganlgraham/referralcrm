@@ -441,7 +441,23 @@ async function buildReferralFilterQuery(
 }
 
 export async function getReferrals(params: GetReferralsParams) {
-  const { session, page = 1, pageSize, fetchAll = false, status, mc, agent, zip, ahaBucket, agentReferrals, search, timeline, sortBy, sortDirection, maxStageReached } = params;
+  const {
+    session,
+    page = 1,
+    pageSize,
+    fetchAll = false,
+    status,
+    mc,
+    agent,
+    zip,
+    ahaBucket,
+    agentReferrals,
+    search,
+    timeline,
+    sortBy,
+    sortDirection,
+    maxStageReached
+  } = params;
   await connectMongo();
   
   const validPageSizes = [20, 25, 50, 100];
@@ -450,7 +466,15 @@ export async function getReferrals(params: GetReferralsParams) {
   const effectivePage = shouldPaginate ? page : 1;
 
   const { query, empty } = await buildReferralFilterQuery({
-    session, status, mc, agent, zip, search, ahaBucket, agentReferrals, maxStageReached,
+    session,
+    status,
+    mc,
+    agent,
+    zip,
+    search,
+    ahaBucket,
+    agentReferrals,
+    maxStageReached
   });
 
   if (empty) {

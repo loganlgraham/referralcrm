@@ -1,7 +1,7 @@
 'use client';
 
 import { ChangeEvent, FocusEvent, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
@@ -90,6 +90,7 @@ const handleCurrencyBlur = (event: FocusEvent<HTMLInputElement>) => {
 
 export function ReferralForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
   const [borrowerPhone, setBorrowerPhone] = useState('');
@@ -102,6 +103,11 @@ export function ReferralForm() {
   const userRole = session?.user?.role ?? null;
   const isAgent = userRole === 'agent';
   const isAdmin = userRole === 'admin';
+  const prefillZip = (() => {
+    const zip = searchParams.get('zip')?.trim() ?? '';
+    return /^\d{5}$/u.test(zip) ? zip : '';
+  })();
+  const prefillNotes = searchParams.get('notes')?.trim() ?? '';
 
   const parseZipList = (value: string): string[] =>
     Array.from(
@@ -265,7 +271,11 @@ export function ReferralForm() {
       }
 
       const { id } = (await response.json()) as { id: string };
-      toast.success('Referral created');
+      toast.success(
+        isAgent
+          ? 'AFC received your intro — you’ll get an email when an MC is paired.'
+          : 'Referral created'
+      );
       router.push(`/referrals/${id}`);
     } catch (error) {
       console.error(error);
@@ -298,10 +308,12 @@ export function ReferralForm() {
     <form onSubmit={handleSubmit} className="space-y-8">
       <div className="overflow-hidden rounded-3xl border border-border/80 bg-surface-raised/95 shadow-xl shadow-slate-200/70 ring-1 ring-border">
         <div className="border-b border-border/80 bg-gradient-to-r from-slate-50 to-slate-100 px-6 py-6 sm:px-8">
-          <h1 className="text-2xl font-semibold text-foreground">Start a new referral</h1>
+          <h1 className="text-2xl font-semibold text-foreground">
+            {isAgent ? 'Introduce a client to AFC' : 'Start a new referral'}
+          </h1>
           <p className="mt-2 max-w-2xl text-sm text-foreground-muted">
             {isAgent
-              ? 'Share your client’s details so our mortgage consultants can connect quickly and keep you in the loop.'
+              ? 'Share your client’s details so we can pair them with a mortgage consultant and keep you in the loop.'
               : "Capture the borrower's details, context, and pre-approval information so teammates can jump in without missing a beat."}
           </p>
         </div>
@@ -470,6 +482,7 @@ export function ReferralForm() {
                   autoComplete="postal-code"
                   placeholder="e.g. 80202, 80216, 80021"
                   className={inputClasses}
+                  defaultValue={prefillZip}
                 />
               </label>
               <label className={labelClasses}>
@@ -507,6 +520,7 @@ export function ReferralForm() {
               rows={4}
               className={`${inputClasses} min-h-[120px] resize-y`}
               placeholder="Share helpful context, deadlines, or next steps"
+              defaultValue={prefillNotes}
             />
           </fieldset>
         </div>

@@ -10,6 +10,9 @@ type CloseStatusConfirmationOptions = {
   canSendAgentNpsEmail?: boolean;
   defaultSendAgentNpsEmail?: boolean;
   showEmailPreference?: boolean;
+  /** Ask whether the client financed with AFC (buy-side only). */
+  askUsedAfc?: boolean;
+  defaultUsedAfc?: boolean;
 };
 
 type PaidStatusConfirmationOptions = {
@@ -25,6 +28,7 @@ export type CloseStatusConfirmationResult = {
   closingDateIso?: string;
   sendClosedEmails: boolean;
   sendAgentNpsEmail: boolean;
+  usedAfc?: boolean;
 };
 
 export type PaidStatusConfirmationResult = {
@@ -65,16 +69,20 @@ const openDateConfirmationToast = (options: {
   showEmailPreference?: boolean;
   canSendAgentNpsEmail?: boolean;
   defaultSendAgentNpsEmail?: boolean;
+  askUsedAfc?: boolean;
+  defaultUsedAfc?: boolean;
 }): Promise<{
   confirmed: boolean;
   dateIso?: string;
   sendClosedEmails: boolean;
   sendAgentNpsEmail: boolean;
+  usedAfc?: boolean;
 }> =>
   new Promise((resolve) => {
     let selectedDate = toDateInputValue(options.initialDateIso);
     let sendClosedEmails = options.defaultSendClosedEmails ?? false;
     let sendAgentNpsEmail = options.defaultSendAgentNpsEmail ?? false;
+    let usedAfc = options.defaultUsedAfc ?? true;
     let settled = false;
 
     const finalize = (result: {
@@ -82,6 +90,7 @@ const openDateConfirmationToast = (options: {
       dateIso?: string;
       sendClosedEmails: boolean;
       sendAgentNpsEmail: boolean;
+      usedAfc?: boolean;
     }) => {
       if (settled) {
         return;
@@ -93,6 +102,7 @@ const openDateConfirmationToast = (options: {
 
     const isClose = options.kind === 'closed';
     const showEmailPreference = options.showEmailPreference ?? true;
+    const askUsedAfc = Boolean(options.askUsedAfc);
     const title = isClose ? 'Confirm close date' : 'Confirm paid date';
     const description = isClose
       ? 'Select the closing date before marking this deal as closed.'
@@ -114,6 +124,7 @@ const openDateConfirmationToast = (options: {
               dateIso: dateInputToIso(selectedDate),
               sendClosedEmails: isClose ? sendClosedEmails : false,
               sendAgentNpsEmail: isClose ? sendAgentNpsEmail : false,
+              usedAfc: askUsedAfc ? usedAfc : undefined,
             });
           }}
         >
@@ -132,6 +143,43 @@ const openDateConfirmationToast = (options: {
               className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
             />
           </label>
+
+          {isClose && askUsedAfc ? (
+            <fieldset className="mt-3 rounded border border-primary-500/30 bg-primary-600/5 p-3">
+              <legend className="px-1 text-xs font-semibold text-foreground">
+                Is this client financing with AFC?
+              </legend>
+              <p className="mt-1 text-xs text-foreground-subtle">
+                Helps keep the client outcome accurate for your partnership view.
+              </p>
+              <div className="mt-2 flex flex-col gap-2 text-xs text-foreground-muted">
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="usedAfcClose"
+                    defaultChecked={usedAfc}
+                    onChange={() => {
+                      usedAfc = true;
+                    }}
+                    className="h-4 w-4 accent-brand"
+                  />
+                  Yes — financing with AFC
+                </label>
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="usedAfcClose"
+                    defaultChecked={!usedAfc}
+                    onChange={() => {
+                      usedAfc = false;
+                    }}
+                    className="h-4 w-4 accent-brand"
+                  />
+                  No — financing with another lender
+                </label>
+              </div>
+            </fieldset>
+          ) : null}
 
           {isClose && showEmailPreference && options.canSendClosedEmails ? (
             <label className="mt-3 flex items-start gap-2 rounded border border-border bg-surface-muted p-2 text-xs text-foreground-muted">
@@ -223,6 +271,8 @@ export const confirmCloseStatusDate = async (
       ? options.defaultSendAgentNpsEmail ?? options.canSendAgentNpsEmail
       : false,
     showEmailPreference,
+    askUsedAfc: options.askUsedAfc,
+    defaultUsedAfc: options.defaultUsedAfc ?? true,
   });
 
   return {
@@ -230,6 +280,7 @@ export const confirmCloseStatusDate = async (
     closingDateIso: result.dateIso,
     sendClosedEmails: result.sendClosedEmails,
     sendAgentNpsEmail: result.sendAgentNpsEmail,
+    usedAfc: result.usedAfc,
   };
 };
 
