@@ -10,14 +10,14 @@ const base =
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    'bg-primary-600 text-white shadow-[0_1px_2px_rgba(19,34,56,0.12),0_6px_16px_-8px_rgba(36,87,214,0.65)] hover:bg-primary-700 active:bg-primary-700 focus-visible:ring-primary-500',
+    'bg-primary-600 text-white shadow-[0_1px_2px_rgba(19,34,56,0.12),0_6px_16px_-8px_rgba(36,87,214,0.65)] hover:bg-primary-700 hover:text-white active:bg-primary-700 focus-visible:text-white focus-visible:ring-primary-500',
   secondary:
     'bg-surface text-foreground ring-1 ring-inset ring-border shadow-sm hover:bg-surface-muted focus-visible:ring-primary-500',
   outline:
     'bg-transparent text-foreground ring-1 ring-inset ring-border hover:bg-surface-muted focus-visible:ring-primary-500',
   ghost: 'bg-transparent text-foreground hover:bg-surface-muted',
   subtle: 'bg-surface-muted text-foreground hover:bg-surface-subtle',
-  danger: 'bg-danger text-white shadow-sm hover:bg-danger/90 focus-visible:ring-danger'
+  danger: 'bg-danger text-white shadow-sm hover:bg-danger/90 hover:text-white focus-visible:text-white focus-visible:ring-danger'
 };
 
 const sizeStyles: Record<ButtonSize, string> = {

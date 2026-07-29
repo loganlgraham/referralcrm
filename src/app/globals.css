@@ -74,9 +74,9 @@
     text-underline-offset: 3px;
   }
 
+  /* Don't set color on hover — it beats Tailwind `text-white` on button-styled links. */
   a:hover,
   a:focus-visible {
-    color: hsl(var(--text));
     text-decoration-color: hsl(var(--primary) / 0.9);
   }
 

@@ -121,7 +121,6 @@ export function Sidebar({ session, className }: { session: Session; className?: 
 
       <div className="relative mx-5 mt-5 border-l-2 border-signal/70 pl-3">
         <p className="route-label text-[9px] text-white/50">AFC · AHA network</p>
-        <p className="mt-1 font-display text-sm font-medium text-white/90">Referral operations</p>
       </div>
 
       <nav className="relative flex-1 overflow-y-auto scrollbar-thin px-3 py-5">
