@@ -102,11 +102,17 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     return new NextResponse('Forbidden', { status: 403 });
   }
   const updatePayload = parsed.data as Record<string, unknown>;
-  const canEditBorrowerContact = session.user.role === 'admin' || session.user.role === 'manager';
+  const canEditBorrowerContact =
+    session.user.role === 'admin' ||
+    session.user.role === 'manager' ||
+    (session.user.role === 'agent' && existing.origin === 'agent');
   const borrowerFieldKeys = ['borrowerFirstName', 'borrowerLastName', 'borrowerEmail', 'borrowerPhone'] as const;
   const borrowerFieldUpdateRequested = borrowerFieldKeys.some((field) => field in updatePayload);
   if (borrowerFieldUpdateRequested && !canEditBorrowerContact) {
-    return NextResponse.json({ error: 'Only admins and managers can update borrower contact details' }, { status: 403 });
+    return NextResponse.json(
+      { error: 'Only admins, managers, or the creating agent can update borrower contact details' },
+      { status: 403 }
+    );
   }
 
   const nextBorrowerFirstName =

@@ -117,7 +117,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     currentAgentId
   );
   const preferredAgentSideForRequest =
-    session.user.role === 'agent' && parsed.data.status === 'Lost'
+    session.user.role === 'agent' &&
+    (parsed.data.status === 'Lost' || Boolean(parsed.data.terminateDeal))
       ? sideFromAssignedDeal ?? sideFromAgent
       : sideFromAgent;
   let requestSide: ReferralSide =
@@ -494,7 +495,12 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
 
   const mappedDealStatus = mapReferralStatusToDealStatus(nextStatus as ReferralStatus);
-  if (mappedDealStatus && parsed.data.status !== 'Under Contract') {
+  const shouldTerminateAttributedDeal = Boolean(parsed.data.terminateDeal);
+
+  const buildAttributedDealQuery = (): {
+    dealQuery: Record<string, unknown>;
+    canSyncDealStatus: boolean;
+  } => {
     const dealQuery: Record<string, unknown> = {
       referralId: referral._id,
       usedAssignedAgent: true,
@@ -512,6 +518,80 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     } else if (session.user.role === 'agent' && currentAgentId) {
       dealQuery.agentId = currentAgentId;
     }
+
+    return { dealQuery, canSyncDealStatus };
+  };
+
+  const forceLostForUnassignedDeal = async () => {
+    if (session.user.role !== 'agent' || !currentAgentId) {
+      return;
+    }
+    const unassignedDealQuery: Record<string, unknown> = {
+      referralId: referral._id,
+      side: requestSide,
+      $or: [{ usedAssignedAgent: false }, { agentAttribution: 'OUTSIDE_AGENT' }],
+    };
+    const latestUnassignedDeal = await Payment.findOne(unassignedDealQuery).sort({ createdAt: -1 });
+
+    if (latestUnassignedDeal) {
+      if (requestSide === 'sell') {
+        referral.sellStatus = 'Lost';
+      } else {
+        referral.buyStatus = 'Lost';
+      }
+      if (referral.status !== 'Lost') {
+        const auditEntry: Record<string, unknown> = {
+          actorRole: session.user.role,
+          field: 'status',
+          previousValue: referral.status,
+          newValue: 'Lost',
+          timestamp: now,
+        };
+        if (actorId) {
+          auditEntry.actorId = actorId;
+        }
+        referral.audit = referral.audit || [];
+        referral.audit.push(auditEntry as any);
+        referral.status = 'Lost';
+        referral.statusLastUpdated = now;
+      }
+      shouldPersistReferralStatus = true;
+      syncError = {
+        code: 'deal_unassigned',
+        message:
+          'This referral is tied to an unassigned/outside-agent deal. We moved your referral status to Lost.',
+      };
+    } else if (!shouldTerminateAttributedDeal) {
+      syncError = {
+        code: 'deal_missing',
+        message:
+          'No attributed deal was found for this referral side, so the status could not be synced to a deal.',
+      };
+    }
+  };
+
+  if (shouldTerminateAttributedDeal) {
+    const { dealQuery, canSyncDealStatus } = buildAttributedDealQuery();
+    const latestAttributedDeal = canSyncDealStatus
+      ? await Payment.findOne(dealQuery).sort({ createdAt: -1 })
+      : null;
+
+    if (latestAttributedDeal) {
+      latestAttributedDeal.status = 'terminated';
+      latestAttributedDeal.terminatedReason =
+        parsed.data.terminatedReason ?? latestAttributedDeal.terminatedReason;
+      latestAttributedDeal.expectedAmountCents = 0;
+      await latestAttributedDeal.save();
+      syncedDeal = latestAttributedDeal.toObject();
+    } else if (
+      session.user.role === 'agent' &&
+      parsed.data.source === 'referral_table' &&
+      !syncError
+    ) {
+      await forceLostForUnassignedDeal();
+    }
+  } else if (mappedDealStatus && parsed.data.status !== 'Under Contract') {
+    const { dealQuery, canSyncDealStatus } = buildAttributedDealQuery();
 
     const latestAttributedDeal = canSyncDealStatus ? await Payment.findOne(dealQuery).sort({ createdAt: -1 }) : null;
 
@@ -669,48 +749,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         }
       }
     } else if (dealMappedStatusUpdateFromTable && session.user.role === 'agent' && currentAgentId) {
-      const unassignedDealQuery: Record<string, unknown> = {
-        referralId: referral._id,
-        side: requestSide,
-        $or: [{ usedAssignedAgent: false }, { agentAttribution: 'OUTSIDE_AGENT' }],
-      };
-      const latestUnassignedDeal = await Payment.findOne(unassignedDealQuery).sort({ createdAt: -1 });
-
-      if (latestUnassignedDeal) {
-        if (requestSide === 'sell') {
-          referral.sellStatus = 'Lost';
-        } else {
-          referral.buyStatus = 'Lost';
-        }
-        if (referral.status !== 'Lost') {
-          const auditEntry: Record<string, unknown> = {
-            actorRole: session.user.role,
-            field: 'status',
-            previousValue: referral.status,
-            newValue: 'Lost',
-            timestamp: now,
-          };
-          if (actorId) {
-            auditEntry.actorId = actorId;
-          }
-          referral.audit = referral.audit || [];
-          referral.audit.push(auditEntry as any);
-          referral.status = 'Lost';
-          referral.statusLastUpdated = now;
-        }
-        shouldPersistReferralStatus = true;
-        syncError = {
-          code: 'deal_unassigned',
-          message:
-            'This referral is tied to an unassigned/outside-agent deal. We moved your referral status to Lost.',
-        };
-      } else {
-        syncError = {
-          code: 'deal_missing',
-          message:
-            'No attributed deal was found for this referral side, so the status could not be synced to a deal.',
-        };
-      }
+      await forceLostForUnassignedDeal();
     }
   }
   if (slaModified) {

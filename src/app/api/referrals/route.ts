@@ -17,6 +17,9 @@ import { buildReferralLink } from '@/lib/referral-links';
 import { normalizePhoneNumber } from '@/utils/phone-utils';
 import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
 import { resolveOriginalLenderId } from '@/lib/server/referral-transfer';
+import { createAdminNotifications } from '@/lib/server/notifications';
+import { User } from '@/models/user';
+import { createPendingLoanFileNumber, displayLoanFileNumber } from '@/utils/loan-file-number';
 import {
   addWeeks,
   format,
@@ -1000,6 +1003,10 @@ export async function POST(request: Request) {
 
   if (loanFileNumber) {
     referralData.loanFileNumber = loanFileNumber;
+  } else if (origin === 'agent') {
+    // Unique index forbids multiple null loanFileNumbers; store a pending
+    // placeholder until an admin fills in the real file number.
+    referralData.loanFileNumber = createPendingLoanFileNumber();
   }
 
   if (session.user.role === 'mc') {
@@ -1206,7 +1213,9 @@ export async function POST(request: Request) {
         const summaryFields = [
           `Client Type: ${referral.clientType}`,
           `Zip${referral.lookingInZips && referral.lookingInZips.length > 1 ? 's' : ''}: ${(referral.lookingInZips || [referral.lookingInZip]).join(', ')}`,
-          referral.loanFileNumber ? `Loan File Number: ${referral.loanFileNumber}` : null,
+          displayLoanFileNumber(referral.loanFileNumber)
+            ? `Loan File Number: ${displayLoanFileNumber(referral.loanFileNumber)}`
+            : null,
           referral.borrower?.email ? `Email: ${referral.borrower.email}` : null,
           referral.borrower?.phone ? `Phone: ${referral.borrower.phone}` : null,
         ].filter(Boolean) as string[];
@@ -1233,6 +1242,87 @@ export async function POST(request: Request) {
     })().catch((error) => {
       console.error('Failed to send new referral notification email', error);
     });
+  }
+
+  // Notify all admins when an agent creates an AFC referral
+  if (session.user.role === 'agent' && !hasAgitCreator) {
+    const agentName = session.user.name || session.user.email || 'An agent';
+    const borrowerLabel = borrowerName || 'New Referral';
+
+    void createAdminNotifications({
+      type: 'referral_created',
+      referralId: referral._id,
+      borrowerName: borrowerLabel,
+      actorRole: session.user.role,
+      actorName: agentName,
+      content: `${agentName} created a new AFC referral for ${borrowerLabel}.`,
+    });
+
+    if (isTransactionalEmailConfigured()) {
+      (async () => {
+        try {
+          const adminUsers = await User.find({ role: 'admin', email: { $ne: null } })
+            .select('name email')
+            .lean<{ name?: string | null; email?: string | null }[]>();
+          const adminEmails = adminUsers
+            .map((user) => (typeof user.email === 'string' && user.email ? user.email.trim() : null))
+            .filter((email): email is string => Boolean(email));
+
+          if (adminEmails.length === 0) {
+            return;
+          }
+
+          const escapeHtml = (value: string): string => {
+            return value.replace(/[&<>"']/g, (char) => {
+              switch (char) {
+                case '&':
+                  return '&amp;';
+                case '<':
+                  return '&lt;';
+                case '>':
+                  return '&gt;';
+                case '"':
+                  return '&quot;';
+                case "'":
+                  return '&#39;';
+                default:
+                  return char;
+              }
+            });
+          };
+
+          const referralLink = buildReferralLink(referral._id.toString());
+          const summaryFields = [
+            `Agent: ${agentName}`,
+            `Client Type: ${referral.clientType}`,
+            `Zip${referral.lookingInZips && referral.lookingInZips.length > 1 ? 's' : ''}: ${(referral.lookingInZips || [referral.lookingInZip]).join(', ')}`,
+            referral.borrower?.email ? `Email: ${referral.borrower.email}` : null,
+            referral.borrower?.phone ? `Phone: ${referral.borrower.phone}` : null,
+          ].filter(Boolean) as string[];
+
+          const html = `
+            <p><strong>${escapeHtml(agentName)}</strong> created a new AFC referral for <strong>${escapeHtml(borrowerLabel)}</strong>.</p>
+            <ul>
+              ${summaryFields.map((field) => `<li>${escapeHtml(field)}</li>`).join('')}
+            </ul>
+            <p>Assign a mortgage consultant from the referral page.</p>
+            <p><a href="${referralLink}">View the referral</a></p>
+          `;
+          const text = `${agentName} created a new AFC referral for ${borrowerLabel}.\n\n${summaryFields.join('\n')}\n\nAssign a mortgage consultant from the referral page.\n\nView the referral: ${referralLink}`;
+
+          await sendTransactionalEmail({
+            to: adminEmails,
+            subject: `New AFC referral from ${agentName}: ${borrowerLabel}`,
+            html,
+            text,
+          });
+        } catch (error) {
+          console.error('Failed to send admin AFC referral notification email', error);
+        }
+      })().catch((error) => {
+        console.error('Failed to send admin AFC referral notification email', error);
+      });
+    }
   }
 
   return NextResponse.json({ id: referral._id.toString() }, { status: 201 });

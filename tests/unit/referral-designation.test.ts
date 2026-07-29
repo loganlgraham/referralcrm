@@ -68,6 +68,61 @@ describe('getReferralDesignation', () => {
       )
     ).toBe('AHA_OOS');
   });
+
+  it('falls back to ahaBucket=AHA_OOS when no agent is designated', () => {
+    expect(
+      getReferralDesignation(
+        {
+          assignedAgent: null,
+          buySideAgent: null,
+          sellSideAgent: null,
+          ahaBucket: 'AHA_OOS',
+          org: 'AHA',
+        },
+        map
+      )
+    ).toBe('AHA_OOS');
+  });
+
+  it('falls back to ahaBucket=AHA when no agent is designated', () => {
+    expect(
+      getReferralDesignation(
+        { assignedAgent: null, ahaBucket: 'AHA' },
+        map
+      )
+    ).toBe('AHA');
+  });
+
+  it('falls back to org=AHA when no agent and no ahaBucket', () => {
+    expect(
+      getReferralDesignation(
+        { assignedAgent: null, org: 'AHA' },
+        map
+      )
+    ).toBe('AHA');
+  });
+
+  it('prefers agent designation over stale ahaBucket', () => {
+    expect(
+      getReferralDesignation(
+        {
+          assignedAgent: aAssigned,
+          ahaBucket: 'AHA_OOS',
+          org: 'AHA',
+        },
+        map
+      )
+    ).toBe('AHA');
+  });
+
+  it('prefers ahaBucket=AHA_OOS over org=AHA when no agent', () => {
+    expect(
+      getReferralDesignation(
+        { ahaBucket: 'AHA_OOS', org: 'AHA' },
+        map
+      )
+    ).toBe('AHA_OOS');
+  });
 });
 
 describe('getPaymentAgentDesignation', () => {

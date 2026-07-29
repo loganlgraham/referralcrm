@@ -72,6 +72,8 @@ interface Props {
   side?: 'buy' | 'sell';
   onContactChange?: (contact: Contact | null) => void;
   className?: string;
+  /** Shown under the empty/pending state (e.g. agent waiting on MC pairing). */
+  pendingHelper?: string;
 }
 
 const directoryForType: Record<AssignmentType, string> = {
@@ -101,7 +103,8 @@ export function ContactAssignment({
   canAssign,
   side,
   onContactChange,
-  className
+  className,
+  pendingHelper
 }: Props) {
   const [open, setOpen] = useState(false);
   const [currentContact, setCurrentContact] = useState<Contact | null | undefined>(contact);
@@ -299,7 +302,14 @@ export function ContactAssignment({
                 )}
               </div>
             ) : (
-              <p className="text-xs text-foreground-subtle">Unassigned</p>
+              <div className="space-y-1.5">
+                <p className="text-xs text-foreground-subtle">{type === 'mc' ? 'Pending' : 'Unassigned'}</p>
+                {pendingHelper ? (
+                  <p className="rounded border border-primary-200 bg-primary-50 px-2 py-1.5 text-[11px] leading-snug text-primary-900">
+                    {pendingHelper}
+                  </p>
+                ) : null}
+              </div>
             )}
           </div>
           {canAssign && (

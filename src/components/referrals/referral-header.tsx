@@ -17,6 +17,7 @@ import { PhoneActivityLink } from '@/components/common/phone-activity-link';
 import { RequestUpdateButton } from '@/components/referrals/request-update-button';
 import { AutoReminderToggle } from '@/components/referrals/auto-reminder-toggle';
 import { AdminTasksCard } from '@/components/referrals/admin-tasks-card';
+import { AgentOriginMarker } from '@/components/referrals/agent-origin-marker';
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
 type AhaBucketValue = '' | 'AHA' | 'AHA_OOS';
@@ -492,13 +493,14 @@ export function ReferralHeader({
     nonAgentRolesCanAssignReferralAgent ||
     (viewerRole === 'agent' &&
       (primarySide === 'buy' ? !fallbackBuySideContact : !fallbackSellSideContact));
-  const canAssignMc =
-    viewerRole === 'admin' ||
-    viewerRole === 'manager' ||
-    (viewerRole === 'agent' && !fallbackMcContact);
+  const canAssignMc = viewerRole === 'admin';
   const canEditBucket = viewerRole === 'admin' || viewerRole === 'manager';
   const showBucketSummary =
     viewerRole !== 'agent' && viewerRole !== 'admin' && viewerRole !== 'mc';
+  const pendingMcHelper =
+    isAgentView && isAgentOrigin
+      ? 'AFC has received your referral — thank you! You will get an email once your referral has been paired with a Mortgage Consultant.'
+      : undefined;
 
   const locationLabel = useMemo(() => {
     const zips = Array.isArray(referral.lookingInZips)
@@ -971,9 +973,12 @@ export function ReferralHeader({
       <div className="grid gap-5 rounded-xl border border-border bg-surface-muted/60 p-4 lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-center">
         <div className="space-y-2 lg:self-center">
           <div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <h1 className="font-display text-2xl font-semibold tracking-[-0.035em] text-foreground">{borrowerName}</h1>
               <CopyButton value={borrowerName} label="Copy name" />
+              {isAgentOrigin && (viewerRole === 'admin' || viewerRole === 'manager') ? (
+                <AgentOriginMarker size="md" />
+              ) : null}
             </div>
             {hasBorrowerContact ? (
               <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-foreground-muted">
@@ -1192,6 +1197,7 @@ export function ReferralHeader({
                   contact={effectiveMcContact}
                   canAssign={canAssignMc}
                   onContactChange={onMcContactChange}
+                  pendingHelper={pendingMcHelper}
                 />
               )}
             </div>
@@ -1238,6 +1244,7 @@ export function ReferralHeader({
                   canAssign={canAssignMc}
                   onContactChange={onMcContactChange}
                   className={isBothClientType ? 'md:col-span-2' : undefined}
+                  pendingHelper={pendingMcHelper}
                 />
               )}
             </div>

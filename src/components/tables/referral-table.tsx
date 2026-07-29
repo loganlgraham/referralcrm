@@ -27,13 +27,13 @@ import {
   type DealStatus,
   type TerminatedReason,
 } from '@/constants/deals';
-import { formatCurrency, formatNumber, formatPhoneNumber } from '@/utils/formatters';
+import { formatNumber, formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
-import { shouldDefaultEmailMcForAgentNotes } from '@/utils/referral-email-defaults';
 import { calculateTimelineDaysRemaining, formatTimelineCountdown } from '@/utils/timeline-countdown';
 import { mapDealStatusToReferralStatusDisplay } from '@/lib/latest-deal-referral-status';
 import { confirmCloseStatusDate } from '@/components/referrals/status-date-confirmation-toast';
 import { StatusPill } from '@/components/ui/status-pill';
+import { AgentOriginMarker } from '@/components/referrals/agent-origin-marker';
 export interface ReferralRow {
   _id: string;
   createdAt: string;
@@ -478,10 +478,13 @@ function StatusSelect({
   const [status, setStatus] = useState<ReferralStatus>(value);
   const [loading, setLoading] = useState(false);
   const [pendingTerminatedSelection, setPendingTerminatedSelection] = useState(false);
+  const [stillShopping, setStillShopping] = useState<'yes' | 'no' | ''>('');
   const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | ''>('');
+  const [hideDealStage, setHideDealStage] = useState(false);
 
   useEffect(() => {
     setStatus(value);
+    setHideDealStage(false);
   }, [value]);
 
   const applyResolvedStatus = useCallback(
@@ -491,6 +494,12 @@ function StatusSelect({
     },
     [onStatusResolved]
   );
+
+  const resetTerminatedPanel = () => {
+    setPendingTerminatedSelection(false);
+    setStillShopping('');
+    setTerminatedReason('');
+  };
 
   const openUnderContractDealModal = () => {
     const toastId = toast.custom((t) => (
@@ -542,8 +551,10 @@ function StatusSelect({
       return;
     }
     if (nextStatus === 'Terminated') {
-      applyResolvedStatus(nextStatus);
+      // Keep the prior status in the select while collecting shopping + reason.
       setPendingTerminatedSelection(true);
+      setStillShopping('');
+      setTerminatedReason('');
       return;
     }
 
@@ -629,7 +640,20 @@ function StatusSelect({
       {pendingTerminatedSelection && (
         <div className="space-y-2 rounded border border-border bg-surface-muted p-2">
           <label className="block text-xs font-semibold text-foreground-muted">
-            Termination reason
+            Is this customer still shopping?
+            <select
+              value={stillShopping}
+              onChange={(event) => setStillShopping(event.target.value as 'yes' | 'no' | '')}
+              className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
+              disabled={loading}
+            >
+              <option value="">Select</option>
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </select>
+          </label>
+          <label className="block text-xs font-semibold text-foreground-muted">
+            Why did the deal fall through?
             <select
               value={terminatedReason}
               onChange={(event) => setTerminatedReason(event.target.value as TerminatedReason | '')}
@@ -650,33 +674,51 @@ function StatusSelect({
               className="rounded bg-primary-600 hover:bg-primary-700 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
               disabled={loading}
               onClick={async () => {
+                if (!stillShopping) {
+                  toast.error('Please choose whether the customer is still shopping.');
+                  return;
+                }
                 if (!terminatedReason) {
                   toast.error('Termination reason is required.');
                   return;
                 }
+                const resolvedStatus: ReferralStatus = stillShopping === 'yes' ? 'Active Lead' : 'Lost';
                 setLoading(true);
                 try {
                   const response = await fetch(`/api/referrals/${referralId}/status`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      status: 'Terminated',
+                      status: resolvedStatus,
                       source: 'referral_table',
                       side,
                       terminatedReason,
+                      terminateDeal: true,
                     }),
                   });
+                  const payload = (await response.json().catch(() => null)) as StatusUpdateResponse | null;
                   if (!response.ok) {
-                    throw new Error('Failed to update status');
+                    if (isReferralStatus(payload?.currentStatus)) {
+                      applyResolvedStatus(payload.currentStatus);
+                    } else {
+                      applyResolvedStatus(value);
+                    }
+                    toast.error(extractStatusErrorMessage(payload));
+                    resetTerminatedPanel();
+                    router.refresh();
+                    return;
                   }
-                  setPendingTerminatedSelection(false);
-                  setTerminatedReason('');
-                  applyResolvedStatus('Terminated');
+                  const nextStatus = isReferralStatus(payload?.status) ? payload.status : resolvedStatus;
+                  applyResolvedStatus(nextStatus);
+                  setHideDealStage(true);
+                  resetTerminatedPanel();
                   toast.success('Referral status updated');
+                  router.refresh();
                 } catch (error) {
                   console.error(error);
                   toast.error('Unable to update status');
                   applyResolvedStatus(value);
+                  resetTerminatedPanel();
                 } finally {
                   setLoading(false);
                 }
@@ -689,8 +731,7 @@ function StatusSelect({
               className="rounded border border-border-strong px-2 py-1 text-xs font-semibold text-foreground-muted"
               disabled={loading}
               onClick={() => {
-                setPendingTerminatedSelection(false);
-                setTerminatedReason('');
+                resetTerminatedPanel();
                 applyResolvedStatus(value);
               }}
             >
@@ -699,7 +740,11 @@ function StatusSelect({
           </div>
         </div>
       )}
-      {dealStatusLabel && dealStatusLabel !== status && dealStatusLabel !== 'Terminated' && (
+      {!pendingTerminatedSelection &&
+        !hideDealStage &&
+        dealStatusLabel &&
+        dealStatusLabel !== status &&
+        dealStatusLabel !== 'Terminated' && (
         <p className="text-xs text-foreground-subtle">Deal stage: {dealStatusLabel}</p>
       )}
     </div>
@@ -711,6 +756,153 @@ function SideStatusPill({ label, status }: { label: string; status?: ReferralSta
     <div className="rounded border border-border bg-surface-muted px-2 py-1">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground-subtle">{label}</p>
       <p className="text-xs font-medium text-foreground-muted">{status ?? '—'}</p>
+    </div>
+  );
+}
+
+function NoteComposer({
+  referralId,
+  mcEmail,
+}: {
+  referralId: string;
+  mcEmail?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const hasMcEmail = Boolean(mcEmail);
+  const [emailMc, setEmailMc] = useState(() => hasMcEmail);
+
+  const reset = () => {
+    setNote('');
+    setEmailMc(hasMcEmail);
+    setOpen(false);
+  };
+
+  const handleSubmit = async () => {
+    if (!note.trim()) {
+      toast.error('Add a note before saving');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/referrals/${referralId}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: note.trim(),
+          emailTargets: emailMc && hasMcEmail ? ['mc'] : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save note');
+      }
+
+      const payload = (await response.json()) as NoteActivityResponse;
+      const emailSummary =
+        Array.isArray(payload.emailedTargets) && payload.emailedTargets.length > 0
+          ? ' Email sent to MC.'
+          : '';
+      toast.success(`Note saved.${emailSummary}`.trim());
+
+      if (payload.deliveryFailed && emailMc && hasMcEmail) {
+        const message = (() => {
+          switch (payload.deliveryFailureReason) {
+            case 'missing_configuration':
+              return 'Note saved, but email delivery is disabled. Set RESEND_API_KEY and EMAIL_FROM environment variables to enable email notifications.';
+            case 'no_recipients':
+              return 'Note saved, but no MC recipient with a valid email address was available.';
+            default:
+              return 'Note was saved, but the email could not be delivered.';
+          }
+        })();
+        toast.error(message);
+      }
+      reset();
+    } catch (error) {
+      console.error(error);
+      toast.error('Unable to save note');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-sm font-medium text-primary-700 hover:underline"
+      >
+        Add note
+      </button>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <textarea
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+        rows={3}
+        className="w-full rounded border border-border px-2 py-1 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
+        placeholder="Capture quick context for this referral"
+        disabled={saving}
+      />
+      <button
+        type="button"
+        role="switch"
+        aria-checked={emailMc}
+        aria-label="Email MC"
+        onClick={() => {
+          if (!saving && hasMcEmail) {
+            setEmailMc((prev) => !prev);
+          }
+        }}
+        disabled={saving || !hasMcEmail}
+        className={`inline-flex items-center gap-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 ${
+          saving || !hasMcEmail
+            ? 'cursor-not-allowed text-foreground-subtle'
+            : 'cursor-pointer text-foreground-muted'
+        }`}
+      >
+        <span
+          className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${
+            saving || !hasMcEmail
+              ? 'bg-surface-subtle'
+              : emailMc
+                ? 'bg-primary-600'
+                : 'bg-surface-subtle'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-surface-raised shadow transition ${
+              emailMc ? 'translate-x-4' : 'translate-x-1'
+            }`}
+          />
+        </span>
+        <span>Email MC</span>
+      </button>
+      <div className="flex gap-2 text-sm">
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={saving}
+          className="inline-flex items-center rounded bg-primary-600 px-3 py-1 font-semibold text-white shadow-sm transition hover:bg-primary-600-dark disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          onClick={reset}
+          disabled={saving}
+          className="inline-flex items-center rounded border border-border px-3 py-1 font-semibold text-foreground-muted transition hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }
@@ -786,140 +978,6 @@ function normalizeStatusForSort({
   const label = dealStatusLabel ?? STATUS_LABELS[status] ?? status;
   return label.toLocaleLowerCase();
 }
-
-function NoteComposer({
-  referralId,
-  mcEmail,
-  hasAnyPayments = false,
-  hasAnyUsedAfcTrue = false
-}: {
-  referralId: string;
-  mcEmail?: string;
-  hasAnyPayments?: boolean;
-  hasAnyUsedAfcTrue?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [note, setNote] = useState('');
-  const [saving, setSaving] = useState(false);
-  const hasMcEmail = Boolean(mcEmail);
-  const defaultEmailMc =
-    hasMcEmail &&
-    shouldDefaultEmailMcForAgentNotes({
-      hasAnyPayments,
-      hasAnyUsedAfcTrue
-    });
-  const [emailMc, setEmailMc] = useState(() => defaultEmailMc);
-
-  const reset = () => {
-    setNote('');
-    setEmailMc(defaultEmailMc);
-    setOpen(false);
-  };
-
-  const handleSubmit = async () => {
-    if (!note.trim()) {
-      toast.error('Add a note before saving');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const response = await fetch(`/api/referrals/${referralId}/notes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: note.trim(),
-          emailTargets: emailMc && hasMcEmail ? ['mc'] : undefined
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to save note');
-      }
-
-      const payload = (await response.json()) as NoteActivityResponse;
-      const emailSummary =
-        Array.isArray(payload.emailedTargets) && payload.emailedTargets.length > 0
-          ? ' Email sent to MC.'
-          : '';
-      toast.success(`Note saved.${emailSummary}`.trim());
-
-      if (payload.deliveryFailed && emailMc && hasMcEmail) {
-        const message = (() => {
-          switch (payload.deliveryFailureReason) {
-            case 'missing_configuration':
-              return 'Note saved, but email delivery is disabled. Set RESEND_API_KEY and EMAIL_FROM environment variables to enable email notifications.';
-            case 'no_recipients':
-              return 'Note saved, but no MC recipient with a valid email address was available.';
-            default:
-              return 'Note was saved, but the email could not be delivered.';
-          }
-        })();
-        toast.error(message);
-      }
-      reset();
-    } catch (error) {
-      console.error(error);
-      toast.error('Unable to save note');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="text-sm font-medium text-primary-700 hover:underline"
-      >
-        Add note
-      </button>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <textarea
-        value={note}
-        onChange={(event) => setNote(event.target.value)}
-        rows={3}
-        className="w-full rounded border border-border px-2 py-1 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
-        placeholder="Capture quick context for this referral"
-        disabled={saving}
-      />
-      <label className={`flex items-center gap-2 text-xs font-medium ${hasMcEmail ? 'text-foreground-muted' : 'text-foreground-subtle'}`}>
-        <input
-          type="checkbox"
-          className="h-4 w-4 accent-brand"
-          checked={emailMc}
-          onChange={(event) => setEmailMc(event.target.checked)}
-          disabled={saving || !hasMcEmail}
-        />
-        Email MC
-      </label>
-      <div className="flex gap-2 text-sm">
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={saving}
-          className="inline-flex items-center rounded bg-primary-600 px-3 py-1 font-semibold text-white shadow-sm transition hover:bg-primary-600-dark disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-        <button
-          type="button"
-          onClick={reset}
-          disabled={saving}
-          className="inline-flex items-center rounded border border-border px-3 py-1 font-semibold text-foreground-muted transition hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
 
 function SortButton({ 
   sortKey, 
@@ -1001,17 +1059,13 @@ function buildColumns(
       const { _id, borrowerName, borrowerPhone, borrowerEmail, urgentTaskCount } = row.original;
       return (
         <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            {showAgentOriginIndicator && row.original.origin === 'agent' ? (
-              <span
-                className="inline-block h-2.5 w-2.5 rounded-full bg-foreground-muted"
-                aria-label="Agent-created referral"
-                title="Agent-created referral"
-              />
-            ) : null}
+          <div className="flex flex-wrap items-center gap-2">
             <Link href={listParams ? `/referrals/${_id}?${listParams}` : `/referrals/${_id}`} className="font-medium text-primary-700">
               {borrowerName}
             </Link>
+            {showAgentOriginIndicator && row.original.origin === 'agent' ? (
+              <AgentOriginMarker size="sm" />
+            ) : null}
             {mode === 'admin' && (urgentTaskCount ?? 0) > 0 ? (
               <span
                 className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800"
@@ -1072,6 +1126,84 @@ function buildColumns(
     cell: ({ row }) => renderTimelineCountdown(row.original),
   };
 
+  const agentColumn: ColumnDef<ReferralRow> = {
+    header: sortableHeader('Agent', 'assignedAgentName', currentSortBy, currentSortDirection, onSortChange),
+    accessorKey: 'assignedAgentName',
+    cell: ({ row }) => {
+      const { assignedAgentName, assignedAgentEmail, assignedAgentPhone, autoUpdateRemindersEnabled } = row.original;
+      if (!assignedAgentName && !assignedAgentPhone && !assignedAgentEmail) {
+        return 'Unassigned';
+      }
+      return (
+        <div className="flex flex-col text-sm">
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-foreground-muted">{assignedAgentName || 'Unassigned'}</span>
+            {autoUpdateRemindersEnabled && (
+              <span title="Auto reminders enabled">
+                <Clock
+                  className="h-3.5 w-3.5 text-foreground-subtle"
+                  aria-label="Auto reminders enabled"
+                />
+              </span>
+            )}
+          </div>
+          {assignedAgentEmail && (
+            <a
+              href={buildGmailComposeUrl(assignedAgentEmail)}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-primary-700 hover:underline"
+            >
+              Email
+            </a>
+          )}
+          {assignedAgentPhone && (
+            <a
+              href={`tel:${assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
+              className="text-xs text-primary-700 hover:underline"
+            >
+              {formatPhoneNumber(assignedAgentPhone)}
+            </a>
+          )}
+        </div>
+      );
+    }
+  };
+
+  const lenderMcColumn: ColumnDef<ReferralRow> = {
+    header: sortableHeader('Lender/MC', 'lenderName', currentSortBy, currentSortDirection, onSortChange),
+    accessorKey: 'lenderName',
+    cell: ({ row }) => {
+      const { lenderName, lenderEmail, lenderPhone } = row.original;
+      if (!lenderName && !lenderPhone && !lenderEmail) {
+        return 'Pending';
+      }
+      return (
+        <div className="flex flex-col text-sm">
+          <span className="font-medium text-foreground-muted">{lenderName || 'Pending'}</span>
+          {lenderEmail && (
+            <a
+              href={buildGmailComposeUrl(lenderEmail)}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-primary-700 hover:underline"
+            >
+              Email
+            </a>
+          )}
+          {lenderPhone && (
+            <a
+              href={`tel:${lenderPhone.replace(/[^0-9+]/g, '')}`}
+              className="text-xs text-primary-700 hover:underline"
+            >
+              {formatPhoneNumber(lenderPhone)}
+            </a>
+          )}
+        </div>
+      );
+    }
+  };
+
   if (mode === 'agent') {
     return [
       borrowerColumn,
@@ -1080,14 +1212,6 @@ function buildColumns(
         accessorKey: 'loanFileNumber'
       },
       timelineColumn,
-      {
-        header: sortableHeader('Pre-approval', 'preApprovalAmountCents', currentSortBy, currentSortDirection, onSortChange),
-        accessorKey: 'preApprovalAmountCents',
-        cell: ({ row }) =>
-          row.original.preApprovalAmountCents
-            ? formatCurrency(row.original.preApprovalAmountCents)
-            : '—'
-      },
       {
         header: sortableHeader('Status', 'status', currentSortBy, currentSortDirection, onSortChange),
         accessorKey: 'status',
@@ -1115,13 +1239,13 @@ function buildColumns(
           <NoteComposer
             referralId={row.original._id}
             mcEmail={row.original.lenderEmail}
-            hasAnyPayments={row.original.hasAnyPayments}
-            hasAnyUsedAfcTrue={row.original.hasAnyUsedAfcTrue}
           />
         ),
         enableSorting: false,
       },
-      createdColumn
+      lenderMcColumn,
+      createdColumn,
+      lastUpdatedColumn,
     ];
   }
 
@@ -1142,8 +1266,8 @@ function buildColumns(
               <span className="font-medium text-foreground-muted">{row.original.assignedAgentName || 'Unassigned'}</span>
               {row.original.autoUpdateRemindersEnabled && (
                 <span title="Auto reminders enabled">
-                  <Clock 
-                    className="h-3.5 w-3.5 text-foreground-subtle" 
+                  <Clock
+                    className="h-3.5 w-3.5 text-foreground-subtle"
                     aria-label="Auto reminders enabled"
                   />
                 </span>
@@ -1181,50 +1305,6 @@ function buildColumns(
     ];
   }
 
-  const agentColumn: ColumnDef<ReferralRow> = {
-    header: sortableHeader('Agent', 'assignedAgentName', currentSortBy, currentSortDirection, onSortChange),
-    accessorKey: 'assignedAgentName',
-    cell: ({ row }) => {
-      const { assignedAgentName, assignedAgentEmail, assignedAgentPhone, autoUpdateRemindersEnabled } = row.original;
-      if (!assignedAgentName && !assignedAgentPhone && !assignedAgentEmail) {
-        return 'Unassigned';
-      }
-      return (
-        <div className="flex flex-col text-sm">
-          <div className="flex items-center gap-1.5">
-            <span className="font-medium text-foreground-muted">{assignedAgentName || 'Unassigned'}</span>
-            {autoUpdateRemindersEnabled && (
-              <span title="Auto reminders enabled">
-                <Clock 
-                  className="h-3.5 w-3.5 text-foreground-subtle" 
-                  aria-label="Auto reminders enabled"
-                />
-              </span>
-            )}
-          </div>
-          {assignedAgentEmail && (
-            <a
-              href={buildGmailComposeUrl(assignedAgentEmail)}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-primary-700 hover:underline"
-            >
-              Email
-            </a>
-          )}
-          {assignedAgentPhone && (
-            <a
-              href={`tel:${assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
-              className="text-xs text-primary-700 hover:underline"
-            >
-              {formatPhoneNumber(assignedAgentPhone)}
-            </a>
-          )}
-        </div>
-      );
-    }
-  };
-
   const adminColumns: ColumnDef<ReferralRow>[] = [
     borrowerColumn,
     {
@@ -1238,39 +1318,7 @@ function buildColumns(
       cell: ({ row }) => <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />,
     },
     ...(hideAgentColumn ? [] : [agentColumn]),
-    {
-      header: sortableHeader('Lender/MC', 'lenderName', currentSortBy, currentSortDirection, onSortChange),
-      accessorKey: 'lenderName',
-      cell: ({ row }) => {
-        const { lenderName, lenderEmail, lenderPhone } = row.original;
-        if (!lenderName && !lenderPhone && !lenderEmail) {
-          return '—';
-        }
-        return (
-          <div className="flex flex-col text-sm">
-            <span className="font-medium text-foreground-muted">{lenderName || 'Unassigned'}</span>
-            {lenderEmail && (
-              <a
-                href={buildGmailComposeUrl(lenderEmail)}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-primary-700 hover:underline"
-              >
-                Email
-              </a>
-            )}
-            {lenderPhone && (
-              <a
-                href={`tel:${lenderPhone.replace(/[^0-9+]/g, '')}`}
-                className="text-xs text-primary-700 hover:underline"
-              >
-                {formatPhoneNumber(lenderPhone)}
-              </a>
-            )}
-          </div>
-        );
-      }
-    },
+    lenderMcColumn,
     createdColumn,
     lastUpdatedColumn
   ];
@@ -1328,17 +1376,13 @@ function ReferralMobileStack({
               <div className={`bg-surface-muted px-4 pt-4 ${row.clientType === 'Both' ? 'pb-3' : 'pb-3'}`}>
                 <div className={`flex ${row.clientType === 'Both' ? 'flex-col gap-3' : 'items-start justify-between gap-3'}`}>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      {showOrigin && row.origin === 'agent' ? (
-                        <span
-                          className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-foreground-muted"
-                          aria-label="Agent-created referral"
-                          title="Agent-created referral"
-                        />
-                      ) : null}
+                    <div className="flex flex-wrap items-center gap-2">
                       <Link href={href} className="text-base font-semibold text-foreground break-words hover:text-primary-700">
                         {row.borrowerName}
                       </Link>
+                      {showOrigin && row.origin === 'agent' ? (
+                        <AgentOriginMarker size="sm" />
+                      ) : null}
                     </div>
                     <div className="mt-1 flex items-center gap-3">
                       {row.borrowerEmail ? (
@@ -1383,23 +1427,43 @@ function ReferralMobileStack({
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                   <MobileField label="Loan file #">{row.loanFileNumber}</MobileField>
                   <MobileField label="Timeline">{timelineText}</MobileField>
-                  <MobileField label="Pre-approval">
-                    {row.preApprovalAmountCents ? (
-                      <span className="font-semibold text-foreground">{formatCurrency(row.preApprovalAmountCents)}</span>
-                    ) : '—'}
+                  <MobileField label="Lender / MC">
+                    {!row.lenderName && !row.lenderPhone && !row.lenderEmail ? (
+                      'Pending'
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        <span className="font-medium text-foreground-muted">{row.lenderName || 'Pending'}</span>
+                        {row.lenderEmail ? (
+                          <a
+                            href={buildGmailComposeUrl(row.lenderEmail)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-primary-700 hover:underline w-fit"
+                          >
+                            Email
+                          </a>
+                        ) : null}
+                        {row.lenderPhone ? (
+                          <a
+                            href={`tel:${row.lenderPhone.replace(/[^0-9+]/g, '')}`}
+                            className="text-xs text-primary-700 hover:underline w-fit"
+                          >
+                            {formatPhoneNumber(row.lenderPhone)}
+                          </a>
+                        ) : null}
+                      </div>
+                    )}
                   </MobileField>
                   <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
+                  <MobileField label="Last updated">
+                    {row.updatedAt ? new Date(row.updatedAt).toLocaleDateString() : '—'}
+                  </MobileField>
                 </div>
 
                 {/* Notes zone */}
                 <div className="border-t border-border pt-3">
                   <MobileField label="Notes">
-                    <NoteComposer
-                      referralId={row._id}
-                      mcEmail={row.lenderEmail}
-                      hasAnyPayments={row.hasAnyPayments}
-                      hasAnyUsedAfcTrue={row.hasAnyUsedAfcTrue}
-                    />
+                    <NoteComposer referralId={row._id} mcEmail={row.lenderEmail} />
                   </MobileField>
                 </div>
               </div>
@@ -1415,16 +1479,12 @@ function ReferralMobileStack({
             <MobileField label="Borrower">
               <div className="flex flex-col gap-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  {showOrigin && row.origin === 'agent' ? (
-                    <span
-                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-foreground-muted"
-                      aria-label="Agent-created referral"
-                      title="Agent-created referral"
-                    />
-                  ) : null}
                   <Link href={href} className="font-medium text-primary-700 break-words">
                     {row.borrowerName}
                   </Link>
+                  {showOrigin && row.origin === 'agent' ? (
+                    <AgentOriginMarker size="sm" />
+                  ) : null}
                   {mode === 'admin' && (row.urgentTaskCount ?? 0) > 0 ? (
                     <span
                       className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800"
@@ -1546,10 +1606,10 @@ function ReferralMobileStack({
                 ) : null}
                 <MobileField label="Lender / MC">
                   {!row.lenderName && !row.lenderPhone && !row.lenderEmail ? (
-                    '—'
+                    'Pending'
                   ) : (
                     <div className="flex flex-col gap-1">
-                      <span className="font-medium text-foreground-muted">{row.lenderName || 'Unassigned'}</span>
+                      <span className="font-medium text-foreground-muted">{row.lenderName || 'Pending'}</span>
                       {row.lenderEmail ? (
                         <a
                           href={buildGmailComposeUrl(row.lenderEmail)}

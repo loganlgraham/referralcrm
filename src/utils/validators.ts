@@ -79,6 +79,7 @@ export const updateStatusSchema = z.object({
   side: z.enum(['buy', 'sell']).optional(),
   source: z.enum(['referral_table', 'referral_detail']).optional(),
   terminatedReason: z.enum(TERMINATED_REASON_VALUES).nullable().optional(),
+  terminateDeal: z.boolean().optional(),
   closingDate: z.string().optional(),
   sendClosedEmails: z.boolean().optional(),
   sendAgentNpsEmail: z.boolean().optional(),
@@ -107,6 +108,22 @@ export const updateStatusSchema = z.object({
       message: 'Terminated reason is required when status is Terminated.',
       path: ['terminatedReason'],
     });
+  }
+  if (data.terminateDeal) {
+    if (data.status !== 'Active Lead' && data.status !== 'Lost' && data.status !== 'Showing Homes') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'terminateDeal requires status Active Lead or Lost.',
+        path: ['status'],
+      });
+    }
+    if (!data.terminatedReason) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Terminated reason is required when terminateDeal is true.',
+        path: ['terminatedReason'],
+      });
+    }
   }
 });
 

@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { Metadata } from 'next';
 import Link from 'next/link';
-import { PlusIcon } from 'lucide-react';
+import { PlusIcon, Send } from 'lucide-react';
 import { ReferralTable, ReferralRow, ReferralSummary } from '@/components/tables/referral-table';
 import { Pagination } from '@/components/tables/pagination';
 import { getCurrentSession } from '@/lib/auth';
@@ -77,15 +77,37 @@ export default async function ReferralsPage({
               : 'Track every lead from intake through close.'}
           </p>
         </div>
-        {showAddReferralButton && (
-          <Link
-            href="/referrals/new"
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          >
-            <PlusIcon className="h-4 w-4" />
-            {role === 'admin' ? 'Add Referral' : 'Add Referral for AFC'}
-          </Link>
-        )}
+        {showAddReferralButton ? (
+          role === 'admin' ? (
+            <Link
+              href="/referrals/new"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            >
+              <PlusIcon className="h-4 w-4" />
+              Add Referral
+            </Link>
+          ) : (
+            <Link
+              href="/referrals/new"
+              className="group relative inline-flex max-w-full items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800 px-4 py-3 text-white no-underline shadow-lg shadow-primary-600/25 ring-1 ring-inset ring-white/15 transition hover:-translate-y-0.5 hover:text-white hover:shadow-xl hover:shadow-primary-700/30 focus-visible:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            >
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,transparent_30%,rgba(255,255,255,0.18)_48%,transparent_62%)] bg-[length:220%_100%] bg-left transition-[background-position] duration-700 group-hover:bg-right"
+              />
+              <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/15 ring-1 ring-inset ring-white/20">
+                <Send
+                  className="h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+                  strokeWidth={2.5}
+                  aria-hidden
+                />
+              </span>
+              <span className="relative text-sm font-semibold leading-tight tracking-tight">
+                Refer a client to AFC
+              </span>
+            </Link>
+          )
+        ) : null}
       </div>
       <Filters mode={tableMode} />
       {hasReferrals ? (
@@ -109,7 +131,9 @@ export default async function ReferralsPage({
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-border-strong bg-surface-raised p-10 text-center text-sm text-foreground-subtle">
-          No referrals yet. Add your first referral to get started.
+          {tableMode === 'agent'
+            ? 'No referrals yet. When you have a buyer ready for financing, refer them to AFC and we will pair them with a mortgage consultant.'
+            : 'No referrals yet. Add your first referral to get started.'}
         </div>
       )}
     </div>

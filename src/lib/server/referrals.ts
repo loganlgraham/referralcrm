@@ -21,6 +21,7 @@ import { computeCohortCloseRate } from '@/lib/server/dashboard-math';
 import { type DealStatus } from '@/constants/deals';
 import { resolveAgentSideForReferral, pickPrimarySideForReferral } from '@/lib/server/referral-sides';
 import { mergeClosedStatusQuery } from '@/lib/server/merge-closed-status-query';
+import { displayLoanFileNumber } from '@/utils/loan-file-number';
 import {
   FUNNEL_STAGE_ORDER,
   isFunnelStage,
@@ -291,17 +292,50 @@ async function buildReferralFilterQuery(
   }
 
   if (ahaBucket === 'AHA' || ahaBucket === 'AHA_OOS' || ahaBucket === 'AGIT') {
-    const agentsWithDesignation = await Agent.find({
-      ahaDesignation: ahaBucket
-    }).select('_id').lean<{ _id: Types.ObjectId }[]>();
+    // Match getReferralDesignation: agent designation wins; otherwise fall back to
+    // ahaBucket/org for AHA / AHA_OOS New Leads that have no designated agent yet.
+    const designatedAgents = await Agent.find({
+      ahaDesignation: { $in: ['AHA', 'AHA_OOS', 'AGIT'] }
+    })
+      .select('_id ahaDesignation')
+      .lean<{ _id: Types.ObjectId; ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null }[]>();
 
-    if (agentsWithDesignation.length > 0) {
-      const agentIds = agentsWithDesignation.map((a) => a._id);
-      appendOrConditions([
-        { assignedAgent: { $in: agentIds } },
-        { buySideAgent: { $in: agentIds } },
-        { sellSideAgent: { $in: agentIds } },
-      ]);
+    const matchingAgentIds = designatedAgents
+      .filter((agent) => agent.ahaDesignation === ahaBucket)
+      .map((agent) => agent._id);
+    const allDesignatedAgentIds = designatedAgents.map((agent) => agent._id);
+
+    const orConditions: Record<string, unknown>[] = [];
+
+    if (matchingAgentIds.length > 0) {
+      orConditions.push(
+        { assignedAgent: { $in: matchingAgentIds } },
+        { buySideAgent: { $in: matchingAgentIds } },
+        { sellSideAgent: { $in: matchingAgentIds } }
+      );
+    }
+
+    if (ahaBucket === 'AHA_OOS') {
+      orConditions.push({
+        ahaBucket: 'AHA_OOS',
+        assignedAgent: { $nin: allDesignatedAgentIds },
+        buySideAgent: { $nin: allDesignatedAgentIds },
+        sellSideAgent: { $nin: allDesignatedAgentIds }
+      });
+    } else if (ahaBucket === 'AHA') {
+      const noDesignatedAgent = {
+        assignedAgent: { $nin: allDesignatedAgentIds },
+        buySideAgent: { $nin: allDesignatedAgentIds },
+        sellSideAgent: { $nin: allDesignatedAgentIds }
+      };
+      orConditions.push(
+        { ahaBucket: 'AHA', ...noDesignatedAgent },
+        { org: 'AHA', ahaBucket: { $ne: 'AHA_OOS' }, ...noDesignatedAgent }
+      );
+    }
+
+    if (orConditions.length > 0) {
+      appendOrConditions(orConditions);
     } else {
       query._id = new Types.ObjectId('000000000000000000000000');
     }
@@ -711,7 +745,7 @@ export async function getReferrals(params: GetReferralsParams) {
         propertyAddress: item.propertyAddress,
         stageOnTransfer: item.stageOnTransfer,
         initialNotes: item.initialNotes,
-        loanFileNumber: item.loanFileNumber,
+        loanFileNumber: displayLoanFileNumber(item.loanFileNumber),
         status: effectiveStatus,
         statusLastUpdated: item.statusLastUpdated ? item.statusLastUpdated.toISOString() : null,
         daysInStatus: differenceInDays(new Date(), item.statusLastUpdated ?? item.createdAt),
@@ -910,6 +944,7 @@ export async function getReferralById(id: string) {
   return {
     ...referral,
     _id: referral._id.toString(),
+    loanFileNumber: displayLoanFileNumber(referral.loanFileNumber),
     createdAt: referral.createdAt.toISOString(),
     referralDate: referral.referralDate ? referral.referralDate.toISOString() : null,
     assignedAgent: referral.assignedAgent

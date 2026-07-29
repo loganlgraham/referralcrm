@@ -298,9 +298,7 @@ async function buildNetworkBreakdown(range: {
     .select('lender ahaBucket org assignedAgent buySideAgent sellSideAgent')
     .lean<ReferralLite[]>();
 
-  // C-13: mirror the live dashboard's getReferralDesignation traversal, which
-  // walks assignedAgent → buySideAgent → sellSideAgent rather than only using
-  // assignedAgent.
+  // C-13: use shared getReferralDesignation (agent slots, then ahaBucket/org).
   const agentIds = Array.from(
     new Set(
       referrals
@@ -332,6 +330,7 @@ async function buildNetworkBreakdown(range: {
       buckets.Unpaired += 1;
       continue;
     }
+    // Shared helper: agent designation first, then ahaBucket/org fallback.
     const designation = sharedGetReferralDesignation(referral, designationMap);
     if (designation === 'AHA_OOS') {
       buckets['AHA OOS'] += 1;
@@ -343,14 +342,6 @@ async function buildNetworkBreakdown(range: {
     }
     if (designation === 'AGIT') {
       buckets.AGIT += 1;
-      continue;
-    }
-    if (referral.ahaBucket === 'AHA_OOS') {
-      buckets['AHA OOS'] += 1;
-      continue;
-    }
-    if (referral.ahaBucket === 'AHA' || referral.org === 'AHA') {
-      buckets.AHA += 1;
       continue;
     }
     // Strict AGIT mode: paired referrals without an AHA/AHA_OOS/AGIT signal are not counted.

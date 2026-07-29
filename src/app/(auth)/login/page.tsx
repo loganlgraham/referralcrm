@@ -4,7 +4,6 @@ export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
 import { FormEvent, Suspense, useMemo, useState } from 'react';
-import { buildGmailComposeUrl } from '@/utils/gmail';
 import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import { AuthShell, AuthHeading } from '@/components/layout/auth-shell';
@@ -99,19 +98,8 @@ function LoginForm() {
   };
 
   return (
-    <AuthShell
-      hero={{
-        eyebrow: 'AFC · AHA',
-        title: 'Every referral, one seamless handoff.',
-        description:
-          'Keep your consultants, coordinators, and agents in sync — from first intro to closed deal.',
-      }}
-    >
-      <AuthHeading
-        eyebrow="AFC · AHA"
-        title="Sign in to Referrio"
-        description="Use your Referrio credentials to sign in."
-      />
+    <AuthShell>
+      <AuthHeading title="Sign in" />
 
       {displayProviderError && (
         <div className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-[hsl(var(--danger))]">
@@ -145,7 +133,7 @@ function LoginForm() {
             <span className="flex justify-end">
               <Link
                 href="/reset-password"
-                className="font-medium text-primary-700 no-underline hover:underline"
+                className="text-sm font-medium text-primary-700 no-underline hover:underline"
               >
                 Forgot password?
               </Link>
@@ -156,7 +144,7 @@ function LoginForm() {
             id="password"
             type="password"
             autoComplete="current-password"
-            placeholder="Enter your password"
+            placeholder="Password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
@@ -175,18 +163,6 @@ function LoginForm() {
         >
           Sign up
         </Link>
-      </p>
-
-      <p className="text-center text-xs text-foreground-subtle">
-        Need help?{' '}
-        <a
-          href={buildGmailComposeUrl('logan.graham@americanfinancing.net')}
-          target="_blank"
-          rel="noreferrer"
-          className="font-medium text-primary-700 no-underline hover:underline"
-        >
-          Contact support
-        </a>
       </p>
     </AuthShell>
   );

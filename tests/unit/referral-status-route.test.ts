@@ -248,6 +248,77 @@ describe('Referral status route table-driven deal status sync', () => {
     expect(latestDeal.save).toHaveBeenCalled();
   });
 
+  it('terminates attributed deal and keeps referral Active Lead when terminateDeal is true', async () => {
+    const referralDoc = makeReferralDoc();
+    referralDoc.clientType = 'Buyer';
+    referralDoc.estPurchasePriceCents = 50000000;
+    referralDoc.referralFeeDueCents = 375000;
+    mockedReferralFindById.mockReturnValue(referralDoc);
+
+    const latestDeal = makeLatestDealDoc();
+    latestDeal.expectedAmountCents = 375000;
+    mockPaymentFindOneChain(latestDeal);
+
+    const response: any = await postHandler(
+      makeRequest({
+        status: 'Active Lead',
+        source: 'referral_table',
+        terminateDeal: true,
+        terminatedReason: 'financing',
+      }),
+      { params: { id: 'ref-1' } }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('Active Lead');
+    expect(referralDoc.buyStatus).toBe('Active Lead');
+    expect(referralDoc.status).toBe('Active Lead');
+    expect(referralDoc.estPurchasePriceCents).toBe(50000000);
+    expect(referralDoc.referralFeeDueCents).toBe(375000);
+    expect(latestDeal.status).toBe('terminated');
+    expect(latestDeal.terminatedReason).toBe('financing');
+    expect(latestDeal.expectedAmountCents).toBe(0);
+    expect(latestDeal.save).toHaveBeenCalled();
+    expect(referralDoc.save).toHaveBeenCalled();
+  });
+
+  it('terminates attributed deal and moves referral to Lost when terminateDeal is true', async () => {
+    const referralDoc = makeReferralDoc();
+    referralDoc.clientType = 'Buyer';
+    referralDoc.autoUpdateRemindersEnabled = true;
+    referralDoc.estPurchasePriceCents = 50000000;
+    referralDoc.referralFeeDueCents = 375000;
+    mockedReferralFindById.mockReturnValue(referralDoc);
+
+    const latestDeal = makeLatestDealDoc();
+    latestDeal.expectedAmountCents = 375000;
+    mockPaymentFindOneChain(latestDeal);
+
+    const response: any = await postHandler(
+      makeRequest({
+        status: 'Lost',
+        source: 'referral_table',
+        terminateDeal: true,
+        terminatedReason: 'changed_mind',
+      }),
+      { params: { id: 'ref-1' } }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('Lost');
+    expect(referralDoc.buyStatus).toBe('Lost');
+    expect(referralDoc.status).toBe('Lost');
+    expect(referralDoc.estPurchasePriceCents).toBe(0);
+    expect(referralDoc.referralFeeDueCents).toBe(0);
+    expect(referralDoc.autoUpdateRemindersEnabled).toBe(false);
+    expect(latestDeal.status).toBe('terminated');
+    expect(latestDeal.terminatedReason).toBe('changed_mind');
+    expect(latestDeal.expectedAmountCents).toBe(0);
+    expect(latestDeal.save).toHaveBeenCalled();
+    expect(mockedPaymentUpdateMany).toHaveBeenCalled();
+    expect(referralDoc.save).toHaveBeenCalled();
+  });
+
   it('updates only the current agent-owned deal when multiple deals exist', async () => {
     const referralDoc = makeReferralDoc();
     mockedReferralFindById.mockReturnValue(referralDoc);

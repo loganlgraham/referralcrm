@@ -697,7 +697,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     (viewerRole === 'admin' && referral.origin === 'admin') ||
     (viewerRole === 'agent' && referral.origin === 'agent');
   const canEditDetails = viewerRole !== 'viewer';
-  const canEditBorrowerContact = viewerRole === 'admin' || viewerRole === 'manager';
+  const canEditBorrowerContact =
+    viewerRole === 'admin' || viewerRole === 'manager' || (viewerRole === 'agent' && isAgentOrigin);
 
   useEffect(() => {
     setReferral(initialReferral);
