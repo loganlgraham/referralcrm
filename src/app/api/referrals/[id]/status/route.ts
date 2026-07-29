@@ -202,7 +202,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   let createdDeal: any = null;
   let syncedDeal: any = null;
-  let syncError: { code: 'agent_record_missing' | 'deal_unassigned' | 'deal_missing'; message: string } | null = null;
+  type StatusSyncError = {
+    code: 'agent_record_missing' | 'deal_unassigned' | 'deal_missing';
+    message: string;
+  };
+  let syncError: StatusSyncError | null = null;
   const sla = (referral.sla ??= {} as any);
   let slaModified = false;
 
@@ -500,6 +504,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const buildAttributedDealQuery = (): {
     dealQuery: Record<string, unknown>;
     canSyncDealStatus: boolean;
+    querySyncError: StatusSyncError | null;
   } => {
     const dealQuery: Record<string, unknown> = {
       referralId: referral._id,
@@ -508,10 +513,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       side: requestSide,
     };
     let canSyncDealStatus = true;
+    let querySyncError: StatusSyncError | null = null;
 
     if (session.user.role === 'agent' && !currentAgentId) {
       canSyncDealStatus = false;
-      syncError = {
+      querySyncError = {
         code: 'agent_record_missing',
         message: 'Unable to sync deal status because your agent profile could not be resolved.',
       };
@@ -519,12 +525,12 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       dealQuery.agentId = currentAgentId;
     }
 
-    return { dealQuery, canSyncDealStatus };
+    return { dealQuery, canSyncDealStatus, querySyncError };
   };
 
-  const forceLostForUnassignedDeal = async () => {
+  const forceLostForUnassignedDeal = async (): Promise<StatusSyncError | null> => {
     if (session.user.role !== 'agent' || !currentAgentId) {
-      return;
+      return null;
     }
     const unassignedDealQuery: Record<string, unknown> = {
       referralId: referral._id,
@@ -556,22 +562,29 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         referral.statusLastUpdated = now;
       }
       shouldPersistReferralStatus = true;
-      syncError = {
+      return {
         code: 'deal_unassigned',
         message:
           'This referral is tied to an unassigned/outside-agent deal. We moved your referral status to Lost.',
       };
-    } else if (!shouldTerminateAttributedDeal) {
-      syncError = {
+    }
+
+    if (!shouldTerminateAttributedDeal) {
+      return {
         code: 'deal_missing',
         message:
           'No attributed deal was found for this referral side, so the status could not be synced to a deal.',
       };
     }
+
+    return null;
   };
 
   if (shouldTerminateAttributedDeal) {
-    const { dealQuery, canSyncDealStatus } = buildAttributedDealQuery();
+    const { dealQuery, canSyncDealStatus, querySyncError } = buildAttributedDealQuery();
+    if (querySyncError) {
+      syncError = querySyncError;
+    }
     const latestAttributedDeal = canSyncDealStatus
       ? await Payment.findOne(dealQuery).sort({ createdAt: -1 })
       : null;
@@ -588,10 +601,13 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       parsed.data.source === 'referral_table' &&
       !syncError
     ) {
-      await forceLostForUnassignedDeal();
+      syncError = await forceLostForUnassignedDeal();
     }
   } else if (mappedDealStatus && parsed.data.status !== 'Under Contract') {
-    const { dealQuery, canSyncDealStatus } = buildAttributedDealQuery();
+    const { dealQuery, canSyncDealStatus, querySyncError } = buildAttributedDealQuery();
+    if (querySyncError) {
+      syncError = querySyncError;
+    }
 
     const latestAttributedDeal = canSyncDealStatus ? await Payment.findOne(dealQuery).sort({ createdAt: -1 }) : null;
 
@@ -749,7 +765,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         }
       }
     } else if (dealMappedStatusUpdateFromTable && session.user.role === 'agent' && currentAgentId) {
-      await forceLostForUnassignedDeal();
+      syncError = await forceLostForUnassignedDeal();
     }
   }
   if (slaModified) {
