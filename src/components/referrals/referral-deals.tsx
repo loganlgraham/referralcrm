@@ -794,100 +794,104 @@ function DealCard({
               disabled={saving || isNoFeeDeal}
             />
           </label>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-foreground-muted">Commission</span>
-              <div className="flex rounded border border-border-strong text-xs font-medium overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => handleCommissionModeToggle('%')}
-                  disabled={saving || isNoFeeDeal}
-                  className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
-                >
-                  %
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleCommissionModeToggle('$')}
-                  disabled={saving || isNoFeeDeal}
-                  className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
-                >
-                  $
-                </button>
+          {!agentCreatedReferral && (
+            <>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-foreground-muted">Commission</span>
+                  <div className="flex rounded border border-border-strong text-xs font-medium overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => handleCommissionModeToggle('%')}
+                      disabled={saving || isNoFeeDeal}
+                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
+                    >
+                      %
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCommissionModeToggle('$')}
+                      disabled={saving || isNoFeeDeal}
+                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
+                    >
+                      $
+                    </button>
+                  </div>
+                </div>
+                {commissionMode === '%' ? (
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    value={commissionPercentage}
+                    onChange={(event) => handleCommissionPercentageChange(event.target.value)}
+                    className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                    placeholder="0.00"
+                    disabled={saving || isNoFeeDeal}
+                  />
+                ) : (
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    value={commissionFlat}
+                    onChange={(event) => handleCommissionFlatChange(event.target.value)}
+                    className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                    placeholder="0.00"
+                    disabled={saving || isNoFeeDeal}
+                  />
+                )}
               </div>
-            </div>
-            {commissionMode === '%' ? (
-              <input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                value={commissionPercentage}
-                onChange={(event) => handleCommissionPercentageChange(event.target.value)}
-                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                placeholder="0.00"
-                disabled={saving || isNoFeeDeal}
-              />
-            ) : (
-              <input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                value={commissionFlat}
-                onChange={(event) => handleCommissionFlatChange(event.target.value)}
-                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                placeholder="0.00"
-                disabled={saving || isNoFeeDeal}
-              />
-            )}
-          </div>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
-            <span>Referral fee %</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={referralFeePercentage}
-              onChange={(event) => setReferralFeePercentage(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              placeholder="0.00"
-              disabled={saving || isNoFeeDeal}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
-            <span>Expected amount</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={expectedAmount}
-              onChange={(event) => {
-                const value = event.target.value;
-                setExpectedManuallyEdited(Boolean(value));
-                setExpectedAmount(value);
-              }}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              placeholder="0.00"
-              disabled={saving || isNoFeeDeal}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
-            <span>Net referral fee paid (optional)</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={netReferralFeePaid}
-              onChange={(event) => setNetReferralFeePaid(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              placeholder="0.00"
-              disabled={saving || isNoFeeDeal}
-            />
-          </label>
+              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+                <span>Referral fee %</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={referralFeePercentage}
+                  onChange={(event) => setReferralFeePercentage(event.target.value)}
+                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  placeholder="0.00"
+                  disabled={saving || isNoFeeDeal}
+                />
+              </label>
+              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+                <span>Expected amount</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={expectedAmount}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setExpectedManuallyEdited(Boolean(value));
+                    setExpectedAmount(value);
+                  }}
+                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  placeholder="0.00"
+                  disabled={saving || isNoFeeDeal}
+                />
+              </label>
+              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+                <span>Net referral fee paid (optional)</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={netReferralFeePaid}
+                  onChange={(event) => setNetReferralFeePaid(event.target.value)}
+                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  placeholder="0.00"
+                  disabled={saving || isNoFeeDeal}
+                />
+              </label>
+            </>
+          )}
             <label className="space-y-1 text-sm font-medium text-foreground-muted">
               <span>Status</span>
               <select

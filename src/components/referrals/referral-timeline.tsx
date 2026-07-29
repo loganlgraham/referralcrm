@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react';
 interface Activity {
   _id: string;
   actor: string;
+  actorName?: string | null;
   channel: string;
   content: string;
   createdAt: string;
@@ -54,7 +55,12 @@ export function ReferralTimeline({ referralId }: { referralId: string }) {
                 <span>{formatInTimeZone(new Date(activity.createdAt), SLA_TIME_ZONE, "MMM d, yyyy 'at' h:mm a 'MT'")}</span>
               </div>
               <p className="mt-2 text-sm text-foreground-muted">{activity.content}</p>
-              <p className="text-xs text-foreground-subtle">by {activity.actor}</p>
+              <p className="text-xs text-foreground-subtle">
+                by {activity.actorName?.trim() || activity.actor}
+                {activity.actorName?.trim() && activity.actor !== activity.actorName.trim()
+                  ? ` (${activity.actor})`
+                  : ''}
+              </p>
             </div>
           ))}
           {canShowToggle && (

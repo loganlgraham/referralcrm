@@ -111,6 +111,43 @@ describe('ReferralNotes', () => {
     expect(screen.getByLabelText('Delete note')).toBeInTheDocument();
   });
 
+  it('defaults Email MC off for admin and on for agent when MC email exists', () => {
+    const mcContact = { name: 'MC One', email: 'mc@example.com' };
+
+    const { unmount } = render(
+      <ReferralNotes
+        referralId="ref-email-default-admin"
+        viewerRole="admin"
+        initialNotes={[]}
+        mcContact={mcContact}
+        hasAnyPayments={false}
+        hasAnyUsedAfcTrue={false}
+      />
+    );
+
+    expect(screen.getByRole('switch', { name: 'Email MC' })).toHaveAttribute(
+      'aria-checked',
+      'false'
+    );
+    unmount();
+
+    render(
+      <ReferralNotes
+        referralId="ref-email-default-agent"
+        viewerRole="agent"
+        initialNotes={[]}
+        mcContact={mcContact}
+        hasAnyPayments={false}
+        hasAnyUsedAfcTrue={false}
+      />
+    );
+
+    expect(screen.getByRole('switch', { name: 'Email MC' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+  });
+
   it('shows no stored notes while the timeline still shows note audit entries', () => {
     swrResponses.set('/api/referrals/ref-3/activities', {
       data: [

@@ -856,7 +856,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   });
   if (referralForCreate) {
     let referralUpdated = false;
-    let previousReferralStatusForLostLog: string | null = null;
+    const previousReferralStatus = referralForCreate.status ?? null;
     if (parsed.data.propertyAddress !== undefined) {
       referralForCreate.propertyAddress = parsed.data.propertyAddress ?? '';
       referralUpdated = true;
@@ -897,9 +897,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     if (isOutsideAgent) {
-      const previousReferralStatus = referralForCreate.status ?? null;
       const now = new Date();
-      previousReferralStatusForLostLog = previousReferralStatus;
 
       referralForCreate.estPurchasePriceCents = 0;
       referralForCreate.referralFeeDueCents = 0;
@@ -940,13 +938,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (referralUpdated) {
       await referralForCreate.save();
     }
-    if (previousReferralStatusForLostLog && previousReferralStatusForLostLog !== 'Lost') {
+
+    const sideLabel = resolvedSide === 'sell' ? 'sell-side' : 'buy-side';
+    await logReferralActivity({
+      referralId: referralForCreate._id.toString(),
+      actorRole: session.user.role,
+      actorId: session.user.id,
+      channel: 'update',
+      content: `Deal created (${dealStatusToDisplay(payment.status)}, ${sideLabel})`,
+    });
+
+    if (previousReferralStatus !== referralForCreate.status) {
       await logReferralActivity({
         referralId: referralForCreate._id.toString(),
         actorRole: session.user.role,
         actorId: session.user.id,
         channel: 'status',
-        content: `Status changed from ${previousReferralStatusForLostLog} to Lost`,
+        content: `Status changed from ${previousReferralStatus ?? 'Unknown'} to ${referralForCreate.status}`,
       });
     }
   }
@@ -1470,6 +1478,16 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         actorId: null,
         channel: 'update',
         content: `Automated update reminders disabled (deal status: ${payment.status})`,
+      });
+    }
+
+    if (parsed.data.status && parsed.data.status !== previousStatus) {
+      await logReferralActivity({
+        referralId: referral._id,
+        actorRole: session.user.role,
+        actorId: session.user.id,
+        channel: 'status',
+        content: `Deal status changed from ${dealStatusToDisplay(previousStatus)} to ${dealStatusToDisplay(payment.status)}`,
       });
     }
 

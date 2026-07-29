@@ -12,6 +12,7 @@ import { calculateReferralFeeDue } from '@/utils/referral';
 import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
+import { dealStatusToDisplay } from '@/lib/format-notification-content';
 import { inferStateFromPostalCode } from '@/utils/location';
 import { calculateBusinessMinutesBetween } from '@/utils/sla-insights';
 import { createAdminNotifications } from '@/lib/server/notifications';
@@ -773,6 +774,17 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
   if (shouldPersistReferralStatus || slaModified) {
     await referral.save();
+  }
+
+  if (createdDeal) {
+    const createdSide = createdDeal.side === 'sell' ? 'sell-side' : 'buy-side';
+    await logReferralActivity({
+      referralId: referral._id,
+      actorRole: session.user.role,
+      actorId: session.user.id,
+      channel: 'update',
+      content: `Deal created (${dealStatusToDisplay(createdDeal.status)}, ${createdSide})`,
+    });
   }
 
   if (shouldPersistReferralStatus && previousStatus !== referral.status) {

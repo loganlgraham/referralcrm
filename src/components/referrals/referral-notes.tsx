@@ -121,13 +121,12 @@ export function ReferralNotes({
   const canControlVisibility = viewerRole === 'admin' || viewerRole === 'manager';
   const hasAgentEmail = Boolean(agentContact?.email);
   const hasMcEmail = Boolean(mcContact?.email);
-  const shouldDefaultEmailMc =
-    viewerRole === 'agent' &&
-    hasMcEmail &&
-    shouldDefaultEmailMcForAgentNotes({
-      hasAnyPayments,
-      hasAnyUsedAfcTrue
-    });
+  const shouldDefaultEmailMc = shouldDefaultEmailMcForAgentNotes({
+    viewerRole,
+    hasMcEmail,
+    hasAnyPayments,
+    hasAnyUsedAfcTrue,
+  });
   const [emailMc, setEmailMc] = useState(() => shouldDefaultEmailMc);
   const hasAdminEmails = Array.isArray(adminContacts)
     ? adminContacts.some((contact) => contact?.email)

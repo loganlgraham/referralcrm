@@ -1711,6 +1711,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         )}
       </section>
       <ReferralNotes
+        key={referralId}
         referralId={referralId}
         initialNotes={notes}
         viewerRole={viewerRole}

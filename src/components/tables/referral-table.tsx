@@ -107,6 +107,8 @@ interface StatusSelectProps {
   side?: 'buy' | 'sell';
   compact?: boolean;
   roleMode?: TableMode;
+  /** Agent-created (agent→AFC) referrals collect no referral fee. */
+  isAgentOrigin?: boolean;
   onStatusResolved?: (nextStatus: ReferralStatus) => void;
 }
 
@@ -181,6 +183,8 @@ const dateStringToLocalISO = (dateString: string): string => {
 
 interface UnderContractDealToastProps {
   defaultSide?: 'buy' | 'sell';
+  /** Agent-created (agent→AFC) referrals collect no referral fee. */
+  isAgentOrigin?: boolean;
   onClose: () => void;
   onSubmit: (payload: {
     paymentPayload: Record<string, unknown>;
@@ -197,7 +201,12 @@ interface UnderContractDealToastProps {
   }) => Promise<void>;
 }
 
-function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: UnderContractDealToastProps) {
+function UnderContractDealToast({
+  onClose,
+  onSubmit,
+  defaultSide = 'buy',
+  isAgentOrigin = false,
+}: UnderContractDealToastProps) {
   const [expectedAmount, setExpectedAmount] = useState('');
   const [expectedManuallyEdited, setExpectedManuallyEdited] = useState(false);
   const [contractPrice, setContractPrice] = useState('');
@@ -278,41 +287,53 @@ function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: Unde
             toast.error('Contract price is required.');
             return;
           }
-          if (!referralFeePercentage.trim()) {
-            toast.error('Referral fee % is required.');
-            return;
-          }
-          const referralFeeParsed = parseNumericInput(referralFeePercentage);
-          if (!Number.isFinite(referralFeeParsed) || referralFeeParsed < 0) {
-            toast.error('Enter a valid referral fee % (0 or greater).');
-            return;
+          if (!isAgentOrigin) {
+            if (!referralFeePercentage.trim()) {
+              toast.error('Referral fee % is required.');
+              return;
+            }
+            const referralFeeParsed = parseNumericInput(referralFeePercentage);
+            if (!Number.isFinite(referralFeeParsed) || referralFeeParsed < 0) {
+              toast.error('Enter a valid referral fee % (0 or greater).');
+              return;
+            }
           }
           const contractPriceCents = toCents(contractPrice);
           const isFlatFeeMode = commissionMode === '$';
-          const commissionBasisPoints = isFlatFeeMode
+          const commissionBasisPoints = isAgentOrigin
             ? null
-            : commissionPercentage
-            ? Math.round(parseNumericInput(commissionPercentage) * 100)
-            : null;
-          const commissionFlatFeeCents = isFlatFeeMode
-            ? (commissionFlat ? toCents(commissionFlat) : null)
-            : null;
-          const referralFeeBasisPoints = Math.round(referralFeeParsed * 100);
-          const expectedAmountCents = toCents(expectedAmount);
+            : isFlatFeeMode
+              ? null
+              : commissionPercentage
+                ? Math.round(parseNumericInput(commissionPercentage) * 100)
+                : null;
+          const commissionFlatFeeCents = isAgentOrigin
+            ? null
+            : isFlatFeeMode
+              ? (commissionFlat ? toCents(commissionFlat) : null)
+              : null;
+          const referralFeeBasisPoints = isAgentOrigin
+            ? null
+            : Math.round(parseNumericInput(referralFeePercentage) * 100);
+          const expectedAmountCents = isAgentOrigin ? 0 : toCents(expectedAmount);
           const computedExpectedAmountCents =
-            !expectedAmountCents && referralFeeBasisPoints
-              ? isFlatFeeMode
-                ? Math.round(((commissionFlatFeeCents ?? 0) * referralFeeBasisPoints) / 10_000)
-                : Math.round((contractPriceCents * (commissionBasisPoints ?? 0) * referralFeeBasisPoints) / 100_000_000)
-              : expectedAmountCents;
+            isAgentOrigin
+              ? 0
+              : !expectedAmountCents && referralFeeBasisPoints
+                ? isFlatFeeMode
+                  ? Math.round(((commissionFlatFeeCents ?? 0) * referralFeeBasisPoints) / 10_000)
+                  : Math.round((contractPriceCents * (commissionBasisPoints ?? 0) * referralFeeBasisPoints) / 100_000_000)
+                : expectedAmountCents;
           const finalExpectedAmountCents = computedExpectedAmountCents;
 
-          const agentCommissionPercentage = isFlatFeeMode
-            ? commissionFlatFeeCents != null && contractPriceCents > 0
-              ? (commissionFlatFeeCents / contractPriceCents) * 100
-              : 0
-            : (commissionBasisPoints ?? 0) / 100;
-          const referralFeePercentageValue = (referralFeeBasisPoints ?? 0) / 100;
+          const agentCommissionPercentage = isAgentOrigin
+            ? 0
+            : isFlatFeeMode
+              ? commissionFlatFeeCents != null && contractPriceCents > 0
+                ? (commissionFlatFeeCents / contractPriceCents) * 100
+                : 0
+              : (commissionBasisPoints ?? 0) / 100;
+          const referralFeePercentageValue = isAgentOrigin ? 0 : (referralFeeBasisPoints ?? 0) / 100;
           const resolvedUnderContractDate = underContractDate
             ? dateStringToLocalISO(underContractDate)
             : new Date().toISOString();
@@ -367,44 +388,48 @@ function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: Unde
             />
           </div>
         </label>
-        <div className="text-xs font-medium text-foreground-muted">
-          <span>Commission</span>
-          <div className="mt-1 flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={`rounded border px-2 py-1 text-xs font-semibold transition ${
-                commissionMode === '%'
-                  ? 'border-primary-500 bg-primary-600 text-white'
-                  : 'border-border-strong bg-surface-raised text-foreground-muted hover:bg-surface-muted'
-              }`}
-              onClick={() => setCommissionMode('%')}
-            >
-              %
-            </button>
-            <button
-              type="button"
-              className={`rounded border px-2 py-1 text-xs font-semibold transition ${
-                commissionMode === '$'
-                  ? 'border-primary-500 bg-primary-600 text-white'
-                  : 'border-border-strong bg-surface-raised text-foreground-muted hover:bg-surface-muted'
-              }`}
-              onClick={() => setCommissionMode('$')}
-            >
-              $
-            </button>
-            <input
-              className="w-full rounded border border-border-strong px-2 py-1 text-sm sm:flex-1"
-              value={commissionMode === '%' ? commissionPercentage : commissionFlat}
-              onChange={(event) => commissionMode === '%' ? setCommissionPercentage(event.target.value) : setCommissionFlat(event.target.value)}
-            />
-          </div>
-        </div>
-        <label className="text-xs font-medium text-foreground-muted">Referral fee %
-          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={referralFeePercentage} onChange={(e) => setReferralFeePercentage(e.target.value)} />
-        </label>
-        <label className="text-xs font-medium text-foreground-muted">Expected amount
-          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={expectedAmount} onChange={(e) => { setExpectedManuallyEdited(Boolean(e.target.value)); setExpectedAmount(e.target.value); }} />
-        </label>
+        {!isAgentOrigin ? (
+          <>
+            <div className="text-xs font-medium text-foreground-muted">
+              <span>Commission</span>
+              <div className="mt-1 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className={`rounded border px-2 py-1 text-xs font-semibold transition ${
+                    commissionMode === '%'
+                      ? 'border-primary-500 bg-primary-600 text-white'
+                      : 'border-border-strong bg-surface-raised text-foreground-muted hover:bg-surface-muted'
+                  }`}
+                  onClick={() => setCommissionMode('%')}
+                >
+                  %
+                </button>
+                <button
+                  type="button"
+                  className={`rounded border px-2 py-1 text-xs font-semibold transition ${
+                    commissionMode === '$'
+                      ? 'border-primary-500 bg-primary-600 text-white'
+                      : 'border-border-strong bg-surface-raised text-foreground-muted hover:bg-surface-muted'
+                  }`}
+                  onClick={() => setCommissionMode('$')}
+                >
+                  $
+                </button>
+                <input
+                  className="w-full rounded border border-border-strong px-2 py-1 text-sm sm:flex-1"
+                  value={commissionMode === '%' ? commissionPercentage : commissionFlat}
+                  onChange={(event) => commissionMode === '%' ? setCommissionPercentage(event.target.value) : setCommissionFlat(event.target.value)}
+                />
+              </div>
+            </div>
+            <label className="text-xs font-medium text-foreground-muted">Referral fee %
+              <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={referralFeePercentage} onChange={(e) => setReferralFeePercentage(e.target.value)} />
+            </label>
+            <label className="text-xs font-medium text-foreground-muted">Expected amount
+              <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={expectedAmount} onChange={(e) => { setExpectedManuallyEdited(Boolean(e.target.value)); setExpectedAmount(e.target.value); }} />
+            </label>
+          </>
+        ) : null}
         <label className="text-xs font-medium text-foreground-muted">Under contract date
           <input
             type="date"
@@ -472,6 +497,7 @@ function StatusSelect({
   side,
   compact = false,
   roleMode,
+  isAgentOrigin = false,
   onStatusResolved,
 }: StatusSelectProps) {
   const router = useRouter();
@@ -505,6 +531,7 @@ function StatusSelect({
     const toastId = toast.custom((t) => (
       <UnderContractDealToast
         defaultSide={defaultSide}
+        isAgentOrigin={isAgentOrigin}
         onClose={() => toast.dismiss(t)}
         onSubmit={async ({ paymentPayload, contractDetails }) => {
           const paymentResponse = await fetch('/api/payments', {
@@ -936,6 +963,7 @@ function AgentBothStatusCell({ row }: { row: ReferralRow }) {
           side={assignedSide}
           compact
           roleMode="agent"
+          isAgentOrigin={row.origin === 'agent'}
           onStatusResolved={(nextStatus) => {
             if (assignedSide === 'sell') {
               setSellStatus(nextStatus);
@@ -1228,6 +1256,7 @@ function buildColumns(
               side={row.original.viewerAssignedSide ?? undefined}
               defaultSide={row.original.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
               roleMode="agent"
+              isAgentOrigin={row.original.origin === 'agent'}
             />
           );
         },
@@ -1416,6 +1445,7 @@ function ReferralMobileStack({
                         side={row.viewerAssignedSide ?? undefined}
                         defaultSide={row.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
                         roleMode="agent"
+                        isAgentOrigin={row.origin === 'agent'}
                       />
                     )}
                   </div>
