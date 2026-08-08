@@ -6,6 +6,19 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: jest.fn() })
 }));
 
+jest.mock('swr', () => ({
+  __esModule: true,
+  default: jest.fn(() => ({
+    data: {
+      score: 82.4,
+      rank: 3,
+      qualified: true,
+      timeframeLabel: 'This Month'
+    },
+    isLoading: false
+  }))
+}));
+
 jest.mock('sonner', () => {
   const toastFn = Object.assign(jest.fn(), {
     success: jest.fn(),
@@ -50,6 +63,8 @@ describe('AgentOverviewCard pills', () => {
     expect(
       screen.getByText((_, element) => element?.textContent === 'Logged on: none yet')
     ).toBeInTheDocument();
+    expect(screen.getByText('82.4 / 100')).toBeInTheDocument();
+    expect(screen.getByText('This Month · Rank #3')).toBeInTheDocument();
   });
 
   it('shows logged-on date when timestamp is available', () => {
@@ -70,6 +85,39 @@ describe('AgentOverviewCard pills', () => {
     expect(
       screen.getByText((_, element) => element?.textContent === 'Logged on: Jan 4, 2026')
     ).toBeInTheDocument();
+  });
+
+  it('lets an admin update NPS from the overview card', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(
+      <AgentOverviewCard
+        agent={{ ...baseAgent, npsScore: 68, lastActivityAt: null, lastLoggedOnAt: null }}
+        isAdmin
+      />
+    );
+
+    expect(screen.getByText('68.0')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('spinbutton', { name: 'NPS Score' })).toHaveValue(68);
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'NPS Score' }), {
+      target: { value: '72' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/agents/agent-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ npsScore: 72 }),
+      })
+    );
+    expect(screen.getByText('72.0')).toBeInTheDocument();
   });
 
   it('excludes the agent from leaderboards when the inactive toast "Exclude" action is chosen', async () => {

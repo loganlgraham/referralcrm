@@ -46,6 +46,7 @@ import {
   normalizeAhaKpiMap
 } from '@/lib/server/aha-leaderboard-scoring';
 import { resolvePushbackMetricsInTimeframe } from '@/lib/server/pushback-metrics';
+import { isDashboardInternalAdminRequest } from '@/lib/server/dashboard-internal-request';
 import { buildConversionFunnel, type FunnelReferralInput } from '@/lib/server/conversion-funnel';
 import {
   computeCohortCloseRate,
@@ -723,7 +724,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const authHeader = request.headers.get('authorization');
   const isCronAdmin = Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
 
-  if (!session && !isCronAdmin) {
+  const isInternalAdmin = isDashboardInternalAdminRequest(request);
+  if (!session && !isCronAdmin && !isInternalAdmin) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
@@ -734,7 +736,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const context = createDashboardContext(request);
   const { referralMatch, timeframe } = context;
 
-  const role = session?.user?.role ?? (isCronAdmin ? 'admin' : null);
+  const role = isInternalAdmin ? 'admin' : session?.user?.role ?? (isCronAdmin ? 'admin' : null);
   const userId = session?.user?.id;
 
   let missingProfile = false;

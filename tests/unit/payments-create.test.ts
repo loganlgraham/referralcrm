@@ -227,7 +227,13 @@ describe('Payments POST outside-agent handling', () => {
     );
     expect(referralDoc.status).toBe('Under Contract');
     expect(mockedPaymentUpdateMany).not.toHaveBeenCalled();
-    expect(mockedLogReferralActivity).not.toHaveBeenCalled();
+    expect(mockedLogReferralActivity).toHaveBeenCalledWith({
+      referralId: 'ref123',
+      actorRole: 'admin',
+      actorId: 'user-1',
+      channel: 'update',
+      content: 'Deal created (Under Contract, buy-side)',
+    });
   });
 
   it('rejects terminated status without terminatedReason', async () => {

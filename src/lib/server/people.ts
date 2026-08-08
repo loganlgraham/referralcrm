@@ -39,6 +39,7 @@ type AgentProfile = {
   languages?: string[];
   ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   source?: string;
+  npsScore: number | null;
   active: boolean;
   includeInMetrics: boolean;
   metrics: AgentMetricsSummary;
@@ -398,6 +399,7 @@ export async function getAgentProfile(id: string): Promise<AgentProfile | null> 
         ? agent.ahaDesignation
         : null,
     source: session.user.role === 'admin' ? (agent.source ?? undefined) : undefined,
+    npsScore: typeof agent.npsScore === 'number' ? agent.npsScore : null,
     active: agent.active !== false,
     includeInMetrics: agent.includeInMetrics !== false,
     metrics,

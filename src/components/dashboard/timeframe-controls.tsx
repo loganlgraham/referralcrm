@@ -37,6 +37,7 @@ type TimeframeDropdownProps = {
   onPresetSelect: (preset: TimeframePreset) => void;
   onCustomRangeSelect: (range: DateRange) => void;
   maxDate: string;
+  openToRightOnMobile?: boolean;
 };
 
 const DISPLAY_RANGE_FORMAT = 'MMM d, yyyy';
@@ -128,7 +129,8 @@ export function TimeframeDropdown({
   customRange,
   onPresetSelect,
   onCustomRangeSelect,
-  maxDate
+  maxDate,
+  openToRightOnMobile = false
 }: TimeframeDropdownProps) {
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -247,7 +249,11 @@ export function TimeframeDropdown({
         <span className="text-xs text-foreground-subtle">▾</span>
       </button>
       {isOpen ? (
-        <div className="absolute right-0 z-20 mt-2 w-80 rounded-lg border border-border bg-surface-raised p-4 shadow-xl">
+        <div
+          className={`absolute z-20 mt-2 w-80 rounded-lg border border-border bg-surface-raised p-4 shadow-xl ${
+            openToRightOnMobile ? 'left-0 sm:left-auto sm:right-0' : 'right-0'
+          }`}
+        >
           <div className="flex items-center justify-between">
             <button
               type="button"

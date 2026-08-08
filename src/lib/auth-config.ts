@@ -8,6 +8,7 @@ import { connectMongo } from '@/lib/mongoose';
 import { Types } from 'mongoose';
 import { User } from '@/models/user';
 import { z } from 'zod';
+import { recordAgentLoginEvent } from '@/lib/server/agent-activity';
 
 const roleValues = ['agent', 'mortgage-consultant', 'admin'] as const;
 type Role = (typeof roleValues)[number];
@@ -217,6 +218,10 @@ export const authOptions: NextAuthOptions = {
           id: signInUser?.id ?? null,
           email: signInUser?.email ?? null
         });
+        await recordAgentLoginEvent({
+          id: signInUser?.id ?? null,
+          email: signInUser?.email ?? null
+        });
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
           console.error('[Auth] Unable to persist last login timestamp:', error);
@@ -229,17 +234,6 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         // @ts-ignore
         token.role = (user as any).role ?? token.role;
-        try {
-          const jwtUser = user as { id?: string | null; email?: string | null };
-          await persistUserLastLoginAt({
-            id: jwtUser?.id ?? null,
-            email: jwtUser?.email ?? null
-          });
-        } catch (error) {
-          if (process.env.NODE_ENV === 'development') {
-            console.error('[Auth] Unable to persist last login timestamp from jwt:', error);
-          }
-        }
       }
 
       const role = (token as any).role;

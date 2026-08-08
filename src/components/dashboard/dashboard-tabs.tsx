@@ -3950,6 +3950,7 @@ export function DashboardTabs() {
             onPresetSelect={handlePresetSelect}
             onCustomRangeSelect={handleCustomRangeSelect}
             maxDate={maxSelectableDate}
+            openToRightOnMobile
           />
           <div className="flex flex-col items-end gap-2">
             <span className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Network</span>

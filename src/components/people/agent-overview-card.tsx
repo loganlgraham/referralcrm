@@ -3,13 +3,16 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import useSWR from 'swr';
 
 import { AgentAdminEditor, type AgentAdminEditorProps } from '@/components/people/agent-admin-editor';
+import { AgentNpsEditor } from '@/components/people/agent-nps-editor';
 import { SendWelcomeEmailButton } from '@/components/people/send-welcome-email-button';
 import { promptInactiveMetricsChoice } from '@/components/people/inactive-metrics-toast';
 import { CopyButton } from '@/components/common/copy-button';
 import { formatDateMST, formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
+import { fetcher } from '@/utils/fetcher';
 
 interface AgentOverviewCardProps {
   agent: AgentAdminEditorProps['agent'] & {
@@ -23,12 +26,23 @@ interface AgentOverviewCardProps {
     } | null;
   };
   isAdmin: boolean;
+  canViewKpiScore?: boolean;
 }
 
-export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
+export function AgentOverviewCard({
+  agent,
+  isAdmin,
+  canViewKpiScore = true,
+}: AgentOverviewCardProps) {
   const router = useRouter();
   const [showEditor, setShowEditor] = useState(false);
   const [togglingActive, setTogglingActive] = useState(false);
+  const { data: kpiScore, isLoading: isKpiScoreLoading } = useSWR<{
+    score: number | null;
+    rank?: number | null;
+    qualified?: boolean;
+    timeframeLabel: string;
+  }>(canViewKpiScore ? `/api/agents/${agent._id}/kpi-score` : null, fetcher);
 
   const patchStatus = async (active: boolean, includeInMetrics: boolean) => {
     if (togglingActive) return;
@@ -276,14 +290,40 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
               : '—'}
           </p>
         </div>
-        {agent.npsScore !== null && agent.npsScore !== undefined && (
+        <div>
+          {isAdmin ? (
+            <AgentNpsEditor
+              agentId={agent._id}
+              initialScore={typeof agent.npsScore === 'number' ? agent.npsScore : null}
+            />
+          ) : (
+            <>
+              <p className="text-xs uppercase text-foreground-subtle">NPS Score</p>
+              <p className="font-medium text-foreground">
+                {typeof agent.npsScore === 'number' ? agent.npsScore.toFixed(1) : '—'}
+              </p>
+            </>
+          )}
+        </div>
+        {canViewKpiScore ? (
           <div>
-            <p className="text-xs uppercase text-foreground-subtle">NPS Score</p>
+            <p className="text-xs uppercase text-foreground-subtle">KPI Score</p>
             <p className="font-medium text-foreground">
-              {typeof agent.npsScore === 'number' ? agent.npsScore.toFixed(1) : '—'}
+              {isKpiScoreLoading
+                ? 'Loading…'
+                : typeof kpiScore?.score === 'number'
+                  ? `${kpiScore.score.toFixed(1)} / 100`
+                  : 'Not ranked'}
             </p>
+            {typeof kpiScore?.score === 'number' ? (
+              <p className="text-xs text-foreground-subtle">
+                {kpiScore.timeframeLabel}
+                {kpiScore.rank ? ` · Rank #${kpiScore.rank}` : ''}
+                {kpiScore.qualified === false ? ' · Provisional' : ''}
+              </p>
+            ) : null}
           </div>
-        )}
+        ) : null}
       </div>
 
       {isAdmin && showEditor && (

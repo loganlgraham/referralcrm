@@ -10,11 +10,14 @@ interface AgentNpsEditorProps {
 }
 
 export function AgentNpsEditor({ agentId, initialScore }: AgentNpsEditorProps) {
+  const [savedScore, setSavedScore] = useState(initialScore);
   const [value, setValue] = useState(initialScore != null ? String(initialScore) : '');
+  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
+    setSavedScore(initialScore);
     setValue(initialScore != null ? String(initialScore) : '');
   }, [initialScore]);
 
@@ -49,7 +52,9 @@ export function AgentNpsEditor({ agentId, initialScore }: AgentNpsEditorProps) {
       }
 
       toast.success('NPS score updated');
+      setSavedScore(parsed);
       setValue(parsed != null ? String(parsed) : '');
+      setEditing(false);
       router.refresh();
     } catch (error) {
       console.error(error);
@@ -59,10 +64,30 @@ export function AgentNpsEditor({ agentId, initialScore }: AgentNpsEditorProps) {
     }
   };
 
+  if (!editing) {
+    return (
+      <div>
+        <p className="text-xs uppercase text-foreground-subtle">NPS Score</p>
+        <div className="mt-1 flex items-center gap-2">
+          <p className="font-medium text-foreground">
+            {savedScore != null ? savedScore.toFixed(1) : '—'}
+          </p>
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            Edit
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="rounded-lg border border-border bg-surface-muted p-4">
-      <label className="block text-sm font-semibold text-foreground-muted">NPS score</label>
-      <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-center">
+    <form onSubmit={handleSubmit}>
+      <label className="text-xs uppercase text-foreground-subtle">NPS Score</label>
+      <div className="mt-1 flex flex-wrap items-center gap-2">
         <input
           type="number"
           inputMode="numeric"
@@ -70,19 +95,31 @@ export function AgentNpsEditor({ agentId, initialScore }: AgentNpsEditorProps) {
           max={100}
           value={value}
           onChange={(event) => setValue(event.target.value)}
-          className="flex-1 rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40 sm:max-w-xs"
-          placeholder="68"
+          aria-label="NPS Score"
+          className="w-24 rounded-md border border-border bg-surface-raised px-2 py-1 text-sm text-foreground shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
+          placeholder="Enter score"
           disabled={saving}
+          autoFocus
         />
         <button
           type="submit"
           disabled={saving}
-          className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex shrink-0 items-center justify-center rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {saving ? 'Saving…' : 'Save NPS'}
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => {
+            setValue(savedScore != null ? String(savedScore) : '');
+            setEditing(false);
+          }}
+          className="text-xs font-medium text-foreground-muted hover:text-foreground"
+        >
+          Cancel
         </button>
       </div>
-      <p className="mt-2 text-xs text-foreground-subtle">Only admins can update this score. Leave blank to clear the value.</p>
     </form>
   );
 }
