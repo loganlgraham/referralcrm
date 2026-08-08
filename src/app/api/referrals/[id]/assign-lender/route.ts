@@ -17,6 +17,7 @@ import {
   deriveReferralStatusFromSides,
   pickPrimarySideForReferral,
 } from '@/lib/server/referral-sides';
+import { formatPhoneNumber } from '@/utils/formatters';
 
 interface Params {
   params: { id: string };
@@ -239,10 +240,11 @@ ${agentLines.length > 0 ? `Agent who sent it:\n${agentLines.join('\n')}\n\n` : '
     agentEmail &&
     isTransactionalEmailConfigured()
   ) {
+    const formattedLenderPhone = formatPhoneNumber(lenderPhone);
     const mcLines = [
       mcName,
       lenderEmail ? `Email: ${lenderEmail}` : null,
-      lenderPhone ? `Phone: ${lenderPhone}` : null,
+      formattedLenderPhone ? `Phone: ${formattedLenderPhone}` : null,
     ].filter(Boolean) as string[];
 
     const greeting = agentName || 'there';

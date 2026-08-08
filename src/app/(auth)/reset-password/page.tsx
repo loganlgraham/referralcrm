@@ -118,23 +118,8 @@ function ResetPasswordForm() {
   };
 
   return (
-    <AuthShell
-      hero={{
-        eyebrow: 'AFC · AHA',
-        title: 'Reset your password securely.',
-        description:
-          'Use your Referrio account email to receive a secure reset link powered by Resend.',
-      }}
-    >
-      <AuthHeading
-        eyebrow="AFC · AHA"
-        title={isResetMode ? 'Choose a new password' : 'Forgot your password?'}
-        description={
-          isResetMode
-            ? 'Enter your email and new password to finish resetting your account.'
-            : 'Enter the email associated with your account to receive a reset link.'
-        }
-      />
+    <AuthShell>
+      <AuthHeading title={isResetMode ? 'Choose a new password' : 'Forgot password'} />
 
       {error && (
         <div className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-[hsl(var(--danger))]">
@@ -203,7 +188,7 @@ function ResetPasswordForm() {
       <p className="text-center text-sm text-foreground-muted">
         Remembered your password?{' '}
         <Link href="/login" className="font-medium text-primary no-underline hover:underline">
-          Go back to sign in
+          Sign in
         </Link>
       </p>
     </AuthShell>

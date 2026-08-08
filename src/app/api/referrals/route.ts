@@ -953,10 +953,16 @@ export async function POST(request: Request) {
     if (!loanFileNumber) {
       return NextResponse.json({ error: 'Loan file number is required.' }, { status: 400 });
     }
+    if (!parsed.data.borrowerCurrentAddress?.trim()) {
+      return NextResponse.json({ error: 'Borrower current address is required.' }, { status: 400 });
+    }
   }
 
   const source = origin === 'agent' ? '' : providedSource;
   const endorser = origin === 'agent' ? '' : providedEndorser;
+  const clientType = origin === 'agent' ? 'Buyer' : parsed.data.clientType;
+  const borrowerCurrentAddress =
+    origin === 'agent' ? '' : (parsed.data.borrowerCurrentAddress?.trim() ?? '');
 
   const referralData: Record<string, unknown> = {
     borrower: {
@@ -968,10 +974,10 @@ export async function POST(request: Request) {
     },
     source,
     endorser,
-    clientType: parsed.data.clientType,
+    clientType,
     lookingInZip: primaryZip,
     lookingInZips,
-    borrowerCurrentAddress: parsed.data.borrowerCurrentAddress,
+    borrowerCurrentAddress,
     stageOnTransfer: parsed.data.stageOnTransfer,
     loanType: parsed.data.loanType,
     estPurchasePriceCents: preApprovalAmountCents,
@@ -1017,22 +1023,17 @@ export async function POST(request: Request) {
   }
 
   let creatorAgentDesignation: string | null = null;
+  let creatorAgentEmail: string | null = null;
   if (session.user.role === 'agent') {
-    const agent = await Agent.findOne({ userId: session.user.id }).select('_id ahaDesignation');
+    const agent = await Agent.findOne({ userId: session.user.id }).select('_id ahaDesignation email');
     if (agent) {
       const agentId = agent._id;
       creatorAgentDesignation = agent.ahaDesignation ?? null;
-      if (parsed.data.clientType === 'Seller') {
-        referralData.sellSideAgent = agentId;
-        referralData.assignedAgent = agentId;
-      } else if (parsed.data.clientType === 'Buyer') {
-        referralData.buySideAgent = agentId;
-        referralData.assignedAgent = agentId;
-      } else if (parsed.data.clientType === 'Both') {
-        referralData.buySideAgent = agentId;
-        referralData.sellSideAgent = agentId;
-        referralData.assignedAgent = agentId;
-      }
+      creatorAgentEmail =
+        typeof agent.email === 'string' && agent.email.trim() ? agent.email.trim() : null;
+      // Agent AFC intros are always buy-side
+      referralData.buySideAgent = agentId;
+      referralData.assignedAgent = agentId;
     }
   }
 
@@ -1321,6 +1322,71 @@ export async function POST(request: Request) {
         }
       })().catch((error) => {
         console.error('Failed to send admin AFC referral notification email', error);
+      });
+    }
+  }
+
+  // Thank the referring agent for their AFC intro
+  if (session.user.role === 'agent' && isTransactionalEmailConfigured()) {
+    const agentReceiptEmail =
+      creatorAgentEmail ||
+      (typeof session.user.email === 'string' && session.user.email.trim()
+        ? session.user.email.trim()
+        : null);
+    const agentGreeting = session.user.name?.trim() || 'there';
+    const borrowerLabel = borrowerName || 'your client';
+
+    if (agentReceiptEmail) {
+      (async () => {
+        try {
+          const escapeHtml = (value: string): string => {
+            return value.replace(/[&<>"']/g, (char) => {
+              switch (char) {
+                case '&':
+                  return '&amp;';
+                case '<':
+                  return '&lt;';
+                case '>':
+                  return '&gt;';
+                case '"':
+                  return '&quot;';
+                case "'":
+                  return '&#39;';
+                default:
+                  return char;
+              }
+            });
+          };
+
+          const referralLink = buildReferralLink(referral._id.toString());
+          const html = `
+            <p>Hi ${escapeHtml(agentGreeting)},</p>
+            <p>Thank you so much for introducing <strong>${escapeHtml(borrowerLabel)}</strong> to AFC — we truly appreciate you trusting us with your client.</p>
+            <p>We've received your referral and our team is already on it. We'll pair them with a mortgage consultant shortly and email you again as soon as that happens so you have everything you need.</p>
+            <p><a href="${referralLink}">View the referral</a></p>
+            <p>We're grateful for the partnership. Thank you again!</p>
+          `;
+          const text = `Hi ${agentGreeting},
+
+Thank you so much for introducing ${borrowerLabel} to AFC — we truly appreciate you trusting us with your client.
+
+We've received your referral and our team is already on it. We'll pair them with a mortgage consultant shortly and email you again as soon as that happens so you have everything you need.
+
+View the referral: ${referralLink}
+
+We're grateful for the partnership. Thank you again!`;
+
+          await sendTransactionalEmail({
+            to: [agentReceiptEmail],
+            subject: `We received your referral for ${borrowerLabel} — thank you!`,
+            html,
+            text,
+          });
+        } catch (error) {
+          console.error('Failed to send agent AFC referral receipt email', error);
+        }
+      })().catch((error) => {
+        console.error('Failed to send agent AFC referral receipt email', error);
       });
     }
   }

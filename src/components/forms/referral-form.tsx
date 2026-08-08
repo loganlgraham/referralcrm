@@ -33,7 +33,7 @@ const referralSchema = z.object({
   lookingInZip: z
     .string()
     .regex(zipListPattern, 'Enter one or more 5-digit ZIP codes separated by commas'),
-  borrowerCurrentAddress: z.string().min(1, 'Add the borrower\'s current address'),
+  borrowerCurrentAddress: z.string().optional(),
   stageOnTransfer: z.enum(STAGE_OPTIONS),
   loanFileNumber: z.string().optional(),
   initialNotes: z.string().optional(),
@@ -163,9 +163,13 @@ export function ReferralForm() {
       borrowerPhone: (formData.get('borrowerPhone')?.toString() ?? '').trim(),
       source: (formData.get('source')?.toString() ?? '').trim(),
       endorser: (formData.get('endorser')?.toString() ?? '').trim(),
-      clientType: (formData.get('clientType')?.toString() as ClientTypeOption) || 'Buyer',
+      clientType: isAgent
+        ? ('Buyer' as ClientTypeOption)
+        : ((formData.get('clientType')?.toString() as ClientTypeOption) || 'Buyer'),
       lookingInZip: (formData.get('lookingInZip')?.toString() ?? '').trim(),
-      borrowerCurrentAddress: (formData.get('borrowerCurrentAddress')?.toString() ?? '').trim(),
+      borrowerCurrentAddress: isAgent
+        ? ''
+        : (formData.get('borrowerCurrentAddress')?.toString() ?? '').trim(),
       stageOnTransfer,
       loanFileNumber: (formData.get('loanFileNumber')?.toString() ?? '').trim(),
       initialNotes: formData.get('initialNotes')?.toString(),
@@ -205,6 +209,10 @@ export function ReferralForm() {
         toast.error('Add a loan file number');
         return;
       }
+      if (!result.data.borrowerCurrentAddress?.trim()) {
+        toast.error("Add the borrower's current address");
+        return;
+      }
     }
 
     const body: Record<string, unknown> = {
@@ -212,10 +220,10 @@ export function ReferralForm() {
       borrowerLastName: result.data.borrowerLastName,
       borrowerEmail: result.data.borrowerEmail,
       borrowerPhone: result.data.borrowerPhone,
-      clientType: result.data.clientType,
+      clientType: isAgent ? 'Buyer' : result.data.clientType,
       lookingInZip: zipList[0],
       lookingInZips: zipList,
-      borrowerCurrentAddress: result.data.borrowerCurrentAddress,
+      borrowerCurrentAddress: isAgent ? '' : (result.data.borrowerCurrentAddress?.trim() ?? ''),
       stageOnTransfer: result.data.stageOnTransfer,
     };
 
@@ -273,7 +281,7 @@ export function ReferralForm() {
       const { id } = (await response.json()) as { id: string };
       toast.success(
         isAgent
-          ? 'AFC received your intro — you’ll get an email when an MC is paired.'
+          ? 'Thanks — we got your intro. Check your email for confirmation, and we’ll email again when an MC is paired.'
           : 'Referral created'
       );
       router.push(`/referrals/${id}`);
@@ -415,20 +423,22 @@ export function ReferralForm() {
                   </label>
                 </>
               )}
-              <label className={labelClasses}>
-                Client type
-                <select
-                  name="clientType"
-                  defaultValue="Buyer"
-                  className={inputClasses}
-                >
-                  {CLIENT_TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {!isAgent && (
+                <label className={labelClasses}>
+                  Client type
+                  <select
+                    name="clientType"
+                    defaultValue="Buyer"
+                    className={inputClasses}
+                  >
+                    {CLIENT_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               {!isAgent && (
                 <>
                   <label className={labelClasses}>
@@ -495,15 +505,17 @@ export function ReferralForm() {
                   ))}
                 </select>
               </label>
-              <label className={`${labelClasses} md:col-span-2`}>
-                Borrower current address
-                <input
-                  name="borrowerCurrentAddress"
-                  required
-                  autoComplete="street-address"
-                  className={inputClasses}
-                />
-              </label>
+              {!isAgent && (
+                <label className={`${labelClasses} md:col-span-2`}>
+                  Borrower current address
+                  <input
+                    name="borrowerCurrentAddress"
+                    required
+                    autoComplete="street-address"
+                    className={inputClasses}
+                  />
+                </label>
+              )}
             </div>
           </fieldset>
 
@@ -512,14 +524,19 @@ export function ReferralForm() {
               Notes for the team
             </legend>
             <p className="text-xs text-foreground-subtle">
-              These notes will land in the referral's conversation thread so everyone has the same
-              context from the start.
+              {isAgent
+                ? 'Share anything that helps the mortgage consultant — budget range, urgency, special circumstances, and your preferred MC if you have one.'
+                : "These notes will land in the referral's conversation thread so everyone has the same context from the start."}
             </p>
             <textarea
               name="initialNotes"
               rows={4}
               className={`${inputClasses} min-h-[120px] resize-y`}
-              placeholder="Share helpful context, deadlines, or next steps"
+              placeholder={
+                isAgent
+                  ? 'e.g. Preferred MC: Jordan Smith. First-time buyer, hoping to close before school starts…'
+                  : 'Share helpful context, deadlines, or next steps'
+              }
               defaultValue={prefillNotes}
             />
           </fieldset>

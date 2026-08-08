@@ -16,7 +16,7 @@ export const createReferralSchema = z.object({
   clientType: z.enum(['Seller', 'Buyer', 'Both']),
   lookingInZip: z.string().regex(/^\d{5}$/),
   lookingInZips: zipArraySchema.optional(),
-  borrowerCurrentAddress: z.string().min(1),
+  borrowerCurrentAddress: z.string().optional(),
   stageOnTransfer: z.enum(['Pre-approval TBD', 'Pre-approved']),
   loanFileNumber: z.string().optional(),
   initialNotes: z.string().optional(),
