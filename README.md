@@ -405,7 +405,9 @@ pnpm exec tsc --noEmit
 
 ## Additional Docs
 
-- `DASHBOARD_VERIFICATION_REPORT.md`
-- `IMPLEMENTATION_SUMMARY.md`
+- `docs/DASHBOARD_VERIFICATION_REPORT.md`
+- `docs/IMPLEMENTATION_SUMMARY.md`
+- `docs/DESIGN.md`
+- `docs/theme.md`
 
 Use these as supplemental references; this README is the primary onboarding and operational guide.

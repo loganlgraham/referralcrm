@@ -16,4 +16,9 @@ tsconfig.tsbuildinfo
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+.playwright-cli/
+
+# Cursor debug logs
+.cursor/debug-*.log
+
 .vercel
