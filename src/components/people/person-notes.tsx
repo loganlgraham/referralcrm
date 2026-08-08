@@ -85,14 +85,14 @@ export function PersonNotes({ subjectId, initialNotes, endpoint, description }: 
           value={content}
           onChange={(event) => setContent(event.target.value)}
           rows={3}
-          className="w-full rounded border border-border px-3 py-2 text-sm text-foreground-muted focus:border-primary-500 focus:outline-none"
+          className="w-full rounded border border-border px-3 py-2 text-sm text-foreground-muted focus:border-ring focus:outline-none"
           placeholder="Record context for internal use"
           disabled={saving}
         />
         <button
           type="submit"
           disabled={saving || !content.trim()}
-          className="inline-flex items-center rounded bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
+          className="inline-flex items-center rounded bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
         >
           {saving ? 'Saving…' : 'Save note'}
         </button>

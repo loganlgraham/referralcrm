@@ -214,7 +214,7 @@ export function RequestUpdateButton({
         type="button"
         onClick={handleOpenModal}
         disabled={agents.length === 0}
-        className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Mail className="h-4 w-4" />
         Request Update from Agent
@@ -232,12 +232,12 @@ export function RequestUpdateButton({
                 </span>
               </div>
               {statusInfo.agentResponded && statusInfo.responseDate ? (
-                <div className="flex items-center gap-1.5 text-green-600">
+                <div className="flex items-center gap-1.5 text-success">
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   <span>Agent updated on {formatDate(statusInfo.responseDate)}</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-1.5 text-amber-600">
+                <div className="flex items-center gap-1.5 text-warning">
                   <Clock className="h-3.5 w-3.5" />
                   <span>No action yet</span>
                 </div>
@@ -253,7 +253,7 @@ export function RequestUpdateButton({
           {/* Next Scheduled Send */}
           {nextSendInfo.nextAt ? (
             <div
-              className={`flex items-center gap-1.5 mt-2 ${nextSendInfo.nextAt.getTime() < Date.now() ? 'text-amber-600' : 'text-blue-600'}`}
+              className={`flex items-center gap-1.5 mt-2 ${nextSendInfo.nextAt.getTime() < Date.now() ? 'text-warning' : 'text-info'}`}
             >
               <Calendar className="h-3.5 w-3.5" />
               <span>
@@ -277,7 +277,7 @@ export function RequestUpdateButton({
 
       {/* Success message outside modal */}
       {successMessage && !isModalOpen && (
-        <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-xs text-green-700">
+        <div className="rounded-lg bg-success-soft border border-success/30 px-3 py-2 text-xs text-success">
           {successMessage}
         </div>
       )}
@@ -295,7 +295,7 @@ export function RequestUpdateButton({
           </p>
 
           {error && (
-            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+            <div className="rounded-lg bg-danger-soft border border-danger/30 px-3 py-2 text-sm text-danger">
               {error}
             </div>
           )}
@@ -310,7 +310,7 @@ export function RequestUpdateButton({
                   type="checkbox"
                   checked={selectedAgentIds.includes(agent.id)}
                   onChange={() => handleToggleAgent(agent.id)}
-                  className="h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
+                  className="h-4 w-4 rounded border-border-strong text-primary focus:ring-ring"
                 />
                 <div className="flex-1">
                   <div className="font-medium text-sm text-foreground">{agent.name ?? 'Agent'}</div>
@@ -332,7 +332,7 @@ export function RequestUpdateButton({
               type="button"
               onClick={handleSubmit}
               disabled={isSending || selectedAgentIds.length === 0}
-              className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSending ? (
                 <>

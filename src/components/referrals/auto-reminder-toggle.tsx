@@ -58,7 +58,7 @@ export function AutoReminderToggle({
     <div className="space-y-2">
       <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-raised p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
-          <div className="mt-1 rounded-full bg-amber-100 p-2 text-amber-700">
+          <div className="mt-1 rounded-full bg-warning-soft p-2 text-warning">
             <Bell className="h-5 w-5" />
           </div>
           <div>
@@ -75,7 +75,7 @@ export function AutoReminderToggle({
               checked={enabled}
               onChange={(event) => handleToggle(event.target.checked)}
               disabled={isUpdating}
-              className="h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-4 w-4 rounded border-border-strong text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             />
             {isUpdating ? 'Updating...' : enabled ? 'Enabled' : 'Disabled'}
           </label>
@@ -83,7 +83,7 @@ export function AutoReminderToggle({
       </div>
       
       {error && (
-        <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+        <div className="rounded-lg bg-danger-soft border border-danger/30 px-3 py-2 text-xs text-danger">
           {error}
         </div>
       )}

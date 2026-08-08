@@ -102,7 +102,7 @@ export function generateFeeBreakdownEmailHTML(data: FeeBreakdownEmailData): { ht
       color: #333;
       margin: 0;
       padding: 0;
-      background-color: #f5f5f5;
+      background-color: #f5f6fa;
     }
     .container {
       max-width: 600px;
@@ -110,7 +110,7 @@ export function generateFeeBreakdownEmailHTML(data: FeeBreakdownEmailData): { ht
       background-color: #ffffff;
     }
     .header {
-      background: #0066cc;
+      background: #0f172a;
       color: white;
       padding: 30px 20px;
       border-radius: 0;
@@ -207,31 +207,31 @@ export function generateFeeBreakdownEmailHTML(data: FeeBreakdownEmailData): { ht
       color: #dc2626;
     }
     .instruction-box {
-      background: #eff6ff;
+      background: #e6f1fe;
       padding: 20px;
-      border-radius: 6px;
-      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      border: 1px solid #c3defb;
       margin: 24px 0;
     }
     .instruction-box p {
       margin: 0;
       font-size: 15px;
       line-height: 1.6;
-      color: #1e40af;
+      color: #0a54b4;
     }
     .button {
       display: inline-block;
-      background: #0066cc;
+      background: #0f172a;
       color: white !important;
       padding: 14px 28px;
       text-decoration: none;
-      border-radius: 6px;
+      border-radius: 8px;
       margin: 20px 0;
       font-weight: 600;
       font-size: 15px;
     }
     .button:hover {
-      background: #0052a3;
+      background: #26314b;
     }
   </style>
 </head>
@@ -321,7 +321,7 @@ Aurora, CO 80014
         <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
           <p style="margin: 0 0 12px 0; font-size: 15px; color: #374151; line-height: 1.6;">
             Please include a copy of the settlement statement with the check, or email it to 
-            <a href="mailto:kristen.truong@americanhomeagents.com" style="color: #0066cc; text-decoration: none;">kristen.truong@americanhomeagents.com</a> 
+            <a href="mailto:kristen.truong@americanhomeagents.com" style="color: #0c6ce9; text-decoration: none;">kristen.truong@americanhomeagents.com</a> 
             if wiring the referral fee (wiring instructions attached).
           </p>
           <p style="margin: 12px 0; font-size: 15px; color: #374151; line-height: 1.6;">

@@ -125,7 +125,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       const buyerFirstName = getFirstName(buyerName);
 
       const emailHtml = `
-<div style="font-family:Inter,system-ui,-apple-system,sans-serif;max-width:640px;color:#0f172a;line-height:1.6;">
+<div style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;max-width:640px;color:#0f172a;line-height:1.6;">
   <p style="margin:0 0 8px 0;">Hi ${agentFirstName},</p>
   
   <p style="margin:0 0 16px 0;">Hope everything's going well with ${buyerFirstName}. When you have a moment, please log in to the referral portal to add a brief update and confirm the current status. Quick notes like "showing homes this weekend," "submitting an offer," or "still in touch but pausing for now" help us stay aligned and best support the client.</p>

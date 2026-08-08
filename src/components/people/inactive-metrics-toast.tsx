@@ -33,7 +33,7 @@ export function promptInactiveMetricsChoice({ label, onChoose }: PromptInactiveM
               toast.dismiss(id);
               onChoose(false);
             }}
-            className="rounded-md bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-700"
+            className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-hover"
           >
             Exclude from leaderboards
           </button>

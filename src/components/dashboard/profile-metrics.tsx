@@ -86,7 +86,7 @@ export function ProfileMetrics() {
 
   if (error) {
     return (
-      <div className="mt-8 rounded-lg border border-red-100 bg-red-50 p-4 text-sm text-red-700">
+      <div className="mt-8 rounded-lg border border-danger/30 bg-danger-soft p-4 text-sm text-danger">
         Unable to load your performance metrics right now.
       </div>
     );
@@ -105,7 +105,7 @@ export function ProfileMetrics() {
 
   if (!data.metrics) {
     return (
-      <div className="mt-8 rounded-lg border border-amber-100 bg-amber-50 p-4 text-sm text-amber-700">
+      <div className="mt-8 rounded-lg border border-warning/30 bg-warning-soft p-4 text-sm text-warning">
         Complete your profile to start seeing personal performance insights.
       </div>
     );

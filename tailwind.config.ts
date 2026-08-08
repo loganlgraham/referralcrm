@@ -20,28 +20,24 @@ const config: Config = {
         // Legacy brand token kept for backwards compatibility with any
         // component that still references `bg-brand` / `text-brand`.
         brand: {
-          DEFAULT: '#2457D6',
-          light: '#4D76DF',
-          dark: '#0F172A'
+          DEFAULT: '#0F172A',
+          light: '#24304C',
+          dark: '#04070E'
         },
-        // Relay blue gives interactive work a consistent, recognizable signal.
+        // Navy (matching the sidebar) gives interactive work a consistent signal.
+        // `hover` and `active` lift rather than darken — near-black has nowhere
+        // darker to go, so the usual 600→700 step reads as no feedback at all.
         primary: {
           DEFAULT: 'hsl(var(--primary) / <alpha-value>)',
+          hover: 'hsl(var(--primary-hover) / <alpha-value>)',
+          active: 'hsl(var(--primary-active) / <alpha-value>)',
           foreground: 'hsl(var(--primary-foreground) / <alpha-value>)',
-          50: '#EEF3FF',
-          100: '#DCE6FF',
-          200: '#B9CDFF',
-          300: '#8EACF8',
-          400: '#5E83E8',
-          500: '#3764DC',
-          600: '#2457D6',
-          700: '#1D46B5',
-          800: '#1A3C91',
-          900: '#183573'
+          soft: 'hsl(var(--primary-soft) / <alpha-value>)'
         },
         signal: {
-          DEFAULT: '#E4684A',
-          soft: '#FFF0EB',
+          DEFAULT: 'hsl(var(--signal) / <alpha-value>)',
+          foreground: 'hsl(var(--signal-foreground) / <alpha-value>)',
+          soft: 'hsl(var(--signal-soft) / <alpha-value>)',
           dark: '#B9472E'
         },
         // Semantic tokens backed by CSS variables declared in globals.css.
@@ -80,16 +76,25 @@ const config: Config = {
           DEFAULT: 'hsl(var(--info) / <alpha-value>)',
           foreground: 'hsl(var(--info-foreground) / <alpha-value>)',
           soft: 'hsl(var(--info-soft) / <alpha-value>)'
+        },
+        accent: {
+          DEFAULT: 'hsl(var(--accent) / <alpha-value>)',
+          foreground: 'hsl(var(--accent-foreground) / <alpha-value>)',
+          soft: 'hsl(var(--accent-soft) / <alpha-value>)'
         }
       },
       borderRadius: {
-        card: '14px',
+        // Softened to match the 16px card radius without touching the ~300
+        // existing `rounded-md` / `rounded-lg` call sites.
+        md: '8px',
+        lg: '10px',
+        card: '16px',
         pill: '9999px'
       },
       boxShadow: {
-        card: '0 1px 2px rgba(19, 34, 56, 0.04), 0 10px 28px -18px rgba(19, 34, 56, 0.22)',
-        raised: '0 8px 20px rgba(19, 34, 56, 0.08), 0 28px 56px -24px rgba(19, 34, 56, 0.24)',
-        focus: '0 0 0 4px hsl(var(--ring) / 0.25)'
+        card: '0 1px 2px rgba(20, 20, 60, 0.04), 0 10px 30px -14px rgba(20, 20, 60, 0.14)',
+        raised: '0 4px 14px rgba(20, 20, 60, 0.06), 0 24px 48px -18px rgba(20, 20, 60, 0.20)',
+        focus: '0 0 0 4px hsl(var(--ring) / 0.22)'
       },
       fontSize: {
         eyebrow: ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.18em', fontWeight: '600' }],

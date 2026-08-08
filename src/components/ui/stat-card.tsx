@@ -17,7 +17,7 @@ interface StatCardProps {
 
 const toneStyles: Record<NonNullable<StatCardProps['tone']>, string> = {
   default: 'border-border bg-surface-raised',
-  primary: 'border-primary-200 bg-primary-50/60',
+  primary: 'border-[hsl(var(--primary)/0.2)] bg-primary-soft/50',
   success: 'border-[hsl(var(--success)/0.25)] bg-success-soft/60',
   warning: 'border-[hsl(var(--warning)/0.25)] bg-warning-soft/60',
   danger: 'border-[hsl(var(--danger)/0.25)] bg-danger-soft/60'
@@ -53,9 +53,9 @@ export function StatCard({
         {icon && <div className="shrink-0 text-foreground-subtle">{icon}</div>}
       </div>
       <div className="flex items-baseline gap-2">
-        <div className="text-2xl font-semibold leading-none tracking-tight text-foreground">{value}</div>
+        <div className="text-numeric text-2xl font-semibold leading-none text-foreground">{value}</div>
         {delta && (
-          <span className={cn('rounded-pill px-1.5 py-0.5 text-[11px] font-medium', deltaTone(delta))}>
+          <span className={cn('text-numeric rounded-pill px-1.5 py-0.5 text-[11px] font-medium', deltaTone(delta))}>
             {delta.value}
           </span>
         )}

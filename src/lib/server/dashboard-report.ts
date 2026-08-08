@@ -751,7 +751,7 @@ function renderHtml(args: {
     .join('');
 
   return `
-    <div style="font-family:Inter,system-ui,-apple-system,sans-serif;color:#0f172a;max-width:640px;">
+    <div style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;color:#0f172a;max-width:640px;">
       <h2 style="margin:0 0 4px;color:#0f172a;">${escapeHtml(args.reportName)}</h2>
       <p style="margin:0 0 12px;color:#64748b;font-size:13px;">Timeframe: ${escapeHtml(args.windowLabel)} &nbsp;&middot;&nbsp; Network: ${escapeHtml(args.network)}</p>
       ${sectionsHtml}

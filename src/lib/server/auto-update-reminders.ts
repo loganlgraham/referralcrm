@@ -210,7 +210,7 @@ export async function runAutoUpdateReminders(
       for (const agent of agents) {
         const agentFirstName = getFirstName(agent.name ?? '');
         const emailHtml = `
-<div style="font-family:Inter,system-ui,-apple-system,sans-serif;max-width:640px;color:#0f172a;line-height:1.6;">
+<div style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;max-width:640px;color:#0f172a;line-height:1.6;">
   <p style="margin:0 0 8px 0;">Hi ${agentFirstName},</p>
   <p style="margin:0 0 16px 0;">This is an automated reminder to update one of your referrals (Day ${daysSincePairing} since pairing):</p>
   <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;">

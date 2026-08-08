@@ -190,7 +190,7 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
     <div className="space-y-6">
       <div className="rounded-md bg-surface-raised p-6 shadow-sm">
         <div className="flex items-start gap-3">
-          <div className="mt-1 rounded-full bg-primary-600/10 p-2 text-primary-700">
+          <div className="mt-1 rounded-full bg-primary/10 p-2 text-primary">
             <SparklesIcon className="h-5 w-5" />
           </div>
           <div className="space-y-2">
@@ -207,7 +207,7 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
                 type="text"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                className="w-full rounded-md border border-border bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                className="w-full rounded-md border border-border bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
                 placeholder={placeholder}
                 disabled={isSearching}
               />
@@ -216,7 +216,7 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 rows={3}
-                className="w-full rounded-md border border-border bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                className="w-full rounded-md border border-border bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
                 placeholder={placeholder}
                 disabled={isSearching}
               />
@@ -228,7 +228,7 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
             <button
               type="submit"
               disabled={isSearching || isLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-primary-600/70"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-primary/70"
             >
               {isSearching ? <Loader2Icon className="h-4 w-4 animate-spin text-white" /> : <SearchIcon className="h-4 w-4" />}
               {isSearching ? 'Searching...' : ctaLabel}
@@ -245,7 +245,7 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
               {derivedCoverageLabels.length > 0 ? (
                 derivedCoverageLabels.map((label) => (
                   <span key={label} className="inline-flex items-center gap-1 rounded-full bg-surface-subtle px-3 py-1 text-xs font-medium text-foreground-muted">
-                    <MapPinIcon className="h-3 w-3 text-primary-700" />
+                    <MapPinIcon className="h-3 w-3 text-primary" />
                     {label}
                   </span>
                 ))
@@ -260,7 +260,7 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
           </div>
         </div>
 
-        {error && <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <p className="mt-4 rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
 
         <div className="mt-6 space-y-4">
           {isLoading ? (
@@ -287,7 +287,7 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
                         href={buildGmailComposeUrl(agent.email)}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:border-primary-500 hover:text-primary-700"
+                        className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:border-primary hover:text-primary-hover"
                       >
                         <MailIcon className="h-4 w-4" />
                         Email
@@ -295,7 +295,7 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
                       {agent.phone && (
                         <a
                           href={`tel:${agent.phone}`}
-                          className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:border-primary-500 hover:text-primary-700 whitespace-nowrap"
+                          className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:border-primary hover:text-primary-hover whitespace-nowrap"
                         >
                           <PhoneIcon className="h-4 w-4" />
                           {formatPhoneNumber(agent.phone) || 'Call'}
@@ -303,7 +303,7 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
                       )}
                       <Link
                         href={`/agents/${agent._id}`}
-                        className="inline-flex items-center gap-2 rounded-md bg-foreground px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
+                        className="inline-flex items-center gap-2 rounded-md bg-foreground px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-hover"
                       >
                         View profile
                         <ArrowRightIcon className="h-4 w-4" />
@@ -313,7 +313,7 @@ export function FindAgentExperience({ variant = 'agent' }: { variant?: 'agent' |
 
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-foreground-subtle">
                     <span className="inline-flex items-center gap-1 font-medium uppercase text-foreground-subtle">
-                      <MapPinIcon className="h-3 w-3 text-primary-700" />
+                      <MapPinIcon className="h-3 w-3 text-primary" />
                       {coverageLabels.slice(0, 5).join(', ') || 'Coverage pending'}
                     </span>
                     <span>Licensed: {agent.statesLicensed.join(', ') || '—'}</span>

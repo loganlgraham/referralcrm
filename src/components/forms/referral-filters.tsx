@@ -69,7 +69,7 @@ function StatusMultiSelect({
             <button
               type="button"
               onClick={() => onChange([])}
-              className="w-full px-3 py-1.5 text-left text-sm normal-case text-indigo-600 hover:bg-surface-muted"
+              className="w-full px-3 py-1.5 text-left text-sm normal-case text-accent hover:bg-surface-muted"
             >
               Clear all
             </button>
@@ -83,7 +83,7 @@ function StatusMultiSelect({
                 type="checkbox"
                 checked={selected.includes(status)}
                 onChange={() => toggle(status)}
-                className="h-3.5 w-3.5 rounded border-border-strong text-indigo-600 focus:ring-indigo-500"
+                className="h-3.5 w-3.5 rounded border-border-strong text-accent focus:ring-accent/30"
               />
               {status}
             </label>

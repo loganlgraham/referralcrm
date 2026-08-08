@@ -105,7 +105,7 @@ export function Sidebar({ session, className }: { session: Session; className?: 
   return (
     <aside
       className={cn(
-        'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-white/10 bg-[#0F172A] text-white',
+        'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-white/10 bg-primary text-white',
         className
       )}
     >
@@ -144,21 +144,21 @@ export function Sidebar({ session, className }: { session: Session; className?: 
                       className={cn(
                         'group relative flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium no-underline transition',
                         active
-                          ? 'bg-white text-[#0F172A] shadow-sm'
+                          ? 'bg-white text-primary shadow-sm'
                           : 'text-white/70 hover:bg-white/10 hover:text-white'
                       )}
                     >
                       {active && (
                         <span
                           aria-hidden
-                          className="absolute -left-[3px] top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full border-[3px] border-[#0F172A] bg-signal"
+                          className="absolute -left-[3px] top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full border-[3px] border-primary bg-signal"
                         />
                       )}
                       <Icon
                         aria-hidden
                         className={cn(
                           'h-4 w-4 shrink-0',
-                          active ? 'text-primary-600' : 'text-white/40 group-hover:text-white/75'
+                          active ? 'text-primary' : 'text-white/40 group-hover:text-white/75'
                         )}
                       />
                       {item.label}
@@ -203,7 +203,7 @@ function UserChip({ session }: { session: Session }) {
       </button>
       {menuOpen && (
         <div
-          className="absolute bottom-full left-3 right-3 mb-2 overflow-hidden rounded-lg border border-white/10 bg-[#1E293B] shadow-raised animate-fade-in"
+          className="absolute bottom-full left-3 right-3 mb-2 overflow-hidden rounded-lg border border-white/10 bg-primary-hover shadow-raised animate-fade-in"
           onMouseLeave={() => setMenuOpen(false)}
         >
           <button

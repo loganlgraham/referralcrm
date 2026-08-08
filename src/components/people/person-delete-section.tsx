@@ -46,15 +46,15 @@ export function PersonDeleteSection({
   };
 
   return (
-    <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-sm text-red-800">
-      <h3 className="text-base font-semibold text-red-900">Delete {label}</h3>
-      <p className="mt-1 text-red-700">
+    <div className="rounded-lg border border-danger/30 bg-danger-soft p-6 text-sm text-danger">
+      <h3 className="text-base font-semibold text-danger">Delete {label}</h3>
+      <p className="mt-1 text-danger">
         {details ?? 'Deleting will remove this profile and sign-in access. This cannot be undone.'}
       </p>
-      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
       <button
         type="button"
-        className="mt-4 inline-flex items-center rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-500 disabled:opacity-60"
+        className="mt-4 inline-flex items-center rounded-md bg-danger px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-danger disabled:opacity-60"
         onClick={handleDelete}
         disabled={isDeleting}
       >

@@ -18,9 +18,9 @@ function ThankYouContent() {
     <main className="flex min-h-[60vh] items-center justify-center bg-surface-subtle px-4 py-12">
       <div className="w-full max-w-xl rounded-card bg-surface-raised p-8 shadow-lg ring-1 ring-border">
         <div className="space-y-4 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success-soft">
             <svg
-              className="h-6 w-6 text-green-600"
+              className="h-6 w-6 text-success"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -40,7 +40,7 @@ function ThankYouContent() {
             <div className="pt-4">
               <Link
                 href="/"
-                className="inline-flex items-center justify-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700"
+                className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover"
               >
                 Return to home
               </Link>

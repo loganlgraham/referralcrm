@@ -309,7 +309,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
                 type="button"
                 onClick={handleSendWelcomeEmail}
                 disabled={sendingWelcome}
-                className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
+                className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {sendingWelcome ? 'Sending…' : 'Send welcome email'}
               </button>
@@ -399,7 +399,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
                 <button
                   type="submit"
                   disabled={saving}
-                  className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
+                  className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {saving ? 'Saving…' : 'Save MC'}
                 </button>
@@ -468,7 +468,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
               <button
                 type="submit"
                 disabled={saving}
-                className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
+                className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {saving ? 'Saving…' : 'Save MC'}
               </button>
@@ -529,7 +529,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
               <tr key={lender._id} className="hover:bg-surface-muted">
                 <td className="px-4 py-3 text-sm text-foreground-muted">
                   <div className="font-medium text-foreground">
-                    <Link href={`/lenders/${lender._id}`} className="text-primary-700 hover:underline">
+                    <Link href={`/lenders/${lender._id}`} className="text-primary hover:underline">
                       {lender.name}
                     </Link>
                   </div>
@@ -540,7 +540,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
                 <td className="px-4 py-3 text-sm text-foreground-muted">
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                      lender.active === false ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'
+                      lender.active === false ? 'bg-danger-soft text-danger' : 'bg-success-soft text-success'
                     }`}
                   >
                     {lender.active === false ? 'Inactive' : 'Active'}

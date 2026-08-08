@@ -247,11 +247,11 @@ export function NotificationDropdown({
                     <div className="flex items-center gap-2">
                       {notification.readAt == null && (
                         <span
-                          className="inline-block h-2 w-2 rounded-full bg-red-500"
+                          className="inline-block h-2 w-2 rounded-full bg-danger"
                           aria-label="Unread notification"
                         />
                       )}
-                      <p className={`text-sm font-semibold hover:underline ${notification.readAt == null ? 'text-primary-700' : 'text-foreground-muted'}`}>
+                      <p className={`text-sm font-semibold hover:underline ${notification.readAt == null ? 'text-primary' : 'text-foreground-muted'}`}>
                         {notification.borrowerName}
                       </p>
                     </div>

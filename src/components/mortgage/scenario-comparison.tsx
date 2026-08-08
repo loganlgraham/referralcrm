@@ -69,9 +69,9 @@ export function ScenarioComparison({ scenarios, onRemoveScenario }: ScenarioComp
 
               {/* Key Metrics */}
               <div className="mt-4 space-y-3">
-                <div className="rounded-lg bg-primary-600/5 p-3">
+                <div className="rounded-lg bg-primary/5 p-3">
                   <p className="text-xs text-foreground-muted">Monthly Payment</p>
-                  <p className="text-xl font-bold text-primary-700">
+                  <p className="text-xl font-bold text-primary">
                     {currencyFormatter.format(scenario.calculations.totalMonthly)}
                   </p>
                 </div>
@@ -117,7 +117,7 @@ export function ScenarioComparison({ scenarios, onRemoveScenario }: ScenarioComp
                   {scenario.calculations.pmiMonthly > 0 && (
                     <div className="flex justify-between">
                       <dt className="text-foreground-muted">PMI</dt>
-                      <dd className="font-semibold text-primary-700">
+                      <dd className="font-semibold text-primary">
                         {currencyFormatter.format(scenario.calculations.pmiMonthly)}/mo
                       </dd>
                     </div>
@@ -125,7 +125,7 @@ export function ScenarioComparison({ scenarios, onRemoveScenario }: ScenarioComp
                   {scenario.inputs.extraPrincipal > 0 && (
                     <div className="flex justify-between">
                       <dt className="text-foreground-muted">Extra Principal</dt>
-                      <dd className="font-semibold text-emerald-600">
+                      <dd className="font-semibold text-success">
                         {currencyFormatter.format(scenario.inputs.extraPrincipal)}/mo
                       </dd>
                     </div>
@@ -167,13 +167,13 @@ export function ScenarioComparison({ scenarios, onRemoveScenario }: ScenarioComp
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div>
               <p className="text-xs text-foreground-muted">Lowest Monthly Payment</p>
-              <p className="mt-1 text-base font-bold text-emerald-600">
+              <p className="mt-1 text-base font-bold text-success">
                 {currencyFormatter.format(Math.min(...scenarios.map((s) => s.calculations.totalMonthly)))}
               </p>
             </div>
             <div>
               <p className="text-xs text-foreground-muted">Lowest Total Interest</p>
-              <p className="mt-1 text-base font-bold text-emerald-600">
+              <p className="mt-1 text-base font-bold text-success">
                 {currencyFormatter.format(Math.min(...scenarios.map((s) => s.calculations.totalInterest)))}
               </p>
             </div>

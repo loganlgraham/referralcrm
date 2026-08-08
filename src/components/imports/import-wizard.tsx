@@ -189,7 +189,7 @@ export function ImportWizard() {
       <div className="space-y-6 rounded-md bg-surface-raised p-6 shadow-sm">
       <div className="flex items-center gap-4 text-sm text-foreground-subtle">
         {steps.map((item) => (
-          <div key={item} className={`flex items-center gap-2 ${step === item ? 'font-semibold text-primary-700' : ''}`}>
+          <div key={item} className={`flex items-center gap-2 ${step === item ? 'font-semibold text-primary' : ''}`}>
             <span className="h-8 w-8 rounded-full border border-border-strong text-center leading-8">{steps.indexOf(item) + 1}</span>
             {item}
           </div>
@@ -254,11 +254,11 @@ export function ImportWizard() {
               {assistantLoading && <p className="text-foreground-subtle">Analyzing sample rows…</p>}
               {!assistantLoading && assistantError && (
                 <div className="flex items-start justify-between gap-3">
-                  <span className="text-sm text-red-600">{assistantError}</span>
+                  <span className="text-sm text-danger">{assistantError}</span>
                   <button
                     type="button"
                     onClick={() => void fetchAssistantInsights()}
-                    className="rounded border border-red-200 px-3 py-1 text-xs font-medium text-red-600"
+                    className="rounded border border-danger/30 px-3 py-1 text-xs font-medium text-danger"
                   >
                     Try again
                   </button>
@@ -311,7 +311,7 @@ export function ImportWizard() {
                 type="button"
                 onClick={handleApplyMappingSuggestions}
                 disabled={assistantLoading || mappingSuggestionEntries.length === 0}
-                className="rounded bg-primary-600 px-3 py-1 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded bg-primary px-3 py-1 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Apply suggestions
               </button>
@@ -319,7 +319,7 @@ export function ImportWizard() {
           </div>
           <button
             type="button"
-            className="rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white"
+            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white"
             onClick={() => setStep('Preview')}
           >
             Continue
@@ -396,7 +396,7 @@ export function ImportWizard() {
             <button type="button" className="rounded border border-border-strong px-4 py-2 text-sm" onClick={() => setStep('Map Fields')}>
               Back
             </button>
-            <button type="button" className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white" onClick={() => setStep('Confirm')}>
+            <button type="button" className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white" onClick={() => setStep('Confirm')}>
               Continue
             </button>
           </div>
@@ -426,7 +426,7 @@ export function ImportWizard() {
             <button type="button" className="rounded border border-border-strong px-4 py-2 text-sm" onClick={() => setStep('Preview')}>
               Back
             </button>
-            <button type="button" className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white" onClick={handleConfirm}>
+            <button type="button" className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white" onClick={handleConfirm}>
               Start import
             </button>
           </div>

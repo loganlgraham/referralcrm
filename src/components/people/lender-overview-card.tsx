@@ -76,13 +76,13 @@ export function LenderOverviewCard({ lender, isAdmin }: LenderOverviewCardProps)
             <h1 className="text-2xl font-semibold text-foreground">{lender.name}</h1>
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                isActive ? 'bg-success-soft text-success' : 'bg-danger-soft text-danger'
               }`}
             >
               {isActive ? 'Active' : 'Inactive'}
             </span>
             {!isActive && lender.includeInMetrics === false && (
-              <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+              <span className="inline-flex items-center rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-semibold text-warning">
                 Excluded from leaderboards
               </span>
             )}
@@ -95,7 +95,7 @@ export function LenderOverviewCard({ lender, isAdmin }: LenderOverviewCardProps)
                 href={buildGmailComposeUrl(lender.email)}
                 target="_blank"
                 rel="noreferrer"
-                className="text-primary-700 hover:underline"
+                className="text-primary hover:underline"
               >
                 {lender.email}
               </a>
@@ -129,8 +129,8 @@ export function LenderOverviewCard({ lender, isAdmin }: LenderOverviewCardProps)
               disabled={togglingActive}
               className={`inline-flex items-center rounded-md px-4 py-2 text-sm font-semibold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-70 ${
                 isActive
-                  ? 'border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
-                  : 'border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  ? 'border border-danger/30 bg-danger-soft text-danger hover:bg-danger-soft'
+                  : 'border border-success/30 bg-success-soft text-success hover:bg-success-soft'
               }`}
               title={
                 isActive
@@ -142,7 +142,7 @@ export function LenderOverviewCard({ lender, isAdmin }: LenderOverviewCardProps)
             </button>
             <button
               type="button"
-              className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700"
+              className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover"
               onClick={() => setShowEditor((previous) => !previous)}
             >
               {showEditor ? 'Close edit' : 'Edit details'}

@@ -44,22 +44,22 @@ export function ExtraPrincipalImpact({
   const monthsDisplay = Math.round((yearsSaved - yearsDisplay) * 12);
 
   return (
-    <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4">
+    <div className="rounded-lg border border-success/30 bg-success-soft/50 p-4">
       <div className="flex items-center gap-2">
-        <div className="rounded-lg bg-emerald-500 p-1.5 text-white">
+        <div className="rounded-lg bg-success p-1.5 text-white">
           <DollarSignIcon className="h-4 w-4" />
         </div>
-        <h3 className="text-sm font-semibold text-emerald-900">Extra Principal Impact</h3>
+        <h3 className="text-sm font-semibold text-success">Extra Principal Impact</h3>
       </div>
 
-      <p className="mt-2 text-xs text-emerald-800">
+      <p className="mt-2 text-xs text-success">
         By paying an extra <strong>{currencyFormatter.format(extraPrincipalAmount)}/month</strong>, you will:
       </p>
 
       <div className="mt-4 grid gap-3">
         {/* Time Saved */}
         <div className="flex items-start gap-3 rounded-md bg-surface-raised p-3 shadow-sm">
-          <div className="rounded-md bg-emerald-100 p-2 text-emerald-600">
+          <div className="rounded-md bg-success-soft p-2 text-success">
             <ClockIcon className="h-4 w-4" />
           </div>
           <div className="flex-1">
@@ -75,7 +75,7 @@ export function ExtraPrincipalImpact({
 
         {/* Interest Saved */}
         <div className="flex items-start gap-3 rounded-md bg-surface-raised p-3 shadow-sm">
-          <div className="rounded-md bg-emerald-100 p-2 text-emerald-600">
+          <div className="rounded-md bg-success-soft p-2 text-success">
             <DollarSignIcon className="h-4 w-4" />
           </div>
           <div className="flex-1">
@@ -87,7 +87,7 @@ export function ExtraPrincipalImpact({
 
         {/* Payoff Date */}
         <div className="flex items-start gap-3 rounded-md bg-surface-raised p-3 shadow-sm">
-          <div className="rounded-md bg-emerald-100 p-2 text-emerald-600">
+          <div className="rounded-md bg-success-soft p-2 text-success">
             <CalendarIcon className="h-4 w-4" />
           </div>
           <div className="flex-1">
@@ -102,7 +102,7 @@ export function ExtraPrincipalImpact({
 
       {/* Visualization bar */}
       <div className="mt-4 space-y-2">
-        <p className="text-xs font-medium text-emerald-900">Payoff Progress Comparison</p>
+        <p className="text-xs font-medium text-success">Payoff Progress Comparison</p>
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <span className="w-20 text-xs text-foreground-muted">Standard</span>
@@ -111,10 +111,10 @@ export function ExtraPrincipalImpact({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-20 text-xs text-emerald-800">With extra</span>
-            <div className="h-4 flex-1 rounded-full bg-emerald-100">
+            <span className="w-20 text-xs text-success">With extra</span>
+            <div className="h-4 flex-1 rounded-full bg-success-soft">
               <div
-                className="h-4 rounded-full bg-emerald-500"
+                className="h-4 rounded-full bg-success"
                 style={{ width: `${((1 - yearsSaved / (monthsSaved / 12 + yearsSaved)) * 100).toFixed(0)}%` }}
               />
             </div>

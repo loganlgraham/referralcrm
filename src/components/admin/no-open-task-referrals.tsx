@@ -149,7 +149,7 @@ export function NoOpenTaskReferrals({ onTaskCreated }: NoOpenTaskReferralsProps)
                     <Link
                       prefetch={false}
                       href={`/referrals/${row.id}`}
-                      className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+                      className="font-medium text-primary transition hover:text-primary-hover hover:underline"
                     >
                       {row.borrowerName}
                     </Link>

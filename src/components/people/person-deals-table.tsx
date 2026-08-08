@@ -60,7 +60,7 @@ const outcomeClassName = (outcome: 'Won' | 'Lost' | 'Pending'): string => {
     return 'text-foreground';
   }
   if (outcome === 'Lost') {
-    return 'text-rose-600';
+    return 'text-danger';
   }
   return 'text-foreground-subtle';
 };
@@ -100,7 +100,7 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
                       <Link
                         prefetch={false}
                         href={`/referrals/${deal.referralId}`}
-                        className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+                        className="font-medium text-primary transition hover:text-primary-hover hover:underline"
                       >
                         {label}
                       </Link>
@@ -135,7 +135,7 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
                       <Link
                         prefetch={false}
                         href={`/agents/${deal.agent.id}`}
-                        className="text-primary-700 transition hover:text-primary-800 hover:underline break-words"
+                        className="text-primary transition hover:text-primary-hover hover:underline break-words"
                       >
                         {deal.agent.name || 'Agent'}
                       </Link>
@@ -196,7 +196,7 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
                         <Link
                           prefetch={false}
                           href={`/referrals/${deal.referralId}`}
-                          className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+                          className="font-medium text-primary transition hover:text-primary-hover hover:underline"
                         >
                           {label}
                         </Link>
@@ -216,7 +216,7 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
                         <Link
                           prefetch={false}
                           href={`/agents/${deal.agent.id}`}
-                          className="text-primary-700 transition hover:text-primary-800 hover:underline"
+                          className="text-primary transition hover:text-primary-hover hover:underline"
                         >
                           {deal.agent.name || 'Agent'}
                         </Link>

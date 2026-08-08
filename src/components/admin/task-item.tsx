@@ -142,19 +142,19 @@ export function TaskItem({
         <button
           type="button"
           onClick={() => onComplete(task._id)}
-          className="mt-0.5 shrink-0 text-foreground-subtle transition hover:text-primary-700"
+          className="mt-0.5 shrink-0 text-foreground-subtle transition hover:text-primary-hover"
           title="Complete"
         >
           <Circle className="h-5 w-5" />
         </button>
       ) : (
-        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
+        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
       )}
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-foreground">{task.title}</p>
         <p className="text-xs text-foreground-subtle">
           {formatDueDate(task.effectiveDueAt ?? task.dueAt)}
-          {isSnoozed && <span className="ml-1 text-amber-600">(snoozed)</span>}
+          {isSnoozed && <span className="ml-1 text-warning">(snoozed)</span>}
         </p>
         {isExpanded && !showAsCompleted && (
           <div className="mt-3 space-y-2 border-t border-border pt-3">
@@ -162,7 +162,7 @@ export function TaskItem({
               <button
                 type="button"
                 onClick={() => onDismiss(task._id)}
-                className="block text-xs font-semibold text-rose-600 hover:underline"
+                className="block text-xs font-semibold text-danger hover:underline"
               >
                 Dismiss
               </button>

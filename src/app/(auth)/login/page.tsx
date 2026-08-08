@@ -133,7 +133,7 @@ function LoginForm() {
             <span className="flex justify-end">
               <Link
                 href="/reset-password"
-                className="text-sm font-medium text-primary-700 no-underline hover:underline"
+                className="text-sm font-medium text-primary no-underline hover:underline"
               >
                 Forgot password?
               </Link>
@@ -159,7 +159,7 @@ function LoginForm() {
         Don&apos;t have an account?{' '}
         <Link
           href="/signup"
-          className="font-medium text-primary-700 no-underline hover:underline"
+          className="font-medium text-primary no-underline hover:underline"
         >
           Sign up
         </Link>

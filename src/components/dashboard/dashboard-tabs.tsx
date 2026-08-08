@@ -152,13 +152,13 @@ const RANKED_LIST_PREVIEW_ROWS = 10;
 const AFC_RISK_VISIBLE_ROWS = 7;
 
 const getCompositeScoreStyle = (score: number) => {
-  if (score >= 75) return 'bg-emerald-50 text-emerald-700';
-  if (score >= 50) return 'bg-amber-50 text-amber-700';
-  return 'bg-red-50 text-red-700';
+  if (score >= 75) return 'bg-success-soft text-success';
+  if (score >= 50) return 'bg-warning-soft text-warning';
+  return 'bg-danger-soft text-danger';
 };
 
 const getKpiWeightBadge = (weight: 'critical' | 'high' | 'medium' | 'low') => {
-  if (weight === 'critical') return 'bg-indigo-600 text-white';
+  if (weight === 'critical') return 'bg-accent text-white';
   if (weight === 'high') return 'bg-[hsl(var(--text))] text-white';
   if (weight === 'medium') return 'bg-foreground-muted text-white';
   return 'bg-surface-subtle text-foreground-muted';
@@ -544,7 +544,7 @@ function NetworkFilterButtons({
             onClick={() => onChange(option.value)}
             className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
               isActive
-                ? 'border-transparent bg-primary-600 text-white shadow-sm'
+                ? 'border-transparent bg-primary text-white shadow-sm'
                 : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
             }`}
           >
@@ -620,7 +620,7 @@ function SummaryCard({
                 event.preventDefault();
                 stat.onClick?.();
               }}
-              className={`${tileBase} cursor-pointer hover:bg-surface-subtle hover:ring-1 hover:ring-sky-300`}
+              className={`${tileBase} cursor-pointer hover:bg-surface-subtle hover:ring-1 hover:ring-info/30`}
             >
               <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle leading-tight min-h-[1.8rem]">{stat.label}</dt>
               <dd className="text-sm font-semibold text-foreground">{stat.value}</dd>
@@ -636,7 +636,7 @@ function SummaryCard({
       })}
     </dl>
   ) : null;
-  const wrapperClass = `rounded-card border border-border bg-surface-raised p-4 shadow-card block w-full text-left transition${isHeaderInteractive ? ' hover:border-sky-300 hover:shadow-md' : ''}`;
+  const wrapperClass = `rounded-card border border-border bg-surface-raised p-4 shadow-card block w-full text-left transition${isHeaderInteractive ? ' hover:border-info/30 hover:shadow-md' : ''}`;
   return (
     <div className={wrapperClass}>
       {headerNode}
@@ -667,7 +667,7 @@ function MetricGroupCard({
                 <button
                   type="button"
                   onClick={metric.onHelperClick}
-                  className="text-xs text-sky-600 underline decoration-sky-300 underline-offset-2 hover:text-sky-800"
+                  className="text-xs text-info underline decoration-info/40 underline-offset-2 hover:text-info"
                 >
                   {metric.helper}
                 </button>
@@ -688,7 +688,7 @@ function LineChartCard({
   formatValue,
   helper,
   actions,
-  color = '#0ea5e9'
+  color = 'hsl(var(--info))'
 }: {
   title: string;
   data: TrendPoint[];
@@ -829,7 +829,7 @@ function LineChartCard({
                   x2={tooltipPoint.x}
                   y1={CHART_PADDING_Y}
                   y2={CHART_HEIGHT - CHART_PADDING_Y}
-                  stroke="#cbd5f5"
+                  stroke="hsl(var(--border))"
                   strokeDasharray="4 4"
                 />
                 <rect
@@ -839,19 +839,19 @@ function LineChartCard({
                   height={tooltipMetrics.height}
                   rx={6}
                   fill="#ffffff"
-                  stroke="#cbd5f5"
+                  stroke="hsl(var(--border))"
                 />
                 <text
                   x={tooltipMetrics.x + 8}
                   y={tooltipMetrics.y + 18}
-                  className="text-[11px] font-semibold fill-slate-900"
+                  className="text-[11px] font-semibold fill-foreground"
                 >
                   {tooltipMetrics.valueLabel}
                 </text>
                 <text
                   x={tooltipMetrics.x + 8}
                   y={tooltipMetrics.y + tooltipMetrics.height - 10}
-                  className="text-[10px] fill-slate-500"
+                  className="text-[10px] fill-foreground-subtle"
                 >
                   {tooltipMetrics.labelText}
                 </text>
@@ -862,14 +862,14 @@ function LineChartCard({
               x2={CHART_WIDTH - CHART_PADDING_X}
               y1={CHART_HEIGHT - CHART_PADDING_Y}
               y2={CHART_HEIGHT - CHART_PADDING_Y}
-              stroke="#e2e8f0"
+              stroke="hsl(var(--border))"
               strokeWidth={1}
             />
             <text
               x={CHART_PADDING_X - 6}
               y={CHART_HEIGHT - CHART_PADDING_Y / 2}
               textAnchor="end"
-              className="text-[10px] fill-slate-400"
+              className="text-[10px] fill-foreground-subtle"
             >
               {formatValue(normalizedMin)}
             </text>
@@ -877,7 +877,7 @@ function LineChartCard({
               x={CHART_PADDING_X - 6}
               y={CHART_PADDING_Y - 4}
               textAnchor="end"
-              className="text-[10px] fill-slate-400"
+              className="text-[10px] fill-foreground-subtle"
             >
               {formatValue(normalizedMax)}
             </text>
@@ -1002,8 +1002,8 @@ function MultiLineChartCard({
           >
             <defs>
               <linearGradient id="gridGradient" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="#e2e8f0" stopOpacity="0.4" />
-                <stop offset="100%" stopColor="#e2e8f0" stopOpacity="0.1" />
+                <stop offset="0%" stopColor="hsl(var(--border))" stopOpacity="0.4" />
+                <stop offset="100%" stopColor="hsl(var(--border))" stopOpacity="0.1" />
               </linearGradient>
             </defs>
             <rect
@@ -1024,7 +1024,7 @@ function MultiLineChartCard({
                     y1={y}
                     x2={MULTI_LINE_CHART_PLOT_RIGHT}
                     y2={y}
-                    stroke="#e2e8f0"
+                    stroke="hsl(var(--border))"
                     strokeWidth={1}
                     strokeDasharray="4 4"
                   />
@@ -1032,7 +1032,7 @@ function MultiLineChartCard({
                     x={MULTI_LINE_CHART_PLOT_LEFT - 6}
                     y={y + 4}
                     textAnchor="end"
-                    className="fill-slate-400 text-[10px]"
+                    className="fill-foreground-subtle text-[10px]"
                   >
                     {formatValue(value)}
                   </text>
@@ -1065,7 +1065,7 @@ function MultiLineChartCard({
                 y1={CHART_PADDING_Y}
                 x2={activePoint.x}
                 y2={CHART_HEIGHT - CHART_PADDING_Y}
-                stroke="#94a3b8"
+                stroke="hsl(var(--text-subtle))"
                 strokeWidth={1}
                 strokeDasharray="4 4"
                 className="pointer-events-none"
@@ -1098,7 +1098,15 @@ function PieChartCard({
   helper?: string;
 }) {
   const total = data.reduce((sum, item) => sum + item.value, 0);
-  const colors = ['#0ea5e9', '#38bdf8', '#7dd3fc', '#bae6fd', '#0284c7'];
+  // Distinct hues rather than five shades of one, so adjacent slices stay
+  // tellable apart at small sizes.
+  const colors = [
+    'hsl(var(--info))',
+    'hsl(var(--accent))',
+    'hsl(var(--success))',
+    'hsl(var(--signal))',
+    'hsl(var(--warning))'
+  ];
 
   const describeArc = (startAngle: number, endAngle: number, radius: number, cx: number, cy: number) => {
     const start = {
@@ -1205,7 +1213,7 @@ function TerminatedDealsList({
                   <p className="truncate text-sm font-semibold text-foreground">{deal.mcName}, {deal.agentName}</p>
                   <p className="text-xs text-foreground-subtle">{deal.reasonLabel}</p>
                 </div>
-                <p className="whitespace-nowrap text-sm font-semibold text-rose-600">
+                <p className="whitespace-nowrap text-sm font-semibold text-danger">
                   {formatCurrency(deal.lostReferralFeeCents)}
                 </p>
               </div>
@@ -1264,10 +1272,10 @@ function ConversionFunnelCard({
               <Link
                 key={stage.status}
                 href={buildStageDrillDownUrl(stage.status)}
-                className="group block rounded-md border border-border px-3 py-2 transition hover:border-primary-200 hover:bg-primary-50/40"
+                className="group block rounded-md border border-border px-3 py-2 transition hover:border-primary/25 hover:bg-primary-soft/40"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium text-foreground group-hover:text-sky-700">{stage.label}</span>
+                  <span className="font-medium text-foreground group-hover:text-info">{stage.label}</span>
                   <div className="flex items-center gap-3 text-sm text-foreground-muted">
                     <span className="font-semibold text-foreground">{formatNumber(stage.count)}</span>
                     {!isFirst && stage.conversionFromPrevious != null ? (
@@ -1279,7 +1287,7 @@ function ConversionFunnelCard({
                       <span className="text-xs text-foreground-subtle">avg {stage.avgDaysInStage}d → next</span>
                     ) : null}
                     {!isFirst && stage.dropOffPercent != null && stage.dropOffPercent > 0 ? (
-                      <span className="text-xs font-medium text-amber-600">↓{stage.dropOffPercent.toFixed(0)}%</span>
+                      <span className="text-xs font-medium text-warning">↓{stage.dropOffPercent.toFixed(0)}%</span>
                     ) : null}
                   </div>
                 </div>
@@ -1295,14 +1303,14 @@ function ConversionFunnelCard({
           <span className="uppercase tracking-wide">Terminal outcomes:</span>
           <Link
             href={buildTerminalDrillDownUrl('Lost')}
-            className="font-medium text-foreground-muted hover:text-sky-700"
+            className="font-medium text-foreground-muted hover:text-info"
           >
             Lost {formatNumber(terminal.lostTotal)}
           </Link>
           <span aria-hidden="true">•</span>
           <Link
             href={buildTerminalDrillDownUrl('Terminated')}
-            className="font-medium text-foreground-muted hover:text-sky-700"
+            className="font-medium text-foreground-muted hover:text-info"
           >
             Terminated {formatNumber(terminal.terminatedTotal)}
           </Link>
@@ -1352,7 +1360,7 @@ function RankedListBody({
                 </div>
                 <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface-subtle">
                   <div
-                    className="h-full rounded-full bg-sky-400"
+                    className="h-full rounded-full bg-info"
                     style={{ width: `${barPct}%` }}
                   />
                 </div>
@@ -1387,7 +1395,7 @@ function RankedListTabs({ views }: { views: RankedListView[] }) {
               onClick={() => setActiveId(view.id)}
               className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
                 isActive
-                  ? 'border-transparent bg-primary-600 text-white shadow-sm'
+                  ? 'border-transparent bg-primary text-white shadow-sm'
                   : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
               }`}
             >
@@ -1505,7 +1513,7 @@ function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
               onClick={() => setActiveId(view.id)}
               className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
                 isActive
-                  ? 'border-transparent bg-primary-600 text-white shadow-sm'
+                  ? 'border-transparent bg-primary text-white shadow-sm'
                   : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
               }`}
             >
@@ -1758,7 +1766,7 @@ function TransferTimingPanel({
   onClick?: () => void;
 }) {
   const containerClasses = isWinner
-    ? 'rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2'
+    ? 'rounded-lg border border-success/30 bg-success-soft px-3 py-2'
     : 'rounded-lg border border-border bg-surface-muted px-3 py-2';
 
   return (
@@ -1768,7 +1776,7 @@ function TransferTimingPanel({
           <button
             type="button"
             onClick={onClick}
-            className="text-xs font-medium uppercase tracking-wide text-sky-600 underline decoration-dotted underline-offset-2 transition hover:text-sky-700"
+            className="text-xs font-medium uppercase tracking-wide text-info underline decoration-dotted underline-offset-2 transition hover:text-info"
           >
             {label}
           </button>
@@ -1776,7 +1784,7 @@ function TransferTimingPanel({
           <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{label}</p>
         )}
         {isWinner ? (
-          <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+          <span className="rounded-full bg-success px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
             Recommended
           </span>
         ) : null}
@@ -1812,7 +1820,7 @@ function TransferTimingDrilldownTable({
                 <td className="py-2">
                   <Link
                     href={`/referrals/${entry.referralId}`}
-                    className="font-medium text-sky-600 hover:text-sky-800 hover:underline"
+                    className="font-medium text-info hover:text-info/75 hover:underline"
                   >
                     {entry.borrowerName}
                   </Link>
@@ -1828,7 +1836,7 @@ function TransferTimingDrilldownTable({
                   <span
                     className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                       entry.hasClosedDeal
-                        ? 'bg-emerald-50 text-emerald-700'
+                        ? 'bg-success-soft text-success'
                         : 'bg-surface-subtle text-foreground-muted'
                     }`}
                   >
@@ -1913,9 +1921,9 @@ function PreApprovalConversionSection({
 
   const conversionSeries = useMemo(
     () => [
-      { label: 'All', color: '#0ea5e9', data: conversion.trend.all ?? [] },
-      { label: 'AHA', color: '#0ea64a', data: conversion.trend.aha ?? [] },
-      { label: 'AHA OOS', color: '#6366f1', data: conversion.trend.ahaOos ?? [] }
+      { label: 'All', color: 'hsl(var(--info))', data: conversion.trend.all ?? [] },
+      { label: 'AHA', color: 'hsl(var(--success))', data: conversion.trend.aha ?? [] },
+      { label: 'AHA OOS', color: 'hsl(var(--accent))', data: conversion.trend.ahaOos ?? [] }
     ],
     [conversion.trend]
   );
@@ -2000,7 +2008,7 @@ function PreApprovalConversionSection({
                 type="month"
                 value={selectedMonth}
                 onChange={(event) => setSelectedMonth(event.target.value)}
-                className="mt-1 w-40 rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                className="mt-1 w-40 rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
             </label>
             <label className="flex flex-col text-xs font-medium text-foreground-muted">
@@ -2010,7 +2018,7 @@ function PreApprovalConversionSection({
                 min={0}
                 value={inputAhaValue}
                 onChange={(event) => setInputAhaValue(event.target.value)}
-                className="mt-1 w-32 rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                className="mt-1 w-32 rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
             </label>
             <label className="flex flex-col text-xs font-medium text-foreground-muted">
@@ -2020,12 +2028,12 @@ function PreApprovalConversionSection({
                 min={0}
                 value={inputAhaOosValue}
                 onChange={(event) => setInputAhaOosValue(event.target.value)}
-                className="mt-1 w-32 rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                className="mt-1 w-32 rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
             </label>
             <button
               type="submit"
-              className="inline-flex items-center rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
               disabled={status === 'saving'}
             >
               {status === 'saving' ? 'Saving…' : 'Save entry'}
@@ -2052,7 +2060,7 @@ function PreApprovalConversionSection({
           </p>
         </div>
       ) : null}
-      {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
+      {errorMessage ? <p className="text-sm text-danger">{errorMessage}</p> : null}
       {status === 'saved' && !errorMessage ? (
         <p className="text-sm text-foreground-muted">Pre-approvals saved.</p>
       ) : null}
@@ -2096,7 +2104,7 @@ function PreApprovalConversionSection({
                       <td className="px-3 py-2 text-right">
                         <button
                           type="button"
-                          className="inline-flex items-center rounded border border-transparent px-2 py-1 text-sm text-foreground-muted hover:text-red-600 disabled:opacity-50"
+                          className="inline-flex items-center rounded border border-transparent px-2 py-1 text-sm text-foreground-muted hover:text-danger disabled:opacity-50"
                           onClick={() => handleDelete(entry.monthKey)}
                           disabled={deletingMonth === entry.monthKey}
                           aria-label={`Delete ${entry.label} pre-approvals`}
@@ -2361,20 +2369,20 @@ function MainDashboard({
           series={[
             {
               label: 'Revenue received',
-              color: '#10b981',
+              color: 'hsl(var(--success))',
               data: data.trends.revenue
             },
             {
               label: 'Revenue generated (closed)',
-              color: '#0ea5e9',
+              color: 'hsl(var(--info))',
               data: data.trends.revenueGenerated ?? []
             }
           ]}
           formatValue={formatCurrency}
         />
-        <LineChartCard title="Deals closed" data={data.trends.deals} formatValue={(value) => formatNumber(Math.round(value))} color="#f59e0b" />
-        <LineChartCard title="Close rate" data={data.trends.closeRate} formatValue={(value) => `${value.toFixed(1)}%`} color="#8b5cf6" />
-        <LineChartCard title="Referrals received" data={data.trends.referrals} formatValue={(value) => formatNumber(Math.round(value))} color="#0ea5e9" />
+        <LineChartCard title="Deals closed" data={data.trends.deals} formatValue={(value) => formatNumber(Math.round(value))} color="hsl(var(--warning))" />
+        <LineChartCard title="Close rate" data={data.trends.closeRate} formatValue={(value) => `${value.toFixed(1)}%`} color="hsl(var(--accent))" />
+        <LineChartCard title="Referrals received" data={data.trends.referrals} formatValue={(value) => formatNumber(Math.round(value))} color="hsl(var(--info))" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -2545,7 +2553,7 @@ function DealsLostTable({ deals }: { deals: LostDealEntry[] }) {
           {deals.map((deal) => (
             <tr key={deal.id} className="hover:bg-surface-muted">
               <td className="px-6 py-3 font-medium text-foreground-muted">
-                <Link href={`/referrals/${deal.referralId}`} className="hover:text-sky-600 hover:underline">
+                <Link href={`/referrals/${deal.referralId}`} className="hover:text-info hover:underline">
                   {deal.borrowerName}
                 </Link>
               </td>
@@ -2593,7 +2601,7 @@ function PendingClosingsTable({ deals }: { deals: PendingClosingEntry[] }) {
                 <td className="px-6 py-3 font-medium text-foreground-muted">
                   <Link
                     href={`/referrals/${deal.referralId}`}
-                    className="hover:text-sky-600 hover:underline"
+                    className="hover:text-info hover:underline"
                   >
                     {deal.borrowerName}
                   </Link>
@@ -2674,7 +2682,7 @@ function ClosedDealsTable({
                 <td className="px-6 py-3 font-medium text-foreground-muted">
                   <Link
                     href={`/referrals/${deal.referralId}`}
-                    className="hover:text-sky-600 hover:underline"
+                    className="hover:text-info hover:underline"
                   >
                     {deal.borrowerName}
                   </Link>
@@ -2721,7 +2729,7 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
           <button
             type="button"
             aria-label={`${title} details`}
-            className="inline-flex rounded-full text-foreground-subtle transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+            className="inline-flex rounded-full text-foreground-subtle transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
           >
             <Info className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -2747,16 +2755,16 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
                     <button
                       type="button"
                       onClick={() => setSelectedMc(entry)}
-                      className="text-sky-600 hover:text-sky-800 hover:underline text-left"
+                      className="text-info hover:text-info/75 hover:underline text-left"
                     >
                       {entry.name}
                     </button>
                     {!entry.qualified ? (
-                      <span className="ml-2 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                      <span className="ml-2 inline-flex rounded-full bg-warning-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
                         Provisional
                       </span>
                     ) : (
-                      <span className="ml-2 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                      <span className="ml-2 inline-flex rounded-full bg-success-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-success">
                         Qualified
                       </span>
                     )}
@@ -2827,7 +2835,7 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
                     </div>
                     <div className="h-1.5 w-full rounded-full bg-surface-subtle">
                       <div
-                        className={`h-1.5 rounded-full transition-all ${kpi.normalizedScore >= 75 ? 'bg-emerald-500' : kpi.normalizedScore >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                        className={`h-1.5 rounded-full transition-all ${kpi.normalizedScore >= 75 ? 'bg-success' : kpi.normalizedScore >= 50 ? 'bg-warning' : 'bg-danger'}`}
                         style={{ width: `${kpi.normalizedScore}%` }}
                       />
                     </div>
@@ -2863,9 +2871,9 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
   });
 
   const getRiskTierBadge = (tier: McAfcRiskCallListEntry['riskTier']) => {
-    if (tier === 'high') return 'bg-rose-100 text-rose-700';
-    if (tier === 'medium') return 'bg-amber-100 text-amber-700';
-    return 'bg-emerald-100 text-emerald-700';
+    if (tier === 'high') return 'bg-danger-soft text-danger';
+    if (tier === 'medium') return 'bg-warning-soft text-warning';
+    return 'bg-success-soft text-success';
   };
   const sortedEntries = useMemo(() => {
     return [...entries].sort((a, b) => {
@@ -2936,7 +2944,7 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
                 <tr key={entry.rowId} className="hover:bg-surface-muted">
                   <td className="px-3 py-2">
                     <div className="flex flex-col">
-                      <Link href={`/referrals/${entry.referralId}`} className="font-medium text-primary-700 hover:underline">
+                      <Link href={`/referrals/${entry.referralId}`} className="font-medium text-primary hover:underline">
                         {entry.borrowerName}
                       </Link>
                       <span className="text-xs text-foreground-subtle">Loan # {entry.loanFileNumber ?? '—'}</span>
@@ -3168,16 +3176,16 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
                       <button
                         type="button"
                         onClick={() => setSelectedAgent(agent)}
-                        className="text-sky-600 hover:text-sky-800 hover:underline text-left"
+                        className="text-info hover:text-info/75 hover:underline text-left"
                       >
                         {agent.name}
                       </button>
                       {!agent.qualified ? (
-                        <span className="ml-2 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                        <span className="ml-2 inline-flex rounded-full bg-warning-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
                           Provisional
                         </span>
                       ) : (
-                        <span className="ml-2 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                        <span className="ml-2 inline-flex rounded-full bg-success-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-success">
                           Qualified
                         </span>
                       )}
@@ -3249,7 +3257,7 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
                     </div>
                     <div className="h-1.5 w-full rounded-full bg-surface-subtle">
                       <div
-                        className={`h-1.5 rounded-full transition-all ${kpi.normalizedScore >= 75 ? 'bg-emerald-500' : kpi.normalizedScore >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                        className={`h-1.5 rounded-full transition-all ${kpi.normalizedScore >= 75 ? 'bg-success' : kpi.normalizedScore >= 50 ? 'bg-warning' : 'bg-danger'}`}
                         style={{ width: `${kpi.normalizedScore}%` }}
                       />
                     </div>
@@ -3347,7 +3355,7 @@ function StaleReferralsTable({ referrals }: { referrals: StaleReferralEntry[] })
           {referrals.map((row) => (
             <tr key={row.id} className="hover:bg-surface-muted">
               <td className="px-6 py-3 font-medium text-foreground-muted">
-                <Link href={`/referrals/${row.id}`} className="hover:text-sky-600 hover:underline">
+                <Link href={`/referrals/${row.id}`} className="hover:text-info hover:underline">
                   {row.borrowerName}
                 </Link>
               </td>
@@ -3402,7 +3410,7 @@ function MissingAttributionReferralsTable({ referrals }: { referrals: MissingAtt
             return (
               <tr key={row.id} className="hover:bg-surface-muted">
                 <td className="px-6 py-3 font-medium text-foreground-muted">
-                  <Link href={`/referrals/${row.id}`} className="hover:text-sky-600 hover:underline">
+                  <Link href={`/referrals/${row.id}`} className="hover:text-info hover:underline">
                     {row.borrowerName}
                   </Link>
                 </td>
@@ -3533,9 +3541,9 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
           helper="Outstanding open tasks and daily completed/created"
           formatValue={(v) => String(Math.round(v))}
           series={[
-            { label: 'Outstanding', color: '#0ea5e9', data: taskTrend.outstanding ?? [] },
-            { label: 'Completed', color: '#22c55e', data: taskTrend.completed ?? [] },
-            { label: 'Created', color: '#f59e0b', data: taskTrend.created ?? [] }
+            { label: 'Outstanding', color: 'hsl(var(--info))', data: taskTrend.outstanding ?? [] },
+            { label: 'Completed', color: 'hsl(var(--success))', data: taskTrend.completed ?? [] },
+            { label: 'Created', color: 'hsl(var(--warning))', data: taskTrend.created ?? [] }
           ]}
         />
       ) : null}
@@ -3608,7 +3616,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                         <Link
                           prefetch={false}
                           href={`/referrals/${row.id}`}
-                          className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+                          className="font-medium text-primary transition hover:text-primary-hover hover:underline"
                         >
                           {row.borrowerName}
                         </Link>
@@ -3624,7 +3632,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                           <Link
                             prefetch={false}
                             href={`/agents/${row.agentId}`}
-                            className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+                            className="font-medium text-primary transition hover:text-primary-hover hover:underline"
                           >
                             {row.agentName || 'Agent'}
                           </Link>
@@ -3633,7 +3641,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                               href={buildGmailComposeUrl(row.agentEmail)}
                               target="_blank"
                               rel="noreferrer"
-                              className="block text-xs text-primary-700 hover:underline"
+                              className="block text-xs text-primary hover:underline"
                             >
                               {row.agentEmail}
                             </a>
@@ -3641,7 +3649,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                           {row.agentPhone && (
                             <a
                               href={`tel:${row.agentPhone.replace(/[^0-9+]/g, '')}`}
-                              className="block text-xs text-primary-700 hover:underline"
+                              className="block text-xs text-primary hover:underline"
                             >
                               {row.agentPhone}
                             </a>
@@ -3657,7 +3665,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                           <Link
                             prefetch={false}
                             href={`/lenders/${row.mcId}`}
-                            className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+                            className="font-medium text-primary transition hover:text-primary-hover hover:underline"
                           >
                             {row.mcName || 'MC'}
                           </Link>
@@ -3666,7 +3674,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                               href={buildGmailComposeUrl(row.mcEmail)}
                               target="_blank"
                               rel="noreferrer"
-                              className="block text-xs text-primary-700 hover:underline"
+                              className="block text-xs text-primary hover:underline"
                             >
                               {row.mcEmail}
                             </a>
@@ -3674,7 +3682,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                           {row.mcPhone && (
                             <a
                               href={`tel:${row.mcPhone.replace(/[^0-9+]/g, '')}`}
-                              className="block text-xs text-primary-700 hover:underline"
+                              className="block text-xs text-primary hover:underline"
                             >
                               {row.mcPhone}
                             </a>
@@ -3741,7 +3749,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                       <Link
                         prefetch={false}
                         href={`/referrals/${row.referralId}`}
-                        className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+                        className="font-medium text-primary transition hover:text-primary-hover hover:underline"
                       >
                         {row.borrowerName}
                       </Link>
@@ -3755,7 +3763,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                           <Link
                             prefetch={false}
                             href={`/agents/${row.agentId}`}
-                            className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+                            className="font-medium text-primary transition hover:text-primary-hover hover:underline"
                           >
                             {row.agentName || 'Agent'}
                           </Link>
@@ -3763,7 +3771,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                           <span className="text-foreground-subtle">Unassigned</span>
                         )}
                         {(row.referralStatus === 'Lost' || row.usedAssignedAgent === false) && (
-                          <span className="inline-flex w-fit items-center justify-center whitespace-nowrap rounded-full bg-rose-100 px-2.5 py-0.5 text-center text-xs font-medium text-rose-700">
+                          <span className="inline-flex w-fit items-center justify-center whitespace-nowrap rounded-full bg-danger-soft px-2.5 py-0.5 text-center text-xs font-medium text-danger">
                             Agent not used
                           </span>
                         )}
@@ -3775,7 +3783,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                           <Link
                             prefetch={false}
                             href={`/lenders/${row.mcId}`}
-                            className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+                            className="font-medium text-primary transition hover:text-primary-hover hover:underline"
                           >
                             {row.mcName || 'MC'}
                           </Link>
@@ -3784,7 +3792,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                               href={buildGmailComposeUrl(row.mcEmail)}
                               target="_blank"
                               rel="noreferrer"
-                              className="block text-xs text-primary-700 hover:underline"
+                              className="block text-xs text-primary hover:underline"
                             >
                               {row.mcEmail}
                             </a>
@@ -3792,7 +3800,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
                           {row.mcPhone && (
                             <a
                               href={`tel:${row.mcPhone.replace(/[^0-9+]/g, '')}`}
-                              className="block text-xs text-primary-700 hover:underline"
+                              className="block text-xs text-primary hover:underline"
                             >
                               {row.mcPhone}
                             </a>
@@ -3921,7 +3929,7 @@ export function DashboardTabs() {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-100 bg-red-50 p-4 text-red-700">
+      <div className="rounded-lg border border-danger/30 bg-danger-soft p-4 text-danger">
         Unable to load dashboard analytics. Please try again later.
       </div>
     );
@@ -3963,7 +3971,7 @@ export function DashboardTabs() {
               onClick={() => setActiveTab(tab.value)}
               className={`rounded-full border px-4 py-1 text-sm font-medium transition ${
                 isActive
-                  ? 'border-transparent bg-primary-600 text-white shadow-sm'
+                  ? 'border-transparent bg-primary text-white shadow-sm'
                   : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
               }`}
             >
@@ -3995,7 +4003,7 @@ export function DashboardTabs() {
       ) : null}
 
       {!swrKey ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-lg border border-warning/30 bg-warning-soft p-4 text-sm text-warning">
           Select a start and end date to load dashboard metrics.
         </div>
       ) : data ? (

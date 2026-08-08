@@ -537,7 +537,7 @@ function DealCard({
               onChange={(event) => {
                 amountDraft = event.target.value;
               }}
-              className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+              className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
             />
           </label>
           <label className="mt-3 block text-xs font-semibold text-foreground-muted">
@@ -548,7 +548,7 @@ function DealCard({
               onChange={(event) => {
                 paidDateDraft = event.target.value;
               }}
-              className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+              className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
             />
           </label>
           <div className="mt-3 flex justify-end gap-2">
@@ -561,7 +561,7 @@ function DealCard({
             </button>
             <button
               type="submit"
-              className="rounded bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-800"
+              className="rounded bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-hover"
             >
               Save
             </button>
@@ -594,7 +594,7 @@ function DealCard({
               </p>
             ) : null}
             {deal.status === 'terminated' && (
-              <p className="text-xs font-medium text-rose-600">
+              <p className="text-xs font-medium text-danger">
                 Termination reason: {terminatedReasonLabel ?? 'Not specified'}
               </p>
             )}
@@ -612,7 +612,7 @@ function DealCard({
                   )
                 }
                 disabled={!canManage || statusUpdating}
-                className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:outline-none"
+                className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none"
               >
                 {statusOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -633,7 +633,7 @@ function DealCard({
                   )
                 }
                 disabled={!canManage || statusUpdating}
-                className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:outline-none"
+                className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none"
               >
                 <option value="">Select reason</option>
                 {TERMINATED_REASON_OPTIONS.map((option) => (
@@ -717,7 +717,7 @@ function DealCard({
                 type="button"
                 onClick={() => void onStatusChange(deal, 'payment_sent')}
                 disabled={statusUpdating || deal.status === 'payment_sent' || deal.status === 'paid'}
-                className="rounded border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-70"
+                className="rounded border border-accent/30 bg-accent-soft px-3 py-2 text-xs font-semibold text-accent transition hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-70"
               >
                 Payment Sent
               </button>
@@ -733,7 +733,7 @@ function DealCard({
               type="button"
               onClick={() => onDelete(deal)}
               disabled={deleting}
-              className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-70"
+              className="rounded border border-danger/30 bg-danger-soft px-3 py-2 text-xs font-semibold text-danger transition hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-70"
             >
               {deleting ? 'Deleting…' : 'Delete deal'}
             </button>
@@ -743,7 +743,7 @@ function DealCard({
                   type="button"
                   onClick={handleSendFeeBreakdown}
                   disabled={saving || !deal.closingDate || !deal.agentId}
-                  className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded bg-primary px-3 py-2 text-xs font-semibold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {deal.feeBreakdownEmailSentAt ? 'Resend Fee Breakdown Email' : 'Send Fee Breakdown Email'}
                 </button>
@@ -762,19 +762,19 @@ function DealCard({
                     </p>
                     {deal.feeBreakdownEmailSentAt &&
                       deal.feeBreakdownEmailSentBy !== 'cron' && (
-                        <p className="text-xs text-amber-600">
+                        <p className="text-xs text-warning">
                           Auto-send disabled for this deal because it was sent manually.
                         </p>
                       )}
                   </div>
                 )}
                 {!deal.closingDate && (
-                  <p className="text-xs text-amber-600">
+                  <p className="text-xs text-warning">
                     Add closing date to enable
                   </p>
                 )}
                 {!deal.agentId && deal.closingDate && (
-                  <p className="text-xs text-amber-600">
+                  <p className="text-xs text-warning">
                     Assign an agent to enable
                   </p>
                 )}
@@ -795,7 +795,7 @@ function DealCard({
               step="0.01"
               value={contractPrice}
               onChange={(event) => setContractPrice(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
               placeholder="0.00"
               disabled={saving || isNoFeeDeal}
             />
@@ -810,7 +810,7 @@ function DealCard({
                       type="button"
                       onClick={() => handleCommissionModeToggle('%')}
                       disabled={saving || isNoFeeDeal}
-                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
+                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-primary text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                     >
                       %
                     </button>
@@ -818,7 +818,7 @@ function DealCard({
                       type="button"
                       onClick={() => handleCommissionModeToggle('$')}
                       disabled={saving || isNoFeeDeal}
-                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
+                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-primary text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                     >
                       $
                     </button>
@@ -832,7 +832,7 @@ function DealCard({
                     step="0.01"
                     value={commissionPercentage}
                     onChange={(event) => handleCommissionPercentageChange(event.target.value)}
-                    className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                    className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                     placeholder="0.00"
                     disabled={saving || isNoFeeDeal}
                   />
@@ -844,7 +844,7 @@ function DealCard({
                     step="0.01"
                     value={commissionFlat}
                     onChange={(event) => handleCommissionFlatChange(event.target.value)}
-                    className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                    className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                     placeholder="0.00"
                     disabled={saving || isNoFeeDeal}
                   />
@@ -859,7 +859,7 @@ function DealCard({
                   step="0.01"
                   value={referralFeePercentage}
                   onChange={(event) => setReferralFeePercentage(event.target.value)}
-                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                   placeholder="0.00"
                   disabled={saving || isNoFeeDeal}
                 />
@@ -877,7 +877,7 @@ function DealCard({
                     setExpectedManuallyEdited(Boolean(value));
                     setExpectedAmount(value);
                   }}
-                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                   placeholder="0.00"
                   disabled={saving || isNoFeeDeal}
                 />
@@ -891,7 +891,7 @@ function DealCard({
                   step="0.01"
                   value={netReferralFeePaid}
                   onChange={(event) => setNetReferralFeePaid(event.target.value)}
-                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                   placeholder="0.00"
                   disabled={saving || isNoFeeDeal}
                 />
@@ -903,7 +903,7 @@ function DealCard({
               <select
                 value={status}
                 onChange={(event) => setStatus(event.target.value as DealStatus)}
-                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                 disabled={saving}
               >
                 {statusOptions.map((option) => (
@@ -923,7 +923,7 @@ function DealCard({
                       event.target.value ? (event.target.value as TerminatedReason) : null
                     )
                   }
-                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                   disabled={saving}
                 >
                   <option value="">Select reason</option>
@@ -941,7 +941,7 @@ function DealCard({
                 type="date"
                 value={underContractDate}
                 onChange={(event) => setUnderContractDate(event.target.value)}
-                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                 disabled={saving}
               />
             </label>
@@ -951,7 +951,7 @@ function DealCard({
                 type="date"
                 value={closingDate}
               onChange={(event) => setClosingDate(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
               disabled={saving}
             />
           </label>
@@ -961,7 +961,7 @@ function DealCard({
               type="text"
               value={propertyAddress}
               onChange={(event) => setPropertyAddress(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
               placeholder="123 Main St, City, ST"
               disabled={saving}
             />
@@ -972,7 +972,7 @@ function DealCard({
               type="text"
               value={propertyCity}
               onChange={(event) => setPropertyCity(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
               placeholder="City"
               disabled={saving}
             />
@@ -994,7 +994,7 @@ function DealCard({
                 setPropertyState(processed);
                 event.currentTarget.value = processed;
               }}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm uppercase focus:border-primary-500 focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm uppercase focus:border-ring focus:outline-none"
               placeholder="ST"
               disabled={saving}
             />
@@ -1004,7 +1004,7 @@ function DealCard({
             <select
               value={agentId}
               onChange={(event) => setAgentId(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
               disabled={saving || agentsLoading}
             >
               <option value="">Unassigned</option>
@@ -1024,7 +1024,7 @@ function DealCard({
             <select
               value={side}
               onChange={(event) => setSide(event.target.value as 'buy' | 'sell')}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
               disabled={saving}
             >
               <option value="buy">Buy-side</option>
@@ -1087,7 +1087,7 @@ function DealCard({
             <button
               type="submit"
               disabled={saving}
-              className="rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
+              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
             >
               {saving ? 'Saving…' : 'Save changes'}
             </button>
@@ -1719,7 +1719,7 @@ export function ReferralDeals({
               step="0.01"
               value={contractPrice}
               onChange={(event) => setContractPrice(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
               placeholder="0.00"
               disabled={submitting}
             />
@@ -1734,7 +1734,7 @@ export function ReferralDeals({
                       type="button"
                       onClick={() => handleCommissionModeToggle('%')}
                       disabled={submitting || !usedAssignedAgent || isAgitDeal}
-                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
+                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-primary text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                     >
                       %
                     </button>
@@ -1742,7 +1742,7 @@ export function ReferralDeals({
                       type="button"
                       onClick={() => handleCommissionModeToggle('$')}
                       disabled={submitting || !usedAssignedAgent || isAgitDeal}
-                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
+                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-primary text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                     >
                       $
                     </button>
@@ -1756,7 +1756,7 @@ export function ReferralDeals({
                     step="0.01"
                     value={commissionPercentage}
                     onChange={(event) => handleCommissionPercentageChange(event.target.value)}
-                    className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                    className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                     placeholder="0.00"
                     disabled={submitting || !usedAssignedAgent || isAgitDeal}
                   />
@@ -1768,7 +1768,7 @@ export function ReferralDeals({
                     step="0.01"
                     value={commissionFlat}
                     onChange={(event) => handleCommissionFlatChange(event.target.value)}
-                    className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                    className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                     placeholder="0.00"
                     disabled={submitting || !usedAssignedAgent || isAgitDeal}
                   />
@@ -1783,7 +1783,7 @@ export function ReferralDeals({
                   step="0.01"
                   value={referralFeePercentage}
                   onChange={(event) => setReferralFeePercentage(event.target.value)}
-                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                   placeholder="0.00"
                   disabled={submitting || !usedAssignedAgent || isAgitDeal}
                 />
@@ -1801,7 +1801,7 @@ export function ReferralDeals({
                     setExpectedManuallyEdited(Boolean(value));
                     setExpectedAmount(value);
                   }}
-                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                   placeholder="0.00"
                   disabled={submitting || !usedAssignedAgent || isAgitDeal}
                 />
@@ -1815,7 +1815,7 @@ export function ReferralDeals({
                   step="0.01"
                   value={netReferralFeePaid}
                   onChange={(event) => setNetReferralFeePaid(event.target.value)}
-                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                   placeholder="0.00"
                   disabled={submitting || !usedAssignedAgent || isAgitDeal}
                 />
@@ -1827,7 +1827,7 @@ export function ReferralDeals({
               <select
                 value={status}
                 onChange={(event) => setStatus(event.target.value as DealStatus)}
-                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                 disabled={submitting}
               >
                 {statusOptions.map((option) => (
@@ -1847,7 +1847,7 @@ export function ReferralDeals({
                       event.target.value ? (event.target.value as TerminatedReason) : null
                     )
                   }
-                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                   disabled={submitting}
                 >
                   <option value="">Select reason</option>
@@ -1865,7 +1865,7 @@ export function ReferralDeals({
                 type="date"
                 value={underContractDate}
                 onChange={(event) => setUnderContractDate(event.target.value)}
-                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                 disabled={submitting}
               />
             </label>
@@ -1875,7 +1875,7 @@ export function ReferralDeals({
                 type="date"
                 value={closingDate}
               onChange={(event) => setClosingDate(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
               disabled={submitting}
             />
           </label>
@@ -1885,7 +1885,7 @@ export function ReferralDeals({
               type="text"
               value={propertyAddress}
               onChange={(event) => setPropertyAddress(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
               placeholder="123 Main St, City, ST"
               disabled={submitting}
             />
@@ -1896,7 +1896,7 @@ export function ReferralDeals({
               type="text"
               value={propertyCity}
               onChange={(event) => setPropertyCity(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
               placeholder="City"
               disabled={submitting}
             />
@@ -1918,7 +1918,7 @@ export function ReferralDeals({
                 setPropertyState(processed);
                 event.currentTarget.value = processed;
               }}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm uppercase focus:border-primary-500 focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm uppercase focus:border-ring focus:outline-none"
               placeholder="ST"
               disabled={submitting}
             />
@@ -1928,7 +1928,7 @@ export function ReferralDeals({
             <select
               value={agentId}
               onChange={(event) => setAgentId(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
               disabled={submitting || agentsLoading}
             >
               <option value="">Unassigned</option>
@@ -1949,7 +1949,7 @@ export function ReferralDeals({
               <select
                 value={side}
                 onChange={(event) => setSide(event.target.value as 'buy' | 'sell')}
-                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                 disabled={submitting}
               >
                 <option value="buy">Buy-side</option>
@@ -2013,7 +2013,7 @@ export function ReferralDeals({
             <button
               type="submit"
               disabled={submitting}
-              className="w-full rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
+              className="w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
             >
               {submitting ? 'Saving…' : 'Add deal'}
             </button>

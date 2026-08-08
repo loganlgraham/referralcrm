@@ -46,7 +46,7 @@ const referralSchema = z.object({
 });
 
 const inputClasses =
-  'mt-2 w-full rounded-lg border border-border-strong/80 bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-white';
+  'mt-2 w-full rounded-lg border border-border-strong/80 bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-white';
 
 const labelClasses = 'flex flex-col text-sm font-medium text-foreground-muted';
 
@@ -306,8 +306,8 @@ export function ReferralForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
-      <div className="overflow-hidden rounded-3xl border border-border/80 bg-surface-raised/95 shadow-xl shadow-slate-200/70 ring-1 ring-border">
-        <div className="border-b border-border/80 bg-gradient-to-r from-slate-50 to-slate-100 px-6 py-6 sm:px-8">
+      <div className="overflow-hidden rounded-3xl border border-border/80 bg-surface-raised/95 shadow-xl shadow-border/70 ring-1 ring-border">
+        <div className="border-b border-border/80 bg-gradient-to-r from-surface-muted to-surface-muted px-6 py-6 sm:px-8">
           <h1 className="text-2xl font-semibold text-foreground">
             {isAgent ? 'Introduce a client to AFC' : 'Start a new referral'}
           </h1>
@@ -533,7 +533,7 @@ export function ReferralForm() {
           <button
             type="submit"
             disabled={loading}
-            className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-brand/20 transition hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex items-center justify-center rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-brand/20 transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {loading ? 'Creating…' : 'Create referral'}
           </button>

@@ -66,7 +66,7 @@ export async function sendNPSSurveyEmail(
   const firstName = data.recipientName.split(' ')[0] || data.recipientName;
 
   const html = `
-    <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
       <h2 style="font-size: 20px; margin-bottom: 8px;">Help us improve</h2>
       <p style="margin: 0 0 12px 0;">Hi ${firstName},</p>
       <p style="margin: 0 0 12px 0;">${question}</p>

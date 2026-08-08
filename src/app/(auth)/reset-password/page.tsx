@@ -202,7 +202,7 @@ function ResetPasswordForm() {
 
       <p className="text-center text-sm text-foreground-muted">
         Remembered your password?{' '}
-        <Link href="/login" className="font-medium text-primary-700 no-underline hover:underline">
+        <Link href="/login" className="font-medium text-primary no-underline hover:underline">
           Go back to sign in
         </Link>
       </p>

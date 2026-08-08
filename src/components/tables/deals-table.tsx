@@ -558,7 +558,7 @@ export function DealsTable() {
       <Link
         prefetch={false}
         href={href}
-        className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+        className="font-medium text-primary transition hover:text-primary-hover hover:underline"
       >
         {label}
       </Link>
@@ -607,7 +607,7 @@ export function DealsTable() {
         <Link
           prefetch={false}
           href={`/agents/${deal.agent.id}`}
-          className="text-sm font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+          className="text-sm font-medium text-primary transition hover:text-primary-hover hover:underline"
         >
           {deal.agent.name || 'Agent'}
         </Link>
@@ -628,7 +628,7 @@ export function DealsTable() {
         <Link
           prefetch={false}
           href={`/lenders/${deal.mc.id}`}
-          className="text-sm font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
+          className="text-sm font-medium text-primary transition hover:text-primary-hover hover:underline"
         >
           {deal.mc.name || 'MC'}
         </Link>
@@ -791,7 +791,7 @@ export function DealsTable() {
           outcome === 'Won'
             ? 'text-foreground'
             : outcome === 'Lost'
-              ? 'text-rose-600'
+              ? 'text-danger'
               : outcome === 'N/A'
                 ? 'text-foreground-subtle'
                 : 'text-foreground-subtle';
@@ -1064,14 +1064,14 @@ export function DealsTable() {
                       <div className="flex items-center gap-3">
                         <button
                           type="button"
-                          className="text-primary-700 hover:text-primary-700/80"
+                          className="text-primary hover:text-primary/80"
                           onClick={() => updateParams({ status: DEAL_STATUS_VALUES.join(',') })}
                         >
                           Select all
                         </button>
                         <button
                           type="button"
-                          className="text-primary-700 hover:text-primary-700/80"
+                          className="text-primary hover:text-primary/80"
                           onClick={() => updateParams({ status: '' })}
                         >
                           Clear
@@ -1087,7 +1087,7 @@ export function DealsTable() {
                           <span className="text-foreground-muted">{label}</span>
                           <input
                             type="checkbox"
-                            className="h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
+                            className="h-4 w-4 rounded border-border-strong text-primary focus:ring-ring"
                             checked={statusFilters.includes(value as DealStatus)}
                             onChange={(event) => {
                               const checked = event.target.checked;
@@ -1126,7 +1126,7 @@ export function DealsTable() {
                       <span>Filter by designation</span>
                       <button
                         type="button"
-                        className="text-primary-700 hover:text-primary-700/80"
+                        className="text-primary hover:text-primary/80"
                         onClick={() => updateParams({ designation: '' })}
                       >
                         Clear
@@ -1141,7 +1141,7 @@ export function DealsTable() {
                           <span className="text-foreground-muted">{label}</span>
                           <input
                             type="checkbox"
-                            className="h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
+                            className="h-4 w-4 rounded border-border-strong text-primary focus:ring-ring"
                             checked={designationFilters.includes(value)}
                             onChange={(event) => {
                               const checked = event.target.checked;

@@ -41,7 +41,7 @@ export function ReferralTimeline({ referralId }: { referralId: string }) {
       </div>
       {isLoading && <p className="text-sm text-foreground-subtle">Loading activity…</p>}
       {error && !isLoading && (
-        <p className="text-sm text-rose-500">We couldn’t load recent activity. Please refresh to try again.</p>
+        <p className="text-sm text-danger">We couldn’t load recent activity. Please refresh to try again.</p>
       )}
       {data && !hasActivity && (
         <p className="text-sm text-foreground-subtle">No activity logged yet. Add a note or update the status to get started.</p>
@@ -66,7 +66,7 @@ export function ReferralTimeline({ referralId }: { referralId: string }) {
           {canShowToggle && (
             <button
               type="button"
-              className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+              className="text-sm font-medium text-accent hover:text-accent/75"
               onClick={() => setShowAll((previous) => !previous)}
             >
               {showAll ? 'Show less' : 'Show all activity'}

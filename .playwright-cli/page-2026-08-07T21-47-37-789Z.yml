@@ -1,0 +1,25 @@
+- generic [active] [ref=e1]:
+  - region "Notifications alt+T"
+  - generic [ref=e3]:
+    - generic [ref=e11]:
+      - generic [ref=e12]: Referrio
+      - generic [ref=e13]: Handoff desk
+    - generic [ref=e14]:
+      - heading "Sign in" [level=1] [ref=e16]
+      - generic [ref=e17]:
+        - generic [ref=e18]:
+          - generic [ref=e19]: Username or email
+          - textbox "Username or email" [ref=e20]:
+            - /placeholder: yourname or you@example.com
+        - generic [ref=e21]:
+          - generic [ref=e22]: Password
+          - textbox "Password" [ref=e23]
+          - paragraph [ref=e24]:
+            - link "Forgot password?" [ref=e26] [cursor=pointer]:
+              - /url: /reset-password
+        - button "Sign in" [ref=e27] [cursor=pointer]
+      - paragraph [ref=e28]:
+        - text: Don't have an account?
+        - link "Sign up" [ref=e29] [cursor=pointer]:
+          - /url: /signup
+  - alert [ref=e30]

@@ -1411,7 +1411,7 @@ export function DealCard({
                       href={assignedAgentHref}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-primary-700 underline-offset-2 hover:underline"
+                      className="text-primary underline-offset-2 hover:underline"
                     >
                       {assignedAgentName}
                     </a>
@@ -1449,7 +1449,7 @@ export function DealCard({
               type="button"
               onClick={handleDeleteClick}
               disabled={isSaving}
-              className="inline-flex items-center gap-2 rounded border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded border border-danger/30 px-3 py-1.5 text-xs font-semibold text-danger transition hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Trash2 className="h-4 w-4" />
               Delete
@@ -1467,7 +1467,7 @@ export function DealCard({
                     inputMode="decimal"
                     value={draft.contractPrice}
                     onChange={handleDraftChange('contractPrice')}
-                    className="rounded border border-border-strong px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none"
+                    className="rounded border border-border-strong px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-ring focus:outline-none"
                     placeholder="350000"
                     disabled={isDetailSaving}
                   />
@@ -1480,7 +1480,7 @@ export function DealCard({
                         type="button"
                         onClick={() => handleCommissionModeToggle('%')}
                         disabled={isDetailSaving || isOutsideAgentSelected}
-                        className={`px-1.5 py-0.5 transition-colors ${draft.commissionMode === '%' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
+                        className={`px-1.5 py-0.5 transition-colors ${draft.commissionMode === '%' ? 'bg-primary text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                       >
                         %
                       </button>
@@ -1488,7 +1488,7 @@ export function DealCard({
                         type="button"
                         onClick={() => handleCommissionModeToggle('$')}
                         disabled={isDetailSaving || isOutsideAgentSelected}
-                        className={`px-1.5 py-0.5 transition-colors ${draft.commissionMode === '$' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
+                        className={`px-1.5 py-0.5 transition-colors ${draft.commissionMode === '$' ? 'bg-primary text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
                       >
                         $
                       </button>
@@ -1500,7 +1500,7 @@ export function DealCard({
                       inputMode="decimal"
                       value={draft.commissionPercent}
                       onChange={handleDraftChange('commissionPercent')}
-                      className="rounded border border-border-strong px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none"
+                      className="rounded border border-border-strong px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-ring focus:outline-none"
                       placeholder="3"
                       disabled={isDetailSaving || isOutsideAgentSelected}
                     />
@@ -1510,7 +1510,7 @@ export function DealCard({
                       inputMode="decimal"
                       value={draft.commissionFlat}
                       onChange={handleDraftChange('commissionFlat')}
-                      className="rounded border border-border-strong px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none"
+                      className="rounded border border-border-strong px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-ring focus:outline-none"
                       placeholder="5000"
                       disabled={isDetailSaving || isOutsideAgentSelected}
                     />
@@ -1524,7 +1524,7 @@ export function DealCard({
                       inputMode="decimal"
                       value={draft.referralFeePercent}
                       onChange={handleDraftChange('referralFeePercent')}
-                      className="rounded border border-border-strong px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none"
+                      className="rounded border border-border-strong px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-ring focus:outline-none"
                       placeholder="25"
                       disabled={isDetailSaving || isOutsideAgentSelected}
                     />
@@ -1535,7 +1535,7 @@ export function DealCard({
                   <select
                     value={draft.side}
                     onChange={handleDraftChange('side')}
-                    className="rounded border border-border-strong px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none"
+                    className="rounded border border-border-strong px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-ring focus:outline-none"
                     disabled={isDetailSaving}
                   >
                     <option value="buy">Buy-side</option>
@@ -1566,7 +1566,7 @@ export function DealCard({
                   <button
                     type="submit"
                     disabled={isDetailSaving}
-                    className="rounded bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isDetailSaving ? 'Saving…' : 'Save details'}
                   </button>
@@ -1604,14 +1604,14 @@ export function DealCard({
                   status !== 'terminated' &&
                   !isAgentOrigin &&
                   !isOutsideAgentSelected && (
-                  <p className="mt-2 text-xs text-amber-600">
+                  <p className="mt-2 text-xs text-warning">
                     Enter contract details to calculate the referral fee before updating deal status.
                   </p>
                 )}
               </div>
               <div className="rounded border border-border bg-surface-muted p-3 text-xs text-foreground-subtle">
                 {status === 'payment_sent' && (
-                  <p className="text-indigo-600">Agent marked payment as sent. Awaiting admin confirmation.</p>
+                  <p className="text-accent">Agent marked payment as sent. Awaiting admin confirmation.</p>
                 )}
                 {status === 'paid' && (
                   <p className="text-foreground-muted">Payment received and confirmed by admin.</p>
@@ -1636,7 +1636,7 @@ export function DealCard({
                   </select>
                 </label>
                 {assignedBucket && agentOutcomeSelection === 'USED_AGENT' && agentSelection && !matchesAssigned && (
-                  <p className="mt-2 text-xs text-amber-600">
+                  <p className="mt-2 text-xs text-warning">
                     This deal did not close with the assigned {assignedBucket === 'AHA' ? 'AHA' : 'AHA OOS'} agent.
                   </p>
                 )}
@@ -1671,7 +1671,7 @@ export function DealCard({
                     <label className="mt-2 inline-flex items-center gap-2 text-sm text-foreground-muted">
                       <input
                         type="checkbox"
-                        className="h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
+                        className="h-4 w-4 rounded border-border-strong text-primary focus:ring-ring"
                         checked={usedAfc}
                         onChange={handleAfcToggle(deal)}
                         disabled={isSaving}
@@ -1707,7 +1707,7 @@ export function DealCard({
                     </p>
                     {deal.feeBreakdownEmailSentAt &&
                       deal.feeBreakdownEmailSentBy !== 'cron' && (
-                        <p className="text-xs text-amber-600">
+                        <p className="text-xs text-warning">
                           Auto-send disabled for this deal because it was sent manually.
                         </p>
                       )}
@@ -1717,17 +1717,17 @@ export function DealCard({
                   type="button"
                   onClick={handleSendFeeBreakdown(deal)}
                   disabled={isSaving || !deal.closingDate || !selectedAgentId}
-                  className="rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {deal.feeBreakdownEmailSentAt ? 'Resend Fee Breakdown Email' : 'Send Fee Breakdown Email'}
                 </button>
                 {!deal.closingDate && (
-                  <p className="mt-2 text-xs text-amber-600">
+                  <p className="mt-2 text-xs text-warning">
                     Add closing date to enable
                   </p>
                 )}
                 {!selectedAgentId && deal.closingDate && (
-                  <p className="mt-2 text-xs text-amber-600">
+                  <p className="mt-2 text-xs text-warning">
                     Assign an agent to enable
                   </p>
                 )}
@@ -1754,7 +1754,7 @@ export function DealCard({
           <button
             type="button"
             onClick={onAddDeal}
-            className="inline-flex items-center justify-center rounded bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-primary-800"
+            className="inline-flex items-center justify-center rounded bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-primary-hover"
           >
             Add deal
           </button>
@@ -1794,7 +1794,7 @@ export function DealCard({
                       href={assignedAgentHref}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-primary-700 underline-offset-2 hover:underline"
+                      className="text-primary underline-offset-2 hover:underline"
                     >
                       {assignedAgentName}
                     </a>
@@ -1828,7 +1828,7 @@ export function DealCard({
             </div>
           </dl>
           {overrides?.hasUnsavedContractChanges && (
-            <p className="mt-3 text-xs text-amber-600">
+            <p className="mt-3 text-xs text-warning">
               Save the deal preparation form below to create or update the active deal.
             </p>
           )}

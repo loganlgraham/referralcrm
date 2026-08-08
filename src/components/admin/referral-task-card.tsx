@@ -189,7 +189,7 @@ export function ReferralTaskCard({ card, view = 'urgent', selectedDate, onMutate
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <Link
               href={`/referrals/${card.referralId}`}
-              className="font-semibold text-foreground hover:text-primary-700 hover:underline"
+              className="font-semibold text-foreground hover:text-primary-hover hover:underline"
             >
               {card.borrower.name || 'Unnamed'}
             </Link>
@@ -203,13 +203,13 @@ export function ReferralTaskCard({ card, view = 'urgent', selectedDate, onMutate
                 href={`${GMAIL_COMPOSE_BASE}${encodeURIComponent(card.borrower.email)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-primary-700 hover:underline"
+                className="text-primary hover:underline"
               >
                 {card.borrower.email}
               </a>
             )}
             {card.borrower.phone && (
-              <a href={`tel:${card.borrower.phone}`} className="text-primary-700 hover:underline">
+              <a href={`tel:${card.borrower.phone}`} className="text-primary hover:underline">
                 {card.borrower.phone}
               </a>
             )}
@@ -219,7 +219,7 @@ export function ReferralTaskCard({ card, view = 'urgent', selectedDate, onMutate
               {card.agent.id ? (
                 <Link
                   href={`/agents/${card.agent.id}`}
-                  className="font-medium text-foreground-muted hover:text-primary-700 hover:underline"
+                  className="font-medium text-foreground-muted hover:text-primary-hover hover:underline"
                 >
                   {card.agent.name ?? 'Agent'}
                 </Link>
@@ -231,13 +231,13 @@ export function ReferralTaskCard({ card, view = 'urgent', selectedDate, onMutate
                   href={`${GMAIL_COMPOSE_BASE}${encodeURIComponent(card.agent.email)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary-700 hover:underline"
+                  className="text-primary hover:underline"
                 >
                   {card.agent.email}
                 </a>
               )}
               {card.agent.phone && (
-                <a href={`tel:${card.agent.phone}`} className="text-primary-700 hover:underline">
+                <a href={`tel:${card.agent.phone}`} className="text-primary hover:underline">
                   {card.agent.phone}
                 </a>
               )}
@@ -247,7 +247,7 @@ export function ReferralTaskCard({ card, view = 'urgent', selectedDate, onMutate
         <button
           type="button"
           onClick={() => setShowAddForm(!showAddForm)}
-          className="inline-flex items-center gap-1 rounded-md bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-800"
+          className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-hover"
         >
           <Plus className="h-3.5 w-3.5" /> Add task
         </button>
@@ -276,7 +276,7 @@ export function ReferralTaskCard({ card, view = 'urgent', selectedDate, onMutate
           <div className="flex gap-2">
             <button
               type="submit"
-              className="rounded bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-800"
+              className="rounded bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-hover"
             >
               Create
             </button>

@@ -87,7 +87,7 @@ export function AmortizationTable({ schedule, includesExtraPrincipal }: Amortiza
             onClick={() => setViewMode('yearly')}
             className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
               viewMode === 'yearly'
-                ? 'bg-primary-600 text-white'
+                ? 'bg-primary text-white'
                 : 'bg-surface-subtle text-foreground-muted hover:bg-surface-subtle'
             }`}
           >
@@ -97,7 +97,7 @@ export function AmortizationTable({ schedule, includesExtraPrincipal }: Amortiza
             onClick={() => setViewMode('monthly')}
             className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
               viewMode === 'monthly'
-                ? 'bg-primary-600 text-white'
+                ? 'bg-primary text-white'
                 : 'bg-surface-subtle text-foreground-muted hover:bg-surface-subtle'
             }`}
           >

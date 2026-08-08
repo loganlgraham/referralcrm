@@ -199,8 +199,8 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
             <ToolbarGroup aria-label="Due date filter">
               <label
                 className={cn(
-                  'inline-flex h-8 items-center gap-2 rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-foreground-muted transition focus-within:border-primary-500 focus-within:ring-2 focus-within:ring-primary-500/30',
-                  selectedDate && 'border-primary-300 bg-primary-50/40 text-primary-700'
+                  'inline-flex h-8 items-center gap-2 rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-foreground-muted transition focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30',
+                  selectedDate && 'border-primary/20 bg-primary-soft/40 text-primary'
                 )}
               >
                 <CalendarDays className="h-3.5 w-3.5" />
@@ -301,7 +301,7 @@ function SegmentedButton({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+        'inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         active
           ? 'bg-surface-raised text-foreground shadow-sm ring-1 ring-border'
           : 'text-foreground-muted hover:text-foreground'
@@ -334,13 +334,13 @@ function StatButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'flex min-w-0 flex-col gap-2 rounded-card border px-4 py-3.5 text-left shadow-card transition hover:shadow-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+        'flex min-w-0 flex-col gap-2 rounded-card border px-4 py-3.5 text-left shadow-card transition hover:shadow-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         tone === 'danger' && value > 0
           ? 'border-[hsl(var(--danger)/0.25)] bg-danger-soft/60'
           : tone === 'warning' && value > 0
             ? 'border-[hsl(var(--warning)/0.25)] bg-warning-soft/60'
             : 'border-border bg-surface-raised',
-        active && 'ring-2 ring-primary-500/60 ring-offset-1 ring-offset-surface'
+        active && 'ring-2 ring-primary/60 ring-offset-1 ring-offset-surface'
       )}
     >
       <div className="flex items-center justify-between gap-2">

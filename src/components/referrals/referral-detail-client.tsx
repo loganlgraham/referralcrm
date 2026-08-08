@@ -1442,7 +1442,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                       onChange={handleDetailInputChange('borrowerFirstName')}
                       required
                       disabled={savingDetails}
-                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                     />
                   </label>
                   <label className="space-y-1 text-sm font-medium text-foreground-muted">
@@ -1453,7 +1453,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                       onChange={handleDetailInputChange('borrowerLastName')}
                       required
                       disabled={savingDetails}
-                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                     />
                   </label>
                   <label className="space-y-1 text-sm font-medium text-foreground-muted">
@@ -1465,7 +1465,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                       onChange={handleDetailInputChange('borrowerEmail')}
                       required
                       disabled={savingDetails}
-                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                     />
                   </label>
                   <label className="space-y-1 text-sm font-medium text-foreground-muted">
@@ -1477,7 +1477,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                       onChange={handleDetailInputChange('borrowerPhone')}
                       required
                       disabled={savingDetails}
-                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                     />
                   </label>
                 </>
@@ -1490,7 +1490,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   onChange={handleDetailInputChange('loanFileNumber')}
                   required
                   disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                 />
               </label>
               <label className="space-y-1 text-sm font-medium text-foreground-muted">
@@ -1500,7 +1500,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   value={detailsDraft.loanType}
                   onChange={handleDetailInputChange('loanType')}
                   disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                 />
               </label>
               <label className="space-y-1 text-sm font-medium text-foreground-muted">
@@ -1514,7 +1514,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                     value={formatCurrencyInputDisplay(detailsDraft.preApprovalAmount)}
                     onChange={handlePreApprovalChange}
                     disabled={savingDetails}
-                    className="mt-1 w-full rounded border border-border-strong px-3 py-2 pl-7 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                    className="mt-1 w-full rounded border border-border-strong px-3 py-2 pl-7 text-sm shadow-sm focus:border-ring focus:outline-none"
                     inputMode="decimal"
                     placeholder="300,000"
                   />
@@ -1529,7 +1529,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                       value={detailsDraft.source}
                       onChange={handleDetailInputChange('source')}
                       disabled={savingDetails || !canEditSourceAndEndorser}
-                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                     />
                   </label>
                   <label className="space-y-1 text-sm font-medium text-foreground-muted">
@@ -1539,7 +1539,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                       value={detailsDraft.endorser}
                       onChange={handleDetailInputChange('endorser')}
                       disabled={savingDetails || !canEditSourceAndEndorser}
-                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                     />
                   </label>
                 </>
@@ -1551,7 +1551,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   value={detailsDraft.clientType}
                   onChange={handleDetailInputChange('clientType')}
                   disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                 >
                   <option value="Buyer">Buyer</option>
                   <option value="Seller">Seller</option>
@@ -1566,7 +1566,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   onChange={handleDetailInputChange('lookingInZip')}
                   required
                   disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                 />
               </label>
               <label className="space-y-1 text-sm font-medium text-foreground-muted">
@@ -1576,7 +1576,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   value={detailsDraft.stageOnTransfer}
                   onChange={handleDetailInputChange('stageOnTransfer')}
                   disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                 >
                   <option value="Pre-approval TBD">Pre-approval TBD</option>
                   <option value="Pre-approved">Pre-approved</option>
@@ -1589,7 +1589,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   value={detailsDraft.timeline}
                   onChange={handleDetailInputChange('timeline')}
                   disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                 >
                   {REFERRAL_TIMELINE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -1607,7 +1607,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                     value={detailsDraft.referralDate}
                     onChange={handleDetailInputChange('referralDate')}
                     disabled={savingDetails}
-                    className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                    className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                   />
                 </label>
               )}
@@ -1619,7 +1619,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   onChange={handleDetailInputChange('borrowerCurrentAddress')}
                   required
                   disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
                 />
               </label>
             </div>
@@ -1635,7 +1635,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               <button
                 type="submit"
                 disabled={savingDetails || !detailsChanged}
-                className="rounded-md bg-primary-600 px-4 py-1.5 text-sm font-semibold text-white shadow transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
+                className="rounded-md bg-primary px-4 py-1.5 text-sm font-semibold text-white shadow transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {savingDetails ? 'Saving…' : 'Save changes'}
               </button>
@@ -1748,7 +1748,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             type="button"
             onClick={handleDeleteReferral}
             disabled={deleting}
-            className="rounded-lg border border-rose-200 bg-rose-500/10 px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
+            className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm font-semibold text-danger transition hover:bg-danger/20 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {deleting ? 'Deleting…' : 'Delete referral'}
           </button>

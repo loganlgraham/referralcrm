@@ -76,25 +76,32 @@ export const Tr = forwardRef<HTMLTableRowElement, HTMLAttributes<HTMLTableRowEle
   }
 );
 
-export const Th = forwardRef<HTMLTableCellElement, ThHTMLAttributes<HTMLTableCellElement>>(
-  function Th({ className, ...props }, ref) {
+/** Currency, counts and dates: mono digits so columns line up down the page. */
+type NumericCell = { numeric?: boolean };
+
+export const Th = forwardRef<HTMLTableCellElement, ThHTMLAttributes<HTMLTableCellElement> & NumericCell>(
+  function Th({ className, numeric, ...props }, ref) {
     return (
       <th
         ref={ref}
         scope="col"
-        className={cn('px-4 py-2.5 font-medium first:pl-5 last:pr-5', className)}
+        className={cn('px-4 py-2.5 font-medium first:pl-5 last:pr-5', numeric && 'text-right', className)}
         {...props}
       />
     );
   }
 );
 
-export const Td = forwardRef<HTMLTableCellElement, TdHTMLAttributes<HTMLTableCellElement>>(
-  function Td({ className, ...props }, ref) {
+export const Td = forwardRef<HTMLTableCellElement, TdHTMLAttributes<HTMLTableCellElement> & NumericCell>(
+  function Td({ className, numeric, ...props }, ref) {
     return (
       <td
         ref={ref}
-        className={cn('px-4 py-3 align-middle text-sm first:pl-5 last:pr-5', className)}
+        className={cn(
+          'px-4 py-3 align-middle text-sm first:pl-5 last:pr-5',
+          numeric && 'text-numeric text-right',
+          className
+        )}
         {...props}
       />
     );

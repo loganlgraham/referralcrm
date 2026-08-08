@@ -140,12 +140,12 @@ const openDateConfirmationToast = (options: {
               onChange={(event) => {
                 selectedDate = event.target.value;
               }}
-              className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+              className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
             />
           </label>
 
           {isClose && askUsedAfc ? (
-            <fieldset className="mt-3 rounded border border-primary-500/30 bg-primary-600/5 p-3">
+            <fieldset className="mt-3 rounded border border-primary/30 bg-primary/5 p-3">
               <legend className="px-1 text-xs font-semibold text-foreground">
                 Is this client financing with AFC?
               </legend>
@@ -189,14 +189,14 @@ const openDateConfirmationToast = (options: {
                 onChange={(event) => {
                   sendClosedEmails = event.target.checked;
                 }}
-                className="mt-0.5 h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
+                className="mt-0.5 h-4 w-4 rounded border-border-strong text-primary focus:ring-ring"
               />
               <span>Send a congratulations email to the referral to rate their agent.</span>
             </label>
           ) : null}
 
           {isClose && showEmailPreference && !options.canSendClosedEmails ? (
-            <p className="mt-3 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+            <p className="mt-3 rounded border border-warning/30 bg-warning-soft px-2 py-1 text-xs text-warning">
               Referral rating email will not be sent because the assigned agent is not marked as used.
             </p>
           ) : null}
@@ -209,7 +209,7 @@ const openDateConfirmationToast = (options: {
                 onChange={(event) => {
                   sendAgentNpsEmail = event.target.checked;
                 }}
-                className="mt-0.5 h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
+                className="mt-0.5 h-4 w-4 rounded border-border-strong text-primary focus:ring-ring"
               />
               <span>Send MC NPS email to the agent.</span>
             </label>
@@ -227,7 +227,7 @@ const openDateConfirmationToast = (options: {
             </button>
             <button
               type="submit"
-              className="rounded bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-800"
+              className="rounded bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-hover"
             >
               Confirm
             </button>
@@ -361,7 +361,7 @@ export const confirmFeeBreakdownSend = async (
                   nextInputs[index] = event.target.value;
                   setCcInputs(nextInputs);
                 }}
-                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none"
               />
             ))}
             <button
@@ -383,7 +383,7 @@ export const confirmFeeBreakdownSend = async (
             </button>
             <button
               type="submit"
-              className="rounded bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-800"
+              className="rounded bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-hover"
             >
               Send
             </button>

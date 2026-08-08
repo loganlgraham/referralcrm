@@ -1553,7 +1553,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
                 to: [borrowerEmail],
                 subject: 'Congrats on Your New Home!',
                 html: `
-                  <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
+                  <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
                     <p>Hi ${borrowerFirstName},</p>
                     <p>Congratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best!</p>
                     <p style="margin: 20px 0 0 0;">
@@ -1623,7 +1623,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
                 to: [agent.email],
                 subject: 'Congratulations on Your Closed Deal!',
                 html: `
-                  <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
+                  <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
                     <p>Hi ${agentFirstName},</p>
                     <p>Congratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.</p>${mcBlockHtml}
                   </div>
@@ -1687,7 +1687,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       const htmlBody = `
         <p>${agentName} marked the referral fee as <strong>Payment Sent</strong> for ${borrowerName}.</p>
         <p>Amount: <strong>${formattedAmount}</strong></p>
-        ${referralLink ? `<p><a href="${referralLink}" style="color:#2563eb;">View referral details</a></p>` : ''}
+        ${referralLink ? `<p><a href="${referralLink}" style="color:#0c6ce9;">View referral details</a></p>` : ''}
       `;
 
       await sendTransactionalEmail({

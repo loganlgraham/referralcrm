@@ -70,14 +70,14 @@ export function AgentNpsEditor({ agentId, initialScore }: AgentNpsEditorProps) {
           max={100}
           value={value}
           onChange={(event) => setValue(event.target.value)}
-          className="flex-1 rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40 sm:max-w-xs"
+          className="flex-1 rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40 sm:max-w-xs"
           placeholder="68"
           disabled={saving}
         />
         <button
           type="submit"
           disabled={saving}
-          className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
         >
           {saving ? 'Saving…' : 'Save NPS'}
         </button>

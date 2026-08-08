@@ -16,18 +16,22 @@ export function BrandMark({ className, compact = false, inverted = false }: Bran
           compact ? 'h-8 w-8' : 'h-9 w-9',
           inverted
             ? 'border-white/20 bg-white/10'
-            : 'border-primary-200 bg-primary-50'
+            : 'border-primary/20 bg-primary-soft'
         )}
       >
-        <svg viewBox="0 0 28 28" fill="none" className="h-full w-full">
+        <svg
+          viewBox="0 0 28 28"
+          fill="none"
+          className={cn('h-full w-full', inverted ? 'text-white' : 'text-primary')}
+        >
           <path
             d="M7 8.5h8.5a5.5 5.5 0 0 1 0 11H13"
-            stroke={inverted ? 'white' : '#2457D6'}
+            stroke="currentColor"
             strokeWidth="2.4"
             strokeLinecap="round"
           />
-          <circle cx="7" cy="8.5" r="3.25" fill={inverted ? 'white' : '#2457D6'} />
-          <circle cx="11.5" cy="19.5" r="3.25" fill="#E4684A" />
+          <circle cx="7" cy="8.5" r="3.25" fill="currentColor" />
+          <circle cx="11.5" cy="19.5" r="3.25" className="fill-signal" />
         </svg>
       </span>
       {!compact ? (

@@ -374,7 +374,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
                 <tr key={agent._id} className="hover:bg-surface-muted">
                   <td className="px-4 py-3 text-sm text-foreground-muted">
                     <div className="font-medium text-foreground">
-                      <Link href={`/agents/${agent._id}`} className="text-primary-700 hover:underline">
+                      <Link href={`/agents/${agent._id}`} className="text-primary hover:underline">
                         {agent.name}
                       </Link>
                     </div>
@@ -383,7 +383,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
                       href={buildGmailComposeUrl(agent.email)}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-primary-700 hover:underline"
+                      className="text-primary hover:underline"
                     >
                       {agent.email}
                     </a>
@@ -392,7 +392,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
                       {agent.phone ? (
                         <a
                           href={`tel:${agent.phone.replace(/[^0-9+]/g, '')}`}
-                          className="text-primary-700 hover:underline"
+                          className="text-primary hover:underline"
                         >
                           {formatPhoneNumber(agent.phone)}
                         </a>
@@ -403,7 +403,7 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
                     <td className="px-4 py-3 text-sm text-foreground-muted">
                       <span
                         className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                          agent.active === false ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'
+                          agent.active === false ? 'bg-danger-soft text-danger' : 'bg-success-soft text-success'
                         }`}
                       >
                         {agent.active === false ? 'Inactive' : 'Active'}

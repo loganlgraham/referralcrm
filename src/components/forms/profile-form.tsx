@@ -285,7 +285,7 @@ export function ProfileForm() {
     const progress = Math.min(Math.max(coverageProgress, 0), 100);
 
     return {
-      backgroundImage: `linear-gradient(90deg, #0b365d 0%, #0b365d ${progress}%, #0f4c81 ${progress}%, #2f6aa3 100%)`,
+      backgroundImage: `linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--primary)) %, hsl(var(--primary-hover)) %, hsl(var(--border-strong)) 100%)`,
       transition: 'background-image 250ms linear',
     };
   }, [coverageProgress, isGeneratingCoverage]);
@@ -777,14 +777,14 @@ export function ProfileForm() {
     <div className="rounded-card bg-surface-raised p-6 shadow-sm ring-1 ring-border">
       <div className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary-700">Referral CRM</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">Referral CRM</p>
           <h1 className="mt-2 text-2xl font-semibold text-foreground">My profile</h1>
         </div>
         {canEdit && !isEditing && (
           <button
             type="button"
             onClick={() => setIsEditing(true)}
-            className="inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground-muted transition hover:border-border-strong hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            className="inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground-muted transition hover:border-border-strong hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Edit profile
           </button>
@@ -802,7 +802,7 @@ export function ProfileForm() {
                   type="text"
                   value={form.name}
                   onChange={handleChange('name')}
-                  className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
                   required
                   disabled={saving}
                 />
@@ -813,7 +813,7 @@ export function ProfileForm() {
                   type="email"
                   value={form.email}
                   onChange={handleChange('email')}
-                  className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
                   required
                   disabled={saving}
                 />
@@ -824,7 +824,7 @@ export function ProfileForm() {
                   type="tel"
                   value={form.phone}
                   onChange={handleChange('phone')}
-                  className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                  className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
                   placeholder="(555) 123-4567"
                   disabled={saving}
                 />
@@ -836,7 +836,7 @@ export function ProfileForm() {
                     type="text"
                     value={form.nmlsId}
                     onChange={handleChange('nmlsId')}
-                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
                     placeholder="123456"
                     disabled={saving}
                     required
@@ -857,7 +857,7 @@ export function ProfileForm() {
                       type="text"
                       value={form.brokerage}
                       onChange={handleChange('brokerage')}
-                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
                       disabled={saving}
                     />
                   </label>
@@ -867,7 +867,7 @@ export function ProfileForm() {
                       type="text"
                       value={form.licenseNumber}
                       onChange={handleChange('licenseNumber')}
-                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
                       disabled={saving}
                     />
                   </label>
@@ -876,7 +876,7 @@ export function ProfileForm() {
                     <textarea
                       value={form.states}
                       onChange={handleChange('states')}
-                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
                       placeholder="CO, UT, AZ"
                       rows={2}
                       disabled={saving}
@@ -891,7 +891,7 @@ export function ProfileForm() {
                         id="profile-coverage-description"
                         value={form.coverageDescription}
                         onChange={handleChange('coverageDescription')}
-                        className="w-full flex-1 rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40 sm:min-h-[5.5rem]"
+                        className="w-full flex-1 rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40 sm:min-h-[5.5rem]"
                         placeholder="Describe neighborhoods, cities, and counties you serve"
                         rows={3}
                         disabled={saving || isGeneratingCoverage || isPersistingCoverage}
@@ -899,7 +899,7 @@ export function ProfileForm() {
                       <button
                         type="button"
                         onClick={generateCoverageLocations}
-                        className="flex shrink-0 items-center justify-center rounded-lg bg-primary-600 px-4 text-sm font-semibold text-white transition hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-70 sm:h-full sm:min-h-[5.5rem] sm:self-stretch"
+                        className="flex shrink-0 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-70 sm:h-full sm:min-h-[5.5rem] sm:self-stretch"
                         style={coverageButtonStyles}
                         disabled={saving || isGeneratingCoverage || isPersistingCoverage}
                       >
@@ -922,7 +922,7 @@ export function ProfileForm() {
                             <button
                               type="button"
                               onClick={() => removeCoverageLocation(location.label)}
-                              className="text-foreground-subtle transition hover:text-foreground-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60"
+                              className="text-foreground-subtle transition hover:text-foreground-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
                               aria-label={`Remove ${location.label}`}
                               disabled={saving || isPersistingCoverage}
                             >
@@ -947,7 +947,7 @@ export function ProfileForm() {
                       type="date"
                       value={form.experienceSince}
                       onChange={handleChange('experienceSince')}
-                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
                       disabled={saving}
                     />
                   </label>
@@ -957,7 +957,7 @@ export function ProfileForm() {
                       multiple
                       value={form.specialties}
                       onChange={handleSelectChange('specialties')}
-                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
                       size={6}
                       disabled={saving}
                     >
@@ -977,7 +977,7 @@ export function ProfileForm() {
                       multiple
                       value={form.languages}
                       onChange={handleSelectChange('languages')}
-                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
                       size={5}
                       disabled={saving}
                     >
@@ -1003,7 +1003,7 @@ export function ProfileForm() {
               <textarea
                 value={form.states}
                 onChange={handleChange('states')}
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
                 placeholder="CO, UT, AZ"
                 rows={2}
                 disabled={saving}
@@ -1015,7 +1015,7 @@ export function ProfileForm() {
             <button
               type="button"
               onClick={cancelEditing}
-              className="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground-muted transition hover:border-border-strong hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              className="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground-muted transition hover:border-border-strong hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               disabled={saving}
             >
               Cancel
@@ -1023,7 +1023,7 @@ export function ProfileForm() {
             <button
               type="submit"
               disabled={saving || !canEdit}
-              className="inline-flex items-center justify-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-70"
+              className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
             >
               {saving ? 'Saving…' : 'Save profile'}
             </button>

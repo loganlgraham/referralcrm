@@ -249,7 +249,7 @@ export function StatusChanger({
             <select
               value={currentStatus}
               onChange={handleChange}
-              className="w-full rounded-md border border-border-strong bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none"
+              className="w-full rounded-md border border-border-strong bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-ring focus:outline-none"
               disabled={loading}
             >
               {pipelineOptions.map((item) => (
@@ -265,7 +265,7 @@ export function StatusChanger({
                   <select
                     value={terminatedReason}
                     onChange={(event) => setTerminatedReason(event.target.value as TerminatedReason | '')}
-                    className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:outline-none"
+                    className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none"
                     disabled={loading}
                   >
                     <option value="">Select reason</option>
@@ -320,7 +320,7 @@ export function StatusChanger({
                   inputMode="decimal"
                   value={formatCurrencyInputDisplay(preApproval)}
                   onChange={handlePreApprovalChange}
-                  className="w-full rounded-md border border-border-strong bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="w-full rounded-md border border-border-strong bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-ring focus:outline-none"
                   placeholder="300,000"
                   disabled={preApprovalSaving || loading}
                 />
@@ -329,7 +329,7 @@ export function StatusChanger({
                     type="button"
                     onClick={handlePreApprovalSave}
                     disabled={preApprovalSaving || !preApprovalDirty}
-                    className="inline-flex flex-1 items-center justify-center rounded bg-foreground px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="inline-flex flex-1 items-center justify-center rounded bg-foreground px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     {preApprovalSaving ? 'Saving…' : 'Save'}
                   </button>

@@ -70,7 +70,7 @@ function CopyButton({
       onClick={handleCopy}
       className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
         copied
-          ? 'bg-green-100 text-green-700'
+          ? 'bg-success-soft text-success'
           : 'bg-surface-subtle text-foreground-muted hover:bg-surface-subtle'
       } ${className}`}
     >
@@ -191,19 +191,12 @@ export function MarketIntelWidget() {
 
         <div className="mt-3 max-w-3xl mx-auto px-4">
           <div className="overflow-hidden rounded-md border border-border shadow-sm">
-            <div
-              style={{
-                textAlign: 'center',
-                padding: '6px 0',
-                backgroundColor: '#0f172a',
-                color: '#ffffff',
-              }}
-            >
+            <div className="bg-primary py-1.5 text-center text-white">
               <a
                 href="https://www.mortgagenewsdaily.com/mortgage-rates"
                 target="_blank"
                 rel="noreferrer"
-                style={{ color: '#ffffff', textDecoration: 'none', fontSize: '13px' }}
+                className="text-[13px] text-white no-underline hover:text-white"
               >
                 Mortgage Interest Rates
               </a>
@@ -216,7 +209,7 @@ export function MarketIntelWidget() {
                 frameBorder="0"
                 scrolling="no"
                 style={{
-                  border: 'solid 1px #0f172a',
+                  border: 'solid 1px hsl(var(--primary))',
                   borderWidth: '0 1px',
                   boxSizing: 'border-box',
                   minWidth: '720px',
@@ -226,20 +219,13 @@ export function MarketIntelWidget() {
                 }}
               />
             </div>
-            <div
-              style={{
-                textAlign: 'center',
-                padding: '6px 0',
-                backgroundColor: '#0f172a',
-                color: '#ffffff',
-              }}
-            >
+            <div className="bg-primary py-1.5 text-center text-white">
               View More{' '}
               <a
                 href="https://www.mortgagenewsdaily.com/mortgage-rates"
                 target="_blank"
                 rel="noreferrer"
-                style={{ color: '#ffffff', textDecoration: 'none', fontSize: '13px' }}
+                className="text-[13px] text-white no-underline hover:text-white"
               >
                 Mortgage Rates
               </a>
@@ -248,12 +234,12 @@ export function MarketIntelWidget() {
         </div>
 
         <div className="mx-auto mt-3 max-w-3xl px-4 pb-5">
-          <div className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-start sm:gap-3">
-            <div className="flex items-center gap-1.5 font-semibold text-amber-800 sm:shrink-0">
+          <div className="flex flex-col gap-2 rounded-md border border-warning/30 bg-warning-soft px-4 py-3 sm:flex-row sm:items-start sm:gap-3">
+            <div className="flex items-center gap-1.5 font-semibold text-warning sm:shrink-0">
               <AlertCircleIcon className="h-4 w-4" />
               <span className="text-sm">Use with care</span>
             </div>
-            <p className="text-sm text-amber-800">
+            <p className="text-sm text-warning">
               These figures are for educational context only. Always defer exact rate quotes to the
               lender you are working with.
             </p>
@@ -282,7 +268,7 @@ export function MarketIntelWidget() {
       {/* Daily Market Brief */}
       <div className="rounded-card bg-surface-raised p-5 shadow">
         <div className="mb-3 flex items-center gap-2">
-          <LineChartIcon className="h-4 w-4 text-primary-700" />
+          <LineChartIcon className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-semibold text-foreground">Daily Market Brief</h2>
         </div>
         {briefLoading ? (
@@ -303,7 +289,7 @@ export function MarketIntelWidget() {
         {/* Agent Talking Points */}
         <div className="rounded-card bg-surface-raised p-5 shadow">
           <div className="mb-3 flex items-center gap-2">
-            <SparklesIcon className="h-4 w-4 text-primary-700" />
+            <SparklesIcon className="h-4 w-4 text-primary" />
             <h2 className="text-sm font-semibold text-foreground">Agent Talking Points</h2>
           </div>
           {talkingPointsLoading ? (
@@ -319,7 +305,7 @@ export function MarketIntelWidget() {
             <ul className="space-y-3">
               {talkingPoints.map((point, i) => (
                 <li key={i} className="flex gap-3 text-sm text-foreground-muted">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-600/10 text-xs font-bold text-primary-700">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
                     {i + 1}
                   </span>
                   <span className="leading-relaxed">{point}</span>
@@ -334,7 +320,7 @@ export function MarketIntelWidget() {
         {/* Latest News */}
         <div className="rounded-card bg-surface-raised p-5 shadow">
           <div className="mb-3 flex items-center gap-2">
-            <NewspaperIcon className="h-4 w-4 text-primary-700" />
+            <NewspaperIcon className="h-4 w-4 text-primary" />
             <h2 className="text-sm font-semibold text-foreground">Latest News</h2>
           </div>
           {articlesLoading ? (
@@ -356,10 +342,10 @@ export function MarketIntelWidget() {
                     rel="noreferrer"
                     className="group flex items-start justify-between gap-2"
                   >
-                    <span className="text-sm font-medium text-foreground group-hover:text-primary-700">
+                    <span className="text-sm font-medium text-foreground group-hover:text-primary-hover">
                       {article.title}
                     </span>
-                    <ExternalLinkIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground-subtle group-hover:text-primary-700" />
+                    <ExternalLinkIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground-subtle group-hover:text-primary-hover" />
                   </a>
                   <p className="mt-0.5 text-xs text-foreground-subtle">
                     {article.source}
@@ -383,7 +369,7 @@ export function MarketIntelWidget() {
             type="button"
             onClick={handleGenerateEmail}
             disabled={emailLoading}
-            className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-700 disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-hover disabled:opacity-60"
           >
             {emailLoading ? (
               <Loader2Icon className="h-4 w-4 animate-spin" />
@@ -412,7 +398,7 @@ export function MarketIntelWidget() {
         </div>
 
         {emailError && (
-          <p className="mt-3 text-xs text-rose-600">{emailError}</p>
+          <p className="mt-3 text-xs text-danger">{emailError}</p>
         )}
 
         {emailResult && (
@@ -445,7 +431,7 @@ export function MarketIntelWidget() {
                 <Skeleton className="h-3.5 w-4/6" />
               </div>
             )}
-            {postError && <p className="text-xs text-rose-600">{postError}</p>}
+            {postError && <p className="text-xs text-danger">{postError}</p>}
             {postResult && (
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground-muted">
                 {postResult}

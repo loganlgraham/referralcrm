@@ -57,7 +57,7 @@ export function NotificationBell({ session, inverted = false }: NotificationBell
           'relative rounded-md p-2 transition focus-visible:outline-none focus-visible:ring-2',
           inverted
             ? 'text-white/60 hover:bg-white/10 hover:text-white focus-visible:ring-white/40'
-            : 'text-foreground-muted hover:bg-surface-muted focus-visible:ring-primary-500/40'
+            : 'text-foreground-muted hover:bg-surface-muted focus-visible:ring-ring/40'
         )}
         aria-label="Notifications"
       >

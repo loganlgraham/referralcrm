@@ -1,6 +1,6 @@
 import '@/app/globals.css';
 import { Metadata } from 'next';
-import { Archivo, IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google';
+import { IBM_Plex_Mono, Manrope } from 'next/font/google';
 import { ReactNode, Suspense } from 'react';
 import { Toaster } from 'sonner';
 import { Analytics } from '@vercel/analytics/react';
@@ -8,11 +8,10 @@ import { SpeedInsights } from '@vercel/speed-insights/next';
 import { NavigationProgress } from '@/components/layout/navigation-progress';
 import { NextAuthProvider } from '@/components/providers/next-auth-provider';
 
-const archivo = Archivo({ subsets: ['latin'], variable: '--font-display' });
-const ibmPlexSans = IBM_Plex_Sans({
+const manrope = Manrope({
   subsets: ['latin'],
   variable: '--font-sans',
-  weight: ['400', '500', '600']
+  weight: ['400', '500', '600', '700', '800']
 });
 const ibmPlexMono = IBM_Plex_Mono({
   subsets: ['latin'],
@@ -28,7 +27,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${archivo.variable} ${ibmPlexSans.variable} ${ibmPlexMono.variable}`}>
+    <html lang="en" className={`${manrope.variable} ${ibmPlexMono.variable}`}>
       <body className="min-h-screen bg-surface-muted text-foreground antialiased">
         <Suspense
           fallback={(
@@ -50,7 +49,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               title: 'text-sm font-medium text-foreground',
               description: 'text-xs text-foreground-muted',
               actionButton:
-                'bg-primary-600 text-white hover:bg-primary-700 rounded-md px-3 py-1 text-xs font-semibold',
+                'bg-primary text-white hover:bg-primary-hover rounded-md px-3 py-1 text-xs font-semibold',
               cancelButton:
                 'bg-surface-muted text-foreground-muted hover:bg-surface-subtle rounded-md px-3 py-1 text-xs font-semibold',
               closeButton:

@@ -687,7 +687,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
                 to: [borrowerEmail],
                 subject: 'Congrats on Your New Home!',
                 html: `
-                  <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
+                  <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
                     <p>Hi ${borrowerFirstName},</p>
                     <p>Congratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentName}—your feedback means a lot and helps others tremendously. Wishing you all the best!</p>
                     <p style="margin: 20px 0 0 0;">
@@ -750,7 +750,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
                 to: [agentEmail],
                 subject: 'Congratulations on Your Closed Deal!',
                 html: `
-                  <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
+                  <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
                     <p>Hi ${agentFirstName},</p>
                     <p>Congratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.</p>${mcBlockHtml}
                   </div>

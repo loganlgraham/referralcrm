@@ -4,45 +4,65 @@
 
 @layer base {
   :root {
-    --font-sans: 'IBM Plex Sans', sans-serif;
-    --font-display: 'Archivo', sans-serif;
+    --font-sans: 'Manrope', sans-serif;
+    --font-display: 'Manrope', sans-serif;
     --font-mono: 'IBM Plex Mono', monospace;
     color-scheme: light;
 
     /* Semantic tokens (HSL triplets so `hsl(var(--x) / <alpha>)` works in Tailwind) */
-    --surface: 210 25% 99%;
+    /* Surfaces — bright porcelain */
+    --surface: 0 0% 100%;
     --surface-raised: 0 0% 100%;
-    --surface-muted: 204 29% 97%;
-    --surface-subtle: 207 31% 95%;
+    --surface-muted: 228 33% 97%;
+    --surface-subtle: 227 33% 95%;
 
-    --border: 207 25% 89%;
-    --border-strong: 209 21% 77%;
+    /* Borders */
+    --border: 224 25% 90%;
+    --border-strong: 226 22% 84%;
 
-    --text: 216 43% 14%;
-    --text-muted: 214 24% 32%;
-    --text-subtle: 211 14% 48%;
+    /* Text */
+    --text: 230 27% 13%;
+    --text-muted: 226 15% 41%;
+    --text-subtle: 224 15% 59%;
 
-    /* Relay blue identifies work that moves a handoff forward. */
-    --primary: 222 71% 49%;
+    /* Navy accent matches the sidebar and identifies work that moves a handoff forward.
+       Near-black has no room to darken, so the interaction steps lift instead. */
+    --primary: 222 47% 11%;
+    --primary-hover: 222 30% 28%;
+    --primary-active: 222 40% 16%;
     --primary-foreground: 0 0% 100%;
+    --primary-soft: 222 32% 92%;
 
-    --ring: 222 71% 49%;
+    /* Focus shares the informational hue but stays brighter, so the ring keeps
+       3:1 against the navy button, white inputs and the porcelain app bg. */
+    --ring: 214 90% 48%;
 
-    --success: 152 56% 35%;
+    /* Solid values are tuned to clear 4.5:1 against their own -soft wash, since
+       every one of them is used for 11px badge text. */
+    --success: 152 52% 28%;
     --success-foreground: 0 0% 100%;
-    --success-soft: 152 60% 94%;
+    --success-soft: 152 40% 94%;
 
-    --warning: 32 95% 44%;
-    --warning-foreground: 30 100% 8%;
-    --warning-soft: 45 94% 94%;
+    --warning: 30 85% 31%;
+    --warning-foreground: 0 0% 100%;
+    --warning-soft: 40 90% 93%;
 
-    --danger: 0 72% 48%;
+    --danger: 340 68% 45%;
     --danger-foreground: 0 0% 100%;
-    --danger-soft: 0 80% 96%;
+    --danger-soft: 340 70% 96%;
 
-    --info: 214 90% 48%;
+    --info: 214 92% 40%;
     --info-foreground: 0 0% 100%;
     --info-soft: 214 95% 95%;
+
+    --accent: 250 55% 45%;
+    --accent-foreground: 0 0% 100%;
+    --accent-soft: 250 100% 97%;
+
+    /* Route motif marker — the node on the handoff rail. */
+    --signal: 12 72% 59%;
+    --signal-foreground: 0 0% 100%;
+    --signal-soft: 16 100% 96%;
   }
 
   html,
@@ -66,18 +86,19 @@
     scroll-behavior: smooth;
   }
 
-  /* Default link styling — override on purpose inside shells using the Button/Link primitives. */
+  /* Default link styling — neutral text color, underline on interaction. Override on
+     purpose inside shells using the Button/Link primitives. */
   a {
     color: hsl(var(--text));
-    text-decoration: underline;
-    text-decoration-color: hsl(var(--text) / 0.25);
+    text-decoration: none;
     text-underline-offset: 3px;
   }
 
   /* Don't set color on hover — it beats Tailwind `text-white` on button-styled links. */
   a:hover,
   a:focus-visible {
-    text-decoration-color: hsl(var(--primary) / 0.9);
+    text-decoration: underline;
+    text-decoration-color: hsl(var(--text) / 0.4);
   }
 
   ::selection {
@@ -89,6 +110,8 @@
   h2,
   h3 {
     font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.03em;
   }
 
   /* Inputs inherit the route-blue ring for a consistent focus style. */
@@ -107,6 +130,15 @@
     font-weight: 600;
   }
 
+  /* Loan numbers, currency, basis points and dates. Mono keeps digit columns
+     aligned in the tables and echoes the eyebrow/route labels. */
+  .text-numeric {
+    font-family: var(--font-mono);
+    font-feature-settings: 'tnum';
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
   .route-label {
     font-family: var(--font-mono);
     font-size: 0.6875rem;
@@ -120,7 +152,13 @@
   }
 
   .route-surface::before {
-    background: linear-gradient(180deg, #2457d6 0%, #2457d6 58%, #e4684a 58%, #e4684a 100%);
+    background: linear-gradient(
+      180deg,
+      hsl(var(--primary)) 0%,
+      hsl(var(--primary)) 58%,
+      hsl(var(--signal)) 58%,
+      hsl(var(--signal)) 100%
+    );
     border-radius: 9999px;
     content: '';
     inset: 14px auto 14px 0;

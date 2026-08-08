@@ -89,7 +89,7 @@ export function Pagination({ currentPage, totalItems, pageSize, totalPages, item
             value={pageSize}
             onChange={handlePageSizeChange}
             disabled={isPending}
-            className="rounded border border-border bg-surface-raised px-2 py-1 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded border border-border bg-surface-raised px-2 py-1 text-sm text-foreground-muted shadow-sm focus:border-ring focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           >
             {pageSize === 20 && <option value={20}>20</option>}
             <option value={25}>25</option>
@@ -102,7 +102,7 @@ export function Pagination({ currentPage, totalItems, pageSize, totalPages, item
             type="button"
             onClick={handlePrevious}
             disabled={currentPage <= 1 || isPending}
-            className="inline-flex items-center justify-center rounded border border-border bg-surface-raised px-2.5 py-1.5 text-sm font-medium text-foreground-muted shadow-sm transition hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center justify-center rounded border border-border bg-surface-raised px-2.5 py-1.5 text-sm font-medium text-foreground-muted shadow-sm transition hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Previous page"
           >
             <ChevronLeftIcon className="h-4 w-4" />
@@ -114,7 +114,7 @@ export function Pagination({ currentPage, totalItems, pageSize, totalPages, item
             type="button"
             onClick={handleNext}
             disabled={currentPage >= totalPages || isPending}
-            className="inline-flex items-center justify-center rounded border border-border bg-surface-raised px-2.5 py-1.5 text-sm font-medium text-foreground-muted shadow-sm transition hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center justify-center rounded border border-border bg-surface-raised px-2.5 py-1.5 text-sm font-medium text-foreground-muted shadow-sm transition hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Next page"
           >
             <ChevronRightIcon className="h-4 w-4" />

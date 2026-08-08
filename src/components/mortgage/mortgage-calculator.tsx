@@ -297,7 +297,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
       <div className="rounded-md bg-surface-raised p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
-            <div className="rounded-lg bg-primary-600/10 p-2 text-primary-700">
+            <div className="rounded-lg bg-primary/10 p-2 text-primary">
               <CalculatorIcon className="h-5 w-5" />
             </div>
             <div>
@@ -334,7 +334,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
             {activeTab === 'calculator' && (
               <button
                 onClick={handleSaveScenario}
-                className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-hover"
               >
                 <PlusIcon className="h-4 w-4" />
                 Save Scenario
@@ -344,7 +344,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
         </div>
 
         {showCopySuccess && (
-          <div className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          <div className="mt-3 rounded-md bg-success-soft px-3 py-2 text-sm text-success">
             ✓ Copied to clipboard!
           </div>
         )}
@@ -356,7 +356,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
               onClick={() => setActiveTab('calculator')}
               className={`whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium ${
                 activeTab === 'calculator'
-                  ? 'border-primary-500 text-primary-700'
+                  ? 'border-primary text-primary'
                   : 'border-transparent text-foreground-subtle hover:border-border-strong hover:text-foreground-muted'
               }`}
             >
@@ -366,7 +366,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
               onClick={() => setActiveTab('amortization')}
               className={`whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium ${
                 activeTab === 'amortization'
-                  ? 'border-primary-500 text-primary-700'
+                  ? 'border-primary text-primary'
                   : 'border-transparent text-foreground-subtle hover:border-border-strong hover:text-foreground-muted'
               }`}
             >
@@ -376,7 +376,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
               onClick={() => setActiveTab('scenarios')}
               className={`whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium ${
                 activeTab === 'scenarios'
-                  ? 'border-primary-500 text-primary-700'
+                  ? 'border-primary text-primary'
                   : 'border-transparent text-foreground-subtle hover:border-border-strong hover:text-foreground-muted'
               }`}
             >
@@ -386,7 +386,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
               onClick={() => setActiveTab('affordability')}
               className={`whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium ${
                 activeTab === 'affordability'
-                  ? 'border-primary-500 text-primary-700'
+                  ? 'border-primary text-primary'
                   : 'border-transparent text-foreground-subtle hover:border-border-strong hover:text-foreground-muted'
               }`}
             >
@@ -407,7 +407,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                     <select
                       value={loanType}
                       onChange={onChange('loanType')}
-                      className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                     >
                       <option value="conventional">Conventional</option>
                       <option value="fha">FHA</option>
@@ -435,7 +435,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         value={formatNumberInput('purchasePrice', purchasePrice)}
                         onChange={onChange('purchasePrice')}
                         onBlur={onBlur('purchasePrice')}
-                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                     </label>
                     <label className="space-y-2">
@@ -449,7 +449,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         value={formatNumberInput('downPaymentPercent', downPaymentPercent)}
                         onChange={onChange('downPaymentPercent')}
                         onBlur={onBlur('downPaymentPercent')}
-                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                       <p className="text-xs text-foreground-subtle">{formatCurrency(calculations.downPaymentAmount)} down</p>
                     </label>
@@ -464,7 +464,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         value={formatNumberInput('interestRate', interestRate)}
                         onChange={onChange('interestRate')}
                         onBlur={onBlur('interestRate')}
-                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                     </label>
                     <label className="space-y-2">
@@ -478,7 +478,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         value={formatNumberInput('termYears', termYears)}
                         onChange={onChange('termYears')}
                         onBlur={onBlur('termYears')}
-                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                     </label>
                     <label className="space-y-2">
@@ -492,7 +492,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         value={formatNumberInput('propertyTaxRate', propertyTaxRate)}
                         onChange={onChange('propertyTaxRate')}
                         onBlur={onBlur('propertyTaxRate')}
-                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                       <p className="text-xs text-foreground-subtle">{formatCurrency(calculations.propertyTaxes)} per month</p>
                     </label>
@@ -507,7 +507,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         value={formatNumberInput('insuranceMonthly', insuranceMonthly)}
                         onChange={onChange('insuranceMonthly')}
                         onBlur={onBlur('insuranceMonthly')}
-                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                     </label>
                     <label className="space-y-2">
@@ -521,7 +521,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         value={formatNumberInput('hoaMonthly', hoaMonthly)}
                         onChange={onChange('hoaMonthly')}
                         onBlur={onBlur('hoaMonthly')}
-                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                     </label>
                     {loanTypeInfo.hasPMI && (
@@ -536,7 +536,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                           value={formatNumberInput('pmiRate', pmiRate)}
                           onChange={onChange('pmiRate')}
                           onBlur={onBlur('pmiRate')}
-                          className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                         />
                         <p className="text-xs text-foreground-subtle">
                           {loanType === 'fha' ? 'FHA MIP applies to all loans' : 'Applies when <20% down'}
@@ -554,7 +554,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         value={formatNumberInput('extraPrincipal', extraPrincipal)}
                         onChange={onChange('extraPrincipal')}
                         onBlur={onBlur('extraPrincipal')}
-                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                       <p className="text-xs text-foreground-subtle">Shows payoff acceleration potential.</p>
                     </label>
@@ -585,7 +585,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <dd className="font-semibold">{formatCurrency(hoaMonthly)}</dd>
                     </div>
                     {calculations.pmiMonthly > 0 && (
-                      <div className="flex items-center justify-between text-primary-700">
+                      <div className="flex items-center justify-between text-primary">
                         <dt className="flex items-center gap-2 font-semibold">
                           {loanType === 'fha' ? 'MIP' : 'PMI'}
                         </dt>
@@ -658,13 +658,13 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
 
                 <div className="rounded-lg border border-border p-4">
                   <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                    <SparklesIcon className="h-4 w-4 text-primary-700" />
+                    <SparklesIcon className="h-4 w-4 text-primary" />
                     Coaching angles
                   </div>
                   <ul className="mt-3 space-y-2 text-sm text-foreground-muted">
                     {insights.map((insight, idx) => (
                       <li key={idx} className="flex gap-2">
-                        <span className="text-primary-700">•</span>
+                        <span className="text-primary">•</span>
                         <span>{insight}</span>
                       </li>
                     ))}

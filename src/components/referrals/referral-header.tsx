@@ -1017,7 +1017,7 @@ export function ReferralHeader({
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
-            <span className="rounded-full bg-primary-600 px-3 py-1 text-white">{status}</span>
+            <span className="rounded-full bg-primary px-3 py-1 text-white">{status}</span>
             <span className="rounded-full bg-surface-subtle px-3 py-1 text-foreground-muted">{propertyLabel}</span>
             <span className="rounded-full bg-signal-soft px-3 py-1 text-signal-dark">{daysInStatus} days in stage</span>
           </div>
@@ -1027,7 +1027,7 @@ export function ReferralHeader({
             isAgentView ? 'lg:justify-start' : ''
           }`}
         >
-          <section className="w-full rounded-lg border border-border border-l-primary-600 border-l-[3px] bg-surface-raised p-3 shadow-sm">
+          <section className="w-full rounded-lg border border-border border-l-primary border-l-[3px] bg-surface-raised p-3 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">Status &amp; progress</h2>
               <span className="text-xs uppercase tracking-wide text-foreground-subtle">Pipeline</span>
@@ -1037,7 +1037,7 @@ export function ReferralHeader({
                 <div className="space-y-3">
                   <div className="grid gap-3 lg:grid-cols-2">
                     <div className="space-y-2 rounded-md border border-border bg-surface-muted/70 p-2.5">
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">Buy</div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-info">Buy</div>
                       <p className="text-[11px] text-foreground-subtle">Latest deal: {latestBuyDealStatusLabel}</p>
                       <StatusChanger
                         referralId={referral._id}
@@ -1054,7 +1054,7 @@ export function ReferralHeader({
                       />
                     </div>
                     <div className="space-y-2 rounded-md border border-border bg-surface-muted/70 p-2.5">
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">Sell</div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-accent">Sell</div>
                       <p className="text-[11px] text-foreground-subtle">Latest deal: {latestSellDealStatusLabel}</p>
                       <StatusChanger
                         referralId={referral._id}
@@ -1087,10 +1087,10 @@ export function ReferralHeader({
               ) : isBothClientType && viewerRole === 'agent' ? (
                 <div className="space-y-2">
                   <div className="grid grid-cols-2 gap-2">
-                    <span className="rounded-full bg-sky-100 px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-sky-700">
+                    <span className="rounded-full bg-info-soft px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-info">
                       Buy: {buyStatusLabel}
                     </span>
-                    <span className="rounded-full bg-indigo-100 px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+                    <span className="rounded-full bg-accent-soft px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-accent">
                       Sell: {sellStatusLabel}
                     </span>
                   </div>
@@ -1144,7 +1144,7 @@ export function ReferralHeader({
                   value={ahaBucket}
                   onChange={handleBucketChange}
                   disabled={savingBucket}
-                  className="mt-2 w-full rounded border border-border-strong bg-surface-raised px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none"
+                  className="mt-2 w-full rounded border border-border-strong bg-surface-raised px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-ring focus:outline-none"
                 >
                   <option value="">Not set</option>
                   <option value="AHA">AHA</option>
@@ -1260,7 +1260,7 @@ export function ReferralHeader({
                   type="button"
                   onClick={handlePreviewIntroductions}
                   disabled={sendingIntroductions || cleaningNotes}
-                  className="rounded-md bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
+                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {sendingIntroductions ? 'Sending…' : cleaningNotes ? 'Preparing…' : 'Send now'}
                 </button>
@@ -1269,7 +1269,7 @@ export function ReferralHeader({
                 value={introNotes}
                 onChange={(event) => setIntroNotes(event.target.value)}
                 rows={2}
-                className="mt-2 w-full rounded border border-border bg-surface-raised px-3 py-2 text-xs text-foreground-muted placeholder:text-foreground-subtle focus:border-primary-500 focus:outline-none"
+                className="mt-2 w-full rounded border border-border bg-surface-raised px-3 py-2 text-xs text-foreground-muted placeholder:text-foreground-subtle focus:border-ring focus:outline-none"
                 placeholder="Add a note to include in the agent email (optional)"
                 disabled={sendingIntroductions || cleaningNotes}
               />
@@ -1309,7 +1309,7 @@ export function ReferralHeader({
                           value={cleanedNotes}
                           onChange={(event) => setCleanedNotes(event.target.value)}
                           rows={4}
-                          className="mt-2 w-full rounded border border-border bg-surface-raised px-3 py-2 text-sm text-foreground-muted focus:border-primary-500 focus:outline-none"
+                          className="mt-2 w-full rounded border border-border bg-surface-raised px-3 py-2 text-sm text-foreground-muted focus:border-ring focus:outline-none"
                         />
                       </div>
                     ) : (
@@ -1329,7 +1329,7 @@ export function ReferralHeader({
                         type="button"
                         onClick={handleConfirmSend}
                         disabled={sendingIntroductions}
-                        className="rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
+                        className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
                       >
                         {sendingIntroductions ? 'Sending…' : 'Confirm & Send'}
                       </button>

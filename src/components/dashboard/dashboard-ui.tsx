@@ -21,7 +21,7 @@ export function DashInfoTip({ label, content }: { label: string; content: string
       <button
         type="button"
         aria-label={label}
-        className="inline-flex rounded-full text-foreground-subtle transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+        className="inline-flex rounded-full text-foreground-subtle transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
       >
         <Info className="h-3.5 w-3.5" aria-hidden="true" />
       </button>

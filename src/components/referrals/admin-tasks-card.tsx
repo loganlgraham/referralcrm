@@ -365,7 +365,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
             <button
               type="button"
               onClick={() => setShowManualForm(!showManualForm)}
-              className="inline-flex items-center gap-1 rounded-md bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-800"
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-hover"
             >
               <Plus className="h-3.5 w-3.5" /> Add task
             </button>
@@ -393,7 +393,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
           <div className="flex gap-2">
             <button
               type="submit"
-              className="rounded bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-800"
+              className="rounded bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-hover"
             >
               Create
             </button>
@@ -543,7 +543,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
                 onClick={() => handleCalendarDaySelect(cell.dayKey)}
                 className={`relative h-10 rounded-md border text-sm transition ${
                   isSelected
-                    ? 'border-primary-500 bg-primary-600/10 text-primary-700'
+                    ? 'border-primary bg-primary/10 text-primary'
                     : hasTasks
                       ? 'border-border-strong bg-surface-muted text-foreground hover:bg-surface-subtle'
                       : 'border-border text-foreground-subtle hover:bg-surface-muted'
@@ -551,7 +551,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
               >
                 {cell.label}
                 {hasTasks && (
-                  <span className="absolute bottom-1 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-primary-600" />
+                  <span className="absolute bottom-1 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-primary" />
                 )}
               </button>
             );
@@ -579,7 +579,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
                           setDayManualDueAt(getDefaultDueAtForDay(selectedDay));
                         }
                       }}
-                      className="inline-flex items-center gap-1 rounded-md bg-primary-600 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-800"
+                      className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-hover"
                     >
                       <Plus className="h-3.5 w-3.5" /> Add task for this day
                     </button>
@@ -607,7 +607,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
                       <div className="flex gap-2">
                         <button
                           type="submit"
-                          className="rounded bg-primary-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-primary-800"
+                          className="rounded bg-primary px-2.5 py-1 text-xs font-semibold text-white hover:bg-primary-hover"
                         >
                           Create
                         </button>

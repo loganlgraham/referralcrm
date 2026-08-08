@@ -261,7 +261,7 @@ export function ContactAssignment({
                   {currentContact?.id ? (
                     <Link
                       href={type === 'agent' ? `/agents/${currentContact.id}` : `/lenders/${currentContact.id}`}
-                      className="font-medium text-primary-700 break-words hover:underline"
+                      className="font-medium text-primary break-words hover:underline"
                     >
                       {formattedContact.name}
                     </Link>
@@ -305,7 +305,7 @@ export function ContactAssignment({
               <div className="space-y-1.5">
                 <p className="text-xs text-foreground-subtle">{type === 'mc' ? 'Pending' : 'Unassigned'}</p>
                 {pendingHelper ? (
-                  <p className="rounded border border-primary-200 bg-primary-50 px-2 py-1.5 text-[11px] leading-snug text-primary-900">
+                  <p className="rounded border border-primary/20 bg-primary-soft px-2 py-1.5 text-[11px] leading-snug text-primary">
                     {pendingHelper}
                   </p>
                 ) : null}
@@ -350,7 +350,7 @@ export function ContactAssignment({
               </select>
             </label>
             {selectedOption?.active === false && (
-              <p className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+              <p className="rounded border border-warning/30 bg-warning-soft px-2 py-1 text-[11px] text-warning">
                 This {title.toLowerCase()} is marked inactive. You can still assign them, but verify this is intentional.
               </p>
             )}
@@ -377,7 +377,7 @@ export function ContactAssignment({
             <button
               type="submit"
               disabled={submitting || !selected}
-              className="inline-flex w-full items-center justify-center rounded bg-primary-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
+              className="inline-flex w-full items-center justify-center rounded bg-primary px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
             >
               {submitting ? 'Saving…' : 'Save'}
             </button>

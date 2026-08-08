@@ -28,7 +28,7 @@ export function AfcFollowUpCta({ notesHint, zipHint }: AfcFollowUpCtaProps) {
       <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
         <Link
           href={introduceHref}
-          className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white no-underline transition hover:bg-primary-800"
+          className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white no-underline transition hover:bg-primary-hover"
         >
           <Send className="h-4 w-4" aria-hidden />
           Introduce a client

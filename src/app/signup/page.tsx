@@ -269,9 +269,9 @@ function SignupPageContent() {
                 <label
                   key={option.value}
                   className={cn(
-                    'flex cursor-pointer items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm font-medium transition focus-within:outline-none focus-within:ring-2 focus-within:ring-primary-500/40',
+                    'flex cursor-pointer items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm font-medium transition focus-within:outline-none focus-within:ring-2 focus-within:ring-ring/40',
                     isSelected
-                      ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-sm'
+                      ? 'border-primary bg-primary-soft text-primary shadow-sm'
                       : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
                   )}
                 >
@@ -318,7 +318,7 @@ function SignupPageContent() {
 
       <p className="text-center text-sm text-foreground-muted">
         Already have an account?{' '}
-        <Link href="/login" className="font-medium text-primary-700 no-underline hover:underline">
+        <Link href="/login" className="font-medium text-primary no-underline hover:underline">
           Log in
         </Link>
       </p>
@@ -329,7 +329,7 @@ function SignupPageContent() {
           href={buildGmailComposeUrl('support@referralcrm.example.com')}
           target="_blank"
           rel="noreferrer"
-          className="font-medium text-primary-700 no-underline hover:underline"
+          className="font-medium text-primary no-underline hover:underline"
         >
           Contact support
         </a>

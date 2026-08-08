@@ -202,7 +202,7 @@ export function MortgageConsultantSearch() {
     <div className="space-y-6">
       <div className="rounded-md bg-surface-raised p-6 shadow-sm">
         <div className="flex items-start gap-3">
-          <div className="mt-1 rounded-full bg-primary-600/10 p-2 text-primary-700">
+          <div className="mt-1 rounded-full bg-primary/10 p-2 text-primary">
             <SparklesIcon className="h-5 w-5" />
           </div>
           <div className="space-y-2">
@@ -221,7 +221,7 @@ export function MortgageConsultantSearch() {
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               rows={2}
-              className="w-full rounded-md border border-border bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+              className="w-full rounded-md border border-border bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
               placeholder="e.g., TX and NM or Colorado"
               disabled={isSearching}
             />
@@ -232,7 +232,7 @@ export function MortgageConsultantSearch() {
             <button
               type="submit"
               disabled={isSearching || isLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-surface-subtle"
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-subtle"
             >
               {isSearching ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <SearchIcon className="h-4 w-4" />}
               {isSearching ? 'Searching...' : 'Find licensed MCs'}
@@ -263,7 +263,7 @@ export function MortgageConsultantSearch() {
           </div>
         </div>
 
-        {error && <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <p className="mt-4 rounded-md bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
 
         <div className="mt-6 space-y-4">
           {isLoading ? (
@@ -287,7 +287,7 @@ export function MortgageConsultantSearch() {
                         href={buildGmailComposeUrl(mc.email)}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:border-primary-500 hover:text-primary-700"
+                        className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:border-primary hover:text-primary-hover"
                       >
                         <MailIcon className="h-4 w-4" />
                         Email
@@ -295,7 +295,7 @@ export function MortgageConsultantSearch() {
                       {mc.phone && (
                         <a
                           href={`tel:${mc.phone}`}
-                          className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:border-primary-500 hover:text-primary-700"
+                          className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:border-primary hover:text-primary-hover"
                         >
                           <PhoneIcon className="h-4 w-4" />
                           {formatPhoneNumber(mc.phone) || 'Call'}
@@ -303,14 +303,14 @@ export function MortgageConsultantSearch() {
                       )}
                       <Link
                         href={`/lenders/${mc._id}`}
-                        className="inline-flex items-center gap-2 rounded-md bg-foreground px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
+                        className="inline-flex items-center gap-2 rounded-md bg-foreground px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-hover"
                       >
                         View profile
                         <ArrowRightIcon className="h-4 w-4" />
                       </Link>
                       <Link
                         href={`/referrals/new`}
-                        className="inline-flex items-center gap-2 rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
+                        className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-hover"
                       >
                         Start referral
                         <ArrowRightIcon className="h-4 w-4" />

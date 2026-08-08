@@ -472,7 +472,7 @@ export function SettingsForm() {
         <button
           type="submit"
           disabled={loading}
-          className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white"
+          className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white"
         >
           {loading ? 'Saving…' : 'Save changes'}
         </button>
@@ -489,7 +489,7 @@ export function SettingsForm() {
           <button
             type="button"
             onClick={handleSelectAll}
-            className="text-sm font-semibold text-primary-700 hover:text-primary-700/80"
+            className="text-sm font-semibold text-primary hover:text-primary/80"
           >
             {allMetricsSelected ? 'Clear selection' : 'Select all metrics'}
           </button>
@@ -502,14 +502,14 @@ export function SettingsForm() {
               <label
                 key={metric.id}
                 className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition ${
-                  isChecked ? 'border-primary-500/40 bg-primary-600/5' : 'border-border hover:border-border-strong'
+                  isChecked ? 'border-primary/40 bg-primary/5' : 'border-border hover:border-border-strong'
                 }`}
               >
                 <input
                   type="checkbox"
                   checked={isChecked}
                   onChange={() => toggleMetric(metric.id)}
-                  className="mt-1 h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
+                  className="mt-1 h-4 w-4 rounded border-border-strong text-primary focus:ring-ring"
                 />
                 <span className="text-sm text-foreground-muted">{metric.label}</span>
               </label>
@@ -600,7 +600,7 @@ export function SettingsForm() {
             <span className="mt-1 block text-xs text-foreground-subtle">
               {recipients.length} recipient{recipients.length === 1 ? '' : 's'}
               {invalidRecipients.length > 0 ? (
-                <span className="ml-2 text-amber-700">Invalid: {invalidRecipients.join(', ')}</span>
+                <span className="ml-2 text-warning">Invalid: {invalidRecipients.join(', ')}</span>
               ) : null}
             </span>
           </label>
@@ -610,7 +610,7 @@ export function SettingsForm() {
                 type="checkbox"
                 checked={attachCsv}
                 onChange={(event) => setAttachCsv(event.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
+                className="mt-1 h-4 w-4 rounded border-border-strong text-primary focus:ring-ring"
               />
               <span>
                 Attach detailed CSV to email
@@ -682,7 +682,7 @@ export function SettingsForm() {
             {selectedMetrics.length ? (
               <span className="font-medium">{selectedMetrics.length} metric(s) selected</span>
             ) : (
-              <span className="font-medium text-amber-700">Select at least one metric.</span>
+              <span className="font-medium text-warning">Select at least one metric.</span>
             )}
             <p className="text-foreground-subtle">
               {cadence === 'one-time'
@@ -695,7 +695,7 @@ export function SettingsForm() {
               type="button"
               onClick={handleDownloadReportCsv}
               disabled={csvLoading}
-              className="rounded border border-primary-500 bg-surface-raised px-4 py-2 text-sm font-semibold text-primary-700 transition hover:bg-primary-700/5 disabled:opacity-70"
+              className="rounded border border-primary bg-surface-raised px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/5 disabled:opacity-70"
             >
               {csvLoading ? 'Building CSV…' : 'Download as CSV'}
             </button>
@@ -703,7 +703,7 @@ export function SettingsForm() {
               type="button"
               onClick={handlePrimaryAction}
               disabled={reportLoading}
-              className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-70"
+              className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-70"
             >
               {reportLoading
                 ? 'Sending…'
@@ -755,7 +755,7 @@ export function SettingsForm() {
                     <button
                       type="button"
                       onClick={() => void handleDeleteSchedule(schedule.id, schedule.name)}
-                      className="rounded border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                      className="rounded border border-danger/30 px-2 py-1 text-xs font-medium text-danger hover:bg-danger-soft"
                     >
                       Delete
                     </button>
@@ -785,7 +785,7 @@ export function SettingsForm() {
                   type="button"
                   disabled={isDownloading}
                   onClick={() => void handleDownloadCsv(report)}
-                  className="w-full rounded border border-primary-500 bg-surface-raised px-4 py-2 text-sm font-semibold text-primary-700 transition hover:bg-primary-700/5 disabled:opacity-70"
+                  className="w-full rounded border border-primary bg-surface-raised px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/5 disabled:opacity-70"
                 >
                   {isDownloading ? 'Preparing CSV…' : `Download ${definition.label.toLowerCase()} CSV`}
                 </button>

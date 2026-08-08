@@ -17,7 +17,7 @@ export const SelectTrigger = forwardRef<
     <SelectPrimitive.Trigger
       ref={ref}
       className={cn(
-        'inline-flex h-9 w-full items-center justify-between gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground shadow-sm transition placeholder:text-foreground-subtle hover:bg-surface-muted focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 disabled:cursor-not-allowed disabled:opacity-60 [&>span]:line-clamp-1',
+        'inline-flex h-9 w-full items-center justify-between gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground shadow-sm transition placeholder:text-foreground-subtle hover:bg-surface-muted focus:border-ring focus:outline-none focus:shadow-focus disabled:cursor-not-allowed disabled:opacity-60 [&>span]:line-clamp-1',
         className
       )}
       {...props}
@@ -77,7 +77,7 @@ export const SelectItem = forwardRef<
     >
       <span className="absolute left-2 flex h-4 w-4 items-center justify-center">
         <SelectPrimitive.ItemIndicator>
-          <Check className="h-4 w-4 text-primary-600" />
+          <Check className="h-4 w-4 text-primary" />
         </SelectPrimitive.ItemIndicator>
       </span>
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

@@ -107,16 +107,16 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
 
   const pillToneClasses: Record<'success' | 'warning' | 'info' | 'muted', { container: string; dot: string }> = {
     success: {
-      container: 'border-emerald-200 bg-emerald-50/80 text-emerald-700',
-      dot: 'bg-emerald-500',
+      container: 'border-success/30 bg-success-soft/80 text-success',
+      dot: 'bg-success',
     },
     warning: {
-      container: 'border-amber-200 bg-amber-50/80 text-amber-700',
-      dot: 'bg-amber-500',
+      container: 'border-warning/30 bg-warning-soft/80 text-warning',
+      dot: 'bg-warning',
     },
     info: {
-      container: 'border-blue-200 bg-blue-50/80 text-blue-700',
-      dot: 'bg-blue-500',
+      container: 'border-info/30 bg-info-soft/80 text-info',
+      dot: 'bg-info',
     },
     muted: {
       container: 'border-border bg-surface-muted/80 text-foreground-muted',
@@ -134,13 +134,13 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
             <h1 className="text-2xl font-semibold text-foreground">{agent.name}</h1>
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                agent.active ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                agent.active ? 'bg-success-soft text-success' : 'bg-danger-soft text-danger'
               }`}
             >
               {agent.active ? 'Active' : 'Inactive'}
             </span>
             {!agent.active && agent.includeInMetrics === false && (
-              <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+              <span className="inline-flex items-center rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-semibold text-warning">
                 Excluded from leaderboards
               </span>
             )}
@@ -153,7 +153,7 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
                 href={buildGmailComposeUrl(agent.email)}
                 target="_blank"
                 rel="noreferrer"
-                className="text-primary-700 hover:underline"
+                className="text-primary hover:underline"
               >
                 {agent.email}
               </a>
@@ -164,7 +164,7 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
               {agent.phone ? (
                 <a
                   href={`tel:${agent.phone.replace(/[^0-9+]/g, '')}`}
-                  className="text-primary-700 hover:underline"
+                  className="text-primary hover:underline"
                 >
                   {formatPhoneNumber(agent.phone)}
                 </a>
@@ -204,8 +204,8 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
                 disabled={togglingActive}
                 className={`inline-flex items-center rounded-md px-4 py-2 text-sm font-semibold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-70 ${
                   agent.active
-                    ? 'border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100'
-                    : 'border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                    ? 'border border-danger/30 bg-danger-soft text-danger hover:bg-danger-soft'
+                    : 'border border-success/30 bg-success-soft text-success hover:bg-success-soft'
                 }`}
                 title={agent.active ? 'Mark this agent inactive so admins know not to use them' : 'Mark this agent active'}
               >
@@ -217,7 +217,7 @@ export function AgentOverviewCard({ agent, isAdmin }: AgentOverviewCardProps) {
               </button>
               <button
                 type="button"
-                className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700"
+                className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover"
                 onClick={() => setShowEditor((previous) => !previous)}
               >
                 {showEditor ? 'Close edit' : 'Edit details'}

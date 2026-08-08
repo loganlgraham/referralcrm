@@ -148,7 +148,7 @@ export function LenderAdminEditor({ lender, className, onSaved }: LenderAdminEdi
         <button
           type="submit"
           disabled={saving}
-          className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-70"
+          className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
         >
           {saving ? 'Saving…' : 'Save changes'}
         </button>

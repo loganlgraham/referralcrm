@@ -20,7 +20,7 @@ export function AgentOriginMarker({ size = 'sm', className }: AgentOriginMarkerP
       title={LABEL}
       aria-label={LABEL}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center gap-1 rounded-md bg-gradient-to-br from-primary-600 to-primary-800 text-white shadow-sm ring-1 ring-inset ring-white/15',
+        'inline-flex shrink-0 items-center justify-center gap-1 rounded-md bg-gradient-to-br from-primary-hover to-primary text-white shadow-sm ring-1 ring-inset ring-white/15',
         isCompact ? 'h-5 w-5' : 'h-6 pl-1.5 pr-2',
         className
       )}

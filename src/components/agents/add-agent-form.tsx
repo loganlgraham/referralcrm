@@ -282,7 +282,7 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
     const progress = Math.min(Math.max(coverageProgress, 0), 100);
 
     return {
-      backgroundImage: `linear-gradient(90deg, #0b365d 0%, #0b365d ${progress}%, #0f4c81 ${progress}%, #2f6aa3 100%)`,
+      backgroundImage: `linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--primary)) %, hsl(var(--primary-hover)) %, hsl(var(--border-strong)) 100%)`,
       transition: 'background-image 250ms linear',
     };
   }, [coverageProgress, isGeneratingCoverage]);
@@ -477,7 +477,7 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
                 type="button"
                 onClick={handleSendWelcomeEmail}
                 disabled={sendingWelcome}
-                className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
+                className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {sendingWelcome ? 'Sending…' : 'Send welcome email'}
               </button>
@@ -673,7 +673,7 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
               <button
                 type="button"
                 onClick={generateCoverageLocations}
-                className="flex shrink-0 items-center justify-center rounded bg-primary-600 px-4 text-sm font-semibold text-white transition hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-70 md:h-full md:min-h-[5.5rem] md:self-stretch"
+                className="flex shrink-0 items-center justify-center rounded bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-70 md:h-full md:min-h-[5.5rem] md:self-stretch"
                 style={coverageButtonStyles}
                 disabled={formDisabled || isGeneratingCoverage}
               >
@@ -696,7 +696,7 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
                     <button
                       type="button"
                       onClick={() => removeCoverageLocation(location.label)}
-                      className="text-foreground-subtle transition hover:text-foreground-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/60"
+                      className="text-foreground-subtle transition hover:text-foreground-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
                       aria-label={`Remove ${location.label}`}
                       disabled={formDisabled}
                     >
@@ -753,7 +753,7 @@ export function AddAgentForm({ onSuccess, onClose }: AddAgentFormProps) {
             <button
               type="submit"
               disabled={formDisabled}
-              className="rounded bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
+              className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
             >
               {saving ? 'Saving…' : 'Save agent'}
             </button>

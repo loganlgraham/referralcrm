@@ -54,7 +54,7 @@ export function MobileNav({ session }: MobileNavProps) {
 
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#0F172A]/95 text-white backdrop-blur md:hidden">
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-primary/95 text-white backdrop-blur md:hidden">
         <div className="flex h-16 items-center justify-between px-4">
           <Link href={role === 'admin' ? '/dashboard' : '/referrals'} className="flex items-center gap-2 no-underline">
             <BrandMark inverted />
@@ -91,7 +91,7 @@ export function MobileNav({ session }: MobileNavProps) {
         />
         <aside
           className={cn(
-            'absolute inset-y-0 right-0 flex w-[82%] max-w-sm flex-col border-l border-white/10 bg-[#0F172A] text-white shadow-raised transition-transform duration-200',
+            'absolute inset-y-0 right-0 flex w-[82%] max-w-sm flex-col border-l border-white/10 bg-primary text-white shadow-raised transition-transform duration-200',
             open ? 'translate-x-0' : 'translate-x-full'
           )}
           role="dialog"
@@ -138,13 +138,13 @@ export function MobileNav({ session }: MobileNavProps) {
                           className={cn(
                             'relative flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium no-underline transition',
                             active
-                              ? 'bg-white text-[#0F172A]'
+                              ? 'bg-white text-primary'
                               : 'text-white/70 hover:bg-white/10 hover:text-white'
                           )}
                         >
                           <Icon
                             aria-hidden
-                            className={cn('h-4 w-4 shrink-0', active ? 'text-primary-600' : 'text-white/40')}
+                            className={cn('h-4 w-4 shrink-0', active ? 'text-primary' : 'text-white/40')}
                           />
                           {item.label}
                         </Link>
