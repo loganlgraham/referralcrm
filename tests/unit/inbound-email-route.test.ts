@@ -6,6 +6,7 @@ import { LenderMC } from '@/models/lender';
 import { sendTransactionalEmail } from '@/lib/email';
 import { extractInboundEmailFieldsWithAI } from '@/lib/server/inbound-email-ai-parser';
 import { logReferralActivity } from '@/lib/server/activities';
+import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
 import { cleanReferralNotes } from '@/lib/server/referral-notes-cleanup';
 import { createAdminNotifications } from '@/lib/server/notifications';
 
@@ -69,6 +70,10 @@ jest.mock('@/lib/server/activities', () => ({
   logReferralActivity: jest.fn()
 }));
 
+jest.mock('@/lib/server/admin-task-reconciler', () => ({
+  generateAndReconcileAdminTasks: jest.fn()
+}));
+
 jest.mock('@/lib/server/referral-notes-cleanup', () => ({
   cleanReferralNotes: jest.fn()
 }));
@@ -102,6 +107,8 @@ const mockedExtractInboundEmailFieldsWithAI = extractInboundEmailFieldsWithAI as
   typeof extractInboundEmailFieldsWithAI
 >;
 const mockedLogReferralActivity = logReferralActivity as jest.MockedFunction<typeof logReferralActivity>;
+const mockedGenerateAndReconcileAdminTasks =
+  generateAndReconcileAdminTasks as jest.MockedFunction<typeof generateAndReconcileAdminTasks>;
 const mockedCleanReferralNotes = cleanReferralNotes as jest.MockedFunction<typeof cleanReferralNotes>;
 const mockedCreateAdminNotifications = createAdminNotifications as jest.MockedFunction<
   typeof createAdminNotifications
@@ -184,6 +191,7 @@ describe('POST /api/inbound-email', () => {
     mockedSendTransactionalEmail.mockResolvedValue(true);
     mockedExtractInboundEmailFieldsWithAI.mockResolvedValue(null);
     mockedLogReferralActivity.mockResolvedValue(undefined);
+    mockedGenerateAndReconcileAdminTasks.mockResolvedValue(undefined);
     mockedCleanReferralNotes.mockImplementation(async (notes) => notes);
     mockedCreateAdminNotifications.mockResolvedValue(undefined);
     mockLenderFindReturn([]);
@@ -228,6 +236,10 @@ describe('POST /api/inbound-email', () => {
         notes: []
       })
     );
+    expect(mockedGenerateAndReconcileAdminTasks).toHaveBeenCalledWith({
+      referralId: 'ref-1',
+      trigger: 'referral.created'
+    });
   });
 
   it('handles Resend receiving API response wrapped in data', async () => {

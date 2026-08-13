@@ -8,6 +8,7 @@ import { uploadEmailAttachment } from '@/lib/server/gcs';
 import { sendTransactionalEmail } from '@/lib/email';
 import { buildReferralLink } from '@/lib/referral-links';
 import { logReferralActivity } from '@/lib/server/activities';
+import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
 import { extractInboundEmailFieldsWithAI } from '@/lib/server/inbound-email-ai-parser';
 import { cleanReferralNotes } from '@/lib/server/referral-notes-cleanup';
 import { createAdminNotifications } from '@/lib/server/notifications';
@@ -1192,6 +1193,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     await Promise.allSettled(activityPromises);
+
+    await generateAndReconcileAdminTasks({
+      referralId: referral._id.toString(),
+      trigger: 'referral.created'
+    }).catch((error) => {
+      console.error('[Admin Tasks] Failed to reconcile tasks for inbound referral:', error);
+    });
 
     const borrowerLabel = escapeHtml(borrowerName);
     const summaryHtml = `
