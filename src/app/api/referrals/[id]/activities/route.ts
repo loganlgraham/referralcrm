@@ -109,6 +109,9 @@ export async function GET(_: NextRequest, { params }: Params): Promise<NextRespo
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
+  if (session.user.role !== 'admin') {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
   await connectMongo();
   const referral = await Referral.findById(params.id)
     .select('assignedAgent buySideAgent sellSideAgent lender notes org deletedAt')

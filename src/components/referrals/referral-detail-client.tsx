@@ -1739,7 +1739,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         assignedAgentDesignation={referral.assignedAgent?.ahaDesignation}
         defaultSide={referral.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
       />
-      <ReferralTimeline referralId={referralId} />
+      {viewerRole === 'admin' ? <ReferralTimeline referralId={referralId} /> : null}
       {canDelete && (
         <div className="flex justify-end">
           <button
