@@ -1,6 +1,6 @@
 'use client';
 
-import { ChangeEvent, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CalculatorIcon,
   InfoIcon,
@@ -23,6 +23,7 @@ import { AmortizationTable } from './amortization-table';
 import { ExtraPrincipalImpact } from './extra-principal-impact';
 import { ScenarioComparison } from './scenario-comparison';
 import { AffordabilityCalculator } from './affordability-calculator';
+import { useNumberInputs } from './use-number-inputs';
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -59,6 +60,17 @@ const defaultInputs: MortgageInputs = {
 
 type TabType = 'calculator' | 'amortization' | 'scenarios' | 'affordability';
 
+type MortgageFieldKey = Exclude<keyof MortgageInputs, 'loanType'>;
+
+function isTabType(value: string | null): value is TabType {
+  return (
+    value === 'calculator' ||
+    value === 'amortization' ||
+    value === 'scenarios' ||
+    value === 'affordability'
+  );
+}
+
 interface Scenario {
   id: string;
   name: string;
@@ -85,58 +97,15 @@ export function MortgageCalculator() {
     loanType,
   } = inputs;
 
-  const [rawInputs, setRawInputs] = useState<Record<string, string>>({});
-
-  const onChange = (key: keyof MortgageInputs) => (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const rawValue = event.target.value;
-    // Handle loan type specially
-    if (key === 'loanType') {
-      setInputs((prev) => ({ ...prev, [key]: rawValue as LoanType }));
-      return;
-    }
-    
-    // Store raw input value to preserve decimals and formatting while typing
-    setRawInputs((prev) => ({ ...prev, [key]: rawValue }));
-    
-    // Remove commas and parse to number
-    const cleanValue = rawValue.replace(/,/g, '');
-    const parsed = Number.parseFloat(cleanValue);
-    const value = Number.isNaN(parsed) ? 0 : parsed;
+  const handleNumberChange = useCallback((key: MortgageFieldKey, value: number) => {
     setInputs((prev) => ({ ...prev, [key]: value }));
-  };
+  }, []);
 
-  const onBlur = (key: keyof MortgageInputs) => () => {
-    // Clear raw input on blur so formatted value shows
-    setRawInputs((prev) => {
-      const newRaw = { ...prev };
-      delete newRaw[key];
-      return newRaw;
-    });
-  };
+  const numberInputs = useNumberInputs<MortgageFieldKey>(handleNumberChange);
 
-  const formatNumberInput = (key: keyof MortgageInputs, value: number): string => {
-    // If user is currently typing in this field, use the raw value
-    if (rawInputs[key] !== undefined) {
-      return rawInputs[key];
-    }
-    
-    // Otherwise format the number value
-    if (value === 0) return '0';
-    
-    // Check if value has decimals
-    const hasDecimals = value % 1 !== 0;
-    
-    if (hasDecimals) {
-      // Preserve decimals up to 2 places
-      return value.toLocaleString('en-US', { 
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2 
-      });
-    } else {
-      // Whole numbers with thousand separators
-      return value.toLocaleString('en-US', { maximumFractionDigits: 0 });
-    }
-  };
+  const handleInputsPatch = useCallback((patch: Partial<MortgageInputs>) => {
+    setInputs((prev) => ({ ...prev, ...patch }));
+  }, []);
 
   const calculations = useMemo(() => calculateMortgage(inputs), [inputs]);
 
@@ -199,7 +168,7 @@ export function MortgageCalculator() {
 
   const handleReset = () => {
     setInputs(defaultInputs);
-    setRawInputs({}); // Clear raw inputs
+    numberInputs.reset();
     // Clear URL parameters
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -258,36 +227,36 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
     setTimeout(() => setShowCopySuccess(false), 2000);
   };
 
-  const handleUseAffordabilityResults = (price: number, downPercent: number) => {
-    setInputs((prev) => ({
-      ...prev,
-      purchasePrice: price,
-      downPaymentPercent: downPercent,
-    }));
-    setActiveTab('calculator');
-  };
+  const handleUseAffordabilityResults = useCallback(
+    (patch: Partial<MortgageInputs>) => {
+      handleInputsPatch(patch);
+      numberInputs.reset();
+      setActiveTab('calculator');
+    },
+    [handleInputsPatch, numberInputs]
+  );
 
-  // Parse URL params on mount
-  useMemo(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const urlInputs: Partial<MortgageInputs> = {};
-      
-      if (params.has('price')) urlInputs.purchasePrice = Number(params.get('price'));
-      if (params.has('down')) urlInputs.downPaymentPercent = Number(params.get('down'));
-      if (params.has('rate')) urlInputs.interestRate = Number(params.get('rate'));
-      if (params.has('term')) urlInputs.termYears = Number(params.get('term'));
-      if (params.has('tax')) urlInputs.propertyTaxRate = Number(params.get('tax'));
-      if (params.has('insurance')) urlInputs.insuranceMonthly = Number(params.get('insurance'));
-      if (params.has('hoa')) urlInputs.hoaMonthly = Number(params.get('hoa'));
-      if (params.has('pmi')) urlInputs.pmiRate = Number(params.get('pmi'));
-      if (params.has('extra')) urlInputs.extraPrincipal = Number(params.get('extra'));
-      if (params.has('type')) urlInputs.loanType = params.get('type') as LoanType;
-      
-      if (Object.keys(urlInputs).length > 0) {
-        setInputs((prev) => ({ ...prev, ...urlInputs }));
-      }
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlInputs: Partial<MortgageInputs> = {};
+
+    if (params.has('price')) urlInputs.purchasePrice = Number(params.get('price'));
+    if (params.has('down')) urlInputs.downPaymentPercent = Number(params.get('down'));
+    if (params.has('rate')) urlInputs.interestRate = Number(params.get('rate'));
+    if (params.has('term')) urlInputs.termYears = Number(params.get('term'));
+    if (params.has('tax')) urlInputs.propertyTaxRate = Number(params.get('tax'));
+    if (params.has('insurance')) urlInputs.insuranceMonthly = Number(params.get('insurance'));
+    if (params.has('hoa')) urlInputs.hoaMonthly = Number(params.get('hoa'));
+    if (params.has('pmi')) urlInputs.pmiRate = Number(params.get('pmi'));
+    if (params.has('extra')) urlInputs.extraPrincipal = Number(params.get('extra'));
+    if (params.has('type')) urlInputs.loanType = params.get('type') as LoanType;
+
+    if (Object.keys(urlInputs).length > 0) {
+      setInputs((prev) => ({ ...prev, ...urlInputs }));
     }
+
+    const tab = params.get('tab');
+    if (isTabType(tab)) setActiveTab(tab);
   }, []);
 
   const loanTypeInfo = getLoanTypeInfo(loanType || 'conventional');
@@ -406,7 +375,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                     <div className="text-sm font-semibold text-foreground">Loan Type</div>
                     <select
                       value={loanType}
-                      onChange={onChange('loanType')}
+                      onChange={(event) =>
+                        handleInputsPatch({ loanType: event.target.value as LoanType })
+                      }
                       className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                     >
                       <option value="conventional">Conventional</option>
@@ -432,9 +403,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <input
                         type="text"
                         inputMode="numeric"
-                        value={formatNumberInput('purchasePrice', purchasePrice)}
-                        onChange={onChange('purchasePrice')}
-                        onBlur={onBlur('purchasePrice')}
+                        value={numberInputs.format('purchasePrice', purchasePrice)}
+                        onChange={numberInputs.onChange('purchasePrice')}
+                        onBlur={numberInputs.onBlur('purchasePrice')}
                         className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                     </label>
@@ -446,9 +417,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <input
                         type="text"
                         inputMode="decimal"
-                        value={formatNumberInput('downPaymentPercent', downPaymentPercent)}
-                        onChange={onChange('downPaymentPercent')}
-                        onBlur={onBlur('downPaymentPercent')}
+                        value={numberInputs.format('downPaymentPercent', downPaymentPercent)}
+                        onChange={numberInputs.onChange('downPaymentPercent')}
+                        onBlur={numberInputs.onBlur('downPaymentPercent')}
                         className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                       <p className="text-xs text-foreground-subtle">{formatCurrency(calculations.downPaymentAmount)} down</p>
@@ -461,9 +432,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <input
                         type="text"
                         inputMode="decimal"
-                        value={formatNumberInput('interestRate', interestRate)}
-                        onChange={onChange('interestRate')}
-                        onBlur={onBlur('interestRate')}
+                        value={numberInputs.format('interestRate', interestRate)}
+                        onChange={numberInputs.onChange('interestRate')}
+                        onBlur={numberInputs.onBlur('interestRate')}
                         className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                     </label>
@@ -475,9 +446,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <input
                         type="text"
                         inputMode="numeric"
-                        value={formatNumberInput('termYears', termYears)}
-                        onChange={onChange('termYears')}
-                        onBlur={onBlur('termYears')}
+                        value={numberInputs.format('termYears', termYears)}
+                        onChange={numberInputs.onChange('termYears')}
+                        onBlur={numberInputs.onBlur('termYears')}
                         className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                     </label>
@@ -489,9 +460,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <input
                         type="text"
                         inputMode="decimal"
-                        value={formatNumberInput('propertyTaxRate', propertyTaxRate)}
-                        onChange={onChange('propertyTaxRate')}
-                        onBlur={onBlur('propertyTaxRate')}
+                        value={numberInputs.format('propertyTaxRate', propertyTaxRate)}
+                        onChange={numberInputs.onChange('propertyTaxRate')}
+                        onBlur={numberInputs.onBlur('propertyTaxRate')}
                         className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                       <p className="text-xs text-foreground-subtle">{formatCurrency(calculations.propertyTaxes)} per month</p>
@@ -504,9 +475,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <input
                         type="text"
                         inputMode="numeric"
-                        value={formatNumberInput('insuranceMonthly', insuranceMonthly)}
-                        onChange={onChange('insuranceMonthly')}
-                        onBlur={onBlur('insuranceMonthly')}
+                        value={numberInputs.format('insuranceMonthly', insuranceMonthly)}
+                        onChange={numberInputs.onChange('insuranceMonthly')}
+                        onBlur={numberInputs.onBlur('insuranceMonthly')}
                         className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                     </label>
@@ -518,9 +489,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <input
                         type="text"
                         inputMode="numeric"
-                        value={formatNumberInput('hoaMonthly', hoaMonthly)}
-                        onChange={onChange('hoaMonthly')}
-                        onBlur={onBlur('hoaMonthly')}
+                        value={numberInputs.format('hoaMonthly', hoaMonthly)}
+                        onChange={numberInputs.onChange('hoaMonthly')}
+                        onBlur={numberInputs.onBlur('hoaMonthly')}
                         className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                     </label>
@@ -533,9 +504,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         <input
                           type="text"
                           inputMode="decimal"
-                          value={formatNumberInput('pmiRate', pmiRate)}
-                          onChange={onChange('pmiRate')}
-                          onBlur={onBlur('pmiRate')}
+                          value={numberInputs.format('pmiRate', pmiRate)}
+                          onChange={numberInputs.onChange('pmiRate')}
+                          onBlur={numberInputs.onBlur('pmiRate')}
                           className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                         />
                         <p className="text-xs text-foreground-subtle">
@@ -551,9 +522,9 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                       <input
                         type="text"
                         inputMode="numeric"
-                        value={formatNumberInput('extraPrincipal', extraPrincipal)}
-                        onChange={onChange('extraPrincipal')}
-                        onBlur={onBlur('extraPrincipal')}
+                        value={numberInputs.format('extraPrincipal', extraPrincipal)}
+                        onChange={numberInputs.onChange('extraPrincipal')}
+                        onBlur={numberInputs.onBlur('extraPrincipal')}
                         className="w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                       <p className="text-xs text-foreground-subtle">Shows payoff acceleration potential.</p>
@@ -587,7 +558,7 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                     {calculations.pmiMonthly > 0 && (
                       <div className="flex items-center justify-between text-primary">
                         <dt className="flex items-center gap-2 font-semibold">
-                          {loanType === 'fha' ? 'MIP' : 'PMI'}
+                          {loanType === 'fha' ? 'MIP' : loanType === 'usda' ? 'USDA annual fee' : 'PMI'}
                         </dt>
                         <dd className="font-semibold">{formatCurrency(calculations.pmiMonthly)}</dd>
                       </div>
@@ -642,6 +613,12 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
                         <dd className="text-base font-semibold text-foreground">{formatCurrency(calculations.fundingFee)}</dd>
                       </div>
                     )}
+                    {calculations.usdaGuaranteeFee && (
+                      <div className="rounded-md bg-surface-muted px-3 py-2">
+                        <dt className="text-xs text-foreground-subtle">USDA Guarantee Fee</dt>
+                        <dd className="text-base font-semibold text-foreground">{formatCurrency(calculations.usdaGuaranteeFee)}</dd>
+                      </div>
+                    )}
                   </dl>
                 </div>
 
@@ -682,9 +659,14 @@ Loan-to-Value: ${formatPercent(calculations.ltv)}
             <ScenarioComparison scenarios={scenarios} onRemoveScenario={handleRemoveScenario} />
           )}
 
-          {activeTab === 'affordability' && (
-            <AffordabilityCalculator onUseResults={handleUseAffordabilityResults} />
-          )}
+          {/* Kept mounted so borrower details survive a trip to another tab. */}
+          <div className={activeTab === 'affordability' ? undefined : 'hidden'}>
+            <AffordabilityCalculator
+              loanInputs={inputs}
+              onLoanInputsChange={handleInputsPatch}
+              onUseResults={handleUseAffordabilityResults}
+            />
+          </div>
         </div>
       </div>
     </div>

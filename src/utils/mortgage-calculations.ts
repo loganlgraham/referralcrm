@@ -4,6 +4,47 @@
 
 export type LoanType = 'conventional' | 'fha' | 'va' | 'usda' | 'jumbo';
 
+/** Upfront FHA mortgage insurance premium, financed into the loan. */
+export const FHA_UPFRONT_MIP_PERCENT = 1.75;
+/** Typical FHA annual MIP for a 30-year loan above 95% LTV. */
+export const FHA_DEFAULT_ANNUAL_MIP_PERCENT = 0.55;
+/** USDA upfront guarantee fee, financed into the loan. */
+export const USDA_GUARANTEE_FEE_PERCENT = 1;
+/** USDA annual fee, collected monthly. */
+export const USDA_ANNUAL_FEE_PERCENT = 0.35;
+/** Conventional mortgage insurance drops off at or below this LTV. */
+export const CONVENTIONAL_MI_CANCEL_LTV = 0.8;
+
+/**
+ * VA funding fee for a first-use purchase loan, tiered by down payment.
+ */
+export function getVaFundingFeePercent(downPaymentPercent: number): number {
+  if (downPaymentPercent >= 10) return 1.3;
+  if (downPaymentPercent > 0) return 1.8;
+  return 2.3;
+}
+
+/**
+ * Upfront fee financed into the loan balance, as a percent of the base loan.
+ */
+export function getFinancedFeePercent(loanType: LoanType, downPaymentPercent: number): number {
+  switch (loanType) {
+    case 'fha':
+      return FHA_UPFRONT_MIP_PERCENT;
+    case 'va':
+      return getVaFundingFeePercent(downPaymentPercent);
+    case 'usda':
+      return USDA_GUARANTEE_FEE_PERCENT;
+    case 'conventional':
+    case 'jumbo':
+      return 0;
+    default: {
+      const exhaustive: never = loanType;
+      throw new Error(`Unhandled loan type: ${String(exhaustive)}`);
+    }
+  }
+}
+
 export interface MortgageInputs {
   purchasePrice: number;
   downPaymentPercent: number;
@@ -19,6 +60,7 @@ export interface MortgageInputs {
 
 export interface MortgageCalculations {
   downPaymentAmount: number;
+  baseLoanAmount: number;
   loanAmount: number;
   principalAndInterest: number;
   propertyTaxes: number;
@@ -26,8 +68,13 @@ export interface MortgageCalculations {
   totalMonthly: number;
   totalInterest: number;
   ltv: number;
+  /** LTV before any financed upfront fee is added to the loan. */
+  baseLtv: number;
+  /** Total upfront fee rolled into the loan, whatever the program calls it. */
+  financedFeeAmount: number;
   fundingFee?: number; // For VA loans
   upfrontMIP?: number; // For FHA loans
+  usdaGuaranteeFee?: number; // For USDA loans
 }
 
 export interface AmortizationEntry {
@@ -49,44 +96,36 @@ function asNumber(value: number): number {
  * Calculate basic mortgage values
  */
 export function calculateMortgage(inputs: MortgageInputs): MortgageCalculations {
+  const loanType = inputs.loanType ?? 'conventional';
   const price = Math.max(asNumber(inputs.purchasePrice), 0);
   const dpPercent = Math.min(Math.max(asNumber(inputs.downPaymentPercent), 0), 100);
   const downPaymentAmount = price * (dpPercent / 100);
-  let loanAmount = Math.max(price - downPaymentAmount, 0);
+  const baseLoanAmount = Math.max(price - downPaymentAmount, 0);
   const monthlyRate = Math.max(asNumber(inputs.interestRate), 0) / 100 / 12;
   const totalPayments = Math.max(Math.floor(asNumber(inputs.termYears) * 12), 1);
 
-  // Loan type specific adjustments
-  let fundingFee = 0;
-  let upfrontMIP = 0;
-
-  if (inputs.loanType === 'va') {
-    // VA funding fee (2.3% for first use with 0 down, lower with down payment)
-    const fundingFeeRate = dpPercent === 0 ? 0.023 : dpPercent >= 10 ? 0.013 : 0.018;
-    fundingFee = loanAmount * fundingFeeRate;
-    loanAmount += fundingFee; // Add funding fee to loan
-  } else if (inputs.loanType === 'fha') {
-    // FHA upfront MIP (1.75% of base loan)
-    upfrontMIP = loanAmount * 0.0175;
-    loanAmount += upfrontMIP; // Add upfront MIP to loan
-  }
+  // Upfront program fees are financed into the balance the payment is built on.
+  const financedFeeAmount = baseLoanAmount * (getFinancedFeePercent(loanType, dpPercent) / 100);
+  const loanAmount = baseLoanAmount + financedFeeAmount;
 
   const principalAndInterest = monthlyRate
     ? loanAmount * (monthlyRate / (1 - Math.pow(1 + monthlyRate, -totalPayments)))
     : loanAmount / totalPayments;
 
   const propertyTaxes = (price * (Math.max(asNumber(inputs.propertyTaxRate), 0) / 100)) / 12;
-  
-  // PMI/MIP calculation varies by loan type
+
+  const pmiRate = Math.max(asNumber(inputs.pmiRate), 0);
   let pmiMonthly = 0;
-  if (inputs.loanType === 'fha') {
-    // FHA MIP is based on loan amount, typically 0.55% annually for >95% LTV
-    pmiMonthly = (loanAmount * 0.0055) / 12;
-  } else if (inputs.loanType === 'conventional' || !inputs.loanType) {
-    // Conventional PMI only if <20% down
-    pmiMonthly = dpPercent < 20 ? (loanAmount * (Math.max(asNumber(inputs.pmiRate), 0) / 100)) / 12 : 0;
+  if (loanType === 'fha') {
+    // FHA annual MIP runs on the financed balance for the life of most loans.
+    pmiMonthly = (loanAmount * (pmiRate / 100)) / 12;
+  } else if (loanType === 'usda') {
+    pmiMonthly = (loanAmount * (USDA_ANNUAL_FEE_PERCENT / 100)) / 12;
+  } else if (loanType === 'conventional') {
+    const baseLtv = price > 0 ? baseLoanAmount / price : 0;
+    pmiMonthly = baseLtv > CONVENTIONAL_MI_CANCEL_LTV ? (baseLoanAmount * (pmiRate / 100)) / 12 : 0;
   }
-  // VA and USDA don't have monthly PMI
+  // VA and jumbo carry no monthly mortgage insurance.
 
   const totalMonthly =
     principalAndInterest +
@@ -98,9 +137,11 @@ export function calculateMortgage(inputs: MortgageInputs): MortgageCalculations 
 
   const totalInterest = principalAndInterest * totalPayments - loanAmount;
   const ltv = loanAmount && price ? loanAmount / price : 0;
+  const baseLtv = baseLoanAmount && price ? baseLoanAmount / price : 0;
 
   return {
     downPaymentAmount,
+    baseLoanAmount,
     loanAmount,
     principalAndInterest,
     propertyTaxes,
@@ -108,8 +149,11 @@ export function calculateMortgage(inputs: MortgageInputs): MortgageCalculations 
     totalMonthly,
     totalInterest,
     ltv,
-    fundingFee: fundingFee > 0 ? fundingFee : undefined,
-    upfrontMIP: upfrontMIP > 0 ? upfrontMIP : undefined,
+    baseLtv,
+    financedFeeAmount,
+    fundingFee: loanType === 'va' && financedFeeAmount > 0 ? financedFeeAmount : undefined,
+    upfrontMIP: loanType === 'fha' && financedFeeAmount > 0 ? financedFeeAmount : undefined,
+    usdaGuaranteeFee: loanType === 'usda' && financedFeeAmount > 0 ? financedFeeAmount : undefined,
   };
 }
 
@@ -189,99 +233,6 @@ export function calculateExtraPrincipalImpact(
     newPayoffDate,
     originalMonths: withoutExtra.length,
     newMonths: withExtra.length,
-  };
-}
-
-/**
- * Calculate affordability (reverse calculation from budget)
- */
-export function calculateAffordability(params: {
-  monthlyBudget: number;
-  downPaymentAmount: number;
-  interestRate: number;
-  termYears: number;
-  propertyTaxRate: number;
-  insuranceMonthly: number;
-  hoaMonthly: number;
-  pmiRate: number;
-  monthlyDebts?: number;
-  grossMonthlyIncome?: number;
-}): {
-  maxPurchasePrice: number;
-  maxLoanAmount: number;
-  recommendedDownPaymentPercent: number;
-  debtToIncomeRatio: number | null;
-  housingExpenseRatio: number | null;
-} {
-  const monthlyRate = Math.max(asNumber(params.interestRate), 0) / 100 / 12;
-  const totalPayments = Math.max(Math.floor(asNumber(params.termYears) * 12), 1);
-  
-  // Iterative approach to find max purchase price
-  // We need to account for: P&I, property taxes, insurance, HOA, and PMI
-  let estimatedPrice = 0;
-  let iterations = 0;
-  const maxIterations = 20;
-  const tolerance = 1; // Within $1
-
-  // Start with a reasonable estimate: assume 80% of budget goes to P&I
-  let initialAvailableForPI = params.monthlyBudget - params.insuranceMonthly - params.hoaMonthly;
-  let initialMaxLoan = monthlyRate > 0
-    ? initialAvailableForPI * 0.8 * ((1 - Math.pow(1 + monthlyRate, -totalPayments)) / monthlyRate)
-    : initialAvailableForPI * 0.8 * totalPayments;
-  estimatedPrice = initialMaxLoan + params.downPaymentAmount;
-
-  while (iterations < maxIterations) {
-    // Calculate all monthly expenses based on current price estimate
-    const propertyTaxes = (estimatedPrice * (params.propertyTaxRate / 100)) / 12;
-    const loanAmount = estimatedPrice - params.downPaymentAmount;
-    const ltv = estimatedPrice > 0 ? loanAmount / estimatedPrice : 0;
-    const pmiMonthly = ltv > 0.8 ? (loanAmount * (params.pmiRate / 100)) / 12 : 0;
-
-    // Calculate what's left for Principal & Interest
-    const availableForPI = Math.max(
-      params.monthlyBudget - params.insuranceMonthly - params.hoaMonthly - propertyTaxes - pmiMonthly,
-      0
-    );
-
-    // Calculate max loan amount based on available P&I
-    const maxLoan = monthlyRate > 0
-      ? availableForPI * ((1 - Math.pow(1 + monthlyRate, -totalPayments)) / monthlyRate)
-      : availableForPI * totalPayments;
-
-    // Calculate new estimated price
-    const newEstimatedPrice = maxLoan + params.downPaymentAmount;
-
-    // Check if we've converged
-    if (Math.abs(newEstimatedPrice - estimatedPrice) < tolerance) {
-      estimatedPrice = newEstimatedPrice;
-      break;
-    }
-
-    estimatedPrice = newEstimatedPrice;
-    iterations++;
-  }
-
-  const maxPurchasePrice = Math.max(estimatedPrice, 0);
-  const maxLoanAmount = Math.max(maxPurchasePrice - params.downPaymentAmount, 0);
-  const recommendedDownPaymentPercent = maxPurchasePrice > 0 
-    ? (params.downPaymentAmount / maxPurchasePrice) * 100 
-    : 0;
-
-  let debtToIncomeRatio = null;
-  let housingExpenseRatio = null;
-
-  if (params.grossMonthlyIncome) {
-    const totalMonthlyDebts = (params.monthlyDebts || 0) + params.monthlyBudget;
-    debtToIncomeRatio = totalMonthlyDebts / params.grossMonthlyIncome;
-    housingExpenseRatio = params.monthlyBudget / params.grossMonthlyIncome;
-  }
-
-  return {
-    maxPurchasePrice,
-    maxLoanAmount,
-    recommendedDownPaymentPercent,
-    debtToIncomeRatio,
-    housingExpenseRatio,
   };
 }
 
