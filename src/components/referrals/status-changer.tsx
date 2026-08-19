@@ -3,7 +3,7 @@
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Pencil } from 'lucide-react';
-import { normalizeReferralStatus } from '@/constants/referrals';
+import { LOST_REASON_OPTIONS, normalizeReferralStatus, type LostReason } from '@/constants/referrals';
 import { ReferralStatus } from '@/models/referral';
 import { toast } from 'sonner';
 import { TERMINATED_REASON_OPTIONS, type TerminatedReason } from '@/constants/deals';
@@ -109,6 +109,8 @@ export function StatusChanger({
   const [editingPreApproval, setEditingPreApproval] = useState(false);
   const [pendingTerminatedSelection, setPendingTerminatedSelection] = useState(false);
   const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | ''>('');
+  const [pendingLostSelection, setPendingLostSelection] = useState(false);
+  const [lostReason, setLostReason] = useState<LostReason | ''>('');
 
   useEffect(() => {
     setCurrentStatus(normalizedStatus);
@@ -138,7 +140,8 @@ export function StatusChanger({
   const submitStatus = async (
     nextStatus: ReferralStatus,
     previousStatus: ReferralStatus,
-    terminatedReason?: TerminatedReason | null
+    terminatedReason?: TerminatedReason | null,
+    lostReason?: LostReason | null
   ) => {
     setLoading(true);
     try {
@@ -150,6 +153,7 @@ export function StatusChanger({
           source: 'referral_detail',
           side,
           terminatedReason: nextStatus === 'Terminated' ? terminatedReason ?? null : null,
+          lostReason: nextStatus === 'Lost' ? lostReason ?? null : null,
         }),
       });
 
@@ -164,7 +168,11 @@ export function StatusChanger({
       if (resolvedStatus !== 'Terminated') {
         setTerminatedReason('');
       }
+      if (resolvedStatus !== 'Lost') {
+        setLostReason('');
+      }
       setPendingTerminatedSelection(false);
+      setPendingLostSelection(false);
       router.refresh();
 
       onStatusChanged?.(resolvedStatus, { ...body, previousStatus });
@@ -186,9 +194,15 @@ export function StatusChanger({
       return;
     }
 
+    if (nextStatus === 'Lost') {
+      setCurrentStatus(nextStatus);
+      setPendingLostSelection(true);
+      return;
+    }
+
     setCurrentStatus(nextStatus);
     onUnderContractIntentChange?.(nextStatus === 'Under Contract');
-    void submitStatus(nextStatus, persistedStatus, null);
+    void submitStatus(nextStatus, persistedStatus, null, null);
   };
 
   const handlePreApprovalChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -299,6 +313,59 @@ export function StatusChanger({
                     onClick={() => {
                       setPendingTerminatedSelection(false);
                       setTerminatedReason('');
+                      setCurrentStatus(persistedStatus);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {pendingLostSelection && (
+              <div className="space-y-2 rounded border border-border bg-surface-muted p-2">
+                <label className="block text-xs font-semibold text-foreground-muted">
+                  Why was this lost?
+                  <select
+                    value={lostReason}
+                    onChange={(event) => setLostReason(event.target.value as LostReason | '')}
+                    className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none"
+                    disabled={loading}
+                  >
+                    <option value="">Select reason</option>
+                    {LOST_REASON_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="text-xs text-foreground-subtle">
+                  Losses that happened before the agent could reach the borrower are not counted
+                  against the agent.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="rounded bg-foreground px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
+                    disabled={loading}
+                    onClick={() => {
+                      if (!lostReason) {
+                        toast.error('Please choose why this referral was lost.');
+                        return;
+                      }
+                      setPendingLostSelection(false);
+                      void submitStatus('Lost', persistedStatus, null, lostReason);
+                    }}
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded border border-border-strong px-2 py-1 text-xs font-semibold text-foreground-muted"
+                    disabled={loading}
+                    onClick={() => {
+                      setPendingLostSelection(false);
+                      setLostReason('');
                       setCurrentStatus(persistedStatus);
                     }}
                   >

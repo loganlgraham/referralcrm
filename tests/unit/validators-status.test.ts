@@ -48,12 +48,39 @@ describe('updateStatusSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts terminateDeal with Lost and terminatedReason', () => {
+  it('accepts terminateDeal with Lost, terminatedReason, and lostReason', () => {
     const result = updateStatusSchema.safeParse({
       status: 'Lost',
       terminateDeal: true,
       terminatedReason: 'changed_mind',
+      lostReason: 'no_longer_buying',
     });
+    expect(result.success).toBe(true);
+  });
+
+  it('requires lostReason when status is Lost', () => {
+    const result = updateStatusSchema.safeParse({ status: 'Lost' });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts lostReason when status is Lost', () => {
+    const result = updateStatusSchema.safeParse({
+      status: 'Lost',
+      lostReason: 'already_had_agent',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a lostReason outside the taxonomy', () => {
+    const result = updateStatusSchema.safeParse({
+      status: 'Lost',
+      lostReason: 'made_up_reason',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('does not require lostReason for other statuses', () => {
+    const result = updateStatusSchema.safeParse({ status: 'Paired' });
     expect(result.success).toBe(true);
   });
 });

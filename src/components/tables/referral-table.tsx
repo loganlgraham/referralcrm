@@ -21,7 +21,13 @@ import { toast } from 'sonner';
 import clsx from 'clsx';
 import { Clock } from 'lucide-react';
 
-import { REFERRAL_STATUSES, ReferralStatus, type ReferralTimeline } from '@/constants/referrals';
+import {
+  LOST_REASON_OPTIONS,
+  REFERRAL_STATUSES,
+  ReferralStatus,
+  type LostReason,
+  type ReferralTimeline
+} from '@/constants/referrals';
 import {
   TERMINATED_REASON_OPTIONS,
   type DealStatus,
@@ -524,6 +530,8 @@ function StatusSelect({
   const [pendingTerminatedSelection, setPendingTerminatedSelection] = useState(false);
   const [stillShopping, setStillShopping] = useState<'yes' | 'no' | ''>('');
   const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | ''>('');
+  const [pendingLostSelection, setPendingLostSelection] = useState(false);
+  const [lostReason, setLostReason] = useState<LostReason | ''>('');
   const [hideDealStage, setHideDealStage] = useState(false);
 
   useEffect(() => {
@@ -543,6 +551,12 @@ function StatusSelect({
     setPendingTerminatedSelection(false);
     setStillShopping('');
     setTerminatedReason('');
+    setLostReason('');
+  };
+
+  const resetLostPanel = () => {
+    setPendingLostSelection(false);
+    setLostReason('');
   };
 
   const openUnderContractDealModal = () => {
@@ -604,6 +618,13 @@ function StatusSelect({
       setPendingTerminatedSelection(true);
       setStillShopping('');
       setTerminatedReason('');
+      setLostReason('');
+      return;
+    }
+    if (nextStatus === 'Lost') {
+      // Keep the prior status in the select while collecting the loss reason.
+      setPendingLostSelection(true);
+      setLostReason('');
       return;
     }
 
@@ -725,6 +746,24 @@ function StatusSelect({
               ))}
             </select>
           </label>
+          {stillShopping === 'no' && (
+            <label className="block text-xs font-semibold text-foreground-muted">
+              Why are we losing this client?
+              <select
+                value={lostReason}
+                onChange={(event) => setLostReason(event.target.value as LostReason | '')}
+                className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
+                disabled={loading}
+              >
+                <option value="">Select reason</option>
+                {LOST_REASON_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="flex gap-2">
             <button
               type="button"
@@ -740,6 +779,10 @@ function StatusSelect({
                   return;
                 }
                 const resolvedStatus: ReferralStatus = stillShopping === 'yes' ? 'Active Lead' : 'Lost';
+                if (resolvedStatus === 'Lost' && !lostReason) {
+                  toast.error('Please choose why we are losing this client.');
+                  return;
+                }
                 setLoading(true);
                 try {
                   const response = await fetch(`/api/referrals/${referralId}/status`, {
@@ -750,6 +793,7 @@ function StatusSelect({
                       source: 'referral_table',
                       side,
                       terminatedReason,
+                      lostReason: resolvedStatus === 'Lost' ? lostReason : null,
                       terminateDeal: true,
                     }),
                   });
@@ -797,7 +841,95 @@ function StatusSelect({
           </div>
         </div>
       )}
+      {pendingLostSelection && (
+        <div className="space-y-2 rounded border border-border bg-surface-muted p-2">
+          <label className="block text-xs font-semibold text-foreground-muted">
+            Why was this lost?
+            <select
+              value={lostReason}
+              onChange={(event) => setLostReason(event.target.value as LostReason | '')}
+              className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
+              disabled={loading}
+            >
+              <option value="">Select reason</option>
+              {LOST_REASON_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-xs text-foreground-subtle">
+            Losses that happened before the agent could reach the borrower are not counted against
+            the agent.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="rounded bg-primary hover:bg-primary-hover px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
+              disabled={loading}
+              onClick={async () => {
+                if (!lostReason) {
+                  toast.error('Please choose why this referral was lost.');
+                  return;
+                }
+                setLoading(true);
+                try {
+                  const response = await fetch(`/api/referrals/${referralId}/status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      status: 'Lost',
+                      source: 'referral_table',
+                      side,
+                      lostReason,
+                    }),
+                  });
+                  const payload = (await response.json().catch(() => null)) as StatusUpdateResponse | null;
+                  if (!response.ok) {
+                    if (isReferralStatus(payload?.currentStatus)) {
+                      applyResolvedStatus(payload.currentStatus);
+                    } else {
+                      applyResolvedStatus(value);
+                    }
+                    toast.error(extractStatusErrorMessage(payload));
+                    resetLostPanel();
+                    router.refresh();
+                    return;
+                  }
+                  const nextStatus = isReferralStatus(payload?.status) ? payload.status : 'Lost';
+                  applyResolvedStatus(nextStatus);
+                  resetLostPanel();
+                  toast.success('Referral status updated');
+                  router.refresh();
+                } catch (error) {
+                  console.error(error);
+                  toast.error('Unable to update status');
+                  applyResolvedStatus(value);
+                  resetLostPanel();
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              Confirm
+            </button>
+            <button
+              type="button"
+              className="rounded border border-border-strong px-2 py-1 text-xs font-semibold text-foreground-muted"
+              disabled={loading}
+              onClick={() => {
+                resetLostPanel();
+                applyResolvedStatus(value);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       {!pendingTerminatedSelection &&
+        !pendingLostSelection &&
         !hideDealStage &&
         dealStatusLabel &&
         dealStatusLabel !== status &&
