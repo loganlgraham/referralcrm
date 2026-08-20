@@ -3,7 +3,12 @@
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Pencil } from 'lucide-react';
-import { LOST_REASON_OPTIONS, normalizeReferralStatus, type LostReason } from '@/constants/referrals';
+import {
+  getLostReasonOptions,
+  getReferralStatusLabel,
+  normalizeReferralStatus,
+  type LostReason
+} from '@/constants/referrals';
 import { ReferralStatus } from '@/models/referral';
 import { toast } from 'sonner';
 import { TERMINATED_REASON_OPTIONS, type TerminatedReason } from '@/constants/deals';
@@ -13,6 +18,8 @@ interface Props {
   status: ReferralStatus;
   statuses: readonly ReferralStatus[];
   includeTerminalStatuses?: boolean;
+  /** Agent-created (agent→AFC) referrals relabel the pipeline around the MC. */
+  isAgentOrigin?: boolean;
   side?: 'buy' | 'sell';
   statusLabel?: string;
   showStatusControl?: boolean;
@@ -89,6 +96,7 @@ export function StatusChanger({
   status,
   statuses,
   includeTerminalStatuses = false,
+  isAgentOrigin = false,
   side,
   statusLabel = 'Pipeline Status',
   showStatusControl = true,
@@ -136,6 +144,8 @@ export function StatusChanger({
     }
     return filtered;
   }, [includeTerminalStatuses, statuses, currentStatus]);
+
+  const lostReasonOptions = useMemo(() => getLostReasonOptions({ isAgentOrigin }), [isAgentOrigin]);
 
   const submitStatus = async (
     nextStatus: ReferralStatus,
@@ -268,7 +278,7 @@ export function StatusChanger({
             >
               {pipelineOptions.map((item) => (
                 <option key={item} value={item}>
-                  {item}
+                  {getReferralStatusLabel(item, { isAgentOrigin })}
                 </option>
               ))}
             </select>
@@ -332,17 +342,19 @@ export function StatusChanger({
                     disabled={loading}
                   >
                     <option value="">Select reason</option>
-                    {LOST_REASON_OPTIONS.map((option) => (
+                    {lostReasonOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
                     ))}
                   </select>
                 </label>
-                <p className="text-xs text-foreground-subtle">
-                  Losses that happened before the agent could reach the borrower are not counted
-                  against the agent.
-                </p>
+                {!isAgentOrigin && (
+                  <p className="text-xs text-foreground-subtle">
+                    Losses that happened before the agent could reach the borrower are not counted
+                    against the agent.
+                  </p>
+                )}
                 <div className="flex gap-2">
                   <button
                     type="button"

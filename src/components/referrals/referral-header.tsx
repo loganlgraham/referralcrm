@@ -7,7 +7,12 @@ import { formatInTimeZone } from 'date-fns-tz';
 import { toast } from 'sonner';
 import { SLA_TIME_ZONE } from '@/utils/sla-insights';
 
-import { ReferralStatus, REFERRAL_STATUSES, normalizeReferralStatus } from '@/constants/referrals';
+import {
+  ReferralStatus,
+  REFERRAL_STATUSES,
+  getReferralStatusLabel,
+  normalizeReferralStatus
+} from '@/constants/referrals';
 import { StatusChanger } from '@/components/referrals/status-changer';
 import { SLAWidget } from '@/components/referrals/sla-widget';
 import { ContactAssignment, type Contact } from '@/components/referrals/contact-assignment';
@@ -955,6 +960,9 @@ export function ReferralHeader({
   const viewerAssignedStatus = viewerAssignedSide === 'sell' ? sellStatusLabel : buyStatusLabel;
   const oppositeSide = viewerAssignedSide === 'sell' ? 'buy' : 'sell';
   const oppositeSideStatus = oppositeSide === 'sell' ? sellStatusLabel : buyStatusLabel;
+  const buyStatusDisplay = getReferralStatusLabel(buyStatusLabel, { isAgentOrigin });
+  const sellStatusDisplay = getReferralStatusLabel(sellStatusLabel, { isAgentOrigin });
+  const oppositeSideStatusDisplay = getReferralStatusLabel(oppositeSideStatus, { isAgentOrigin });
   const shouldStackAssignmentsForAdminBoth = viewerRole === 'admin' && isBothClientType;
   const latestDealStatusLabel = latestDealStatus ?? 'No deals yet';
   const latestBuyDealStatusLabel = latestBuyDealStatus ?? 'No deals yet';
@@ -1044,6 +1052,7 @@ export function ReferralHeader({
                         status={buyStatusLabel}
                         statuses={REFERRAL_STATUSES}
                         includeTerminalStatuses
+                        isAgentOrigin={isAgentOrigin}
                         side="buy"
                         statusLabel="Status & progress"
                         showPreApproval={false}
@@ -1061,6 +1070,7 @@ export function ReferralHeader({
                         status={sellStatusLabel}
                         statuses={REFERRAL_STATUSES}
                         includeTerminalStatuses
+                        isAgentOrigin={isAgentOrigin}
                         side="sell"
                         statusLabel="Status & progress"
                         showPreApproval={false}
@@ -1088,10 +1098,10 @@ export function ReferralHeader({
                 <div className="space-y-2">
                   <div className="grid grid-cols-2 gap-2">
                     <span className="rounded-full bg-info-soft px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-info">
-                      Buy: {buyStatusLabel}
+                      Buy: {buyStatusDisplay}
                     </span>
                     <span className="rounded-full bg-accent-soft px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-accent">
-                      Sell: {sellStatusLabel}
+                      Sell: {sellStatusDisplay}
                     </span>
                   </div>
                   <p className="text-[11px] text-foreground-subtle">
@@ -1102,6 +1112,7 @@ export function ReferralHeader({
                     referralId={referral._id}
                     status={viewerAssignedStatus}
                     statuses={REFERRAL_STATUSES}
+                    isAgentOrigin={isAgentOrigin}
                     side={viewerAssignedSide}
                     statusLabel={`My side (${viewerAssignedSide})`}
                     preApprovalAmountCents={preApprovalAmountCents}
@@ -1112,7 +1123,7 @@ export function ReferralHeader({
                     onUnderContractIntentChange={onUnderContractIntentChange}
                   />
                   <p className="text-[11px] text-foreground-subtle">
-                    {oppositeSide.toUpperCase()} side status: {oppositeSideStatus}
+                    {oppositeSide.toUpperCase()} side status: {oppositeSideStatusDisplay}
                   </p>
                 </div>
               ) : (
@@ -1123,6 +1134,7 @@ export function ReferralHeader({
                     status={status}
                     statuses={REFERRAL_STATUSES}
                     includeTerminalStatuses={viewerRole === 'admin'}
+                    isAgentOrigin={isAgentOrigin}
                     side={primarySide}
                     preApprovalAmountCents={preApprovalAmountCents}
                     onStatusChanged={handleStatusChanged}

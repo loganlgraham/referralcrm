@@ -22,9 +22,10 @@ import clsx from 'clsx';
 import { Clock } from 'lucide-react';
 
 import {
-  LOST_REASON_OPTIONS,
   REFERRAL_STATUSES,
   ReferralStatus,
+  getLostReasonOptions,
+  getReferralStatusLabel,
   type LostReason,
   type ReferralTimeline
 } from '@/constants/referrals';
@@ -533,6 +534,7 @@ function StatusSelect({
   const [pendingLostSelection, setPendingLostSelection] = useState(false);
   const [lostReason, setLostReason] = useState<LostReason | ''>('');
   const [hideDealStage, setHideDealStage] = useState(false);
+  const lostReasonOptions = getLostReasonOptions({ isAgentOrigin });
 
   useEffect(() => {
     setStatus(value);
@@ -711,7 +713,7 @@ function StatusSelect({
       >
         {REFERRAL_STATUSES.map((item) => (
           <option key={item} value={item}>
-            {item}
+            {getReferralStatusLabel(item, { isAgentOrigin })}
           </option>
         ))}
       </select>
@@ -756,7 +758,7 @@ function StatusSelect({
                 disabled={loading}
               >
                 <option value="">Select reason</option>
-                {LOST_REASON_OPTIONS.map((option) => (
+                {lostReasonOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -852,17 +854,19 @@ function StatusSelect({
               disabled={loading}
             >
               <option value="">Select reason</option>
-              {LOST_REASON_OPTIONS.map((option) => (
+              {lostReasonOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
               ))}
             </select>
           </label>
-          <p className="text-xs text-foreground-subtle">
-            Losses that happened before the agent could reach the borrower are not counted against
-            the agent.
-          </p>
+          {!isAgentOrigin && (
+            <p className="text-xs text-foreground-subtle">
+              Losses that happened before the agent could reach the borrower are not counted against
+              the agent.
+            </p>
+          )}
           <div className="flex gap-2">
             <button
               type="button"
@@ -940,11 +944,21 @@ function StatusSelect({
   );
 }
 
-function SideStatusPill({ label, status }: { label: string; status?: ReferralStatus | null }) {
+function SideStatusPill({
+  label,
+  status,
+  isAgentOrigin = false,
+}: {
+  label: string;
+  status?: ReferralStatus | null;
+  isAgentOrigin?: boolean;
+}) {
   return (
     <div className="rounded border border-border bg-surface-muted px-2 py-1">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground-subtle">{label}</p>
-      <p className="text-xs font-medium text-foreground-muted">{status ?? '—'}</p>
+      <p className="text-xs font-medium text-foreground-muted">
+        {status ? getReferralStatusLabel(status, { isAgentOrigin }) : '—'}
+      </p>
     </div>
   );
 }
@@ -1098,6 +1112,7 @@ function NoteComposer({
 
 function AgentBothStatusCell({ row }: { row: ReferralRow }) {
   const assignedSide = row.viewerAssignedSide ?? 'buy';
+  const isAgentOrigin = row.origin === 'agent';
   const [buyStatus, setBuyStatus] = useState<ReferralStatus>(row.buyStatus ?? row.status);
   const [sellStatus, setSellStatus] = useState<ReferralStatus>(row.sellStatus ?? row.status);
 
@@ -1111,8 +1126,8 @@ function AgentBothStatusCell({ row }: { row: ReferralRow }) {
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        <SideStatusPill label="Buy" status={buyStatus} />
-        <SideStatusPill label="Sell" status={sellStatus} />
+        <SideStatusPill label="Buy" status={buyStatus} isAgentOrigin={isAgentOrigin} />
+        <SideStatusPill label="Sell" status={sellStatus} isAgentOrigin={isAgentOrigin} />
       </div>
       <div className="rounded border border-primary/20 bg-primary/5 p-2">
         <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
@@ -1125,7 +1140,7 @@ function AgentBothStatusCell({ row }: { row: ReferralRow }) {
           side={assignedSide}
           compact
           roleMode="agent"
-          isAgentOrigin={row.origin === 'agent'}
+          isAgentOrigin={isAgentOrigin}
           onStatusResolved={(nextStatus) => {
             if (assignedSide === 'sell') {
               setSellStatus(nextStatus);
@@ -1156,8 +1171,10 @@ const STATUS_LABELS: Record<string, string> = {
   'Payment Received': 'Payment Received'
 };
 
-function StatusBadge({ status }: { status: string }) {
-  const label = STATUS_LABELS[status] ?? status;
+function StatusBadge({ status, isAgentOrigin = false }: { status: string; isAgentOrigin?: boolean }) {
+  const label = isAgentOrigin
+    ? getReferralStatusLabel(status, { isAgentOrigin })
+    : STATUS_LABELS[status] ?? status;
   return <StatusPill kind="auto" status={status} label={label} />;
 }
 
@@ -1489,7 +1506,10 @@ function buildColumns(
         header: sortableHeader('Status', 'status', currentSortBy, currentSortDirection, onSortChange),
         accessorKey: 'status',
         cell: ({ row }) => (
-          <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />
+          <StatusBadge
+            status={row.original.dealStatusLabel ?? row.original.status}
+            isAgentOrigin={row.original.origin === 'agent'}
+          />
         ),
       },
       createdColumn
@@ -1506,7 +1526,12 @@ function buildColumns(
     {
       header: sortableHeader('Status', 'status', currentSortBy, currentSortDirection, onSortChange),
       accessorKey: 'status',
-      cell: ({ row }) => <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />,
+      cell: ({ row }) => (
+        <StatusBadge
+          status={row.original.dealStatusLabel ?? row.original.status}
+          isAgentOrigin={row.original.origin === 'agent'}
+        />
+      ),
     },
     ...(hideAgentColumn ? [] : [agentColumn]),
     lenderMcColumn,
@@ -1747,7 +1772,10 @@ function ReferralMobileStack({
                   </div>
                 </MobileField>
                 <MobileField label="Status">
-                  <StatusBadge status={row.dealStatusLabel ?? row.status} />
+                  <StatusBadge
+                    status={row.dealStatusLabel ?? row.status}
+                    isAgentOrigin={row.origin === 'agent'}
+                  />
                 </MobileField>
                 <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
               </>
@@ -1756,7 +1784,10 @@ function ReferralMobileStack({
             {mode === 'admin' ? (
               <>
                 <MobileField label="Status">
-                  <StatusBadge status={row.dealStatusLabel ?? row.status} />
+                  <StatusBadge
+                    status={row.dealStatusLabel ?? row.status}
+                    isAgentOrigin={row.origin === 'agent'}
+                  />
                 </MobileField>
                 {!hideAgent ? (
                   <MobileField label="Agent">

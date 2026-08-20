@@ -32,6 +32,33 @@ export function normalizeReferralStatus(status?: string | null): ReferralStatus 
   return REFERRAL_STATUSES.includes(status as ReferralStatus) ? (status as ReferralStatus) : null;
 }
 
+/**
+ * Agent-created referrals run the opposite direction from the rest of the
+ * pipeline: the agent already represents the client and is handing them to AFC
+ * for financing. The stored statuses are shared, so these are display-only
+ * overrides that re-point the wording at the mortgage consultant.
+ */
+export const AGENT_ORIGIN_STATUS_LABELS: Partial<Record<ReferralStatus, string>> = {
+  'New Lead': 'Intro received',
+  Paired: 'Matched with MC',
+  'In Communication': 'MC reached out',
+  'Active Lead': 'Working with MC'
+};
+
+export function getReferralStatusLabel(
+  status: string,
+  options?: { isAgentOrigin?: boolean }
+): string {
+  if (!options?.isAgentOrigin) {
+    return status;
+  }
+  const normalized = normalizeReferralStatus(status);
+  if (!normalized) {
+    return status;
+  }
+  return AGENT_ORIGIN_STATUS_LABELS[normalized] ?? normalized;
+}
+
 export const LOST_REASON_VALUES = [
   'never_connected',
   'already_had_agent',
@@ -79,6 +106,37 @@ export const LOST_REASON_COUNTS_AGAINST_AGENT: Record<LostReason, boolean> = {
 export const LOST_REASON_OPTIONS: { value: LostReason; label: string }[] = LOST_REASON_VALUES.map(
   (value) => ({ value, label: LOST_REASON_LABELS[value] })
 );
+
+/**
+ * The agent-choice reasons make no sense when the agent is the referrer, so
+ * agent-created referrals get a narrower list worded around the MC.
+ */
+export const AGENT_ORIGIN_LOST_REASON_VALUES = [
+  'never_connected',
+  'not_qualified',
+  'no_longer_buying',
+  'unresponsive_after_contact',
+  'service_issue',
+  'other'
+] as const satisfies readonly LostReason[];
+
+export const AGENT_ORIGIN_LOST_REASON_LABELS: Partial<Record<LostReason, string>> = {
+  never_connected: 'MC was never able to reach the client',
+  not_qualified: 'Client did not qualify',
+  unresponsive_after_contact: 'Client went quiet after the MC connected'
+};
+
+export const AGENT_ORIGIN_LOST_REASON_OPTIONS: { value: LostReason; label: string }[] =
+  AGENT_ORIGIN_LOST_REASON_VALUES.map((value) => ({
+    value,
+    label: AGENT_ORIGIN_LOST_REASON_LABELS[value] ?? LOST_REASON_LABELS[value]
+  }));
+
+export function getLostReasonOptions(options?: {
+  isAgentOrigin?: boolean;
+}): { value: LostReason; label: string }[] {
+  return options?.isAgentOrigin ? AGENT_ORIGIN_LOST_REASON_OPTIONS : LOST_REASON_OPTIONS;
+}
 
 export const LOST_REASON_SOURCE_VALUES = ['reported', 'inferred'] as const;
 
