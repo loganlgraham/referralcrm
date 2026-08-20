@@ -18,6 +18,7 @@ import { Referral, ReferralDocument } from '@/models/referral';
 import { Payment } from '@/models/payment';
 import { Agent } from '@/models/agent';
 import { DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
+import { isAttributableLoss } from '@/lib/server/lost-attribution';
 
 type TimeframeKey = 'day' | 'week' | 'month' | 'next_month' | 'year' | 'ytd' | 'all' | 'custom';
 
@@ -226,9 +227,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     lostStatusMatch.statusLastUpdated = updatedAtMatch;
   }
 
-  const lostStatusReferrals = await Referral.find<{ statusLastUpdated?: Date }>(lostStatusMatch)
-    .select('status statusLastUpdated')
-    .lean();
+  const lostStatusReferrals = await Referral.find(lostStatusMatch)
+    .select('status lostReason statusLastUpdated')
+    .lean<{ status?: string | null; lostReason?: string | null; statusLastUpdated?: Date }[]>();
 
   const paymentsWithMetric = payments
     .map((payment) => ({
@@ -286,7 +287,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return count + matches.length;
   }, 0);
 
-  const lostStatusCount = lostStatusReferrals.length;
+  // Losses that happened before the agent could reach the borrower are reported
+  // separately rather than counted against them.
+  const lostStatusCount = lostStatusReferrals.filter((referral) => isAttributableLoss(referral)).length;
+  const unattributableLostCount = lostStatusReferrals.length - lostStatusCount;
 
   const { totalAgentRevenueCents, referralFeesPaidCents } = paymentsWithMetric.reduce(
     (acc, payment) => {
@@ -320,6 +324,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     revenueExpectedCents,
     averageCommissionCents,
     lostReferrals: lostReferralsCount + lostStatusCount,
+    unattributableLostReferrals: unattributableLostCount,
     totalAgentRevenueCents,
     referralFeesPaidCents,
     avgResponseHours,

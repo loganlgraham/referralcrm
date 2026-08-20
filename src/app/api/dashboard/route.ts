@@ -19,7 +19,11 @@ import {
 } from 'date-fns';
 import { connectMongo } from '@/lib/mongoose';
 import { getCurrentSession } from '@/lib/auth';
-import { DEFAULT_AGENT_COMMISSION_BPS } from '@/constants/referrals';
+import {
+  DEFAULT_AGENT_COMMISSION_BPS,
+  LOST_REASON_LABELS,
+  type LostReason
+} from '@/constants/referrals';
 import { zipToState, inferStateFromLocationText } from '@/utils/location';
 import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
@@ -46,6 +50,7 @@ import {
   normalizeAhaKpiMap
 } from '@/lib/server/aha-leaderboard-scoring';
 import { resolvePushbackMetricsInTimeframe } from '@/lib/server/pushback-metrics';
+import { isAttributableLoss } from '@/lib/server/lost-attribution';
 import { isDashboardInternalAdminRequest } from '@/lib/server/dashboard-internal-request';
 import { buildConversionFunnel, type FunnelReferralInput } from '@/lib/server/conversion-funnel';
 import {
@@ -196,6 +201,7 @@ interface DashboardReferral {
   sellStatus?: string | null;
   lender?: Types.ObjectId | null;
   status?: string;
+  lostReason?: string | null;
   preApprovalAmountCents?: number;
   stageOnTransfer?: string | null;
   initialNotes?: string;
@@ -937,7 +943,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...referralMatch,
   })
     .select(
-      'createdAt updatedAt referralDate status statusLastUpdated referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents stageOnTransfer initialNotes notes.content notes.createdAt assignedAgent buySideAgent sellSideAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin dealSide clientType sla lookingInZip lookingInZips loanFileNumber borrower.name audit.field audit.previousValue audit.newValue audit.timestamp'
+      'createdAt updatedAt referralDate status lostReason statusLastUpdated referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents stageOnTransfer initialNotes notes.content notes.createdAt assignedAgent buySideAgent sellSideAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin dealSide clientType sla lookingInZip lookingInZips loanFileNumber borrower.name audit.field audit.previousValue audit.newValue audit.timestamp'
     )
     .lean<DashboardReferral[]>()
     .exec();
@@ -3291,13 +3297,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // (same semantics as the AHA/AGIT lostDeals series) rather than referrals
   // created in this timeframe that happen to be Lost today. This keeps the
   // "Lost referrals by agent" table in-sync with a changing timeframe.
+  // Losses are split by reason: only those the agent could have influenced count
+  // against them. Losses that happened before the agent could reach the borrower
+  // are reported separately as lead quality.
   const agentLostDealsMap = new Map<string, number>();
+  const agentUnattributableLostMap = new Map<string, number>();
   referralsByNetwork.forEach((referral) => {
     if (referral.status !== 'Lost') return;
     const lostAt = referral.statusLastUpdated ?? referral.updatedAt ?? referral.createdAt;
     if (!isWithinTimeframe(lostAt)) return;
     const key = referral.assignedAgent ? referral.assignedAgent.toString() : 'unassigned';
-    agentLostDealsMap.set(key, (agentLostDealsMap.get(key) ?? 0) + 1);
+    const target = isAttributableLoss(referral) ? agentLostDealsMap : agentUnattributableLostMap;
+    target.set(key, (target.get(key) ?? 0) + 1);
   });
 
   // Aggregate agent metrics from payments
@@ -3464,14 +3475,86 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.revenueCents - a.revenueCents);
 
-  const agentLostDeals = Array.from(agentLostDealsMap.entries())
-    .map(([key, value]) => ({
+  const agentLostDeals = Array.from(
+    new Set([...agentLostDealsMap.keys(), ...agentUnattributableLostMap.keys()])
+  )
+    .map((key) => ({
       id: key,
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
-      referrals: value
+      referrals: agentLostDealsMap.get(key) ?? 0,
+      unattributableReferrals: agentUnattributableLostMap.get(key) ?? 0
     }))
     .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.referrals - a.referrals);
+
+  // Lead-quality view: losses we did not charge to the agent, grouped by the MC and
+  // the lead source that sent them. Repeat "already had an agent" from one source is
+  // a source problem, not an agent problem.
+  const lostInTimeframe = referralsByNetwork.filter((referral) => {
+    if (referral.status !== 'Lost') return false;
+    const lostAt = referral.statusLastUpdated ?? referral.updatedAt ?? referral.createdAt;
+    return isWithinTimeframe(lostAt);
+  });
+
+  const unattributableByMcMap = new Map<string, number>();
+  const unattributableBySourceMap = new Map<string, number>();
+  const unattributableByReasonMap = new Map<string, number>();
+  let attributableLostCount = 0;
+  let unattributableLostCount = 0;
+  let classifiedLostCount = 0;
+
+  lostInTimeframe.forEach((referral) => {
+    if (referral.lostReason) {
+      classifiedLostCount += 1;
+    }
+    if (isAttributableLoss(referral)) {
+      attributableLostCount += 1;
+      return;
+    }
+    unattributableLostCount += 1;
+
+    const mcKey = referral.lender ? referral.lender.toString() : 'unassigned';
+    unattributableByMcMap.set(mcKey, (unattributableByMcMap.get(mcKey) ?? 0) + 1);
+
+    const sourceKey = normalizeOptionalText(referral.source) ?? 'Unknown source';
+    unattributableBySourceMap.set(sourceKey, (unattributableBySourceMap.get(sourceKey) ?? 0) + 1);
+
+    const reasonKey = referral.lostReason ?? 'other';
+    unattributableByReasonMap.set(reasonKey, (unattributableByReasonMap.get(reasonKey) ?? 0) + 1);
+  });
+
+  const sortByCountThenName = (
+    a: { count: number; name: string },
+    b: { count: number; name: string }
+  ) => b.count - a.count || a.name.localeCompare(b.name);
+
+  const lostAttribution = {
+    attributableCount: attributableLostCount,
+    unattributableCount: unattributableLostCount,
+    totalCount: attributableLostCount + unattributableLostCount,
+    classifiedCount: classifiedLostCount,
+    classifiedRatePercent: safePercent(
+      classifiedLostCount,
+      attributableLostCount + unattributableLostCount
+    ),
+    unattributableByMc: Array.from(unattributableByMcMap.entries())
+      .map(([id, count]) => ({
+        id,
+        name: id === 'unassigned' ? 'Unassigned MC' : lenderNameMap.get(id) ?? 'Unknown MC',
+        count
+      }))
+      .sort(sortByCountThenName),
+    unattributableBySource: Array.from(unattributableBySourceMap.entries())
+      .map(([name, count]) => ({ id: name, name, count }))
+      .sort(sortByCountThenName),
+    unattributableByReason: Array.from(unattributableByReasonMap.entries())
+      .map(([reason, count]) => ({
+        id: reason,
+        name: LOST_REASON_LABELS[reason as LostReason] ?? 'Other',
+        count
+      }))
+      .sort(sortByCountThenName)
+  };
 
   const agentCreatedMcAssignmentCount = new Map<string, number>();
   filteredReferrals.forEach((referral) => {
@@ -3596,7 +3679,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       referralIdToAgentKey.set(r._id.toString(), key);
       referralCountMap.set(key, (referralCountMap.get(key) ?? 0) + 1);
       const lostAt = r.statusLastUpdated ?? r.updatedAt ?? r.createdAt;
-      if (r.status === 'Lost' && isWithinTimeframe(lostAt)) {
+      // Only attributable losses feed the composite score: a borrower who was
+      // never reachable, or who already had an agent, is not the agent's miss.
+      if (isAttributableLoss(r) && isWithinTimeframe(lostAt)) {
         lostDealsMap.set(key, (lostDealsMap.get(key) ?? 0) + 1);
       }
       if (r.sla) {
@@ -4575,6 +4660,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       averageClosedDealAmount: agentAverageClosedDeal,
       netRevenue: agentNetRevenue,
       lostDeals: agentLostDeals,
+      lostAttribution,
       agentCreatedMcAssignments: agentCreatedMcLeaderboard,
       ahaLeaderboards,
       ahaOosLeaderboards

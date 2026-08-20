@@ -62,6 +62,24 @@ interface LeaderboardEntry {
   outsideLenderLossCount?: number;
   outsideLenderLossRate?: number;
   referrals?: number;
+  unattributableReferrals?: number;
+}
+
+interface LostAttributionBreakdownEntry {
+  id: string;
+  name: string;
+  count: number;
+}
+
+interface LostAttributionSummary {
+  attributableCount: number;
+  unattributableCount: number;
+  totalCount: number;
+  classifiedCount: number;
+  classifiedRatePercent: number;
+  unattributableByMc: LostAttributionBreakdownEntry[];
+  unattributableBySource: LostAttributionBreakdownEntry[];
+  unattributableByReason: LostAttributionBreakdownEntry[];
 }
 
 interface AhaRankedAgent {
@@ -396,6 +414,7 @@ interface DashboardResponse {
     revenueExpected: LeaderboardEntry[];
     netRevenue: LeaderboardEntry[];
     lostDeals: LeaderboardEntry[];
+    lostAttribution?: LostAttributionSummary;
     agentCreatedMcAssignments: LeaderboardEntry[];
     ahaLeaderboards: { rankedAgents: AhaRankedAgent[] };
     ahaOosLeaderboards: { rankedAgents: AhaRankedAgent[] };
@@ -1488,6 +1507,9 @@ type AgentLeaderboardView = {
   label: string;
   valueLabel: string;
   entries: LeaderboardEntry[];
+  /** When set, renders unattributableReferrals in an extra right-hand column. */
+  secondaryValueLabel?: string;
+  footnote?: string;
 };
 
 function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
@@ -1499,7 +1521,8 @@ function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
     return null;
   }
 
-  const { entries, valueLabel } = activeView;
+  const { entries, valueLabel, secondaryValueLabel, footnote } = activeView;
+  const columnCount = secondaryValueLabel ? 4 : 3;
 
   return (
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
@@ -1533,6 +1556,9 @@ function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
               <th className="py-1 font-medium">Rank</th>
               <th className="py-1 font-medium">Name</th>
               <th className="py-1 font-medium text-right">{valueLabel}</th>
+              {secondaryValueLabel ? (
+                <th className="py-1 font-medium text-right">{secondaryValueLabel}</th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -1554,11 +1580,16 @@ function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
                               ? `${formatNumber(entry.dealsClosed)} / ${formatNumber(entry.totalReferrals ?? 0)}`
                               : '—'}
                   </td>
+                  {secondaryValueLabel ? (
+                    <td className="py-2 text-right text-foreground-subtle">
+                      {formatNumber(entry.unattributableReferrals ?? 0)}
+                    </td>
+                  ) : null}
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={3} className="py-6 text-center text-sm text-foreground-subtle">
+                <td colSpan={columnCount} className="py-6 text-center text-sm text-foreground-subtle">
                   Nothing to display for this period.
                 </td>
               </tr>
@@ -1566,6 +1597,7 @@ function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
           </tbody>
         </table>
       </div>
+      {footnote ? <p className="mt-3 text-xs text-foreground-subtle">{footnote}</p> : null}
     </div>
   );
 }
@@ -3272,6 +3304,86 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
   );
 }
 
+function LostAttributionCard({ data }: { data: LostAttributionSummary }) {
+  const [activeId, setActiveId] = useState<'reason' | 'source' | 'mc'>('reason');
+  const breakdowns = {
+    reason: { label: 'By reason', nameLabel: 'Reason', entries: data.unattributableByReason },
+    source: { label: 'By lead source', nameLabel: 'Source', entries: data.unattributableBySource },
+    mc: { label: 'By mortgage consultant', nameLabel: 'Mortgage consultant', entries: data.unattributableByMc }
+  } as const;
+  const active = breakdowns[activeId];
+
+  return (
+    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+        Lost referrals: who they count against
+      </p>
+      <dl className="mt-3 grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-surface-muted px-3 py-2">
+          <dt className="text-xs text-foreground-subtle">Counted against the agent</dt>
+          <dd className="mt-1 text-xl font-semibold text-foreground">
+            {formatNumber(data.attributableCount)}
+          </dd>
+        </div>
+        <div className="rounded-lg bg-surface-muted px-3 py-2">
+          <dt className="text-xs text-foreground-subtle">Lost before the agent connected</dt>
+          <dd className="mt-1 text-xl font-semibold text-foreground">
+            {formatNumber(data.unattributableCount)}
+          </dd>
+        </div>
+      </dl>
+      <p className="mt-2 text-xs text-foreground-subtle">
+        {formatNumber(data.classifiedCount)} of {formatNumber(data.totalCount)} lost referrals have a
+        reason on file ({data.classifiedRatePercent.toFixed(0)}%). Referrals without a reason are
+        counted against the agent.
+      </p>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {(Object.keys(breakdowns) as Array<keyof typeof breakdowns>).map((key) => {
+          const isActive = key === activeId;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setActiveId(key)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                isActive
+                  ? 'border-transparent bg-primary text-white shadow-sm'
+                  : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
+              }`}
+            >
+              {breakdowns[key].label}
+            </button>
+          );
+        })}
+      </div>
+      <table className="mt-3 w-full text-sm">
+        <thead>
+          <tr className="text-left text-xs text-foreground-subtle">
+            <th className="py-1 font-medium">{active.nameLabel}</th>
+            <th className="py-1 text-right font-medium">Lost referrals</th>
+          </tr>
+        </thead>
+        <tbody>
+          {active.entries.length ? (
+            active.entries.map((entry) => (
+              <tr key={entry.id} className="border-t border-border text-foreground-muted">
+                <td className="py-2 font-medium text-foreground">{entry.name}</td>
+                <td className="py-2 text-right">{formatNumber(entry.count)}</td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={2} className="py-6 text-center text-sm text-foreground-subtle">
+                Nothing to display for this period.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
   const averageCommissionDisplay =
     data.averageCommissionPercent > 0 ? `${data.averageCommissionPercent.toFixed(2)}%` : '—';
@@ -3299,6 +3411,9 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
         <SummaryCard title="Average agent commission" value={averageCommissionDisplay} helper={commissionHelper} />
         <SummaryCard title="Average referral fee" value={averageReferralFeeDisplay} helper={referralFeeHelper} />
       </div>
+      {data.lostAttribution && data.lostAttribution.totalCount > 0 ? (
+        <LostAttributionCard data={data.lostAttribution} />
+      ) : null}
       <AgentLeaderboardCard
         views={[
           { id: 'referrals', label: 'Referrals by agent', valueLabel: 'Referrals', entries: data.referralLeaderboard },
@@ -3317,7 +3432,15 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
             entries: data.revenueExpected
           },
           { id: 'net-earnings', label: 'Agent net earnings', valueLabel: 'Net revenue', entries: data.netRevenue },
-          { id: 'lost-referrals', label: 'Lost referrals by agent', valueLabel: 'Lost referrals', entries: data.lostDeals },
+          {
+            id: 'lost-referrals',
+            label: 'Lost referrals by agent',
+            valueLabel: 'Counted against agent',
+            secondaryValueLabel: 'Lost before contact',
+            entries: data.lostDeals,
+            footnote:
+              'Only losses after the agent connected with the borrower count against them, so this total is lower than the overall lost referral count.'
+          },
           ...(data.agentCreatedMcAssignments.length > 0
             ? [
                 {

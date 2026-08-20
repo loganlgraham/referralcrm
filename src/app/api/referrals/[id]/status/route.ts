@@ -199,6 +199,26 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     }
 
     referral.audit.push(auditEntry as any);
+
+    // Keyed on the derived aggregate status, not the requested side status: a
+    // single-side loss on a Both referral does not aggregate to Lost and must not
+    // record a reason. A payload without a reason leaves an existing one alone so
+    // that changing one side cannot wipe the other side's reported reason.
+    const previousLostReason = referral.lostReason ?? null;
+    const nextLostReason =
+      referral.status === 'Lost' ? parsed.data.lostReason ?? previousLostReason : null;
+    if (nextLostReason !== previousLostReason) {
+      referral.lostReason = nextLostReason;
+      referral.lostReasonSource = nextLostReason ? 'reported' : null;
+      referral.audit.push({
+        actorRole: session.user.role,
+        actorId: actorId ?? undefined,
+        field: 'lostReason',
+        previousValue: previousLostReason,
+        newValue: nextLostReason,
+        timestamp: now
+      } as any);
+    }
   }
 
   let createdDeal: any = null;

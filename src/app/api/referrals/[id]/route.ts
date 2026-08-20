@@ -296,7 +296,18 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
 
     // Put all updatePayload fields in $set
     const setFields: Record<string, unknown> = { ...updatePayload };
-    
+
+    // Keep the lost reason consistent with the status being written: stamp the
+    // source when a reason is supplied, and drop a stale reason if the referral is
+    // being moved out of Lost.
+    if (setFields.lostReason) {
+      setFields.lostReasonSource = 'reported';
+    } else if (typeof setFields.status === 'string' && setFields.status !== 'Lost') {
+      setFields.lostReason = null;
+      setFields.lostReasonSource = null;
+    }
+
+
     // Only add $set if there are fields to set
     if (Object.keys(setFields).length > 0) {
       updateObject.$set = setFields;

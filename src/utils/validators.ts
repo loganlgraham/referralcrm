@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { REFERRAL_STATUSES, REFERRAL_STATUS_VALUES, REFERRAL_TIMELINE_VALUES } from '@/constants/referrals';
+import {
+  LOST_REASON_VALUES,
+  REFERRAL_STATUSES,
+  REFERRAL_STATUS_VALUES,
+  REFERRAL_TIMELINE_VALUES
+} from '@/constants/referrals';
 import { DEAL_STATUS_VALUES, TERMINATED_REASON_VALUES } from '@/constants/deals';
 
 const zipArraySchema = z
@@ -34,6 +39,11 @@ export const updateReferralSchema = z.object({
   buyStatus: z.enum(REFERRAL_STATUS_VALUES).optional(),
   sellStatus: z.enum(REFERRAL_STATUS_VALUES).optional(),
   terminatedReason: z.enum(TERMINATED_REASON_VALUES).nullable().optional(),
+  // Optional rather than required-on-Lost: this schema backs the general edit form,
+  // which resubmits the current status. Requiring it would block edits to referrals
+  // that were lost before reasons were captured. A missing reason is treated as
+  // counting against the agent, so omitting it cannot understate losses.
+  lostReason: z.enum(LOST_REASON_VALUES).nullable().optional(),
   assignedAgent: z.string().optional(),
   referralFeeBasisPoints: z.number().int().min(0).optional(),
   ahaBucket: z.enum(['AHA', 'AHA_OOS']).nullable().optional(),
@@ -79,6 +89,7 @@ export const updateStatusSchema = z.object({
   side: z.enum(['buy', 'sell']).optional(),
   source: z.enum(['referral_table', 'referral_detail']).optional(),
   terminatedReason: z.enum(TERMINATED_REASON_VALUES).nullable().optional(),
+  lostReason: z.enum(LOST_REASON_VALUES).nullable().optional(),
   terminateDeal: z.boolean().optional(),
   closingDate: z.string().optional(),
   sendClosedEmails: z.boolean().optional(),
@@ -109,6 +120,13 @@ export const updateStatusSchema = z.object({
       code: z.ZodIssueCode.custom,
       message: 'Terminated reason is required when status is Terminated.',
       path: ['terminatedReason'],
+    });
+  }
+  if (data.status === 'Lost' && !data.lostReason) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please tell us why this referral was lost.',
+      path: ['lostReason'],
     });
   }
   if (data.terminateDeal) {

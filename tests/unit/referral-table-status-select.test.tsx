@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ReferralTable } from '@/components/tables/referral-table';
 import { TERMINATED_REASON_OPTIONS } from '@/constants/deals';
+import { LOST_REASON_OPTIONS } from '@/constants/referrals';
 
 const mockReplace = jest.fn();
 const mockRefresh = jest.fn();
@@ -362,7 +363,9 @@ describe('ReferralTable agent status actions', () => {
 
     fireEvent.change(screen.getByDisplayValue('Under Contract'), { target: { value: 'Terminated' } });
     fireEvent.change(screen.getByDisplayValue('Select'), { target: { value: 'yes' } });
-    fireEvent.change(screen.getByDisplayValue('Select reason'), { target: { value: terminatedReason } });
+    fireEvent.change(screen.getByLabelText(/Why did the deal fall through\?/), {
+      target: { value: terminatedReason },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
     await waitFor(() => {
@@ -375,6 +378,7 @@ describe('ReferralTable agent status actions', () => {
             status: 'Active Lead',
             source: 'referral_table',
             terminatedReason,
+            lostReason: null,
             terminateDeal: true,
           }),
         })
@@ -391,6 +395,8 @@ describe('ReferralTable agent status actions', () => {
   it('sends Lost + terminateDeal when customer is not still shopping', async () => {
     const terminatedReason = TERMINATED_REASON_OPTIONS[1]?.value ?? TERMINATED_REASON_OPTIONS[0]?.value;
     expect(terminatedReason).toBeTruthy();
+    const lostReason = LOST_REASON_OPTIONS[0]?.value;
+    expect(lostReason).toBeTruthy();
     mockFetch.mockResolvedValue({
       ok: true,
       json: async () => ({ status: 'Lost', deal: { status: 'terminated' } }),
@@ -418,7 +424,12 @@ describe('ReferralTable agent status actions', () => {
 
     fireEvent.change(screen.getByDisplayValue('Under Contract'), { target: { value: 'Terminated' } });
     fireEvent.change(screen.getByDisplayValue('Select'), { target: { value: 'no' } });
-    fireEvent.change(screen.getByDisplayValue('Select reason'), { target: { value: terminatedReason } });
+    fireEvent.change(screen.getByLabelText(/Why did the deal fall through\?/), {
+      target: { value: terminatedReason },
+    });
+    fireEvent.change(screen.getByLabelText(/Why are we losing this client\?/), {
+      target: { value: lostReason },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
     await waitFor(() => {
@@ -431,6 +442,7 @@ describe('ReferralTable agent status actions', () => {
             status: 'Lost',
             source: 'referral_table',
             terminatedReason,
+            lostReason,
             terminateDeal: true,
           }),
         })

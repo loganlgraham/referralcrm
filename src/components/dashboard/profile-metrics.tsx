@@ -29,6 +29,7 @@ interface ProfileMetricsResponse {
     revenueExpectedCents: number;
     averageCommissionCents?: number;
     lostReferrals?: number;
+    unattributableLostReferrals?: number;
     totalAgentRevenueCents?: number;
     referralFeesPaidCents?: number;
     avgResponseHours: number | null;
@@ -118,7 +119,7 @@ export function ProfileMetrics() {
       : TIMEFRAME_PRESETS.find((option) => option.value === timeframe)?.label ?? 'Select timeframe';
   const rangeLabel = data.timeframeLabel || fallbackLabel;
 
-  const cards = [
+  const cards: { label: string; value: string; helper?: string }[] = [
     { label: 'Total referrals', value: formatNumber(metrics.totalReferrals) },
     { label: 'Deals closed', value: formatNumber(metrics.dealsClosed) },
     { label: 'Close rate', value: `${metrics.closeRate.toFixed(1)}%` },
@@ -140,7 +141,15 @@ export function ProfileMetrics() {
       label: 'NPS score',
       value: typeof metrics.npsScore === 'number' ? metrics.npsScore.toString() : 'Not set'
     });
-    cards.push({ label: 'Lost referrals', value: formatNumber(metrics.lostReferrals ?? 0) });
+    const unattributableLost = metrics.unattributableLostReferrals ?? 0;
+    cards.push({
+      label: 'Lost referrals',
+      value: formatNumber(metrics.lostReferrals ?? 0),
+      helper:
+        unattributableLost > 0
+          ? `${formatNumber(unattributableLost)} more were lost before you could reach the borrower and are not counted here`
+          : undefined
+    });
     cards.push({ label: 'Total agent revenue', value: formatCurrency(metrics.totalAgentRevenueCents ?? 0) });
     cards.push({ label: 'Referral fees paid', value: formatCurrency(metrics.referralFeesPaidCents ?? 0) });
   }
@@ -164,6 +173,7 @@ export function ProfileMetrics() {
           <div key={card.label} className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
             <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{card.label}</p>
             <p className="mt-2 text-xl font-semibold text-foreground">{card.value}</p>
+            {card.helper ? <p className="mt-1 text-xs text-foreground-subtle">{card.helper}</p> : null}
           </div>
         ))}
       </div>
