@@ -1,4 +1,3 @@
-import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import type { Types } from 'mongoose';
 
@@ -16,7 +15,12 @@ import {
   findMcInFreeText,
   normalizeMcToken
 } from '@/lib/server/mc-matcher';
-import { parseSignatureHeader, parseSvixSignatures } from './signature';
+import {
+  resolveResendSignatureHeader,
+  resolveResendTimestampHeader,
+  verifyResendWebhookSignature
+} from '@/lib/server/resend-webhook-signature';
+import { getReferralNotificationRecipients } from '@/lib/server/cc-recipients';
 
 interface NormalizedAttachment {
   filename: string;
@@ -60,110 +64,6 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD'
 });
-
-function decodeSignature(signature: string): Buffer | null {
-  const trimmed = signature.trim();
-  try {
-    const hexBuffer = Buffer.from(trimmed, 'hex');
-    if (hexBuffer.length > 0 && hexBuffer.toString('hex') === trimmed.toLowerCase()) {
-      return hexBuffer;
-    }
-  } catch (error) {
-    if (error) {
-      // continue to base64 attempt
-    }
-  }
-  try {
-    const base64Buffer = Buffer.from(trimmed, 'base64');
-    return base64Buffer.length > 0 ? base64Buffer : null;
-  } catch (error) {
-    return null;
-  }
-}
-
-function verifyResendSignature(
-  rawBody: string,
-  header: string,
-  secret: string,
-  fallbackTimestamp?: string
-): boolean {
-  const parsed = parseSignatureHeader(header, fallbackTimestamp);
-  if (!parsed) {
-    return false;
-  }
-
-  const payload = parsed.timestamp ? `${parsed.timestamp}.${rawBody}` : rawBody;
-  const expected = crypto.createHmac('sha256', secret).update(payload, 'utf8').digest();
-  const provided = decodeSignature(parsed.signature);
-
-  if (!provided || provided.length !== expected.length) {
-    return false;
-  }
-
-  const providedView = new Uint8Array(provided);
-  const expectedView = new Uint8Array(expected);
-
-  return crypto.timingSafeEqual(providedView, expectedView);
-}
-
-function resolveSvixSecret(secret: string): Uint8Array {
-  let bytes: Buffer;
-  if (secret.startsWith('whsec_')) {
-    const raw = secret.slice('whsec_'.length);
-    bytes = Buffer.from(raw, 'base64');
-  } else {
-    bytes = Buffer.from(secret, 'utf8');
-  }
-  return Uint8Array.from(bytes);
-}
-
-function verifySvixSignature(
-  rawBody: string,
-  header: string,
-  secret: string,
-  timestamp?: string,
-  messageId?: string
-): boolean {
-  if (!timestamp || !messageId) {
-    return false;
-  }
-
-  const signatures = parseSvixSignatures(header);
-  if (signatures.length === 0) {
-    return false;
-  }
-
-  const payload = `${messageId}.${timestamp}.${rawBody}`;
-  const secretBuffer = resolveSvixSecret(secret);
-  const expectedBase64 = crypto.createHmac('sha256', secretBuffer).update(payload, 'utf8').digest('base64');
-  const expected = new TextEncoder().encode(expectedBase64);
-
-  for (const signature of signatures) {
-    const provided = new TextEncoder().encode(signature);
-    if (provided.length !== expected.length) {
-      continue;
-    }
-    if (crypto.timingSafeEqual(provided, expected)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-function verifyInboundSignature(
-  rawBody: string,
-  signatureHeader: string,
-  secret: string,
-  timestamp?: string,
-  svixMessageId?: string
-): boolean {
-  if (verifyResendSignature(rawBody, signatureHeader, secret, timestamp)) {
-    return true;
-  }
-
-  return verifySvixSignature(rawBody, signatureHeader, secret, timestamp, svixMessageId);
-}
 
 function stripHtmlTags(html: string): string {
   return html
@@ -835,17 +735,6 @@ function resolveInboundSecret(): string | undefined {
   );
 }
 
-function resolveSignatureHeader(request: NextRequest): string | null {
-  const headerNames = ['resend-signature', 'x-resend-signature', 'svix-signature'];
-  for (const name of headerNames) {
-    const value = request.headers.get(name);
-    if (value) {
-      return value;
-    }
-  }
-  return null;
-}
-
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const secret = resolveInboundSecret();
   if (!secret) {
@@ -857,20 +746,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Resend API key is not configured.' }, { status: 500 });
   }
 
-  const signatureHeader = resolveSignatureHeader(request);
+  const signatureHeader = resolveResendSignatureHeader(request.headers);
   if (!signatureHeader) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
-  const timestampHeader =
-    request.headers.get('resend-timestamp') ??
-    request.headers.get('x-resend-timestamp') ??
-    request.headers.get('svix-timestamp') ??
-    undefined;
+  const timestampHeader = resolveResendTimestampHeader(request.headers);
   const svixMessageId = request.headers.get('svix-id') ?? undefined;
   const rawBody = await request.text();
 
-  if (!verifyInboundSignature(rawBody, signatureHeader, secret, timestampHeader, svixMessageId)) {
+  if (!verifyResendWebhookSignature(rawBody, signatureHeader, secret, timestampHeader, svixMessageId)) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
@@ -1209,9 +1094,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       text: summaryText
     });
 
-    // Send email notification to kristen.truong@americanhomeagents.com
+    // Notify the referral coordinators configured for the account.
     (async () => {
       try {
+        const coordinatorRecipients = getReferralNotificationRecipients();
+        if (coordinatorRecipients.length === 0) {
+          return;
+        }
+
         const referralLink = buildReferralLink(referral._id.toString());
         const borrowerLabel = escapeHtml(borrowerName);
         const notificationHtml = `
@@ -1224,10 +1114,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const notificationText = `A new referral has been created for ${borrowerName}.\n\n${summaryFields.join('\n')}\n\nView the referral: ${referralLink}`;
 
         await sendTransactionalEmail({
-          to: ['kristen.truong@americanhomeagents.com'],
+          to: coordinatorRecipients,
           subject: `New Referral: ${borrowerName}`,
           html: notificationHtml,
-          text: notificationText
+          text: notificationText,
+          context: { referralId: referral._id.toString() }
         });
       } catch (error) {
         console.error('Failed to send new referral notification email', error);

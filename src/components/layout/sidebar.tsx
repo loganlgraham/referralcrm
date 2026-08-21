@@ -25,6 +25,7 @@ import { cn } from '@/lib/cn';
 import { Avatar } from '@/components/ui/avatar';
 import { BrandMark } from '@/components/ui/brand-mark';
 import { NotificationBell } from '@/components/layout/notification-bell';
+import { IntroduceClientCta } from '@/components/layout/introduce-client-cta';
 
 type Role = 'admin' | 'mc' | 'agent' | string;
 
@@ -122,6 +123,12 @@ export function Sidebar({ session, className }: { session: Session; className?: 
       <div className="relative mx-5 mt-5 border-l-2 border-signal/70 pl-3">
         <p className="route-label text-[9px] text-white/50">AFC · AHA network</p>
       </div>
+
+      {role !== 'admin' && role !== 'mc' && (
+        <div className="px-3 pt-4">
+          <IntroduceClientCta />
+        </div>
+      )}
 
       <nav className="relative flex-1 overflow-y-auto scrollbar-thin px-3 py-5">
         {sections.map((section) => (

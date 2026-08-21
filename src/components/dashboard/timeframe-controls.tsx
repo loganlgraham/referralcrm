@@ -38,6 +38,11 @@ type TimeframeDropdownProps = {
   onCustomRangeSelect: (range: DateRange) => void;
   maxDate: string;
   openToRightOnMobile?: boolean;
+  /**
+   * Admin headers label their controls with the mono eyebrow and align to the
+   * page title's left edge on mobile. Agent surfaces keep the original label.
+   */
+  eyebrowLabel?: boolean;
 };
 
 const DISPLAY_RANGE_FORMAT = 'MMM d, yyyy';
@@ -130,7 +135,8 @@ export function TimeframeDropdown({
   onPresetSelect,
   onCustomRangeSelect,
   maxDate,
-  openToRightOnMobile = false
+  openToRightOnMobile = false,
+  eyebrowLabel = false
 }: TimeframeDropdownProps) {
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -238,8 +244,21 @@ export function TimeframeDropdown({
   const canGoNextMonth = formatDateInput(addMonths(visibleMonth, 1)) <= maxDate;
 
   return (
-    <div ref={dropdownRef} className="relative flex flex-col items-end gap-2">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-foreground-subtle">Timeframe</span>
+    <div
+      ref={dropdownRef}
+      className={`relative flex flex-col gap-2 ${
+        eyebrowLabel ? 'items-start sm:items-end' : 'items-end'
+      }`}
+    >
+      <span
+        className={
+          eyebrowLabel
+            ? 'text-eyebrow text-foreground-subtle'
+            : 'text-[11px] font-medium uppercase tracking-wide text-foreground-subtle'
+        }
+      >
+        Timeframe
+      </span>
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}

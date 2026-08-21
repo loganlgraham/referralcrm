@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { Mail, Clock, CheckCircle2, Send, Calendar } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
+import { Button } from '@/components/ui/button';
 import type { Contact } from '@/components/referrals/contact-assignment';
 import { getNextAutoUpdateSendAt } from '@/utils/auto-update-schedule';
 import { formatInTimeZone } from 'date-fns-tz';
@@ -210,15 +211,14 @@ export function RequestUpdateButton({
 
   return (
     <div className="space-y-2">
-      <button
+      <Button
         type="button"
         onClick={handleOpenModal}
         disabled={agents.length === 0}
-        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+        leadingIcon={<Mail className="h-4 w-4" />}
       >
-        <Mail className="h-4 w-4" />
-        Request Update from Agent
-      </button>
+        Request update from agent
+      </Button>
 
       {/* Status Display */}
       {agents.length > 0 && (
@@ -321,31 +321,24 @@ export function RequestUpdateButton({
           </div>
 
           <div className="flex gap-3 pt-4 border-t border-border">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              className="flex-1"
               onClick={() => setIsModalOpen(false)}
-              className="flex-1 rounded-lg border border-border-strong bg-surface-raised px-4 py-2 text-sm font-semibold text-foreground-muted transition hover:bg-surface-muted"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              className="flex-1"
               onClick={handleSubmit}
-              disabled={isSending || selectedAgentIds.length === 0}
-              className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={selectedAgentIds.length === 0}
+              loading={isSending}
+              leadingIcon={<Send className="h-4 w-4" />}
             >
-              {isSending ? (
-                <>
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Sending...
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4" />
-                  Send Email{selectedAgentIds.length > 1 ? 's' : ''}
-                </>
-              )}
-            </button>
+              {isSending ? 'Sending...' : `Send email${selectedAgentIds.length > 1 ? 's' : ''}`}
+            </Button>
           </div>
         </div>
       </Modal>

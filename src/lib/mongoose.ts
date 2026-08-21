@@ -46,6 +46,8 @@ const registerModels = async () => {
     import('@/models/admin-task'),
     import('@/models/agent'),
     import('@/models/coverage-suggestion'),
+    import('@/models/email-address-health'),
+    import('@/models/email-message'),
     import('@/models/lender'),
     import('@/models/payment'),
     import('@/models/pre-approval-metric'),

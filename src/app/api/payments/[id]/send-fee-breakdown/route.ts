@@ -11,6 +11,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { generateFeeBreakdownEmailHTML, generateFeeBreakdownSubject } from '@/lib/email-templates/fee-breakdown';
 import { buildReferralLink } from '@/lib/referral-links';
+import { buildCcList, getReferralNotificationRecipients } from '@/lib/server/cc-recipients';
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 
@@ -31,7 +32,6 @@ interface PaymentLean {
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const DEFAULT_FEE_BREAKDOWN_CC = 'kristen.truong@americanhomeagents.com';
 
 export async function POST(
   request: NextRequest,
@@ -192,12 +192,10 @@ export async function POST(
 
     // Generate subject line with borrower's last name
     const subject = generateFeeBreakdownSubject(borrowerName);
-    const ccRecipients = Array.from(
-      new Set(
-        [DEFAULT_FEE_BREAKDOWN_CC, ...additionalCcRecipients]
-          .filter((email): email is string => Boolean(email))
-          .filter((email) => email.toLowerCase() !== agentEmail.toLowerCase())
-      )
+    const ccRecipients = buildCcList(
+      getReferralNotificationRecipients(),
+      additionalCcRecipients.filter((email): email is string => Boolean(email)),
+      agentEmail
     );
 
     // Read and prepare PDF attachments

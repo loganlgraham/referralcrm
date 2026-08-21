@@ -14,7 +14,7 @@ export default async function AgentsPage() {
   const isAdmin = session?.user?.role === 'admin';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {isAdmin ? <AdminAgentsView /> : <AgentsTable />}
     </div>
   );

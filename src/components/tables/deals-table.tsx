@@ -23,6 +23,11 @@ import { Pagination } from '@/components/tables/pagination';
 import { StatusPill } from '@/components/ui/status-pill';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip } from '@/components/ui/tooltip';
+import { PageHeader } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Input } from '@/components/ui/input';
+import { selectFieldClasses } from '@/components/ui/field-group';
+import { cn } from '@/lib/cn';
 import { fetcher } from '@/utils/fetcher';
 import { addYears } from 'date-fns';
 import { formatCurrency, formatDate } from '@/utils/formatters';
@@ -94,9 +99,9 @@ interface DealRow {
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-border bg-surface-raised px-5 py-4 shadow-sm">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-foreground">{value}</p>
+    <div className="rounded-card border border-border bg-surface-raised px-4 py-3 shadow-card">
+      <p className="text-eyebrow text-foreground-subtle">{label}</p>
+      <p className="text-numeric mt-1 text-2xl font-semibold tracking-[-0.02em] text-foreground">{value}</p>
     </div>
   );
 }
@@ -439,7 +444,9 @@ export function DealsTable() {
       <button
         type="button"
         onClick={() => toggleSort(sortKey)}
-        className="flex items-center gap-1 text-left"
+        // Buttons don't inherit text-transform, so the header's eyebrow casing
+        // has to be restated or sortable columns read title case.
+        className="flex items-center gap-1 text-left uppercase"
       >
         <span>{label}</span>
         <span className="text-[10px] text-foreground-subtle">{icon}</span>
@@ -656,7 +663,7 @@ export function DealsTable() {
   };
 
   const renderClosingDate = (value?: string | null) => {
-    return value ? formatDate(value) : '—';
+    return <span className="text-numeric">{value ? formatDate(value) : '—'}</span>;
   };
 
   const renderDealSide = (deal: DealRow) => {
@@ -683,38 +690,38 @@ export function DealsTable() {
   };
 
   const renderAdminTable = () => (
-    <div className="overflow-x-auto rounded-card border border-border bg-surface-raised shadow-sm">
+    <div className="overflow-x-auto rounded-card border border-border bg-surface-raised shadow-card">
       <table className="min-w-full divide-y divide-border">
         <thead className="sticky top-0 z-10 bg-surface-muted">
           <tr>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+            <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
               <SortableHeader label="Referral" sortKey="referral" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+            <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
               <SortableHeader label="Agent" sortKey="agent" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+            <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
               MC
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+            <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
               <SortableHeader label="Deal Side" sortKey="dealSide" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+            <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
               <SortableHeader label="Status" sortKey="status" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+            <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
               <SortableHeader label="Under contract date" sortKey="underContractDate" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+            <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
               <SortableHeader label="Closing date" sortKey="closingDate" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+            <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
               <SortableHeader label="Purchase Price" sortKey="purchasePrice" />
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold tracking-wide text-foreground-subtle">
+            <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
               Commission
             </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+            <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
               <SortableHeader label="Referral Fee" sortKey="referralFee" />
             </th>
           </tr>
@@ -732,25 +739,25 @@ export function DealsTable() {
 
             return (
               <tr key={deal._id} className="even:bg-surface-muted/50 hover:bg-surface-subtle">
-                <td className="px-4 py-3 text-sm text-foreground-muted">
+                <td className="px-4 py-1.5 text-sm text-foreground-muted">
                   <div className="flex flex-col">
                     {renderReferralLink(deal)}
-                    <span className="text-xs text-foreground-subtle">
+                    <span className="text-numeric text-xs text-foreground-subtle">
                       Loan # {deal.referral?.loanFileNumber || '—'}
                     </span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-sm text-foreground-muted">{renderAgentLink(deal)}</td>
-                <td className="px-4 py-3 text-sm text-foreground-muted">{renderMcLink(deal)}</td>
-                <td className="px-4 py-3 text-sm text-foreground-muted">{renderDealSide(deal)}</td>
-                <td className="px-4 py-3 text-sm text-foreground-muted">{renderStatusControl(deal)}</td>
-                <td className="px-4 py-3 text-sm text-foreground-muted">{renderClosingDate(deal.underContractDate)}</td>
-                <td className="px-4 py-3 text-sm text-foreground-muted">{renderClosingDate(deal.closingDate)}</td>
-                <td className="px-4 py-3 text-sm text-foreground-muted">
+                <td className="px-4 py-1.5 text-sm text-foreground-muted">{renderAgentLink(deal)}</td>
+                <td className="px-4 py-1.5 text-sm text-foreground-muted">{renderMcLink(deal)}</td>
+                <td className="px-4 py-1.5 text-sm text-foreground-muted">{renderDealSide(deal)}</td>
+                <td className="px-4 py-1.5 text-sm text-foreground-muted">{renderStatusControl(deal)}</td>
+                <td className="px-4 py-1.5 text-sm text-foreground-muted">{renderClosingDate(deal.underContractDate)}</td>
+                <td className="px-4 py-1.5 text-sm text-foreground-muted">{renderClosingDate(deal.closingDate)}</td>
+                <td className="text-numeric px-4 py-1.5 text-sm text-foreground-muted">
                   {isTerminated || purchasePrice <= 0 ? '—' : formatCurrency(purchasePrice)}
                 </td>
-                <td className="px-4 py-3 text-sm text-foreground-muted">{commissionDisplay}</td>
-                <td className="px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(referralFee)}</td>
+                <td className="text-numeric px-4 py-1.5 text-sm text-foreground-muted">{commissionDisplay}</td>
+                <td className="text-numeric px-4 py-1.5 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(referralFee)}</td>
               </tr>
             );
           })}
@@ -840,37 +847,37 @@ export function DealsTable() {
                 <div className="px-4 py-3 space-y-3">
                   <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                     <div className="space-y-1">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Status</p>
+                      <p className="text-eyebrow text-foreground-subtle">Status</p>
                       <div className="text-sm text-foreground">{renderStatusControl(deal)}</div>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Under contract date</p>
+                      <p className="text-eyebrow text-foreground-subtle">Under contract date</p>
                       <p className="text-sm text-foreground">{renderClosingDate(deal.underContractDate)}</p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Closing date</p>
+                      <p className="text-eyebrow text-foreground-subtle">Closing date</p>
                       <p className="text-sm text-foreground">{renderClosingDate(deal.closingDate)}</p>
                     </div>
                   </div>
 
                   {/* Financial section */}
-                  <div className="rounded-md bg-surface-muted p-3">
+                  <div className="rounded-lg bg-surface-muted p-3">
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                       <div className="space-y-0.5">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">Referral fee</p>
-                        <p className="text-sm font-semibold text-foreground">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</p>
+                        <p className="text-eyebrow text-foreground-subtle">Referral fee</p>
+                        <p className="text-numeric text-sm font-semibold text-foreground">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</p>
                       </div>
                       <div className="space-y-0.5">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">Fee paid</p>
-                        <p className="text-sm font-semibold text-foreground">{isTerminated ? '—' : formatCurrency(paidAmount)}</p>
+                        <p className="text-eyebrow text-foreground-subtle">Fee paid</p>
+                        <p className="text-numeric text-sm font-semibold text-foreground">{isTerminated ? '—' : formatCurrency(paidAmount)}</p>
                       </div>
                       <div className="space-y-0.5">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">Commission</p>
-                        <p className="text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(commission)}</p>
+                        <p className="text-eyebrow text-foreground-subtle">Commission</p>
+                        <p className="text-numeric text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(commission)}</p>
                       </div>
                       <div className="space-y-0.5">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-foreground-subtle">Net commission</p>
-                        <p className="text-sm font-semibold text-foreground">{isTerminated ? '—' : formatCurrency(netCommission)}</p>
+                        <p className="text-eyebrow text-foreground-subtle">Net commission</p>
+                        <p className="text-numeric text-sm font-semibold text-foreground">{isTerminated ? '—' : formatCurrency(netCommission)}</p>
                       </div>
                     </div>
                   </div>
@@ -882,7 +889,7 @@ export function DealsTable() {
                 className="space-y-3 rounded-card border border-border bg-surface-raised p-4 shadow-card"
               >
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Referral</p>
+                  <p className="text-eyebrow text-foreground-subtle">Referral</p>
                   <div className="text-sm text-foreground">
                     <div className="flex flex-col gap-0.5 break-words">
                       {renderReferralLink(deal)}
@@ -893,70 +900,70 @@ export function DealsTable() {
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Status</p>
+                  <p className="text-eyebrow text-foreground-subtle">Status</p>
                   <div className="text-sm text-foreground">{renderStatusControl(deal)}</div>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Under contract date</p>
+                  <p className="text-eyebrow text-foreground-subtle">Under contract date</p>
                   <p className="text-sm text-foreground">{renderClosingDate(deal.underContractDate)}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Closing date</p>
+                  <p className="text-eyebrow text-foreground-subtle">Closing date</p>
                   <p className="text-sm text-foreground">{renderClosingDate(deal.closingDate)}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Outcome</p>
+                  <p className="text-eyebrow text-foreground-subtle">Outcome</p>
                   <p className={`text-sm font-medium ${outcomeColor}`}>{outcome}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Referral fee</p>
-                  <p className="text-sm text-foreground">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</p>
+                  <p className="text-eyebrow text-foreground-subtle">Referral fee</p>
+                  <p className="text-numeric text-sm text-foreground">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Paid</p>
-                  <p className="text-sm text-foreground">{isTerminated ? '—' : formatCurrency(paidAmount)}</p>
+                  <p className="text-eyebrow text-foreground-subtle">Paid</p>
+                  <p className="text-numeric text-sm text-foreground">{isTerminated ? '—' : formatCurrency(paidAmount)}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Commission</p>
-                  <p className="text-sm text-foreground">{isTerminated ? '—' : formatCurrency(commission)}</p>
+                  <p className="text-eyebrow text-foreground-subtle">Commission</p>
+                  <p className="text-numeric text-sm text-foreground">{isTerminated ? '—' : formatCurrency(commission)}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Net commission</p>
-                  <p className="text-sm text-foreground">{isTerminated ? '—' : formatCurrency(netCommission)}</p>
+                  <p className="text-eyebrow text-foreground-subtle">Net commission</p>
+                  <p className="text-numeric text-sm text-foreground">{isTerminated ? '—' : formatCurrency(netCommission)}</p>
                 </div>
               </div>
             )
         )}
       </div>
-      <div className="hidden overflow-x-auto rounded-card border border-border bg-surface-raised shadow-sm md:block">
+      <div className="hidden overflow-x-auto rounded-card border border-border bg-surface-raised shadow-card md:block">
         <table className="min-w-full divide-y divide-border">
           <thead className="bg-surface-muted">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+              <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
                 <SortableHeader label="Referral" sortKey="referral" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+              <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
                 <SortableHeader label="Status" sortKey="status" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+              <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
                 <SortableHeader label="Under contract date" sortKey="underContractDate" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+              <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
                 <SortableHeader label="Closing date" sortKey="closingDate" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+              <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
                 <SortableHeader label="Outcome" sortKey="outcome" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+              <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
                 <SortableHeader label="Referral Fee" sortKey="referralFee" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+              <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
                 <SortableHeader label={isAgentView ? 'Referral Fee Paid' : 'Paid'} sortKey="receivedAmount" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+              <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
                 <SortableHeader label="Commission" sortKey="commission" />
               </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+              <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
                 <SortableHeader label="Net Commission" sortKey="netCommission" />
               </th>
             </tr>
@@ -977,10 +984,10 @@ export function DealsTable() {
                   <td className="px-4 py-3 text-sm text-foreground-muted">{renderClosingDate(deal.underContractDate)}</td>
                   <td className="px-4 py-3 text-sm text-foreground-muted">{renderClosingDate(deal.closingDate)}</td>
                   <td className={`px-4 py-3 text-sm font-medium ${outcomeColor}`}>{outcome}</td>
-                  <td className="px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</td>
-                  <td className="px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(paidAmount)}</td>
-                  <td className="px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(commission)}</td>
-                  <td className="px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(netCommission)}</td>
+                  <td className="text-numeric px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(referralFee || 0)}</td>
+                  <td className="text-numeric px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(paidAmount)}</td>
+                  <td className="text-numeric px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(commission)}</td>
+                  <td className="text-numeric px-4 py-3 text-sm text-foreground-muted">{isTerminated ? '—' : formatCurrency(netCommission)}</td>
                 </tr>
               )
             )}
@@ -992,31 +999,30 @@ export function DealsTable() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-5">
         <div className="h-8 w-48 animate-pulse rounded-lg bg-surface-subtle" />
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="h-20 animate-pulse rounded-xl bg-surface-subtle" />
-          <div className="h-20 animate-pulse rounded-xl bg-surface-subtle" />
+          <div className="h-20 animate-pulse rounded-card bg-surface-subtle" />
+          <div className="h-20 animate-pulse rounded-card bg-surface-subtle" />
         </div>
-        <div className="h-96 animate-pulse rounded-xl bg-surface-subtle" />
+        <div className="h-96 animate-pulse rounded-card bg-surface-subtle" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Deals</h1>
-          <p className="text-sm text-foreground-subtle">
-            {data
-              ? `${data.total} ${hasActiveFilters ? 'filtered ' : ''}deal${data.total !== 1 ? 's' : ''}`
-              : 'Loading...'}
-            {timeframe !== 'all' && isAdminView ? ` · ${timeframeLabel}` : ''}
-          </p>
-        </div>
-        {isAdminView && (
-          <div className="flex flex-col items-end gap-2">
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Pipeline"
+        title="Deals"
+        description={`${
+          data
+            ? `${data.total} ${hasActiveFilters ? 'filtered ' : ''}deal${data.total !== 1 ? 's' : ''}`
+            : 'Loading...'
+        }${timeframe !== 'all' && isAdminView ? ` · ${timeframeLabel}` : ''}`}
+        attention={isAdminView ? false : undefined}
+        actions={
+          isAdminView ? (
             <TimeframeDropdown
               timeframe={timeframe}
               rangeLabel={timeframeLabel}
@@ -1024,41 +1030,42 @@ export function DealsTable() {
               onPresetSelect={handlePresetSelect}
               onCustomRangeSelect={handleCustomRangeSelect}
               maxDate={maxSelectableDate}
+              eyebrowLabel
             />
-          </div>
-        )}
-      </div>
-      <div className="space-y-4 rounded-xl border border-border bg-surface-muted/50 p-4">
-        <label className="flex flex-col text-xs font-semibold text-foreground-muted">
-          Search
-          <input
+          ) : null
+        }
+      />
+      <div className="space-y-4 rounded-card border border-border bg-surface-raised p-4 shadow-card">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-eyebrow text-foreground-subtle">Search</span>
+          <Input
             type="text"
             value={searchTerm}
             onChange={(event) => handleSearchInput(event.target.value)}
-            className="mt-2 w-full rounded-lg border border-border bg-surface-raised px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-10"
             placeholder="Borrower, address, loan #, agent"
           />
         </label>
         {isAdminView && (
           <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div ref={statusMenuRef} className="relative min-w-0 flex flex-col text-xs font-semibold uppercase text-foreground-subtle">
-              Status
-              <div className="relative mt-1">
+            <div ref={statusMenuRef} className="relative flex min-w-0 flex-col gap-1.5">
+              <span className="text-eyebrow text-foreground-subtle">Status</span>
+              <div className="relative">
                 <button
                   type="button"
                   onClick={() => setIsStatusMenuOpen((open) => !open)}
                   disabled={isPending}
-                  className="flex w-full items-center justify-between gap-2 rounded border border-border bg-surface-raised px-3 py-2 text-left text-sm normal-case text-foreground-muted disabled:cursor-not-allowed disabled:opacity-50"
+                  className={cn(selectFieldClasses, 'flex items-center justify-between gap-2 text-left')}
                 >
                   <span className="truncate">
                     {statusFilters.length > 0
                       ? `${statusFilters.length} status${statusFilters.length > 1 ? 'es' : ''} selected`
                       : 'All statuses'}
                   </span>
-                  <span className="text-foreground-subtle">&#9662;</span>
+                  <span aria-hidden className="text-foreground-subtle">&#9662;</span>
                 </button>
                 {isStatusMenuOpen && (
-                  <div className="absolute left-0 right-0 z-30 mt-1 w-full rounded border border-border bg-surface-raised py-1 shadow-lg">
+                  <div className="absolute left-0 right-0 z-30 mt-1 w-full rounded-lg border border-border bg-surface-raised py-1 shadow-card">
                     <div className="mb-2 flex items-center justify-between px-3 pt-1 text-xs font-semibold text-foreground-muted">
                       <span>Filter statuses</span>
                       <div className="flex items-center gap-3">
@@ -1104,24 +1111,24 @@ export function DealsTable() {
                 )}
               </div>
             </div>
-            <div ref={designationMenuRef} className="relative min-w-0 flex flex-col text-xs font-semibold uppercase text-foreground-subtle">
-              Agent Designation
-              <div className="relative mt-1">
+            <div ref={designationMenuRef} className="relative flex min-w-0 flex-col gap-1.5">
+              <span className="text-eyebrow text-foreground-subtle">Agent designation</span>
+              <div className="relative">
                 <button
                   type="button"
                   onClick={() => setIsDesignationMenuOpen((open) => !open)}
                   disabled={isPending}
-                  className="flex w-full items-center justify-between gap-2 rounded border border-border bg-surface-raised px-3 py-2 text-left text-sm normal-case text-foreground-muted disabled:cursor-not-allowed disabled:opacity-50"
+                  className={cn(selectFieldClasses, 'flex items-center justify-between gap-2 text-left')}
                 >
                   <span className="truncate">
                     {designationFilters.length > 0
                       ? `${designationFilters.length} designation${designationFilters.length > 1 ? 's' : ''} selected`
                       : 'All designations'}
                   </span>
-                  <span className="text-foreground-subtle">&#9662;</span>
+                  <span aria-hidden className="text-foreground-subtle">&#9662;</span>
                 </button>
                 {isDesignationMenuOpen && (
-                  <div className="absolute left-0 right-0 z-30 mt-1 max-h-60 w-full overflow-y-auto rounded border border-border bg-surface-raised py-1 shadow-lg">
+                  <div className="absolute left-0 right-0 z-30 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-border bg-surface-raised py-1 shadow-card">
                     <div className="mb-2 flex items-center justify-between px-3 pt-1 text-xs font-semibold text-foreground-muted">
                       <span>Filter by designation</span>
                       <button
@@ -1158,14 +1165,14 @@ export function DealsTable() {
                 )}
               </div>
             </div>
-            <label className="flex min-w-0 flex-col text-xs font-semibold uppercase text-foreground-subtle">
-              Used Agent
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-eyebrow text-foreground-subtle">Used agent</span>
               <select
                 value={usedAgentFilter}
                 onChange={(event) =>
                   updateParams({ usedAgent: event.target.value as TriStateFilterValue })
                 }
-                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                className={selectFieldClasses}
                 disabled={isPending}
               >
                 <option value="all">All</option>
@@ -1173,14 +1180,14 @@ export function DealsTable() {
                 <option value="false">No</option>
               </select>
             </label>
-            <label className="flex min-w-0 flex-col text-xs font-semibold uppercase text-foreground-subtle">
-              Used AFC
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-eyebrow text-foreground-subtle">Used AFC</span>
               <select
                 value={usedAfcFilter}
                 onChange={(event) =>
                   updateParams({ usedAfc: event.target.value as TriStateFilterValue })
                 }
-                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                className={selectFieldClasses}
                 disabled={isPending}
               >
                 <option value="all">All</option>
@@ -1193,10 +1200,10 @@ export function DealsTable() {
       </div>
       {summarySection}
       {deals.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border-strong bg-surface-raised py-16">
-          <p className="text-lg font-medium text-foreground-subtle">No deals found</p>
-          <p className="mt-1 text-sm text-foreground-subtle">Try adjusting your filters or timeframe</p>
-        </div>
+        <EmptyState
+          title="No deals found"
+          description="Try adjusting your filters or timeframe."
+        />
       ) : (
         isAdminView ? renderAdminTable() : renderDefaultTable()
       )}

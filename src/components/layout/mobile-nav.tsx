@@ -9,6 +9,7 @@ import { signOut } from 'next-auth/react';
 
 import { navSections } from './sidebar';
 import { NotificationBell } from './notification-bell';
+import { IntroduceClientCta } from './introduce-client-cta';
 import { cn } from '@/lib/cn';
 import { Avatar } from '@/components/ui/avatar';
 import { BrandMark } from '@/components/ui/brand-mark';
@@ -116,6 +117,12 @@ export function MobileNav({ session }: MobileNavProps) {
               <XIcon className="h-5 w-5" />
             </button>
           </div>
+
+          {role !== 'admin' && role !== 'mc' && (
+            <div className="px-3 pt-4">
+              <IntroduceClientCta onNavigate={() => setOpen(false)} />
+            </div>
+          )}
 
           <nav className="flex-1 overflow-y-auto scrollbar-thin px-3 py-4">
             {sections.map((section) => (

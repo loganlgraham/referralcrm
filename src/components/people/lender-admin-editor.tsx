@@ -3,6 +3,9 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { FieldGrid, FieldLabel } from '@/components/ui/field-group';
+import { Input } from '@/components/ui/input';
 
 interface LenderAdminEditorProps {
   lender: {
@@ -89,69 +92,50 @@ export function LenderAdminEditor({ lender, className, onSaved }: LenderAdminEdi
 
   return (
     <form onSubmit={handleSubmit} className={className}>
-      <div className="grid gap-4 md:grid-cols-2">
-        <label className="text-xs font-semibold text-foreground-muted">
-          Name
-          <input
-            type="text"
-            value={form.name}
-            onChange={handleChange('name')}
-            className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
-            required
-            disabled={saving}
-          />
+      <FieldGrid>
+        <label className="block space-y-1.5">
+          <FieldLabel label="Name" />
+          <Input type="text" value={form.name} onChange={handleChange('name')} required disabled={saving} />
         </label>
-        <label className="text-xs font-semibold text-foreground-muted">
-          Email
-          <input
-            type="email"
-            value={form.email}
-            onChange={handleChange('email')}
-            className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
-            required
-            disabled={saving}
-          />
+        <label className="block space-y-1.5">
+          <FieldLabel label="Email" />
+          <Input type="email" value={form.email} onChange={handleChange('email')} required disabled={saving} />
         </label>
-        <label className="text-xs font-semibold text-foreground-muted">
-          Phone
-          <input
+        <label className="block space-y-1.5">
+          <FieldLabel label="Phone" />
+          <Input
             type="tel"
             value={form.phone}
             onChange={handleChange('phone')}
-            className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
             disabled={saving}
+            className="text-numeric"
           />
         </label>
-        <label className="text-xs font-semibold text-foreground-muted">
-          NMLS ID
-          <input
+        <label className="block space-y-1.5">
+          <FieldLabel label="NMLS ID" />
+          <Input
             type="text"
             value={form.nmlsId}
             onChange={handleChange('nmlsId')}
-            className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
             disabled={saving}
+            className="text-numeric"
           />
         </label>
-        <label className="text-xs font-semibold text-foreground-muted md:col-span-2">
-          Licensed states (comma separated)
-          <input
+        <label className="block space-y-1.5 sm:col-span-2">
+          <FieldLabel label="Licensed states" hint="comma separated" />
+          <Input
             type="text"
             value={form.licensedStates}
             onChange={handleChange('licensedStates')}
-            className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
             placeholder="CO, UT"
             disabled={saving}
           />
         </label>
-      </div>
+      </FieldGrid>
       <div className="mt-4 flex justify-end">
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
-        >
+        <Button type="submit" loading={saving}>
           {saving ? 'Saving…' : 'Save changes'}
-        </button>
+        </Button>
       </div>
     </form>
   );

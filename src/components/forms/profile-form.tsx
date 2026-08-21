@@ -7,6 +7,11 @@ import { differenceInYears, parseISO } from 'date-fns';
 
 import { fetcher } from '@/utils/fetcher';
 import { AGENT_LANGUAGE_OPTIONS, AGENT_SPECIALTY_OPTIONS } from '@/constants/agent-options';
+import { cn } from '@/lib/cn';
+import { PageHeader } from '@/components/ui/page-header';
+import { Button } from '@/components/ui/button';
+import { Input, Textarea } from '@/components/ui/input';
+import { FieldGrid, FieldGroup, FieldLabel, selectFieldClasses } from '@/components/ui/field-group';
 
 interface CoverageLocation {
   label: string;
@@ -332,7 +337,11 @@ export function ProfileForm() {
   };
 
   if (!data) {
-    return <div className="rounded-md bg-surface-raised p-6 shadow-sm">Loading profile…</div>;
+    return (
+      <div className="rounded-card border border-border bg-surface-raised p-4 text-sm text-foreground-muted shadow-card">
+        Loading profile…
+      </div>
+    );
   }
 
   const parseList = (value: string, transform?: (value: string) => string) =>
@@ -650,6 +659,17 @@ export function ProfileForm() {
     );
   };
 
+  const readOnlyValue = (value: string, numeric = false) => (
+    <p
+      className={cn(
+        'mt-1 text-base font-medium text-foreground',
+        numeric && 'text-numeric'
+      )}
+    >
+      {value}
+    </p>
+  );
+
   const readOnlyAgent = (profile: AgentProfileResponse) => {
     const yearsExperience = profile.experienceSince
       ? Math.max(differenceInYears(new Date(), new Date(profile.experienceSince)), 0)
@@ -660,255 +680,238 @@ export function ProfileForm() {
         : `${yearsExperience} ${yearsExperience === 1 ? 'year' : 'years'}`;
 
     return (
-      <div className="space-y-8">
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Contact & basics</h2>
-          <div className="grid gap-6 sm:grid-cols-2">
+      <div className="space-y-5">
+        <FieldGroup title="Contact & basics">
+          <FieldGrid className="gap-y-4">
             <div>
-              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Name</p>
+              <p className="text-xs text-foreground-subtle">Name</p>
               <p className="mt-1 text-base font-semibold text-foreground">{profile.name}</p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Email</p>
-              <p className="mt-1 text-base font-medium text-foreground">{profile.email}</p>
+              <p className="text-xs text-foreground-subtle">Email</p>
+              {readOnlyValue(profile.email)}
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Phone</p>
-              <p className="mt-1 text-base font-medium text-foreground">
-                {profile.phone ? profile.phone : 'Not provided'}
-              </p>
+              <p className="text-xs text-foreground-subtle">Phone</p>
+              {readOnlyValue(profile.phone || 'Not provided', Boolean(profile.phone))}
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Brokerage</p>
-              <p className="mt-1 text-base font-medium text-foreground">
-                {profile.brokerage ? profile.brokerage : 'Not provided'}
-              </p>
+              <p className="text-xs text-foreground-subtle">Brokerage</p>
+              {readOnlyValue(profile.brokerage || 'Not provided')}
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-foreground-subtle">License number</p>
-              <p className="mt-1 text-base font-medium text-foreground">
-                {profile.licenseNumber ? profile.licenseNumber : 'Not provided'}
-              </p>
+              <p className="text-xs text-foreground-subtle">License number</p>
+              {readOnlyValue(profile.licenseNumber || 'Not provided', Boolean(profile.licenseNumber))}
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Years of experience</p>
-              <p className="mt-1 text-base font-medium text-foreground">{yearsExperienceLabel}</p>
+              <p className="text-xs text-foreground-subtle">Years of experience</p>
+              {readOnlyValue(yearsExperienceLabel, yearsExperience !== null)}
             </div>
-          </div>
-        </section>
+          </FieldGrid>
+        </FieldGroup>
 
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Coverage & markets</h2>
-          <div className="grid gap-6 sm:grid-cols-2">
+        <FieldGroup title="Coverage & markets">
+          <FieldGrid className="gap-y-4">
             <div>
-              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Licensed states</p>
+              <p className="text-xs text-foreground-subtle">Licensed states</p>
               <div className="mt-2">{renderBadgeList(profile.statesLicensed?.map((state) => state.toUpperCase()))}</div>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Areas covered</p>
+              <p className="text-xs text-foreground-subtle">Areas covered</p>
               <div className="mt-2">
                 {renderBadgeList(profile.coverageLocations?.map((location) => location.label))}
               </div>
             </div>
             <div className="sm:col-span-2">
-              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Specialties</p>
+              <p className="text-xs text-foreground-subtle">Specialties</p>
               <div className="mt-2">{renderBadgeList(profile.specialties)}</div>
             </div>
             <div className="sm:col-span-2">
-              <p className="text-xs uppercase tracking-wide text-foreground-subtle">Languages</p>
+              <p className="text-xs text-foreground-subtle">Languages</p>
               <div className="mt-2">{renderBadgeList(profile.languages, 'No languages listed')}</div>
             </div>
-          </div>
-        </section>
+          </FieldGrid>
+        </FieldGroup>
       </div>
     );
   };
 
   const readOnlyMc = (profile: McProfileResponse) => (
-    <div className="space-y-8">
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Contact & basics</h2>
-        <div className="grid gap-6 sm:grid-cols-2">
+    <div className="space-y-5">
+      <FieldGroup title="Contact & basics">
+        <FieldGrid className="gap-y-4">
           <div>
-            <p className="text-xs uppercase tracking-wide text-foreground-subtle">Name</p>
+            <p className="text-xs text-foreground-subtle">Name</p>
             <p className="mt-1 text-base font-semibold text-foreground">{profile.name}</p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-foreground-subtle">Email</p>
-            <p className="mt-1 text-base font-medium text-foreground">{profile.email}</p>
+            <p className="text-xs text-foreground-subtle">Email</p>
+            {readOnlyValue(profile.email)}
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-foreground-subtle">Phone</p>
-            <p className="mt-1 text-base font-medium text-foreground">
-              {profile.phone ? profile.phone : 'Not provided'}
-            </p>
+            <p className="text-xs text-foreground-subtle">Phone</p>
+            {readOnlyValue(profile.phone || 'Not provided', Boolean(profile.phone))}
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-foreground-subtle">NMLS ID</p>
-            <p className="mt-1 text-base font-medium text-foreground">{profile.nmlsId || 'Not provided'}</p>
+            <p className="text-xs text-foreground-subtle">NMLS ID</p>
+            {readOnlyValue(profile.nmlsId || 'Not provided', Boolean(profile.nmlsId))}
           </div>
-        </div>
-      </section>
+        </FieldGrid>
+      </FieldGroup>
 
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Licensed states</h2>
-        <div>{renderBadgeList(profile.licensedStates?.map((state) => state.toUpperCase()))}</div>
-      </section>
+      <FieldGroup title="Licensed states">
+        {renderBadgeList(profile.licensedStates?.map((state) => state.toUpperCase()))}
+      </FieldGroup>
     </div>
   );
 
   const readOnlyAdmin = (profile: AdminProfileResponse) => (
-    <div className="space-y-4">
-      <div>
-        <p className="text-xs uppercase tracking-wide text-foreground-subtle">Name</p>
-        <p className="mt-1 text-base font-semibold text-foreground">{profile.name ?? 'Not provided'}</p>
-      </div>
-      <div>
-        <p className="text-xs uppercase tracking-wide text-foreground-subtle">Email</p>
-        <p className="mt-1 text-base font-medium text-foreground">{profile.email ?? 'Not provided'}</p>
-      </div>
-      <p className="text-sm text-foreground-subtle">Admin profiles are managed by the Referral CRM team.</p>
-    </div>
+    <FieldGroup
+      title="Contact & basics"
+      description="Admin profiles are managed by the Referral CRM team."
+    >
+      <FieldGrid className="gap-y-4">
+        <div>
+          <p className="text-xs text-foreground-subtle">Name</p>
+          <p className="mt-1 text-base font-semibold text-foreground">{profile.name ?? 'Not provided'}</p>
+        </div>
+        <div>
+          <p className="text-xs text-foreground-subtle">Email</p>
+          {readOnlyValue(profile.email ?? 'Not provided')}
+        </div>
+      </FieldGrid>
+    </FieldGroup>
   );
 
   const canEdit = data.role === 'agent' || data.role === 'mc';
 
   return (
-    <div className="rounded-card bg-surface-raised p-6 shadow-sm ring-1 ring-border">
-      <div className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">Referral CRM</p>
-          <h1 className="mt-2 text-2xl font-semibold text-foreground">My profile</h1>
-        </div>
-        {canEdit && !isEditing && (
-          <button
-            type="button"
-            onClick={() => setIsEditing(true)}
-            className="inline-flex items-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground-muted transition hover:border-border-strong hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            Edit profile
-          </button>
-        )}
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Account"
+        title="My profile"
+        description="Keep your contact details and coverage current so the team can route work to you."
+        actions={
+          canEdit && !isEditing ? (
+            <Button variant="secondary" onClick={() => setIsEditing(true)}>
+              Edit profile
+            </Button>
+          ) : null
+        }
+      />
 
       {isEditing ? (
-        <form onSubmit={handleSubmit} className="mt-6 space-y-8">
-          <section className="space-y-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Contact & basics</h2>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="text-sm font-semibold text-foreground-muted">
-                Name
-                <input
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <FieldGroup title="Contact & basics">
+            <FieldGrid>
+              <label className="block space-y-1.5">
+                <FieldLabel label="Name" />
+                <Input
                   type="text"
                   value={form.name}
                   onChange={handleChange('name')}
-                  className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
                   required
                   disabled={saving}
                 />
               </label>
-              <label className="text-sm font-semibold text-foreground-muted">
-                Email
-                <input
+              <label className="block space-y-1.5">
+                <FieldLabel label="Email" />
+                <Input
                   type="email"
                   value={form.email}
                   onChange={handleChange('email')}
-                  className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
                   required
                   disabled={saving}
                 />
               </label>
-              <label className="text-sm font-semibold text-foreground-muted">
-                Phone
-                <input
+              <label className="block space-y-1.5">
+                <FieldLabel label="Phone" />
+                <Input
                   type="tel"
                   value={form.phone}
                   onChange={handleChange('phone')}
-                  className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
-                  placeholder="(555) 123-4567"
+                  className="text-numeric"
+                  placeholder="555-123-4567"
                   disabled={saving}
                 />
               </label>
               {data.role === 'mc' && (
-                <label className="text-sm font-semibold text-foreground-muted">
-                  NMLS ID
-                  <input
+                <label className="block space-y-1.5">
+                  <FieldLabel label="NMLS ID" />
+                  <Input
                     type="text"
                     value={form.nmlsId}
                     onChange={handleChange('nmlsId')}
-                    className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
+                    className="text-numeric"
                     placeholder="123456"
                     disabled={saving}
                     required
                   />
                 </label>
               )}
-            </div>
-          </section>
+            </FieldGrid>
+          </FieldGroup>
 
           {data.role === 'agent' && (
             <>
-              <section className="space-y-4">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Coverage & licensing</h2>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm font-semibold text-foreground-muted">
-                    Brokerage
-                    <input
+              <FieldGroup title="Coverage & licensing">
+                <FieldGrid>
+                  <label className="block space-y-1.5">
+                    <FieldLabel label="Brokerage" />
+                    <Input
                       type="text"
                       value={form.brokerage}
                       onChange={handleChange('brokerage')}
-                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
                       disabled={saving}
                     />
                   </label>
-                  <label className="text-sm font-semibold text-foreground-muted">
-                    License number
-                    <input
+                  <label className="block space-y-1.5">
+                    <FieldLabel label="License number" />
+                    <Input
                       type="text"
                       value={form.licenseNumber}
                       onChange={handleChange('licenseNumber')}
-                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
+                      className="text-numeric"
                       disabled={saving}
                     />
                   </label>
-                  <label className="text-sm font-semibold text-foreground-muted sm:col-span-2">
-                    Licensed states
-                    <textarea
+                  <label className="block space-y-1.5 sm:col-span-2">
+                    <FieldLabel label="Licensed states" />
+                    <Textarea
                       value={form.states}
                       onChange={handleChange('states')}
-                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
                       placeholder="CO, UT, AZ"
                       rows={2}
                       disabled={saving}
                     />
                   </label>
-                  <div className="sm:col-span-2">
-                    <label htmlFor="profile-coverage-description" className="text-sm font-semibold text-foreground-muted">
-                      Areas covered
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label htmlFor="profile-coverage-description" className="block">
+                      <FieldLabel label="Areas covered" />
                     </label>
-                    <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-4">
-                      <textarea
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-4">
+                      <Textarea
                         id="profile-coverage-description"
                         value={form.coverageDescription}
                         onChange={handleChange('coverageDescription')}
-                        className="w-full flex-1 rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40 sm:min-h-[5.5rem]"
+                        className="flex-1 sm:min-h-[5.5rem]"
                         placeholder="Describe neighborhoods, cities, and counties you serve"
                         rows={3}
                         disabled={saving || isGeneratingCoverage || isPersistingCoverage}
                       />
-                      <button
-                        type="button"
+                      <Button
                         onClick={generateCoverageLocations}
-                        className="flex shrink-0 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-70 sm:h-full sm:min-h-[5.5rem] sm:self-stretch"
+                        className="shrink-0 sm:h-auto sm:min-h-[5.5rem] sm:self-stretch"
                         style={coverageButtonStyles}
-                        disabled={saving || isGeneratingCoverage || isPersistingCoverage}
+                        disabled={saving || isPersistingCoverage}
+                        loading={isGeneratingCoverage}
                       >
-                        {isGeneratingCoverage ? 'Generating…' : 'Save Service Areas'}
-                      </button>
+                        {isGeneratingCoverage ? 'Generating…' : 'Save service areas'}
+                      </Button>
                     </div>
                   </div>
                   <div className="sm:col-span-2">
-                    <p className="text-sm font-semibold text-foreground-muted">Cities, towns & counties</p>
+                    <p className="text-sm font-medium text-foreground">Cities, towns & counties</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {form.coverageLocations.length === 0 ? (
                         <p className="text-sm text-foreground-subtle">No coverage locations added yet.</p>
@@ -933,31 +936,31 @@ export function ProfileForm() {
                       )}
                     </div>
                   </div>
-                </div>
-              </section>
+                </FieldGrid>
+              </FieldGroup>
 
-              <section className="space-y-4">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">
-                  Experience, specialties & languages
-                </h2>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm font-semibold text-foreground-muted">
-                    Experience start date
-                    <input
+              <FieldGroup title="Experience, specialties & languages">
+                <FieldGrid>
+                  <label className="block space-y-1.5">
+                    <FieldLabel label="Experience start date" />
+                    <Input
                       type="date"
                       value={form.experienceSince}
                       onChange={handleChange('experienceSince')}
-                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
+                      className="text-numeric"
                       disabled={saving}
                     />
                   </label>
-                  <label className="text-sm font-semibold text-foreground-muted sm:col-span-2">
-                    Specialties
+                  <label className="block space-y-1.5 sm:col-span-2">
+                    <FieldLabel
+                      label="Specialties"
+                      hint="Hold Ctrl or Command to select several"
+                    />
                     <select
                       multiple
                       value={form.specialties}
                       onChange={handleSelectChange('specialties')}
-                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
+                      className={cn(selectFieldClasses, 'h-auto py-2')}
                       size={6}
                       disabled={saving}
                     >
@@ -967,17 +970,17 @@ export function ProfileForm() {
                         </option>
                       ))}
                     </select>
-                    <span className="mt-1 block text-xs font-normal text-foreground-subtle">
-                      Hold Ctrl (Windows) or Command (Mac) to select multiple specialties.
-                    </span>
                   </label>
-                  <label className="text-sm font-semibold text-foreground-muted sm:col-span-2">
-                    Languages spoken
+                  <label className="block space-y-1.5 sm:col-span-2">
+                    <FieldLabel
+                      label="Languages spoken"
+                      hint="Hold Ctrl or Command to select several"
+                    />
                     <select
                       multiple
                       value={form.languages}
                       onChange={handleSelectChange('languages')}
-                      className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
+                      className={cn(selectFieldClasses, 'h-auto py-2')}
                       size={5}
                       disabled={saving}
                     >
@@ -987,54 +990,39 @@ export function ProfileForm() {
                         </option>
                       ))}
                     </select>
-                    <span className="mt-1 block text-xs font-normal text-foreground-subtle">
-                      Hold Ctrl (Windows) or Command (Mac) to select multiple languages.
-                    </span>
                   </label>
-                </div>
-              </section>
-
+                </FieldGrid>
+              </FieldGroup>
             </>
           )}
 
           {data.role === 'mc' && (
-            <section className="space-y-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Licensed states</h2>
-              <textarea
+            <FieldGroup title="Licensed states">
+              <Textarea
                 value={form.states}
                 onChange={handleChange('states')}
-                className="mt-1 w-full rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
                 placeholder="CO, UT, AZ"
                 rows={2}
                 disabled={saving}
               />
-            </section>
+            </FieldGroup>
           )}
 
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
-            <button
-              type="button"
-              onClick={cancelEditing}
-              className="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground-muted transition hover:border-border-strong hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              disabled={saving}
-            >
+            <Button variant="secondary" onClick={cancelEditing} disabled={saving}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving || !canEdit}
-              className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
-            >
+            </Button>
+            <Button type="submit" disabled={!canEdit} loading={saving}>
               {saving ? 'Saving…' : 'Save profile'}
-            </button>
+            </Button>
           </div>
         </form>
       ) : (
-        <div className="mt-6">
+        <>
           {data.role === 'agent' && readOnlyAgent(data)}
           {data.role === 'mc' && readOnlyMc(data)}
           {data.role === 'admin' && readOnlyAdmin(data)}
-        </div>
+        </>
       )}
     </div>
   );

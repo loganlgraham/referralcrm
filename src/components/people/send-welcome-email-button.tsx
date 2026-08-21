@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { Button } from '@/components/ui/button';
+
 interface SendWelcomeEmailButtonProps {
   endpoint: string;
   recipientName: string;
@@ -37,17 +39,16 @@ export function SendWelcomeEmailButton({ endpoint, recipientEmail, recipientName
     }
   };
 
-  const disabled = sending || !recipientEmail;
-
   return (
-    <button
+    <Button
       type="button"
+      variant="secondary"
       onClick={handleSendWelcomeEmail}
-      disabled={disabled}
-      className="inline-flex items-center rounded-md border border-border bg-surface-raised px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-70"
+      disabled={!recipientEmail}
+      loading={sending}
     >
       {sending ? 'Sending…' : 'Send welcome email'}
-    </button>
+    </Button>
   );
 }
 

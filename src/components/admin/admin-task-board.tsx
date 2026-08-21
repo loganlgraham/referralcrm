@@ -175,9 +175,7 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
             <Separator orientation="vertical" className="h-6" />
 
             <ToolbarGroup role="group" aria-label="Group by">
-              <span className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
-                Group by
-              </span>
+              <span className="text-eyebrow text-foreground-subtle">Group by</span>
               <div className="flex items-center gap-0.5 rounded-lg bg-surface-muted p-0.5">
                 <SegmentedButton active={groupBy === 'due'} onClick={() => setGroupBy('due')}>
                   Due date
@@ -336,7 +334,7 @@ function StatButton({
       className={cn(
         'flex min-w-0 flex-col gap-2 rounded-card border px-4 py-3.5 text-left shadow-card transition hover:shadow-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         tone === 'danger' && value > 0
-          ? 'border-[hsl(var(--danger)/0.25)] bg-danger-soft/60'
+          ? 'border-[hsl(var(--signal)/0.3)] bg-signal-soft'
           : tone === 'warning' && value > 0
             ? 'border-[hsl(var(--warning)/0.25)] bg-warning-soft/60'
             : 'border-border bg-surface-raised',
@@ -344,12 +342,15 @@ function StatButton({
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
+        <span className="text-eyebrow flex items-center gap-1.5 text-foreground-subtle">
+          {tone === 'danger' && value > 0 ? (
+            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-signal" />
+          ) : null}
           {label}
         </span>
         <span className="shrink-0 text-foreground-subtle">{icon}</span>
       </div>
-      <span className="text-2xl font-semibold leading-none tracking-tight text-foreground">
+      <span className="text-numeric text-2xl font-semibold leading-none tracking-[-0.02em] text-foreground">
         {value}
       </span>
       <span className="text-xs text-foreground-muted">{hint}</span>

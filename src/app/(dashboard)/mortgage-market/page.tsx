@@ -6,7 +6,7 @@ import { MarketIntelWidget } from '@/components/mortgage/market-intel-widget';
 import { getCurrentSession } from '@/lib/auth';
 
 export const metadata: Metadata = {
-  title: 'Market Intelligence | Referral CRM',
+  title: 'Mortgage Market | Referral CRM',
 };
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ export default async function MortgageMarketPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <MarketIntelWidget />
       <AfcFollowUpCta notesHint="Introduced after reviewing current mortgage market conditions." />
     </div>

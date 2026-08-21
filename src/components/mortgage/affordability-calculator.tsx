@@ -1,7 +1,9 @@
 'use client';
 
-import { ChangeEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { ClipboardIcon, Share2Icon, AlertTriangleIcon, WalletIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState, type MutableRefObject } from 'react';
+import { AlertTriangleIcon } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 import {
   AffordabilityInput,
   DEFAULT_CONFORMING_LOAN_LIMIT,
@@ -15,6 +17,14 @@ import { LoanType, MortgageInputs, getLoanTypeInfo } from '@/utils/mortgage-calc
 import { AffordabilityResultCard } from './affordability-result-card';
 import { AffordabilityRatioMeters } from './affordability-ratio-meters';
 import { BuyingPowerLeversPanel } from './buying-power-levers';
+import {
+  CheckboxField,
+  FieldGrid,
+  FieldGroup,
+  NumberField,
+  SegmentedToggle,
+  SelectField,
+} from './fields';
 import { formatCurrency, formatSignedCurrency } from './formatters';
 import { useNumberInputs } from './use-number-inputs';
 
@@ -57,8 +67,13 @@ interface BorrowerState {
   conformingLoanLimit: number;
 }
 
-const INPUT_CLASS =
-  'w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring';
+const loanTypeOptions = [
+  { value: 'conventional', label: 'Conventional' },
+  { value: 'fha', label: 'FHA' },
+  { value: 'va', label: 'VA' },
+  { value: 'usda', label: 'USDA' },
+  { value: 'jumbo', label: 'Jumbo' },
+];
 
 function isLoanType(value: string | null): value is LoanType {
   return (
@@ -90,77 +105,10 @@ function defaultBorrowerState(loanType: LoanType): BorrowerState {
   };
 }
 
-interface NumberFieldProps {
-  label: string;
-  hint?: string;
-  value: string;
-  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  onBlur: () => void;
-  footnote?: string;
-  decimal?: boolean;
-  disabled?: boolean;
-}
-
-function NumberField({
-  label,
-  hint,
-  value,
-  onChange,
-  onBlur,
-  footnote,
-  decimal,
-  disabled,
-}: NumberFieldProps) {
-  return (
-    <label className={`space-y-2 ${disabled ? 'opacity-50' : ''}`}>
-      <div className="flex items-center justify-between gap-2 text-sm font-medium text-foreground-muted">
-        {label}
-        {hint ? <span className="text-xs text-foreground-subtle">{hint}</span> : null}
-      </div>
-      <input
-        type="text"
-        inputMode={decimal ? 'decimal' : 'numeric'}
-        value={value}
-        onChange={onChange}
-        onBlur={onBlur}
-        disabled={disabled}
-        className={INPUT_CLASS}
-      />
-      {footnote ? <p className="text-xs text-foreground-subtle">{footnote}</p> : null}
-    </label>
-  );
-}
-
-interface SegmentedToggleProps {
-  options: { value: string; label: string }[];
-  value: string;
-  onChange: (value: string) => void;
-  ariaLabel: string;
-}
-
-function SegmentedToggle({ options, value, onChange, ariaLabel }: SegmentedToggleProps) {
-  return (
-    <div
-      role="group"
-      aria-label={ariaLabel}
-      className="inline-flex rounded-md border border-border p-0.5"
-    >
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => onChange(option.value)}
-          className={`rounded px-2.5 py-1 text-xs font-medium ${
-            value === option.value
-              ? 'bg-primary text-white'
-              : 'text-foreground-muted hover:text-foreground'
-          }`}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
+/** Copy and share are driven from the page header, which owns those buttons. */
+export interface AffordabilityActions {
+  copySummary: () => void;
+  shareLink: () => void;
 }
 
 interface AffordabilityCalculatorProps {
@@ -168,18 +116,19 @@ interface AffordabilityCalculatorProps {
   loanInputs: MortgageInputs;
   onLoanInputsChange: (patch: Partial<MortgageInputs>) => void;
   onUseResults?: (patch: Partial<MortgageInputs>) => void;
+  actionsRef?: MutableRefObject<AffordabilityActions | null>;
 }
 
 export function AffordabilityCalculator({
   loanInputs,
   onLoanInputsChange,
   onUseResults,
+  actionsRef,
 }: AffordabilityCalculatorProps) {
   const loanType = loanInputs.loanType ?? 'conventional';
 
   const [borrower, setBorrower] = useState<BorrowerState>(() => defaultBorrowerState(loanType));
   const [capsProgram, setCapsProgram] = useState<LoanType>(loanType);
-  const [copyMessage, setCopyMessage] = useState<string | null>(null);
 
   // Switching programs swaps in that program's qualifying limits.
   if (capsProgram !== loanType) {
@@ -304,11 +253,6 @@ export function AffordabilityCalculator({
   const loanTypeInfo = getLoanTypeInfo(loanType);
   const showMiRateField = loanType === 'conventional' || loanType === 'fha';
 
-  const flashCopyMessage = (message: string) => {
-    setCopyMessage(message);
-    setTimeout(() => setCopyMessage(null), 2_000);
-  };
-
   const handleUseResults = () => {
     onUseResults?.({
       purchasePrice: result.maxPurchasePrice,
@@ -364,7 +308,7 @@ export function AffordabilityCalculator({
     );
 
     navigator.clipboard.writeText(lines.join('\n'));
-    flashCopyMessage('Buyer summary copied.');
+    toast.success('Buyer summary copied');
   };
 
   const handleShareLink = () => {
@@ -398,237 +342,226 @@ export function AffordabilityCalculator({
     navigator.clipboard.writeText(
       `${window.location.origin}${window.location.pathname}?${params.toString()}`
     );
-    flashCopyMessage('Share link copied.');
+    toast.success('Share link copied', {
+      description: 'Anyone you send it to opens this exact scenario.',
+    });
   };
 
+  // No dependency array: the page header calls these on demand, so they must
+  // always close over the current borrower and loan values.
+  useEffect(() => {
+    if (!actionsRef) return undefined;
+    actionsRef.current = { copySummary: handleCopySummary, shareLink: handleShareLink };
+    return () => {
+      actionsRef.current = null;
+    };
+  });
+
   return (
-    <div className="rounded-lg border border-border p-4">
-      <div className="flex items-start gap-3">
-        <div className="rounded-lg bg-primary/10 p-2 text-primary">
-          <WalletIcon className="h-5 w-5" />
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold text-foreground">What can they buy?</h2>
-          <p className="text-sm text-foreground-muted">
-            Works the way a pre-qualification does: income and debts set the payment they can carry,
-            then cash on hand and program rules cap the price.
-          </p>
-        </div>
-      </div>
+    <div className="grid gap-5 lg:grid-cols-2">
+      <div className="space-y-4">
+        <FieldGroup
+          title="Income & debts"
+          action={
+            <SegmentedToggle<IncomeMode>
+              ariaLabel="Income period"
+              value={borrower.incomeMode}
+              onChange={(incomeMode) =>
+                setBorrower((prev) => {
+                  if (incomeMode === prev.incomeMode) return prev;
+                  return {
+                    ...prev,
+                    incomeMode,
+                    incomeValue:
+                      incomeMode === 'annual' ? prev.incomeValue * 12 : prev.incomeValue / 12,
+                  };
+                })
+              }
+              options={[
+                { value: 'monthly', label: 'Monthly' },
+                { value: 'annual', label: 'Annual' },
+              ]}
+            />
+          }
+        >
+          <FieldGrid>
+            <NumberField
+              label="Gross income"
+              prefix="$"
+              hint={borrower.incomeMode === 'annual' ? 'per year' : 'per month'}
+              value={borrowerInputs.format('incomeValue', borrower.incomeValue)}
+              onChange={borrowerInputs.onChange('incomeValue')}
+              onBlur={borrowerInputs.onBlur('incomeValue')}
+              footnote={
+                borrower.incomeMode === 'annual'
+                  ? `${formatCurrency(grossMonthlyIncome)} per month`
+                  : 'Before taxes, all borrowers'
+              }
+            />
+            <NumberField
+              label="Monthly debts"
+              prefix="$"
+              hint="per month"
+              value={borrowerInputs.format('monthlyDebts', borrower.monthlyDebts)}
+              onChange={borrowerInputs.onChange('monthlyDebts')}
+              onBlur={borrowerInputs.onBlur('monthlyDebts')}
+              footnote="Cars, cards, student loans"
+            />
+          </FieldGrid>
+        </FieldGroup>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <div className="space-y-4">
-          <div className="rounded-lg border border-border p-4">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-foreground">Income &amp; debts</h3>
-              <SegmentedToggle
-                ariaLabel="Income period"
-                value={borrower.incomeMode}
-                onChange={(value) =>
-                  setBorrower((prev) => {
-                    const incomeMode = value as IncomeMode;
-                    if (incomeMode === prev.incomeMode) return prev;
-                    return {
-                      ...prev,
-                      incomeMode,
-                      incomeValue:
-                        incomeMode === 'annual' ? prev.incomeValue * 12 : prev.incomeValue / 12,
-                    };
-                  })
-                }
-                options={[
-                  { value: 'monthly', label: 'Monthly' },
-                  { value: 'annual', label: 'Annual' },
-                ]}
-              />
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-4">
+        <FieldGroup
+          title="Down payment & cash"
+          action={
+            <SegmentedToggle<DownPaymentMode>
+              ariaLabel="Down payment entry"
+              value={borrower.downPaymentMode}
+              onChange={(downPaymentMode) =>
+                setBorrower((prev) => ({ ...prev, downPaymentMode }))
+              }
+              options={[
+                { value: 'amount', label: 'Dollars' },
+                { value: 'percent', label: 'Percent' },
+              ]}
+            />
+          }
+        >
+          <FieldGrid>
+            {borrower.downPaymentMode === 'amount' ? (
               <NumberField
-                label="Gross income"
-                hint={borrower.incomeMode === 'annual' ? 'Per year' : 'Per month'}
-                value={borrowerInputs.format('incomeValue', borrower.incomeValue)}
-                onChange={borrowerInputs.onChange('incomeValue')}
-                onBlur={borrowerInputs.onBlur('incomeValue')}
-                footnote={
-                  borrower.incomeMode === 'annual'
-                    ? `${formatCurrency(grossMonthlyIncome)} per month`
-                    : 'Before taxes, all borrowers combined'
-                }
+                label="Down payment"
+                prefix="$"
+                value={borrowerInputs.format('downPaymentAmount', borrower.downPaymentAmount)}
+                onChange={borrowerInputs.onChange('downPaymentAmount')}
+                onBlur={borrowerInputs.onBlur('downPaymentAmount')}
+                footnote={`${result.downPaymentPercent.toFixed(1)}% at the max price`}
               />
+            ) : (
               <NumberField
-                label="Monthly debt payments"
-                hint="Per month"
-                value={borrowerInputs.format('monthlyDebts', borrower.monthlyDebts)}
-                onChange={borrowerInputs.onChange('monthlyDebts')}
-                onBlur={borrowerInputs.onBlur('monthlyDebts')}
-                footnote="Car loans, credit card minimums, student loans"
-              />
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-border p-4">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-foreground">Down payment &amp; cash</h3>
-              <SegmentedToggle
-                ariaLabel="Down payment entry"
-                value={borrower.downPaymentMode}
-                onChange={(value) =>
-                  setBorrower((prev) => ({ ...prev, downPaymentMode: value as DownPaymentMode }))
-                }
-                options={[
-                  { value: 'amount', label: 'Dollars' },
-                  { value: 'percent', label: 'Percent' },
-                ]}
-              />
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-4">
-              {borrower.downPaymentMode === 'amount' ? (
-                <NumberField
-                  label="Down payment"
-                  hint="USD"
-                  value={borrowerInputs.format('downPaymentAmount', borrower.downPaymentAmount)}
-                  onChange={borrowerInputs.onChange('downPaymentAmount')}
-                  onBlur={borrowerInputs.onBlur('downPaymentAmount')}
-                  footnote={`${result.downPaymentPercent.toFixed(1)}% at the max price`}
-                />
-              ) : (
-                <NumberField
-                  label="Down payment"
-                  hint="% of price"
-                  decimal
-                  value={borrowerInputs.format('downPaymentPercent', borrower.downPaymentPercent)}
-                  onChange={borrowerInputs.onChange('downPaymentPercent')}
-                  onBlur={borrowerInputs.onBlur('downPaymentPercent')}
-                  footnote={`${formatCurrency(result.downPaymentAmount)} at the max price`}
-                />
-              )}
-              <NumberField
-                label="Closing costs"
-                hint="% of price"
+                label="Down payment"
+                suffix="%"
                 decimal
-                value={borrowerInputs.format('closingCostPercent', borrower.closingCostPercent)}
-                onChange={borrowerInputs.onChange('closingCostPercent')}
-                onBlur={borrowerInputs.onBlur('closingCostPercent')}
-                footnote={`${formatCurrency(result.closingCosts)} at the max price`}
+                value={borrowerInputs.format('downPaymentPercent', borrower.downPaymentPercent)}
+                onChange={borrowerInputs.onChange('downPaymentPercent')}
+                onBlur={borrowerInputs.onBlur('downPaymentPercent')}
+                footnote={`${formatCurrency(result.downPaymentAmount)} at the max price`}
               />
-            </div>
-            <label className="mt-4 flex items-center gap-2 text-sm font-medium text-foreground-muted">
-              <input
-                type="checkbox"
-                checked={borrower.useCashLimit}
-                onChange={(event) =>
-                  setBorrower((prev) => ({ ...prev, useCashLimit: event.target.checked }))
-                }
-                className="h-4 w-4 rounded border-border text-primary focus:ring-ring"
-              />
-              Cap the price by the cash they actually have
-            </label>
+            )}
+            <NumberField
+              label="Closing costs"
+              suffix="%"
+              hint="of price"
+              decimal
+              value={borrowerInputs.format('closingCostPercent', borrower.closingCostPercent)}
+              onChange={borrowerInputs.onChange('closingCostPercent')}
+              onBlur={borrowerInputs.onBlur('closingCostPercent')}
+              footnote={`${formatCurrency(result.closingCosts)} at the max price`}
+            />
+          </FieldGrid>
+          <div className="mt-3 space-y-3 border-t border-border pt-3">
+            <CheckboxField
+              label="Cap the price by the cash they actually have"
+              checked={borrower.useCashLimit}
+              onChange={(useCashLimit) => setBorrower((prev) => ({ ...prev, useCashLimit }))}
+            />
             {borrower.useCashLimit ? (
-              <div className="mt-3">
-                <NumberField
-                  label="Total cash available"
-                  hint="USD"
-                  value={borrowerInputs.format('cashOnHand', borrower.cashOnHand)}
-                  onChange={borrowerInputs.onChange('cashOnHand')}
-                  onBlur={borrowerInputs.onBlur('cashOnHand')}
-                  footnote="Must cover the down payment and closing costs together"
-                />
-              </div>
+              <NumberField
+                label="Total cash available"
+                prefix="$"
+                value={borrowerInputs.format('cashOnHand', borrower.cashOnHand)}
+                onChange={borrowerInputs.onChange('cashOnHand')}
+                onBlur={borrowerInputs.onBlur('cashOnHand')}
+                footnote="Must cover the down payment and closing costs together"
+              />
             ) : null}
           </div>
+        </FieldGroup>
 
-          <div className="rounded-lg border border-border p-4">
-            <h3 className="text-sm font-semibold text-foreground">Comfort check</h3>
-            <label className="mt-3 flex items-center gap-2 text-sm font-medium text-foreground-muted">
-              <input
-                type="checkbox"
-                checked={borrower.useComfortBudget}
-                onChange={(event) =>
-                  setBorrower((prev) => ({ ...prev, useComfortBudget: event.target.checked }))
-                }
-                className="h-4 w-4 rounded border-border text-primary focus:ring-ring"
-              />
-              Also cap the payment at what they say they want to spend
-            </label>
+        <FieldGroup title="Comfort check">
+          <div className="space-y-3">
+            <CheckboxField
+              label="Also cap the payment at what they want to spend"
+              checked={borrower.useComfortBudget}
+              onChange={(useComfortBudget) =>
+                setBorrower((prev) => ({ ...prev, useComfortBudget }))
+              }
+            />
             {borrower.useComfortBudget ? (
-              <div className="mt-3">
-                <NumberField
-                  label="Target monthly payment"
-                  hint="Per month"
-                  value={borrowerInputs.format('comfortBudget', borrower.comfortBudget)}
-                  onChange={borrowerInputs.onChange('comfortBudget')}
-                  onBlur={borrowerInputs.onBlur('comfortBudget')}
-                  footnote="Covers the full payment, including taxes, insurance, HOA, and mortgage insurance"
-                />
-              </div>
+              <NumberField
+                label="Target monthly payment"
+                prefix="$"
+                hint="per month"
+                value={borrowerInputs.format('comfortBudget', borrower.comfortBudget)}
+                onChange={borrowerInputs.onChange('comfortBudget')}
+                onBlur={borrowerInputs.onBlur('comfortBudget')}
+                footnote="Covers taxes, insurance, HOA, and mortgage insurance too"
+              />
             ) : (
-              <p className="mt-2 text-xs text-foreground-subtle">
+              <p className="text-xs text-foreground-subtle">
                 Turn this on to compare what they qualify for against what they want to pay.
               </p>
             )}
           </div>
+        </FieldGroup>
 
-          <div className="rounded-lg border border-border p-4">
-            <h3 className="text-sm font-semibold text-foreground">Loan assumptions</h3>
-            <p className="mt-1 text-xs text-foreground-subtle">
-              Shared with the Calculator tab, so both tabs stay on the same scenario.
-            </p>
-            <label className="mt-3 block space-y-2">
-              <div className="text-sm font-medium text-foreground-muted">Loan program</div>
-              <select
-                value={loanType}
-                onChange={(event) =>
-                  onLoanInputsChange({ loanType: event.target.value as LoanType })
-                }
-                className={INPUT_CLASS}
-              >
-                <option value="conventional">Conventional</option>
-                <option value="fha">FHA</option>
-                <option value="va">VA</option>
-                <option value="usda">USDA</option>
-                <option value="jumbo">Jumbo</option>
-              </select>
-              <p className="text-xs text-foreground-subtle">
-                {loanTypeInfo.description}
-                {loanTypeInfo.minDownPaymentPercent > 0
-                  ? ` (Min ${loanTypeInfo.minDownPaymentPercent}% down)`
-                  : ''}
-              </p>
-            </label>
-            <div className="mt-3 grid grid-cols-2 gap-4">
+        <FieldGroup
+          title="Loan assumptions"
+          description="Shared with the Calculator tab, so both tabs stay on one scenario."
+        >
+          <div className="space-y-3">
+            <SelectField
+              label="Loan program"
+              value={loanType}
+              onChange={(value) => onLoanInputsChange({ loanType: value as LoanType })}
+              options={loanTypeOptions}
+              footnote={
+                loanTypeInfo.minDownPaymentPercent > 0
+                  ? `${loanTypeInfo.description} (minimum ${loanTypeInfo.minDownPaymentPercent}% down)`
+                  : loanTypeInfo.description
+              }
+            />
+            <FieldGrid>
               <NumberField
                 label="Interest rate"
-                hint="Annual %"
+                suffix="%"
                 decimal
+                reserveFootnote={false}
                 value={loanFields.format('interestRate', loanInputs.interestRate)}
                 onChange={loanFields.onChange('interestRate')}
                 onBlur={loanFields.onBlur('interestRate')}
               />
               <NumberField
                 label="Term"
-                hint="Years"
+                suffix="yrs"
+                reserveFootnote={false}
                 value={loanFields.format('termYears', loanInputs.termYears)}
                 onChange={loanFields.onChange('termYears')}
                 onBlur={loanFields.onBlur('termYears')}
               />
               <NumberField
                 label="Property tax rate"
-                hint="% / year"
+                suffix="%"
+                hint="per year"
                 decimal
+                reserveFootnote={false}
                 value={loanFields.format('propertyTaxRate', loanInputs.propertyTaxRate)}
                 onChange={loanFields.onChange('propertyTaxRate')}
                 onBlur={loanFields.onBlur('propertyTaxRate')}
               />
               <NumberField
                 label="Homeowners insurance"
-                hint="Monthly"
+                prefix="$"
+                hint="per month"
+                reserveFootnote={false}
                 value={loanFields.format('insuranceMonthly', loanInputs.insuranceMonthly)}
                 onChange={loanFields.onChange('insuranceMonthly')}
                 onBlur={loanFields.onBlur('insuranceMonthly')}
               />
               <NumberField
                 label="HOA dues"
-                hint="Monthly"
+                prefix="$"
+                hint="per month"
+                reserveFootnote={false}
                 value={loanFields.format('hoaMonthly', loanInputs.hoaMonthly)}
                 onChange={loanFields.onChange('hoaMonthly')}
                 onBlur={loanFields.onBlur('hoaMonthly')}
@@ -636,136 +569,105 @@ export function AffordabilityCalculator({
               {showMiRateField ? (
                 <NumberField
                   label={loanType === 'fha' ? 'Annual MIP rate' : 'PMI rate'}
-                  hint="Annual %"
+                  suffix="%"
+                  hint="per year"
                   decimal
+                  reserveFootnote={false}
                   value={loanFields.format('pmiRate', loanInputs.pmiRate)}
                   onChange={loanFields.onChange('pmiRate')}
                   onBlur={loanFields.onBlur('pmiRate')}
                 />
               ) : null}
-            </div>
+            </FieldGrid>
           </div>
+        </FieldGroup>
 
-          <details className="rounded-lg border border-border p-4">
-            <summary className="cursor-pointer text-sm font-semibold text-foreground">
-              Qualifying limits
-            </summary>
-            <p className="mt-2 text-xs text-foreground-subtle">
-              {result.guidelines.guidelineNote}
-            </p>
-            <div className="mt-3 grid grid-cols-2 gap-4">
-              {borrower.frontEndCapPercent === null ? (
-                <div className="text-xs text-foreground-subtle">
-                  {result.guidelines.name} does not use a housing payment limit.
-                </div>
-              ) : (
-                <NumberField
-                  label="Housing payment cap"
-                  hint="% of income"
-                  decimal
-                  value={borrowerInputs.format('frontEndCapPercent', borrower.frontEndCapPercent)}
-                  onChange={borrowerInputs.onChange('frontEndCapPercent')}
-                  onBlur={borrowerInputs.onBlur('frontEndCapPercent')}
-                />
-              )}
+        <details className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+          <summary className="cursor-pointer text-eyebrow text-foreground-subtle">
+            Qualifying limits
+          </summary>
+          <p className="mt-2 text-xs text-foreground-muted">{result.guidelines.guidelineNote}</p>
+          <FieldGrid className="mt-3">
+            {borrower.frontEndCapPercent === null ? (
+              <p className="text-xs text-foreground-subtle">
+                {result.guidelines.name} does not use a housing payment limit.
+              </p>
+            ) : (
               <NumberField
-                label="Total debt cap"
-                hint="% of income"
+                label="Housing payment cap"
+                suffix="%"
+                hint="of income"
                 decimal
-                value={borrowerInputs.format('backEndCapPercent', borrower.backEndCapPercent)}
-                onChange={borrowerInputs.onChange('backEndCapPercent')}
-                onBlur={borrowerInputs.onBlur('backEndCapPercent')}
+                reserveFootnote={false}
+                value={borrowerInputs.format('frontEndCapPercent', borrower.frontEndCapPercent)}
+                onChange={borrowerInputs.onChange('frontEndCapPercent')}
+                onBlur={borrowerInputs.onBlur('frontEndCapPercent')}
               />
-              <NumberField
-                label="Conforming loan limit"
-                hint="USD"
-                value={borrowerInputs.format(
-                  'conformingLoanLimit',
-                  borrower.conformingLoanLimit
-                )}
-                onChange={borrowerInputs.onChange('conformingLoanLimit')}
-                onBlur={borrowerInputs.onBlur('conformingLoanLimit')}
-                footnote="Update for high-cost counties"
-              />
-            </div>
-          </details>
-        </div>
+            )}
+            <NumberField
+              label="Total debt cap"
+              suffix="%"
+              hint="of income"
+              decimal
+              reserveFootnote={false}
+              value={borrowerInputs.format('backEndCapPercent', borrower.backEndCapPercent)}
+              onChange={borrowerInputs.onChange('backEndCapPercent')}
+              onBlur={borrowerInputs.onBlur('backEndCapPercent')}
+            />
+            <NumberField
+              label="Conforming loan limit"
+              prefix="$"
+              value={borrowerInputs.format('conformingLoanLimit', borrower.conformingLoanLimit)}
+              onChange={borrowerInputs.onChange('conformingLoanLimit')}
+              onBlur={borrowerInputs.onBlur('conformingLoanLimit')}
+              footnote="Update for high-cost counties"
+            />
+          </FieldGrid>
+        </details>
+      </div>
 
-        <div className="space-y-4">
-          <AffordabilityResultCard
-            result={result}
-            loanType={loanType}
-            bindingLabel={bindingLabel}
-          />
+      <div className="space-y-4">
+        <AffordabilityResultCard result={result} loanType={loanType} bindingLabel={bindingLabel} />
 
-          <AffordabilityRatioMeters
-            grossMonthlyIncome={grossMonthlyIncome}
-            frontEndRatio={result.frontEndRatio}
-            backEndRatio={result.backEndRatio}
-            frontEndCapPercent={borrower.frontEndCapPercent}
-            backEndCapPercent={borrower.backEndCapPercent}
-            frontEndHeadroom={result.frontEndHeadroom}
-            backEndHeadroom={result.backEndHeadroom}
-            guidelineNote={result.guidelines.guidelineNote}
-          />
+        {onUseResults ? (
+          <Button variant="secondary" className="w-full" onClick={handleUseResults}>
+            Use this price in the calculator
+          </Button>
+        ) : null}
 
-          {result.warnings.length > 0 ? (
-            <ul className="space-y-2">
-              {result.warnings.map((warning) => (
-                <li
-                  key={warning.id}
-                  className={`flex gap-2 rounded-md px-3 py-2 text-sm ${
-                    warning.severity === 'warning'
-                      ? 'bg-warning-soft text-warning'
-                      : 'bg-surface-muted text-foreground-muted'
-                  }`}
-                >
-                  <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>{warning.message}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
+        <AffordabilityRatioMeters
+          grossMonthlyIncome={grossMonthlyIncome}
+          frontEndRatio={result.frontEndRatio}
+          backEndRatio={result.backEndRatio}
+          frontEndCapPercent={borrower.frontEndCapPercent}
+          backEndCapPercent={borrower.backEndCapPercent}
+          frontEndHeadroom={result.frontEndHeadroom}
+          backEndHeadroom={result.backEndHeadroom}
+          guidelineNote={result.guidelines.guidelineNote}
+        />
 
-          <BuyingPowerLeversPanel
-            levers={result.levers}
-            bindingConstraint={result.bindingConstraint}
-          />
-
-          {copyMessage ? (
-            <div className="rounded-md bg-success-soft px-3 py-2 text-sm text-success">
-              {copyMessage}
-            </div>
-          ) : null}
-
-          <div className="flex flex-wrap gap-2">
-            {onUseResults ? (
-              <button
-                type="button"
-                onClick={handleUseResults}
-                className="flex-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+        {result.warnings.length > 0 ? (
+          <ul className="space-y-2">
+            {result.warnings.map((warning) => (
+              <li
+                key={warning.id}
+                className={`flex gap-2 rounded-lg px-3 py-2 text-sm ${
+                  warning.severity === 'warning'
+                    ? 'bg-warning-soft text-[hsl(var(--warning))]'
+                    : 'bg-surface-muted text-foreground-muted'
+                }`}
               >
-                Use this price in the Calculator
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={handleCopySummary}
-              className="inline-flex items-center gap-2 rounded-md border border-border-strong bg-surface-raised px-3 py-2 text-sm font-medium text-foreground-muted hover:bg-surface-muted"
-            >
-              <ClipboardIcon className="h-4 w-4" />
-              Copy buyer summary
-            </button>
-            <button
-              type="button"
-              onClick={handleShareLink}
-              className="inline-flex items-center gap-2 rounded-md border border-border-strong bg-surface-raised px-3 py-2 text-sm font-medium text-foreground-muted hover:bg-surface-muted"
-            >
-              <Share2Icon className="h-4 w-4" />
-              Share link
-            </button>
-          </div>
-        </div>
+                <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                <span>{warning.message}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <BuyingPowerLeversPanel
+          levers={result.levers}
+          bindingConstraint={result.bindingConstraint}
+        />
       </div>
     </div>
   );

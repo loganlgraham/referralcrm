@@ -8,6 +8,12 @@ import useSWR from 'swr';
 import { toast } from 'sonner';
 import { Pagination } from '@/components/tables/pagination';
 import { fetcher } from '@/utils/fetcher';
+import { cn } from '@/lib/cn';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { EmptyState } from '@/components/ui/empty-state';
+import { FieldGrid, FieldLabel, selectFieldClasses } from '@/components/ui/field-group';
+import { TBody, THead, Table, TableScroll, TableShell, Td, Th, Tr } from '@/components/ui/table-shell';
 
 interface LenderRow {
   _id: string;
@@ -46,6 +52,72 @@ interface LendersResponse {
   total: number;
   page: number;
   pageSize: number;
+}
+
+type LenderForm = {
+  name: string;
+  email: string;
+  phone: string;
+  nmlsId: string;
+  licensedStates: string;
+};
+
+function LenderFormFields({
+  form,
+  handleChange,
+  saving,
+}: {
+  form: LenderForm;
+  handleChange: (field: keyof LenderForm) => (event: ChangeEvent<HTMLInputElement>) => void;
+  saving: boolean;
+}) {
+  return (
+    <FieldGrid>
+      <label className="block space-y-1.5">
+        <FieldLabel label="Name" />
+        <Input type="text" value={form.name} onChange={handleChange('name')} required disabled={saving} />
+      </label>
+      <label className="block space-y-1.5">
+        <FieldLabel label="Email" />
+        <Input type="email" value={form.email} onChange={handleChange('email')} required disabled={saving} />
+      </label>
+      <label className="block space-y-1.5">
+        <FieldLabel label="Phone" />
+        <Input
+          type="tel"
+          value={form.phone}
+          onChange={handleChange('phone')}
+          disabled={saving}
+          className="text-numeric"
+        />
+      </label>
+      <label className="block space-y-1.5">
+        <FieldLabel label="NMLS ID" />
+        <Input
+          type="text"
+          value={form.nmlsId}
+          onChange={handleChange('nmlsId')}
+          disabled={saving}
+          className="text-numeric"
+        />
+      </label>
+      <label className="block space-y-1.5">
+        <FieldLabel label="Licensed states" hint="comma separated" />
+        <Input
+          type="text"
+          value={form.licensedStates}
+          onChange={handleChange('licensedStates')}
+          placeholder="CO, UT"
+          disabled={saving}
+        />
+      </label>
+      <div className="flex items-end sm:col-span-2">
+        <Button type="submit" loading={saving}>
+          {saving ? 'Saving…' : 'Save MC'}
+        </Button>
+      </div>
+    </FieldGrid>
+  );
 }
 
 export function LendersTable({ showForm: externalShowForm, setShowForm: externalSetShowForm }: LendersTableProps) {
@@ -186,7 +258,13 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
     });
   }, [data, sortConfig]);
 
-  if (!data) return <div className="rounded-md bg-surface-raised p-4 shadow-sm">Loading mortgage consultants…</div>;
+  if (!data) {
+    return (
+      <div className="rounded-card border border-border bg-surface-raised p-4 text-sm text-foreground-muted shadow-card">
+        Loading mortgage consultants…
+      </div>
+    );
+  }
 
   const toggleSort = (key: SortKey) => {
     setSortConfig((previous) => {
@@ -205,7 +283,9 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
       <button
         type="button"
         onClick={() => toggleSort(sortKey)}
-        className="flex items-center gap-1 text-left"
+        // Buttons don't inherit text-transform, so the header's eyebrow casing
+        // has to be restated or sortable columns read title case.
+        className="flex items-center gap-1 text-left uppercase"
       >
         <span>{label}</span>
         <span className="text-[10px] text-foreground-subtle">{icon}</span>
@@ -305,255 +385,134 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
               <p className="text-xs text-foreground-muted">{lastCreatedLender.email}</p>
             </div>
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleSendWelcomeEmail}
-                disabled={sendingWelcome}
-                className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
-              >
+              <Button type="button" onClick={handleSendWelcomeEmail} loading={sendingWelcome}>
                 {sendingWelcome ? 'Sending…' : 'Send welcome email'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setLastCreatedLender(null)}
-                className="rounded border border-border px-4 py-2 text-sm font-semibold text-foreground-muted hover:bg-surface-muted"
-              >
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setLastCreatedLender(null)}>
                 Dismiss
-              </button>
+              </Button>
             </div>
           </div>
         </div>
       )}
 
       {isAdmin && !hasExternalControl && (
-        <div className="rounded-lg border border-dashed border-border-strong bg-surface-raised p-4 shadow-sm">
+        <div className="rounded-card border border-dashed border-border-strong bg-surface-raised p-4 shadow-card">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-foreground">Add a mortgage consultant</h2>
+              <h2 className="font-display text-sm font-semibold tracking-[-0.02em] text-foreground">Add a mortgage consultant</h2>
               <p className="text-xs text-foreground-subtle">Keep the directory up to date so agents can collaborate quickly.</p>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowForm((previous) => !previous)}
-              className="rounded border border-border-strong px-3 py-1 text-xs font-semibold text-foreground-muted hover:bg-surface-subtle"
-            >
+            <Button type="button" variant="secondary" size="sm" onClick={() => setShowForm((previous) => !previous)}>
               {showForm ? 'Close' : 'New MC'}
-            </button>
+            </Button>
           </div>
           {showForm && (
-            <form onSubmit={handleCreate} className="mt-4 grid gap-3 md:grid-cols-2">
-              <label className="text-xs font-semibold text-foreground-muted">
-                Name
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={handleChange('name')}
-                  className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
-                  required
-                  disabled={saving}
-                />
-              </label>
-              <label className="text-xs font-semibold text-foreground-muted">
-                Email
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={handleChange('email')}
-                  className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
-                  required
-                  disabled={saving}
-                />
-              </label>
-              <label className="text-xs font-semibold text-foreground-muted">
-                Phone
-                <input
-                  type="tel"
-                  value={form.phone}
-                  onChange={handleChange('phone')}
-                  className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
-                  disabled={saving}
-                />
-              </label>
-              <label className="text-xs font-semibold text-foreground-muted">
-                NMLS ID
-                <input
-                  type="text"
-                  value={form.nmlsId}
-                  onChange={handleChange('nmlsId')}
-                  className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
-                  disabled={saving}
-                />
-              </label>
-              <label className="text-xs font-semibold text-foreground-muted">
-                Licensed states (comma separated)
-                <input
-                  type="text"
-                  value={form.licensedStates}
-                  onChange={handleChange('licensedStates')}
-                  className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
-                  placeholder="CO, UT"
-                  disabled={saving}
-                />
-              </label>
-              <div className="md:col-span-2">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {saving ? 'Saving…' : 'Save MC'}
-                </button>
-              </div>
+            <form onSubmit={handleCreate} className="mt-4">
+              <LenderFormFields form={form} handleChange={handleChange} saving={saving} />
             </form>
           )}
         </div>
       )}
       {isAdmin && showForm && hasExternalControl && (
         <form onSubmit={handleCreate} className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-xs font-semibold text-foreground-muted">
-              Name
-              <input
-                type="text"
-                value={form.name}
-                onChange={handleChange('name')}
-                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
-                required
-                disabled={saving}
-              />
-            </label>
-            <label className="text-xs font-semibold text-foreground-muted">
-              Email
-              <input
-                type="email"
-                value={form.email}
-                onChange={handleChange('email')}
-                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
-                required
-                disabled={saving}
-              />
-            </label>
-            <label className="text-xs font-semibold text-foreground-muted">
-              Phone
-              <input
-                type="tel"
-                value={form.phone}
-                onChange={handleChange('phone')}
-                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
-                disabled={saving}
-              />
-            </label>
-            <label className="text-xs font-semibold text-foreground-muted">
-              NMLS ID
-              <input
-                type="text"
-                value={form.nmlsId}
-                onChange={handleChange('nmlsId')}
-                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
-                disabled={saving}
-              />
-            </label>
-            <label className="text-xs font-semibold text-foreground-muted">
-              Licensed states (comma separated)
-              <input
-                type="text"
-                value={form.licensedStates}
-                onChange={handleChange('licensedStates')}
-                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
-                placeholder="CO, UT"
-                disabled={saving}
-              />
-            </label>
-            <div className="md:col-span-2">
-              <button
-                type="submit"
-                disabled={saving}
-                className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {saving ? 'Saving…' : 'Save MC'}
-              </button>
-            </div>
-          </div>
+          <LenderFormFields form={form} handleChange={handleChange} saving={saving} />
         </form>
       )}
       {isAdmin && (
-        <div className="flex flex-wrap items-end gap-4">
-          <label className="block flex-1 text-xs font-semibold text-foreground-muted">
-            Search
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              disabled={isPending}
-              className="mt-2 w-full max-w-2xl rounded-lg border border-border px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder="Name, email, phone, NMLS ID"
-            />
-          </label>
-          <label className="text-xs font-semibold text-foreground-muted">
-            Status
-            <select
-              value={activeFilter}
-              onChange={(event) => updateParams({ activeFilter: event.target.value })}
-              disabled={isPending}
-              className="mt-2 block rounded border border-border bg-surface-raised px-3 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <option value="all">All statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </label>
+        <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+          <div className="flex flex-wrap items-end gap-4">
+            <label className="block flex-1 space-y-2">
+              <span className="text-eyebrow text-foreground-subtle">Search</span>
+              <Input
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                disabled={isPending}
+                className="max-w-2xl"
+                placeholder="Name, email, phone, NMLS ID"
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-eyebrow text-foreground-subtle">Status</span>
+              <select
+                value={activeFilter}
+                onChange={(event) => updateParams({ activeFilter: event.target.value })}
+                disabled={isPending}
+                className={cn(selectFieldClasses, 'block')}
+              >
+                <option value="all">All statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </label>
+          </div>
         </div>
       )}
-      <div className="overflow-x-auto rounded-card border border-border bg-surface-raised shadow-card">
-        <table className="min-w-full divide-y divide-border">
-          <thead className="bg-surface-muted">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                <SortableHeader label="Lender" sortKey="name" />
-              </th>
-              {isAdmin && (
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                  Status
-                </th>
+      <TableShell>
+        <TableScroll>
+          <Table className="min-w-full">
+            <THead>
+              <Tr>
+                <Th dense={isAdmin} className="text-eyebrow">
+                  <SortableHeader label="Lender" sortKey="name" />
+                </Th>
+                {isAdmin && (
+                  <Th dense className="text-eyebrow">
+                    Status
+                  </Th>
+                )}
+                <Th dense={isAdmin} className="text-eyebrow">
+                  <SortableHeader label="NMLS" sortKey="nmls" />
+                </Th>
+                <Th dense={isAdmin} className="text-eyebrow">
+                  <SortableHeader label="Licensed states" sortKey="states" />
+                </Th>
+              </Tr>
+            </THead>
+            <TBody>
+              {sortedLenders.length === 0 ? (
+                <tr>
+                  <td colSpan={isAdmin ? 4 : 3} className="p-4">
+                    <EmptyState compact title="No mortgage consultants match this view" />
+                  </td>
+                </tr>
+              ) : (
+                sortedLenders.map((lender) => (
+                  <Tr key={lender._id}>
+                    <Td dense={isAdmin} className="text-foreground-muted">
+                      <div className="font-medium text-foreground">
+                        <Link href={`/lenders/${lender._id}`} className="text-primary hover:underline">
+                          {lender.name}
+                        </Link>
+                      </div>
+                      <div className="text-xs text-foreground-subtle">{lender.email}</div>
+                      <div className="text-numeric text-xs text-foreground-subtle">{lender.phone}</div>
+                    </Td>
+                    {isAdmin && (
+                      <Td dense className="text-foreground-muted">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                            lender.active === false ? 'bg-danger-soft text-danger' : 'bg-success-soft text-success'
+                          }`}
+                        >
+                          {lender.active === false ? 'Inactive' : 'Active'}
+                        </span>
+                      </Td>
+                    )}
+                    <Td dense={isAdmin} className="text-numeric text-foreground-muted">
+                      {lender.nmlsId}
+                    </Td>
+                    <Td dense={isAdmin} className="text-foreground-muted">
+                      {(lender.licensedStates ?? []).join(', ') || '—'}
+                    </Td>
+                  </Tr>
+                ))
               )}
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                <SortableHeader label="NMLS" sortKey="nmls" />
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                <SortableHeader label="Licensed states" sortKey="states" />
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {sortedLenders.map((lender) => (
-              <tr key={lender._id} className="hover:bg-surface-muted">
-                <td className="px-4 py-3 text-sm text-foreground-muted">
-                  <div className="font-medium text-foreground">
-                    <Link href={`/lenders/${lender._id}`} className="text-primary hover:underline">
-                      {lender.name}
-                    </Link>
-                  </div>
-                  <div className="text-xs text-foreground-subtle">{lender.email}</div>
-                  <div className="text-xs text-foreground-subtle">{lender.phone}</div>
-                </td>
-              {isAdmin && (
-                <td className="px-4 py-3 text-sm text-foreground-muted">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                      lender.active === false ? 'bg-danger-soft text-danger' : 'bg-success-soft text-success'
-                    }`}
-                  >
-                    {lender.active === false ? 'Inactive' : 'Active'}
-                  </span>
-                </td>
-              )}
-              <td className="px-4 py-3 text-sm text-foreground-muted">{lender.nmlsId}</td>
-              <td className="px-4 py-3 text-sm text-foreground-muted">{(lender.licensedStates ?? []).join(', ') || '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-        </table>
-      </div>
+            </TBody>
+          </Table>
+        </TableScroll>
+      </TableShell>
       {data && (
         <Pagination
           currentPage={data.page}

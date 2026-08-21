@@ -10,6 +10,7 @@ import { connectMongo } from '@/lib/mongoose';
 import { AdminTask, getEffectiveDueDate, type AdminTaskLean } from '@/models/admin-task';
 import { Referral } from '@/models/referral';
 import { AdminTaskBoard } from '@/components/admin/admin-task-board';
+import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export const metadata: Metadata = {
@@ -73,13 +74,13 @@ export default async function AdminTasksPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Admin Tasks</h1>
-        <p className="text-sm text-foreground-subtle">
-          Shared tasks across all referrals. All admins see the same task state.
-        </p>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Operations"
+        title="Admin tasks"
+        description="Shared tasks across all referrals. Every admin sees the same task state."
+        attention={overdueCount > 0}
+      />
       <Suspense fallback={<BoardFallback />}>
         <AdminTaskBoard
           overdueCount={overdueCount}

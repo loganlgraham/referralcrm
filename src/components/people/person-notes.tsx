@@ -3,6 +3,10 @@
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/input';
+import { EmptyState } from '@/components/ui/empty-state';
+
 interface PersonNote {
   id: string;
   authorName: string;
@@ -75,37 +79,32 @@ export function PersonNotes({ subjectId, initialNotes, endpoint, description }: 
   };
 
   return (
-    <div className="space-y-4 rounded-lg border border-border bg-surface-raised p-5 shadow-sm">
+    <div className="space-y-4 rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <div>
-        <h2 className="text-lg font-semibold text-foreground">Admin Notes</h2>
-        <p className="text-sm text-foreground-subtle">{description}</p>
+        <h2 className="text-eyebrow text-foreground-subtle">Admin notes</h2>
+        <p className="mt-1.5 text-sm text-foreground-subtle">{description}</p>
       </div>
       <form onSubmit={handleSubmit} className="space-y-3">
-        <textarea
+        <Textarea
           value={content}
           onChange={(event) => setContent(event.target.value)}
           rows={3}
-          className="w-full rounded border border-border px-3 py-2 text-sm text-foreground-muted focus:border-ring focus:outline-none"
           placeholder="Record context for internal use"
           disabled={saving}
         />
-        <button
-          type="submit"
-          disabled={saving || !content.trim()}
-          className="inline-flex items-center rounded bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
-        >
+        <Button type="submit" size="sm" disabled={!content.trim()} loading={saving}>
           {saving ? 'Saving…' : 'Save note'}
-        </button>
+        </Button>
       </form>
       <div className="space-y-3">
-        {sortedNotes.length === 0 && <p className="text-sm text-foreground-subtle">No notes yet.</p>}
+        {sortedNotes.length === 0 && <EmptyState compact title="No notes yet" />}
         {sortedNotes.map((note) => (
-          <div key={note.id} className="rounded border border-border p-3">
+          <div key={note.id} className="rounded-card border border-border p-3">
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-foreground-subtle">
               <span className="font-semibold text-foreground-muted">
                 {note.authorName} · {note.authorRole}
               </span>
-              <span>{formatTimestamp(note.createdAt)}</span>
+              <span className="text-numeric">{formatTimestamp(note.createdAt)}</span>
             </div>
             <p className="mt-2 whitespace-pre-line text-sm text-foreground-muted">{note.content}</p>
           </div>

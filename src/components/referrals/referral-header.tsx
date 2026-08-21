@@ -1,11 +1,17 @@
 'use client';
 
 import { type ChangeEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useSWRConfig } from 'swr';
 import { differenceInDays } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { toast } from 'sonner';
 import { SLA_TIME_ZONE } from '@/utils/sla-insights';
+import { cn } from '@/lib/cn';
+import { PageHeader } from '@/components/ui/page-header';
+import { Button } from '@/components/ui/button';
+import { Input, Textarea } from '@/components/ui/input';
+import { selectFieldClasses } from '@/components/ui/field-group';
 
 import {
   ReferralStatus,
@@ -52,6 +58,60 @@ const formatFullAddress = (
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === 'string' && value.trim().length > 0;
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const normalizeCcInputs = (values: string[]): string[] =>
+  Array.from(
+    new Set(
+      values
+        .map((value) => value.trim().toLowerCase())
+        .filter((value) => value.length > 0)
+    )
+  );
+
+function CcRecipientFields({
+  label,
+  values,
+  onValuesChange,
+  disabled = false,
+}: {
+  label: string;
+  values: string[];
+  onValuesChange: (updater: (previous: string[]) => string[]) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-eyebrow text-foreground-subtle">{label}</p>
+      {values.map((value, index) => (
+        <Input
+          key={index}
+          type="email"
+          inputMode="email"
+          placeholder="name@example.com"
+          value={value}
+          disabled={disabled}
+          onChange={(event) => {
+            const nextValue = event.target.value;
+            onValuesChange((previous) =>
+              previous.map((entry, entryIndex) => (entryIndex === index ? nextValue : entry))
+            );
+          }}
+        />
+      ))}
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        disabled={disabled}
+        onClick={() => onValuesChange((previous) => [...previous, ''])}
+      >
+        + Add CC recipient
+      </Button>
+    </div>
+  );
+}
 
 const asNullableString = (value: unknown): string | null | undefined =>
   typeof value === 'string' || value == null ? value : undefined;
@@ -233,6 +293,8 @@ export function ReferralHeader({
   const [sendingIntroductions, setSendingIntroductions] = useState(false);
   const [introNotes, setIntroNotes] = useState('');
   const [cleanedNotes, setCleanedNotes] = useState('');
+  const [agentCcInputs, setAgentCcInputs] = useState<string[]>(['']);
+  const [mcCcInputs, setMcCcInputs] = useState<string[]>(['']);
   const [showPreview, setShowPreview] = useState(false);
   const [cleaningNotes, setCleaningNotes] = useState(false);
   const [introEmailStatus, setIntroEmailStatus] = useState<{
@@ -529,6 +591,9 @@ export function ReferralHeader({
     return locationLabel ? `Looking in ${locationLabel}` : 'Pending location';
   }, [effectivePropertyAddress, locationLabel, savedDisplayAddress, savedStreet]);
 
+  const showAgentCcField = !isAgentOrigin;
+  const showMcCcField = referral.clientType !== 'Seller';
+
   const borrowerName = referral.borrower?.name ?? 'Borrower';
   const borrowerEmail = referral.borrower?.email?.trim() ?? '';
   const borrowerPhone = referral.borrower?.phone?.trim() ?? '';
@@ -568,13 +633,23 @@ export function ReferralHeader({
   };
 
   const handleConfirmSend = async () => {
+    const agentCcRecipients = showAgentCcField ? normalizeCcInputs(agentCcInputs) : [];
+    const mcCcRecipients = showMcCcField ? normalizeCcInputs(mcCcInputs) : [];
+    const invalidCc = [...agentCcRecipients, ...mcCcRecipients].find(
+      (email) => !EMAIL_REGEX.test(email)
+    );
+    if (invalidCc) {
+      toast.error(`"${invalidCc}" is not a valid email address.`);
+      return;
+    }
+
     setSendingIntroductions(true);
     setShowPreview(false);
     try {
       const response = await fetch(`/api/referrals/${referral._id}/send-emails`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes: cleanedNotes }),
+        body: JSON.stringify({ notes: cleanedNotes, agentCcRecipients, mcCcRecipients }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -595,6 +670,12 @@ export function ReferralHeader({
       }
       if (errors.length > 0) {
         summaryParts.push(`Failed for ${errors.join(', ')}`);
+      }
+      if (agentCcRecipients.length > 0) {
+        summaryParts.push(`Copied on the agent email: ${agentCcRecipients.join(', ')}`);
+      }
+      if (mcCcRecipients.length > 0) {
+        summaryParts.push(`Copied on the MC email: ${mcCcRecipients.join(', ')}`);
       }
 
       const summary = summaryParts.join('. ');
@@ -627,6 +708,8 @@ export function ReferralHeader({
       });
       setIntroNotes('');
       setCleanedNotes('');
+      setAgentCcInputs(['']);
+      setMcCcInputs(['']);
     } catch (error) {
       console.error('Failed to send intro emails', error);
       toast.error(error instanceof Error ? error.message : 'Unable to send intro emails right now.');
@@ -638,6 +721,8 @@ export function ReferralHeader({
   const handleCancelPreview = () => {
     setShowPreview(false);
     setCleanedNotes('');
+    setAgentCcInputs(['']);
+    setMcCcInputs(['']);
   };
 
   const handleRecopyIntroEmail = async () => {
@@ -977,19 +1062,33 @@ export function ReferralHeader({
         : 'grid items-start gap-2.5';
 
   return (
-    <div className="route-surface space-y-5 overflow-hidden rounded-card bg-surface-raised p-4 pl-5 shadow-card ring-1 ring-border sm:p-5 sm:pl-6">
-      <div className="grid gap-5 rounded-xl border border-border bg-surface-muted/60 p-4 lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-center">
+    <div className="space-y-5">
+      <PageHeader
+        breadcrumbs={
+          <span className="flex items-center gap-1.5">
+            <Link href="/referrals" className="text-foreground-muted hover:text-foreground">
+              Referrals
+            </Link>
+            <span aria-hidden>/</span>
+            <span className="truncate">{borrowerName}</span>
+          </span>
+        }
+        eyebrow={`${referral.clientType ?? 'Buyer'} · ${status}`}
+        title={borrowerName}
+        actions={
+          <>
+            <CopyButton value={borrowerName} label="Copy name" />
+            {isAgentOrigin && (viewerRole === 'admin' || viewerRole === 'manager') ? (
+              <AgentOriginMarker size="md" />
+            ) : null}
+          </>
+        }
+      />
+      <div className="route-surface grid gap-5 rounded-card border border-border bg-surface-raised p-4 shadow-card lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-center">
         <div className="space-y-2 lg:self-center">
           <div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <h1 className="font-display text-2xl font-semibold tracking-[-0.035em] text-foreground">{borrowerName}</h1>
-              <CopyButton value={borrowerName} label="Copy name" />
-              {isAgentOrigin && (viewerRole === 'admin' || viewerRole === 'manager') ? (
-                <AgentOriginMarker size="md" />
-              ) : null}
-            </div>
             {hasBorrowerContact ? (
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-foreground-muted">
+              <div className="flex flex-wrap items-center gap-2 text-sm text-foreground-muted">
                 {borrowerEmail && (
                   <>
                     <EmailActivityLink
@@ -1012,7 +1111,7 @@ export function ReferralHeader({
                       phone={borrowerPhone}
                       recipient="Borrower"
                       recipientName={borrowerName}
-                      className="text-sm"
+                      className="text-numeric text-sm"
                     >
                       {borrowerPhone}
                     </PhoneActivityLink>
@@ -1021,13 +1120,17 @@ export function ReferralHeader({
                 )}
               </div>
             ) : (
-              <p className="mt-1 text-sm text-foreground-muted">Contact information pending</p>
+              <p className="text-sm text-foreground-muted">Contact information pending</p>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
-            <span className="rounded-full bg-primary px-3 py-1 text-white">{status}</span>
-            <span className="rounded-full bg-surface-subtle px-3 py-1 text-foreground-muted">{propertyLabel}</span>
-            <span className="rounded-full bg-signal-soft px-3 py-1 text-signal-dark">{daysInStatus} days in stage</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-eyebrow rounded-full bg-primary px-3 py-1 text-white">{status}</span>
+            <span className="text-eyebrow rounded-full bg-surface-subtle px-3 py-1 text-foreground-muted">
+              {propertyLabel}
+            </span>
+            <span className="text-eyebrow rounded-full bg-signal-soft px-3 py-1 text-signal-dark">
+              <span className="text-numeric">{daysInStatus}</span> days in stage
+            </span>
           </div>
         </div>
         <div
@@ -1035,17 +1138,17 @@ export function ReferralHeader({
             isAgentView ? 'lg:justify-start' : ''
           }`}
         >
-          <section className="w-full rounded-lg border border-border border-l-primary border-l-[3px] bg-surface-raised p-3 shadow-sm">
+          <section className="w-full rounded-card border border-border bg-surface-raised p-3 shadow-card">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">Status &amp; progress</h2>
-              <span className="text-xs uppercase tracking-wide text-foreground-subtle">Pipeline</span>
+              <h2 className="text-eyebrow text-foreground-muted">Status &amp; progress</h2>
+              <span className="text-eyebrow text-foreground-subtle">Pipeline</span>
             </div>
             <div className="mt-1.5">
               {isBothClientType && viewerRole === 'admin' ? (
                 <div className="space-y-3">
                   <div className="grid gap-3 lg:grid-cols-2">
                     <div className="space-y-2 rounded-md border border-border bg-surface-muted/70 p-2.5">
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-info">Buy</div>
+                      <div className="text-eyebrow text-info">Buy</div>
                       <p className="text-[11px] text-foreground-subtle">Latest deal: {latestBuyDealStatusLabel}</p>
                       <StatusChanger
                         referralId={referral._id}
@@ -1063,7 +1166,7 @@ export function ReferralHeader({
                       />
                     </div>
                     <div className="space-y-2 rounded-md border border-border bg-surface-muted/70 p-2.5">
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-accent">Sell</div>
+                      <div className="text-eyebrow text-accent">Sell</div>
                       <p className="text-[11px] text-foreground-subtle">Latest deal: {latestSellDealStatusLabel}</p>
                       <StatusChanger
                         referralId={referral._id}
@@ -1097,10 +1200,10 @@ export function ReferralHeader({
               ) : isBothClientType && viewerRole === 'agent' ? (
                 <div className="space-y-2">
                   <div className="grid grid-cols-2 gap-2">
-                    <span className="rounded-full bg-info-soft px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-info">
+                    <span className="text-eyebrow rounded-full bg-info-soft px-3 py-1 text-center text-info">
                       Buy: {buyStatusDisplay}
                     </span>
-                    <span className="rounded-full bg-accent-soft px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-accent">
+                    <span className="text-eyebrow rounded-full bg-accent-soft px-3 py-1 text-center text-accent">
                       Sell: {sellStatusDisplay}
                     </span>
                   </div>
@@ -1146,9 +1249,9 @@ export function ReferralHeader({
             </div>
           </section>
           {showBucketSummary && (
-            <section className="flex h-full flex-col justify-between rounded-lg border border-border bg-surface-muted p-4 sm:col-span-2">
+            <section className="flex h-full flex-col justify-between rounded-card border border-border bg-surface-muted p-4 sm:col-span-2">
               <div className="space-y-2">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">Agent bucket</h2>
+                <h2 className="text-eyebrow text-foreground-muted">Agent bucket</h2>
                 <p className="text-xs text-foreground-subtle">{bucketDescription}</p>
               </div>
               {canEditBucket ? (
@@ -1156,7 +1259,7 @@ export function ReferralHeader({
                   value={ahaBucket}
                   onChange={handleBucketChange}
                   disabled={savingBucket}
-                  className="mt-2 w-full rounded border border-border-strong bg-surface-raised px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-ring focus:outline-none"
+                  className={cn(selectFieldClasses, 'mt-2')}
                 >
                   <option value="">Not set</option>
                   <option value="AHA">AHA</option>
@@ -1179,9 +1282,9 @@ export function ReferralHeader({
         }
       >
         {viewerRole === 'admin' && <AdminTasksCard referralId={String(referral._id)} viewerRole={viewerRole} />}
-        <section className="space-y-3 rounded-xl border border-border bg-surface-raised px-4 py-3.5 shadow-sm">
+        <section className="space-y-3 rounded-card border border-border bg-surface-raised p-4 shadow-card">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">Team assignments</h2>
+            <h2 className="text-eyebrow text-foreground-muted">Team assignments</h2>
             <p className="text-xs text-foreground-subtle">Keep the right partners aligned on this referral.</p>
           </div>
           {shouldStackAssignmentsForAdminBoth ? (
@@ -1265,23 +1368,23 @@ export function ReferralHeader({
             <div className="rounded-lg border border-border bg-surface-muted px-3 py-2">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-0.5 text-xs text-foreground-muted">
-                  <p className="font-semibold uppercase tracking-wide text-foreground-muted">Intro emails</p>
+                  <p className="text-eyebrow text-foreground-muted">Intro emails</p>
                   <p>Send friendly updates to the agent and MC.</p>
                 </div>
-                <button
+                <Button
                   type="button"
+                  size="sm"
                   onClick={handlePreviewIntroductions}
-                  disabled={sendingIntroductions || cleaningNotes}
-                  className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
+                  loading={sendingIntroductions || cleaningNotes}
                 >
                   {sendingIntroductions ? 'Sending…' : cleaningNotes ? 'Preparing…' : 'Send now'}
-                </button>
+                </Button>
               </div>
-              <textarea
+              <Textarea
                 value={introNotes}
                 onChange={(event) => setIntroNotes(event.target.value)}
                 rows={2}
-                className="mt-2 w-full rounded border border-border bg-surface-raised px-3 py-2 text-xs text-foreground-muted placeholder:text-foreground-subtle focus:border-ring focus:outline-none"
+                className="mt-2"
                 placeholder="Add a note to include in the agent email (optional)"
                 disabled={sendingIntroductions || cleaningNotes}
               />
@@ -1298,53 +1401,65 @@ export function ReferralHeader({
                       .
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleRecopyIntroEmail}
-                    className="rounded-md border border-border-strong bg-surface-raised px-3 py-1.5 text-xs font-medium text-foreground-muted shadow-sm transition hover:bg-surface-muted"
-                  >
+                  <Button type="button" variant="secondary" size="sm" onClick={handleRecopyIntroEmail}>
                     Re-copy intro email
-                  </button>
+                  </Button>
                 </div>
               )}
               {showPreview && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                  <div className="mx-4 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-md bg-surface-raised p-6 shadow-xl">
-                    <h3 className="text-lg font-semibold text-foreground">Preview Email Notes</h3>
+                  <div className="mx-4 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-card bg-surface-raised p-6 shadow-card">
+                    <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">
+                      Preview Email Notes
+                    </h3>
                     <p className="mt-1 text-sm text-foreground-subtle">
                       Review the cleaned-up notes before sending to the agent.
                     </p>
                     {cleanedNotes ? (
-                      <div className="mt-4 rounded-md border border-border bg-surface-muted p-3">
-                        <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Notes (cleaned up)</p>
-                        <textarea
+                      <div className="mt-4 rounded-card border border-border bg-surface-muted p-3">
+                        <p className="text-eyebrow text-foreground-subtle">Notes (cleaned up)</p>
+                        <Textarea
                           value={cleanedNotes}
                           onChange={(event) => setCleanedNotes(event.target.value)}
                           rows={4}
-                          className="mt-2 w-full rounded border border-border bg-surface-raised px-3 py-2 text-sm text-foreground-muted focus:border-ring focus:outline-none"
+                          className="mt-2"
                         />
                       </div>
                     ) : (
-                      <div className="mt-4 rounded-md border border-border bg-surface-muted p-3">
+                      <div className="mt-4 rounded-card border border-border bg-surface-muted p-3">
                         <p className="text-sm text-foreground-muted">No notes will be included in the email.</p>
                       </div>
                     )}
+                    {(showAgentCcField || showMcCcField) && (
+                      <div className="mt-4 space-y-4 rounded-card border border-border bg-surface-muted p-3">
+                        <p className="text-sm text-foreground-muted">
+                          Copy other people on these emails. The referral coordinator is always copied.
+                        </p>
+                        {showAgentCcField && (
+                          <CcRecipientFields
+                            label="CC on the agent email (optional)"
+                            values={agentCcInputs}
+                            onValuesChange={setAgentCcInputs}
+                            disabled={sendingIntroductions}
+                          />
+                        )}
+                        {showMcCcField && (
+                          <CcRecipientFields
+                            label="CC on the mortgage consultant email (optional)"
+                            values={mcCcInputs}
+                            onValuesChange={setMcCcInputs}
+                            disabled={sendingIntroductions}
+                          />
+                        )}
+                      </div>
+                    )}
                     <div className="mt-6 flex justify-end gap-3">
-                      <button
-                        type="button"
-                        onClick={handleCancelPreview}
-                        className="rounded-md border border-border-strong bg-surface-raised px-4 py-2 text-sm font-medium text-foreground-muted shadow-sm transition hover:bg-surface-muted"
-                      >
+                      <Button type="button" variant="secondary" onClick={handleCancelPreview}>
                         Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleConfirmSend}
-                        disabled={sendingIntroductions}
-                        className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
-                      >
+                      </Button>
+                      <Button type="button" onClick={handleConfirmSend} loading={sendingIntroductions}>
                         {sendingIntroductions ? 'Sending…' : 'Confirm & Send'}
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>

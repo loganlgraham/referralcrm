@@ -9,6 +9,10 @@ import { ArrowRightIcon, Loader2Icon, MailIcon, PhoneIcon, SearchIcon, SparklesI
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatDecimal, formatNumber, formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
+import { Button, buttonClasses } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/input';
+import { EmptyState } from '@/components/ui/empty-state';
+import { StatTile } from '@/components/ui/stat-tile';
 
 interface MortgageConsultant {
   _id: string;
@@ -199,14 +203,14 @@ export function MortgageConsultantSearch() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-md bg-surface-raised p-6 shadow-sm">
+    <div className="space-y-5">
+      <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
         <div className="flex items-start gap-3">
           <div className="mt-1 rounded-full bg-primary/10 p-2 text-primary">
             <SparklesIcon className="h-5 w-5" />
           </div>
           <div className="space-y-2">
-            <p className="text-sm font-semibold text-foreground-muted">Find a mortgage consultant</p>
+            <p className="font-display text-sm font-semibold tracking-[-0.02em] text-foreground">Find a mortgage consultant</p>
             <p className="text-sm text-foreground-muted">
               Describe where your borrower needs a licensed mortgage consultant. We’ll surface teammates licensed in that state
               with recent performance so you can pick a partner and launch the referral flow.
@@ -216,12 +220,11 @@ export function MortgageConsultantSearch() {
 
         <form onSubmit={handleSearch} className="mt-6 space-y-4">
           <label className="block space-y-2">
-            <span className="text-sm font-medium text-foreground-muted">Which state does your borrower need?</span>
-            <textarea
+            <span className="text-sm font-medium text-foreground">Which state does your borrower need?</span>
+            <Textarea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               rows={2}
-              className="w-full rounded-md border border-border bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
               placeholder="e.g., TX and NM or Colorado"
               disabled={isSearching}
             />
@@ -229,22 +232,22 @@ export function MortgageConsultantSearch() {
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-foreground-subtle">We’ll check licensing coverage and rank top performers.</p>
-            <button
+            <Button
               type="submit"
-              disabled={isSearching || isLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-surface-subtle"
+              disabled={isLoading}
+              loading={isSearching}
+              leadingIcon={<SearchIcon className="h-4 w-4" />}
             >
-              {isSearching ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <SearchIcon className="h-4 w-4" />}
               {isSearching ? 'Searching...' : 'Find licensed MCs'}
-            </button>
+            </Button>
           </div>
         </form>
       </div>
 
-      <div className="rounded-md bg-surface-raised p-6 shadow-sm">
+      <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase text-foreground-subtle">Licensing focus</p>
+            <p className="text-eyebrow text-foreground-subtle">Licensing focus</p>
             <div className="mt-1 flex flex-wrap gap-2 text-sm text-foreground-muted">
               {states.length > 0 ? (
                 states.map((state) => (
@@ -275,86 +278,62 @@ export function MortgageConsultantSearch() {
             matches.map((mc) => {
               const metrics = mc.metrics ?? EMPTY_LENDER_METRICS;
               return (
-                <div key={mc._id} className="rounded-lg border border-border p-4 shadow-sm">
+                <div key={mc._id} className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
                   <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <h2 className="text-lg font-semibold text-foreground">{mc.name}</h2>
-                      <p className="text-sm text-foreground-muted">NMLS {mc.nmlsId || 'pending'}</p>
+                      <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">{mc.name}</h2>
+                      <p className="text-sm text-foreground-muted">
+                        NMLS <span className="text-numeric">{mc.nmlsId || 'pending'}</span>
+                      </p>
                       <p className="mt-1 text-xs text-foreground-subtle">Licensed: {(mc.licensedStates ?? []).join(', ') || '—'}</p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
                       <a
                         href={buildGmailComposeUrl(mc.email)}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:border-primary hover:text-primary-hover"
+                        className={buttonClasses({ variant: 'secondary', size: 'sm' })}
                       >
                         <MailIcon className="h-4 w-4" />
                         Email
                       </a>
                       {mc.phone && (
-                        <a
-                          href={`tel:${mc.phone}`}
-                          className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:border-primary hover:text-primary-hover"
-                        >
+                        <a href={`tel:${mc.phone}`} className={buttonClasses({ variant: 'secondary', size: 'sm' })}>
                           <PhoneIcon className="h-4 w-4" />
-                          {formatPhoneNumber(mc.phone) || 'Call'}
+                          <span className="text-numeric">{formatPhoneNumber(mc.phone) || 'Call'}</span>
                         </a>
                       )}
-                      <Link
-                        href={`/lenders/${mc._id}`}
-                        className="inline-flex items-center gap-2 rounded-md bg-foreground px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-hover"
-                      >
+                      <Link href={`/lenders/${mc._id}`} className={buttonClasses({ variant: 'secondary', size: 'sm' })}>
                         View profile
                         <ArrowRightIcon className="h-4 w-4" />
                       </Link>
-                      <Link
-                        href={`/referrals/new`}
-                        className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary-hover"
-                      >
+                      <Link href={`/referrals/new`} className={buttonClasses({ size: 'sm' })}>
                         Start referral
                         <ArrowRightIcon className="h-4 w-4" />
                       </Link>
                     </div>
                   </div>
 
-                  <div className="mt-4 grid gap-3 text-sm text-foreground-muted sm:grid-cols-2 md:grid-cols-4">
-                    <div className="rounded border border-border p-3">
-                      <p className="text-xs uppercase text-foreground-subtle">Closings (12 mo)</p>
-                      <p className="mt-1 text-lg font-semibold text-foreground">{formatNumber(metrics.closingsLast12Months)}</p>
-                    </div>
-                    <div className="rounded border border-border p-3">
-                      <p className="text-xs uppercase text-foreground-subtle">Closing rate</p>
-                      <p className="mt-1 text-lg font-semibold text-foreground">{formatDecimal(metrics.closingRate)}%</p>
-                    </div>
-                    <div className="rounded border border-border p-3">
-                      <p className="text-xs uppercase text-foreground-subtle">Total referrals</p>
-                      <p className="mt-1 text-lg font-semibold text-foreground">{formatNumber(metrics.totalReferrals)}</p>
-                    </div>
-                    <div className="rounded border border-border p-3">
-                      <p className="text-xs uppercase text-foreground-subtle">Active pipeline</p>
-                      <p className="mt-1 text-lg font-semibold text-foreground">{formatNumber(metrics.activePipeline)}</p>
-                    </div>
-                    <div className="rounded border border-border p-3">
-                      <p className="text-xs uppercase text-foreground-subtle">Deals closed</p>
-                      <p className="mt-1 text-lg font-semibold text-foreground">{formatNumber(metrics.dealsClosedAllTime)}</p>
-                    </div>
-                    <div className="rounded border border-border p-3">
-                      <p className="text-xs uppercase text-foreground-subtle">Revenue realized</p>
-                      <p className="mt-1 text-lg font-semibold text-foreground">{formatCurrency(metrics.revenueRealizedCents)}</p>
-                    </div>
-                    <div className="rounded border border-border p-3">
-                      <p className="text-xs uppercase text-foreground-subtle">NPS</p>
-                      <p className="mt-1 text-lg font-semibold text-foreground">{metrics.npsScore == null ? '—' : formatDecimal(metrics.npsScore)}</p>
-                    </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+                    <StatTile label="Closings (12 mo)" value={formatNumber(metrics.closingsLast12Months)} />
+                    <StatTile label="Closing rate" value={`${formatDecimal(metrics.closingRate)}%`} />
+                    <StatTile label="Total referrals" value={formatNumber(metrics.totalReferrals)} />
+                    <StatTile label="Active pipeline" value={formatNumber(metrics.activePipeline)} />
+                    <StatTile label="Deals closed" value={formatNumber(metrics.dealsClosedAllTime)} />
+                    <StatTile label="Revenue realized" value={formatCurrency(metrics.revenueRealizedCents)} />
+                    <StatTile
+                      label="NPS"
+                      value={metrics.npsScore == null ? '—' : formatDecimal(metrics.npsScore)}
+                    />
                   </div>
                 </div>
               );
             })
           ) : (
-            <div className="rounded-lg border border-dashed border-border bg-surface-muted p-8 text-center text-sm text-foreground-muted">
-              Suggested mortgage consultants will appear here after you run a search.
-            </div>
+            <EmptyState
+              title="No suggestions yet"
+              description="Suggested mortgage consultants will appear here after you run a search."
+            />
           )}
         </div>
       </div>

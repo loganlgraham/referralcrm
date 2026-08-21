@@ -1,39 +1,43 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
+import { Fragment, useMemo, useState } from 'react';
+import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
+import { cn } from '@/lib/cn';
 import { AmortizationEntry } from '@/utils/mortgage-calculations';
+import { SegmentedToggle } from './fields';
+import { formatCurrency } from './formatters';
 
-const currencyFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 0,
-});
+type ViewMode = 'yearly' | 'monthly';
+
+interface YearSummary {
+  year: number;
+  totalPayment: number;
+  totalPrincipal: number;
+  totalInterest: number;
+  totalExtraPrincipal: number;
+  endingBalance: number;
+  months: AmortizationEntry[];
+}
 
 interface AmortizationTableProps {
   schedule: AmortizationEntry[];
   includesExtraPrincipal: boolean;
 }
 
+const headerCell =
+  'sticky top-0 z-[1] bg-surface-raised px-3 py-2 text-eyebrow text-foreground-subtle shadow-[inset_0_-1px_0_0_hsl(var(--border))]';
+
 export function AmortizationTable({ schedule, includesExtraPrincipal }: AmortizationTableProps) {
-  const [viewMode, setViewMode] = useState<'yearly' | 'monthly'>('yearly');
+  const [viewMode, setViewMode] = useState<ViewMode>('yearly');
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
 
-  // Group by year for yearly view
   const yearlyData = useMemo(() => {
-    const years: {
-      year: number;
-      totalPayment: number;
-      totalPrincipal: number;
-      totalInterest: number;
-      totalExtraPrincipal: number;
-      endingBalance: number;
-      months: AmortizationEntry[];
-    }[] = [];
+    const years: YearSummary[] = [];
+    const byYear = new Map<number, YearSummary>();
 
-    schedule.forEach((entry) => {
+    for (const entry of schedule) {
       const yearIndex = Math.ceil(entry.month / 12);
-      let yearData = years.find((y) => y.year === yearIndex);
+      let yearData = byYear.get(yearIndex);
 
       if (!yearData) {
         yearData = {
@@ -45,6 +49,7 @@ export function AmortizationTable({ schedule, includesExtraPrincipal }: Amortiza
           endingBalance: entry.balance,
           months: [],
         };
+        byYear.set(yearIndex, yearData);
         years.push(yearData);
       }
 
@@ -54,193 +59,218 @@ export function AmortizationTable({ schedule, includesExtraPrincipal }: Amortiza
       yearData.totalExtraPrincipal += entry.extraPrincipal;
       yearData.endingBalance = entry.balance;
       yearData.months.push(entry);
-    });
+    }
 
     return years;
   }, [schedule]);
 
   const toggleYear = (year: number) => {
-    const newExpanded = new Set(expandedYears);
-    if (newExpanded.has(year)) {
-      newExpanded.delete(year);
-    } else {
-      newExpanded.add(year);
-    }
-    setExpandedYears(newExpanded);
+    setExpandedYears((prev) => {
+      const next = new Set(prev);
+      if (next.has(year)) {
+        next.delete(year);
+      } else {
+        next.add(year);
+      }
+      return next;
+    });
   };
 
   if (schedule.length === 0) {
     return (
-      <div className="rounded-lg border border-border p-8 text-center">
-        <p className="text-sm text-foreground-subtle">No amortization data available</p>
+      <div className="rounded-card border border-border bg-surface-raised p-8 text-center shadow-card">
+        <p className="text-sm text-foreground-muted">No amortization data available.</p>
       </div>
     );
   }
 
+  const totalInterest = schedule[schedule.length - 1]?.cumulativeInterest ?? 0;
+  const payoffDate = new Date();
+  payoffDate.setMonth(payoffDate.getMonth() + schedule.length);
+
+  const summary = [
+    { label: 'Payments', value: `${schedule.length} months` },
+    { label: 'Total interest', value: formatCurrency(totalInterest) },
+    {
+      label: 'Payoff date',
+      value: payoffDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+    },
+  ];
+
   return (
-    <div className="space-y-4">
-      {/* View mode toggle */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground">Amortization Schedule</h3>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setViewMode('yearly')}
-            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-              viewMode === 'yearly'
-                ? 'bg-primary text-white'
-                : 'bg-surface-subtle text-foreground-muted hover:bg-surface-subtle'
-            }`}
-          >
-            Yearly
-          </button>
-          <button
-            onClick={() => setViewMode('monthly')}
-            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-              viewMode === 'monthly'
-                ? 'bg-primary text-white'
-                : 'bg-surface-subtle text-foreground-muted hover:bg-surface-subtle'
-            }`}
-          >
-            Monthly
-          </button>
-        </div>
+    <section className="rounded-card border border-border bg-surface-raised shadow-card">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <h2 className="text-eyebrow text-foreground-subtle">Amortization schedule</h2>
+        <SegmentedToggle<ViewMode>
+          ariaLabel="Schedule detail"
+          value={viewMode}
+          onChange={setViewMode}
+          options={[
+            { value: 'yearly', label: 'Yearly' },
+            { value: 'monthly', label: 'Monthly' },
+          ]}
+        />
       </div>
 
-      {/* Table */}
-      <div className="max-h-[500px] overflow-auto rounded-lg border border-border">
-        <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-surface-muted text-foreground-muted">
+      <dl className="grid grid-cols-3 divide-x divide-border border-b border-border">
+        {summary.map((item) => (
+          <div key={item.label} className="px-4 py-3">
+            <dt className="text-xs text-foreground-subtle">{item.label}</dt>
+            <dd className="text-numeric mt-0.5 text-base font-semibold text-foreground">
+              {item.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="scrollbar-thin max-h-[520px] overflow-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead>
             <tr>
-              <th className="border-b border-border px-3 py-2 text-left font-semibold">
+              <th scope="col" className={cn(headerCell, 'text-left')}>
                 {viewMode === 'yearly' ? 'Year' : 'Month'}
               </th>
-              <th className="border-b border-border px-3 py-2 text-right font-semibold">Payment</th>
-              <th className="border-b border-border px-3 py-2 text-right font-semibold">Principal</th>
-              <th className="border-b border-border px-3 py-2 text-right font-semibold">Interest</th>
-              {includesExtraPrincipal && (
-                <th className="border-b border-border px-3 py-2 text-right font-semibold">Extra</th>
-              )}
-              <th className="border-b border-border px-3 py-2 text-right font-semibold">Balance</th>
+              <th scope="col" className={cn(headerCell, 'text-right')}>
+                Payment
+              </th>
+              <th scope="col" className={cn(headerCell, 'text-right')}>
+                Principal
+              </th>
+              <th scope="col" className={cn(headerCell, 'text-right')}>
+                Interest
+              </th>
+              {includesExtraPrincipal ? (
+                <th scope="col" className={cn(headerCell, 'text-right')}>
+                  Extra
+                </th>
+              ) : null}
+              <th scope="col" className={cn(headerCell, 'text-right')}>
+                Balance
+              </th>
             </tr>
           </thead>
           <tbody>
-            {viewMode === 'yearly' ? (
-              <>
-                {yearlyData.map((yearData) => (
-                  <>
-                    <tr
-                      key={`year-${yearData.year}`}
-                      className="cursor-pointer hover:bg-surface-muted"
-                      onClick={() => toggleYear(yearData.year)}
-                    >
-                      <td className="border-b border-border px-3 py-2 font-medium text-foreground">
-                        <div className="flex items-center gap-2">
-                          {expandedYears.has(yearData.year) ? (
-                            <ChevronUpIcon className="h-3 w-3" />
-                          ) : (
-                            <ChevronDownIcon className="h-3 w-3" />
-                          )}
-                          Year {yearData.year}
-                        </div>
-                      </td>
-                      <td className="border-b border-border px-3 py-2 text-right text-foreground-muted">
-                        {currencyFormatter.format(yearData.totalPayment)}
-                      </td>
-                      <td className="border-b border-border px-3 py-2 text-right text-foreground-muted">
-                        {currencyFormatter.format(yearData.totalPrincipal)}
-                      </td>
-                      <td className="border-b border-border px-3 py-2 text-right text-foreground-muted">
-                        {currencyFormatter.format(yearData.totalInterest)}
-                      </td>
-                      {includesExtraPrincipal && (
-                        <td className="border-b border-border px-3 py-2 text-right text-foreground-muted">
-                          {currencyFormatter.format(yearData.totalExtraPrincipal)}
+            {viewMode === 'yearly'
+              ? yearlyData.map((yearData) => {
+                  const isExpanded = expandedYears.has(yearData.year);
+                  const principalShare =
+                    yearData.totalPrincipal + yearData.totalInterest > 0
+                      ? yearData.totalPrincipal /
+                        (yearData.totalPrincipal + yearData.totalInterest)
+                      : 0;
+
+                  return (
+                    <Fragment key={`year-${yearData.year}`}>
+                      <tr
+                        className="cursor-pointer border-t border-border transition hover:bg-surface-muted"
+                        onClick={() => toggleYear(yearData.year)}
+                      >
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            aria-expanded={isExpanded}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleYear(yearData.year);
+                            }}
+                            className="flex items-center gap-1.5 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            {isExpanded ? (
+                              <ChevronDownIcon className="h-3.5 w-3.5 text-foreground-subtle" />
+                            ) : (
+                              <ChevronRightIcon className="h-3.5 w-3.5 text-foreground-subtle" />
+                            )}
+                            Year {yearData.year}
+                          </button>
+                          <span
+                            aria-hidden
+                            className="ml-5 mt-1 flex h-1 w-20 overflow-hidden rounded-pill bg-info/25"
+                          >
+                            <span
+                              className="block h-1 bg-primary"
+                              style={{ width: `${principalShare * 100}%` }}
+                            />
+                          </span>
                         </td>
-                      )}
-                      <td className="border-b border-border px-3 py-2 text-right font-medium text-foreground">
-                        {currencyFormatter.format(yearData.endingBalance)}
+                        <td className="text-numeric px-3 py-2 text-right text-foreground-muted">
+                          {formatCurrency(yearData.totalPayment)}
+                        </td>
+                        <td className="text-numeric px-3 py-2 text-right text-foreground-muted">
+                          {formatCurrency(yearData.totalPrincipal)}
+                        </td>
+                        <td className="text-numeric px-3 py-2 text-right text-foreground-muted">
+                          {formatCurrency(yearData.totalInterest)}
+                        </td>
+                        {includesExtraPrincipal ? (
+                          <td className="text-numeric px-3 py-2 text-right text-foreground-muted">
+                            {formatCurrency(yearData.totalExtraPrincipal)}
+                          </td>
+                        ) : null}
+                        <td className="text-numeric px-3 py-2 text-right font-semibold text-foreground">
+                          {formatCurrency(yearData.endingBalance)}
+                        </td>
+                      </tr>
+                      {isExpanded
+                        ? yearData.months.map((entry) => (
+                            <tr
+                              key={`month-${entry.month}`}
+                              className="border-t border-border bg-surface-muted/40 text-xs text-foreground-muted"
+                            >
+                              <td className="py-1.5 pl-9 pr-3">Month {entry.month}</td>
+                              <td className="text-numeric px-3 py-1.5 text-right">
+                                {formatCurrency(entry.payment)}
+                              </td>
+                              <td className="text-numeric px-3 py-1.5 text-right">
+                                {formatCurrency(entry.principal)}
+                              </td>
+                              <td className="text-numeric px-3 py-1.5 text-right">
+                                {formatCurrency(entry.interest)}
+                              </td>
+                              {includesExtraPrincipal ? (
+                                <td className="text-numeric px-3 py-1.5 text-right">
+                                  {formatCurrency(entry.extraPrincipal)}
+                                </td>
+                              ) : null}
+                              <td className="text-numeric px-3 py-1.5 text-right">
+                                {formatCurrency(entry.balance)}
+                              </td>
+                            </tr>
+                          ))
+                        : null}
+                    </Fragment>
+                  );
+                })
+              : schedule.map((entry) => (
+                  <tr key={`month-${entry.month}`} className="border-t border-border hover:bg-surface-muted">
+                    <td className="px-3 py-2 font-medium text-foreground">Month {entry.month}</td>
+                    <td className="text-numeric px-3 py-2 text-right text-foreground-muted">
+                      {formatCurrency(entry.payment)}
+                    </td>
+                    <td className="text-numeric px-3 py-2 text-right text-foreground-muted">
+                      {formatCurrency(entry.principal)}
+                    </td>
+                    <td className="text-numeric px-3 py-2 text-right text-foreground-muted">
+                      {formatCurrency(entry.interest)}
+                    </td>
+                    {includesExtraPrincipal ? (
+                      <td className="text-numeric px-3 py-2 text-right text-foreground-muted">
+                        {formatCurrency(entry.extraPrincipal)}
                       </td>
-                    </tr>
-                    {expandedYears.has(yearData.year) &&
-                      yearData.months.map((entry) => (
-                        <tr key={`month-${entry.month}`} className="bg-surface-muted/50 text-foreground-muted">
-                          <td className="border-b border-border px-3 py-1.5 pl-10 text-xs">Month {entry.month}</td>
-                          <td className="border-b border-border px-3 py-1.5 text-right">
-                            {currencyFormatter.format(entry.payment)}
-                          </td>
-                          <td className="border-b border-border px-3 py-1.5 text-right">
-                            {currencyFormatter.format(entry.principal)}
-                          </td>
-                          <td className="border-b border-border px-3 py-1.5 text-right">
-                            {currencyFormatter.format(entry.interest)}
-                          </td>
-                          {includesExtraPrincipal && (
-                            <td className="border-b border-border px-3 py-1.5 text-right">
-                              {currencyFormatter.format(entry.extraPrincipal)}
-                            </td>
-                          )}
-                          <td className="border-b border-border px-3 py-1.5 text-right">
-                            {currencyFormatter.format(entry.balance)}
-                          </td>
-                        </tr>
-                      ))}
-                  </>
-                ))}
-              </>
-            ) : (
-              <>
-                {schedule.map((entry) => (
-                  <tr key={`month-${entry.month}`} className="hover:bg-surface-muted">
-                    <td className="border-b border-border px-3 py-2 font-medium text-foreground">
-                      Month {entry.month}
-                    </td>
-                    <td className="border-b border-border px-3 py-2 text-right text-foreground-muted">
-                      {currencyFormatter.format(entry.payment)}
-                    </td>
-                    <td className="border-b border-border px-3 py-2 text-right text-foreground-muted">
-                      {currencyFormatter.format(entry.principal)}
-                    </td>
-                    <td className="border-b border-border px-3 py-2 text-right text-foreground-muted">
-                      {currencyFormatter.format(entry.interest)}
-                    </td>
-                    {includesExtraPrincipal && (
-                      <td className="border-b border-border px-3 py-2 text-right text-foreground-muted">
-                        {currencyFormatter.format(entry.extraPrincipal)}
-                      </td>
-                    )}
-                    <td className="border-b border-border px-3 py-2 text-right font-medium text-foreground">
-                      {currencyFormatter.format(entry.balance)}
+                    ) : null}
+                    <td className="text-numeric px-3 py-2 text-right font-semibold text-foreground">
+                      {formatCurrency(entry.balance)}
                     </td>
                   </tr>
                 ))}
-              </>
-            )}
           </tbody>
         </table>
       </div>
 
-      {/* Summary stats */}
-      <div className="grid grid-cols-3 gap-3 rounded-lg bg-surface-muted p-3">
-        <div>
-          <p className="text-xs text-foreground-subtle">Total Payments</p>
-          <p className="text-sm font-semibold text-foreground">{schedule.length} months</p>
-        </div>
-        <div>
-          <p className="text-xs text-foreground-subtle">Total Interest Paid</p>
-          <p className="text-sm font-semibold text-foreground">
-            {currencyFormatter.format(schedule[schedule.length - 1]?.cumulativeInterest || 0)}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs text-foreground-subtle">Payoff Date</p>
-          <p className="text-sm font-semibold text-foreground">
-            {new Date(Date.now() + schedule.length * 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', {
-              month: 'short',
-              year: 'numeric',
-            })}
-          </p>
-        </div>
-      </div>
-    </div>
+      <p className="border-t border-border px-4 py-2.5 text-xs text-foreground-subtle">
+        {viewMode === 'yearly'
+          ? 'Select a year to open its monthly detail. The bar shows how much of that year goes to principal.'
+          : 'Every scheduled payment, in order.'}
+      </p>
+    </section>
   );
 }

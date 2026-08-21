@@ -4,6 +4,10 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useCallback, useMemo, useTransition } from 'react';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 
+import { cn } from '@/lib/cn';
+import { Button } from '@/components/ui/button';
+import { selectFieldClasses } from '@/components/ui/field-group';
+
 interface PaginationProps {
   currentPage: number;
   totalItems: number;
@@ -77,9 +81,9 @@ export function Pagination({ currentPage, totalItems, pageSize, totalPages, item
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-4">
         <p className="text-sm text-foreground-muted">
-          Showing <span className="font-medium text-foreground">{startItem}</span> to{' '}
-          <span className="font-medium text-foreground">{endItem}</span> of{' '}
-          <span className="font-medium text-foreground">{totalItems}</span> {itemLabel}
+          Showing <span className="text-numeric font-medium text-foreground">{startItem}</span> to{' '}
+          <span className="text-numeric font-medium text-foreground">{endItem}</span> of{' '}
+          <span className="text-numeric font-medium text-foreground">{totalItems}</span> {itemLabel}
         </p>
       </div>
       <div className="flex items-center gap-3">
@@ -89,7 +93,7 @@ export function Pagination({ currentPage, totalItems, pageSize, totalPages, item
             value={pageSize}
             onChange={handlePageSizeChange}
             disabled={isPending}
-            className="rounded border border-border bg-surface-raised px-2 py-1 text-sm text-foreground-muted shadow-sm focus:border-ring focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            className={cn(selectFieldClasses, 'text-numeric h-8 w-auto pr-2')}
           >
             {pageSize === 20 && <option value={20}>20</option>}
             <option value={25}>25</option>
@@ -98,27 +102,30 @@ export function Pagination({ currentPage, totalItems, pageSize, totalPages, item
           </select>
         </label>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={handlePrevious}
             disabled={currentPage <= 1 || isPending}
-            className="inline-flex items-center justify-center rounded border border-border bg-surface-raised px-2.5 py-1.5 text-sm font-medium text-foreground-muted shadow-sm transition hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-8 px-0"
             aria-label="Previous page"
           >
-            <ChevronLeftIcon className="h-4 w-4" />
-          </button>
-          <span className="px-3 py-1.5 text-sm font-medium text-foreground-muted">
-            Page {currentPage} of {totalPages}
+            <ChevronLeftIcon className="h-4 w-4" aria-hidden />
+          </Button>
+          <span className="px-3 text-sm font-medium text-foreground-muted">
+            Page <span className="text-numeric">{currentPage}</span> of{' '}
+            <span className="text-numeric">{totalPages}</span>
           </span>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={handleNext}
             disabled={currentPage >= totalPages || isPending}
-            className="inline-flex items-center justify-center rounded border border-border bg-surface-raised px-2.5 py-1.5 text-sm font-medium text-foreground-muted shadow-sm transition hover:bg-surface-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-8 px-0"
             aria-label="Next page"
           >
-            <ChevronRightIcon className="h-4 w-4" />
-          </button>
+            <ChevronRightIcon className="h-4 w-4" aria-hidden />
+          </Button>
         </div>
       </div>
     </div>

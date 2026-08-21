@@ -12,6 +12,10 @@ import {
 import { ReferralStatus } from '@/models/referral';
 import { toast } from 'sonner';
 import { TERMINATED_REASON_OPTIONS, type TerminatedReason } from '@/constants/deals';
+import { cn } from '@/lib/cn';
+import { Button } from '@/components/ui/button';
+import { inputFieldClasses } from '@/components/ui/input';
+import { selectFieldClasses } from '@/components/ui/field-group';
 
 interface Props {
   referralId: string;
@@ -269,11 +273,11 @@ export function StatusChanger({
       <div className="space-y-4">
         {showStatusControl && (
           <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{statusLabel}</p>
+            <p className="text-eyebrow text-foreground-subtle">{statusLabel}</p>
             <select
               value={currentStatus}
               onChange={handleChange}
-              className="w-full rounded-md border border-border-strong bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-ring focus:outline-none"
+              className={selectFieldClasses}
               disabled={loading}
             >
               {pipelineOptions.map((item) => (
@@ -283,13 +287,13 @@ export function StatusChanger({
               ))}
             </select>
             {pendingTerminatedSelection && (
-              <div className="space-y-2 rounded border border-border bg-surface-muted p-2">
+              <div className="space-y-2 rounded-card border border-border bg-surface-muted p-2">
                 <label className="block text-xs font-semibold text-foreground-muted">
                   Termination reason
                   <select
                     value={terminatedReason}
                     onChange={(event) => setTerminatedReason(event.target.value as TerminatedReason | '')}
-                    className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none"
+                    className={cn(selectFieldClasses, 'mt-1')}
                     disabled={loading}
                   >
                     <option value="">Select reason</option>
@@ -301,9 +305,9 @@ export function StatusChanger({
                   </select>
                 </label>
                 <div className="flex gap-2">
-                  <button
+                  <Button
                     type="button"
-                    className="rounded bg-foreground px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
+                    size="sm"
                     disabled={loading}
                     onClick={() => {
                       if (!terminatedReason) {
@@ -315,10 +319,11 @@ export function StatusChanger({
                     }}
                   >
                     Confirm
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    className="rounded border border-border-strong px-2 py-1 text-xs font-semibold text-foreground-muted"
+                    variant="secondary"
+                    size="sm"
                     disabled={loading}
                     onClick={() => {
                       setPendingTerminatedSelection(false);
@@ -327,18 +332,18 @@ export function StatusChanger({
                     }}
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
             {pendingLostSelection && (
-              <div className="space-y-2 rounded border border-border bg-surface-muted p-2">
+              <div className="space-y-2 rounded-card border border-border bg-surface-muted p-2">
                 <label className="block text-xs font-semibold text-foreground-muted">
                   Why was this lost?
                   <select
                     value={lostReason}
                     onChange={(event) => setLostReason(event.target.value as LostReason | '')}
-                    className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none"
+                    className={cn(selectFieldClasses, 'mt-1')}
                     disabled={loading}
                   >
                     <option value="">Select reason</option>
@@ -356,9 +361,9 @@ export function StatusChanger({
                   </p>
                 )}
                 <div className="flex gap-2">
-                  <button
+                  <Button
                     type="button"
-                    className="rounded bg-foreground px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
+                    size="sm"
                     disabled={loading}
                     onClick={() => {
                       if (!lostReason) {
@@ -370,10 +375,11 @@ export function StatusChanger({
                     }}
                   >
                     Confirm
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    className="rounded border border-border-strong px-2 py-1 text-xs font-semibold text-foreground-muted"
+                    variant="secondary"
+                    size="sm"
                     disabled={loading}
                     onClick={() => {
                       setPendingLostSelection(false);
@@ -382,7 +388,7 @@ export function StatusChanger({
                     }}
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -391,7 +397,7 @@ export function StatusChanger({
 
         {showPreApproval && (
           <div className="space-y-1">
-            <div className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Pre-approval</div>
+            <div className="text-eyebrow text-foreground-subtle">Pre-approval</div>
             {editingPreApproval ? (
               <div className="space-y-2">
                 <input
@@ -399,32 +405,33 @@ export function StatusChanger({
                   inputMode="decimal"
                   value={formatCurrencyInputDisplay(preApproval)}
                   onChange={handlePreApprovalChange}
-                  className="w-full rounded-md border border-border-strong bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-ring focus:outline-none"
+                  className={cn(inputFieldClasses, 'text-numeric')}
                   placeholder="300,000"
                   disabled={preApprovalSaving || loading}
                 />
                 <div className="flex items-center gap-2">
-                  <button
+                  <Button
                     type="button"
                     onClick={handlePreApprovalSave}
-                    disabled={preApprovalSaving || !preApprovalDirty}
-                    className="inline-flex flex-1 items-center justify-center rounded bg-foreground px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
+                    disabled={!preApprovalDirty}
+                    loading={preApprovalSaving}
+                    className="flex-1"
                   >
                     {preApprovalSaving ? 'Saving…' : 'Save'}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    variant="secondary"
                     onClick={handlePreApprovalCancel}
                     disabled={preApprovalSaving || loading}
-                    className="inline-flex items-center justify-center rounded border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-between rounded-md border border-border-strong bg-surface-raised px-3 py-2 text-sm font-semibold text-foreground shadow-sm">
-                <span>{formattedPreApprovalDisplay}</span>
+              <div className="flex items-center justify-between rounded-lg border border-border-strong bg-surface-raised px-3 py-2 text-sm font-semibold text-foreground shadow-sm">
+                <span className="text-numeric">{formattedPreApprovalDisplay}</span>
                 <button
                   type="button"
                   onClick={() => setEditingPreApproval(true)}

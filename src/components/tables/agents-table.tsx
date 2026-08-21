@@ -19,6 +19,12 @@ import { Pagination } from '@/components/tables/pagination';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatDecimal, formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
+import { cn } from '@/lib/cn';
+import { PageHeader } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Input } from '@/components/ui/input';
+import { selectFieldClasses } from '@/components/ui/field-group';
+import { TBody, THead, Table, TableScroll, TableShell, Td, Th, Tr } from '@/components/ui/table-shell';
 
 interface CoverageLocation {
   label: string;
@@ -64,6 +70,8 @@ interface AgentsTableProps {
   // Legacy props kept for backward compatibility but no longer used
   showForm?: boolean;
   setShowForm?: Dispatch<SetStateAction<boolean>>;
+  /** Set when a parent already renders the page header for this table. */
+  hideHeading?: boolean;
 }
 
 interface AgentsResponse {
@@ -73,7 +81,11 @@ interface AgentsResponse {
   pageSize: number;
 }
 
-export function AgentsTable({ showForm: externalShowForm, setShowForm: externalSetShowForm }: AgentsTableProps) {
+export function AgentsTable({
+  showForm: externalShowForm,
+  setShowForm: externalSetShowForm,
+  hideHeading = false,
+}: AgentsTableProps) {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === 'admin';
   const router = useRouter();
@@ -257,7 +269,9 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
       <button
         type="button"
         onClick={() => toggleSort(sortKey)}
-        className="flex items-center gap-1 text-left"
+        // Buttons don't inherit text-transform, so the header's eyebrow casing
+        // has to be restated or sortable columns read title case.
+        className="flex items-center gap-1 text-left uppercase"
       >
         <span>{label}</span>
         <span className="text-[10px] text-foreground-subtle">{icon}</span>
@@ -266,45 +280,44 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
   };
 
   if (!data) {
-    return <div className="rounded-md bg-surface-raised p-4 shadow-sm">Loading agents…</div>;
+    return (
+      <div className="rounded-card border border-border bg-surface-raised p-4 text-sm text-foreground-muted shadow-card">
+        Loading agents…
+      </div>
+    );
   }
-
-
-
 
 
 
   return (
     <div className="space-y-4">
-      {!isAdmin && (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground">Agents</h1>
-            <p className="text-sm text-foreground-subtle">Browse real estate agent partners.</p>
-          </div>
-        </div>
+      {!isAdmin && !hideHeading && (
+        <PageHeader
+          eyebrow="Partner network"
+          title="Agents"
+          description="Browse real estate agent partners."
+        />
       )}
-      <div className="rounded-xl border border-border bg-surface-muted/50 p-4">
+      <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
         <div className="flex flex-col gap-3 md:flex-row md:items-end">
           {isAdmin && (
-            <label className="flex-1 text-xs font-semibold text-foreground-muted">
-              Search
-              <input
+            <label className="flex-1 space-y-1.5">
+              <span className="text-eyebrow block text-foreground-subtle">Search</span>
+              <Input
                 type="text"
                 value={searchTerm}
                 onChange={(event) => handleSearchInput(event.target.value)}
-                className="mt-2 w-full rounded-lg border border-border bg-surface-raised px-4 py-3 text-base shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
                 placeholder="Name, email, phone, brokerage"
               />
             </label>
           )}
-          <label className="text-xs font-semibold text-foreground-muted">
-            Agent Designation
+          <label className="space-y-1.5">
+            <span className="text-eyebrow block text-foreground-subtle">Agent Designation</span>
             <select
               value={ahaFilter}
               onChange={(event) => updateParams({ ahaFilter: event.target.value })}
               disabled={isPending}
-              className="mt-1 rounded border border-border bg-surface-raised px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+              className={selectFieldClasses}
             >
               <option value="all">All agents</option>
               <option value="AHA">AHA</option>
@@ -313,13 +326,13 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
             </select>
           </label>
           {isAdmin && (
-            <label className="text-xs font-semibold text-foreground-muted">
-              Status
+            <label className="space-y-1.5">
+              <span className="text-eyebrow block text-foreground-subtle">Status</span>
               <select
                 value={activeFilter}
                 onChange={(event) => updateParams({ activeFilter: event.target.value })}
                 disabled={isPending}
-                className="mt-1 rounded border border-border bg-surface-raised px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                className={selectFieldClasses}
               >
                 <option value="all">All statuses</option>
                 <option value="active">Active</option>
@@ -330,111 +343,118 @@ export function AgentsTable({ showForm: externalShowForm, setShowForm: externalS
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-card border border-border bg-surface-raised shadow-sm">
-        <table className="min-w-full divide-y divide-border">
-          <thead className="bg-surface-muted">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                <SortableHeader label="Agent" sortKey="name" />
-              </th>
-              {isAdmin && (
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                  Status
-                </th>
-              )}
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                <SortableHeader label="Closings (12mo)" sortKey="closings" />
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                <SortableHeader label="Closing %" sortKey="closingRate" />
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                <SortableHeader label="NPS" sortKey="nps" />
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                <SortableHeader label="Avg response" sortKey="avgResponse" />
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                <SortableHeader label="Referral fees paid" sortKey="referralFees" />
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                <SortableHeader label="Net income" sortKey="netIncome" />
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {agents.length === 0 ? (
+      <TableShell>
+        <TableScroll>
+          <Table className="min-w-full">
+            <THead>
               <tr>
-                <td className="px-4 py-6 text-center text-sm text-foreground-subtle" colSpan={isAdmin ? 8 : 7}>
-                  No agents match the selected filter.
-                </td>
+                <Th dense={isAdmin}>
+                  <SortableHeader label="Agent" sortKey="name" />
+                </Th>
+                {isAdmin && <Th dense>Status</Th>}
+                <Th dense={isAdmin}>
+                  <SortableHeader label="Closings (12mo)" sortKey="closings" />
+                </Th>
+                <Th dense={isAdmin}>
+                  <SortableHeader label="Closing %" sortKey="closingRate" />
+                </Th>
+                <Th dense={isAdmin}>
+                  <SortableHeader label="NPS" sortKey="nps" />
+                </Th>
+                <Th dense={isAdmin}>
+                  <SortableHeader label="Avg response" sortKey="avgResponse" />
+                </Th>
+                <Th dense={isAdmin}>
+                  <SortableHeader label="Referral fees paid" sortKey="referralFees" />
+                </Th>
+                <Th dense={isAdmin}>
+                  <SortableHeader label="Net income" sortKey="netIncome" />
+                </Th>
               </tr>
-            ) : (
-              agents.map((agent) => (
-                <tr key={agent._id} className="hover:bg-surface-muted">
-                  <td className="px-4 py-3 text-sm text-foreground-muted">
-                    <div className="font-medium text-foreground">
-                      <Link href={`/agents/${agent._id}`} className="text-primary hover:underline">
-                        {agent.name}
-                      </Link>
-                    </div>
-                    <div className="text-xs text-foreground-subtle">
-                      <a
-                      href={buildGmailComposeUrl(agent.email)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      {agent.email}
-                    </a>
-                    </div>
-                    <div className="text-xs text-foreground-subtle">
-                      {agent.phone ? (
-                        <a
-                          href={`tel:${agent.phone.replace(/[^0-9+]/g, '')}`}
-                          className="text-primary hover:underline"
-                        >
-                          {formatPhoneNumber(agent.phone)}
-                        </a>
-                      ) : '—'}
-                    </div>
-                  </td>
-                  {isAdmin && (
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                          agent.active === false ? 'bg-danger-soft text-danger' : 'bg-success-soft text-success'
-                        }`}
-                      >
-                        {agent.active === false ? 'Inactive' : 'Active'}
-                      </span>
-                    </td>
-                  )}
-                  <td className="px-4 py-3 text-sm text-foreground-muted">{agent.metrics.closingsLast12Months}</td>
-                  <td className="px-4 py-3 text-sm text-foreground-muted">
-                    {(() => {
-                      const closingRate = formatDecimal(agent.metrics.closingRate);
-                      return closingRate === '—' ? '—' : `${closingRate}%`;
-                    })()}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-foreground-muted">{agent.metrics.npsScore ?? '—'}</td>
-                  <td className="px-4 py-3 text-sm text-foreground-muted">
-                    {agent.metrics.avgResponseHours == null
-                      ? '—'
-                      : `${formatDecimal(agent.metrics.avgResponseHours)} hrs`}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-foreground-muted">
-                    {formatCurrency(agent.metrics.totalReferralFeesPaidCents)}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-foreground-muted">
-                    {formatCurrency(agent.metrics.totalNetIncomeCents)}
+            </THead>
+            <TBody>
+              {agents.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6" colSpan={isAdmin ? 8 : 7}>
+                    <EmptyState
+                      compact
+                      title="No agents found"
+                      description="No agents match the selected filter."
+                    />
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : (
+                agents.map((agent) => (
+                  <Tr key={agent._id}>
+                    <Td dense={isAdmin} className="text-foreground-muted">
+                      <div className="font-medium text-foreground">
+                        <Link href={`/agents/${agent._id}`} className="text-primary hover:underline">
+                          {agent.name}
+                        </Link>
+                      </div>
+                      <div className="text-xs text-foreground-subtle">
+                        <a
+                          href={buildGmailComposeUrl(agent.email)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          {agent.email}
+                        </a>
+                      </div>
+                      <div className="text-numeric text-xs text-foreground-subtle">
+                        {agent.phone ? (
+                          <a
+                            href={`tel:${agent.phone.replace(/[^0-9+]/g, '')}`}
+                            className="text-primary hover:underline"
+                          >
+                            {formatPhoneNumber(agent.phone)}
+                          </a>
+                        ) : '—'}
+                      </div>
+                    </Td>
+                    {isAdmin && (
+                      <Td dense className="text-foreground-muted">
+                        <span
+                          className={cn(
+                            'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                            agent.active === false
+                              ? 'bg-danger-soft text-danger'
+                              : 'bg-success-soft text-success'
+                          )}
+                        >
+                          {agent.active === false ? 'Inactive' : 'Active'}
+                        </span>
+                      </Td>
+                    )}
+                    <Td dense={isAdmin} className="text-numeric text-foreground-muted">
+                      {agent.metrics.closingsLast12Months}
+                    </Td>
+                    <Td dense={isAdmin} className="text-numeric text-foreground-muted">
+                      {(() => {
+                        const closingRate = formatDecimal(agent.metrics.closingRate);
+                        return closingRate === '—' ? '—' : `${closingRate}%`;
+                      })()}
+                    </Td>
+                    <Td dense={isAdmin} className="text-numeric text-foreground-muted">{agent.metrics.npsScore ?? '—'}</Td>
+                    <Td dense={isAdmin} className="text-numeric text-foreground-muted">
+                      {agent.metrics.avgResponseHours == null
+                        ? '—'
+                        : `${formatDecimal(agent.metrics.avgResponseHours)} hrs`}
+                    </Td>
+                    <Td dense={isAdmin} className="text-numeric text-foreground-muted">
+                      {formatCurrency(agent.metrics.totalReferralFeesPaidCents)}
+                    </Td>
+                    <Td dense={isAdmin} className="text-numeric text-foreground-muted">
+                      {formatCurrency(agent.metrics.totalNetIncomeCents)}
+                    </Td>
+                  </Tr>
+                ))
+              )}
+            </TBody>
+          </Table>
+        </TableScroll>
+      </TableShell>
       {data && (
         <Pagination
           currentPage={data.page}

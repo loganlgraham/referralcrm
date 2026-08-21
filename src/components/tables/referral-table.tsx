@@ -41,6 +41,8 @@ import { mapDealStatusToReferralStatusDisplay } from '@/lib/latest-deal-referral
 import { confirmCloseStatusDate } from '@/components/referrals/status-date-confirmation-toast';
 import { StatusPill } from '@/components/ui/status-pill';
 import { AgentOriginMarker } from '@/components/referrals/agent-origin-marker';
+import { Button } from '@/components/ui/button';
+
 export interface ReferralRow {
   _id: string;
   createdAt: string;
@@ -388,7 +390,7 @@ function UnderContractDealToast({
           <div className="relative mt-1">
             <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-sm text-foreground-subtle">$</span>
             <input
-              className="w-full rounded border border-border-strong py-1 pl-6 pr-2 text-sm"
+              className="text-numeric w-full rounded-lg border border-border-strong/70 py-1 pl-6 pr-2 text-sm"
               inputMode="decimal"
               value={contractPrice}
               onChange={(e) => setContractPrice(formatCurrencyInput(e.target.value))}
@@ -423,24 +425,24 @@ function UnderContractDealToast({
                   $
                 </button>
                 <input
-                  className="w-full rounded border border-border-strong px-2 py-1 text-sm sm:flex-1"
+                  className="text-numeric w-full rounded-lg border border-border-strong/70 px-2 py-1 text-sm sm:flex-1"
                   value={commissionMode === '%' ? commissionPercentage : commissionFlat}
                   onChange={(event) => commissionMode === '%' ? setCommissionPercentage(event.target.value) : setCommissionFlat(event.target.value)}
                 />
               </div>
             </div>
             <label className="text-xs font-medium text-foreground-muted">Referral fee %
-              <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={referralFeePercentage} onChange={(e) => setReferralFeePercentage(e.target.value)} />
+              <input className="text-numeric mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-sm" value={referralFeePercentage} onChange={(e) => setReferralFeePercentage(e.target.value)} />
             </label>
             <label className="text-xs font-medium text-foreground-muted">Expected amount
-              <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={expectedAmount} onChange={(e) => { setExpectedManuallyEdited(Boolean(e.target.value)); setExpectedAmount(e.target.value); }} />
+              <input className="text-numeric mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-sm" value={expectedAmount} onChange={(e) => { setExpectedManuallyEdited(Boolean(e.target.value)); setExpectedAmount(e.target.value); }} />
             </label>
           </>
         ) : null}
         <label className="text-xs font-medium text-foreground-muted">Under contract date
           <input
             type="date"
-            className="mt-1 w-full cursor-pointer rounded border border-border-strong px-2 py-1 text-sm"
+            className="text-numeric mt-1 w-full cursor-pointer rounded-lg border border-border-strong/70 px-2 py-1 text-sm"
             value={underContractDate}
             onClick={handleDateInputClick}
             onChange={(e) => setUnderContractDate(e.target.value)}
@@ -449,32 +451,32 @@ function UnderContractDealToast({
         <label className="text-xs font-medium text-foreground-muted">Closing date
           <input
             type="date"
-            className="mt-1 w-full cursor-pointer rounded border border-border-strong px-2 py-1 text-sm"
+            className="text-numeric mt-1 w-full cursor-pointer rounded-lg border border-border-strong/70 px-2 py-1 text-sm"
             value={closingDate}
             onClick={handleDateInputClick}
             onChange={(e) => setClosingDate(e.target.value)}
           />
         </label>
         <label className="text-xs font-medium text-foreground-muted sm:col-span-2">Property address
-          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={propertyAddress} onChange={(e) => setPropertyAddress(e.target.value)} />
+          <input className="mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-sm" value={propertyAddress} onChange={(e) => setPropertyAddress(e.target.value)} />
         </label>
         <label className="text-xs font-medium text-foreground-muted">Property city
-          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={propertyCity} onChange={(e) => setPropertyCity(e.target.value)} />
+          <input className="mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-sm" value={propertyCity} onChange={(e) => setPropertyCity(e.target.value)} />
         </label>
         <label className="text-xs font-medium text-foreground-muted">Property state
-          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm uppercase" maxLength={2} value={propertyState} onChange={(e) => setPropertyState(e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2))} />
+          <input className="mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-sm uppercase" maxLength={2} value={propertyState} onChange={(e) => setPropertyState(e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2))} />
         </label>
         <label className="text-xs font-medium text-foreground-muted">Property ZIP
-          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={propertyPostalCode} onChange={(e) => setPropertyPostalCode(e.target.value)} />
+          <input className="text-numeric mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-sm" value={propertyPostalCode} onChange={(e) => setPropertyPostalCode(e.target.value)} />
         </label>
         <label className="text-xs font-medium text-foreground-muted">Deal side
-          <select className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={side} onChange={(e) => setSide(e.target.value as 'buy' | 'sell')}>
+          <select className="mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-sm" value={side} onChange={(e) => setSide(e.target.value as 'buy' | 'sell')}>
             <option value="buy">Buy-side</option>
             <option value="sell">Sell-side</option>
           </select>
         </label>
         {side !== 'sell' && (
-          <fieldset className="rounded border border-primary/40 bg-primary/5 px-3 py-2 sm:col-span-2">
+          <fieldset className="rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 sm:col-span-2">
             <legend className="px-1 text-sm font-semibold text-foreground">
               Is this client financing with AFC?
             </legend>
@@ -506,8 +508,19 @@ function UnderContractDealToast({
           </fieldset>
         )}
         <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
-          <button type="button" className="w-full rounded border border-border-strong px-3 py-1.5 text-xs font-semibold text-foreground-muted sm:w-auto" onClick={onClose} disabled={submitting}>Cancel</button>
-          <button type="submit" className="w-full rounded bg-primary px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 sm:w-auto" disabled={submitting}>{submitting ? 'Saving…' : 'Save deal & move status'}</button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="w-full sm:w-auto"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" size="sm" className="w-full sm:w-auto" loading={submitting}>
+            {submitting ? 'Saving…' : 'Save deal & move status'}
+          </Button>
         </div>
       </form>
     </div>
@@ -709,7 +722,7 @@ function StatusSelect({
         value={status}
         onChange={handleChange}
         disabled={loading}
-        className="w-full rounded border border-border bg-surface-raised px-2 py-1 text-sm text-foreground-muted shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
+        className="w-full rounded-lg border border-border bg-surface-raised px-2 py-1 text-sm text-foreground-muted shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
       >
         {REFERRAL_STATUSES.map((item) => (
           <option key={item} value={item}>
@@ -718,13 +731,13 @@ function StatusSelect({
         ))}
       </select>
       {pendingTerminatedSelection && (
-        <div className="space-y-2 rounded border border-border bg-surface-muted p-2">
+        <div className="space-y-2 rounded-lg border border-border bg-surface-muted p-2">
           <label className="block text-xs font-semibold text-foreground-muted">
             Is this customer still shopping?
             <select
               value={stillShopping}
               onChange={(event) => setStillShopping(event.target.value as 'yes' | 'no' | '')}
-              className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
+              className="mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
               disabled={loading}
             >
               <option value="">Select</option>
@@ -737,7 +750,7 @@ function StatusSelect({
             <select
               value={terminatedReason}
               onChange={(event) => setTerminatedReason(event.target.value as TerminatedReason | '')}
-              className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
+              className="mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
               disabled={loading}
             >
               <option value="">Select reason</option>
@@ -754,7 +767,7 @@ function StatusSelect({
               <select
                 value={lostReason}
                 onChange={(event) => setLostReason(event.target.value as LostReason | '')}
-                className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
+                className="mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
                 disabled={loading}
               >
                 <option value="">Select reason</option>
@@ -831,7 +844,7 @@ function StatusSelect({
             </button>
             <button
               type="button"
-              className="rounded border border-border-strong px-2 py-1 text-xs font-semibold text-foreground-muted"
+              className="rounded-lg border border-border-strong/70 px-2 py-1 text-xs font-semibold text-foreground-muted"
               disabled={loading}
               onClick={() => {
                 resetTerminatedPanel();
@@ -844,13 +857,13 @@ function StatusSelect({
         </div>
       )}
       {pendingLostSelection && (
-        <div className="space-y-2 rounded border border-border bg-surface-muted p-2">
+        <div className="space-y-2 rounded-lg border border-border bg-surface-muted p-2">
           <label className="block text-xs font-semibold text-foreground-muted">
             Why was this lost?
             <select
               value={lostReason}
               onChange={(event) => setLostReason(event.target.value as LostReason | '')}
-              className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
+              className="mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
               disabled={loading}
             >
               <option value="">Select reason</option>
@@ -920,7 +933,7 @@ function StatusSelect({
             </button>
             <button
               type="button"
-              className="rounded border border-border-strong px-2 py-1 text-xs font-semibold text-foreground-muted"
+              className="rounded-lg border border-border-strong/70 px-2 py-1 text-xs font-semibold text-foreground-muted"
               disabled={loading}
               onClick={() => {
                 resetLostPanel();
@@ -954,8 +967,8 @@ function SideStatusPill({
   isAgentOrigin?: boolean;
 }) {
   return (
-    <div className="rounded border border-border bg-surface-muted px-2 py-1">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground-subtle">{label}</p>
+    <div className="rounded-lg border border-border bg-surface-muted px-2 py-1">
+      <p className="text-eyebrow text-foreground-subtle">{label}</p>
       <p className="text-xs font-medium text-foreground-muted">
         {status ? getReferralStatusLabel(status, { isAgentOrigin }) : '—'}
       </p>
@@ -1050,7 +1063,7 @@ function NoteComposer({
         value={note}
         onChange={(event) => setNote(event.target.value)}
         rows={3}
-        className="w-full rounded border border-border px-2 py-1 text-sm text-foreground-muted shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
+        className="w-full rounded-lg border border-border px-2 py-1 text-sm text-foreground-muted shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
         placeholder="Capture quick context for this referral"
         disabled={saving}
       />
@@ -1101,7 +1114,7 @@ function NoteComposer({
           type="button"
           onClick={reset}
           disabled={saving}
-          className="inline-flex items-center rounded border border-border px-3 py-1 font-semibold text-foreground-muted transition hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-70"
+          className="inline-flex items-center rounded-lg border border-border px-3 py-1 font-semibold text-foreground-muted transition hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-70"
         >
           Cancel
         </button>
@@ -1129,10 +1142,8 @@ function AgentBothStatusCell({ row }: { row: ReferralRow }) {
         <SideStatusPill label="Buy" status={buyStatus} isAgentOrigin={isAgentOrigin} />
         <SideStatusPill label="Sell" status={sellStatus} isAgentOrigin={isAgentOrigin} />
       </div>
-      <div className="rounded border border-primary/20 bg-primary/5 p-2">
-        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
-          My side: {assignedSide}
-        </p>
+      <div className="rounded-lg border border-primary/20 bg-primary/5 p-2">
+        <p className="text-eyebrow mb-1 text-primary">My side: {assignedSide}</p>
         <StatusSelect
           referralId={row._id}
           value={assignedStatus}
@@ -1215,7 +1226,9 @@ function SortButton({
     <button
       type="button"
       onClick={handleClick}
-      className="flex items-center gap-1 text-left"
+      // Buttons don't inherit text-transform, so the eyebrow casing on the
+      // header cell has to be restated here or sortable columns read title case.
+      className="flex items-center gap-1 text-left uppercase"
     >
       <span>{label}</span>
       <span className="text-[10px] text-foreground-subtle">{icon}</span>
@@ -1310,7 +1323,9 @@ function buildColumns(
   const createdColumn: ColumnDef<ReferralRow> = {
     header: sortableHeader('Created', 'createdAt', currentSortBy, currentSortDirection, onSortChange),
     accessorKey: 'createdAt',
-    cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString(),
+    cell: ({ row }) => (
+      <span className="text-numeric">{new Date(row.original.createdAt).toLocaleDateString()}</span>
+    ),
   };
 
   const lastUpdatedColumn: ColumnDef<ReferralRow> = {
@@ -1318,7 +1333,11 @@ function buildColumns(
     accessorKey: 'updatedAt',
     cell: ({ row }) => {
       const updatedAt = row.original.updatedAt;
-      return updatedAt ? new Date(updatedAt).toLocaleDateString() : '—';
+      return (
+        <span className="text-numeric">
+          {updatedAt ? new Date(updatedAt).toLocaleDateString() : '—'}
+        </span>
+      );
     },
   };
 
@@ -1416,7 +1435,8 @@ function buildColumns(
       borrowerColumn,
       {
         header: sortableHeader('Loan File #', 'loanFileNumber', currentSortBy, currentSortDirection, onSortChange),
-        accessorKey: 'loanFileNumber'
+        accessorKey: 'loanFileNumber',
+        cell: ({ row }) => <span className="text-numeric">{row.original.loanFileNumber}</span>
       },
       timelineColumn,
       {
@@ -1462,7 +1482,8 @@ function buildColumns(
       borrowerColumn,
       {
         header: sortableHeader('Loan File #', 'loanFileNumber', currentSortBy, currentSortDirection, onSortChange),
-        accessorKey: 'loanFileNumber'
+        accessorKey: 'loanFileNumber',
+        cell: ({ row }) => <span className="text-numeric">{row.original.loanFileNumber}</span>
       },
       timelineColumn,
       {
@@ -1520,7 +1541,8 @@ function buildColumns(
     borrowerColumn,
     {
       header: sortableHeader('Loan File #', 'loanFileNumber', currentSortBy, currentSortDirection, onSortChange),
-      accessorKey: 'loanFileNumber'
+      accessorKey: 'loanFileNumber',
+      cell: ({ row }) => <span className="text-numeric">{row.original.loanFileNumber}</span>
     },
     timelineColumn,
     {
@@ -1548,11 +1570,19 @@ function referralDetailHref(row: ReferralRow, listParams: string) {
   return listParams ? `/referrals/${row._id}?${listParams}` : `/referrals/${row._id}`;
 }
 
-function MobileField({ label, children }: { label: string; children: ReactNode }) {
+function MobileField({
+  label,
+  numeric,
+  children
+}: {
+  label: string;
+  numeric?: boolean;
+  children: ReactNode;
+}) {
   return (
     <div className="space-y-1">
-      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">{label}</p>
-      <div className="text-sm text-foreground">{children}</div>
+      <p className="text-eyebrow text-foreground-subtle">{label}</p>
+      <div className={clsx('text-sm text-foreground', numeric && 'text-numeric')}>{children}</div>
     </div>
   );
 }
@@ -1642,7 +1672,7 @@ function ReferralMobileStack({
               {/* Details zone */}
               <div className="px-4 py-3 space-y-3">
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                  <MobileField label="Loan file #">{row.loanFileNumber}</MobileField>
+                  <MobileField label="Loan file #" numeric>{row.loanFileNumber}</MobileField>
                   <MobileField label="Timeline">{timelineText}</MobileField>
                   <MobileField label="Lender / MC">
                     {!row.lenderName && !row.lenderPhone && !row.lenderEmail ? (
@@ -1671,8 +1701,10 @@ function ReferralMobileStack({
                       </div>
                     )}
                   </MobileField>
-                  <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
-                  <MobileField label="Last updated">
+                  <MobileField label="Created" numeric>
+                    {new Date(row.createdAt).toLocaleDateString()}
+                  </MobileField>
+                  <MobileField label="Last updated" numeric>
                     {row.updatedAt ? new Date(row.updatedAt).toLocaleDateString() : '—'}
                   </MobileField>
                 </div>
@@ -1734,7 +1766,7 @@ function ReferralMobileStack({
               </div>
             </MobileField>
 
-            <MobileField label="Loan file #">{row.loanFileNumber}</MobileField>
+            <MobileField label="Loan file #" numeric>{row.loanFileNumber}</MobileField>
             <MobileField label="Timeline">{timelineText}</MobileField>
 
             {mode === 'mc' ? (
@@ -1777,7 +1809,9 @@ function ReferralMobileStack({
                     isAgentOrigin={row.origin === 'agent'}
                   />
                 </MobileField>
-                <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
+                <MobileField label="Created" numeric>
+                  {new Date(row.createdAt).toLocaleDateString()}
+                </MobileField>
               </>
             ) : null}
 
@@ -1854,8 +1888,10 @@ function ReferralMobileStack({
                     </div>
                   )}
                 </MobileField>
-                <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
-                <MobileField label="Last updated">
+                <MobileField label="Created" numeric>
+                  {new Date(row.createdAt).toLocaleDateString()}
+                </MobileField>
+                <MobileField label="Last updated" numeric>
                   {row.updatedAt ? new Date(row.updatedAt).toLocaleDateString() : '—'}
                 </MobileField>
               </>
@@ -1972,9 +2008,11 @@ export function ReferralTable({
               {headerGroup.headers.map((header) => (
                 <th
                   key={header.id}
-                  className={`px-4 py-3 text-xs font-semibold uppercase tracking-wide text-foreground-subtle ${
+                  className={clsx(
+                    'text-eyebrow px-4 text-foreground-subtle',
+                    mode === 'admin' ? 'py-2' : 'py-3',
                     header.column.id === 'actions' ? 'text-right' : 'text-left'
-                  }`}
+                  )}
                 >
                   {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                 </th>
@@ -1988,9 +2026,11 @@ export function ReferralTable({
               {row.getVisibleCells().map((cell) => (
                 <td
                   key={cell.id}
-                  className={`px-4 py-3 text-sm text-foreground-muted ${
-                    cell.column.id === 'actions' ? 'text-right' : ''
-                  }`}
+                  className={clsx(
+                    'px-4 text-sm text-foreground-muted',
+                    mode === 'admin' ? 'py-1.5' : 'py-3',
+                    cell.column.id === 'actions' && 'text-right'
+                  )}
                 >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
@@ -2060,11 +2100,11 @@ export function ReferralSummary({
 
   return (
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <dl className={clsx('grid gap-4', columnClass)}>
+      <dl className={clsx('grid gap-2', columnClass)}>
         {metrics.map((metric) => (
-          <div key={metric.label}>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">{metric.label}</dt>
-            <dd className="mt-1 text-2xl font-semibold text-foreground">{metric.value}</dd>
+          <div key={metric.label} className="rounded-lg bg-surface-muted px-3 py-2">
+            <dt className="text-xs text-foreground-subtle">{metric.label}</dt>
+            <dd className="text-numeric mt-0.5 text-base font-semibold text-foreground">{metric.value}</dd>
           </div>
         ))}
       </dl>

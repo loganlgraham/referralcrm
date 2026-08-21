@@ -18,9 +18,9 @@ function RatioMeter({ title, description, ratio, capPercent, headroom }: RatioMe
 
   return (
     <div>
-      <div className="flex items-center justify-between text-sm">
+      <div className="flex items-baseline justify-between gap-2 text-sm">
         <span className="text-foreground-muted">{title}</span>
-        <span className="font-semibold text-foreground">
+        <span className="text-numeric font-semibold text-foreground">
           {formatPercent(ratio)}
           {capPercent === null ? null : (
             <span className="ml-1 text-xs font-medium text-foreground-subtle">
@@ -29,9 +29,9 @@ function RatioMeter({ title, description, ratio, capPercent, headroom }: RatioMe
           )}
         </span>
       </div>
-      <div className="mt-1 h-2 overflow-hidden rounded-full bg-surface-subtle">
+      <div className="mt-1.5 h-2 overflow-hidden rounded-pill bg-surface-subtle">
         <div
-          className={`h-2 rounded-full ${
+          className={`h-2 rounded-pill ${
             overCap ? 'bg-danger' : nearCap ? 'bg-warning' : 'bg-success'
           }`}
           style={{ width: `${fill}%` }}
@@ -71,18 +71,18 @@ export function AffordabilityRatioMeters({
 }: AffordabilityRatioMetersProps) {
   if (grossMonthlyIncome <= 0 || frontEndRatio === null || backEndRatio === null) {
     return (
-      <div className="rounded-lg border border-border p-4">
-        <h3 className="text-sm font-semibold text-foreground">Qualifying ratios</h3>
+      <section className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+        <h3 className="text-eyebrow text-foreground-subtle">Qualifying ratios</h3>
         <p className="mt-2 text-sm text-foreground-muted">
           Add gross monthly income to see how the payment lines up against qualifying limits.
         </p>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div className="rounded-lg border border-border p-4">
-      <h3 className="text-sm font-semibold text-foreground">Qualifying ratios</h3>
+    <section className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <h3 className="text-eyebrow text-foreground-subtle">Qualifying ratios</h3>
       <div className="mt-3 space-y-4">
         <RatioMeter
           title="Housing payment vs income"
@@ -104,6 +104,6 @@ export function AffordabilityRatioMeters({
         />
       </div>
       <p className="mt-3 text-xs text-foreground-subtle">{guidelineNote}</p>
-    </div>
+    </section>
   );
 }

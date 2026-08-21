@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { Button } from '@/components/ui/button';
+
 interface PersonDeleteSectionProps {
   id: string;
   label: string;
@@ -46,20 +48,15 @@ export function PersonDeleteSection({
   };
 
   return (
-    <div className="rounded-lg border border-danger/30 bg-danger-soft p-6 text-sm text-danger">
-      <h3 className="text-base font-semibold text-danger">Delete {label}</h3>
+    <div className="rounded-card border border-danger/30 bg-danger-soft p-4 text-sm text-danger">
+      <h3 className="font-display text-base font-semibold tracking-[-0.02em] text-danger">Delete {label}</h3>
       <p className="mt-1 text-danger">
         {details ?? 'Deleting will remove this profile and sign-in access. This cannot be undone.'}
       </p>
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
-      <button
-        type="button"
-        className="mt-4 inline-flex items-center rounded-md bg-danger px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-danger disabled:opacity-60"
-        onClick={handleDelete}
-        disabled={isDeleting}
-      >
+      <Button type="button" variant="danger" className="mt-4" onClick={handleDelete} loading={isDeleting}>
         {isDeleting ? 'Deleting…' : `Delete ${label}`}
-      </button>
+      </Button>
     </div>
   );
 }

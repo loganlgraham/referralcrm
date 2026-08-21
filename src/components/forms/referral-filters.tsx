@@ -6,6 +6,9 @@ import useSWR from 'swr';
 
 import { REFERRAL_STATUSES, REFERRAL_TIMELINE_OPTIONS } from '@/constants/referrals';
 import { fetcher } from '@/utils/fetcher';
+import { cn } from '@/lib/cn';
+import { Input } from '@/components/ui/input';
+import { selectFieldClasses } from '@/components/ui/field-group';
 
 type FilterMode = 'admin' | 'mc' | 'agent';
 
@@ -52,24 +55,24 @@ function StatusMultiSelect({
   const label = selected.length === 0 ? 'All' : `${selected.length} selected`;
 
   return (
-    <div ref={containerRef} className="relative flex flex-col text-xs font-semibold uppercase text-foreground-subtle">
-      Status
+    <div ref={containerRef} className="relative flex flex-col gap-1.5">
+      <span className="text-eyebrow text-foreground-subtle">Status</span>
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         disabled={disabled}
-        className="mt-1 w-full rounded border border-border bg-surface-raised px-3 py-2 text-left text-sm normal-case text-foreground-muted disabled:opacity-50"
+        className={cn(selectFieldClasses, 'flex items-center justify-between text-left')}
       >
         {label}
-        <span className="float-right text-foreground-subtle">&#9662;</span>
+        <span aria-hidden className="text-foreground-subtle">&#9662;</span>
       </button>
       {open && (
-        <div className="absolute top-full z-20 mt-1 max-h-60 w-full overflow-y-auto rounded border border-border bg-surface-raised py-1 shadow-lg">
+        <div className="absolute top-full z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-border bg-surface-raised py-1 shadow-card">
           {selected.length > 0 && (
             <button
               type="button"
               onClick={() => onChange([])}
-              className="w-full px-3 py-1.5 text-left text-sm normal-case text-accent hover:bg-surface-muted"
+              className="w-full px-3 py-1.5 text-left text-sm text-primary hover:bg-surface-muted"
             >
               Clear all
             </button>
@@ -77,7 +80,7 @@ function StatusMultiSelect({
           {REFERRAL_STATUSES.map((status) => (
             <label
               key={status}
-              className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm normal-case text-foreground-muted hover:bg-surface-muted"
+              className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-foreground-muted hover:bg-surface-muted"
             >
               <input
                 type="checkbox"
@@ -202,14 +205,14 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   }, [searchTerm]);
 
   return (
-    <div className="space-y-4 rounded-xl border border-border bg-surface-muted/50 p-4">
-      <label className="flex flex-col text-xs font-semibold text-foreground-muted">
-        Search
-        <input
+    <div className="space-y-4 rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <label className="flex flex-col gap-1.5">
+        <span className="text-eyebrow text-foreground-subtle">Search</span>
+        <Input
           type="text"
           value={searchTerm}
           onChange={(event) => handleSearchInput(event.target.value)}
-          className="mt-2 w-full rounded-lg border border-border bg-surface-raised px-4 py-3 text-base shadow-sm"
+          className="h-10"
           placeholder="Name, email, phone, loan #"
         />
       </label>
@@ -226,12 +229,12 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
           disabled={isPending}
         />
         {isAdminMode && (
-          <label className="flex flex-col text-xs font-semibold uppercase text-foreground-subtle">
-            Agent referrals
+          <label className="flex flex-col gap-1.5">
+            <span className="text-eyebrow text-foreground-subtle">Agent referrals</span>
             <select
               value={agentReferralValue}
               onChange={(event) => handleChange('agentReferrals', event.target.value)}
-              className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
+              className={selectFieldClasses}
               disabled={isPending}
             >
               <option value="">All</option>
@@ -241,12 +244,12 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
           </label>
         )}
         {showAhaBucket && (
-          <label className="flex flex-col text-xs font-semibold uppercase text-foreground-subtle">
-            Agent Designation
+          <label className="flex flex-col gap-1.5">
+            <span className="text-eyebrow text-foreground-subtle">Agent designation</span>
             <select
               value={ahaBucketValue}
               onChange={(event) => handleChange('ahaBucket', event.target.value)}
-              className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
+              className={selectFieldClasses}
               disabled={isPending}
             >
               <option value="">All</option>
@@ -256,12 +259,12 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
             </select>
           </label>
         )}
-        <label className="flex flex-col text-xs font-semibold uppercase text-foreground-subtle">
-          MC
+        <label className="flex flex-col gap-1.5">
+          <span className="text-eyebrow text-foreground-subtle">MC</span>
           <select
             value={lenderValue}
             onChange={(event) => handleChange('mc', event.target.value)}
-            className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
+            className={selectFieldClasses}
             disabled={isPending}
           >
             <option value="">All</option>
@@ -274,12 +277,12 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
           </select>
         </label>
         {!isAgentMode && (
-          <label className="flex flex-col text-xs font-semibold uppercase text-foreground-subtle">
-            Agent
+          <label className="flex flex-col gap-1.5">
+            <span className="text-eyebrow text-foreground-subtle">Agent</span>
             <select
               value={agentValue}
               onChange={(event) => handleChange('agent', event.target.value)}
-              className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
+              className={selectFieldClasses}
               disabled={isPending}
             >
               <option value="">All</option>
@@ -292,12 +295,12 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
             </select>
           </label>
         )}
-        <label className="flex flex-col text-xs font-semibold uppercase text-foreground-subtle">
-          Timeline
+        <label className="flex flex-col gap-1.5">
+          <span className="text-eyebrow text-foreground-subtle">Timeline</span>
           <select
             value={timelineValue}
             onChange={(event) => handleChange('timeline', event.target.value)}
-            className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
+            className={selectFieldClasses}
             disabled={isPending}
           >
             <option value="">All</option>

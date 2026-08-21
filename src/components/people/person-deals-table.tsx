@@ -2,6 +2,8 @@ import Link from 'next/link';
 
 import { DEAL_STATUS_LABELS, type DealStatus } from '@/constants/deals';
 import { formatCurrency } from '@/utils/formatters';
+import { EmptyState } from '@/components/ui/empty-state';
+import { TBody, THead, Table, TableScroll, TableShell, Td, Th, Tr } from '@/components/ui/table-shell';
 
 export interface PersonDealSummary {
   id: string;
@@ -67,7 +69,7 @@ const outcomeClassName = (outcome: 'Won' | 'Lost' | 'Pending'): string => {
 
 export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
   if (!Array.isArray(deals) || deals.length === 0) {
-    return <p className="text-sm text-foreground-subtle">No deals recorded yet.</p>;
+    return <EmptyState compact title="No deals recorded yet" />;
   }
 
   const showAgentColumn = context === 'mc' && deals.some((deal) => deal.agent?.id);
@@ -93,7 +95,7 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
               className="space-y-3 rounded-card border border-border bg-surface-raised p-4 shadow-card"
             >
               <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Referral</p>
+                <p className="text-eyebrow text-foreground-subtle">Referral</p>
                 <div className="text-sm text-foreground-muted">
                   <div className="flex flex-col gap-0.5 break-words">
                     {deal.referralId ? (
@@ -112,24 +114,24 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
                 </div>
               </div>
               <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Status</p>
+                <p className="text-eyebrow text-foreground-subtle">Status</p>
                 <p className="text-sm text-foreground-muted">{getStatusLabel(deal.status)}</p>
               </div>
               <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Outcome</p>
+                <p className="text-eyebrow text-foreground-subtle">Outcome</p>
                 <p className={`text-sm font-medium ${outcomeColor}`}>{outcome}</p>
               </div>
               <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Expected</p>
-                <p className="text-sm text-foreground-muted">{formatCurrency(expectedCents)}</p>
+                <p className="text-eyebrow text-foreground-subtle">Expected</p>
+                <p className="text-numeric text-sm text-foreground-muted">{formatCurrency(expectedCents)}</p>
               </div>
               <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Received</p>
-                <p className="text-sm text-foreground-muted">{formatCurrency(receivedCents)}</p>
+                <p className="text-eyebrow text-foreground-subtle">Received</p>
+                <p className="text-numeric text-sm text-foreground-muted">{formatCurrency(receivedCents)}</p>
               </div>
               {showAgentColumn ? (
                 <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent</p>
+                  <p className="text-eyebrow text-foreground-subtle">Agent</p>
                   <div className="text-sm text-foreground-muted">
                     {deal.agent?.id ? (
                       <Link
@@ -149,33 +151,20 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
           );
         })}
       </div>
-      <div className="hidden overflow-hidden rounded-card border border-border bg-surface-raised shadow-card md:block">
-        <table className="min-w-full divide-y divide-border">
-          <thead className="bg-surface-muted">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                Referral
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                Status
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                Outcome
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                Expected
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                Received
-              </th>
-              {showAgentColumn && (
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
-                  Agent
-                </th>
-              )}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
+      <TableShell className="hidden md:block">
+        <TableScroll>
+          <Table className="min-w-full">
+            <THead>
+              <Tr>
+                <Th className="text-eyebrow">Referral</Th>
+                <Th className="text-eyebrow">Status</Th>
+                <Th className="text-eyebrow">Outcome</Th>
+                <Th className="text-eyebrow">Expected</Th>
+                <Th className="text-eyebrow">Received</Th>
+                {showAgentColumn && <Th className="text-eyebrow">Agent</Th>}
+              </Tr>
+            </THead>
+            <TBody>
             {deals.map((deal) => {
               const outcome = computeOutcome(deal, context);
               const outcomeColor = outcomeClassName(outcome);
@@ -189,8 +178,8 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
                   : 'Loan # —';
 
               return (
-                <tr key={deal.id} className="hover:bg-surface-muted">
-                  <td className="px-4 py-3 text-sm text-foreground-muted">
+                <Tr key={deal.id}>
+                  <Td className="text-foreground-muted">
                     <div className="flex flex-col">
                       {deal.referralId ? (
                         <Link
@@ -205,13 +194,13 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
                       )}
                       <span className="text-xs text-foreground-subtle">{detail}</span>
                     </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-foreground-muted">{getStatusLabel(deal.status)}</td>
-                  <td className={`px-4 py-3 text-sm font-medium ${outcomeColor}`}>{outcome}</td>
-                  <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(expectedCents)}</td>
-                  <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(receivedCents)}</td>
+                  </Td>
+                  <Td className="text-foreground-muted">{getStatusLabel(deal.status)}</Td>
+                  <Td className={`font-medium ${outcomeColor}`}>{outcome}</Td>
+                  <Td className="text-numeric text-foreground-muted">{formatCurrency(expectedCents)}</Td>
+                  <Td className="text-numeric text-foreground-muted">{formatCurrency(receivedCents)}</Td>
                   {showAgentColumn && (
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
+                    <Td className="text-foreground-muted">
                       {deal.agent?.id ? (
                         <Link
                           prefetch={false}
@@ -223,14 +212,15 @@ export function PersonDealsTable({ deals, context }: PersonDealsTableProps) {
                       ) : (
                         <span className="text-foreground-subtle">Unassigned</span>
                       )}
-                    </td>
+                    </Td>
                   )}
-                </tr>
+                </Tr>
               );
             })}
-          </tbody>
-        </table>
-      </div>
+            </TBody>
+          </Table>
+        </TableScroll>
+      </TableShell>
     </>
   );
 }

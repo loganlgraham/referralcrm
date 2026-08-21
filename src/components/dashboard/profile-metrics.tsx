@@ -87,7 +87,7 @@ export function ProfileMetrics() {
 
   if (error) {
     return (
-      <div className="mt-8 rounded-lg border border-danger/30 bg-danger-soft p-4 text-sm text-danger">
+      <div className="rounded-card border border-danger/30 bg-danger-soft p-4 text-sm text-danger">
         Unable to load your performance metrics right now.
       </div>
     );
@@ -96,9 +96,9 @@ export function ProfileMetrics() {
   if (isLoading || !data) {
     const placeholderCount = normalizedRole === 'agent' ? 12 : normalizedRole === 'mc' ? 9 : 6;
     return (
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: placeholderCount }).map((_, index) => (
-          <div key={index} className="h-24 animate-pulse rounded-lg border border-border bg-surface-raised" />
+          <div key={index} className="h-24 animate-pulse rounded-card border border-border bg-surface-raised" />
         ))}
       </div>
     );
@@ -106,7 +106,7 @@ export function ProfileMetrics() {
 
   if (!data.metrics) {
     return (
-      <div className="mt-8 rounded-lg border border-warning/30 bg-warning-soft p-4 text-sm text-warning">
+      <div className="rounded-card border border-warning/30 bg-warning-soft p-4 text-sm text-warning">
         Complete your profile to start seeing personal performance insights.
       </div>
     );
@@ -155,9 +155,14 @@ export function ProfileMetrics() {
   }
 
   return (
-    <div className="mt-8 space-y-4">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <h2 className="text-lg font-semibold text-foreground">Your performance snapshot</h2>
+        <div>
+          <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">
+            Your performance snapshot
+          </h2>
+          <p className="text-eyebrow mt-1 text-foreground-subtle">{rangeLabel}</p>
+        </div>
         <TimeframeDropdown
           timeframe={timeframe}
           rangeLabel={rangeLabel}
@@ -167,12 +172,11 @@ export function ProfileMetrics() {
           maxDate={maxSelectableDate}
         />
       </div>
-      <p className="text-xs uppercase tracking-wide text-foreground-subtle">{rangeLabel}</p>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => (
           <div key={card.label} className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-            <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{card.label}</p>
-            <p className="mt-2 text-xl font-semibold text-foreground">{card.value}</p>
+            <p className="text-eyebrow text-foreground-subtle">{card.label}</p>
+            <p className="text-numeric mt-2 text-xl font-semibold text-foreground">{card.value}</p>
             {card.helper ? <p className="mt-1 text-xs text-foreground-subtle">{card.helper}</p> : null}
           </div>
         ))}

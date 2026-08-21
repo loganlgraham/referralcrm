@@ -76,29 +76,38 @@ export const Tr = forwardRef<HTMLTableRowElement, HTMLAttributes<HTMLTableRowEle
   }
 );
 
-/** Currency, counts and dates: mono digits so columns line up down the page. */
-type NumericCell = { numeric?: boolean };
+/**
+ * `numeric` gives mono digits so columns line up down the page. `dense` drops a
+ * density step for admin tables, which show far more rows per screen.
+ */
+type CellOptions = { numeric?: boolean; dense?: boolean };
 
-export const Th = forwardRef<HTMLTableCellElement, ThHTMLAttributes<HTMLTableCellElement> & NumericCell>(
-  function Th({ className, numeric, ...props }, ref) {
+export const Th = forwardRef<HTMLTableCellElement, ThHTMLAttributes<HTMLTableCellElement> & CellOptions>(
+  function Th({ className, numeric, dense, ...props }, ref) {
     return (
       <th
         ref={ref}
         scope="col"
-        className={cn('px-4 py-2.5 font-medium first:pl-5 last:pr-5', numeric && 'text-right', className)}
+        className={cn(
+          'px-4 font-medium first:pl-5 last:pr-5',
+          dense ? 'py-2' : 'py-2.5',
+          numeric && 'text-right',
+          className
+        )}
         {...props}
       />
     );
   }
 );
 
-export const Td = forwardRef<HTMLTableCellElement, TdHTMLAttributes<HTMLTableCellElement> & NumericCell>(
-  function Td({ className, numeric, ...props }, ref) {
+export const Td = forwardRef<HTMLTableCellElement, TdHTMLAttributes<HTMLTableCellElement> & CellOptions>(
+  function Td({ className, numeric, dense, ...props }, ref) {
     return (
       <td
         ref={ref}
         className={cn(
-          'px-4 py-3 align-middle text-sm first:pl-5 last:pr-5',
+          'px-4 align-middle text-sm first:pl-5 last:pr-5',
+          dense ? 'py-1.5' : 'py-3',
           numeric && 'text-numeric text-right',
           className
         )}

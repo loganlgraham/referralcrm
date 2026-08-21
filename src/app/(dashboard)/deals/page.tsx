@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 export default function DealsPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <DealsTable />
     </div>
   );

@@ -337,7 +337,7 @@ Aurora, CO 80014
       <div class="instruction-box">
         <p>
           <strong>Please review these numbers for accuracy.</strong> If anything appears incorrect, 
-          please contact <strong>Kristen Truong</strong> (CC'd on this email) to discuss.
+          please contact <strong>Kristen Truong</strong> to discuss.
         </p>
       </div>
 
@@ -401,7 +401,7 @@ Congratulations again on the upcoming closing, and thank you for your partnershi
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Please review these numbers for accuracy. If anything appears incorrect, 
-please contact Kristen Truong (CC'd on this email) to discuss.
+please contact Kristen Truong to discuss.
 
 View Deal in Platform:
 ${data.platformUrl}

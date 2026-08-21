@@ -7,6 +7,11 @@ interface PageHeaderProps {
   description?: ReactNode;
   actions?: ReactNode;
   breadcrumbs?: ReactNode;
+  /**
+   * Whether this page has work waiting on someone. Omit it to keep the node
+   * decorative; pass a real boolean and the node reads as a status light.
+   */
+  attention?: boolean;
   className?: string;
 }
 
@@ -16,12 +21,21 @@ export function PageHeader({
   description,
   actions,
   breadcrumbs,
+  attention,
   className
 }: PageHeaderProps) {
+  const nodeTone = attention === false ? 'bg-primary' : 'bg-signal';
+
   return (
     <header className={cn('relative flex flex-col gap-4 border-b border-border pb-5 pl-5 sm:flex-row sm:items-end sm:justify-between', className)}>
       <span aria-hidden className="absolute bottom-5 left-0 top-0 w-[3px] rounded-full bg-primary" />
-      <span aria-hidden className="absolute bottom-3 left-[-3px] h-2.5 w-2.5 rounded-full border-2 border-surface-muted bg-signal" />
+      <span
+        aria-hidden
+        className={cn(
+          'absolute bottom-3 left-[-3px] h-2.5 w-2.5 rounded-full border-2 border-surface-muted',
+          nodeTone
+        )}
+      />
       <div className="min-w-0 space-y-1.5">
         {breadcrumbs && <div className="text-xs text-foreground-subtle">{breadcrumbs}</div>}
         {eyebrow && (

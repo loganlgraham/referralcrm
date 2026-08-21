@@ -1,21 +1,13 @@
 'use client';
 
-import { XIcon } from 'lucide-react';
+import { LayersIcon, XIcon } from 'lucide-react';
+import { cn } from '@/lib/cn';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { MortgageInputs, MortgageCalculations } from '@/utils/mortgage-calculations';
+import { formatCurrency, formatPercent } from './formatters';
 
-const currencyFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 0,
-});
-
-const percentFormatter = new Intl.NumberFormat('en-US', {
-  style: 'percent',
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-});
-
-interface Scenario {
+export interface Scenario {
   id: string;
   name: string;
   inputs: MortgageInputs;
@@ -25,170 +17,232 @@ interface Scenario {
 interface ScenarioComparisonProps {
   scenarios: Scenario[];
   onRemoveScenario: (id: string) => void;
+  onStartFromCalculator: () => void;
 }
 
-export function ScenarioComparison({ scenarios, onRemoveScenario }: ScenarioComparisonProps) {
+type RowFormat = 'currency' | 'percent' | 'text';
+/** Which direction counts as the better outcome, when one exists. */
+type RowBest = 'low' | 'high' | 'none';
+
+interface ComparisonRow {
+  label: string;
+  format: RowFormat;
+  best: RowBest;
+  value: (scenario: Scenario) => number | string;
+  emphasis?: boolean;
+}
+
+const rows: ComparisonRow[] = [
+  {
+    label: 'Monthly payment',
+    format: 'currency',
+    best: 'low',
+    value: (scenario) => scenario.calculations.totalMonthly,
+    emphasis: true,
+  },
+  {
+    label: 'Purchase price',
+    format: 'currency',
+    best: 'none',
+    value: (scenario) => scenario.inputs.purchasePrice,
+  },
+  {
+    label: 'Down payment',
+    format: 'currency',
+    best: 'none',
+    value: (scenario) => scenario.calculations.downPaymentAmount,
+  },
+  {
+    label: 'Loan amount',
+    format: 'currency',
+    best: 'none',
+    value: (scenario) => scenario.calculations.loanAmount,
+  },
+  {
+    label: 'Interest rate',
+    format: 'text',
+    best: 'none',
+    value: (scenario) => `${scenario.inputs.interestRate}%`,
+  },
+  {
+    label: 'Term',
+    format: 'text',
+    best: 'none',
+    value: (scenario) => `${scenario.inputs.termYears} yrs`,
+  },
+  {
+    label: 'Loan-to-value',
+    format: 'percent',
+    best: 'low',
+    value: (scenario) => scenario.calculations.ltv,
+  },
+  {
+    label: 'Principal & interest',
+    format: 'currency',
+    best: 'none',
+    value: (scenario) => scenario.calculations.principalAndInterest,
+  },
+  {
+    label: 'Property taxes',
+    format: 'currency',
+    best: 'none',
+    value: (scenario) => scenario.calculations.propertyTaxes,
+  },
+  {
+    label: 'Homeowners insurance',
+    format: 'currency',
+    best: 'none',
+    value: (scenario) => scenario.inputs.insuranceMonthly,
+  },
+  {
+    label: 'HOA dues',
+    format: 'currency',
+    best: 'none',
+    value: (scenario) => scenario.inputs.hoaMonthly,
+  },
+  {
+    label: 'Mortgage insurance',
+    format: 'currency',
+    best: 'low',
+    value: (scenario) => scenario.calculations.pmiMonthly,
+  },
+  {
+    label: 'Extra principal',
+    format: 'currency',
+    best: 'none',
+    value: (scenario) => scenario.inputs.extraPrincipal,
+  },
+  {
+    label: 'Total interest',
+    format: 'currency',
+    best: 'low',
+    value: (scenario) => scenario.calculations.totalInterest,
+  },
+];
+
+function renderValue(value: number | string, format: RowFormat) {
+  if (typeof value === 'string') return value;
+  return format === 'percent' ? formatPercent(value) : formatCurrency(value);
+}
+
+/**
+ * Only marks a winner when the values actually differ, so identical scenarios
+ * don't get an arbitrary green cell.
+ */
+function findBestIds(scenarios: Scenario[], row: ComparisonRow): Set<string> {
+  if (row.best === 'none' || scenarios.length < 2) return new Set();
+
+  const numeric = scenarios.map((scenario) => ({
+    id: scenario.id,
+    value: row.value(scenario),
+  }));
+  if (numeric.some((entry) => typeof entry.value !== 'number')) return new Set();
+
+  const values = numeric.map((entry) => entry.value as number);
+  const target = row.best === 'low' ? Math.min(...values) : Math.max(...values);
+  if (values.every((value) => value === target)) return new Set();
+
+  return new Set(
+    numeric.filter((entry) => (entry.value as number) === target).map((entry) => entry.id)
+  );
+}
+
+export function ScenarioComparison({
+  scenarios,
+  onRemoveScenario,
+  onStartFromCalculator,
+}: ScenarioComparisonProps) {
   if (scenarios.length === 0) {
     return (
-      <div className="rounded-lg border border-border p-8 text-center">
-        <p className="text-sm text-foreground-muted">No scenarios saved yet</p>
-        <p className="mt-1 text-xs text-foreground-subtle">Save scenarios to compare them side-by-side</p>
-      </div>
+      <EmptyState
+        icon={<LayersIcon className="h-5 w-5" aria-hidden />}
+        title="No saved scenarios yet"
+        description="Save a scenario from the calculator to line options up side by side."
+        action={
+          <Button variant="secondary" size="sm" onClick={onStartFromCalculator}>
+            Open the calculator
+          </Button>
+        }
+      />
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground">Compare Scenarios</h3>
-        <p className="text-xs text-foreground-subtle">{scenarios.length} scenario{scenarios.length !== 1 ? 's' : ''}</p>
+    <section className="rounded-card border border-border bg-surface-raised shadow-card">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <h2 className="text-eyebrow text-foreground-subtle">Scenario comparison</h2>
+        <p className="text-xs text-foreground-subtle">
+          {scenarios.length === 1
+            ? 'Save another scenario to compare.'
+            : 'Green marks the better number in each row.'}
+        </p>
       </div>
 
-      <div className="overflow-x-auto">
-        <div className="inline-flex min-w-full gap-4">
-          {scenarios.map((scenario, index) => (
-            <div
-              key={scenario.id}
-              className="flex-shrink-0 rounded-lg border border-border bg-surface-raised p-4"
-              style={{ width: '280px' }}
-            >
-              {/* Header */}
-              <div className="flex items-start justify-between">
-                <div>
-                  <h4 className="font-semibold text-foreground">{scenario.name}</h4>
-                  <p className="text-xs text-foreground-subtle">Scenario {index + 1}</p>
-                </div>
-                <button
-                  onClick={() => onRemoveScenario(scenario.id)}
-                  className="rounded-md p-1 text-foreground-subtle hover:bg-surface-subtle hover:text-foreground-muted"
-                  aria-label="Remove scenario"
-                >
-                  <XIcon className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Key Metrics */}
-              <div className="mt-4 space-y-3">
-                <div className="rounded-lg bg-primary/5 p-3">
-                  <p className="text-xs text-foreground-muted">Monthly Payment</p>
-                  <p className="text-xl font-bold text-primary">
-                    {currencyFormatter.format(scenario.calculations.totalMonthly)}
-                  </p>
-                </div>
-
-                <dl className="space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <dt className="text-foreground-muted">Purchase Price</dt>
-                    <dd className="font-semibold text-foreground">
-                      {currencyFormatter.format(scenario.inputs.purchasePrice)}
-                    </dd>
+      <div className="scrollbar-thin overflow-x-auto">
+        <table className="w-full min-w-[36rem] border-collapse text-sm">
+          <thead>
+            <tr>
+              <th
+                scope="col"
+                className="sticky left-0 z-[1] bg-surface-raised px-4 py-3 text-left text-eyebrow text-foreground-subtle"
+              >
+                Metric
+              </th>
+              {scenarios.map((scenario) => (
+                <th key={scenario.id} scope="col" className="px-4 py-3 text-right align-top">
+                  <div className="flex items-start justify-end gap-1.5">
+                    <span className="text-sm font-semibold text-foreground">{scenario.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveScenario(scenario.id)}
+                      aria-label={`Remove ${scenario.name}`}
+                      className="rounded-md p-0.5 text-foreground-subtle transition hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <XIcon className="h-3.5 w-3.5" />
+                    </button>
                   </div>
-                  <div className="flex justify-between">
-                    <dt className="text-foreground-muted">Down Payment</dt>
-                    <dd className="font-semibold text-foreground">
-                      {scenario.inputs.downPaymentPercent}% (
-                      {currencyFormatter.format(scenario.calculations.downPaymentAmount)})
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-foreground-muted">Interest Rate</dt>
-                    <dd className="font-semibold text-foreground">{scenario.inputs.interestRate}%</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-foreground-muted">Loan Amount</dt>
-                    <dd className="font-semibold text-foreground">
-                      {currencyFormatter.format(scenario.calculations.loanAmount)}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-foreground-muted">Term</dt>
-                    <dd className="font-semibold text-foreground">{scenario.inputs.termYears} years</dd>
-                  </div>
-                  <div className="flex justify-between border-t border-border pt-2">
-                    <dt className="text-foreground-muted">Total Interest</dt>
-                    <dd className="font-semibold text-foreground">
-                      {currencyFormatter.format(scenario.calculations.totalInterest)}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-foreground-muted">LTV</dt>
-                    <dd className="font-semibold text-foreground">{percentFormatter.format(scenario.calculations.ltv)}</dd>
-                  </div>
-                  {scenario.calculations.pmiMonthly > 0 && (
-                    <div className="flex justify-between">
-                      <dt className="text-foreground-muted">PMI</dt>
-                      <dd className="font-semibold text-primary">
-                        {currencyFormatter.format(scenario.calculations.pmiMonthly)}/mo
-                      </dd>
-                    </div>
-                  )}
-                  {scenario.inputs.extraPrincipal > 0 && (
-                    <div className="flex justify-between">
-                      <dt className="text-foreground-muted">Extra Principal</dt>
-                      <dd className="font-semibold text-success">
-                        {currencyFormatter.format(scenario.inputs.extraPrincipal)}/mo
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-              </div>
-
-              {/* Breakdown */}
-              <div className="mt-4 space-y-1 border-t border-border pt-3 text-xs">
-                <p className="font-medium text-foreground-muted">Payment Breakdown</p>
-                <div className="flex justify-between text-foreground-muted">
-                  <span>P&I</span>
-                  <span>{currencyFormatter.format(scenario.calculations.principalAndInterest)}</span>
-                </div>
-                <div className="flex justify-between text-foreground-muted">
-                  <span>Property Tax</span>
-                  <span>{currencyFormatter.format(scenario.calculations.propertyTaxes)}</span>
-                </div>
-                <div className="flex justify-between text-foreground-muted">
-                  <span>Insurance</span>
-                  <span>{currencyFormatter.format(scenario.inputs.insuranceMonthly)}</span>
-                </div>
-                {scenario.inputs.hoaMonthly > 0 && (
-                  <div className="flex justify-between text-foreground-muted">
-                    <span>HOA</span>
-                    <span>{currencyFormatter.format(scenario.inputs.hoaMonthly)}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const bestIds = findBestIds(scenarios, row);
+              return (
+                <tr key={row.label} className="border-t border-border">
+                  <th
+                    scope="row"
+                    className={cn(
+                      'sticky left-0 z-[1] bg-surface-raised px-4 py-2 text-left font-medium',
+                      row.emphasis ? 'text-foreground' : 'text-foreground-muted'
+                    )}
+                  >
+                    {row.label}
+                  </th>
+                  {scenarios.map((scenario) => {
+                    const value = row.value(scenario);
+                    const isBest = bestIds.has(scenario.id);
+                    return (
+                      <td
+                        key={scenario.id}
+                        className={cn(
+                          'text-numeric px-4 py-2 text-right',
+                          row.emphasis
+                            ? 'text-base font-bold text-foreground'
+                            : 'font-medium text-foreground-muted',
+                          isBest && 'text-[hsl(var(--success))]'
+                        )}
+                      >
+                        {renderValue(value, row.format)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
-
-      {/* Comparison Summary */}
-      {scenarios.length > 1 && (
-        <div className="rounded-lg bg-surface-muted p-4">
-          <h4 className="text-sm font-semibold text-foreground">Quick Comparison</h4>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <p className="text-xs text-foreground-muted">Lowest Monthly Payment</p>
-              <p className="mt-1 text-base font-bold text-success">
-                {currencyFormatter.format(Math.min(...scenarios.map((s) => s.calculations.totalMonthly)))}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-foreground-muted">Lowest Total Interest</p>
-              <p className="mt-1 text-base font-bold text-success">
-                {currencyFormatter.format(Math.min(...scenarios.map((s) => s.calculations.totalInterest)))}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-foreground-muted">Highest Down Payment</p>
-              <p className="mt-1 text-base font-bold text-foreground">
-                {Math.max(...scenarios.map((s) => s.inputs.downPaymentPercent))}% (
-                {currencyFormatter.format(
-                  Math.max(...scenarios.map((s) => s.calculations.downPaymentAmount))
-                )})
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    </section>
   );
 }

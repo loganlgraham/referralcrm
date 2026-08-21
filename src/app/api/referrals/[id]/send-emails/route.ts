@@ -6,6 +6,11 @@ import { Referral } from '@/models/referral';
 import { logReferralActivity } from '@/lib/server/activities';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { buildContactActionLink, buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
+import {
+  buildCcList,
+  getReferralNotificationRecipients,
+  parseCcRecipients,
+} from '@/lib/server/cc-recipients';
 
 
 interface Params {
@@ -192,7 +197,7 @@ const trySendEmail = async (
     subject,
     html: htmlLines.filter(Boolean).join(''),
     text: textLines.filter(Boolean).join('\n'),
-    cc,
+    cc: cc ? buildCcList(cc, [], to) : undefined,
   });
 
   if (success) {
@@ -221,11 +226,26 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
 
   let notes: string | null = null;
+  let agentCcExtras: string[] = [];
+  let mcCcExtras: string[] = [];
   try {
     const body = await request.json();
     if (typeof body?.notes === 'string' && body.notes.trim()) {
       notes = body.notes.trim();
     }
+
+    const agentCc = parseCcRecipients(body?.agentCcRecipients);
+    const mcCc = parseCcRecipients(body?.mcCcRecipients);
+    const invalid = [...agentCc.invalid, ...mcCc.invalid];
+    if (invalid.length > 0) {
+      return NextResponse.json(
+        { error: `Invalid CC email address(es): ${invalid.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    agentCcExtras = agentCc.emails;
+    mcCcExtras = mcCc.emails;
   } catch {
     // Body is empty or not JSON, which is fine
   }
@@ -279,8 +299,10 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   const result: SendResult = { sent: [], skipped: [], errors: [] };
 
-  // CC email for intro emails
-  const introEmailCC = ['kristen.truong@americanhomeagents.com'];
+  // CC email for intro emails, plus any extras the admin added in the send confirmation
+  const defaultIntroEmailCC = getReferralNotificationRecipients();
+  const agentEmailCC = buildCcList(defaultIntroEmailCC, agentCcExtras);
+  const mcEmailCC = buildCcList(defaultIntroEmailCC, mcCcExtras);
 
   const shouldEmailAgent = referral.origin !== 'agent';
   const isSellerOnly = referral.clientType === 'Seller';
@@ -395,7 +417,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         ],
         label,
         result,
-        introEmailCC
+        agentEmailCC
       );
     }
   }
@@ -492,7 +514,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       mcEmailTextLines.filter(Boolean),
       'mc',
       result,
-      introEmailCC
+      mcEmailCC
     );
   }
 
@@ -624,14 +646,28 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       console.error('Failed to send referral pairing notification email', error);
     });
 
+    const ccSummaryParts: string[] = [];
+    if (agentCcExtras.length > 0) {
+      ccSummaryParts.push(`agent CC: ${agentCcExtras.join(', ')}`);
+    }
+    if (mcCcExtras.length > 0) {
+      ccSummaryParts.push(`MC CC: ${mcCcExtras.join(', ')}`);
+    }
+
     await logReferralActivity({
       referralId: referral._id,
       actorRole: session.user.role,
       actorId: session.user.id,
       channel: 'email',
-      content: `Admin sent intro emails to: ${result.sent.join(', ')}`,
+      content: `Admin sent intro emails to: ${result.sent.join(', ')}${
+        ccSummaryParts.length > 0 ? ` (${ccSummaryParts.join('; ')})` : ''
+      }`,
     });
   }
 
-  return NextResponse.json(result);
+  return NextResponse.json({
+    ...result,
+    agentCcRecipients: agentCcExtras,
+    mcCcRecipients: mcCcExtras,
+  });
 }

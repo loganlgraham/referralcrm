@@ -6,12 +6,10 @@ import { cn } from '@/lib/cn';
 import { Tooltip } from '@/components/ui/tooltip';
 
 /** Single card shell shared by every dashboard widget. */
+export const dashCardClasses = 'rounded-card border border-border bg-surface-raised p-4 shadow-card';
+
 export function DashCard({ className, children }: { className?: string; children: ReactNode }) {
-  return (
-    <div className={cn('rounded-card border border-border bg-surface-raised p-4 shadow-card', className)}>
-      {children}
-    </div>
-  );
+  return <div className={cn(dashCardClasses, className)}>{children}</div>;
 }
 
 /** Small info icon that reveals methodology/details on hover or focus. */

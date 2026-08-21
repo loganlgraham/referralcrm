@@ -8,6 +8,9 @@ import { Pagination } from '@/components/tables/pagination';
 import { getCurrentSession } from '@/lib/auth';
 import { getReferrals } from '@/lib/server/referrals';
 import { Filters } from '@/components/forms/referral-filters';
+import { PageHeader } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
+import { buttonClasses } from '@/components/ui/button';
 
 export const metadata: Metadata = {
   title: 'Referrals | Referral CRM'
@@ -63,52 +66,27 @@ export default async function ReferralsPage({
   const showAddReferralButton = role !== 'mc';
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">
-            {tableMode === 'agent' ? 'My referrals' : 'Referrals'}
-          </h1>
-          <p className="text-sm text-foreground-subtle">
-            {tableMode === 'agent'
-              ? 'Review your leads, update their status, and capture quick notes as you work each opportunity.'
-              : tableMode === 'mc'
-              ? 'Keep tabs on the borrowers you have handed off and collaborate with partnered agents.'
-              : 'Track every lead from intake through close.'}
-          </p>
-        </div>
-        {showAddReferralButton ? (
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Pipeline"
+        title={tableMode === 'agent' ? 'My referrals' : 'Referrals'}
+        description={
+          tableMode === 'agent'
+            ? 'Review your leads, update their status, and capture quick notes as you work each opportunity.'
+            : tableMode === 'mc'
+            ? 'Keep tabs on the borrowers you have handed off and collaborate with partnered agents.'
+            : 'Track every lead from intake through close.'
+        }
+        attention={tableMode === 'admin' ? false : undefined}
+        actions={
           role === 'admin' ? (
-            <Link
-              href="/referrals/new"
-              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-            >
-              <PlusIcon className="h-4 w-4" />
-              Add Referral
+            <Link href="/referrals/new" className={buttonClasses()}>
+              <PlusIcon className="h-4 w-4" aria-hidden />
+              Add referral
             </Link>
-          ) : (
-            <Link
-              href="/referrals/new"
-              className="group relative inline-flex max-w-full items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-br from-primary-hover via-primary-active to-primary px-4 py-3 text-white no-underline shadow-lg shadow-primary/25 ring-1 ring-inset ring-white/15 transition hover:-translate-y-0.5 hover:text-white hover:shadow-xl hover:shadow-primary/30 focus-visible:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-            >
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,transparent_30%,rgba(255,255,255,0.18)_48%,transparent_62%)] bg-[length:220%_100%] bg-left transition-[background-position] duration-700 group-hover:bg-right"
-              />
-              <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/15 ring-1 ring-inset ring-white/20">
-                <Send
-                  className="h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
-                  strokeWidth={2.5}
-                  aria-hidden
-                />
-              </span>
-              <span className="relative text-sm font-semibold leading-tight tracking-tight">
-                Introduce a client to AFC
-              </span>
-            </Link>
-          )
-        ) : null}
-      </div>
+          ) : null
+        }
+      />
       <Filters mode={tableMode} />
       {hasReferrals ? (
         <div className="space-y-4">
@@ -130,11 +108,22 @@ export default async function ReferralsPage({
           />
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-border-strong bg-surface-raised p-10 text-center text-sm text-foreground-subtle">
-          {tableMode === 'agent'
-            ? 'No referrals yet. When you have a buyer ready for financing, introduce them to AFC and we will pair them with a mortgage consultant.'
-            : 'No referrals yet. Add your first referral to get started.'}
-        </div>
+        <EmptyState
+          icon={<Send className="h-4 w-4" aria-hidden />}
+          title="No referrals yet"
+          description={
+            tableMode === 'agent'
+              ? 'When you have a buyer ready for financing, introduce them to AFC and we will pair them with a mortgage consultant.'
+              : 'Add your first referral to get started.'
+          }
+          action={
+            showAddReferralButton ? (
+              <Link href="/referrals/new" className={buttonClasses({ size: 'sm' })}>
+                {role === 'admin' ? 'Add referral' : 'Introduce a client to AFC'}
+              </Link>
+            ) : null
+          }
+        />
       )}
     </div>
   );

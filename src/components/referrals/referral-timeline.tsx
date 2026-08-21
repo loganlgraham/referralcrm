@@ -5,6 +5,8 @@ import { fetcher } from '@/utils/fetcher';
 import { formatInTimeZone } from 'date-fns-tz';
 import { SLA_TIME_ZONE } from '@/utils/sla-insights';
 import { useMemo, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 
 interface Activity {
   _id: string;
@@ -34,25 +36,31 @@ export function ReferralTimeline({ referralId }: { referralId: string }) {
   const canShowToggle = activities.length > 5;
 
   return (
-    <div className="space-y-4 rounded-lg border border-border bg-surface-raised p-5 shadow-sm">
+    <div className="space-y-4 rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <div>
-        <h2 className="text-lg font-semibold text-foreground">Activity timeline</h2>
-        <p className="text-sm text-foreground-subtle">Latest interactions and updates from your team.</p>
+        <h2 className="text-eyebrow text-foreground-muted">Activity timeline</h2>
+        <p className="mt-1 text-xs text-foreground-subtle">Latest interactions and updates from your team.</p>
       </div>
       {isLoading && <p className="text-sm text-foreground-subtle">Loading activity…</p>}
       {error && !isLoading && (
         <p className="text-sm text-danger">We couldn’t load recent activity. Please refresh to try again.</p>
       )}
       {data && !hasActivity && (
-        <p className="text-sm text-foreground-subtle">No activity logged yet. Add a note or update the status to get started.</p>
+        <EmptyState
+          compact
+          title="No activity logged yet"
+          description="Add a note or update the status to get started."
+        />
       )}
       {hasActivity && (
         <div className="space-y-3">
           {visibleActivities.map((activity) => (
-            <div key={activity._id} className="rounded-lg border border-border bg-surface-muted/60 p-4">
+            <div key={activity._id} className="rounded-card border border-border bg-surface-muted/60 p-4">
               <div className="flex items-center justify-between text-xs text-foreground-subtle">
-                <span className="uppercase">{activity.channel}</span>
-                <span>{formatInTimeZone(new Date(activity.createdAt), SLA_TIME_ZONE, "MMM d, yyyy 'at' h:mm a 'MT'")}</span>
+                <span className="text-eyebrow">{activity.channel}</span>
+                <span className="text-numeric">
+                  {formatInTimeZone(new Date(activity.createdAt), SLA_TIME_ZONE, "MMM d, yyyy 'at' h:mm a 'MT'")}
+                </span>
               </div>
               <p className="mt-2 text-sm text-foreground-muted">{activity.content}</p>
               <p className="text-xs text-foreground-subtle">
@@ -64,13 +72,14 @@ export function ReferralTimeline({ referralId }: { referralId: string }) {
             </div>
           ))}
           {canShowToggle && (
-            <button
+            <Button
               type="button"
-              className="text-sm font-medium text-accent hover:text-accent/75"
+              variant="ghost"
+              size="sm"
               onClick={() => setShowAll((previous) => !previous)}
             >
               {showAll ? 'Show less' : 'Show all activity'}
-            </button>
+            </Button>
           )}
         </div>
       )}

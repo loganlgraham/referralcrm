@@ -5,6 +5,11 @@ import Papa from 'papaparse';
 import JSZip from 'jszip';
 import { toast } from 'sonner';
 import { IMPORT_ENTITY_CONFIG, IMPORT_ENTITY_NAMES, type ImportEntity } from '@/constants/imports';
+import { Button } from '@/components/ui/button';
+import { FieldFootnote, FieldGroup, FieldLabel, selectFieldClasses } from '@/components/ui/field-group';
+import { PageHeader } from '@/components/ui/page-header';
+import { TBody, THead, Table, TableScroll, TableShell, Td, Th, Tr } from '@/components/ui/table-shell';
+import { cn } from '@/lib/cn';
 
 const steps = ['Upload', 'Map Fields', 'Preview', 'Confirm'] as const;
 
@@ -14,6 +19,72 @@ type ImportAssistantInsights = {
   standardizedRows?: Record<string, string>[];
   notes?: string[];
 };
+
+type RowIssue = { rowIndex: number; message: string };
+
+/**
+ * Numbered stations, because an import genuinely is a sequence and the order is
+ * information the operator needs. The signal node marks the current station.
+ */
+function StepRail({ activeIndex }: { activeIndex: number }) {
+  return (
+    <ol className="scrollbar-thin inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-pill border border-border bg-surface-raised p-1 shadow-card">
+      {steps.map((item, index) => {
+        const isCurrent = index === activeIndex;
+        const isDone = index < activeIndex;
+        return (
+          <li key={item} className="flex shrink-0 items-center gap-1">
+            {index > 0 ? (
+              <span
+                aria-hidden
+                className={cn('h-[2px] w-5 rounded-full', isDone || isCurrent ? 'bg-primary' : 'bg-border')}
+              />
+            ) : null}
+            <span
+              aria-current={isCurrent ? 'step' : undefined}
+              className={cn(
+                'inline-flex items-center gap-2 whitespace-nowrap rounded-pill px-3 py-1.5 text-sm font-medium',
+                isCurrent ? 'bg-primary text-white shadow-sm' : isDone ? 'text-foreground' : 'text-foreground-subtle'
+              )}
+            >
+              <span
+                className={cn(
+                  'text-numeric inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold',
+                  isCurrent
+                    ? 'bg-signal text-white'
+                    : isDone
+                      ? 'bg-primary text-white'
+                      : 'bg-surface-muted text-foreground-subtle'
+                )}
+              >
+                {index + 1}
+              </span>
+              {item}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function FlaggedRows({ issues, keyPrefix = 'map' }: { issues: RowIssue[]; keyPrefix?: string }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-eyebrow flex items-center gap-1.5 text-foreground-subtle">
+        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-signal" />
+        Flagged rows
+      </p>
+      <ul className="list-disc space-y-1 pl-5 text-xs text-foreground-muted">
+        {issues.map((issue) => (
+          <li key={`${keyPrefix}-${issue.rowIndex}-${issue.message}`}>
+            Row <span className="text-numeric">{issue.rowIndex + 1}</span>: {issue.message}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export function ImportWizard() {
   const [step, setStep] = useState<typeof steps[number]>('Upload');
@@ -178,101 +249,118 @@ export function ImportWizard() {
     }
   };
 
+  const activeStepIndex = steps.indexOf(step);
+  const mappedColumnCount = headers.filter((header) => Boolean(mapping[header])).length;
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Import Wizard</h1>
-          <p className="text-sm text-foreground-subtle">Upload CSV/XLSX/ZIP files and map to CRM fields.</p>
-        </div>
-      </div>
-      <div className="space-y-6 rounded-md bg-surface-raised p-6 shadow-sm">
-      <div className="flex items-center gap-4 text-sm text-foreground-subtle">
-        {steps.map((item) => (
-          <div key={item} className={`flex items-center gap-2 ${step === item ? 'font-semibold text-primary' : ''}`}>
-            <span className="h-8 w-8 rounded-full border border-border-strong text-center leading-8">{steps.indexOf(item) + 1}</span>
-            {item}
-          </div>
-        ))}
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Data"
+        title="Import wizard"
+        description="Upload a CSV, XLSX, or ZIP file and map its columns to CRM fields."
+        attention={false}
+      />
+
+      <StepRail activeIndex={activeStepIndex} />
+
       {step === 'Upload' && (
-        <div className="space-y-4">
-          <label className="text-sm font-medium text-foreground-muted">
-            Entity
-            <select
-              className="mt-1 w-full rounded border border-border px-3 py-2"
-              value={entity}
-              onChange={(event) => setEntity(event.target.value as ImportEntity)}
-            >
-              {IMPORT_ENTITY_NAMES.map((key) => (
-                <option key={key}>{key}</option>
-              ))}
-            </select>
-          </label>
-          {entityDescription && (
-            <p className="text-xs text-foreground-subtle">{entityDescription}</p>
-          )}
-          <input type="file" accept=".csv,.xlsx,.xls,.zip" onChange={handleFileChange} />
-        </div>
-      )}
-      {step === 'Map Fields' && (
-        <div className="space-y-4">
-          <p className="text-sm text-foreground-subtle">Map columns to CRM fields.</p>
-          {headers.map((header) => (
-            <div key={header} className="flex items-center justify-between gap-4 rounded border border-border px-3 py-2">
-              <span className="text-sm font-medium text-foreground-muted">{header}</span>
+        <FieldGroup title="Upload" description="Pick what these rows represent, then choose a file.">
+          <div className="space-y-3">
+            <label className="block space-y-1.5">
+              <FieldLabel label="Entity" />
               <select
-                value={mapping[header] ?? ''}
-                onChange={(event) => handleMappingChange(header, event.target.value)}
-                className="rounded border border-border px-2 py-1 text-sm"
+                className={cn(selectFieldClasses, 'sm:max-w-xs')}
+                value={entity}
+                onChange={(event) => setEntity(event.target.value as ImportEntity)}
               >
-                <option value="">Ignore</option>
-                {entityFields.map((field) => (
-                  <option key={field} value={field}>
-                    {field}
-                  </option>
+                {IMPORT_ENTITY_NAMES.map((key) => (
+                  <option key={key}>{key}</option>
                 ))}
               </select>
+              <FieldFootnote reserve>{entityDescription}</FieldFootnote>
+            </label>
+            <input
+              type="file"
+              accept=".csv,.xlsx,.xls,.zip"
+              onChange={handleFileChange}
+              className="block w-full cursor-pointer rounded-lg border border-dashed border-border-strong/70 bg-surface px-4 py-6 text-sm text-foreground-muted transition hover:border-ring file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:font-display file:text-sm file:font-medium file:text-white"
+            />
+          </div>
+        </FieldGroup>
+      )}
+
+      {step === 'Map Fields' && (
+        <div className="space-y-5">
+          <FieldGroup
+            title="Map fields"
+            description="Match each column in your file to a CRM field. Anything left on Ignore is skipped."
+            action={
+              <span className="text-xs text-foreground-subtle">
+                <span className="text-numeric">{mappedColumnCount}</span> of{' '}
+                <span className="text-numeric">{headers.length}</span> mapped
+              </span>
+            }
+          >
+            <div className="space-y-2">
+              {headers.map((header) => (
+                <div
+                  key={header}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
+                >
+                  <span className="text-sm font-medium text-foreground">{header}</span>
+                  <select
+                    value={mapping[header] ?? ''}
+                    onChange={(event) => handleMappingChange(header, event.target.value)}
+                    className={cn(selectFieldClasses, 'h-8 w-auto min-w-[12rem] text-xs')}
+                  >
+                    <option value="">Ignore</option>
+                    {entityFields.map((field) => (
+                      <option key={field} value={field}>
+                        {field}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
             </div>
-          ))}
-          <div className="rounded border border-border bg-surface-muted/50 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground-muted">Import Assistant</h2>
-                <p className="text-xs text-foreground-subtle">AI suggestions to speed up mapping and data cleanup.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void fetchAssistantInsights()}
-                disabled={assistantLoading}
-                className="rounded border border-border-strong px-3 py-1 text-xs font-medium text-foreground-muted disabled:cursor-not-allowed disabled:opacity-50"
-              >
+          </FieldGroup>
+
+          <FieldGroup
+            title="Import assistant"
+            description="Suggestions to speed up mapping and flag messy data before it lands."
+            action={
+              <Button variant="secondary" size="sm" loading={assistantLoading} onClick={() => void fetchAssistantInsights()}>
                 {assistantLoading ? 'Analyzing…' : 'Refresh'}
-              </button>
-            </div>
-            <div className="mt-3 space-y-3 text-sm text-foreground-muted">
+              </Button>
+            }
+          >
+            <div className="space-y-3 text-sm text-foreground-muted">
               {assistantLoading && <p className="text-foreground-subtle">Analyzing sample rows…</p>}
               {!assistantLoading && assistantError && (
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2">
                   <span className="text-sm text-danger">{assistantError}</span>
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-danger hover:bg-danger/10 hover:text-danger"
                     onClick={() => void fetchAssistantInsights()}
-                    className="rounded border border-danger/30 px-3 py-1 text-xs font-medium text-danger"
                   >
                     Try again
-                  </button>
+                  </Button>
                 </div>
               )}
               {!assistantLoading && !assistantError && (
                 <>
                   {mappingSuggestionEntries.length > 0 ? (
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Suggested matches</p>
+                      <p className="text-eyebrow text-foreground-subtle">Suggested matches</p>
                       <ul className="mt-2 space-y-1 text-xs">
                         {mappingSuggestionEntries.map(([column, field]) => (
-                          <li key={column} className="flex items-center justify-between rounded border border-border bg-surface-raised px-2 py-1">
-                            <span className="font-medium text-foreground-muted">{column}</span>
+                          <li
+                            key={column}
+                            className="flex items-center justify-between gap-3 rounded-lg bg-surface-muted px-2.5 py-1.5"
+                          >
+                            <span className="font-medium text-foreground">{column}</span>
                             <span className="text-foreground-subtle">→ {field}</span>
                           </li>
                         ))}
@@ -283,7 +371,7 @@ export function ImportWizard() {
                   )}
                   {assistantNotes.length > 0 && (
                     <div className="space-y-1">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Assistant notes</p>
+                      <p className="text-eyebrow text-foreground-subtle">Assistant notes</p>
                       <ul className="list-disc space-y-1 pl-5 text-xs text-foreground-muted">
                         {assistantNotes.map((note, index) => (
                           <li key={`${note}-${index}`}>{note}</li>
@@ -291,148 +379,139 @@ export function ImportWizard() {
                       </ul>
                     </div>
                   )}
-                  {rowIssues.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Flagged rows</p>
-                      <ul className="list-disc space-y-1 pl-5 text-xs text-foreground-muted">
-                        {rowIssues.map((issue) => (
-                          <li key={`${issue.rowIndex}-${issue.message}`}>
-                            Row {issue.rowIndex + 1}: {issue.message}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  {rowIssues.length > 0 && <FlaggedRows issues={rowIssues} />}
                 </>
               )}
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
+            <div className="mt-4">
+              <Button
                 onClick={handleApplyMappingSuggestions}
                 disabled={assistantLoading || mappingSuggestionEntries.length === 0}
-                className="rounded bg-primary px-3 py-1 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Apply suggestions
-              </button>
+              </Button>
             </div>
+          </FieldGroup>
+
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => setStep('Upload')}>
+              Back
+            </Button>
+            <Button onClick={() => setStep('Preview')}>Continue</Button>
           </div>
-          <button
-            type="button"
-            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white"
-            onClick={() => setStep('Preview')}
-          >
-            Continue
-          </button>
         </div>
       )}
+
       {step === 'Preview' && (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-foreground-subtle">Preview first 20 rows.</p>
-            {hasStandardizedRows && (
-              <label className="flex items-center gap-2 text-xs font-medium text-foreground-muted">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border border-border-strong"
-                  checked={useStandardizedPreview}
-                  onChange={(event) => setUseStandardizedPreview(event.target.checked)}
-                />
-                Use AI-cleaned preview
-              </label>
-            )}
-          </div>
-          <div className="max-h-64 overflow-auto rounded border border-border">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr>
-                  {headers.map((header) => (
-                    <th key={header} className="border-b bg-surface-muted px-2 py-1 text-left text-xs uppercase text-foreground-subtle">
-                      {header}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {previewRows.map((row, index) => (
-                  <tr key={index} className="odd:bg-surface-raised even:bg-surface-muted">
-                    {headers.map((header) => (
-                      <td key={header} className="px-2 py-1">
-                        {row[header]}
-                      </td>
+        <div className="space-y-5">
+          <FieldGroup
+            title="Preview"
+            description="The first 20 rows, exactly as they will be read."
+            action={
+              hasStandardizedRows ? (
+                <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground-muted">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-border-strong text-primary focus:ring-ring"
+                    checked={useStandardizedPreview}
+                    onChange={(event) => setUseStandardizedPreview(event.target.checked)}
+                  />
+                  Use cleaned preview
+                </label>
+              ) : null
+            }
+          >
+            <TableShell className="shadow-none">
+              <TableScroll className="max-h-64 overflow-y-auto">
+                <Table>
+                  <THead>
+                    <Tr>
+                      {headers.map((header) => (
+                        <Th key={header} dense>
+                          {header}
+                        </Th>
+                      ))}
+                    </Tr>
+                  </THead>
+                  <TBody>
+                    {previewRows.map((row, index) => (
+                      <Tr key={index}>
+                        {headers.map((header) => (
+                          <Td key={header} dense>
+                            {row[header]}
+                          </Td>
+                        ))}
+                      </Tr>
                     ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  </TBody>
+                </Table>
+              </TableScroll>
+            </TableShell>
+          </FieldGroup>
+
           {(rowIssues.length > 0 || assistantNotes.length > 0) && (
-            <div className="rounded border border-border bg-surface-muted/50 p-4 text-xs text-foreground-muted">
-              {assistantNotes.length > 0 && (
-                <div className="space-y-1">
-                  <p className="font-semibold uppercase tracking-wide text-foreground-subtle">Assistant notes</p>
-                  <ul className="list-disc space-y-1 pl-5">
-                    {assistantNotes.map((note, index) => (
-                      <li key={`preview-note-${index}`}>{note}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {rowIssues.length > 0 && (
-                <div className="space-y-1">
-                  <p className="font-semibold uppercase tracking-wide text-foreground-subtle">Flagged rows</p>
-                  <ul className="list-disc space-y-1 pl-5">
-                    {rowIssues.map((issue) => (
-                      <li key={`preview-issue-${issue.rowIndex}-${issue.message}`}>
-                        Row {issue.rowIndex + 1}: {issue.message}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
+            <FieldGroup title="Before you continue">
+              <div className="space-y-3 text-xs text-foreground-muted">
+                {assistantNotes.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-eyebrow text-foreground-subtle">Assistant notes</p>
+                    <ul className="list-disc space-y-1 pl-5">
+                      {assistantNotes.map((note, index) => (
+                        <li key={`preview-note-${index}`}>{note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {rowIssues.length > 0 && <FlaggedRows issues={rowIssues} keyPrefix="preview" />}
+              </div>
+            </FieldGroup>
           )}
-          <div className="flex items-center gap-3">
-            <button type="button" className="rounded border border-border-strong px-4 py-2 text-sm" onClick={() => setStep('Map Fields')}>
+
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => setStep('Map Fields')}>
               Back
-            </button>
-            <button type="button" className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white" onClick={() => setStep('Confirm')}>
-              Continue
-            </button>
+            </Button>
+            <Button onClick={() => setStep('Confirm')}>Continue</Button>
           </div>
         </div>
       )}
+
       {step === 'Confirm' && (
-        <div className="space-y-4">
-          <p className="text-sm text-foreground-subtle">Confirm mapping and start import.</p>
-          <pre className="max-h-40 overflow-auto rounded bg-foreground p-4 text-xs text-white">{JSON.stringify(mapping, null, 2)}</pre>
-          {assistantInsights && (
-            <div className="rounded border border-border bg-surface-muted/50 p-4 text-xs text-foreground-muted">
-              <p className="font-semibold uppercase tracking-wide text-foreground-subtle">Import assistant summary</p>
-              <p className="mt-1">
-                {mappingSuggestionEntries.length > 0
-                  ? `Passing ${mappingSuggestionEntries.length} mapping suggestion${mappingSuggestionEntries.length === 1 ? '' : 's'}`
-                  : 'No mapping suggestions applied.'}
-              </p>
-              <p>
-                {rowIssues.length > 0
-                  ? `Assistant flagged ${rowIssues.length} sample row${rowIssues.length === 1 ? '' : 's'} for review.`
-                  : 'No sample rows were flagged.'}
-              </p>
-              {hasStandardizedRows && <p>AI-standardized values are included for preview and downstream cleanup.</p>}
-            </div>
-          )}
-          <div className="flex items-center gap-3">
-            <button type="button" className="rounded border border-border-strong px-4 py-2 text-sm" onClick={() => setStep('Preview')}>
+        <div className="space-y-5">
+          <FieldGroup title="Confirm" description="This is the mapping that will be applied to every row in the file.">
+            <pre className="text-numeric max-h-40 overflow-auto rounded-lg bg-primary p-4 text-xs leading-5 text-white">
+              {JSON.stringify(mapping, null, 2)}
+            </pre>
+            {assistantInsights && (
+              <div className="mt-3 rounded-lg bg-surface-muted p-4 text-xs text-foreground-muted">
+                <p className="text-eyebrow text-foreground-subtle">Assistant summary</p>
+                <p className="mt-2">
+                  {mappingSuggestionEntries.length > 0
+                    ? `Passing ${mappingSuggestionEntries.length} mapping suggestion${mappingSuggestionEntries.length === 1 ? '' : 's'}.`
+                    : 'No mapping suggestions applied.'}
+                </p>
+                <p>
+                  {rowIssues.length > 0 ? (
+                    <span className="font-medium text-signal">
+                      {rowIssues.length} sample row{rowIssues.length === 1 ? '' : 's'} flagged for review.
+                    </span>
+                  ) : (
+                    'No sample rows were flagged.'
+                  )}
+                </p>
+                {hasStandardizedRows && <p>Cleaned values are included for preview and downstream cleanup.</p>}
+              </div>
+            )}
+          </FieldGroup>
+
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => setStep('Preview')}>
               Back
-            </button>
-            <button type="button" className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white" onClick={handleConfirm}>
-              Start import
-            </button>
+            </Button>
+            <Button onClick={handleConfirm}>Start import</Button>
           </div>
         </div>
       )}
-      </div>
     </div>
   );
 }

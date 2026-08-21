@@ -4,6 +4,9 @@ import { cn } from '@/lib/cn';
 const baseField =
   'flex w-full rounded-lg border border-border-strong/70 bg-surface px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_1px_rgba(15,23,42,0.03)] transition placeholder:text-foreground-subtle focus:border-ring focus:outline-none focus:shadow-focus disabled:cursor-not-allowed disabled:bg-surface-muted disabled:opacity-60';
 
+/** For the handful of places that still render a raw `input` (dynamic name/value maps). */
+export const inputFieldClasses = cn(baseField, 'h-9');
+
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   invalid?: boolean;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { HomeIcon, LockIcon } from 'lucide-react';
+import { LockIcon } from 'lucide-react';
 import {
   AffordabilityResult,
   getFinancedFeeLabel,
@@ -20,111 +20,85 @@ export function AffordabilityResultCard({
   loanType,
   bindingLabel,
 }: AffordabilityResultCardProps) {
+  const paymentRows = [
+    { label: 'Principal & interest', value: result.principalAndInterest },
+    { label: 'Property taxes', value: result.propertyTaxes },
+    { label: 'Homeowners insurance', value: result.insuranceMonthly },
+    { label: 'HOA dues', value: result.hoaMonthly },
+  ];
+
+  if (result.mortgageInsuranceMonthly > 0) {
+    paymentRows.push({
+      label: getMortgageInsuranceLabel(loanType),
+      value: result.mortgageInsuranceMonthly,
+    });
+  }
+
+  const snapshot = [
+    { label: 'Loan amount', value: formatCurrency(result.totalLoanAmount) },
+    {
+      label: 'Down payment',
+      value: `${formatCurrency(result.downPaymentAmount)} · ${result.downPaymentPercent.toFixed(1)}%`,
+    },
+    { label: 'Loan-to-value', value: formatPercent(result.baseLtv) },
+    { label: 'Cash to close', value: formatCurrency(result.cashToClose) },
+  ];
+
+  if (result.financedFeeAmount > 0) {
+    snapshot.push({
+      label: getFinancedFeeLabel(loanType),
+      value: formatCurrency(result.financedFeeAmount),
+    });
+  }
+
   return (
-    <div className="rounded-lg border border-primary/20 bg-primary-soft p-4">
-      <div className="flex items-center gap-2">
-        <HomeIcon className="h-5 w-5 text-primary" />
-        <h3 className="text-sm font-semibold text-primary">Most they can buy</h3>
-      </div>
+    <section className="rounded-card border border-border bg-surface-raised p-5 shadow-card">
+      <h2 className="text-eyebrow text-foreground-subtle">Most they can buy</h2>
 
-      <div className="mt-4 rounded-md bg-surface-raised p-4 shadow-sm">
-        <p className="text-sm text-foreground-muted">Maximum purchase price</p>
-        <p className="mt-1 text-3xl font-bold text-foreground">
-          {formatCurrency(result.maxPurchasePrice)}
-        </p>
-        <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-2.5 py-1 text-xs font-medium text-foreground-muted">
-          <LockIcon className="h-3 w-3" />
-          {bindingLabel}
-        </p>
-        <p className="mt-2 text-xs text-foreground-subtle">
-          Rounded down to the nearest {formatCurrency(1000)} so the payment below stays inside the
-          limits.
-        </p>
-      </div>
+      <p className="mt-2 text-numeric text-4xl font-bold tracking-[-0.03em] text-foreground">
+        {formatCurrency(result.maxPurchasePrice)}
+      </p>
+      <p className="mt-2 inline-flex items-center gap-1.5 rounded-pill bg-surface-muted px-2.5 py-1 text-xs font-medium text-foreground-muted">
+        <LockIcon className="h-3 w-3" aria-hidden />
+        {bindingLabel}
+      </p>
 
-      <div className="mt-4 rounded-md bg-surface-raised p-4 shadow-sm">
-        <p className="text-sm font-semibold text-foreground">Payment at that price</p>
-        <dl className="mt-3 space-y-2 text-sm text-foreground-muted">
-          <div className="flex items-center justify-between">
-            <dt>Principal &amp; interest</dt>
-            <dd className="font-semibold text-foreground">
-              {formatCurrency(result.principalAndInterest)}
-            </dd>
-          </div>
-          <div className="flex items-center justify-between">
-            <dt>Property taxes</dt>
-            <dd className="font-semibold text-foreground">{formatCurrency(result.propertyTaxes)}</dd>
-          </div>
-          <div className="flex items-center justify-between">
-            <dt>Homeowners insurance</dt>
-            <dd className="font-semibold text-foreground">
-              {formatCurrency(result.insuranceMonthly)}
-            </dd>
-          </div>
-          <div className="flex items-center justify-between">
-            <dt>HOA dues</dt>
-            <dd className="font-semibold text-foreground">{formatCurrency(result.hoaMonthly)}</dd>
-          </div>
-          {result.mortgageInsuranceMonthly > 0 ? (
-            <div className="flex items-center justify-between text-primary">
-              <dt className="font-semibold">{getMortgageInsuranceLabel(loanType)}</dt>
-              <dd className="font-semibold">{formatCurrency(result.mortgageInsuranceMonthly)}</dd>
-            </div>
-          ) : null}
-        </dl>
-        <div className="mt-3 flex items-center justify-between rounded-md bg-surface-muted px-3 py-2">
-          <span className="text-sm font-semibold text-foreground-muted">Total monthly payment</span>
-          <span className="text-lg font-bold text-foreground">
+      <div className="mt-4 border-t border-border pt-3">
+        <div className="flex items-baseline justify-between">
+          <p className="text-sm font-semibold text-foreground">Payment at that price</p>
+          <p className="text-numeric text-lg font-bold text-foreground">
             {formatCurrency(result.totalMonthlyPayment)}
-          </span>
+            <span className="ml-1 text-xs font-medium text-foreground-subtle">/mo</span>
+          </p>
         </div>
+        <dl className="mt-2 divide-y divide-border">
+          {paymentRows.map((row) => (
+            <div key={row.label} className="flex items-baseline justify-between gap-3 py-1.5">
+              <dt className="text-sm text-foreground-muted">{row.label}</dt>
+              <dd className="text-numeric text-sm font-semibold text-foreground">
+                {formatCurrency(row.value)}
+              </dd>
+            </div>
+          ))}
+        </dl>
       </div>
 
-      <dl className="mt-4 grid grid-cols-2 gap-3">
-        <div className="rounded-md bg-surface-raised px-3 py-2 shadow-sm">
-          <dt className="text-xs text-foreground-subtle">Loan amount</dt>
-          <dd className="text-base font-semibold text-foreground">
-            {formatCurrency(result.totalLoanAmount)}
-          </dd>
-        </div>
-        <div className="rounded-md bg-surface-raised px-3 py-2 shadow-sm">
-          <dt className="text-xs text-foreground-subtle">Down payment</dt>
-          <dd className="text-base font-semibold text-foreground">
-            {formatCurrency(result.downPaymentAmount)}
-            <span className="ml-1 text-xs font-medium text-foreground-subtle">
-              {result.downPaymentPercent.toFixed(1)}%
-            </span>
-          </dd>
-        </div>
-        <div className="rounded-md bg-surface-raised px-3 py-2 shadow-sm">
-          <dt className="text-xs text-foreground-subtle">Loan-to-value</dt>
-          <dd className="text-base font-semibold text-foreground">
-            {formatPercent(result.baseLtv)}
-          </dd>
-        </div>
-        <div className="rounded-md bg-surface-raised px-3 py-2 shadow-sm">
-          <dt className="text-xs text-foreground-subtle">Cash needed to close</dt>
-          <dd className="text-base font-semibold text-foreground">
-            {formatCurrency(result.cashToClose)}
-          </dd>
-        </div>
-        {result.financedFeeAmount > 0 ? (
-          <div className="col-span-2 rounded-md bg-surface-raised px-3 py-2 shadow-sm">
-            <dt className="text-xs text-foreground-subtle">{getFinancedFeeLabel(loanType)}</dt>
-            <dd className="text-base font-semibold text-foreground">
-              {formatCurrency(result.financedFeeAmount)}
-              <span className="ml-1 text-xs font-medium text-foreground-subtle">
-                on a {formatCurrency(result.baseLoanAmount)} base loan
-              </span>
+      <dl className="mt-4 grid grid-cols-2 gap-2">
+        {snapshot.map((item) => (
+          <div key={item.label} className="rounded-lg bg-surface-muted px-3 py-2">
+            <dt className="text-xs text-foreground-subtle">{item.label}</dt>
+            <dd className="text-numeric mt-0.5 text-sm font-semibold text-foreground">
+              {item.value}
             </dd>
           </div>
-        ) : null}
+        ))}
       </dl>
 
       <p className="mt-3 text-xs text-foreground-subtle">
-        Cash to close covers the down payment plus estimated closing costs. It does not include
-        prepaid taxes and insurance the lender may collect at settlement.
+        Prices are rounded down to the nearest {formatCurrency(1000)} so the payment stays inside the
+        limits. Cash to close covers the down payment plus estimated closing costs, not prepaid taxes
+        and insurance.
       </p>
-    </div>
+    </section>
   );
 }

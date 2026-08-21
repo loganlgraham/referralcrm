@@ -2,18 +2,18 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  AlertCircleIcon,
-  CheckIcon,
   ClipboardIcon,
   ExternalLinkIcon,
-  LineChartIcon,
-  Loader2Icon,
-  NewspaperIcon,
-  RefreshCwIcon,
+  RotateCcwIcon,
   SendIcon,
   ShareIcon,
   SparklesIcon,
 } from 'lucide-react';
+import { toast } from 'sonner';
+
+import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/ui/page-header';
+import { FieldGroup } from './fields';
 
 type RssArticle = {
   title: string;
@@ -41,46 +41,25 @@ function Skeleton({ className }: { className?: string }) {
   return <div className={`animate-pulse rounded bg-surface-subtle ${className ?? ''}`} />;
 }
 
-function CopyButton({
-  text,
-  label = 'Copy',
-  copiedLabel = 'Copied!',
-  className = '',
-}: {
-  text: string;
-  label?: string;
-  copiedLabel?: string;
-  className?: string;
-}) {
-  const [copied, setCopied] = useState(false);
-
+function CopyButton({ text, label }: { text: string; label: string }) {
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+      toast.success('Copied');
     } catch {
-      // clipboard unavailable
+      toast.error('Could not copy');
     }
   };
 
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="sm"
+      leadingIcon={<ClipboardIcon className="h-3.5 w-3.5" />}
       onClick={handleCopy}
-      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-        copied
-          ? 'bg-success-soft text-success'
-          : 'bg-surface-subtle text-foreground-muted hover:bg-surface-subtle'
-      } ${className}`}
     >
-      {copied ? (
-        <CheckIcon className="h-3.5 w-3.5" />
-      ) : (
-        <ClipboardIcon className="h-3.5 w-3.5" />
-      )}
-      {copied ? copiedLabel : label}
-    </button>
+      {label}
+    </Button>
   );
 }
 
@@ -149,11 +128,12 @@ export function MarketIntelWidget() {
         setEmailResult(data.email);
         const text = `Subject: ${data.email.subject}\n\n${data.email.body}`;
         await navigator.clipboard.writeText(text);
+        toast.success('Email copied');
       } else {
-        setEmailError('Failed to generate email. Please try again.');
+        setEmailError('Could not generate the email. Try again.');
       }
     } catch {
-      setEmailError('Failed to generate email. Please try again.');
+      setEmailError('Could not generate the email. Try again.');
     } finally {
       setEmailLoading(false);
     }
@@ -169,277 +149,218 @@ export function MarketIntelWidget() {
       const data = (await res.json()) as { post?: string; error?: string };
       if (data.post) {
         setPostResult(data.post);
+        toast.success('Social post ready');
       } else {
-        setPostError('Failed to generate post. Please try again.');
+        setPostError('Could not generate the post. Try again.');
       }
     } catch {
-      setPostError('Failed to generate post. Please try again.');
+      setPostError('Could not generate the post. Try again.');
     } finally {
       setPostLoading(false);
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Live Rate Snapshot — top of page */}
-      <div className="rounded-card bg-surface-raised shadow">
-        <div className="px-5 pt-5">
-          <p className="text-center text-xs font-medium uppercase tracking-wide text-foreground-subtle">
-            Live national mortgage rates — via Mortgage News Daily
-          </p>
-        </div>
-
-        <div className="mt-3 max-w-3xl mx-auto px-4">
-          <div className="overflow-hidden rounded-md border border-border shadow-sm">
-            <div className="bg-primary py-1.5 text-center text-white">
-              <a
-                href="https://www.mortgagenewsdaily.com/mortgage-rates"
-                target="_blank"
-                rel="noreferrer"
-                className="text-[13px] text-white no-underline hover:text-white"
-              >
-                Mortgage Interest Rates
-              </a>
-            </div>
-            <div className="overflow-x-auto">
-              <iframe
-                src="//widgets.mortgagenewsdaily.com/widget/f/rates?t=large&sn=true&c=0f172a&u=&cbu=&w=720&h=290"
-                width="720"
-                height="290"
-                frameBorder="0"
-                scrolling="no"
-                style={{
-                  border: 'solid 1px hsl(var(--primary))',
-                  borderWidth: '0 1px',
-                  boxSizing: 'border-box',
-                  minWidth: '720px',
-                  width: '720px',
-                  height: '290px',
-                  display: 'block',
-                }}
-              />
-            </div>
-            <div className="bg-primary py-1.5 text-center text-white">
-              View More{' '}
-              <a
-                href="https://www.mortgagenewsdaily.com/mortgage-rates"
-                target="_blank"
-                rel="noreferrer"
-                className="text-[13px] text-white no-underline hover:text-white"
-              >
-                Mortgage Rates
-              </a>
-            </div>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Mortgage coach"
+        title="Mortgage market"
+        description="Today's national rate picture and talking points so you can set expectations before handing a client to AFC."
+        actions={
+          <div className="flex items-center gap-3">
+            {lastUpdated ? (
+              <span className="route-label text-foreground-subtle">Updated {lastUpdated}</span>
+            ) : null}
+            <Button
+              variant="secondary"
+              leadingIcon={<RotateCcwIcon className="h-4 w-4" />}
+              onClick={loadAll}
+            >
+              Refresh
+            </Button>
           </div>
-        </div>
+        }
+      />
 
-        <div className="mx-auto mt-3 max-w-3xl px-4 pb-5">
-          <div className="flex flex-col gap-2 rounded-md border border-warning/30 bg-warning-soft px-4 py-3 sm:flex-row sm:items-start sm:gap-3">
-            <div className="flex items-center gap-1.5 font-semibold text-warning sm:shrink-0">
-              <AlertCircleIcon className="h-4 w-4" />
-              <span className="text-sm">Use with care</span>
+      <div className="grid gap-5 lg:grid-cols-5">
+        <FieldGroup title="Today's brief" className="lg:col-span-3">
+          {briefLoading ? (
+            <div className="space-y-2.5">
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-4/6" />
             </div>
-            <p className="text-sm text-warning">
-              These figures are for educational context only. Always defer exact rate quotes to the
-              lender you are working with.
+          ) : brief ? (
+            <p className="text-[17px] leading-8 tracking-[-0.015em] text-foreground">{brief}</p>
+          ) : (
+            <p className="text-sm text-foreground-subtle">
+              Market brief unavailable. Refresh to try again.
             </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Page header row */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Market Intelligence</h1>
-          {lastUpdated && (
-            <p className="mt-0.5 text-xs text-foreground-subtle">Last updated at {lastUpdated}</p>
           )}
-        </div>
-        <button
-          type="button"
-          onClick={loadAll}
-          className="inline-flex items-center gap-2 self-start rounded-md border border-border bg-surface-raised px-3 py-1.5 text-sm font-medium text-foreground-muted shadow-sm transition-colors hover:bg-surface-muted sm:self-auto"
-        >
-          <RefreshCwIcon className="h-4 w-4" />
-          Refresh
-        </button>
-      </div>
+        </FieldGroup>
 
-      {/* Daily Market Brief */}
-      <div className="rounded-card bg-surface-raised p-5 shadow">
-        <div className="mb-3 flex items-center gap-2">
-          <LineChartIcon className="h-4 w-4 text-primary" />
-          <h2 className="text-sm font-semibold text-foreground">Daily Market Brief</h2>
-        </div>
-        {briefLoading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-5/6" />
-            <Skeleton className="h-4 w-4/6" />
-          </div>
-        ) : brief ? (
-          <p className="text-sm leading-relaxed text-foreground-muted">{brief}</p>
-        ) : (
-          <p className="text-sm text-foreground-subtle">Market brief unavailable. Try refreshing.</p>
-        )}
-      </div>
-
-      {/* Two-column: Talking Points + Latest News */}
-      <div className="grid gap-5 lg:grid-cols-2">
-        {/* Agent Talking Points */}
-        <div className="rounded-card bg-surface-raised p-5 shadow">
-          <div className="mb-3 flex items-center gap-2">
-            <SparklesIcon className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Agent Talking Points</h2>
-          </div>
+        <section className="rounded-card border border-border bg-surface-raised p-4 shadow-card lg:col-span-2">
+          <h3 className="flex items-center gap-2 text-eyebrow text-foreground-subtle">
+            <SparklesIcon className="h-3.5 w-3.5 text-signal" aria-hidden />
+            Talking points
+          </h3>
           {talkingPointsLoading ? (
-            <div className="space-y-3">
+            <div className="mt-2 space-y-3">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="space-y-1.5">
+                <div key={i} className="space-y-1.5 py-2">
                   <Skeleton className="h-3.5 w-full" />
                   <Skeleton className="h-3.5 w-5/6" />
                 </div>
               ))}
             </div>
           ) : talkingPoints.length > 0 ? (
-            <ul className="space-y-3">
-              {talkingPoints.map((point, i) => (
-                <li key={i} className="flex gap-3 text-sm text-foreground-muted">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                    {i + 1}
-                  </span>
-                  <span className="leading-relaxed">{point}</span>
+            <ul className="mt-2 divide-y divide-border">
+              {talkingPoints.map((point) => (
+                <li key={point} className="py-2 text-sm leading-5 text-foreground-muted last:pb-0">
+                  {point}
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-foreground-subtle">Talking points unavailable. Try refreshing.</p>
+            <p className="mt-2 text-sm text-foreground-subtle">
+              Talking points unavailable. Refresh to try again.
+            </p>
           )}
-        </div>
-
-        {/* Latest News */}
-        <div className="rounded-card bg-surface-raised p-5 shadow">
-          <div className="mb-3 flex items-center gap-2">
-            <NewspaperIcon className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Latest News</h2>
-          </div>
-          {articlesLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="space-y-1">
-                  <Skeleton className="h-3.5 w-full" />
-                  <Skeleton className="h-3 w-1/3" />
-                </div>
-              ))}
-            </div>
-          ) : articles.length > 0 ? (
-            <ul className="max-h-72 space-y-3 overflow-y-auto pr-1">
-              {articles.map((article, i) => (
-                <li key={i} className="border-b border-border pb-3 last:border-0 last:pb-0">
-                  <a
-                    href={article.link}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="group flex items-start justify-between gap-2"
-                  >
-                    <span className="text-sm font-medium text-foreground group-hover:text-primary-hover">
-                      {article.title}
-                    </span>
-                    <ExternalLinkIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground-subtle group-hover:text-primary-hover" />
-                  </a>
-                  <p className="mt-0.5 text-xs text-foreground-subtle">
-                    {article.source}
-                    {article.pubDate ? ` · ${relativeTime(article.pubDate)}` : ''}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-foreground-subtle">No news articles available. Try refreshing.</p>
-          )}
-        </div>
+        </section>
       </div>
 
-      {/* Agent Tools: Copy Email + Social Post */}
-      <div className="rounded-card bg-surface-raised p-5 shadow">
-        <h2 className="mb-4 text-sm font-semibold text-foreground">Agent Tools</h2>
-        <div className="flex flex-wrap gap-3">
-          {/* Copy Client Email */}
-          <button
-            type="button"
-            onClick={handleGenerateEmail}
-            disabled={emailLoading}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-hover disabled:opacity-60"
+      <FieldGroup
+        title="Live national rates"
+        action={
+          <a
+            href="https://www.mortgagenewsdaily.com/mortgage-rates"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground-muted no-underline hover:text-foreground"
           >
-            {emailLoading ? (
-              <Loader2Icon className="h-4 w-4 animate-spin" />
-            ) : emailResult ? (
-              <CheckIcon className="h-4 w-4" />
-            ) : (
-              <SendIcon className="h-4 w-4" />
-            )}
-            {emailLoading ? 'Generating…' : emailResult ? 'Copied to Clipboard!' : 'Copy Client Email'}
-          </button>
+            Mortgage News Daily
+            <ExternalLinkIcon className="h-3.5 w-3.5" aria-hidden />
+          </a>
+        }
+      >
+        <div className="scrollbar-thin overflow-x-auto rounded-lg bg-surface-muted p-3">
+          <div className="mx-auto w-[720px] overflow-hidden rounded-md bg-surface-raised ring-1 ring-border">
+            <iframe
+              title="Live national mortgage rates"
+              src="//widgets.mortgagenewsdaily.com/widget/f/rates?t=large&sn=true&c=0f172a&u=&cbu=&w=720&h=290"
+              width="720"
+              height="290"
+              scrolling="no"
+              className="block h-[290px] w-[720px] border-0"
+            />
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-foreground-subtle">
+          Figures are for coaching context. Defer exact quotes to the lender you are working with.
+        </p>
+      </FieldGroup>
 
-          {/* Generate Social Post */}
-          <button
-            type="button"
-            onClick={handleGeneratePost}
-            disabled={postLoading}
-            className="inline-flex items-center gap-2 rounded-md border border-border bg-surface-raised px-4 py-2 text-sm font-medium text-foreground-muted shadow-sm transition-colors hover:bg-surface-muted disabled:opacity-60"
+      <FieldGroup title="Latest news">
+        {articlesLoading ? (
+          <div className="space-y-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="flex items-center justify-between gap-6">
+                <Skeleton className="h-3.5 w-2/5" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            ))}
+          </div>
+        ) : articles.length > 0 ? (
+          <ul className="scrollbar-thin max-h-72 divide-y divide-border overflow-y-auto">
+            {articles.map((article) => (
+              <li key={article.link}>
+                <a
+                  href={article.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="group flex items-baseline justify-between gap-6 py-2.5 no-underline"
+                >
+                  <span className="text-sm font-medium text-foreground group-hover:text-primary-hover">
+                    {article.title}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1.5 text-xs text-foreground-subtle">
+                    {article.source}
+                    {article.pubDate ? ` · ${relativeTime(article.pubDate)}` : ''}
+                    <ExternalLinkIcon
+                      className="h-3.5 w-3.5 group-hover:text-primary-hover"
+                      aria-hidden
+                    />
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-foreground-subtle">
+            No news articles available. Refresh to try again.
+          </p>
+        )}
+      </FieldGroup>
+
+      <FieldGroup title="Client copy">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            leadingIcon={<SendIcon className="h-4 w-4" />}
+            loading={emailLoading}
+            onClick={handleGenerateEmail}
           >
-            {postLoading ? (
-              <Loader2Icon className="h-4 w-4 animate-spin" />
-            ) : (
-              <ShareIcon className="h-4 w-4" />
-            )}
-            {postLoading ? 'Generating…' : 'Generate Social Post'}
-          </button>
+            Copy client email
+          </Button>
+          <Button
+            variant="secondary"
+            leadingIcon={<ShareIcon className="h-4 w-4" />}
+            loading={postLoading}
+            onClick={handleGeneratePost}
+          >
+            Generate social post
+          </Button>
         </div>
 
-        {emailError && (
-          <p className="mt-3 text-xs text-danger">{emailError}</p>
-        )}
+        {emailError ? <p className="mt-3 text-xs text-danger">{emailError}</p> : null}
 
-        {emailResult && (
-          <div className="mt-4 rounded-lg border border-border bg-surface-muted p-4">
+        {emailResult ? (
+          <div className="mt-4 rounded-lg bg-surface-muted p-4">
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-semibold text-foreground-muted">Email Preview</p>
+              <p className="text-eyebrow text-foreground-subtle">Email preview</p>
               <CopyButton
                 text={`Subject: ${emailResult.subject}\n\n${emailResult.body}`}
-                label="Copy Email"
-                copiedLabel="Copied!"
+                label="Copy email"
               />
             </div>
-            <p className="text-xs font-medium text-foreground">Subject: {emailResult.subject}</p>
-            <p className="mt-2 whitespace-pre-wrap text-xs text-foreground-muted">{emailResult.body}</p>
+            <p className="text-sm font-medium text-foreground">Subject: {emailResult.subject}</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-foreground-muted">
+              {emailResult.body}
+            </p>
           </div>
-        )}
+        ) : null}
 
-        {postOpen && (
-          <div className="mt-4 rounded-lg border border-border bg-surface-muted p-4">
+        {postOpen ? (
+          <div className="mt-4 rounded-lg bg-surface-muted p-4">
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-semibold text-foreground-muted">Social Post</p>
-              {postResult && (
-                <CopyButton text={postResult} label="Copy Post" copiedLabel="Copied!" />
-              )}
+              <p className="text-eyebrow text-foreground-subtle">Social post</p>
+              {postResult ? <CopyButton text={postResult} label="Copy post" /> : null}
             </div>
-            {postLoading && (
+            {postLoading ? (
               <div className="space-y-2">
                 <Skeleton className="h-3.5 w-full" />
                 <Skeleton className="h-3.5 w-5/6" />
                 <Skeleton className="h-3.5 w-4/6" />
               </div>
-            )}
-            {postError && <p className="text-xs text-danger">{postError}</p>}
-            {postResult && (
+            ) : null}
+            {postError ? <p className="text-xs text-danger">{postError}</p> : null}
+            {postResult ? (
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground-muted">
                 {postResult}
               </p>
-            )}
+            ) : null}
           </div>
-        )}
-      </div>
+        ) : null}
+      </FieldGroup>
     </div>
   );
 }

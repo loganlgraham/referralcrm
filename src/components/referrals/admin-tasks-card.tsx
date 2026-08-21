@@ -7,6 +7,8 @@ import { toast } from 'sonner';
 
 import { getEightAmMountainDateTimeLocalForDay, getTodayEightAmMountainDateTimeLocal } from '@/lib/admin-task-day';
 import { TaskItem, type TaskItemData } from '@/components/admin/task-item';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 interface AdminTask {
   _id: string;
@@ -347,67 +349,63 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
   }
 
   return (
-    <section className="space-y-4 rounded-2xl border border-border bg-surface-raised p-5 shadow-sm">
+    <section className="space-y-4 rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">Tasks</h2>
-          <p className="text-xs text-foreground-subtle">Admin tasks for this referral.</p>
+          <h2 className="text-eyebrow text-foreground-subtle">Tasks</h2>
+          <p className="mt-1.5 text-xs text-foreground-muted">Admin tasks for this referral.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => setStatusFilter(statusFilter === 'open' ? 'completed' : 'open')}
-            className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-foreground-muted transition hover:bg-surface-subtle"
           >
             {statusFilter === 'open' ? 'Show completed' : 'Show open'}
-          </button>
+          </Button>
           {statusFilter === 'open' && (
-            <button
-              type="button"
+            <Button
+              size="sm"
+              leadingIcon={<Plus className="h-3.5 w-3.5" />}
               onClick={() => setShowManualForm(!showManualForm)}
-              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-hover"
             >
-              <Plus className="h-3.5 w-3.5" /> Add task
-            </button>
+              Add task
+            </Button>
           )}
         </div>
       </div>
 
       {showManualForm && (
         <form onSubmit={handleManualSubmit} className="space-y-2 rounded-lg border border-border bg-surface-muted p-3">
-          <input
+          <Input
             type="text"
             value={manualTitle}
             onChange={(e) => setManualTitle(e.target.value)}
             placeholder="Task name"
-            className="w-full rounded border border-border px-3 py-2 text-sm"
             required
           />
-          <input
+          <Input
             type="datetime-local"
             value={manualDueAt}
             onChange={(e) => setManualDueAt(e.target.value)}
-            className="w-full rounded border border-border px-3 py-2 text-sm"
+            className="text-numeric"
             required
           />
           <div className="flex gap-2">
-            <button
-              type="submit"
-              className="rounded bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-hover"
-            >
+            <Button type="submit" size="sm">
               Create
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => {
                 setShowManualForm(false);
                 setManualTitle('');
                 setManualDueAt(getTodayEightAmMountainDateTimeLocal());
               }}
-              className="rounded border border-border px-3 py-1.5 text-xs font-semibold text-foreground-muted hover:bg-surface-subtle"
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -495,34 +493,36 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
 
       <div className="space-y-3 border-t border-border pt-4">
         <div className="flex items-center justify-between">
-          <div className="inline-flex items-center gap-2 text-sm font-semibold text-foreground-muted">
+          <div className="text-eyebrow inline-flex items-center gap-2 text-foreground-subtle">
             <CalendarDays className="h-4 w-4" />
             Calendar
           </div>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-7 w-7"
               onClick={() => setCalendarMonth((prev) => shiftMonth(prev, -1))}
-              className="rounded border border-border p-1 text-foreground-muted transition hover:bg-surface-subtle"
               aria-label="Previous month"
             >
               <ChevronLeft className="h-4 w-4" />
-            </button>
-            <p className="min-w-[8rem] text-center text-xs font-medium text-foreground-muted">
+            </Button>
+            <p className="text-numeric min-w-[8rem] text-center text-xs font-medium text-foreground-muted">
               {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
             </p>
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-7 w-7"
               onClick={() => setCalendarMonth((prev) => shiftMonth(prev, 1))}
-              className="rounded border border-border p-1 text-foreground-muted transition hover:bg-surface-subtle"
               aria-label="Next month"
             >
               <ChevronRight className="h-4 w-4" />
-            </button>
+            </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium uppercase tracking-wide text-foreground-subtle">
+        <div className="text-eyebrow grid grid-cols-7 gap-1 text-center text-[10px] text-foreground-subtle">
           {CALENDAR_WEEK_DAYS.map((day) => (
             <span key={day}>{day}</span>
           ))}
@@ -541,7 +541,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
                 key={cell.dayKey}
                 type="button"
                 onClick={() => handleCalendarDaySelect(cell.dayKey)}
-                className={`relative h-10 rounded-md border text-sm transition ${
+                className={`text-numeric relative h-10 rounded-md border text-sm transition ${
                   isSelected
                     ? 'border-primary bg-primary/10 text-primary'
                     : hasTasks
@@ -564,55 +564,56 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
           ) : (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-foreground-muted">{formatSelectedDay(selectedDay)}</p>
-                <p className="text-xs text-foreground-subtle">{selectedDayTasks.length} task(s)</p>
+                <p className="text-sm font-semibold text-foreground">{formatSelectedDay(selectedDay)}</p>
+                <p className="text-xs text-foreground-subtle">
+                  <span className="text-numeric">{selectedDayTasks.length}</span> task
+                  {selectedDayTasks.length === 1 ? '' : 's'}
+                </p>
               </div>
               {selectedDayTasks.length === 0 ? (
                 <div className="space-y-2">
                   <p className="text-sm text-foreground-subtle">No tasks due on this day.</p>
                   {statusFilter === 'open' && !showDayManualForm && (
-                    <button
-                      type="button"
+                    <Button
+                      size="sm"
+                      leadingIcon={<Plus className="h-3.5 w-3.5" />}
                       onClick={() => {
                         setShowDayManualForm(true);
                         if (!dayManualDueAt && selectedDay) {
                           setDayManualDueAt(getDefaultDueAtForDay(selectedDay));
                         }
                       }}
-                      className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-hover"
                     >
-                      <Plus className="h-3.5 w-3.5" /> Add task for this day
-                    </button>
+                      Add task for this day
+                    </Button>
                   )}
                   {statusFilter === 'open' && showDayManualForm && (
                     <form
                       onSubmit={handleDayManualSubmit}
                       className="space-y-2 rounded-lg border border-border bg-surface-raised p-2.5"
                     >
-                      <input
+                      <Input
                         type="text"
                         value={dayManualTitle}
                         onChange={(e) => setDayManualTitle(e.target.value)}
                         placeholder="Task name"
-                        className="w-full rounded border border-border px-2 py-1.5 text-sm"
+                        className="h-8"
                         required
                       />
-                      <input
+                      <Input
                         type="datetime-local"
                         value={dayManualDueAt}
                         onChange={(e) => setDayManualDueAt(e.target.value)}
-                        className="w-full rounded border border-border px-2 py-1.5 text-sm"
+                        className="text-numeric h-8"
                         required
                       />
                       <div className="flex gap-2">
-                        <button
-                          type="submit"
-                          className="rounded bg-primary px-2.5 py-1 text-xs font-semibold text-white hover:bg-primary-hover"
-                        >
+                        <Button type="submit" size="sm">
                           Create
-                        </button>
-                        <button
-                          type="button"
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() => {
                             setShowDayManualForm(false);
                             setDayManualTitle('');
@@ -620,10 +621,9 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
                               setDayManualDueAt(getDefaultDueAtForDay(selectedDay));
                             }
                           }}
-                          className="rounded border border-border px-2.5 py-1 text-xs font-semibold text-foreground-muted hover:bg-surface-subtle"
                         >
                           Cancel
-                        </button>
+                        </Button>
                       </div>
                     </form>
                   )}

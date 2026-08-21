@@ -9,6 +9,8 @@ import { toast } from 'sonner';
 import type { AgentActivityEntry } from '@/lib/server/agent-activity';
 import { fetcher } from '@/utils/fetcher';
 import { SLA_TIME_ZONE } from '@/utils/sla-insights';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const ACTION_LABELS: Record<AgentActivityEntry['action'], string> = {
   login: 'Login',
@@ -58,22 +60,22 @@ export function AgentActivityCard({ agentId }: { agentId: string }) {
   };
 
   return (
-    <section className="rounded-md bg-surface-raised p-6 shadow-sm">
+    <section className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">Agent activity</h2>
-          <p className="text-sm text-foreground-subtle">
+          <h2 className="text-eyebrow text-foreground-muted">Agent activity</h2>
+          <p className="mt-1 text-xs text-foreground-subtle">
             The five most recent actions completed by this agent.
           </p>
         </div>
-        <button
+        <Button
           type="button"
+          variant="secondary"
           onClick={() => void downloadFullLog()}
-          disabled={isDownloading}
-          className="inline-flex items-center rounded-md border border-border bg-surface-muted px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition hover:bg-surface-subtle"
+          loading={isDownloading}
         >
           {isDownloading ? 'Preparing download…' : 'Download full activity log (.csv)'}
-        </button>
+        </Button>
       </div>
 
       <div className="mt-4 max-h-80 space-y-2 overflow-y-auto pr-1">
@@ -82,18 +84,22 @@ export function AgentActivityCard({ agentId }: { agentId: string }) {
         ) : error ? (
           <p className="py-4 text-sm text-danger">We couldn’t load this agent’s activity.</p>
         ) : activities.length === 0 ? (
-          <p className="py-4 text-sm text-foreground-subtle">No agent activity has been recorded yet.</p>
+          <EmptyState
+            compact
+            title="No agent activity yet"
+            description="Calls, emails and status changes will appear here."
+          />
         ) : (
           activities.map((activity) => (
             <article
               key={activity.id}
-              className="rounded-lg border border-border bg-surface-muted/60 px-4 py-3"
+              className="rounded-card border border-border bg-surface-muted/60 px-4 py-3"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">
+                <span className="text-eyebrow text-foreground-subtle">
                   {ACTION_LABELS[activity.action]}
                 </span>
-                <time className="text-xs text-foreground-subtle">
+                <time className="text-numeric text-xs text-foreground-subtle">
                   {formatInTimeZone(
                     new Date(activity.createdAt),
                     SLA_TIME_ZONE,

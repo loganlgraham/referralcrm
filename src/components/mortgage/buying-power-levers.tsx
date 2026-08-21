@@ -9,21 +9,21 @@ function LeverGroup({ title, levers }: { title: string; levers: BuyingPowerLever
 
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">{title}</p>
-      <ul className="mt-2 divide-y divide-border">
+      <p className="text-eyebrow text-foreground-subtle">{title}</p>
+      <ul className="mt-1.5 divide-y divide-border">
         {levers.map((lever) => (
           <li key={lever.id} className="flex items-center justify-between gap-3 py-2 text-sm">
             <span className="text-foreground-muted">{lever.label}</span>
             <span className="flex shrink-0 items-baseline gap-2">
-              <span className="font-semibold text-foreground">
+              <span className="text-numeric font-semibold text-foreground">
                 {formatCurrency(lever.maxPurchasePrice)}
               </span>
               <span
-                className={`text-xs font-medium ${
+                className={`text-numeric text-xs font-medium ${
                   lever.priceDelta > 0
-                    ? 'text-success'
+                    ? 'text-[hsl(var(--success))]'
                     : lever.priceDelta < 0
-                    ? 'text-danger'
+                    ? 'text-[hsl(var(--danger))]'
                     : 'text-foreground-subtle'
                 }`}
               >
@@ -49,21 +49,23 @@ export function BuyingPowerLeversPanel({ levers, bindingConstraint }: BuyingPowe
   const cappedByInsuranceCliff = bindingConstraint === 'mortgage-insurance-cliff';
 
   return (
-    <div className="rounded-lg border border-border p-4">
-      <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-        <TrendingUpIcon className="h-4 w-4 text-primary" />
+    <section className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+      <h3 className="flex items-center gap-2 text-eyebrow text-foreground-subtle">
+        <TrendingUpIcon className="h-3.5 w-3.5 text-signal" aria-hidden />
         What moves the number
-      </div>
+      </h3>
 
-      <p className="mt-3 rounded-md bg-primary-soft px-3 py-2 text-sm text-foreground">
-        Every <span className="font-semibold">{formatCurrency(100)}</span> per month freed up is
-        worth about{' '}
-        <span className="font-semibold">{formatCurrency(levers.pricePerHundredMonthly)}</span> in
-        purchase price at this rate and term.
+      <p className="mt-3 rounded-lg bg-primary-soft px-3 py-2 text-sm text-foreground">
+        Every <span className="text-numeric font-semibold">{formatCurrency(100)}</span> per month
+        freed up is worth about{' '}
+        <span className="text-numeric font-semibold">
+          {formatCurrency(levers.pricePerHundredMonthly)}
+        </span>{' '}
+        in purchase price at this rate and term.
       </p>
 
       {cappedByCash ? (
-        <p className="mt-2 text-xs text-warning">
+        <p className="mt-2 text-xs text-[hsl(var(--warning))]">
           Cash to close is the limit right now, so income and debt changes will not move the maximum
           price until there is more cash available.
         </p>
@@ -93,6 +95,6 @@ export function BuyingPowerLeversPanel({ levers, bindingConstraint }: BuyingPowe
         <LeverGroup title="More down payment" levers={levers.extraDownPayment} />
         <LeverGroup title="More income" levers={levers.incomeIncrease} />
       </div>
-    </div>
+    </section>
   );
 }

@@ -10,6 +10,10 @@ import {
   AGENT_LANGUAGE_OPTIONS,
   AGENT_SPECIALTY_OPTIONS,
 } from '@/constants/agent-options';
+import { Button } from '@/components/ui/button';
+import { FieldLabel, selectFieldClasses } from '@/components/ui/field-group';
+import { Input, Textarea } from '@/components/ui/input';
+import { cn } from '@/lib/cn';
 
 interface CoverageLocation {
   label: string;
@@ -486,69 +490,48 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
 
   return (
     <div className={wrapperClassName}>
-      <h2 className="text-lg font-semibold text-foreground">Edit agent details</h2>
-      <p className="mt-1 text-sm text-foreground-subtle">Update contact info, coverage, specialties, AHA designation, and active status.</p>
-      <form onSubmit={handleSubmit} className="mt-4 grid gap-4 md:grid-cols-2">
-        <label className="text-xs font-semibold text-foreground-muted">
-          Name
-          <input
-            type="text"
-            value={form.name}
-            onChange={handleChange('name')}
-            className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
-            required
-            disabled={formDisabled}
-          />
+      <h2 className="text-eyebrow text-foreground-subtle">Edit agent details</h2>
+      <p className="mt-1.5 text-xs text-foreground-muted">Update contact info, coverage, specialties, AHA designation, and active status.</p>
+      <form onSubmit={handleSubmit} className="mt-4 grid gap-x-4 gap-y-3 md:grid-cols-2">
+        <label className="block space-y-1.5">
+          <FieldLabel label="Name" />
+          <Input type="text" value={form.name} onChange={handleChange('name')} required disabled={formDisabled} />
         </label>
-        <label className="text-xs font-semibold text-foreground-muted">
-          Email
-          <input
-            type="email"
-            value={form.email}
-            onChange={handleChange('email')}
-            className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
-            required
-            disabled={formDisabled}
-          />
+        <label className="block space-y-1.5">
+          <FieldLabel label="Email" />
+          <Input type="email" value={form.email} onChange={handleChange('email')} required disabled={formDisabled} />
         </label>
-        <label className="text-xs font-semibold text-foreground-muted">
-          Phone
-          <input
+        <label className="block space-y-1.5">
+          <FieldLabel label="Phone" />
+          <Input
             type="tel"
             value={form.phone}
             onChange={handleChange('phone')}
-            className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
             disabled={formDisabled}
+            className="text-numeric"
           />
         </label>
-        <label className="text-xs font-semibold text-foreground-muted">
-          License number
-          <input
+        <label className="block space-y-1.5">
+          <FieldLabel label="License number" />
+          <Input
             type="text"
             value={form.licenseNumber}
             onChange={handleChange('licenseNumber')}
-            className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
             disabled={formDisabled}
+            className="text-numeric"
           />
         </label>
-        <label className="text-xs font-semibold text-foreground-muted">
-          Brokerage
-          <input
-            type="text"
-            value={form.brokerage}
-            onChange={handleChange('brokerage')}
-            className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
-            disabled={formDisabled}
-          />
+        <label className="block space-y-1.5">
+          <FieldLabel label="Brokerage" />
+          <Input type="text" value={form.brokerage} onChange={handleChange('brokerage')} disabled={formDisabled} />
         </label>
         {isAdmin && (
-          <label className="text-xs font-semibold text-foreground-muted">
-            Source
-            <input
+          <label className="block space-y-1.5">
+            <FieldLabel label="Source" />
+            <Input
               type="text"
               value={form.source}
               onChange={handleChange('source')}
-              className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
               placeholder="Where did we recruit this agent from?"
               disabled={formDisabled}
               list={sourceHistory.length > 0 ? 'agent-source-history' : undefined}
@@ -562,50 +545,48 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
             )}
           </label>
         )}
-        <div className="md:col-span-2 space-y-2">
-          <p className="text-xs font-semibold text-foreground-muted">Office Address</p>
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="text-xs font-semibold text-foreground-muted md:col-span-2">
-              Street
-              <input
+        <div className="space-y-2 md:col-span-2">
+          <p className="text-eyebrow text-foreground-subtle">Office address</p>
+          <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
+            <label className="block space-y-1.5 md:col-span-2">
+              <FieldLabel label="Street" />
+              <Input
                 type="text"
                 value={form.officeAddress.street}
                 onChange={handleOfficeAddressChange('street')}
-                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
                 placeholder="123 Main St"
                 disabled={formDisabled}
               />
             </label>
-            <label className="text-xs font-semibold text-foreground-muted">
-              City
-              <input
+            <label className="block space-y-1.5">
+              <FieldLabel label="City" />
+              <Input
                 type="text"
                 value={form.officeAddress.city}
                 onChange={handleOfficeAddressChange('city')}
-                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
                 placeholder="Denver"
                 disabled={formDisabled}
               />
             </label>
-            <label className="text-xs font-semibold text-foreground-muted">
-              State
-              <input
+            <label className="block space-y-1.5">
+              <FieldLabel label="State" />
+              <Input
                 type="text"
                 value={form.officeAddress.state}
                 onChange={handleOfficeAddressChange('state')}
-                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm uppercase"
+                className="uppercase"
                 placeholder="CO"
                 maxLength={2}
                 disabled={formDisabled}
               />
             </label>
-            <label className="text-xs font-semibold text-foreground-muted">
-              ZIP Code
-              <input
+            <label className="block space-y-1.5">
+              <FieldLabel label="ZIP code" />
+              <Input
                 type="text"
                 value={form.officeAddress.zipCode}
                 onChange={handleOfficeAddressChange('zipCode')}
-                className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
+                className="text-numeric"
                 placeholder="80202"
                 maxLength={5}
                 disabled={formDisabled}
@@ -613,12 +594,12 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
             </label>
           </div>
         </div>
-        <label className="text-xs font-semibold text-foreground-muted">
-          AHA classification
+        <label className="block space-y-1.5">
+          <FieldLabel label="AHA classification" />
           <select
             value={form.ahaDesignation}
             onChange={handleAhaChange}
-            className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
+            className={selectFieldClasses}
             disabled={formDisabled}
           >
             <option value="">Not set</option>
@@ -630,55 +611,54 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
           </select>
         </label>
         {isAdmin && (
-          <label className="flex items-center gap-2 text-xs font-semibold text-foreground-muted">
+          <label className="flex cursor-pointer items-center gap-2 self-end pb-2 text-sm font-medium text-foreground">
             <input
               type="checkbox"
               checked={form.active}
               onChange={handleActiveChange}
-              className="h-4 w-4 rounded border border-border"
+              className="h-4 w-4 rounded border-border-strong text-primary focus:ring-ring"
               disabled={formDisabled}
             />
             Agent is active
           </label>
         )}
-        <label className="text-xs font-semibold text-foreground-muted">
-          States (comma separated)
-          <input
+        <label className="block space-y-1.5">
+          <FieldLabel label="States" hint="comma separated" />
+          <Input
             type="text"
             value={form.states}
             onChange={handleChange('states')}
-            className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
             placeholder="CO, UT"
             disabled={formDisabled}
           />
         </label>
-        <div className="md:col-span-2 space-y-2">
-          <label htmlFor="edit-agent-coverage-description" className="text-xs font-semibold text-foreground-muted">
-            Areas covered
+        <div className="space-y-1.5 md:col-span-2">
+          <label htmlFor="edit-agent-coverage-description">
+            <FieldLabel label="Areas covered" />
           </label>
           <div className="flex flex-col gap-2 md:flex-row md:items-stretch md:gap-3">
-            <textarea
+            <Textarea
               id="edit-agent-coverage-description"
               value={form.coverageDescription}
               onChange={handleCoverageDescriptionChange}
-              className="w-full flex-1 rounded border border-border px-3 py-2 text-sm md:min-h-[5.5rem]"
+              className="flex-1 md:min-h-[5.5rem]"
               placeholder="Describe the neighborhoods, cities, and counties this agent serves"
               rows={3}
               disabled={formDisabled || isGeneratingCoverage}
             />
-            <button
-              type="button"
+            <Button
+              className="shrink-0 md:h-full md:min-h-[5.5rem] md:self-stretch"
               onClick={generateCoverageLocations}
-              className="flex shrink-0 items-center justify-center rounded bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-70 md:h-full md:min-h-[5.5rem] md:self-stretch"
               style={coverageButtonStyles}
+              loading={isGeneratingCoverage}
               disabled={formDisabled || isGeneratingCoverage}
             >
-              {isGeneratingCoverage ? 'Generating…' : 'Save Service Areas'}
-            </button>
+              {isGeneratingCoverage ? 'Generating…' : 'Save service areas'}
+            </Button>
           </div>
         </div>
-        <div className="md:col-span-2 space-y-2">
-          <p className="text-xs font-semibold text-foreground-muted">Cities, towns & counties</p>
+        <div className="space-y-2 md:col-span-2">
+          <p className="text-eyebrow text-foreground-subtle">Cities, towns &amp; counties</p>
           <div className="flex flex-wrap gap-2">
             {form.coverageLocations.length === 0 ? (
               <p className="text-xs text-foreground-subtle">No coverage locations added yet.</p>
@@ -703,14 +683,14 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
             )}
           </div>
         </div>
-        <div className="md:col-span-2 grid gap-3">
-          <label className="text-xs font-semibold text-foreground-muted">
-            Specialties
+        <div className="grid gap-3 md:col-span-2">
+          <label className="block space-y-1.5">
+            <FieldLabel label="Specialties" hint="hold Ctrl or Command to pick several" />
             <select
               multiple
               value={form.specialties}
               onChange={handleSelectChange('specialties')}
-              className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
+              className={cn(selectFieldClasses, 'h-auto py-2')}
               size={6}
               disabled={formDisabled}
             >
@@ -720,17 +700,14 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
                 </option>
               ))}
             </select>
-            <span className="mt-1 block text-[11px] font-normal text-foreground-subtle">
-              Hold Ctrl (Windows) or Command (Mac) to select multiple specialties.
-            </span>
           </label>
-          <label className="text-xs font-semibold text-foreground-muted">
-            Languages spoken
+          <label className="block space-y-1.5">
+            <FieldLabel label="Languages spoken" hint="hold Ctrl or Command to pick several" />
             <select
               multiple
               value={form.languages}
               onChange={handleSelectChange('languages')}
-              className="mt-1 w-full rounded border border-border px-3 py-2 text-sm"
+              className={cn(selectFieldClasses, 'h-auto py-2')}
               size={5}
               disabled={formDisabled}
             >
@@ -740,19 +717,12 @@ export function AgentAdminEditor({ agent, variant = 'standalone', className, onS
                 </option>
               ))}
             </select>
-            <span className="mt-1 block text-[11px] font-normal text-foreground-subtle">
-              Hold Ctrl (Windows) or Command (Mac) to select multiple languages.
-            </span>
           </label>
         </div>
         <div className="md:col-span-2">
-          <button
-            type="submit"
-            disabled={formDisabled}
-            className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
-          >
+          <Button type="submit" loading={saving} disabled={formDisabled}>
             {saving ? 'Saving…' : 'Save changes'}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

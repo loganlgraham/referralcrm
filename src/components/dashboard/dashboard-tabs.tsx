@@ -17,7 +17,11 @@ import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatDate, formatNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { Info, Trash2 } from 'lucide-react';
+import { dashCardClasses } from '@/components/dashboard/dashboard-ui';
 import { Modal } from '@/components/ui/modal';
+import { PageHeader } from '@/components/ui/page-header';
+import { PillTabs, type PillTabDefinition } from '@/components/ui/pill-tabs';
+import { cn } from '@/lib/cn';
 import {
   Select,
   SelectContent,
@@ -602,8 +606,8 @@ function SummaryCard({
   const isHeaderInteractive = Boolean(drillDownHref ?? onClick);
   const headerContent = (
     <>
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
-      <p className="mt-2 text-2xl font-semibold text-foreground">{value}</p>
+      <p className="text-eyebrow text-foreground-subtle">{title}</p>
+      <p className="text-numeric mt-2 text-2xl font-semibold tracking-[-0.02em] text-foreground">{value}</p>
       {helper ? <p className="mt-1 text-xs text-foreground-subtle">{helper}</p> : null}
     </>
   );
@@ -641,21 +645,25 @@ function SummaryCard({
               }}
               className={`${tileBase} cursor-pointer hover:bg-surface-subtle hover:ring-1 hover:ring-info/30`}
             >
-              <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle leading-tight min-h-[1.8rem]">{stat.label}</dt>
+              <dt className="text-eyebrow text-foreground-subtle leading-tight min-h-[1.8rem]">{stat.label}</dt>
               <dd className="text-sm font-semibold text-foreground">{stat.value}</dd>
             </button>
           );
         }
         return (
           <div key={`${title}-${stat.label}`} className={tileBase}>
-            <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle leading-tight min-h-[1.8rem]">{stat.label}</dt>
+            <dt className="text-eyebrow text-foreground-subtle leading-tight min-h-[1.8rem]">{stat.label}</dt>
             <dd className="text-sm font-semibold text-foreground">{stat.value}</dd>
           </div>
         );
       })}
     </dl>
   ) : null;
-  const wrapperClass = `rounded-card border border-border bg-surface-raised p-4 shadow-card block w-full text-left transition${isHeaderInteractive ? ' hover:border-info/30 hover:shadow-md' : ''}`;
+  const wrapperClass = cn(
+    dashCardClasses,
+    'block w-full text-left transition',
+    isHeaderInteractive && 'hover:border-info/30 hover:shadow-md'
+  );
   return (
     <div className={wrapperClass}>
       {headerNode}
@@ -672,8 +680,8 @@ function MetricGroupCard({
   metrics: { label: string; value: string; helper?: string; onHelperClick?: () => void }[];
 }) {
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">{title}</p>
       <dl className="mt-3 divide-y divide-border">
         {metrics.map((metric, index) => (
           <div key={`${title}-${metric.label}`} className="space-y-0.5 py-2.5 first:pt-0 last:pb-0">
@@ -789,10 +797,10 @@ function LineChartCard({
   };
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={dashCardClasses}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+          <p className="text-eyebrow text-foreground-subtle">{title}</p>
           {helper ? <p className="text-xs text-foreground-subtle">{helper}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -990,10 +998,10 @@ function MultiLineChartCard({
   };
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={dashCardClasses}>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+          <p className="text-eyebrow text-foreground-subtle">{title}</p>
           {helper ? <p className="text-xs text-foreground-subtle">{helper}</p> : null}
         </div>
         <div className="flex items-center gap-4">
@@ -1143,10 +1151,10 @@ function PieChartCard({
   let currentAngle = -Math.PI / 2;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={dashCardClasses}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+          <p className="text-eyebrow text-foreground-subtle">{title}</p>
           {helper ? <p className="text-xs text-foreground-subtle">{helper}</p> : null}
         </div>
         <p className="text-xs font-semibold text-foreground-muted">{total > 0 ? `${formatNumber(total)} deals` : '—'}</p>
@@ -1211,11 +1219,11 @@ function TerminatedDealsList({
   totalDeals: number;
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={cn(dashCardClasses, 'flex h-full min-h-0 flex-col')}>
       <div className="flex items-baseline justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Terminated deals</p>
-          <p className="mt-2 text-2xl font-semibold text-foreground">{formatCurrency(totalLostReferralFeeCents)}</p>
+          <p className="text-eyebrow text-foreground-subtle">Terminated deals</p>
+          <p className="text-numeric mt-2 text-2xl font-semibold tracking-[-0.02em] text-foreground">{formatCurrency(totalLostReferralFeeCents)}</p>
           <p className="text-xs text-foreground-subtle">{formatNumber(totalDeals)} lost deals</p>
         </div>
       </div>
@@ -1277,8 +1285,8 @@ function ConversionFunnelCard({
   };
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Conversion funnel</p>
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">Conversion funnel</p>
       <p className="mt-1 text-xs text-foreground-subtle">
         Cohort funnel: each stage counts referrals that ever reached that stage. Click a row to open referrals
         currently in that status (row totals can differ from the list).
@@ -1403,7 +1411,7 @@ function RankedListTabs({ views }: { views: RankedListView[] }) {
   }
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={dashCardClasses}>
       <div className="flex flex-wrap items-center gap-2">
         {views.map((view) => {
           const isActive = view.id === activeView.id;
@@ -1449,9 +1457,9 @@ function LeaderboardTable({
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={dashCardClasses}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+        <p className="text-eyebrow text-foreground-subtle">{title}</p>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
       <div
@@ -1525,7 +1533,7 @@ function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
   const columnCount = secondaryValueLabel ? 4 : 3;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={dashCardClasses}>
       <div className="flex flex-wrap items-center gap-2">
         {views.map((view) => {
           const isActive = view.id === activeView.id;
@@ -1640,8 +1648,8 @@ function McKpiMetricLeaderboardCard({ entries }: { entries: McRankedEntry[] }) {
   const activeLabel = metricOptions.find((option) => option.key === resolvedKey)?.label ?? 'Value';
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">MC KPI by metric</p>
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">MC KPI by metric</p>
       <p className="mt-1 text-xs text-foreground-subtle">
         Rank mortgage consultants on one Composite Leaderboard measure at a time for this period.
       </p>
@@ -1750,8 +1758,8 @@ function TransferTimingCard({
   }
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">
         When to transfer to the brokerage
       </p>
       <p className="mt-1 text-xs text-foreground-subtle">
@@ -1813,7 +1821,7 @@ function TransferTimingPanel({
             {label}
           </button>
         ) : (
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{label}</p>
+          <p className="text-eyebrow text-foreground-subtle">{label}</p>
         )}
         {isWinner ? (
           <span className="rounded-full bg-success px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
@@ -1821,7 +1829,7 @@ function TransferTimingPanel({
           </span>
         ) : null}
       </div>
-      <p className="mt-1 text-2xl font-semibold text-foreground">{rate.toFixed(1)}%</p>
+      <p className="text-numeric mt-1 text-2xl font-semibold tracking-[-0.02em] text-foreground">{rate.toFixed(1)}%</p>
       <p className="text-xs text-foreground-subtle">
         {`${formatNumber(closed)} / ${formatNumber(total)} closed`}
       </p>
@@ -2024,10 +2032,10 @@ function PreApprovalConversionSection({
   };
 
   return (
-    <div className="space-y-4 rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={cn(dashCardClasses, 'space-y-4')}>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Pre-approval conversion</p>
+          <p className="text-eyebrow text-foreground-subtle">Pre-approval conversion</p>
           <p className="text-xs text-foreground-subtle">
             Track how referral volume compares with AHA and AHA OOS pre-approvals issued each month.
           </p>
@@ -2573,7 +2581,7 @@ function DealsLostTable({ deals }: { deals: LostDealEntry[] }) {
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
+          <tr className="text-eyebrow border-b border-border text-foreground-muted">
             <th className="px-6 py-3">Borrower</th>
             <th className="px-6 py-3">Agent</th>
             <th className="px-6 py-3">MC</th>
@@ -2615,7 +2623,7 @@ function PendingClosingsTable({ deals }: { deals: PendingClosingEntry[] }) {
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
+          <tr className="text-eyebrow border-b border-border text-foreground-muted">
             <th className="px-6 py-3">Borrower</th>
             <th className="px-6 py-3">Agent</th>
             <th className="px-6 py-3">MC</th>
@@ -2687,7 +2695,7 @@ function ClosedDealsTable({
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
+          <tr className="text-eyebrow border-b border-border text-foreground-muted">
             <th className="px-6 py-3">Borrower</th>
             <th className="px-6 py-3">Agent</th>
             <th className="px-6 py-3">MC</th>
@@ -2754,9 +2762,9 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
   const description = "Composite score blends weighted MC KPIs scored relative to peers this period. The top drivers of rank are closed deals with AFC, fewer closed deals without AFC, fewer closes without the assigned agent, deals created, referral (transfer) volume, and total revenue. Close speed, pushed-back deals, financing terminations, NPS, and revenue per referral act as lower-weight quality guardrails. MCs with fewer than 3 referrals are marked provisional and receive a volume discount, but still keep a score. KPIs with no data this period are excluded from that MC's weighted average rather than dragging the score toward the median.";
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={dashCardClasses}>
       <div className="flex items-center gap-1.5">
-        <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+        <p className="text-eyebrow text-foreground-subtle">{title}</p>
         <Tooltip content={description} side="bottom" className="w-80 max-w-[calc(100vw-3rem)] text-left leading-relaxed">
           <button
             type="button"
@@ -2842,7 +2850,7 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
               ) : null}
             </div>
             <div>
-              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-foreground-subtle">KPI Breakdown</p>
+              <p className="mb-3 text-eyebrow text-foreground-subtle">KPI Breakdown</p>
               <div className="space-y-3">
                 {selectedMc.kpis.map((kpi) => (
                   <div key={kpi.key}>
@@ -2946,8 +2954,8 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
   const scrollMaxHeight = `${AFC_RISK_VISIBLE_ROWS * RANKED_LIST_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">AFC Loss Risk Call List</p>
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">AFC Loss Risk Call List</p>
       <p className="mt-1 text-xs text-foreground-subtle">
         AHA OOS buyer referrals in Active Lead or aged In Communication status with outside-lender risk signals.
         Under-contract referrals are excluded; rows can resurface after 14 days without a page update.
@@ -2960,7 +2968,7 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
           style={shouldScroll ? { maxHeight: scrollMaxHeight } : undefined}
         >
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
+            <thead className="text-eyebrow border-b border-border text-foreground-muted">
               <tr>
                 {renderSortHeader('borrower', 'Borrower')}
                 {renderSortHeader('mc', 'MC')}
@@ -3083,12 +3091,12 @@ function PushbackSummaryCard({
   const rate = summary.pushbackRatePercent.toFixed(1);
   const avgDays = summary.averageDaysPushedBackPerEvent.toFixed(1);
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">
         Deals pushed back
       </p>
       <div className="mt-2 flex items-baseline gap-3">
-        <p className="text-2xl font-semibold text-foreground">
+        <p className="text-numeric text-2xl font-semibold tracking-[-0.02em] text-foreground">
           {formatNumber(summary.distinctDealsPushedBack)}
         </p>
         <p className="text-sm font-medium text-foreground-subtle">{rate}% pushback rate</p>
@@ -3099,7 +3107,7 @@ function PushbackSummaryCard({
       </p>
       <dl className="mt-3 grid grid-cols-2 gap-2">
         <div className="rounded-lg bg-surface-muted px-2 py-1">
-          <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+          <dt className="text-eyebrow text-foreground-subtle">
             Total pushback events
           </dt>
           <dd className="text-sm font-semibold text-foreground">
@@ -3107,7 +3115,7 @@ function PushbackSummaryCard({
           </dd>
         </div>
         <div className="rounded-lg bg-surface-muted px-2 py-1">
-          <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+          <dt className="text-eyebrow text-foreground-subtle">
             Avg. days pushed back
           </dt>
           <dd className="text-sm font-semibold text-foreground">{avgDays} days</dd>
@@ -3125,8 +3133,8 @@ function McPushbackLeaderboardTable({
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">
         Pushbacks by MC
       </p>
       <p className="mt-1 text-xs text-foreground-subtle">
@@ -3181,8 +3189,8 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
   const scrollMaxHeight = `${RANKED_LIST_PREVIEW_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">{title}</p>
       <p className="mt-1 text-xs text-foreground-subtle">
         Composite score blends weighted KPIs. Agents with fewer than 3 referrals are marked provisional and receive a
         reliability adjustment. CRM usage is included as a low-weight tie-break style signal.
@@ -3264,7 +3272,7 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
               ) : null}
             </div>
             <div>
-              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-foreground-subtle">KPI Breakdown</p>
+              <p className="mb-3 text-eyebrow text-foreground-subtle">KPI Breakdown</p>
               <div className="space-y-3">
                 {selectedAgent.kpis.map((kpi) => (
                   <div key={kpi.key}>
@@ -3314,20 +3322,20 @@ function LostAttributionCard({ data }: { data: LostAttributionSummary }) {
   const active = breakdowns[activeId];
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">
         Lost referrals: who they count against
       </p>
       <dl className="mt-3 grid grid-cols-2 gap-2">
         <div className="rounded-lg bg-surface-muted px-3 py-2">
           <dt className="text-xs text-foreground-subtle">Counted against the agent</dt>
-          <dd className="mt-1 text-xl font-semibold text-foreground">
+          <dd className="text-numeric mt-1 text-xl font-semibold tracking-[-0.02em] text-foreground">
             {formatNumber(data.attributableCount)}
           </dd>
         </div>
         <div className="rounded-lg bg-surface-muted px-3 py-2">
           <dt className="text-xs text-foreground-subtle">Lost before the agent connected</dt>
-          <dd className="mt-1 text-xl font-semibold text-foreground">
+          <dd className="text-numeric mt-1 text-xl font-semibold tracking-[-0.02em] text-foreground">
             {formatNumber(data.unattributableCount)}
           </dd>
         </div>
@@ -3465,7 +3473,7 @@ function StaleReferralsTable({ referrals }: { referrals: StaleReferralEntry[] })
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
+          <tr className="text-eyebrow border-b border-border text-foreground-muted">
             <th className="px-6 py-3">Borrower</th>
             <th className="px-6 py-3">Status</th>
             <th className="px-6 py-3">Agent</th>
@@ -3515,7 +3523,7 @@ function MissingAttributionReferralsTable({ referrals }: { referrals: MissingAtt
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
+          <tr className="text-eyebrow border-b border-border text-foreground-muted">
             <th className="px-6 py-3">Borrower</th>
             <th className="px-6 py-3">Status</th>
             <th className="px-6 py-3">Agent</th>
@@ -3672,7 +3680,7 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
       ) : null}
       <div className="rounded-card border border-border bg-surface-raised shadow-card">
         <div className="border-b border-border px-6 py-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+          <p className="text-eyebrow text-foreground-subtle">
             Missing Source or Endorser
           </p>
           <p className="mt-1 text-sm text-foreground-subtle">
@@ -3715,7 +3723,7 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
 
       {/* AGIT Referrals Table */}
       <div>
-        <h3 className="mb-3 text-lg font-semibold text-foreground">AGIT Referrals</h3>
+        <h3 className="text-eyebrow mb-3 text-foreground-subtle">AGIT referrals</h3>
         {data.referralRows.length === 0 ? (
           <p className="text-sm text-foreground-subtle">No AGIT referrals in this timeframe.</p>
         ) : (
@@ -3723,12 +3731,12 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
             <table className="min-w-full divide-y divide-border">
               <thead className="bg-surface-muted">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Borrower</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">MC</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Created</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Last Updated</th>
+                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Borrower</th>
+                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Status</th>
+                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Agent</th>
+                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">MC</th>
+                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Created</th>
+                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Last Updated</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -3831,8 +3839,8 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
 
       {/* AGIT Deals Table */}
       <div>
-        <h3 className="mb-3 text-lg font-semibold text-foreground">
-          AGIT Deals
+        <h3 className="text-eyebrow mb-3 text-foreground-subtle">
+          AGIT deals
           {data.dealRows.length > 0 && (
             <span className="ml-2 text-sm font-normal text-foreground-subtle">
               {
@@ -3854,15 +3862,15 @@ function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
             <table className="min-w-full divide-y divide-border">
               <thead className="bg-surface-muted">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Referral</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Expected</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Received</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">MC</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Closing Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent Used</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Used AFC</th>
+                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Referral</th>
+                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Status</th>
+                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Expected</th>
+                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Received</th>
+                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Agent</th>
+                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">MC</th>
+                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Closing Date</th>
+                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Agent Used</th>
+                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Used AFC</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -4021,6 +4029,11 @@ export function DashboardTabs() {
     }
   }, [visibleTabs, activeTab]);
 
+  const pillTabs = useMemo<PillTabDefinition<TabValue>[]>(
+    () => visibleTabs.map((tab) => ({ id: tab.value, label: tab.label })),
+    [visibleTabs]
+  );
+
   const handlePreApprovalSaved = () => {
     if (!swrKey) {
       return;
@@ -4052,58 +4065,49 @@ export function DashboardTabs() {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-danger/30 bg-danger-soft p-4 text-danger">
+      <div className="rounded-card border border-danger/30 bg-danger-soft p-4 text-danger shadow-card">
         Unable to load dashboard analytics. Please try again later.
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Performance dashboards</h1>
-          <p className="text-sm text-foreground-subtle">{timeframeLabel}</p>
-        </div>
-        <div className="flex flex-wrap items-start justify-end gap-6">
-          <TimeframeDropdown
-            timeframe={timeframe}
-            rangeLabel={timeframeLabel}
-            customRange={customRange}
-            onPresetSelect={handlePresetSelect}
-            onCustomRangeSelect={handleCustomRangeSelect}
-            maxDate={maxSelectableDate}
-            openToRightOnMobile
-          />
-          <div className="flex flex-col items-end gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Network</span>
-            <NetworkFilterButtons
-              value={activeNetworkFilter}
-              onChange={(value) => handleNetworkFilterChange(activeTab, value)}
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Analytics"
+        title="Performance dashboards"
+        description={timeframeLabel}
+        attention={false}
+        actions={
+          <div className="flex flex-wrap items-start justify-start gap-6 sm:justify-end">
+            <TimeframeDropdown
+              timeframe={timeframe}
+              rangeLabel={timeframeLabel}
+              customRange={customRange}
+              onPresetSelect={handlePresetSelect}
+              onCustomRangeSelect={handleCustomRangeSelect}
+              maxDate={maxSelectableDate}
+              openToRightOnMobile
+              eyebrowLabel
             />
+            <div className="flex flex-col items-start gap-2 sm:items-end">
+              <span className="text-eyebrow text-foreground-subtle">Network</span>
+              <NetworkFilterButtons
+                value={activeNetworkFilter}
+                onChange={(value) => handleNetworkFilterChange(activeTab, value)}
+              />
+            </div>
           </div>
-        </div>
-      </div>
+        }
+      />
 
-      <div className="flex flex-wrap gap-2">
-        {visibleTabs.map((tab) => {
-          const isActive = activeTab === tab.value;
-          return (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => setActiveTab(tab.value)}
-              className={`rounded-full border px-4 py-1 text-sm font-medium transition ${
-                isActive
-                  ? 'border-transparent bg-primary text-white shadow-sm'
-                  : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
-              }`}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      <PillTabs
+        ariaLabel="Dashboard views"
+        idPrefix="dashboard-tab"
+        tabs={pillTabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
 
       {showSkeleton ? (
         <div className="space-y-4">
@@ -4127,7 +4131,7 @@ export function DashboardTabs() {
       ) : null}
 
       {!swrKey ? (
-        <div className="rounded-lg border border-warning/30 bg-warning-soft p-4 text-sm text-warning">
+        <div className="rounded-card border border-warning/30 bg-warning-soft p-4 text-sm text-warning shadow-card">
           Select a start and end date to load dashboard metrics.
         </div>
       ) : data ? (

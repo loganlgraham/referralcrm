@@ -10,6 +10,8 @@ import { AgentsTable } from '@/components/tables/agents-table';
 import { Modal } from '@/components/ui/modal';
 import { AddAgentForm } from '@/components/agents/add-agent-form';
 import { fetcher } from '@/utils/fetcher';
+import { PageHeader } from '@/components/ui/page-header';
+import { Button, buttonClasses } from '@/components/ui/button';
 
 interface InactiveAgentsResponse {
   total: number;
@@ -33,38 +35,39 @@ export function AdminAgentsView() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Agents</h1>
-          <p className="text-sm text-foreground-subtle">Browse and manage real estate agent partners.</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setShowAddAgentModal(true)}
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-            aria-label="Add agent"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Add Agent</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowAISearchModal(true)}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-            aria-label="Find agent by area"
-          >
-            <MapPin className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Partner network"
+        title="Agents"
+        description="Browse and manage real estate agent partners."
+        attention={inactiveCount > 0}
+        actions={
+          <>
+            <Button
+              type="button"
+              onClick={() => setShowAddAgentModal(true)}
+              aria-label="Add agent"
+              leadingIcon={<Plus className="h-4 w-4" />}
+            >
+              Add Agent
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowAISearchModal(true)}
+              aria-label="Find agent by area"
+            >
+              <MapPin className="h-4 w-4" />
+            </Button>
+          </>
+        }
+      />
 
-      <div className="rounded-xl border border-border bg-surface-raised p-4 shadow-sm">
+      <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Inactive agents</p>
-            <p className="mt-1 text-2xl font-semibold text-foreground">{inactiveCount}</p>
+            <p className="text-eyebrow text-foreground-subtle">Inactive agents</p>
+            <p className="text-numeric mt-1 text-2xl font-semibold tracking-[-0.02em] text-foreground">{inactiveCount}</p>
             <p className="text-sm text-foreground-subtle">
               Inactive agents are hidden from non-admin users and should be reviewed before assignment.
             </p>
@@ -72,21 +75,18 @@ export function AdminAgentsView() {
           <div className="flex gap-2">
             <Link
               href="/agents?activeFilter=inactive"
-              className="inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-semibold text-foreground transition hover:bg-surface-muted"
+              className={buttonClasses({ variant: 'secondary' })}
             >
               View inactive agents
             </Link>
-            <Link
-              href="/agents"
-              className="inline-flex items-center justify-center rounded-md border border-border px-4 py-2 text-sm font-semibold text-foreground transition hover:bg-surface-muted"
-            >
+            <Link href="/agents" className={buttonClasses({ variant: 'secondary' })}>
               View all agents
             </Link>
           </div>
         </div>
       </div>
 
-      <AgentsTable />
+      <AgentsTable hideHeading />
 
       {/* Add Agent Modal */}
       <Modal

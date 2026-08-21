@@ -13,6 +13,7 @@ import { ReferralMetadata } from '@/models/referral-metadata';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
 import { sendTransactionalEmail, isTransactionalEmailConfigured } from '@/lib/email';
+import { getReferralNotificationRecipients } from '@/lib/server/cc-recipients';
 import { buildReferralLink } from '@/lib/referral-links';
 import { normalizePhoneNumber } from '@/utils/phone-utils';
 import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
@@ -1185,12 +1186,17 @@ export async function POST(request: Request) {
     console.error('[Admin Tasks] Failed to reconcile tasks for new referral:', error);
   });
 
-  // Send email notification to kristen.truong@americanhomeagents.com
+  // Notify the referral coordinators configured for the account.
   // Skip if AGIT agent created the referral
   const hasAgitCreator = creatorAgentDesignation === 'AGIT';
   if (isTransactionalEmailConfigured() && !hasAgitCreator) {
     (async () => {
       try {
+        const coordinatorRecipients = getReferralNotificationRecipients();
+        if (coordinatorRecipients.length === 0) {
+          return;
+        }
+
         const escapeHtml = (value: string): string => {
           return value.replace(/[&<>"']/g, (char) => {
             switch (char) {
@@ -1232,10 +1238,11 @@ export async function POST(request: Request) {
         const text = `A new referral has been created for ${borrowerLabel}.\n\n${summaryFields.join('\n')}\n\nView the referral: ${referralLink}`;
 
         await sendTransactionalEmail({
-          to: ['kristen.truong@americanhomeagents.com'],
+          to: coordinatorRecipients,
           subject: `New Referral: ${borrowerLabel}`,
           html,
-          text
+          text,
+          context: { referralId: referral._id.toString() }
         });
       } catch (error) {
         console.error('Failed to send new referral notification email', error);

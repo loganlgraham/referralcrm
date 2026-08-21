@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { FieldGrid, FieldGroup, FieldLabel, selectFieldClasses } from '@/components/ui/field-group';
+import { Input, Textarea } from '@/components/ui/input';
+import { PageHeader } from '@/components/ui/page-header';
+import { cn } from '@/lib/cn';
 
 const DASHBOARD_METRICS = [
   { id: 'summary', label: 'Executive summary (totals, close rate, revenue)' },
@@ -435,67 +440,61 @@ export function SettingsForm() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
-          <p className="text-sm text-foreground-subtle">Manage referral fee policies, reports, and data exports.</p>
-        </div>
-      </div>
-      <form onSubmit={handleSubmit} className="space-y-4 rounded-md bg-surface-raised p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-foreground">Referral fee policy</h2>
-        <p className="text-sm text-foreground-subtle">Configure default referral fee tiers.</p>
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="text-sm font-medium text-foreground-muted">
-            Closed price ≤ $400k (% of commission)
-            <input
-              type="number"
-              min="0"
-              max="100"
-              value={tier1}
-              onChange={(event) => setTier1(Number(event.target.value))}
-              className="mt-1 w-full rounded border border-border px-3 py-2"
-            />
-          </label>
-          <label className="text-sm font-medium text-foreground-muted">
-            Closed price &gt; $400k (% of commission)
-            <input
-              type="number"
-              min="0"
-              max="100"
-              value={tier2}
-              onChange={(event) => setTier2(Number(event.target.value))}
-              className="mt-1 w-full rounded border border-border px-3 py-2"
-            />
-          </label>
-        </div>
-        <button
-          type="submit"
-          disabled={loading}
-          className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white"
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Administration"
+        title="Settings"
+        description="Manage referral fee policies, reports, and data exports."
+        attention={false}
+      />
+
+      <form onSubmit={handleSubmit}>
+        <FieldGroup
+          title="Referral fee policy"
+          description="Default tiers applied when a deal has no explicit referral fee override."
         >
-          {loading ? 'Saving…' : 'Save changes'}
-        </button>
+          <FieldGrid>
+            <label className="block space-y-1.5">
+              <FieldLabel label="Closed price ≤ $400k" hint="% of commission" />
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                value={tier1}
+                onChange={(event) => setTier1(Number(event.target.value))}
+                className="text-numeric font-medium"
+              />
+            </label>
+            <label className="block space-y-1.5">
+              <FieldLabel label="Closed price above $400k" hint="% of commission" />
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                value={tier2}
+                onChange={(event) => setTier2(Number(event.target.value))}
+                className="text-numeric font-medium"
+              />
+            </label>
+          </FieldGrid>
+          <div className="mt-4">
+            <Button type="submit" loading={loading}>
+              {loading ? 'Saving…' : 'Save changes'}
+            </Button>
+          </div>
+        </FieldGroup>
       </form>
 
-      <div className="rounded-md bg-surface-raised p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-semibold text-foreground">Dashboard metric reports</h2>
-            <p className="text-sm text-foreground-subtle">
-              Email a snapshot of admin dashboard metrics to one or more recipients, or schedule recurring delivery.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={handleSelectAll}
-            className="text-sm font-semibold text-primary hover:text-primary/80"
-          >
+      <FieldGroup
+        title="Dashboard metric reports"
+        description="Email a snapshot of admin dashboard metrics to one or more recipients, or schedule recurring delivery."
+        action={
+          <Button variant="ghost" size="sm" onClick={handleSelectAll}>
             {allMetricsSelected ? 'Clear selection' : 'Select all metrics'}
-          </button>
-        </div>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          </Button>
+        }
+      >
+        <div className="grid gap-3 md:grid-cols-2">
           {DASHBOARD_METRICS.map((metric) => {
             const isChecked = selectedMetrics.includes(metric.id);
             return (
@@ -517,19 +516,18 @@ export function SettingsForm() {
           })}
         </div>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <label className="text-sm font-medium text-foreground-muted">
-            Report name
-            <input
+        <div className="mt-4 grid gap-x-4 gap-y-3 md:grid-cols-3">
+          <label className="block space-y-1.5">
+            <FieldLabel label="Report name" />
+            <Input
               type="text"
               value={reportName}
               onChange={(event) => setReportName(event.target.value)}
-              className="mt-1 w-full rounded border border-border px-3 py-2"
               placeholder="Performance dashboard export"
             />
           </label>
-          <label className="text-sm font-medium text-foreground-muted">
-            Timeframe
+          <label className="block space-y-1.5">
+            <FieldLabel label="Timeframe" />
             <select
               value={reportTimeframe}
               onChange={(event) => {
@@ -540,7 +538,7 @@ export function SettingsForm() {
                   setCustomEndDate('');
                 }
               }}
-              className="mt-1 w-full rounded border border-border px-3 py-2"
+              className={selectFieldClasses}
             >
               <option>This week</option>
               <option>Last week</option>
@@ -552,12 +550,12 @@ export function SettingsForm() {
               <option>Custom export window</option>
             </select>
           </label>
-          <label className="text-sm font-medium text-foreground-muted">
-            Network filter
+          <label className="block space-y-1.5">
+            <FieldLabel label="Network filter" />
             <select
               value={network}
               onChange={(event) => setNetwork(event.target.value as NetworkFilter)}
-              className="mt-1 w-full rounded border border-border px-3 py-2"
+              className={selectFieldClasses}
             >
               <option value="ALL">All</option>
               <option value="AHA">AHA</option>
@@ -565,66 +563,67 @@ export function SettingsForm() {
             </select>
           </label>
           {reportTimeframe === 'Custom export window' && (
-            <div className="grid grid-cols-1 gap-4 md:col-span-3 md:grid-cols-2">
-              <label className="text-sm font-medium text-foreground-muted">
-                Start date
-                <input
+            <div className="grid grid-cols-1 gap-x-4 gap-y-3 md:col-span-3 md:grid-cols-2">
+              <label className="block space-y-1.5">
+                <FieldLabel label="Start date" />
+                <Input
                   type="date"
                   value={customStartDate}
                   onChange={(event) => setCustomStartDate(event.target.value)}
-                  className="mt-1 w-full rounded border border-border px-3 py-2"
+                  className="text-numeric"
                 />
               </label>
-              <label className="text-sm font-medium text-foreground-muted">
-                End date
-                <input
+              <label className="block space-y-1.5">
+                <FieldLabel label="End date" />
+                <Input
                   type="date"
                   value={customEndDate}
                   onChange={(event) => setCustomEndDate(event.target.value)}
-                  className="mt-1 w-full rounded border border-border px-3 py-2"
+                  className="text-numeric"
                 />
               </label>
             </div>
           )}
         </div>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="text-sm font-medium text-foreground-muted">
-            Recipients (comma-separated)
-            <textarea
+        <div className="mt-4 grid gap-x-4 gap-y-3 md:grid-cols-2">
+          <label className="block space-y-1.5">
+            <FieldLabel label="Recipients" hint="comma-separated" />
+            <Textarea
               value={recipientsInput}
               onChange={(event) => setRecipientsInput(event.target.value)}
-              className="mt-1 h-20 w-full rounded border border-border px-3 py-2"
+              className="h-20"
               placeholder="ops@referralcrm.com, leadership@referralcrm.com"
             />
-            <span className="mt-1 block text-xs text-foreground-subtle">
-              {recipients.length} recipient{recipients.length === 1 ? '' : 's'}
+            <span className="block text-xs text-foreground-subtle">
+              <span className="text-numeric">{recipients.length}</span> recipient
+              {recipients.length === 1 ? '' : 's'}
               {invalidRecipients.length > 0 ? (
                 <span className="ml-2 text-warning">Invalid: {invalidRecipients.join(', ')}</span>
               ) : null}
             </span>
           </label>
           <div className="space-y-3">
-            <label className="flex items-start gap-2 text-sm font-medium text-foreground-muted">
+            <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
               <input
                 type="checkbox"
                 checked={attachCsv}
                 onChange={(event) => setAttachCsv(event.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-border-strong text-primary focus:ring-ring"
+                className="mt-0.5 h-4 w-4 rounded border-border-strong text-primary focus:ring-ring"
               />
-              <span>
+              <span className="font-medium">
                 Attach detailed CSV to email
                 <span className="block text-xs font-normal text-foreground-subtle">
                   Includes every section as rows for spreadsheet analysis.
                 </span>
               </span>
             </label>
-            <label className="text-sm font-medium text-foreground-muted">
-              Delivery cadence
+            <label className="block space-y-1.5">
+              <FieldLabel label="Delivery cadence" />
               <select
                 value={cadence}
                 onChange={(event) => setCadence(event.target.value as Cadence)}
-                className="mt-1 w-full rounded border border-border px-3 py-2"
+                className={selectFieldClasses}
               >
                 <option value="one-time">Send once now</option>
                 <option value="daily">Daily, 7am MT</option>
@@ -633,54 +632,62 @@ export function SettingsForm() {
               </select>
             </label>
             {cadence !== 'one-time' && (
-              <label className="text-sm font-medium text-foreground-muted">
-                Schedule label
-                <input
+              <label className="block space-y-1.5">
+                <FieldLabel label="Schedule label" />
+                <Input
                   type="text"
                   value={scheduleName}
                   onChange={(event) => setScheduleName(event.target.value)}
                   placeholder={`${reportName} (${cadence})`}
-                  className="mt-1 w-full rounded border border-border px-3 py-2"
                 />
               </label>
             )}
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border p-4">
-          <span className="text-sm font-medium text-foreground-muted">Presets</span>
-          <select
-            value={selectedPresetId}
-            onChange={(e) => {
-              const v = e.target.value;
-              setSelectedPresetId(v);
-              if (v) loadPreset(v);
-            }}
-            className="rounded border border-border px-3 py-1.5 text-sm"
-          >
-            <option value="">Load preset…</option>
-            {reportPresets.map((p) => (
-              <option key={p.name} value={p.name}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <input
-            type="text"
-            value={presetName}
-            onChange={(e) => setPresetName(e.target.value)}
-            placeholder="Preset name"
-            className="w-40 rounded border border-border px-3 py-1.5 text-sm"
-          />
-          <button type="button" onClick={savePreset} className="rounded border border-border-strong px-3 py-1.5 text-sm font-medium text-foreground-muted hover:bg-surface-muted">
+        <div className="mt-4 flex flex-wrap items-end gap-3 rounded-lg border border-border p-4">
+          <span className="text-eyebrow pb-2.5 text-foreground-subtle">Presets</span>
+          <label className="block space-y-1.5">
+            <FieldLabel label="Load preset" />
+            <select
+              value={selectedPresetId}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSelectedPresetId(v);
+                if (v) loadPreset(v);
+              }}
+              className={cn(selectFieldClasses, 'w-48')}
+            >
+              <option value="">Load preset…</option>
+              {reportPresets.map((p) => (
+                <option key={p.name} value={p.name}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block space-y-1.5">
+            <FieldLabel label="New preset name" />
+            <Input
+              type="text"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              placeholder="Preset name"
+              className="w-44"
+            />
+          </label>
+          <Button variant="secondary" onClick={savePreset}>
             Save as preset
-          </button>
+          </Button>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-muted p-4 text-sm text-foreground-muted">
           <div>
             {selectedMetrics.length ? (
-              <span className="font-medium">{selectedMetrics.length} metric(s) selected</span>
+              <span className="font-medium">
+                <span className="text-numeric">{selectedMetrics.length}</span> metric
+                {selectedMetrics.length === 1 ? '' : 's'} selected
+              </span>
             ) : (
               <span className="font-medium text-warning">Select at least one metric.</span>
             )}
@@ -691,109 +698,106 @@ export function SettingsForm() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handleDownloadReportCsv}
-              disabled={csvLoading}
-              className="rounded border border-primary bg-surface-raised px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/5 disabled:opacity-70"
-            >
+            <Button variant="outline" onClick={handleDownloadReportCsv} loading={csvLoading}>
               {csvLoading ? 'Building CSV…' : 'Download as CSV'}
-            </button>
-            <button
-              type="button"
-              onClick={handlePrimaryAction}
-              disabled={reportLoading}
-              className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-70"
-            >
+            </Button>
+            <Button onClick={handlePrimaryAction} loading={reportLoading}>
               {reportLoading
                 ? 'Sending…'
                 : cadence === 'one-time'
                   ? 'Send report now'
                   : 'Save schedule'}
-            </button>
+            </Button>
           </div>
         </div>
+      </FieldGroup>
 
-        <div className="mt-6 rounded-lg border border-border">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <h3 className="text-base font-semibold text-foreground">Active scheduled reports</h3>
-            {schedulesLoading ? (
-              <span className="text-xs text-foreground-subtle">Loading…</span>
-            ) : (
-              <span className="text-xs text-foreground-subtle">{schedules.length} schedule(s)</span>
-            )}
-          </div>
-          {schedules.length === 0 && !schedulesLoading ? (
-            <p className="px-4 py-6 text-center text-sm text-foreground-subtle">
-              No recurring reports yet. Pick a cadence above and click <em>Save schedule</em>.
-            </p>
+      <FieldGroup
+        title="Active scheduled reports"
+        description="Recurring deliveries run at 7am America/Denver on their cadence."
+        action={
+          schedulesLoading ? (
+            <span className="text-xs text-foreground-subtle">Loading…</span>
           ) : (
-            <ul className="divide-y divide-border">
-              {schedules.map((schedule) => (
-                <li key={schedule.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground">{schedule.name}</p>
-                    <p className="text-xs text-foreground-subtle">
-                      {describeCadence(schedule.cadence)} · {schedule.recipients.length} recipient
-                      {schedule.recipients.length === 1 ? '' : 's'} · {schedule.metrics.length} metric
-                      {schedule.metrics.length === 1 ? '' : 's'} · network {schedule.network}
-                    </p>
-                    <p className="text-xs text-foreground-subtle">
-                      Next run: {formatRunAt(schedule.nextRunAt)} · Last run: {formatRunAt(schedule.lastRunAt)}
-                    </p>
-                    <p className="truncate text-xs text-foreground-subtle">To: {schedule.recipients.join(', ')}</p>
-                  </div>
-                  <div className="flex flex-shrink-0 items-center gap-2">
-                    <label className="flex items-center gap-1 text-xs text-foreground-muted">
-                      <input
-                        type="checkbox"
-                        checked={schedule.enabled}
-                        onChange={(event) => void handleToggleSchedule(schedule.id, event.target.checked)}
-                      />
-                      Enabled
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => void handleDeleteSchedule(schedule.id, schedule.name)}
-                      className="rounded border border-danger/30 px-2 py-1 text-xs font-medium text-danger hover:bg-danger-soft"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
+            <span className="text-xs text-foreground-subtle">
+              <span className="text-numeric">{schedules.length}</span> active
+            </span>
+          )
+        }
+      >
+        {schedules.length === 0 && !schedulesLoading ? (
+          <p className="rounded-lg border border-dashed border-border bg-surface-muted/50 px-4 py-6 text-center text-sm text-foreground-subtle">
+            No recurring reports yet. Pick a cadence above and choose <em>Save schedule</em>.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {schedules.map((schedule) => (
+              <li key={schedule.id} className="flex flex-wrap items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">{schedule.name}</p>
+                  <p className="text-xs text-foreground-subtle">
+                    {describeCadence(schedule.cadence)} · <span className="text-numeric">{schedule.recipients.length}</span> recipient
+                    {schedule.recipients.length === 1 ? '' : 's'} · <span className="text-numeric">{schedule.metrics.length}</span> metric
+                    {schedule.metrics.length === 1 ? '' : 's'} · network {schedule.network}
+                  </p>
+                  <p className="text-xs text-foreground-subtle">
+                    Next run: <span className="text-numeric">{formatRunAt(schedule.nextRunAt)}</span> · Last run:{' '}
+                    <span className="text-numeric">{formatRunAt(schedule.lastRunAt)}</span>
+                  </p>
+                  <p className="truncate text-xs text-foreground-subtle">To: {schedule.recipients.join(', ')}</p>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <label className="flex cursor-pointer items-center gap-1.5 text-xs text-foreground-muted">
+                    <input
+                      type="checkbox"
+                      checked={schedule.enabled}
+                      onChange={(event) => void handleToggleSchedule(schedule.id, event.target.checked)}
+                      className="h-4 w-4 rounded border-border-strong text-primary focus:ring-ring"
+                    />
+                    Enabled
+                  </label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-danger hover:bg-danger-soft hover:text-danger"
+                    onClick={() => void handleDeleteSchedule(schedule.id, schedule.name)}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </FieldGroup>
 
-      <div className="rounded-md bg-surface-raised p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-foreground">CSV exports</h2>
-        <p className="text-sm text-foreground-subtle">Download detailed CSVs for referrals, agents, mortgage consultants, and deals.</p>
-
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
+      <FieldGroup
+        title="CSV exports"
+        description="Download detailed CSVs for referrals, agents, mortgage consultants, and deals."
+      >
+        <div className="grid gap-4 md:grid-cols-2">
           {(Object.keys(EXPORT_DEFINITIONS) as ExportReport[]).map((report) => {
             const definition = EXPORT_DEFINITIONS[report];
             const isDownloading = exporting === report;
             return (
               <div key={report} className="flex flex-col justify-between gap-3 rounded-lg border border-border p-4">
                 <div>
-                  <h3 className="text-base font-semibold text-foreground">{definition.label}</h3>
-                  <p className="text-sm text-foreground-subtle">{definition.helper}</p>
+                  <h4 className="text-sm font-semibold text-foreground">{definition.label}</h4>
+                  <p className="mt-0.5 text-xs text-foreground-muted">{definition.helper}</p>
                 </div>
-                <button
-                  type="button"
-                  disabled={isDownloading}
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  loading={isDownloading}
                   onClick={() => void handleDownloadCsv(report)}
-                  className="w-full rounded border border-primary bg-surface-raised px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/5 disabled:opacity-70"
                 >
                   {isDownloading ? 'Preparing CSV…' : `Download ${definition.label.toLowerCase()} CSV`}
-                </button>
+                </Button>
               </div>
             );
           })}
         </div>
-      </div>
+      </FieldGroup>
     </div>
   );
 }

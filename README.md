@@ -198,6 +198,45 @@ EMAIL_SERVER=
 EMAIL_FROM=
 ```
 
+### Referral Coordinator Recipients
+
+Who gets copied on referral notifications, fee breakdowns, and intro emails. Comma or
+semicolon separated.
+
+```env
+REFERRAL_NOTIFICATION_RECIPIENTS=
+```
+
+There is no built-in default. When this is unset the app logs a warning and skips the
+coordinator copy entirely rather than falling back to a hardcoded address, because an address
+baked into the code that later stops accepting mail is exactly how coordinator notifications
+started bouncing unnoticed. Every other recipient on those messages is unaffected.
+
+Prefer a shared alias over an individual mailbox. A personal address that fills up or gets
+suspended will bounce every message it is copied on, which marks the whole message bounced
+even when the primary recipient received it fine.
+
+### Delivery Event Webhook
+
+Delivery route: `POST /api/email-events`
+
+Records bounces, spam complaints, delays, and deliveries against sent messages, and keeps
+bouncing addresses off both To and CC lines until they recover. A message whose every To
+recipient is bouncing is not sent at all; it is stored with status `suppressed` so the skip
+stays visible. Each bounce lengthens the backoff window; when the window lapses the address
+gets one probe send and is restored automatically if that delivers.
+
+Configure a Resend webhook pointing at this route subscribed to `email.bounced`,
+`email.complained`, `email.delivery_delayed`, and `email.delivered`, then set its signing
+secret:
+
+```env
+RESEND_EVENTS_WEBHOOK_SECRET=
+```
+
+Falls back to `RESEND_WEBHOOK_SECRET` when unset. Deploy the route before creating the Resend
+webhook, since the signing secret does not exist until the endpoint is created.
+
 ### Inbound Email Webhook
 
 Inbound route: `POST /api/inbound-email`

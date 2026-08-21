@@ -4,6 +4,10 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
+import { cn } from '@/lib/cn';
+import { Button } from '@/components/ui/button';
+import { inputFieldClasses } from '@/components/ui/input';
+
 interface AgentNpsEditorProps {
   agentId: string;
   initialScore: number | null;
@@ -67,9 +71,9 @@ export function AgentNpsEditor({ agentId, initialScore }: AgentNpsEditorProps) {
   if (!editing) {
     return (
       <div>
-        <p className="text-xs uppercase text-foreground-subtle">NPS Score</p>
+        <p className="text-eyebrow text-foreground-subtle">NPS Score</p>
         <div className="mt-1 flex items-center gap-2">
-          <p className="font-medium text-foreground">
+          <p className="text-numeric font-medium text-foreground">
             {savedScore != null ? savedScore.toFixed(1) : '—'}
           </p>
           <button
@@ -86,7 +90,7 @@ export function AgentNpsEditor({ agentId, initialScore }: AgentNpsEditorProps) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <label className="text-xs uppercase text-foreground-subtle">NPS Score</label>
+      <label className="text-eyebrow text-foreground-subtle">NPS Score</label>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         <input
           type="number"
@@ -96,29 +100,26 @@ export function AgentNpsEditor({ agentId, initialScore }: AgentNpsEditorProps) {
           value={value}
           onChange={(event) => setValue(event.target.value)}
           aria-label="NPS Score"
-          className="w-24 rounded-md border border-border bg-surface-raised px-2 py-1 text-sm text-foreground shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40"
+          className={cn(inputFieldClasses, 'text-numeric w-24')}
           placeholder="Enter score"
           disabled={saving}
           autoFocus
         />
-        <button
-          type="submit"
-          disabled={saving}
-          className="inline-flex shrink-0 items-center justify-center rounded-md bg-primary px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-        >
+        <Button type="submit" size="sm" loading={saving}>
           {saving ? 'Saving…' : 'Save'}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
           disabled={saving}
           onClick={() => {
             setValue(savedScore != null ? String(savedScore) : '');
             setEditing(false);
           }}
-          className="text-xs font-medium text-foreground-muted hover:text-foreground"
         >
           Cancel
-        </button>
+        </Button>
       </div>
     </form>
   );

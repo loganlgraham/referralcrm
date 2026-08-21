@@ -168,7 +168,7 @@ describe('ReferralNotes', () => {
       </>
     );
 
-    expect(screen.getByText('No notes yet.')).toBeInTheDocument();
+    expect(screen.getByText('No notes yet')).toBeInTheDocument();
     expect(screen.getByText('Deleted note by Taylor Admin: Old content')).toBeInTheDocument();
   });
 });

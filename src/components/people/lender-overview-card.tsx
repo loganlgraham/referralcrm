@@ -1,8 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+
+import { PageHeader } from '@/components/ui/page-header';
+import { Button } from '@/components/ui/button';
 
 import { CopyButton } from '@/components/common/copy-button';
 import { formatPhoneNumber } from '@/utils/formatters';
@@ -69,104 +73,104 @@ export function LenderOverviewCard({ lender, isAdmin }: LenderOverviewCardProps)
   };
 
   return (
-    <div className="rounded-md bg-surface-raised p-6 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-1.5">
-            <h1 className="text-2xl font-semibold text-foreground">{lender.name}</h1>
-            <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                isActive ? 'bg-success-soft text-success' : 'bg-danger-soft text-danger'
-              }`}
-            >
-              {isActive ? 'Active' : 'Inactive'}
-            </span>
+    <>
+      <PageHeader
+        breadcrumbs={
+          <span className="flex items-center gap-1.5">
+            <Link href="/lenders" className="text-foreground-muted hover:text-foreground">
+              Mortgage consultants
+            </Link>
+            <span aria-hidden>/</span>
+            <span className="truncate">{lender.name}</span>
+          </span>
+        }
+        eyebrow={isActive ? 'Active' : 'Inactive'}
+        title={lender.name}
+        actions={
+          <>
+            <CopyButton value={lender.name} label="Copy name" />
             {!isActive && lender.includeInMetrics === false && (
-              <span className="inline-flex items-center rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-semibold text-warning">
+              <span className="text-eyebrow inline-flex items-center rounded-full bg-warning-soft px-2 py-0.5 text-warning">
                 Excluded from leaderboards
               </span>
             )}
-            <CopyButton value={lender.name} label="Copy name" />
-          </div>
-          <div className="mt-2 space-y-1 text-sm text-foreground-muted">
-            <p className="flex items-center gap-1">
-              Email{' '}
-              <a
-                href={buildGmailComposeUrl(lender.email)}
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary hover:underline"
-              >
-                {lender.email}
-              </a>
-              <CopyButton value={lender.email} label="Copy email" />
-            </p>
-            <p className="flex items-center gap-1">
-              Phone: {formatPhoneNumber(lender.phone) || '—'}
-              {lender.phone && <CopyButton value={lender.phone} label="Copy phone" className="ml-1" />}
-            </p>
-            <p>NMLS ID: {lender.nmlsId || '—'}</p>
-            {isAdmin && lender.npsScore !== null && lender.npsScore !== undefined && (
-              <p>
-                NPS Score:{' '}
-                <span className="font-medium text-foreground">
-                  {typeof lender.npsScore === 'number' ? lender.npsScore.toFixed(1) : '—'}
-                </span>
-              </p>
+            {isAdmin && (
+              <>
+                <SendWelcomeEmailButton
+                  endpoint={`/api/lenders/${lender._id}/welcome-email`}
+                  recipientEmail={lender.email}
+                  recipientName={lender.name}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleToggleActive}
+                  loading={togglingActive}
+                  title={
+                    isActive
+                      ? 'Mark this mortgage consultant inactive so admins know not to use them'
+                      : 'Mark this mortgage consultant active'
+                  }
+                >
+                  {togglingActive ? 'Saving…' : isActive ? 'Mark inactive' : 'Mark active'}
+                </Button>
+                <Button type="button" onClick={() => setShowEditor((previous) => !previous)}>
+                  {showEditor ? 'Close edit' : 'Edit details'}
+                </Button>
+              </>
             )}
+          </>
+        }
+      />
+
+      <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+        <div className="space-y-1 text-sm text-foreground-muted">
+          <p className="flex items-center gap-1">
+            Email{' '}
+            <a
+              href={buildGmailComposeUrl(lender.email)}
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary hover:underline"
+            >
+              {lender.email}
+            </a>
+            <CopyButton value={lender.email} label="Copy email" />
+          </p>
+          <p className="flex items-center gap-1">
+            Phone: <span className="text-numeric">{formatPhoneNumber(lender.phone) || '—'}</span>
+            {lender.phone && <CopyButton value={lender.phone} label="Copy phone" className="ml-1" />}
+          </p>
+          <p>
+            NMLS ID: <span className="text-numeric">{lender.nmlsId || '—'}</span>
+          </p>
+          {isAdmin && lender.npsScore !== null && lender.npsScore !== undefined && (
+            <p>
+              NPS Score:{' '}
+              <span className="text-numeric font-medium text-foreground">
+                {typeof lender.npsScore === 'number' ? lender.npsScore.toFixed(1) : '—'}
+              </span>
+            </p>
+          )}
+        </div>
+
+        <div className="mt-4 grid gap-3 text-sm text-foreground-muted sm:grid-cols-2">
+          <div>
+            <p className="text-eyebrow text-foreground-subtle">Licensed states</p>
+            <p className="mt-0.5 font-medium text-foreground">{(lender.licensedStates ?? []).join(', ') || '—'}</p>
           </div>
         </div>
-        {isAdmin && (
-          <div className="flex flex-wrap justify-end gap-2">
-            <SendWelcomeEmailButton
-              endpoint={`/api/lenders/${lender._id}/welcome-email`}
-              recipientEmail={lender.email}
-              recipientName={lender.name}
+
+        {isAdmin && showEditor && (
+          <div className="mt-6 border-t border-border pt-6">
+            <LenderAdminEditor
+              lender={lender}
+              className="space-y-4"
+              onSaved={() => setShowEditor(false)}
             />
-            <button
-              type="button"
-              onClick={handleToggleActive}
-              disabled={togglingActive}
-              className={`inline-flex items-center rounded-md px-4 py-2 text-sm font-semibold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-70 ${
-                isActive
-                  ? 'border border-danger/30 bg-danger-soft text-danger hover:bg-danger-soft'
-                  : 'border border-success/30 bg-success-soft text-success hover:bg-success-soft'
-              }`}
-              title={
-                isActive
-                  ? 'Mark this mortgage consultant inactive so admins know not to use them'
-                  : 'Mark this mortgage consultant active'
-              }
-            >
-              {togglingActive ? 'Saving…' : isActive ? 'Mark inactive' : 'Mark active'}
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover"
-              onClick={() => setShowEditor((previous) => !previous)}
-            >
-              {showEditor ? 'Close edit' : 'Edit details'}
-            </button>
           </div>
         )}
       </div>
-
-      <div className="mt-4 grid gap-3 text-sm text-foreground-muted sm:grid-cols-2">
-        <div>
-          <p className="text-xs uppercase text-foreground-subtle">Licensed States</p>
-          <p className="font-medium text-foreground">{(lender.licensedStates ?? []).join(', ') || '—'}</p>
-        </div>
-      </div>
-
-      {isAdmin && showEditor && (
-        <div className="mt-6 border-t border-border pt-6">
-          <LenderAdminEditor
-            lender={lender}
-            className="space-y-4"
-            onSaved={() => setShowEditor(false)}
-          />
-        </div>
-      )}
-    </div>
+    </>
   );
 }

@@ -27,6 +27,19 @@ const sizeStyles: Record<ButtonSize, string> = {
   icon: 'h-9 w-9 p-0'
 };
 
+/** Lets anchors and `next/link` adopt the exact button styling without duplicating it. */
+export function buttonClasses({
+  variant = 'primary',
+  size = 'md',
+  className
+}: {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  className?: string;
+} = {}) {
+  return cn(base, variantStyles[variant], sizeStyles[size], 'no-underline', className);
+}
+
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
