@@ -1030,7 +1030,6 @@ export function DealsTable() {
               onPresetSelect={handlePresetSelect}
               onCustomRangeSelect={handleCustomRangeSelect}
               maxDate={maxSelectableDate}
-              eyebrowLabel
             />
           ) : null
         }

@@ -19,6 +19,22 @@ interface PillTabsProps<T extends string> {
 }
 
 /**
+ * The pill track and its segments are shared with `SegmentedPills` so filter
+ * controls sitting next to the tabs can't drift out of step visually.
+ */
+export const pillTrackClasses =
+  'scrollbar-thin inline-flex max-w-full gap-1 overflow-x-auto rounded-pill border border-border bg-surface-raised p-1 shadow-card';
+
+export function pillSegmentClasses(isActive: boolean): string {
+  return cn(
+    'inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-pill px-4 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface-raised',
+    isActive
+      ? 'bg-primary text-white shadow-sm'
+      : 'text-foreground-muted hover:bg-surface-muted hover:text-foreground'
+  );
+}
+
+/**
  * Rail-mounted pill tabs with roving tabindex. Panels are rendered by the
  * caller, so a panel can stay mounted while another tab is shown.
  */
@@ -51,10 +67,7 @@ export function PillTabs<T extends string>({
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className={cn(
-        'scrollbar-thin inline-flex max-w-full gap-1 overflow-x-auto rounded-pill border border-border bg-surface-raised p-1 shadow-card',
-        className
-      )}
+      className={cn(pillTrackClasses, className)}
     >
       {tabs.map((tab, index) => {
         const isActive = tab.id === activeTab;
@@ -72,12 +85,7 @@ export function PillTabs<T extends string>({
             tabIndex={isActive ? 0 : -1}
             onClick={() => onTabChange(tab.id)}
             onKeyDown={(event) => handleKeyDown(event, index)}
-            className={cn(
-              'inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-pill px-4 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface-raised',
-              isActive
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-foreground-muted hover:bg-surface-muted hover:text-foreground'
-            )}
+            className={pillSegmentClasses(isActive)}
           >
             {tab.label}
             {tab.count !== undefined && tab.count > 0 ? (

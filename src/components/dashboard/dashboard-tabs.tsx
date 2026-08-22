@@ -20,7 +20,9 @@ import { Info, Trash2 } from 'lucide-react';
 import { dashCardClasses } from '@/components/dashboard/dashboard-ui';
 import { Modal } from '@/components/ui/modal';
 import { PageHeader } from '@/components/ui/page-header';
+import { sectionLabelClasses } from '@/components/ui/section-label';
 import { PillTabs, type PillTabDefinition } from '@/components/ui/pill-tabs';
+import { SegmentedPills } from '@/components/ui/segmented-pills';
 import { cn } from '@/lib/cn';
 import {
   Select,
@@ -548,36 +550,6 @@ const DEFAULT_NETWORK_FILTER: Record<TabValue, NetworkFilter> = {
   admin: 'AHA_OOS',
   agit: 'ALL'
 };
-
-function NetworkFilterButtons({
-  value,
-  onChange
-}: {
-  value: NetworkFilter;
-  onChange: (value: NetworkFilter) => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {NETWORK_FILTER_OPTIONS.map((option) => {
-        const isActive = value === option.value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-              isActive
-                ? 'border-transparent bg-primary text-white shadow-sm'
-                : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
-            }`}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 const CHART_WIDTH = 320;
 const CHART_HEIGHT = 180;
@@ -4063,6 +4035,10 @@ export function DashboardTabs() {
       : TIMEFRAME_PRESETS.find((option) => option.value === timeframe)?.label ?? 'Select timeframe';
   const timeframeLabel = data?.timeframe.label ?? fallbackTimeframeLabel;
 
+  // The button already names the preset, so the header spells out the actual
+  // dates instead. "All time" starts at the epoch, which reads as a bug.
+  const headerRangeLabel = timeframe === 'all' ? 'All time' : formatDisplayRange(customRange);
+
   if (error) {
     return (
       <div className="rounded-card border border-danger/30 bg-danger-soft p-4 text-danger shadow-card">
@@ -4076,38 +4052,39 @@ export function DashboardTabs() {
       <PageHeader
         eyebrow="Analytics"
         title="Performance dashboards"
-        description={timeframeLabel}
+        description={headerRangeLabel}
         attention={false}
-        actions={
-          <div className="flex flex-wrap items-start justify-start gap-6 sm:justify-end">
-            <TimeframeDropdown
-              timeframe={timeframe}
-              rangeLabel={timeframeLabel}
-              customRange={customRange}
-              onPresetSelect={handlePresetSelect}
-              onCustomRangeSelect={handleCustomRangeSelect}
-              maxDate={maxSelectableDate}
-              openToRightOnMobile
-              eyebrowLabel
-            />
-            <div className="flex flex-col items-start gap-2 sm:items-end">
-              <span className="text-eyebrow text-foreground-subtle">Network</span>
-              <NetworkFilterButtons
-                value={activeNetworkFilter}
-                onChange={(value) => handleNetworkFilterChange(activeTab, value)}
-              />
-            </div>
-          </div>
-        }
       />
 
-      <PillTabs
-        ariaLabel="Dashboard views"
-        idPrefix="dashboard-tab"
-        tabs={pillTabs}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <PillTabs
+          ariaLabel="Dashboard views"
+          idPrefix="dashboard-tab"
+          tabs={pillTabs}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <TimeframeDropdown
+            timeframe={timeframe}
+            rangeLabel={timeframeLabel}
+            customRange={customRange}
+            onPresetSelect={handlePresetSelect}
+            onCustomRangeSelect={handleCustomRangeSelect}
+            maxDate={maxSelectableDate}
+            openToRightOnMobile
+          />
+          <div className="flex items-center gap-2">
+            <span className={sectionLabelClasses}>Network</span>
+            <SegmentedPills
+              ariaLabel="Network filter"
+              options={NETWORK_FILTER_OPTIONS}
+              value={activeNetworkFilter}
+              onChange={(value) => handleNetworkFilterChange(activeTab, value)}
+            />
+          </div>
+        </div>
+      </div>
 
       {showSkeleton ? (
         <div className="space-y-4">

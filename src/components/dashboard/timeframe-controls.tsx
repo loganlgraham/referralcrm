@@ -13,6 +13,7 @@ import {
   startOfYear,
   subYears
 } from 'date-fns';
+import { CalendarDays, ChevronDown } from 'lucide-react';
 import {
   MouseEvent as ReactMouseEvent,
   useCallback,
@@ -21,6 +22,8 @@ import {
   useRef,
   useState
 } from 'react';
+
+import { cn } from '@/lib/cn';
 
 type SelectionPhase = 'start' | 'end';
 
@@ -38,11 +41,6 @@ type TimeframeDropdownProps = {
   onCustomRangeSelect: (range: DateRange) => void;
   maxDate: string;
   openToRightOnMobile?: boolean;
-  /**
-   * Admin headers label their controls with the mono eyebrow and align to the
-   * page title's left edge on mobile. Agent surfaces keep the original label.
-   */
-  eyebrowLabel?: boolean;
 };
 
 const DISPLAY_RANGE_FORMAT = 'MMM d, yyyy';
@@ -135,8 +133,7 @@ export function TimeframeDropdown({
   onPresetSelect,
   onCustomRangeSelect,
   maxDate,
-  openToRightOnMobile = false,
-  eyebrowLabel = false
+  openToRightOnMobile = false
 }: TimeframeDropdownProps) {
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -244,32 +241,25 @@ export function TimeframeDropdown({
   const canGoNextMonth = formatDateInput(addMonths(visibleMonth, 1)) <= maxDate;
 
   return (
-    <div
-      ref={dropdownRef}
-      className={`relative flex flex-col gap-2 ${
-        eyebrowLabel ? 'items-start sm:items-end' : 'items-end'
-      }`}
-    >
-      <span
-        className={
-          eyebrowLabel
-            ? 'text-eyebrow text-foreground-subtle'
-            : 'text-[11px] font-medium uppercase tracking-wide text-foreground-subtle'
-        }
-      >
-        Timeframe
-      </span>
+    <div ref={dropdownRef} className="relative inline-flex">
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex items-center gap-2 rounded-full border border-border px-3 py-1 text-sm font-medium text-foreground-muted transition hover:border-border-strong hover:text-foreground"
+        aria-label={`Timeframe: ${rangeLabel}`}
+        aria-haspopup="dialog"
+        aria-expanded={isOpen}
+        className="inline-flex h-9 items-center gap-2 rounded-pill border border-border bg-surface-raised px-3.5 text-sm font-medium text-foreground shadow-card transition hover:border-border-strong hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
       >
+        <CalendarDays aria-hidden className="h-4 w-4 text-foreground-subtle" />
         <span>{rangeLabel}</span>
-        <span className="text-xs text-foreground-subtle">▾</span>
+        <ChevronDown
+          aria-hidden
+          className={cn('h-4 w-4 text-foreground-subtle transition', isOpen && 'rotate-180')}
+        />
       </button>
       {isOpen ? (
         <div
-          className={`absolute z-20 mt-2 w-80 rounded-lg border border-border bg-surface-raised p-4 shadow-xl ${
+          className={`absolute top-full z-20 mt-2 w-80 rounded-card border border-border bg-surface-raised p-4 shadow-raised ${
             openToRightOnMobile ? 'left-0 sm:left-auto sm:right-0' : 'right-0'
           }`}
         >
@@ -333,7 +323,7 @@ export function TimeframeDropdown({
           </div>
 
           <div className="mt-4 border-t border-border pt-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Quick ranges</p>
+            <p className="text-xs font-medium text-foreground-subtle">Quick ranges</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {TIMEFRAME_PRESETS.map((option) => {
                 const isActive = timeframe === option.value;
