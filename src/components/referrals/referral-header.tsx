@@ -10,6 +10,7 @@ import { SLA_TIME_ZONE } from '@/utils/sla-insights';
 import { cn } from '@/lib/cn';
 import { PageHeader } from '@/components/ui/page-header';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Textarea } from '@/components/ui/input';
 import { selectFieldClasses } from '@/components/ui/field-group';
 
@@ -22,16 +23,20 @@ import {
 import { StatusChanger } from '@/components/referrals/status-changer';
 import { SLAWidget } from '@/components/referrals/sla-widget';
 import { ContactAssignment, type Contact } from '@/components/referrals/contact-assignment';
+import { ContactLine } from '@/components/common/contact-line';
 import { CopyButton } from '@/components/common/copy-button';
-import { EmailActivityLink } from '@/components/common/email-activity-link';
-import { PhoneActivityLink } from '@/components/common/phone-activity-link';
 import { RequestUpdateButton } from '@/components/referrals/request-update-button';
 import { AutoReminderToggle } from '@/components/referrals/auto-reminder-toggle';
 import { AdminTasksCard } from '@/components/referrals/admin-tasks-card';
 import { AgentOriginMarker } from '@/components/referrals/agent-origin-marker';
+import { Badge } from '@/components/ui/badge';
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
 type AhaBucketValue = '' | 'AHA' | 'AHA_OOS';
+
+/** One recipe for panels nested inside a Card, and one for panels nested inside those. */
+const nestedPanelClasses = 'rounded-lg border border-border bg-surface-muted p-3';
+const innerPanelClasses = 'rounded-lg border border-border bg-surface p-3';
 
 const formatFullAddress = (
   street?: string,
@@ -83,7 +88,7 @@ function CcRecipientFields({
 }) {
   return (
     <div className="space-y-2">
-      <p className="text-eyebrow text-foreground-subtle">{label}</p>
+      <p className="text-xs font-medium text-foreground-subtle">{label}</p>
       {values.map((value, index) => (
         <Input
           key={index}
@@ -1056,13 +1061,13 @@ export function ReferralHeader({
   // stays a single column so agent + MC contact details are not squeezed.
   const assignmentGridClassName =
     shouldStackAssignmentsForAdminBoth
-      ? 'grid items-start gap-2.5'
+      ? 'grid items-start gap-2'
       : isBothClientType
-        ? 'grid items-start gap-2.5 md:grid-cols-2'
-        : 'grid items-start gap-2.5';
+        ? 'grid items-start gap-2 md:grid-cols-2'
+        : 'grid items-start gap-2';
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <PageHeader
         breadcrumbs={
           <span className="flex items-center gap-1.5">
@@ -1074,6 +1079,7 @@ export function ReferralHeader({
           </span>
         }
         eyebrow={`${referral.clientType ?? 'Buyer'} · ${status}`}
+        eyebrowClassName="text-xs font-semibold text-foreground-muted"
         title={borrowerName}
         actions={
           <>
@@ -1084,53 +1090,44 @@ export function ReferralHeader({
           </>
         }
       />
-      <div className="route-surface grid gap-5 rounded-card border border-border bg-surface-raised p-4 shadow-card lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-center">
+      <Card className="route-surface grid gap-5 p-5 lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-center">
         <div className="space-y-2 lg:self-center">
           <div>
             {hasBorrowerContact ? (
-              <div className="flex flex-wrap items-center gap-2 text-sm text-foreground-muted">
-                {borrowerEmail && (
-                  <>
-                    <EmailActivityLink
-                      referralId={referral._id}
-                      email={borrowerEmail}
-                      recipient="Borrower"
-                      recipientName={borrowerName}
-                      className="text-sm"
-                    >
-                      {borrowerEmail}
-                    </EmailActivityLink>
-                    <CopyButton value={borrowerEmail} label="Copy email" />
-                  </>
-                )}
-                {borrowerEmail && borrowerPhone && <span className="text-foreground-subtle">•</span>}
-                {borrowerPhone && (
-                  <>
-                    <PhoneActivityLink
-                      referralId={referral._id}
-                      phone={borrowerPhone}
-                      recipient="Borrower"
-                      recipientName={borrowerName}
-                      className="text-numeric text-sm"
-                    >
-                      {borrowerPhone}
-                    </PhoneActivityLink>
-                    <CopyButton value={borrowerPhone} label="Copy phone" />
-                  </>
-                )}
+              <div className="flex flex-wrap items-center gap-2">
+                {borrowerEmail ? (
+                  <ContactLine
+                    kind="email"
+                    layout="chip"
+                    value={borrowerEmail}
+                    referralId={referral._id}
+                    recipient="Borrower"
+                    recipientName={borrowerName}
+                  />
+                ) : null}
+                {borrowerPhone ? (
+                  <ContactLine
+                    kind="phone"
+                    layout="chip"
+                    value={borrowerPhone}
+                    referralId={referral._id}
+                    recipient="Borrower"
+                    recipientName={borrowerName}
+                  />
+                ) : null}
               </div>
             ) : (
               <p className="text-sm text-foreground-muted">Contact information pending</p>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-eyebrow rounded-full bg-primary px-3 py-1 text-white">{status}</span>
-            <span className="text-eyebrow rounded-full bg-surface-subtle px-3 py-1 text-foreground-muted">
+            <Badge variant="primary">{status}</Badge>
+            <Badge variant="neutral" className="max-w-full whitespace-normal">
               {propertyLabel}
-            </span>
-            <span className="text-eyebrow rounded-full bg-signal-soft px-3 py-1 text-signal-dark">
-              <span className="text-numeric">{daysInStatus}</span> days in stage
-            </span>
+            </Badge>
+            <Badge variant="progress">
+              <span className="tabular-nums">{daysInStatus}</span> days in stage
+            </Badge>
           </div>
         </div>
         <div
@@ -1138,18 +1135,18 @@ export function ReferralHeader({
             isAgentView ? 'lg:justify-start' : ''
           }`}
         >
-          <section className="w-full rounded-card border border-border bg-surface-raised p-3 shadow-card">
+          <section className={cn('w-full', nestedPanelClasses)}>
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-eyebrow text-foreground-muted">Status &amp; progress</h2>
-              <span className="text-eyebrow text-foreground-subtle">Pipeline</span>
+              <h2 className="text-sm font-semibold text-foreground">Status &amp; progress</h2>
+              <span className="text-xs font-medium text-foreground-subtle">Pipeline</span>
             </div>
-            <div className="mt-1.5">
+            <div className="mt-3">
               {isBothClientType && viewerRole === 'admin' ? (
                 <div className="space-y-3">
                   <div className="grid gap-3 lg:grid-cols-2">
-                    <div className="space-y-2 rounded-md border border-border bg-surface-muted/70 p-2.5">
-                      <div className="text-eyebrow text-info">Buy</div>
-                      <p className="text-[11px] text-foreground-subtle">Latest deal: {latestBuyDealStatusLabel}</p>
+                    <div className={cn('space-y-2', innerPanelClasses)}>
+                      <div className="text-xs font-semibold text-info">Buy</div>
+                      <p className="text-xs text-foreground-subtle">Latest deal: {latestBuyDealStatusLabel}</p>
                       <StatusChanger
                         referralId={referral._id}
                         status={buyStatusLabel}
@@ -1165,9 +1162,9 @@ export function ReferralHeader({
                         onUnderContractIntentChange={onUnderContractIntentChange}
                       />
                     </div>
-                    <div className="space-y-2 rounded-md border border-border bg-surface-muted/70 p-2.5">
-                      <div className="text-eyebrow text-accent">Sell</div>
-                      <p className="text-[11px] text-foreground-subtle">Latest deal: {latestSellDealStatusLabel}</p>
+                    <div className={cn('space-y-2', innerPanelClasses)}>
+                      <div className="text-xs font-semibold text-accent">Sell</div>
+                      <p className="text-xs text-foreground-subtle">Latest deal: {latestSellDealStatusLabel}</p>
                       <StatusChanger
                         referralId={referral._id}
                         status={sellStatusLabel}
@@ -1184,7 +1181,7 @@ export function ReferralHeader({
                       />
                     </div>
                   </div>
-                  <div className="rounded-md border border-border bg-surface-muted/70 p-2.5">
+                  <div className={innerPanelClasses}>
                     <StatusChanger
                       referralId={referral._id}
                       status={status}
@@ -1200,14 +1197,14 @@ export function ReferralHeader({
               ) : isBothClientType && viewerRole === 'agent' ? (
                 <div className="space-y-2">
                   <div className="grid grid-cols-2 gap-2">
-                    <span className="text-eyebrow rounded-full bg-info-soft px-3 py-1 text-center text-info">
+                    <Badge variant="info" className="justify-center">
                       Buy: {buyStatusDisplay}
-                    </span>
-                    <span className="text-eyebrow rounded-full bg-accent-soft px-3 py-1 text-center text-accent">
+                    </Badge>
+                    <Badge variant="accent" className="justify-center">
                       Sell: {sellStatusDisplay}
-                    </span>
+                    </Badge>
                   </div>
-                  <p className="text-[11px] text-foreground-subtle">
+                  <p className="text-xs text-foreground-subtle">
                     Latest deal on my side ({viewerAssignedSide.toUpperCase()}):{' '}
                     {viewerAssignedSide === 'sell' ? latestSellDealStatusLabel : latestBuyDealStatusLabel}
                   </p>
@@ -1225,13 +1222,13 @@ export function ReferralHeader({
                     onPreApprovalSaved={handlePreApprovalSaved}
                     onUnderContractIntentChange={onUnderContractIntentChange}
                   />
-                  <p className="text-[11px] text-foreground-subtle">
+                  <p className="text-xs text-foreground-subtle">
                     {oppositeSide.toUpperCase()} side status: {oppositeSideStatusDisplay}
                   </p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <p className="text-[11px] text-foreground-subtle">Latest deal: {latestDealStatusLabel}</p>
+                  <p className="text-xs text-foreground-subtle">Latest deal: {latestDealStatusLabel}</p>
                   <StatusChanger
                     referralId={referral._id}
                     status={status}
@@ -1249,9 +1246,9 @@ export function ReferralHeader({
             </div>
           </section>
           {showBucketSummary && (
-            <section className="flex h-full flex-col justify-between rounded-card border border-border bg-surface-muted p-4 sm:col-span-2">
-              <div className="space-y-2">
-                <h2 className="text-eyebrow text-foreground-muted">Agent bucket</h2>
+            <section className={cn('flex h-full flex-col justify-between sm:col-span-2', nestedPanelClasses)}>
+              <div className="space-y-1">
+                <h2 className="text-sm font-semibold text-foreground">Agent bucket</h2>
                 <p className="text-xs text-foreground-subtle">{bucketDescription}</p>
               </div>
               {canEditBucket ? (
@@ -1259,19 +1256,19 @@ export function ReferralHeader({
                   value={ahaBucket}
                   onChange={handleBucketChange}
                   disabled={savingBucket}
-                  className={cn(selectFieldClasses, 'mt-2')}
+                  className={cn(selectFieldClasses, 'mt-3')}
                 >
                   <option value="">Not set</option>
                   <option value="AHA">AHA</option>
                   <option value="AHA_OOS">AHA OOS</option>
                 </select>
               ) : (
-                <p className="mt-3 text-lg font-semibold text-foreground">{bucketLabel}</p>
+                <p className="mt-3 text-sm font-semibold text-foreground">{bucketLabel}</p>
               )}
             </section>
           )}
         </div>
-      </div>
+      </Card>
       {showSlaWidget && <SLAWidget referral={{ ...referral, status, audit: auditEntries }} />}
 
       <div
@@ -1282,13 +1279,13 @@ export function ReferralHeader({
         }
       >
         {viewerRole === 'admin' && <AdminTasksCard referralId={String(referral._id)} viewerRole={viewerRole} />}
-        <section className="space-y-3 rounded-card border border-border bg-surface-raised p-4 shadow-card">
-          <div className="space-y-1">
-            <h2 className="text-eyebrow text-foreground-muted">Team assignments</h2>
-            <p className="text-xs text-foreground-subtle">Keep the right partners aligned on this referral.</p>
-          </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Team assignments</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-3">
           {shouldStackAssignmentsForAdminBoth ? (
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               <ContactAssignment
                 referralId={referral._id}
                 type="agent"
@@ -1365,11 +1362,11 @@ export function ReferralHeader({
             </div>
           )}
           {viewerRole === 'admin' && (
-            <div className="rounded-lg border border-border bg-surface-muted px-3 py-2">
+            <div className={nestedPanelClasses}>
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="space-y-0.5 text-xs text-foreground-muted">
-                  <p className="text-eyebrow text-foreground-muted">Intro emails</p>
-                  <p>Send friendly updates to the agent and MC.</p>
+                <div className="space-y-0.5">
+                  <p className="text-sm font-semibold text-foreground">Intro emails</p>
+                  <p className="text-xs text-foreground-subtle">Send a friendly intro to the agent and MC.</p>
                 </div>
                 <Button
                   type="button"
@@ -1384,16 +1381,16 @@ export function ReferralHeader({
                 value={introNotes}
                 onChange={(event) => setIntroNotes(event.target.value)}
                 rows={2}
-                className="mt-2"
+                className="mt-3"
                 placeholder="Add a note to include in the agent email (optional)"
                 disabled={sendingIntroductions || cleaningNotes}
               />
-              <p className="mt-1 text-[11px] text-foreground-subtle">
-                Agent intro emails include MC info plus opposite-side agent details when available, and the MC email highlights the paired agent team.
+              <p className="mt-2 text-xs text-foreground-muted">
+                Each email includes the other partner's contact info.
               </p>
               {introEmailStatus && (
-                <div className="mt-2 space-y-2">
-                  <div className="text-[11px] text-foreground-muted">
+                <div className="mt-3 space-y-2">
+                  <div className="text-xs text-foreground-muted">
                     <p>{introEmailStatus.summary}</p>
                     <p>
                       Copied intro email for Gmail and sent at{' '}
@@ -1408,7 +1405,7 @@ export function ReferralHeader({
               )}
               {showPreview && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                  <div className="mx-4 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-card bg-surface-raised p-6 shadow-card">
+                  <div className="mx-4 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-card border border-border bg-surface-raised p-6 shadow-card">
                     <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">
                       Preview Email Notes
                     </h3>
@@ -1416,8 +1413,8 @@ export function ReferralHeader({
                       Review the cleaned-up notes before sending to the agent.
                     </p>
                     {cleanedNotes ? (
-                      <div className="mt-4 rounded-card border border-border bg-surface-muted p-3">
-                        <p className="text-eyebrow text-foreground-subtle">Notes (cleaned up)</p>
+                      <div className={cn('mt-4', nestedPanelClasses)}>
+                        <p className="text-xs font-medium text-foreground-subtle">Notes (cleaned up)</p>
                         <Textarea
                           value={cleanedNotes}
                           onChange={(event) => setCleanedNotes(event.target.value)}
@@ -1426,12 +1423,12 @@ export function ReferralHeader({
                         />
                       </div>
                     ) : (
-                      <div className="mt-4 rounded-card border border-border bg-surface-muted p-3">
+                      <div className={cn('mt-4', nestedPanelClasses)}>
                         <p className="text-sm text-foreground-muted">No notes will be included in the email.</p>
                       </div>
                     )}
                     {(showAgentCcField || showMcCcField) && (
-                      <div className="mt-4 space-y-4 rounded-card border border-border bg-surface-muted p-3">
+                      <div className={cn('mt-4 space-y-4', nestedPanelClasses)}>
                         <p className="text-sm text-foreground-muted">
                           Copy other people on these emails. The referral coordinator is always copied.
                         </p>
@@ -1469,7 +1466,7 @@ export function ReferralHeader({
           
           {/* Agent Update Request Section */}
           {viewerRole === 'admin' && (
-            <div className="space-y-3 border-t border-border pt-4">
+            <div className={cn('space-y-3', nestedPanelClasses)}>
               <RequestUpdateButton
                 referralId={referral._id}
                 assignedAgent={effectiveAgentContact}
@@ -1491,7 +1488,8 @@ export function ReferralHeader({
               />
             </div>
           )}
-        </section>
+          </CardContent>
+        </Card>
       </div>
 
     </div>

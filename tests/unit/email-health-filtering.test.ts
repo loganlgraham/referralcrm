@@ -24,6 +24,10 @@ jest.mock('@/lib/server/email-address-health', () => ({
   partitionByHealth: jest.fn(),
 }));
 
+jest.mock('@/lib/server/email-delivery-failure', () => ({
+  recordEmailDeliveryFailure: jest.fn().mockResolvedValue(undefined),
+}));
+
 const partitionByHealthMock = partitionByHealth as jest.MockedFunction<typeof partitionByHealth>;
 const createMock = EmailMessage.create as jest.Mock;
 

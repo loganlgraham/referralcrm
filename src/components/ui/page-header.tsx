@@ -13,6 +13,11 @@ interface PageHeaderProps {
    */
   attention?: boolean;
   className?: string;
+  /**
+   * Replaces the default mono eyebrow styling. Lets a page opt out of the mono
+   * treatment without restyling every other header.
+   */
+  eyebrowClassName?: string;
 }
 
 export function PageHeader({
@@ -22,7 +27,8 @@ export function PageHeader({
   actions,
   breadcrumbs,
   attention,
-  className
+  className,
+  eyebrowClassName
 }: PageHeaderProps) {
   const nodeTone = attention === false ? 'bg-primary' : 'bg-signal';
 
@@ -39,7 +45,7 @@ export function PageHeader({
       <div className="min-w-0 space-y-1.5">
         {breadcrumbs && <div className="text-xs text-foreground-subtle">{breadcrumbs}</div>}
         {eyebrow && (
-          <div className="text-eyebrow text-foreground-muted">{eyebrow}</div>
+          <div className={eyebrowClassName ?? 'text-eyebrow text-foreground-muted'}>{eyebrow}</div>
         )}
         <h1 className="truncate font-display text-2xl font-extrabold tracking-[-0.035em] text-foreground sm:text-[1.85rem]">
           {title}

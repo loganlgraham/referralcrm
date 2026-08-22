@@ -6,7 +6,14 @@ import { formatInTimeZone } from 'date-fns-tz';
 import { CheckCircle2, Circle, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/cn';
+import { inputFieldClasses } from '@/components/ui/input';
+
 const SLA_TIME_ZONE = 'America/Denver';
+
+/** Compact field styling for the inline reschedule/edit controls inside a task row. */
+const compactFieldClasses = 'h-8 px-2 py-1 text-xs';
 
 function getSnoozeBaseDate(task: TaskItemData): Date {
   const now = new Date();
@@ -137,7 +144,7 @@ export function TaskItem({
   };
 
   return (
-    <li className="flex items-start gap-2 rounded-lg border border-border bg-surface-muted/50 p-3">
+    <li className="flex items-start gap-2 rounded-lg border border-border bg-surface-muted p-3">
       {!showAsCompleted ? (
         <button
           type="button"
@@ -185,12 +192,12 @@ export function TaskItem({
               </button>
             )}
             {isEditing && onEdit && (
-              <div className="space-y-2 rounded-md border border-border bg-surface-raised p-2">
+              <div className="space-y-2 rounded-lg border border-border bg-surface-raised p-3">
                 <input
                   type="text"
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full rounded border border-border px-2 py-1 text-xs"
+                  className={cn(inputFieldClasses, compactFieldClasses)}
                   placeholder="Task name"
                 />
                 <div className="flex flex-wrap items-center gap-2">
@@ -198,15 +205,11 @@ export function TaskItem({
                     type="datetime-local"
                     value={editDueAt}
                     onChange={(e) => setEditDueAt(e.target.value)}
-                    className="rounded border border-border px-2 py-1 text-xs"
+                    className={cn(inputFieldClasses, compactFieldClasses, 'w-auto tabular-nums')}
                   />
-                  <button
-                    type="button"
-                    onClick={handleEditSave}
-                    className="rounded border border-border bg-surface-raised px-2 py-1 text-xs font-medium text-foreground-muted transition hover:bg-surface-muted"
-                  >
+                  <Button type="button" variant="secondary" size="sm" onClick={handleEditSave}>
                     Save
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -222,14 +225,15 @@ export function TaskItem({
               <div className="flex flex-wrap items-center gap-1">
                 <span className="mr-1 text-xs text-foreground-subtle">Snooze:</span>
                 {([1, 3, 7, 30] as const).map((days) => (
-                  <button
+                  <Button
                     key={days}
                     type="button"
+                    variant="secondary"
+                    size="sm"
                     onClick={() => handleSnoozePreset(days)}
-                    className="rounded border border-border bg-surface-raised px-2 py-1 text-xs font-medium text-foreground-muted transition hover:bg-surface-muted"
                   >
                     +{days} day{days === 1 ? '' : 's'}
-                  </button>
+                  </Button>
                 ))}
               </div>
             )}
@@ -239,16 +243,17 @@ export function TaskItem({
                 type="datetime-local"
                 value={dueOverride}
                 onChange={(e) => setDueOverride(e.target.value)}
-                className="rounded border border-border px-2 py-1 text-xs"
+                className={cn(inputFieldClasses, compactFieldClasses, 'w-auto tabular-nums')}
               />
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={handleSetReschedule}
                 disabled={!dueOverride}
-                className="rounded border border-border bg-surface-raised px-2 py-1 text-xs font-medium text-foreground-muted transition hover:bg-surface-muted disabled:opacity-50"
               >
                 Set
-              </button>
+              </Button>
               {task.dueAtOverride && (
                 <button
                   type="button"
@@ -266,7 +271,7 @@ export function TaskItem({
         <button
           type="button"
           onClick={() => onToggleExpand(task._id)}
-          className="shrink-0 rounded p-1 text-foreground-subtle hover:bg-surface-subtle hover:text-foreground-muted"
+          className="shrink-0 rounded-md p-1 text-foreground-subtle transition hover:bg-surface-subtle hover:text-foreground-muted"
         >
           <MoreHorizontal className="h-4 w-4" />
         </button>

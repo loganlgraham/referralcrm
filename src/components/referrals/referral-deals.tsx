@@ -16,7 +16,9 @@ import {
 } from '@/components/referrals/status-date-confirmation-toast';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { inputFieldClasses } from '@/components/ui/input';
+import { SectionLabel, sectionLabelClasses } from '@/components/ui/section-label';
 import { EmptyState } from '@/components/ui/empty-state';
 
 interface ReferralDealsProps {
@@ -529,7 +531,7 @@ function DealCard({
         >
           <p className="text-sm font-semibold text-foreground">Mark deal as paid</p>
           <p className="mt-1 text-xs text-foreground-subtle">Confirm the amount paid for this deal.</p>
-          <label className="mt-3 block text-xs font-semibold text-foreground-muted">
+          <label className={cn('mt-3 block', sectionLabelClasses)}>
             Amount paid
             <input
               autoFocus
@@ -544,7 +546,7 @@ function DealCard({
               className={cn(inputFieldClasses, 'mt-1')}
             />
           </label>
-          <label className="mt-3 block text-xs font-semibold text-foreground-muted">
+          <label className={cn('mt-3 block', sectionLabelClasses)}>
             Paid date
             <input
               type="date"
@@ -570,30 +572,28 @@ function DealCard({
   };
 
   return (
-    <div
-      className="flex flex-col gap-3 rounded-card border border-border bg-surface-muted p-4 shadow-card"
-    >
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface-muted p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-2">
           <div className="space-y-1">
-            <p className="text-eyebrow text-foreground-subtle">Status</p>
+            <SectionLabel>Status</SectionLabel>
             <p className="text-sm font-semibold text-foreground">{statusLabel}</p>
             <p className="text-xs text-foreground-subtle">
-              Created <span className="text-numeric">{formatDateMST(deal.createdAt)}</span>
+              Created <span className="tabular-nums">{formatDateMST(deal.createdAt)}</span>
             </p>
             <p className="text-xs text-foreground-subtle">
               Under contract:{' '}
-              <span className="text-numeric">
+              <span className="tabular-nums">
                 {deal.underContractDate ? formatDateMST(deal.underContractDate) : '—'}
               </span>
             </p>
             <p className="text-xs text-foreground-subtle">
               Closing date:{' '}
-              <span className="text-numeric">{deal.closingDate ? formatDateMST(deal.closingDate) : '—'}</span>
+              <span className="tabular-nums">{deal.closingDate ? formatDateMST(deal.closingDate) : '—'}</span>
             </p>
             {originalClosingDate ? (
               <p className="text-xs text-foreground-subtle">
-                Original close date: <span className="text-numeric">{formatDateMST(originalClosingDate)}</span>
+                Original close date: <span className="tabular-nums">{formatDateMST(originalClosingDate)}</span>
               </p>
             ) : null}
             {deal.status === 'terminated' && (
@@ -603,7 +603,7 @@ function DealCard({
             )}
           </div>
           {!isCrossSideReadOnly && (
-            <label className="block text-xs font-semibold text-foreground-muted">
+            <label className={cn('block', sectionLabelClasses)}>
               <span className="mr-2">Update stage</span>
               <select
                 value={(deal.status as DealStatus | undefined) ?? 'under_contract'}
@@ -626,7 +626,7 @@ function DealCard({
             </label>
           )}
           {canManage && !isCrossSideReadOnly && (
-            <label className="block text-xs font-semibold text-foreground-muted">
+            <label className={cn('block', sectionLabelClasses)}>
               <span className="mr-2">Termination reason</span>
               <select
                 value={terminatedReason ?? ''}
@@ -650,38 +650,38 @@ function DealCard({
         </div>
         {!isCrossSideReadOnly && (
           <div className="space-y-1">
-            <p className="text-eyebrow text-foreground-subtle">Expected</p>
-            <p className="text-numeric text-sm font-semibold text-foreground">{expected}</p>
+            <SectionLabel>Expected</SectionLabel>
+            <p className="tabular-nums text-sm font-semibold text-foreground">{expected}</p>
             <p className="text-xs text-foreground-subtle">
-              Net paid: <span className="text-numeric">{netPaid}</span>
+              Net paid: <span className="tabular-nums">{netPaid}</span>
             </p>
           </div>
         )}
         <div className="space-y-1 text-sm text-foreground-muted">
           <p>
-            <span className="text-eyebrow text-foreground-subtle">Contract price: </span>
-            <span className="text-numeric font-semibold">{contractPriceValue}</span>
+            <span className={sectionLabelClasses}>Contract price: </span>
+            <span className="tabular-nums font-semibold">{contractPriceValue}</span>
           </p>
           {!isCrossSideReadOnly && (
             <>
               <p>
-                <span className="text-eyebrow text-foreground-subtle">Commission: </span>
-                <span className="text-numeric font-semibold">
+                <span className={sectionLabelClasses}>Commission: </span>
+                <span className="tabular-nums font-semibold">
                   {deal.commissionFlatFeeCents
                     ? formatCurrency(deal.commissionFlatFeeCents)
                     : formatPercent(deal.commissionBasisPoints)}
                 </span>
               </p>
               <p>
-                <span className="text-eyebrow text-foreground-subtle">Referral fee: </span>
-                <span className="text-numeric font-semibold">{formatPercent(deal.referralFeeBasisPoints)}</span>
+                <span className={sectionLabelClasses}>Referral fee: </span>
+                <span className="tabular-nums font-semibold">{formatPercent(deal.referralFeeBasisPoints)}</span>
               </p>
               <p>
-                <span className="text-eyebrow text-foreground-subtle">Side: </span>
+                <span className={sectionLabelClasses}>Side: </span>
                 <span className="font-semibold">{dealSide}</span>
               </p>
               <p>
-                <span className="text-eyebrow text-foreground-subtle">Used AFC: </span>
+                <span className={sectionLabelClasses}>Used AFC: </span>
                 <span className="font-semibold">
                   {deal.side === 'sell'
                     ? 'N/A'
@@ -691,17 +691,17 @@ function DealCard({
                 </span>
               </p>
               <p>
-                <span className="text-eyebrow text-foreground-subtle">Used Agent: </span>
+                <span className={sectionLabelClasses}>Used Agent: </span>
                 <span className="font-semibold">{deal.usedAssignedAgent ? 'Yes' : 'No'}</span>
               </p>
             </>
           )}
           <p>
-            <span className="text-eyebrow text-foreground-subtle">Address: </span>
+            <span className={sectionLabelClasses}>Address: </span>
             <span className="font-semibold">{deal.propertyAddress?.trim() || '—'}</span>
           </p>
           <p>
-            <span className="text-eyebrow text-foreground-subtle">Agent: </span>
+            <span className={sectionLabelClasses}>Agent: </span>
             <span className="font-semibold">{deal.agent?.name ?? 'Unassigned'}</span>
           </p>
         </div>
@@ -794,8 +794,8 @@ function DealCard({
       </div>
 
       {editing && canManage && (
-        <form onSubmit={handleSubmit} className="grid gap-3 rounded-card border border-border bg-surface-raised p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
+        <form onSubmit={handleSubmit} className="grid gap-3 rounded-lg border border-border bg-surface-raised p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
             <span>Contract price</span>
             <input
               type="number"
@@ -814,7 +814,7 @@ function DealCard({
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-foreground-muted">Commission</span>
-                  <div className="flex rounded border border-border-strong text-xs font-medium overflow-hidden">
+                  <div className="flex overflow-hidden rounded-lg border border-border-strong/70 text-xs font-medium">
                     <button
                       type="button"
                       onClick={() => handleCommissionModeToggle('%')}
@@ -859,7 +859,7 @@ function DealCard({
                   />
                 )}
               </div>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
                 <span>Referral fee %</span>
                 <input
                   type="number"
@@ -873,7 +873,7 @@ function DealCard({
                   disabled={saving || isNoFeeDeal}
                 />
               </label>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
                 <span>Expected amount</span>
                 <input
                   type="number"
@@ -891,7 +891,7 @@ function DealCard({
                   disabled={saving || isNoFeeDeal}
                 />
               </label>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
                 <span>Net referral fee paid (optional)</span>
                 <input
                   type="number"
@@ -907,7 +907,7 @@ function DealCard({
               </label>
             </>
           )}
-            <label className="space-y-1 text-sm font-medium text-foreground-muted">
+            <label className="space-y-1 text-xs font-medium text-foreground-muted">
               <span>Status</span>
               <select
                 value={status}
@@ -923,7 +923,7 @@ function DealCard({
               </select>
             </label>
             {status === 'terminated' && (
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
                 <span>Termination reason</span>
                 <select
                   value={terminatedReason ?? ''}
@@ -944,7 +944,7 @@ function DealCard({
                 </select>
               </label>
             )}
-            <label className="space-y-1 text-sm font-medium text-foreground-muted">
+            <label className="space-y-1 text-xs font-medium text-foreground-muted">
               <span>Under contract date</span>
               <input
                 type="date"
@@ -954,7 +954,7 @@ function DealCard({
                 disabled={saving}
               />
             </label>
-            <label className="space-y-1 text-sm font-medium text-foreground-muted">
+            <label className="space-y-1 text-xs font-medium text-foreground-muted">
               <span>Closing date</span>
               <input
                 type="date"
@@ -964,7 +964,7 @@ function DealCard({
               disabled={saving}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
             <span>Property address</span>
             <input
               type="text"
@@ -975,7 +975,7 @@ function DealCard({
               disabled={saving}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
             <span>Property city</span>
             <input
               type="text"
@@ -986,7 +986,7 @@ function DealCard({
               disabled={saving}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
             <span>Property state</span>
             <input
               type="text"
@@ -1008,7 +1008,7 @@ function DealCard({
               disabled={saving}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
             <span>Agent</span>
             <select
               value={agentId}
@@ -1028,7 +1028,7 @@ function DealCard({
               )}
             </select>
           </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
             <span>Deal side</span>
             <select
               value={side}
@@ -1040,7 +1040,7 @@ function DealCard({
               <option value="sell">Sell-side</option>
             </select>
           </label>
-          <div className="flex flex-col justify-center gap-2 rounded border border-border p-3 text-sm sm:col-span-2 lg:col-span-4">
+          <div className="flex flex-col justify-center gap-2 rounded-lg border border-border bg-surface-raised p-3 text-sm sm:col-span-2 lg:col-span-4">
             {side !== 'sell' && (
               <label className="flex items-center gap-2 text-foreground-muted">
                 <input
@@ -1093,12 +1093,13 @@ function DealCard({
             )}
           </div>
           <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-4">
-            <Button type="submit" loading={saving}>
+            <Button type="submit" size="sm" loading={saving}>
               {saving ? 'Saving…' : 'Save changes'}
             </Button>
             <Button
               type="button"
               variant="secondary"
+              size="sm"
               onClick={() => {
                 populateFromDeal();
                 setExpectedManuallyEdited(false);
@@ -1692,11 +1693,11 @@ export function ReferralDeals({
   };
 
   return (
-    <section className="space-y-4 rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-eyebrow text-foreground-subtle">Deals</p>
-          <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">Referral deals</h2>
+    <Card>
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 space-y-0">
+        <div className="space-y-1">
+          <CardTitle>Referral deals</CardTitle>
+          <p className="text-sm text-foreground-muted">Contracts and payouts tied to this referral.</p>
         </div>
         {canManage && canCreateForViewer && (
           <Button
@@ -1709,14 +1710,14 @@ export function ReferralDeals({
             {showForm ? 'Hide form' : 'Add deal'}
           </Button>
         )}
-      </div>
-
+      </CardHeader>
+      <CardContent className="space-y-4">
       {canManage && canCreateForViewer && showForm && (
         <form
           onSubmit={handleSubmit}
-          className="grid gap-4 rounded-card border border-border p-4 sm:grid-cols-2 lg:grid-cols-4"
+          className="grid gap-4 rounded-lg border border-border bg-surface-muted p-4 sm:grid-cols-2 lg:grid-cols-4"
         >
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
             <span>Contract price</span>
             <input
               type="number"
@@ -1735,7 +1736,7 @@ export function ReferralDeals({
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-foreground-muted">Commission</span>
-                  <div className="flex rounded border border-border-strong text-xs font-medium overflow-hidden">
+                  <div className="flex overflow-hidden rounded-lg border border-border-strong/70 text-xs font-medium">
                     <button
                       type="button"
                       onClick={() => handleCommissionModeToggle('%')}
@@ -1780,7 +1781,7 @@ export function ReferralDeals({
                   />
                 )}
               </div>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
                 <span>Referral fee %</span>
                 <input
                   type="number"
@@ -1794,7 +1795,7 @@ export function ReferralDeals({
                   disabled={submitting || !usedAssignedAgent || isAgitDeal}
                 />
               </label>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
                 <span>Expected amount</span>
                 <input
                   type="number"
@@ -1812,7 +1813,7 @@ export function ReferralDeals({
                   disabled={submitting || !usedAssignedAgent || isAgitDeal}
                 />
               </label>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
                 <span>Net referral fee paid (optional)</span>
                 <input
                   type="number"
@@ -1828,7 +1829,7 @@ export function ReferralDeals({
               </label>
             </>
           )}
-            <label className="space-y-1 text-sm font-medium text-foreground-muted">
+            <label className="space-y-1 text-xs font-medium text-foreground-muted">
               <span>Status</span>
               <select
                 value={status}
@@ -1844,7 +1845,7 @@ export function ReferralDeals({
               </select>
             </label>
             {status === 'terminated' && (
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
                 <span>Termination reason</span>
                 <select
                   value={terminatedReason ?? ''}
@@ -1865,7 +1866,7 @@ export function ReferralDeals({
                 </select>
               </label>
             )}
-            <label className="space-y-1 text-sm font-medium text-foreground-muted">
+            <label className="space-y-1 text-xs font-medium text-foreground-muted">
               <span>Under contract date</span>
               <input
                 type="date"
@@ -1875,7 +1876,7 @@ export function ReferralDeals({
                 disabled={submitting}
               />
             </label>
-            <label className="space-y-1 text-sm font-medium text-foreground-muted">
+            <label className="space-y-1 text-xs font-medium text-foreground-muted">
               <span>Closing date</span>
               <input
                 type="date"
@@ -1885,7 +1886,7 @@ export function ReferralDeals({
               disabled={submitting}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted sm:col-span-2 lg:col-span-4">
+          <label className="space-y-1 text-xs font-medium text-foreground-muted sm:col-span-2 lg:col-span-4">
             <span>Property address</span>
             <input
               type="text"
@@ -1896,7 +1897,7 @@ export function ReferralDeals({
               disabled={submitting}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
             <span>Property city</span>
             <input
               type="text"
@@ -1907,7 +1908,7 @@ export function ReferralDeals({
               disabled={submitting}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
             <span>Property state</span>
             <input
               type="text"
@@ -1929,7 +1930,7 @@ export function ReferralDeals({
               disabled={submitting}
             />
           </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
             <span>Agent</span>
             <select
               value={agentId}
@@ -1950,7 +1951,7 @@ export function ReferralDeals({
             </select>
           </label>
           {!(viewerRole === 'agent' && (viewerAssignedSide === 'buy' || viewerAssignedSide === 'sell')) && (
-            <label className="space-y-1 text-sm font-medium text-foreground-muted">
+            <label className="space-y-1 text-xs font-medium text-foreground-muted">
               <span>Deal side</span>
               <select
                 value={side}
@@ -1963,7 +1964,7 @@ export function ReferralDeals({
               </select>
             </label>
           )}
-          <div className="flex flex-col justify-center gap-2 rounded border border-border p-3 text-sm sm:col-span-2 lg:col-span-4">
+          <div className="flex flex-col justify-center gap-2 rounded-lg border border-border bg-surface-raised p-3 text-sm sm:col-span-2 lg:col-span-4">
             {effectiveCreateSide !== 'sell' && (
               <label className="flex items-center gap-2 text-foreground-muted">
                 <input
@@ -2071,6 +2072,7 @@ export function ReferralDeals({
           </>
         )}
       </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }

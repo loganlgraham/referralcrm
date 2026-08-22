@@ -273,7 +273,7 @@ export function StatusChanger({
       <div className="space-y-4">
         {showStatusControl && (
           <div className="space-y-1">
-            <p className="text-eyebrow text-foreground-subtle">{statusLabel}</p>
+            <p className="text-xs font-medium text-foreground-subtle">{statusLabel}</p>
             <select
               value={currentStatus}
               onChange={handleChange}
@@ -287,8 +287,8 @@ export function StatusChanger({
               ))}
             </select>
             {pendingTerminatedSelection && (
-              <div className="space-y-2 rounded-card border border-border bg-surface-muted p-2">
-                <label className="block text-xs font-semibold text-foreground-muted">
+              <div className="space-y-2 rounded-lg border border-border bg-surface-muted p-3">
+                <label className="block text-xs font-medium text-foreground-muted">
                   Termination reason
                   <select
                     value={terminatedReason}
@@ -337,8 +337,8 @@ export function StatusChanger({
               </div>
             )}
             {pendingLostSelection && (
-              <div className="space-y-2 rounded-card border border-border bg-surface-muted p-2">
-                <label className="block text-xs font-semibold text-foreground-muted">
+              <div className="space-y-2 rounded-lg border border-border bg-surface-muted p-3">
+                <label className="block text-xs font-medium text-foreground-muted">
                   Why was this lost?
                   <select
                     value={lostReason}
@@ -397,7 +397,7 @@ export function StatusChanger({
 
         {showPreApproval && (
           <div className="space-y-1">
-            <div className="text-eyebrow text-foreground-subtle">Pre-approval</div>
+            <div className="text-xs font-medium text-foreground-subtle">Pre-approval</div>
             {editingPreApproval ? (
               <div className="space-y-2">
                 <input
@@ -405,7 +405,7 @@ export function StatusChanger({
                   inputMode="decimal"
                   value={formatCurrencyInputDisplay(preApproval)}
                   onChange={handlePreApprovalChange}
-                  className={cn(inputFieldClasses, 'text-numeric')}
+                  className={cn(inputFieldClasses, 'tabular-nums')}
                   placeholder="300,000"
                   disabled={preApprovalSaving || loading}
                 />
@@ -430,12 +430,12 @@ export function StatusChanger({
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-between rounded-lg border border-border-strong bg-surface-raised px-3 py-2 text-sm font-semibold text-foreground shadow-sm">
-                <span className="text-numeric">{formattedPreApprovalDisplay}</span>
+              <div className="flex items-center justify-between rounded-lg border border-border-strong/70 bg-surface px-3 py-2 text-sm font-medium text-foreground shadow-[inset_0_1px_1px_rgba(15,23,42,0.03)]">
+                <span className="tabular-nums">{formattedPreApprovalDisplay}</span>
                 <button
                   type="button"
                   onClick={() => setEditingPreApproval(true)}
-                  className="inline-flex items-center justify-center rounded p-1 text-foreground-subtle transition hover:bg-surface-subtle hover:text-foreground-muted"
+                  className="inline-flex items-center justify-center rounded-md p-1 text-foreground-subtle transition hover:bg-surface-muted hover:text-foreground-muted"
                   aria-label="Edit pre-approval"
                 >
                   <Pencil className="h-4 w-4" aria-hidden="true" />

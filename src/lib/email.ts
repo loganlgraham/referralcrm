@@ -3,6 +3,7 @@ import { Resend } from 'resend';
 import { connectMongo } from '@/lib/mongoose';
 import { EmailMessage } from '@/models/email-message';
 import { partitionByHealth } from '@/lib/server/email-address-health';
+import { recordEmailDeliveryFailure } from '@/lib/server/email-delivery-failure';
 
 type EmailContext = {
   referralId?: string | null;
@@ -153,6 +154,13 @@ export async function sendTransactionalEmailWithResult(
       withheldTo,
       withheldCc,
     });
+    await recordEmailDeliveryFailure({
+      referralId: payload.context?.referralId,
+      subject: payload.subject,
+      recipients: withheldTo,
+      reason: null,
+      kind: 'suppressed',
+    });
 
     return {
       ok: false,
@@ -201,10 +209,18 @@ export async function sendTransactionalEmailWithResult(
     // suppressed addresses and invalid recipients as successful sends.
     if (response.error) {
       console.error('Failed to send transactional email', response.error);
+      const reason = response.error.message ?? 'Resend rejected the message.';
+      await recordEmailDeliveryFailure({
+        referralId: payload.context?.referralId,
+        subject: payload.subject,
+        recipients: to,
+        reason,
+        kind: 'send_failed',
+      });
       return {
         ok: false,
         id: null,
-        error: response.error.message ?? 'Resend rejected the message.',
+        error: reason,
         withheldTo,
         withheldCc,
         suppressed: false,
@@ -226,10 +242,18 @@ export async function sendTransactionalEmailWithResult(
     return { ok: true, id: resendId, error: null, withheldTo, withheldCc, suppressed: false };
   } catch (error) {
     console.error('Failed to send transactional email', error);
+    const reason = error instanceof Error ? error.message : 'Unknown email failure.';
+    await recordEmailDeliveryFailure({
+      referralId: payload.context?.referralId,
+      subject: payload.subject,
+      recipients: to,
+      reason,
+      kind: 'send_failed',
+    });
     return {
       ok: false,
       id: null,
-      error: error instanceof Error ? error.message : 'Unknown email failure.',
+      error: reason,
       withheldTo,
       withheldCc,
       suppressed: false,

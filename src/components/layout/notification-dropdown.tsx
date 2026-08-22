@@ -11,6 +11,7 @@ interface Notification {
     | 'note'
     | 'status_change'
     | 'email_response'
+    | 'email_delivery_failed'
     | 'update_request_response'
     | 'nps_survey_completed'
     | 'checkin_no_response_24h'
@@ -185,6 +186,8 @@ export function NotificationDropdown({
         return '🔄';
       case 'email_response':
         return '📧';
+      case 'email_delivery_failed':
+        return '📪';
       case 'update_request_response':
         return '✅';
       case 'nps_survey_completed':

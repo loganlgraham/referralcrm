@@ -9,6 +9,7 @@ import { formatInTimeZone } from 'date-fns-tz';
 import { SLA_TIME_ZONE } from '@/utils/sla-insights';
 import { shouldDefaultEmailMcForAgentNotes } from '@/utils/referral-email-defaults';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/input';
 import { EmptyState } from '@/components/ui/empty-state';
 
@@ -365,19 +366,19 @@ export function ReferralNotes({
     const isEditingNote = editingNotes.has(note.id);
 
     return (
-      <div key={note.id} className="rounded-card border border-border bg-surface-raised px-3 py-3">
+      <div key={note.id} className="rounded-lg border border-border bg-surface-raised px-3 py-3">
         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs font-semibold text-foreground-muted">
           <span className="truncate">
             {note.authorName} · {note.authorRole}
           </span>
           <div className="flex items-center gap-2">
-            <span className="text-numeric text-foreground-subtle">{formatTimestamp(note.createdAt)}</span>
+            <span className="font-normal tabular-nums text-foreground-subtle">{formatTimestamp(note.createdAt)}</span>
             {!isEditing && (
               <>
                 <button
                   type="button"
                   onClick={() => handleEditStart(note)}
-                  className="inline-flex items-center rounded p-1 text-foreground-subtle transition hover:text-primary-hover hover:bg-primary/10"
+                  className="inline-flex items-center rounded-md p-1 text-foreground-subtle transition hover:text-primary-hover hover:bg-primary/10"
                   aria-label="Edit note"
                 >
                   <Pencil className="h-3.5 w-3.5" />
@@ -387,7 +388,7 @@ export function ReferralNotes({
                     type="button"
                     onClick={() => handleDelete(note.id)}
                     disabled={isDeleting}
-                    className="inline-flex items-center rounded p-1 text-foreground-subtle transition hover:text-danger hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center rounded-md p-1 text-foreground-subtle transition hover:text-danger hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label="Delete note"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -447,7 +448,7 @@ export function ReferralNotes({
           <>
             <p className="mt-2 whitespace-pre-line text-sm text-foreground-muted">{note.content}</p>
             {showBadges && (
-              <div className="text-eyebrow mt-2 flex flex-wrap gap-2">
+              <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium">
                 {showVisibilityBadge && (
                   <span className="rounded-full bg-warning-soft px-2 py-0.5 text-warning">
                     {[note.hiddenFromAgent ? 'Hidden from agent' : null, note.hiddenFromMc ? 'Hidden from MC' : null]
@@ -479,11 +480,12 @@ export function ReferralNotes({
   };
 
   return (
-    <div className="space-y-4 rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <div>
-        <h2 className="text-eyebrow text-foreground-muted">Notes</h2>
-        <p className="mt-1 text-xs text-foreground-subtle">Capture context and decisions for this referral</p>
-      </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Notes</CardTitle>
+        <p className="text-sm text-foreground-muted">Capture context and decisions for this referral</p>
+      </CardHeader>
+      <CardContent className="space-y-4">
       <form onSubmit={handleSubmit} className="space-y-3">
         <Textarea
           value={content}
@@ -548,10 +550,10 @@ export function ReferralNotes({
           ) : null;
         })()}
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" size="sm" disabled={!content.trim()} loading={saving}>
+          <Button type="submit" disabled={!content.trim()} loading={saving}>
             {saving ? 'Saving…' : 'Save note'}
           </Button>
-          <Button type="button" variant="secondary" size="sm" disabled={saving} onClick={resetForm}>
+          <Button type="button" variant="secondary" disabled={saving} onClick={resetForm}>
             Cancel
           </Button>
         </div>
@@ -574,7 +576,7 @@ export function ReferralNotes({
               <button
                 type="button"
                 onClick={handleDropdownToggle}
-                className="flex w-full items-center justify-between rounded-card border border-border bg-surface-muted px-3 py-2 text-left text-sm font-semibold text-foreground-muted transition hover:bg-surface-subtle"
+                className="flex w-full items-center justify-between rounded-lg border border-border bg-surface-muted px-3 py-2 text-left text-sm font-semibold text-foreground-muted transition hover:bg-surface-subtle"
               >
                 <span>
                   {showNotesDropdown ? 'Hide note drawer' : `Show all notes (${sortedNotes.length})`}
@@ -585,7 +587,7 @@ export function ReferralNotes({
               </button>
             )}
             {showNotesDropdown && (
-              <div className="max-h-80 space-y-2 overflow-y-auto rounded-card border border-border bg-surface-muted p-2">
+              <div className="max-h-80 space-y-2 overflow-y-auto rounded-lg border border-border bg-surface-muted p-2">
                 {sortedNotes.map(renderNoteCard)}
               </div>
             )}
@@ -593,6 +595,7 @@ export function ReferralNotes({
           </div>
         )}
       </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

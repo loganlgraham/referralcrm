@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell } from 'lucide-react';
+
+import { cn } from '@/lib/cn';
 
 interface AutoReminderToggleProps {
   referralId: string;
@@ -54,34 +55,42 @@ export function AutoReminderToggle({
     }
   };
 
+  const statusLabel = isUpdating ? 'Updating...' : enabled ? 'Enabled' : 'Disabled';
+
   return (
     <div className="space-y-2">
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-raised p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="mt-1 rounded-full bg-warning-soft p-2 text-warning">
-            <Bell className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-foreground">Automated update reminders</p>
-            <p className="text-xs text-foreground-muted">
-              Sends periodic emails to agents requesting updates (Day 1, 3, 7, 14, then every 2 weeks from agent assignment)
-            </p>
-          </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Automated update reminders</p>
+          <p className="text-xs text-foreground-muted">
+            Emails on day 1, 3, 7, and 14, then every 2 weeks after the agent is assigned.
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <label className="inline-flex items-center gap-2 text-xs font-semibold text-foreground-muted">
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(event) => handleToggle(event.target.checked)}
-              disabled={isUpdating}
-              className="h-4 w-4 rounded border-border-strong text-primary focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={enabled}
+            aria-label="Automated update reminders"
+            disabled={isUpdating}
+            onClick={() => handleToggle(!enabled)}
+            className={cn(
+              'relative h-5 w-9 rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-50',
+              enabled ? 'bg-primary' : 'bg-border-strong'
+            )}
+          >
+            <span
+              aria-hidden
+              className={cn(
+                'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition',
+                enabled && 'translate-x-4'
+              )}
             />
-            {isUpdating ? 'Updating...' : enabled ? 'Enabled' : 'Disabled'}
-          </label>
+          </button>
+          <span className="text-xs font-medium text-foreground-muted">{statusLabel}</span>
         </div>
       </div>
-      
+
       {error && (
         <div className="rounded-lg bg-danger-soft border border-danger/30 px-3 py-2 text-xs text-danger">
           {error}

@@ -1,9 +1,10 @@
+import { Types } from 'mongoose';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { connectMongo } from '@/lib/mongoose';
 import { EmailMessage, type EmailMessageStatus } from '@/models/email-message';
-import { logReferralActivity } from '@/lib/server/activities';
 import { recordBounce, recordDelivery } from '@/lib/server/email-address-health';
+import { recordEmailDeliveryFailure } from '@/lib/server/email-delivery-failure';
 import {
   resolveResendSignatureHeader,
   resolveResendTimestampHeader,
@@ -176,16 +177,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     if (isFailure && message?.referralId) {
-      const who =
-        failedRecipients.length > 0 ? failedRecipients.join(', ') : 'a recipient';
-      const subject = message.subject ? `"${message.subject}"` : 'an email';
-      const detail = bounceMessage ? ` Reason: ${bounceMessage}` : '';
-      const verb = status === 'complained' ? 'was marked as spam by' : 'could not be delivered to';
-      await logReferralActivity({
-        referralId: message.referralId as never,
-        actorRole: null,
-        channel: 'email',
-        content: `${subject} ${verb} ${who}.${detail}`,
+      await recordEmailDeliveryFailure({
+        referralId: message.referralId as Types.ObjectId,
+        subject: message.subject,
+        recipients: failedRecipients,
+        reason: bounceMessage,
+        kind: status === 'complained' ? 'complained' : 'bounced',
       });
     }
 

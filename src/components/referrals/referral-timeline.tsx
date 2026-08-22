@@ -6,6 +6,7 @@ import { formatInTimeZone } from 'date-fns-tz';
 import { SLA_TIME_ZONE } from '@/utils/sla-insights';
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 
 interface Activity {
@@ -36,11 +37,12 @@ export function ReferralTimeline({ referralId }: { referralId: string }) {
   const canShowToggle = activities.length > 5;
 
   return (
-    <div className="space-y-4 rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <div>
-        <h2 className="text-eyebrow text-foreground-muted">Activity timeline</h2>
-        <p className="mt-1 text-xs text-foreground-subtle">Latest interactions and updates from your team.</p>
-      </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Activity timeline</CardTitle>
+        <p className="text-sm text-foreground-muted">Latest interactions and updates from your team.</p>
+      </CardHeader>
+      <CardContent className="space-y-4">
       {isLoading && <p className="text-sm text-foreground-subtle">Loading activity…</p>}
       {error && !isLoading && (
         <p className="text-sm text-danger">We couldn’t load recent activity. Please refresh to try again.</p>
@@ -55,10 +57,10 @@ export function ReferralTimeline({ referralId }: { referralId: string }) {
       {hasActivity && (
         <div className="space-y-3">
           {visibleActivities.map((activity) => (
-            <div key={activity._id} className="rounded-card border border-border bg-surface-muted/60 p-4">
+            <div key={activity._id} className="rounded-lg border border-border bg-surface-muted p-3">
               <div className="flex items-center justify-between text-xs text-foreground-subtle">
-                <span className="text-eyebrow">{activity.channel}</span>
-                <span className="text-numeric">
+                <span className="font-semibold text-foreground-muted">{activity.channel}</span>
+                <span className="tabular-nums">
                   {formatInTimeZone(new Date(activity.createdAt), SLA_TIME_ZONE, "MMM d, yyyy 'at' h:mm a 'MT'")}
                 </span>
               </div>
@@ -83,6 +85,7 @@ export function ReferralTimeline({ referralId }: { referralId: string }) {
           )}
         </div>
       )}
-    </div>
+      </CardContent>
+    </Card>
   );
 }

@@ -5,9 +5,8 @@ import Link from 'next/link';
 import useSWR, { useSWRConfig } from 'swr';
 import { toast } from 'sonner';
 
+import { ContactLine } from '@/components/common/contact-line';
 import { CopyButton } from '@/components/common/copy-button';
-import { EmailActivityLink } from '@/components/common/email-activity-link';
-import { PhoneActivityLink } from '@/components/common/phone-activity-link';
 import { Button } from '@/components/ui/button';
 import { selectFieldClasses } from '@/components/ui/field-group';
 import { Input } from '@/components/ui/input';
@@ -255,61 +254,51 @@ export function ContactAssignment({
 
   return (
     <div className={className ? `h-full ${className}` : 'h-full'}>
-      <div className="flex h-full flex-col rounded-card border border-border bg-surface-raised px-3 py-2">
+      <div className="flex h-full flex-col rounded-lg bg-surface-raised px-3 py-2 shadow-sm ring-1 ring-inset ring-border">
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <p className="text-eyebrow text-foreground-subtle">{title}</p>
+            <p className="text-xs font-medium text-foreground-subtle">{title}</p>
             {formattedContact ? (
-              <div className="space-y-0">
+              <div className="mt-0.5 space-y-0.5">
                 <div className="flex items-center gap-1">
                   {currentContact?.id ? (
                     <Link
                       href={type === 'agent' ? `/agents/${currentContact.id}` : `/lenders/${currentContact.id}`}
-                      className="font-medium text-primary break-words hover:underline"
+                      className="text-base font-semibold text-primary break-words hover:underline"
                     >
                       {formattedContact.name}
                     </Link>
                   ) : (
-                    <p className="font-medium text-foreground break-words">{formattedContact.name}</p>
+                    <p className="text-base font-semibold text-foreground break-words">{formattedContact.name}</p>
                   )}
                   <CopyButton value={formattedContact.name} label="Copy name" />
                 </div>
-                {formattedContact.email && (
-                  <p className="text-xs text-foreground-subtle break-all">
-                    Email:{' '}
-                    <EmailActivityLink
-                      referralId={referralId}
-                      email={formattedContact.email}
-                      recipient={title}
-                      recipientName={formattedContact.name}
-                      className="text-xs"
-                    >
-                      {formattedContact.email}
-                    </EmailActivityLink>
-                    <CopyButton value={formattedContact.email} label="Copy email" className="ml-1" />
-                  </p>
-                )}
-                {formattedContact.phone && (
-                  <p className="text-xs text-foreground-subtle break-all">
-                    Phone:{' '}
-                    <PhoneActivityLink
-                      referralId={referralId}
-                      phone={formattedContact.phone}
-                      recipient={title}
-                      recipientName={formattedContact.name}
-                      className="text-xs"
-                    >
-                      {formattedContact.phone}
-                    </PhoneActivityLink>
-                    <CopyButton value={formattedContact.phone} label="Copy phone" className="ml-1" />
-                  </p>
-                )}
+                {formattedContact.email ? (
+                  <ContactLine
+                    kind="email"
+                    value={formattedContact.email}
+                    referralId={referralId}
+                    recipient={title}
+                    recipientName={formattedContact.name}
+                  />
+                ) : null}
+                {formattedContact.phone ? (
+                  <ContactLine
+                    kind="phone"
+                    value={formattedContact.phone}
+                    referralId={referralId}
+                    recipient={title}
+                    recipientName={formattedContact.name}
+                  />
+                ) : null}
               </div>
             ) : (
-              <div className="space-y-1.5">
-                <p className="text-xs text-foreground-subtle">{type === 'mc' ? 'Pending' : 'Unassigned'}</p>
+              <div className="mt-0.5 space-y-1.5">
+                <p className="text-sm font-semibold text-foreground-muted">
+                  {type === 'mc' ? 'Pending' : 'Unassigned'}
+                </p>
                 {pendingHelper ? (
-                  <p className="rounded border border-primary/20 bg-primary-soft px-2 py-1.5 text-[11px] leading-snug text-primary">
+                  <p className="rounded-lg border border-primary/20 bg-primary-soft px-2 py-1.5 text-xs leading-snug text-primary">
                     {pendingHelper}
                   </p>
                 ) : null}
@@ -330,7 +319,7 @@ export function ContactAssignment({
         {open && canAssign && (
           <form onSubmit={handleSubmit} className="mt-3 space-y-3">
             <label className="block space-y-1.5">
-              <span className="text-eyebrow text-foreground-subtle">Select {title}</span>
+              <span className="text-xs font-medium text-foreground-subtle">Select {title}</span>
               <Input
                 type="text"
                 value={searchTerm}
@@ -355,37 +344,34 @@ export function ContactAssignment({
               </select>
             </label>
             {selectedOption?.active === false && (
-              <p className="rounded-lg border border-warning/30 bg-warning-soft px-2 py-1 text-[11px] text-warning">
+              <p className="rounded-lg border border-warning/30 bg-warning-soft px-2 py-1.5 text-xs text-warning">
                 This {title.toLowerCase()} is marked inactive. You can still assign them, but verify this is intentional.
               </p>
             )}
             {type === 'agent' && (
-              <div className="flex flex-col gap-2 rounded border border-dashed border-border p-3 text-xs text-foreground-muted">
+              <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-foreground-muted">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="font-semibold text-foreground-muted">Need a recommendation?</p>
-                  <button
+                  <p className="font-medium text-foreground-muted">Need a recommendation?</p>
+                  <Button
                     type="button"
+                    variant="secondary"
+                    size="sm"
                     onClick={handleSuggest}
-                    disabled={suggesting}
-                    className="inline-flex items-center justify-center rounded bg-foreground px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-foreground disabled:cursor-not-allowed disabled:opacity-70"
+                    loading={suggesting}
                   >
                     {suggesting ? 'Thinking…' : 'Suggest agent'}
-                  </button>
+                  </Button>
                 </div>
                 {suggestionReason && (
-                  <p className="rounded bg-surface-muted p-2 text-[11px] text-foreground-muted">
+                  <p className="rounded-lg bg-surface-subtle p-2 text-xs text-foreground-muted">
                     <span className="font-semibold text-foreground-muted">Why:</span> {suggestionReason}
                   </p>
                 )}
               </div>
             )}
-            <button
-              type="submit"
-              disabled={submitting || !selected}
-              className="inline-flex w-full items-center justify-center rounded bg-primary px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-70"
-            >
+            <Button type="submit" size="sm" className="w-full" disabled={!selected} loading={submitting}>
               {submitting ? 'Saving…' : 'Save'}
-            </button>
+            </Button>
           </form>
         )}
       </div>

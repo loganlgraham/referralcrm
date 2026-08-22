@@ -210,68 +210,64 @@ export function RequestUpdateButton({
   };
 
   return (
-    <div className="space-y-2">
-      <Button
-        type="button"
-        onClick={handleOpenModal}
-        disabled={agents.length === 0}
-        leadingIcon={<Mail className="h-4 w-4" />}
-      >
-        Request update from agent
-      </Button>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-0.5">
+          <p className="text-sm font-semibold text-foreground">Agent updates</p>
+          <p className="text-xs text-foreground-subtle">Ask the assigned agent for a status note.</p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          onClick={handleOpenModal}
+          disabled={agents.length === 0}
+          leadingIcon={<Mail className="h-3.5 w-3.5" />}
+        >
+          Request update
+        </Button>
+      </div>
 
-      {/* Status Display */}
-      {agents.length > 0 && (
-        <div className="text-xs text-foreground-muted">
+      {agents.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-foreground-subtle">
           {statusInfo.lastSent ? (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5 text-foreground-subtle" />
-                <span>
-                  Last sent: {formatDate(statusInfo.lastSent)} ({daysSince(statusInfo.lastSent)})
-                </span>
-              </div>
-              {statusInfo.agentResponded && statusInfo.responseDate ? (
-                <div className="flex items-center gap-1.5 text-success">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  <span>Agent updated on {formatDate(statusInfo.responseDate)}</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 text-warning">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>No action yet</span>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 text-foreground-subtle">
-              <Mail className="h-3.5 w-3.5" />
-              <span>Never sent</span>
-            </div>
-          )}
-          
-          {/* Next Scheduled Send */}
-          {nextSendInfo.nextAt ? (
-            <div
-              className={`flex items-center gap-1.5 mt-2 ${nextSendInfo.nextAt.getTime() < Date.now() ? 'text-warning' : 'text-info'}`}
-            >
-              <Calendar className="h-3.5 w-3.5" />
-              <span>
-                {nextSendInfo.nextAt.getTime() < Date.now()
-                  ? `Overdue: ${formatDate(nextSendInfo.nextAt)} (${daysSince(nextSendInfo.nextAt)})`
-                  : `Next scheduled: ${formatDate(nextSendInfo.nextAt)} (${daysSince(nextSendInfo.nextAt)})`}
+            <>
+              <span className="inline-flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5" aria-hidden />
+                Last sent: {formatDate(statusInfo.lastSent)} ({daysSince(statusInfo.lastSent)})
               </span>
-            </div>
+              {statusInfo.agentResponded && statusInfo.responseDate ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                  Agent updated on {formatDate(statusInfo.responseDate)}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" aria-hidden />
+                  No action yet
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="inline-flex items-center gap-1.5">
+              <Mail className="h-3.5 w-3.5" aria-hidden />
+              Never sent
+            </span>
+          )}
+          {nextSendInfo.nextAt ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Calendar className="h-3.5 w-3.5" aria-hidden />
+              {nextSendInfo.nextAt.getTime() < Date.now()
+                ? `Overdue: ${formatDate(nextSendInfo.nextAt)} (${daysSince(nextSendInfo.nextAt)})`
+                : `Next scheduled: ${formatDate(nextSendInfo.nextAt)} (${daysSince(nextSendInfo.nextAt)})`}
+            </span>
           ) : nextSendInfo.reason ? (
-            <div className="flex items-center gap-1.5 text-foreground-subtle mt-2">
-              <Calendar className="h-3.5 w-3.5" />
-              <span>{nextSendInfo.reason}</span>
-            </div>
+            <span className="inline-flex items-center gap-1.5">
+              <Calendar className="h-3.5 w-3.5" aria-hidden />
+              {nextSendInfo.reason}
+            </span>
           ) : null}
         </div>
-      )}
-
-      {agents.length === 0 && (
+      ) : (
         <p className="text-xs text-foreground-subtle">No agents assigned to this referral</p>
       )}
 

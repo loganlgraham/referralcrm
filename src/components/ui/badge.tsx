@@ -3,6 +3,7 @@ import { cn } from '@/lib/cn';
 
 export type BadgeVariant =
   | 'neutral'
+  | 'primary'
   | 'success'
   | 'warning'
   | 'danger'
@@ -14,6 +15,7 @@ export type BadgeSize = 'sm' | 'md';
 
 const variantStyles: Record<BadgeVariant, string> = {
   neutral: 'bg-surface-muted text-foreground ring-1 ring-inset ring-border',
+  primary: 'bg-primary text-white',
   success: 'bg-success-soft text-[hsl(var(--success))] ring-1 ring-inset ring-[hsl(var(--success)/0.25)]',
   warning: 'bg-warning-soft text-[hsl(var(--warning))] ring-1 ring-inset ring-[hsl(var(--warning)/0.3)]',
   danger: 'bg-danger-soft text-[hsl(var(--danger))] ring-1 ring-inset ring-[hsl(var(--danger)/0.3)]',
@@ -44,7 +46,7 @@ export const Badge = forwardRef<HTMLSpanElement, BadgeProps>(function Badge(
     <span
       ref={ref}
       className={cn(
-        'inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-pill font-medium',
+        'inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-pill font-display font-medium tracking-[-0.01em]',
         variantStyles[variant],
         sizeStyles[size],
         className

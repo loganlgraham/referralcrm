@@ -439,9 +439,7 @@ export async function DELETE(request: NextRequest, context: RouteContext): Promi
   if (referral.deletedAt) {
     return new NextResponse('Not found', { status: 404 });
   }
-  const agentDeletingAgentReferral = session.user.role === 'agent' && referral.origin === 'agent';
-  const adminDeletingAdminReferral = session.user.role === 'admin' && referral.origin === 'admin';
-  const canDelete = agentDeletingAgentReferral || adminDeletingAdminReferral;
+  const canDelete = session.user.role === 'admin' && referral.origin === 'admin';
 
   if (!canDelete) {
     return new NextResponse('Forbidden', { status: 403 });

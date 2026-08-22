@@ -19,7 +19,8 @@ import { formatCurrency, formatDateMST } from '@/utils/formatters';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { Button } from '@/components/ui/button';
+import { Button, buttonClasses } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { inputFieldClasses } from '@/components/ui/input';
 
 type ReferralSource = string;
@@ -162,6 +163,8 @@ const DETAIL_FIELD_KEYS: (keyof DetailDraft)[] = [
   'timeline',
   'referralDate',
 ];
+
+const detailLabelClasses = 'text-xs font-medium text-foreground-subtle';
 
 const ensureString = (value: unknown) => (typeof value === 'string' ? value : '');
 
@@ -696,9 +699,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     return referral.lookingInZip ?? '';
   }, [referral.lookingInZips, referral.lookingInZip]);
 
-  const canDelete =
-    (viewerRole === 'admin' && referral.origin === 'admin') ||
-    (viewerRole === 'agent' && referral.origin === 'agent');
+  const canDelete = viewerRole === 'admin' && referral.origin === 'admin';
   const canEditDetails = viewerRole !== 'viewer';
   const canEditBorrowerContact =
     viewerRole === 'admin' || viewerRole === 'manager' || (viewerRole === 'agent' && isAgentOrigin);
@@ -1369,36 +1370,34 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const buildNavHref = (id: string) => listParams ? `/referrals/${id}?${listParams}` : `/referrals/${id}`;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {showNav && (
-        <nav className="flex items-center justify-end gap-3" aria-label="Referral navigation">
+        <nav className="flex items-center justify-end gap-1" aria-label="Referral navigation">
           {prevReferralId ? (
             <Link
               href={buildNavHref(prevReferralId)}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-foreground-subtle transition hover:bg-surface-subtle hover:text-foreground-muted"
+              className={buttonClasses({ variant: 'secondary', size: 'icon' })}
+              aria-label="Previous referral"
             >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              Prev
+              <ChevronLeft className="h-4 w-4" aria-hidden />
             </Link>
           ) : (
-            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs text-foreground-subtle">
-              <ChevronLeft className="h-3.5 w-3.5" />
-              Prev
-            </span>
+            <Button variant="secondary" size="icon" disabled aria-label="Previous referral">
+              <ChevronLeft className="h-4 w-4" aria-hidden />
+            </Button>
           )}
           {nextReferralId ? (
             <Link
               href={buildNavHref(nextReferralId)}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-foreground-subtle transition hover:bg-surface-subtle hover:text-foreground-muted"
+              className={buttonClasses({ variant: 'secondary', size: 'icon' })}
+              aria-label="Next referral"
             >
-              Next
-              <ChevronRight className="h-3.5 w-3.5" />
+              <ChevronRight className="h-4 w-4" aria-hidden />
             </Link>
           ) : (
-            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs text-foreground-subtle">
-              Next
-              <ChevronRight className="h-3.5 w-3.5" />
-            </span>
+            <Button variant="secondary" size="icon" disabled aria-label="Next referral">
+              <ChevronRight className="h-4 w-4" aria-hidden />
+            </Button>
           )}
         </nav>
       )}
@@ -1416,24 +1415,25 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         onSellSideAgentContactChange={handleSellSideAgentContactChange}
         onMcContactChange={handleMcContactChange}
       />
-      <section className="space-y-4 rounded-card border border-border bg-surface-raised p-4 shadow-card">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-eyebrow text-foreground-muted">Referral details</h2>
-            <p className="text-xs text-foreground-subtle">Key context provided at intake.</p>
+      <Card>
+        <CardHeader className="flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+          <div className="space-y-1">
+            <CardTitle>Referral details</CardTitle>
+            <p className="text-sm text-foreground-muted">Key context provided at intake.</p>
           </div>
           {canEditDetails && !isEditingDetails && (
             <Button type="button" variant="secondary" size="sm" onClick={startEditingDetails}>
               Edit details
             </Button>
           )}
-        </div>
+        </CardHeader>
+        <CardContent>
         {isEditingDetails ? (
           <form onSubmit={handleDetailsSubmit} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {canEditBorrowerContact && (
                 <>
-                  <label className="space-y-1 text-sm font-medium text-foreground-muted">
+                  <label className="space-y-1 text-xs font-medium text-foreground-muted">
                     <span>Borrower First Name</span>
                     <input
                       name="borrowerFirstName"
@@ -1444,7 +1444,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                       className={cn(inputFieldClasses, 'mt-1')}
                     />
                   </label>
-                  <label className="space-y-1 text-sm font-medium text-foreground-muted">
+                  <label className="space-y-1 text-xs font-medium text-foreground-muted">
                     <span>Borrower Last Name</span>
                     <input
                       name="borrowerLastName"
@@ -1455,7 +1455,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                       className={cn(inputFieldClasses, 'mt-1')}
                     />
                   </label>
-                  <label className="space-y-1 text-sm font-medium text-foreground-muted">
+                  <label className="space-y-1 text-xs font-medium text-foreground-muted">
                     <span>Borrower Email</span>
                     <input
                       type="email"
@@ -1467,7 +1467,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                       className={cn(inputFieldClasses, 'mt-1')}
                     />
                   </label>
-                  <label className="space-y-1 text-sm font-medium text-foreground-muted">
+                  <label className="space-y-1 text-xs font-medium text-foreground-muted">
                     <span>Borrower Phone</span>
                     <input
                       type="tel"
@@ -1481,7 +1481,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   </label>
                 </>
               )}
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
                 <span>Loan File #</span>
                 <input
                   name="loanFileNumber"
@@ -1492,7 +1492,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   className={cn(inputFieldClasses, 'mt-1')}
                 />
               </label>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
                 <span>Loan Type</span>
                 <input
                   name="loanType"
@@ -1502,7 +1502,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   className={cn(inputFieldClasses, 'mt-1')}
                 />
               </label>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
                 <span>Pre-approval Amount</span>
                 <div className="relative">
                   <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-foreground-subtle">
@@ -1513,7 +1513,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                     value={formatCurrencyInputDisplay(detailsDraft.preApprovalAmount)}
                     onChange={handlePreApprovalChange}
                     disabled={savingDetails}
-                    className={cn(inputFieldClasses, 'text-numeric mt-1 pl-7')}
+                    className={cn(inputFieldClasses, 'mt-1 pl-7 tabular-nums')}
                     inputMode="decimal"
                     placeholder="300,000"
                   />
@@ -1521,7 +1521,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               </label>
               {canViewSourceAndEndorser && (
                 <>
-                  <label className="space-y-1 text-sm font-medium text-foreground-muted">
+                  <label className="space-y-1 text-xs font-medium text-foreground-muted">
                     <span>Source</span>
                     <input
                       name="source"
@@ -1531,7 +1531,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                       className={cn(inputFieldClasses, 'mt-1')}
                     />
                   </label>
-                  <label className="space-y-1 text-sm font-medium text-foreground-muted">
+                  <label className="space-y-1 text-xs font-medium text-foreground-muted">
                     <span>Endorser</span>
                     <input
                       name="endorser"
@@ -1543,7 +1543,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   </label>
                 </>
               )}
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
                 <span>Client Type</span>
                 <select
                   name="clientType"
@@ -1557,7 +1557,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   <option value="Both">Both</option>
                 </select>
               </label>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
                 <span>Looking In (Zip)</span>
                 <input
                   name="lookingInZip"
@@ -1568,7 +1568,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   className={cn(inputFieldClasses, 'mt-1')}
                 />
               </label>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
                 <span>Stage on Transfer</span>
                 <select
                   name="stageOnTransfer"
@@ -1581,7 +1581,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   <option value="Pre-approved">Pre-approved</option>
                 </select>
               </label>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
                 <span>Timeline</span>
                 <select
                   name="timeline"
@@ -1598,7 +1598,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                 </select>
               </label>
               {viewerRole === 'admin' && (
-                <label className="space-y-1 text-sm font-medium text-foreground-muted">
+                <label className="space-y-1 text-xs font-medium text-foreground-muted">
                   <span>Referral date (historical)</span>
                   <input
                     type="datetime-local"
@@ -1610,7 +1610,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                   />
                 </label>
               )}
-              <label className="space-y-1 text-sm font-medium text-foreground-muted sm:col-span-2 lg:col-span-3">
+              <label className="space-y-1 text-xs font-medium text-foreground-muted sm:col-span-2 lg:col-span-3">
                 <span>Borrower Current Address</span>
                 <input
                   name="borrowerCurrentAddress"
@@ -1639,45 +1639,45 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         ) : (
           <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-1">
-              <dt className="text-eyebrow text-foreground-subtle">Loan File #</dt>
-              <dd className="text-numeric text-sm font-semibold text-foreground">{referral.loanFileNumber || '—'}</dd>
+              <dt className={detailLabelClasses}>Loan File #</dt>
+              <dd className="text-sm font-semibold tabular-nums text-foreground">{referral.loanFileNumber || '—'}</dd>
             </div>
             <div className="space-y-1">
-              <dt className="text-eyebrow text-foreground-subtle">Loan Type</dt>
+              <dt className={detailLabelClasses}>Loan Type</dt>
               <dd className="text-sm text-foreground-muted">{referral.loanType?.trim() ? referral.loanType : '—'}</dd>
             </div>
             <div className="space-y-1">
-              <dt className="text-eyebrow text-foreground-subtle">Pre-approval Amount</dt>
-              <dd className="text-numeric text-sm text-foreground-muted">
+              <dt className={detailLabelClasses}>Pre-approval Amount</dt>
+              <dd className="text-sm tabular-nums text-foreground-muted">
                 {referral.preApprovalAmountCents ? formatCurrency(referral.preApprovalAmountCents) : '—'}
               </dd>
             </div>
             {canViewSourceAndEndorser && (
               <>
                 <div className="space-y-1">
-                  <dt className="text-eyebrow text-foreground-subtle">Source</dt>
+                  <dt className={detailLabelClasses}>Source</dt>
                   <dd className="text-sm text-foreground-muted">{referral.source ?? '—'}</dd>
                 </div>
                 <div className="space-y-1">
-                  <dt className="text-eyebrow text-foreground-subtle">Endorser</dt>
+                  <dt className={detailLabelClasses}>Endorser</dt>
                   <dd className="text-sm text-foreground-muted">{referral.endorser?.trim() ? referral.endorser : '—'}</dd>
                 </div>
               </>
             )}
             <div className="space-y-1">
-              <dt className="text-eyebrow text-foreground-subtle">Client Type</dt>
+              <dt className={detailLabelClasses}>Client Type</dt>
               <dd className="text-sm text-foreground-muted">{referral.clientType ?? '—'}</dd>
             </div>
             <div className="space-y-1">
-              <dt className="text-eyebrow text-foreground-subtle">Looking In (Zip)</dt>
-              <dd className="text-numeric text-sm text-foreground-muted">{lookingInZipDisplay ? lookingInZipDisplay : '—'}</dd>
+              <dt className={detailLabelClasses}>Looking In (Zip)</dt>
+              <dd className="text-sm tabular-nums text-foreground-muted">{lookingInZipDisplay ? lookingInZipDisplay : '—'}</dd>
             </div>
             <div className="space-y-1">
-              <dt className="text-eyebrow text-foreground-subtle">Stage on Transfer</dt>
+              <dt className={detailLabelClasses}>Stage on Transfer</dt>
               <dd className="text-sm text-foreground-muted">{referral.stageOnTransfer?.trim() ? referral.stageOnTransfer : '—'}</dd>
             </div>
             <div className="space-y-1">
-              <dt className="text-eyebrow text-foreground-subtle">Timeline</dt>
+              <dt className={detailLabelClasses}>Timeline</dt>
               <dd className="text-sm text-foreground-muted">
                 {referral.timeline && REFERRAL_TIMELINE_OPTIONS.find((opt) => opt.value === referral.timeline)
                   ? REFERRAL_TIMELINE_OPTIONS.find((opt) => opt.value === referral.timeline)?.label
@@ -1685,26 +1685,27 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
               </dd>
             </div>
             <div className="space-y-1">
-              <dt className="text-eyebrow text-foreground-subtle">Entered into CRM</dt>
-              <dd className="text-numeric text-sm text-foreground-muted">{formatDateMST(referral.createdAt)}</dd>
+              <dt className={detailLabelClasses}>Entered into CRM</dt>
+              <dd className="text-sm tabular-nums text-foreground-muted">{formatDateMST(referral.createdAt)}</dd>
             </div>
             {viewerRole === 'admin' && (
               <div className="space-y-1">
-                <dt className="text-eyebrow text-foreground-subtle">Referral date (historical)</dt>
-                <dd className="text-numeric text-sm text-foreground-muted">
+                <dt className={detailLabelClasses}>Referral date (historical)</dt>
+                <dd className="text-sm tabular-nums text-foreground-muted">
                   {referral.referralDate ? formatDateMST(referral.referralDate) : '—'}
                 </dd>
               </div>
             )}
             <div className="space-y-1 sm:col-span-2 lg:col-span-3">
-              <dt className="text-eyebrow text-foreground-subtle">Borrower Current Address</dt>
+              <dt className={detailLabelClasses}>Borrower Current Address</dt>
               <dd className="text-sm text-foreground-muted">
                 {referral.borrowerCurrentAddress?.trim() ? referral.borrowerCurrentAddress : '—'}
               </dd>
             </div>
           </dl>
         )}
-      </section>
+        </CardContent>
+      </Card>
       <ReferralNotes
         key={referralId}
         referralId={referralId}
@@ -1736,7 +1737,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         assignedAgentDesignation={referral.assignedAgent?.ahaDesignation}
         defaultSide={referral.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
       />
-      <ReferralTimeline referralId={referralId} />
+      {viewerRole !== 'agent' ? <ReferralTimeline referralId={referralId} /> : null}
       {canDelete && (
         <div className="flex justify-end">
           <Button type="button" variant="danger" onClick={handleDeleteReferral} loading={deleting}>
