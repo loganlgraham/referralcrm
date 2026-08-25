@@ -313,7 +313,7 @@ export function generateFeeBreakdownEmailHTML(data: FeeBreakdownEmailData): { ht
           <div class="label">Mailing Address</div>
           <div class="value" style="white-space: pre-line; line-height: 1.8;">
 American Home Agents
-3045 S Parker Rd #200
+3190 South Vaughn Way, Suite 550
 Aurora, CO 80014
           </div>
         </div>
@@ -387,7 +387,7 @@ PAYMENT INSTRUCTIONS
 
 Mailing Address:
 American Home Agents
-3045 S Parker Rd #200
+3190 South Vaughn Way, Suite 550
 Aurora, CO 80014
 
 Please include a copy of the settlement statement with the check, or email it to 
