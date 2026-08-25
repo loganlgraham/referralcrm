@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   addMonths,
+  addWeeks,
   endOfDay,
   endOfMonth,
+  endOfWeek,
   format,
   parseISO,
   startOfDay,
   startOfMonth,
   startOfWeek,
   startOfYear,
+  subMonths,
+  subWeeks,
   subYears
 } from 'date-fns';
 
@@ -20,7 +24,18 @@ import { Agent } from '@/models/agent';
 import { DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
 import { isAttributableLoss } from '@/lib/server/lost-attribution';
 
-type TimeframeKey = 'day' | 'week' | 'month' | 'next_month' | 'year' | 'ytd' | 'all' | 'custom';
+type TimeframeKey =
+  | 'day'
+  | 'week'
+  | 'last_week'
+  | 'next_week'
+  | 'month'
+  | 'last_month'
+  | 'next_month'
+  | 'year'
+  | 'ytd'
+  | 'all'
+  | 'custom';
 
 interface TimeframeInfo {
   key: TimeframeKey;
@@ -34,7 +49,10 @@ const CLOSED_DEAL_STATUSES = new Set(['closed', 'payment_sent', 'paid']);
 const TIMEFRAME_LABELS: Record<Exclude<TimeframeKey, 'custom'>, string> = {
   day: 'Today',
   week: 'This week',
+  last_week: 'Last week',
+  next_week: 'Next week',
   month: 'This month',
+  last_month: 'Last month',
   next_month: 'Next month',
   year: 'Last 12 months',
   ytd: 'Year to date',
@@ -61,7 +79,10 @@ function parseTimeframe(request: NextRequest): TimeframeInfo {
   const normalizedKey: TimeframeKey =
     timeframeParam === 'day' ||
     timeframeParam === 'week' ||
+    timeframeParam === 'last_week' ||
+    timeframeParam === 'next_week' ||
     timeframeParam === 'month' ||
+    timeframeParam === 'last_month' ||
     timeframeParam === 'next_month' ||
     timeframeParam === 'year' ||
     timeframeParam === 'ytd' ||
@@ -94,6 +115,24 @@ function parseTimeframe(request: NextRequest): TimeframeInfo {
         start: startOfWeek(now, { weekStartsOn: 1 }),
         end: endOfDay(now)
       };
+    case 'last_week': {
+      const lastWeek = subWeeks(now, 1);
+      return {
+        key: 'last_week',
+        label: TIMEFRAME_LABELS.last_week,
+        start: startOfWeek(lastWeek, { weekStartsOn: 1 }),
+        end: endOfWeek(lastWeek, { weekStartsOn: 1 })
+      };
+    }
+    case 'next_week': {
+      const nextWeek = addWeeks(now, 1);
+      return {
+        key: 'next_week',
+        label: TIMEFRAME_LABELS.next_week,
+        start: startOfWeek(nextWeek, { weekStartsOn: 1 }),
+        end: endOfWeek(nextWeek, { weekStartsOn: 1 })
+      };
+    }
     case 'year':
       return {
         key: 'year',
@@ -108,6 +147,15 @@ function parseTimeframe(request: NextRequest): TimeframeInfo {
         label: TIMEFRAME_LABELS.next_month,
         start: startOfMonth(nextMonth),
         end: endOfMonth(nextMonth)
+      };
+    }
+    case 'last_month': {
+      const lastMonth = subMonths(now, 1);
+      return {
+        key: 'last_month',
+        label: TIMEFRAME_LABELS.last_month,
+        start: startOfMonth(lastMonth),
+        end: endOfMonth(lastMonth)
       };
     }
     case 'ytd':
@@ -125,13 +173,16 @@ function parseTimeframe(request: NextRequest): TimeframeInfo {
         end: endOfDay(now)
       };
     case 'month':
-    default:
       return {
         key: 'month',
         label: TIMEFRAME_LABELS.month,
         start: startOfMonth(now),
         end: endOfMonth(now)
       };
+    default: {
+      const exhaustive: never = normalizedKey;
+      return exhaustive;
+    }
   }
 }
 

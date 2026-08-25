@@ -34,3 +34,47 @@ describe('getPreviousPeriodRange week (M-2)', () => {
     expect(prev.end.getTime()).toBeLessThan(timeframe.start.getTime());
   });
 });
+
+describe('parseTimeframe last_week / next_week / last_month', () => {
+  it('last_week is the prior Monday–Sunday calendar week', () => {
+    const last = parseTimeframe('last_week', null, null);
+    const current = parseTimeframe('week', null, null);
+    expect(last.start && last.end && current.start).toBeTruthy();
+    if (!last.start || !last.end || !current.start) return;
+    expect(last.end.getTime()).toBeLessThan(current.start.getTime());
+    expect(last.start.getDay()).toBe(1);
+    expect(last.label).toBe('Last Week');
+  });
+
+  it('next_week is the following Monday–Sunday calendar week', () => {
+    const next = parseTimeframe('next_week', null, null);
+    const current = parseTimeframe('week', null, null);
+    expect(next.start && next.end && current.start).toBeTruthy();
+    if (!next.start || !next.end || !current.start) return;
+    expect(next.start.getTime()).toBeGreaterThan(current.start.getTime());
+    expect(next.start.getDay()).toBe(1);
+    expect(next.label).toBe('Next Week');
+  });
+
+  it('last_month is the previous calendar month', () => {
+    const last = parseTimeframe('last_month', null, null);
+    const current = parseTimeframe('month', null, null);
+    expect(last.start && last.end && current.start).toBeTruthy();
+    if (!last.start || !last.end || !current.start) return;
+    expect(last.end.getTime()).toBeLessThan(current.start.getTime());
+    expect(last.label).toBe('Last Month');
+  });
+});
+
+describe('getPreviousPeriodRange last_week / next_week / last_month', () => {
+  it('ends immediately before the selected window', () => {
+    const keys = ['last_week', 'next_week', 'last_month'] as const;
+    for (const key of keys) {
+      const timeframe = parseTimeframe(key, null, null);
+      const prev = getPreviousPeriodRange(timeframe);
+      expect(prev).not.toBeNull();
+      if (!prev || !timeframe.start) continue;
+      expect(prev.end.getTime()).toBeLessThan(timeframe.start.getTime());
+    }
+  });
+});

@@ -1,5 +1,6 @@
 import {
   addMonths,
+  addWeeks,
   differenceInCalendarDays,
   differenceInDays,
   endOfDay,
@@ -9,6 +10,8 @@ import {
   startOfMonth,
   startOfWeek,
   startOfYear,
+  subMonths,
+  subWeeks,
   subYears
 } from 'date-fns';
 import { NextRequest, NextResponse } from 'next/server';
@@ -231,10 +234,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         timeframeStart = startOfWeek(now, { weekStartsOn: 1 });
         timeframeEnd = endOfWeek(now, { weekStartsOn: 1 });
         break;
+      case 'last_week': {
+        const lastWeek = subWeeks(now, 1);
+        timeframeStart = startOfWeek(lastWeek, { weekStartsOn: 1 });
+        timeframeEnd = endOfWeek(lastWeek, { weekStartsOn: 1 });
+        break;
+      }
+      case 'next_week': {
+        const nextWeek = addWeeks(now, 1);
+        timeframeStart = startOfWeek(nextWeek, { weekStartsOn: 1 });
+        timeframeEnd = endOfWeek(nextWeek, { weekStartsOn: 1 });
+        break;
+      }
       case 'month':
         timeframeStart = startOfMonth(now);
         timeframeEnd = endOfMonth(now);
         break;
+      case 'last_month': {
+        const lastMonth = subMonths(now, 1);
+        timeframeStart = startOfMonth(lastMonth);
+        timeframeEnd = endOfMonth(lastMonth);
+        break;
+      }
       case 'next_month': {
         const nextMonth = addMonths(now, 1);
         timeframeStart = startOfMonth(nextMonth);
