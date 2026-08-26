@@ -1,7 +1,7 @@
 import '@/app/globals.css';
 import { Metadata } from 'next';
 import { IBM_Plex_Mono, Manrope } from 'next/font/google';
-import { ReactNode, Suspense } from 'react';
+import { CSSProperties, ReactNode, Suspense } from 'react';
 import { Toaster } from 'sonner';
 import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/next';
@@ -27,7 +27,19 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${manrope.variable} ${ibmPlexMono.variable}`}>
+    <html
+      lang="en"
+      className={`${manrope.variable} ${ibmPlexMono.variable}`}
+      style={{ '--font-manrope': 'var(--font-sans)' } as CSSProperties}
+    >
+      <head>
+        <link rel="icon" href="/favicon.ico" sizes="32x32" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16" />
+        <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon-180.png" sizes="180x180" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+      </head>
       <body className="min-h-screen bg-surface-muted text-foreground antialiased">
         <Suspense
           fallback={(

@@ -47,9 +47,9 @@
     --warning-foreground: 0 0% 100%;
     --warning-soft: 40 90% 93%;
 
-    --danger: 340 68% 45%;
+    --danger: 12 68% 42%;
     --danger-foreground: 0 0% 100%;
-    --danger-soft: 340 70% 96%;
+    --danger-soft: 16 85% 96%;
 
     --info: 214 92% 40%;
     --info-foreground: 0 0% 100%;
@@ -63,6 +63,16 @@
     --signal: 12 72% 59%;
     --signal-foreground: 0 0% 100%;
     --signal-soft: 16 100% 96%;
+
+    /* Referrio logo palette. Nothing outside this list is brand color. */
+    --referrio-navy: #0F1729;      /* letterforms, icon tile, primary buttons */
+    --referrio-coral: #E2694B;     /* the drawn r, eyebrows, accents */
+    --referrio-coral-deep: #C9522F;/* link hover, text on coral tint */
+    --referrio-coral-tint: #FFF1EB;/* accent surfaces, totals, badges */
+    --referrio-off-white: #FBFCFE; /* light icon tile, inset panels */
+    --referrio-slate: #5A6178;     /* body copy on light */
+    --referrio-slate-light: #8890A6;/* captions, meta */
+    --referrio-border: #DFE3EE;    /* hairlines */
   }
 
   html,

@@ -1182,10 +1182,8 @@ const STATUS_LABELS: Record<string, string> = {
   'Payment Received': 'Payment Received'
 };
 
-function StatusBadge({ status, isAgentOrigin = false }: { status: string; isAgentOrigin?: boolean }) {
-  const label = isAgentOrigin
-    ? getReferralStatusLabel(status, { isAgentOrigin })
-    : STATUS_LABELS[status] ?? status;
+function StatusBadge({ status }: { status: string }) {
+  const label = STATUS_LABELS[status] ?? status;
   return <StatusPill kind="auto" status={status} label={label} />;
 }
 
@@ -1527,10 +1525,7 @@ function buildColumns(
         header: sortableHeader('Status', 'status', currentSortBy, currentSortDirection, onSortChange),
         accessorKey: 'status',
         cell: ({ row }) => (
-          <StatusBadge
-            status={row.original.dealStatusLabel ?? row.original.status}
-            isAgentOrigin={row.original.origin === 'agent'}
-          />
+          <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />
         ),
       },
       createdColumn
@@ -1549,10 +1544,7 @@ function buildColumns(
       header: sortableHeader('Status', 'status', currentSortBy, currentSortDirection, onSortChange),
       accessorKey: 'status',
       cell: ({ row }) => (
-        <StatusBadge
-          status={row.original.dealStatusLabel ?? row.original.status}
-          isAgentOrigin={row.original.origin === 'agent'}
-        />
+        <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />
       ),
     },
     ...(hideAgentColumn ? [] : [agentColumn]),
@@ -1804,10 +1796,7 @@ function ReferralMobileStack({
                   </div>
                 </MobileField>
                 <MobileField label="Status">
-                  <StatusBadge
-                    status={row.dealStatusLabel ?? row.status}
-                    isAgentOrigin={row.origin === 'agent'}
-                  />
+                  <StatusBadge status={row.dealStatusLabel ?? row.status} />
                 </MobileField>
                 <MobileField label="Created" numeric>
                   {new Date(row.createdAt).toLocaleDateString()}
@@ -1818,10 +1807,7 @@ function ReferralMobileStack({
             {mode === 'admin' ? (
               <>
                 <MobileField label="Status">
-                  <StatusBadge
-                    status={row.dealStatusLabel ?? row.status}
-                    isAgentOrigin={row.origin === 'agent'}
-                  />
+                  <StatusBadge status={row.dealStatusLabel ?? row.status} />
                 </MobileField>
                 {!hideAgent ? (
                   <MobileField label="Agent">

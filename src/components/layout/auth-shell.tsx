@@ -8,6 +8,7 @@ interface AuthShellProps {
     description?: ReactNode;
     footer?: ReactNode;
   };
+  brand?: ReactNode;
   children: ReactNode;
   wide?: boolean;
 }
@@ -17,7 +18,7 @@ interface AuthShellProps {
  * Shared across /login, /signup, /reset-password, /check-email, and /onboarding.
  * Omit `hero` for a centered, minimal single-column layout.
  */
-export function AuthShell({ hero, children, wide = false }: AuthShellProps) {
+export function AuthShell({ hero, brand, children, wide = false }: AuthShellProps) {
   const isMinimal = !hero;
 
   return (
@@ -84,7 +85,7 @@ export function AuthShell({ hero, children, wide = false }: AuthShellProps) {
         }
       >
         <div className={isMinimal ? 'mb-8' : 'mb-6 lg:hidden'}>
-          <BrandMark />
+          {brand ?? <BrandMark />}
         </div>
         <div
           className={

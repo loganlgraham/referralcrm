@@ -1,6 +1,6 @@
 ---
 name: Referrio
-description: Light, professional operations UI for referral and lending workflows—cool slate neutrals with a deep charcoal brand anchor and restrained semantic color.
+description: Light, professional operations UI for referral and lending workflows—cool slate neutrals with a deep charcoal brand anchor, restrained semantic color, and a single coral brand accent reserved for the logo.
 colors:
   background: "#F1F5F9"
   background-subtle: "#F8FAFC"
@@ -16,6 +16,11 @@ colors:
   primary-muted-surface: "#F9FAFB"
   primary-muted-border: "#E5E7EB"
   primary-accent-text: "#111827"
+  brand-navy: "#0F1729"
+  brand-coral: "#E2694B"
+  brand-coral-deep: "#C9522F"
+  brand-coral-tint: "#FFF1EB"
+  brand-off-white: "#FBFCFE"
   border: "#E2E8F0"
   border-strong: "#CBD5E1"
   ring: "#374B6D"
@@ -49,6 +54,18 @@ colors:
   selection-surface: "#C7C9CD"
   surface-toolbar-tint: "#F8FAFC"
 typography:
+  wordmark:
+    fontFamily: Manrope
+    fontSize: 28px
+    fontWeight: "700"
+    lineHeight: 28px
+    letterSpacing: "-0.035em"
+  brand-descriptor:
+    fontFamily: Manrope
+    fontSize: 11px
+    fontWeight: "700"
+    lineHeight: 16px
+    letterSpacing: 0.22em
   display-hero:
     fontFamily: Inter
     fontSize: 48px
@@ -131,6 +148,7 @@ rounded:
   sm: 6px
   md: 8px
   card: 14px
+  icon-tile: 22.5%
   pill: 9999px
 spacing:
   unit: 4px
@@ -155,6 +173,8 @@ spacing:
   auth-panel-wide-max-width: 576px
   sidebar-width: 256px
   shell-inset: 12px
+  brand-lockup-gap: 15px
+  brand-clear-space: 25%
 elevation:
   card-shadow: "0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -12px rgba(15, 23, 42, 0.12)"
   raised-shadow: "0 4px 12px rgba(15, 23, 42, 0.06), 0 20px 40px -16px rgba(15, 23, 42, 0.18)"
@@ -183,14 +203,30 @@ components:
   link-accent:
     textColor: "{colors.link-contrast}"
     typography: "{typography.label-strong}"
+  brand-wordmark:
+    textColor: "{colors.brand-navy}"
+    accentColor: "{colors.brand-coral}"
+    typography: "{typography.wordmark}"
+  brand-wordmark-inverse:
+    textColor: "{colors.inverse-text}"
+    accentColor: "{colors.brand-coral}"
+    typography: "{typography.wordmark}"
+  brand-icon-tile:
+    backgroundColor: "{colors.brand-navy}"
+    accentColor: "{colors.brand-coral}"
+    textColor: "{colors.inverse-text}"
+    rounded: "{rounded.icon-tile}"
+  brand-descriptor-text:
+    textColor: "{colors.foreground-subtle}"
+    typography: "{typography.brand-descriptor}"
   sidebar-shell:
     backgroundColor: "{colors.surface-raised}"
     textColor: "{colors.foreground}"
   sidebar-brand-mark:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.primary-foreground}"
+    backgroundColor: "{colors.brand-navy}"
+    accentColor: "{colors.brand-coral}"
+    textColor: "{colors.inverse-text}"
     rounded: "{rounded.md}"
-    typography: "{typography.label-strong}"
   sidebar-nav-active:
     backgroundColor: "{colors.primary-muted-surface}"
     textColor: "{colors.primary-accent-text}"
@@ -344,17 +380,44 @@ Referrio presents a **bright, trustworthy operations desk**: plenty of breathing
 
 The experience is **light mode first**: crisp white surfaces on a misty blue-gray page background, with shadows so subtle they read as lift rather than drama. Motion is **barely-there**: quick fades and slides for overlays, with a slim brand-tinted progress shimmer at the top during route changes so the app feels responsive without distracting the user.
 
+The one place the interface allows itself a flourish is the **logo**. Everything else stays neutral so the mark carries the identity alone.
+
+## Brand
+
+The wordmark is **Manrope 700, set as type**, with a single drawn letter: the first of the double r's rises past x-height, arcs over the i, and its terminal ring dots it. That ring is the whole idea—a referral handed off and closed. Every other letter is the font as it ships.
+
+The **icon** is that drawn r lifted out of the wordmark and set in a navy squircle. It exists because the wordmark dies below about 28px; above that size, prefer the wordmark or the full lockup.
+
+**Coral (`brand-coral`) is a logo color, not a UI color.** It appears in the drawn r, the icon's arc, and nowhere else in the product. Primary buttons stay charcoal, active navigation stays charcoal, semantic states stay semantic. If coral starts showing up on buttons and badges, the mark stops being distinctive and the palette loses its discipline.
+
+Note that `brand-navy` and `foreground` are the same value (`#0F1729`)—the letterforms are literally the body text color, which is why the wordmark sits comfortably in dense UI. They are named separately so the logo can hold its value if the text color is ever retuned.
+
+**Rules**
+
+- The wordmark's background prop must match the surface behind it. The ring's counter is filled, not transparent—on the wrong background it shows a halo.
+- On coral, photography, or the auth hero, use **white letterforms with a white accent**. Never coral-on-navy at small sizes.
+- Do not redraw or re-space the r. It is positioned against Manrope's own metrics (`-0.025em` left, `-0.06em` right) and the arc is tuned to the font's tittle height.
+- Minimum wordmark size is **28px**. Below that, use the icon.
+- Clear space around the icon tile equals **one quarter of the tile's width** on all sides.
+- The icon retunes its own geometry across sizes: the stroke thickens and the horizontal run shortens as the tile shrinks, and below ~22px the ring closes to a solid dot. Use the supplied component or the size-matched file rather than scaling one asset.
+
+**Assets** live in `src/components/brand/` (`ReferrioWordmark`, `ReferrioIcon`, `AuthBrandLockup`) and `public/` (favicons, apple-touch icon, PWA icons, manifest).
+
 ## Colors
 
-The palette is a **cool neutral foundation** (mist background, white cards, blue-gray borders) paired with a **single deep brand anchor** in charcoal slate for the logo mark, primary buttons, active navigation, and progress indicators. Text uses a near-navy foreground for maximum readability, stepped down to muted slate for secondary labels and metadata.
+The palette is a **cool neutral foundation** (mist background, white cards, blue-gray borders) paired with a **single deep brand anchor** in charcoal slate for primary buttons, active navigation, and progress indicators. Text uses a near-navy foreground for maximum readability, stepped down to muted slate for secondary labels and metadata.
 
 Semantic accents are **disciplined and operational**: forest green for success, amber-orange for caution, true red for errors, and a clear blue for informational states. Each semantic color has a **soft tint surface** for inline alerts, badges, and validation panels so messaging feels supportive rather than loud. A distinct **violet progress family** separates in-flight states from terminal success—use it when something is underway but not yet closed.
+
+The `brand-*` family is **reserved for the logo and its immediate surroundings**. `brand-coral-deep` is for a link hover or text set on `brand-coral-tint`; `brand-coral-tint` is for brand moments outside the product—an invoice total, a marketing badge—not for UI state. `brand-off-white` is the light icon tile and inset brand panels.
 
 **Auth and storytelling surfaces** layer two radial washes over a corner-to-corner charcoal gradient: a bright, diffuse highlight from the top and a gentle vignette from the bottom-left. Hero copy stays white with slightly transparent body text so hierarchy stays clear against the rich background.
 
 ## Typography
 
 **Inter** drives the entire interface for its neutral, business-correct tone. Enable subtle stylistic alternates on long-form UI for a slightly refined rhythm. Hierarchy leans on **weight and tracking**, not decorative display faces: section titles are semibold and tight-tracking, while metadata and navigation labels shrink to compact sizes with increased letter spacing for "overline" labeling.
+
+**Manrope 700 is loaded for one purpose: the wordmark and the descriptor that sits under it.** It is not a UI face and not a heading face. Do not set page titles, card titles, or marketing headlines in it—that would put the logo and the interface in competition. Load it via `next/font/google` as a CSS variable so it never becomes the inherited default.
 
 Eyebrows and marketing labels use **wide tracking and uppercase treatment** to scan quickly without shouting. Card titles stay at a modest size—this is a data product, so headlines rarely exceed what is needed to orient the user on a dense page. Hero marketing headlines may jump to a larger display size on wide screens, but dashboard interiors stay restrained.
 
@@ -364,35 +427,44 @@ Content sits in a **centered reading column** on wide screens with a fixed-width
 
 The shell reserves a **persistent sidebar** on large breakpoints while collapsing navigation for small screens—surface continuity is maintained so the user always perceives the same neutral staging color behind work areas. Auth flows use a **split layout**: a fixed marketing column and a centered form panel, switching to a single column on small viewports.
 
-## Elevation & Depth
+The **brand lockup** in the sidebar and on auth pages pairs the icon tile with the wordmark at a 15px gap, the descriptor stacked beneath the wordmark and optically aligned to its width.
+
+## Elevation &amp; Depth
 
 Depth is **photographic and restrained**. Primary containers use a **two-layer shadow**: a hairline close shadow for edge definition and a broad, soft penumbra that lifts panels just above the page. Modals, menus, auth panels, and toasts step up to a **deeper raised shadow** so they clearly float above scrolling lists.
 
 Focus states use a **high-visibility ring**: a 2px ring in the brand blue-gray family plus a 2px offset from the control, with an optional outer 4px glow for extra clarity on dense tables. Primary controls may carry a **light drop shadow** to separate them from flat surfaces. A slim **route progress** element at the top of the viewport uses a luminous gradient stroke with a gentle glow—enough to reassure, not enough to compete with page content.
 
+The logo never carries a shadow. The icon tile is flat on every surface.
+
 ## Shapes
 
 Corner radii are **modern but office-appropriate**. Interactive controls and navigation rows use a compact radius; cards, panels, and notifications use a **somewhat softer, larger default radius** so data groupings read as cohesive tiles. Fully rounded **pill shapes** are reserved for compact status chips and tags.
 
+The **icon tile is the one proportional radius** in the system: 22.5% of the tile's width, so the squircle holds its character from 16px to 512px. Don't substitute a fixed radius token.
+
 ## Components
 
-**Navigation** pairs an active **soft tinted fill** with a **vertical bar indicator** at the leading edge—this makes the current section obvious even when skim reading. Icons sit at a small fixed square size and inherit muted colors until hovered or selected.
+**Navigation** pairs an active **soft tinted fill** with a **vertical bar indicator** at the leading edge—this makes the current section obvious even when skim reading. Icons sit at a small fixed square size and inherit muted colors until hovered or selected. The rail's head carries the brand mark; at collapsed widths, the icon tile stands alone.
 
 **Cards** are bordered, softly shadowed, and often divided by top and bottom rules. Toolbars nested in cards may use a **half-strength tinted band** to separate filters from results without introducing a second card.
 
 **Form controls** fill the width of their container, use compact height on standard fields, and show **focus rings in brand-tinted blue** rather than harsh browser defaults. Invalid fields layer danger soft fills and borders without rewriting the entire control style.
 
-**Buttons** span a few hierarchy levels: filled primary for irreversible or main submission paths, bordered secondary for alternative actions, quiet ghost and subtle fills for low-friction utilities, and a dedicated danger treatment for destructive work. Sizes step from compact inline actions to a larger full-width auth submit.
+**Buttons** span a few hierarchy levels: filled primary for irreversible or main submission paths, bordered secondary for alternative actions, quiet ghost and subtle fills for low-friction utilities, and a dedicated danger treatment for destructive work. Sizes step from compact inline actions to a larger full-width auth submit. No button is ever coral.
 
 **Badges** are capsule chips with hairline rings, leaning on semantic soft fills. Keep labels short; when space is tight, a leading dot can punctuate state without extra copy.
 
-**Auth patterns** contrast a rich gradient story panel with a clean, bright form card. Supporting links in forms pick up the **deep accent text color** rather than default browser blue, keeping the palette self-consistent.
+**Auth patterns** contrast a rich gradient story panel with a clean, bright form card. The form panel opens with the **icon-and-wordmark lockup** above the heading; the hero panel uses the inverse wordmark. Supporting links in forms pick up the **deep accent text color** rather than default browser blue, keeping the palette self-consistent.
 
 ## Do's and Don'ts
 
 - Do keep **backgrounds cool and surfaces white** for the main application; rely on spacing and light shadows—not heavy borders everywhere—to separate regions.
 - Do use **semantic soft fills** behind alerts and badges so state reads instantly in peripheral vision.
 - Do preserve **strong contrast** on primary buttons and hero inverse text; the brand anchor is dark on purpose.
+- Do let the **logo be the only coral** on the screen.
 - Don't introduce **dark chrome** in core workflows unless explicitly switching the whole experience; partial dark panels beside light content will feel accidental.
 - Don't use **neon or rainbow accents** for routine CRM tasks; let semantic colors carry meaning.
+- Don't set interface text in **Manrope**, and don't set the wordmark in **Inter**.
+- Don't recolor, rotate, outline, or add effects to the mark, and don't place the wordmark on a background its ring fill doesn't match.
 - Don't animate large layout shifts; prefer **opacity and short lateral moves** under 200ms for overlays and drawers.

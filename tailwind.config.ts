@@ -14,6 +14,7 @@ const config: Config = {
       fontFamily: {
         sans: ['var(--font-sans)', ...fontFamily.sans],
         display: ['var(--font-display)', ...fontFamily.sans],
+        manrope: ['var(--font-manrope)', ...fontFamily.sans],
         mono: ['var(--font-mono)', ...fontFamily.mono]
       },
       colors: {

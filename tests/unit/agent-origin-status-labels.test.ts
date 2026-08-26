@@ -8,28 +8,17 @@ import {
 } from '@/constants/referrals';
 
 describe('getReferralStatusLabel', () => {
-  it('returns the stored status unchanged for non-agent referrals', () => {
+  it('returns the stored status for both agent and non-agent referrals', () => {
     for (const status of REFERRAL_STATUSES) {
       expect(getReferralStatusLabel(status)).toBe(status);
       expect(getReferralStatusLabel(status, { isAgentOrigin: false })).toBe(status);
-    }
-  });
-
-  it('re-points the early pipeline at the mortgage consultant for agent referrals', () => {
-    expect(getReferralStatusLabel('New Lead', { isAgentOrigin: true })).toBe('Intro received');
-    expect(getReferralStatusLabel('Paired', { isAgentOrigin: true })).toBe('Matched with MC');
-    expect(getReferralStatusLabel('In Communication', { isAgentOrigin: true })).toBe('MC reached out');
-    expect(getReferralStatusLabel('Active Lead', { isAgentOrigin: true })).toBe('Working with MC');
-  });
-
-  it('leaves the late pipeline and terminal statuses alone', () => {
-    for (const status of ['Under Contract', 'Closed', 'Lost', 'Terminated']) {
       expect(getReferralStatusLabel(status, { isAgentOrigin: true })).toBe(status);
     }
   });
 
-  it('normalizes the legacy Showing Homes alias before relabeling', () => {
-    expect(getReferralStatusLabel('Showing Homes', { isAgentOrigin: true })).toBe('Working with MC');
+  it('normalizes the legacy Showing Homes alias to Active Lead', () => {
+    expect(getReferralStatusLabel('Showing Homes')).toBe('Active Lead');
+    expect(getReferralStatusLabel('Showing Homes', { isAgentOrigin: true })).toBe('Active Lead');
   });
 
   it('passes through deal-stage labels that are not referral statuses', () => {

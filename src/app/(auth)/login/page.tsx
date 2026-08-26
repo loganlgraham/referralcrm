@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { FormEvent, Suspense, useMemo, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
+import { AuthBrandLockup } from '@/components/brand/AuthBrandLockup';
 import { AuthShell, AuthHeading } from '@/components/layout/auth-shell';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
@@ -98,7 +99,7 @@ function LoginForm() {
   };
 
   return (
-    <AuthShell>
+    <AuthShell brand={<AuthBrandLockup />}>
       <AuthHeading title="Sign in" />
 
       {displayProviderError && (

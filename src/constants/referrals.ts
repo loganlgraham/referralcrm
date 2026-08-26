@@ -33,30 +33,15 @@ export function normalizeReferralStatus(status?: string | null): ReferralStatus 
 }
 
 /**
- * Agent-created referrals run the opposite direction from the rest of the
- * pipeline: the agent already represents the client and is handing them to AFC
- * for financing. The stored statuses are shared, so these are display-only
- * overrides that re-point the wording at the mortgage consultant.
+ * Display label for a referral status. Agent-created referrals share the same
+ * pipeline names; origin is shown separately (Via agent). The unused options
+ * argument is kept so existing call sites do not need a rewrite.
  */
-export const AGENT_ORIGIN_STATUS_LABELS: Partial<Record<ReferralStatus, string>> = {
-  'New Lead': 'Intro received',
-  Paired: 'Matched with MC',
-  'In Communication': 'MC reached out',
-  'Active Lead': 'Working with MC'
-};
-
 export function getReferralStatusLabel(
   status: string,
-  options?: { isAgentOrigin?: boolean }
+  _options?: { isAgentOrigin?: boolean }
 ): string {
-  if (!options?.isAgentOrigin) {
-    return status;
-  }
-  const normalized = normalizeReferralStatus(status);
-  if (!normalized) {
-    return status;
-  }
-  return AGENT_ORIGIN_STATUS_LABELS[normalized] ?? normalized;
+  return normalizeReferralStatus(status) ?? status;
 }
 
 export const LOST_REASON_VALUES = [

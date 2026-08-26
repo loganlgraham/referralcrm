@@ -22,7 +22,7 @@ interface Props {
   status: ReferralStatus;
   statuses: readonly ReferralStatus[];
   includeTerminalStatuses?: boolean;
-  /** Agent-created (agent→AFC) referrals relabel the pipeline around the MC. */
+  /** Agent-created (agent→AFC) referrals use a narrower lost-reason list. */
   isAgentOrigin?: boolean;
   side?: 'buy' | 'sell';
   statusLabel?: string;
