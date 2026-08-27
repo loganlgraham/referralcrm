@@ -1,7 +1,8 @@
 import { describe, expect, it } from '@jest/globals';
 import {
-  AGENT_ORIGIN_LOST_REASON_VALUES,
+  LOST_REASON_LABELS,
   LOST_REASON_OPTIONS,
+  LOST_REASON_VALUES,
   REFERRAL_STATUSES,
   getLostReasonOptions,
   getReferralStatusLabel,
@@ -28,31 +29,32 @@ describe('getReferralStatusLabel', () => {
 });
 
 describe('getLostReasonOptions', () => {
-  it('returns the full list for non-agent referrals', () => {
+  it('returns the same full list for every origin', () => {
     expect(getLostReasonOptions()).toBe(LOST_REASON_OPTIONS);
     expect(getLostReasonOptions({ isAgentOrigin: false })).toBe(LOST_REASON_OPTIONS);
+    expect(getLostReasonOptions({ isAgentOrigin: true })).toBe(LOST_REASON_OPTIONS);
+    expect(getLostReasonOptions({ isAgentOrigin: true }).map((option) => option.value)).toEqual([
+      ...LOST_REASON_VALUES
+    ]);
   });
 
-  it('drops the agent-choice reasons for agent referrals', () => {
-    const values = getLostReasonOptions({ isAgentOrigin: true }).map((option) => option.value);
-
-    expect(values).not.toContain('already_had_agent');
-    expect(values).not.toContain('chose_other_agent_precontact');
-    expect(values).not.toContain('chose_other_agent_postcontact');
-    expect(values).toEqual([...AGENT_ORIGIN_LOST_REASON_VALUES]);
-  });
-
-  it('words the remaining reasons around the mortgage consultant', () => {
-    const labelsByValue = new Map(
-      getLostReasonOptions({ isAgentOrigin: true }).map((option) => [option.value, option.label])
+  it('keeps borrower-focused wording and never names the MC or agent', () => {
+    expect(LOST_REASON_LABELS.never_connected).toBe('Never able to reach the borrower');
+    expect(LOST_REASON_LABELS.already_had_agent).toBe('Already working with someone else');
+    expect(LOST_REASON_LABELS.chose_other_agent_precontact).toBe(
+      'Went with someone else before we connected'
     );
-
-    expect(labelsByValue.get('never_connected')).toBe('MC was never able to reach the client');
-    expect(labelsByValue.get('unresponsive_after_contact')).toBe(
-      'Client went quiet after the MC connected'
+    expect(LOST_REASON_LABELS.chose_other_agent_postcontact).toBe(
+      'Went with someone else after we connected'
     );
-    // Reasons without an override fall back to the shared copy.
-    expect(labelsByValue.get('no_longer_buying')).toBe('No longer buying / timeline changed');
+    expect(LOST_REASON_LABELS.out_of_area).toBe('Looking outside our area');
+    expect(LOST_REASON_LABELS.already_transacted).toBe('Already bought or sold');
+    expect(LOST_REASON_LABELS.duplicate_or_invalid).toBe('Duplicate or bad contact info');
+
+    for (const label of Object.values(LOST_REASON_LABELS)) {
+      expect(label).not.toMatch(/\bMC\b/i);
+      expect(label).not.toMatch(/\bagent\b/i);
+    }
   });
 
   it('returns a stable reference so it can be read during render', () => {

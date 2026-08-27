@@ -1155,6 +1155,7 @@ export function ReferralHeader({
                         isAgentOrigin={isAgentOrigin}
                         side="buy"
                         statusLabel="Status & progress"
+                        borrowerName={borrowerName}
                         showPreApproval={false}
                         preApprovalAmountCents={preApprovalAmountCents}
                         onStatusChanged={(next, payload) => handleStatusChanged(next, payload, 'buy')}
@@ -1173,6 +1174,7 @@ export function ReferralHeader({
                         isAgentOrigin={isAgentOrigin}
                         side="sell"
                         statusLabel="Status & progress"
+                        borrowerName={borrowerName}
                         showPreApproval={false}
                         preApprovalAmountCents={preApprovalAmountCents}
                         onStatusChanged={(next, payload) => handleStatusChanged(next, payload, 'sell')}
@@ -1215,6 +1217,7 @@ export function ReferralHeader({
                     isAgentOrigin={isAgentOrigin}
                     side={viewerAssignedSide}
                     statusLabel={`My side (${viewerAssignedSide})`}
+                    borrowerName={borrowerName}
                     preApprovalAmountCents={preApprovalAmountCents}
                     onStatusChanged={(next, payload) =>
                       handleStatusChanged(next, payload, viewerAssignedSide)
@@ -1236,6 +1239,7 @@ export function ReferralHeader({
                     includeTerminalStatuses={viewerRole === 'admin'}
                     isAgentOrigin={isAgentOrigin}
                     side={primarySide}
+                    borrowerName={borrowerName}
                     preApprovalAmountCents={preApprovalAmountCents}
                     onStatusChanged={handleStatusChanged}
                     onPreApprovalSaved={handlePreApprovalSaved}

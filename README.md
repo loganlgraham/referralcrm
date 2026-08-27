@@ -331,15 +331,15 @@ Uses `jest.api.config.ts` with `NODE_ENV=test`.
 
 ### E2E Tests
 
-Uses Playwright (`playwright.config.ts`). On startup, the config loads **`.env.test.local`** if it exists—use it for `PLAYWRIGHT_BASE_URL` or other test-only values without changing `.env.local`.
+Uses Playwright (`playwright.config.ts`). On startup, the config loads **`.env.test.local`** if it exists. Copy `.env.test.example` to `.env.test.local` and fill in logins for admin, AHA agent, OOS agent, and MC.
 
-Playwright does **not** start the Next.js server. In one terminal run `pnpm dev`, then in another:
+If nothing is already listening on the base URL, Playwright starts Next.js (`next dev`). If `pnpm dev` / `npm run dev` is already running, it reuses that server.
 
 ```bash
 pnpm test:e2e
 ```
 
-Base URL defaults to `http://localhost:3000`, or `PLAYWRIGHT_BASE_URL` when set (including from `.env.test.local`).
+Base URL defaults to `http://localhost:3000`, or `PLAYWRIGHT_BASE_URL` when set. Tests for a role are skipped until that role’s identifier and password are set. CI runs only when `PLAYWRIGHT_BASE_URL` plus admin login secrets are configured.
 
 ## API Overview
 
@@ -420,8 +420,9 @@ Authorization: Bearer <CRON_SECRET>
 
 ### E2E tests fail to connect
 
-- Ensure `pnpm dev` is running.
-- Verify the base URL: `PLAYWRIGHT_BASE_URL` (or `.env.test.local`) or default `http://localhost:3000`.
+- Confirm `.env.test.local` exists (copy from `.env.test.example`) and `PLAYWRIGHT_BASE_URL` matches the running app, default `http://localhost:3000`.
+- Fill in `E2E_*_IDENTIFIER` / `E2E_*_PASSWORD` for each role you want to cover. Missing roles are skipped.
+- Playwright will start Next.js if nothing is already listening on that URL.
 
 ## Contributing
 
@@ -436,7 +437,7 @@ pnpm test:api
 pnpm exec tsc --noEmit
 ```
 
-4. If UI or flow changes are significant, run E2E tests as well.
+4. If UI or flow changes are significant, run E2E tests as well (`pnpm test:e2e` after filling `.env.test.local`).
 5. Open a PR with:
    - clear summary of behavior changes
    - test plan and results

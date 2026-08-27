@@ -30,13 +30,22 @@ describe('updateStatusSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects terminateDeal with statuses other than Active Lead or Lost', () => {
+  it('rejects terminateDeal with statuses other than Active Lead, In Communication, or Lost', () => {
     const result = updateStatusSchema.safeParse({
       status: 'Terminated',
       terminateDeal: true,
       terminatedReason: 'inspection',
     });
     expect(result.success).toBe(false);
+  });
+
+  it('accepts terminateDeal with In Communication and terminatedReason', () => {
+    const result = updateStatusSchema.safeParse({
+      status: 'In Communication',
+      terminateDeal: true,
+      terminatedReason: 'financing',
+    });
+    expect(result.success).toBe(true);
   });
 
   it('accepts terminateDeal with Active Lead and terminatedReason', () => {

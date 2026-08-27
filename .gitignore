@@ -5,6 +5,7 @@ pnpm-lock.yaml
 .env.local
 .env*
 !.env.example
+!.env.test.example
 .DS_Store
 playwright-report
 /coverage

@@ -15,7 +15,7 @@ const config: Config = {
     '^.+\\.(t|j)sx?$': ['ts-jest', { tsconfig: 'tsconfig.jest.json' }]
   },
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
-  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/e2e/', '/tests/e2e/', '/tests/home.spec.ts', '/tests/unit/google-geocoding.test.ts', '/tests/unit/inbound-email-signature.test.ts', '/tests/api/']
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/e2e/', '/tests/e2e/', '/tests/unit/google-geocoding.test.ts', '/tests/unit/inbound-email-signature.test.ts', '/tests/api/']
 };
 
 export default config;

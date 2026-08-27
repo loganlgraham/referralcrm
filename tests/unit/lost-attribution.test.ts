@@ -16,6 +16,12 @@ describe('isAttributableLoss', () => {
     ).toBe(false);
   });
 
+  it('does not count lead-quality losses outside the assigned agent\'s control', () => {
+    expect(isAttributableLoss({ status: 'Lost', lostReason: 'out_of_area' })).toBe(false);
+    expect(isAttributableLoss({ status: 'Lost', lostReason: 'already_transacted' })).toBe(false);
+    expect(isAttributableLoss({ status: 'Lost', lostReason: 'duplicate_or_invalid' })).toBe(false);
+  });
+
   it('counts losses where another agent was chosen after ours was met', () => {
     expect(
       isAttributableLoss({ status: 'Lost', lostReason: 'chose_other_agent_postcontact' })

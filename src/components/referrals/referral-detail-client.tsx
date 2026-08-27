@@ -10,8 +10,23 @@ import { ReferralHeader } from '@/components/referrals/referral-header';
 import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import type { Contact } from '@/components/referrals/contact-assignment';
-import { normalizeReferralStatus, type ReferralStatus, REFERRAL_TIMELINE_OPTIONS, REFERRAL_TIMELINE_VALUES } from '@/constants/referrals';
+import {
+  REFERRAL_STATUSES,
+  REFERRAL_TIMELINE_OPTIONS,
+  REFERRAL_TIMELINE_VALUES,
+  type ReferralStatus
+} from '@/constants/referrals';
 import { ReferralDeals } from '@/components/referrals/referral-deals';
+import { StatusChanger } from '@/components/referrals/status-changer';
+import { AgentActivityCard } from '@/components/referrals/agent-activity-card';
+import { AgentDealsCard, type DealStageExtras } from '@/components/referrals/agent-deals-card';
+import { AgentContextRail, AgentDetailHeader } from '@/components/referrals/agent-referral-detail';
+import {
+  collectUnderContractDeal,
+  editDealDetails,
+  submitUnderContractDeal
+} from '@/components/referrals/deal-details-toast';
+import type { DealStatus } from '@/constants/deals';
 import { getReferralDealsVisibility } from '@/components/referrals/deal-visibility';
 import { getLatestDealReferralStatuses } from '@/lib/latest-deal-referral-status';
 import type { ReferralPayment } from '@/types/referral-payment';
@@ -22,10 +37,16 @@ import { cn } from '@/lib/cn';
 import { Button, buttonClasses } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { inputFieldClasses } from '@/components/ui/input';
+import { collectIntakeDetails } from '@/components/referrals/intake-details-toast';
+import {
+  formatCurrencyInputDisplay,
+  sanitizeCurrencyInput,
+  type DetailDraft,
+  type ReferralClientType,
+  type TransferStage
+} from '@/components/referrals/referral-detail-draft';
 
 type ReferralSource = string;
-type ReferralClientType = 'Seller' | 'Buyer' | 'Both';
-type TransferStage = 'Pre-approval TBD' | 'Pre-approved';
 
 interface ReferralContact {
   _id?: string | null;
@@ -128,24 +149,6 @@ interface FinancialState {
   dealSide?: 'buy' | 'sell';
 }
 
-interface DetailDraft {
-  borrowerFirstName: string;
-  borrowerLastName: string;
-  borrowerEmail: string;
-  borrowerPhone: string;
-  loanFileNumber: string;
-  source: ReferralSource;
-  endorser: string;
-  clientType: ReferralClientType;
-  lookingInZip: string;
-  borrowerCurrentAddress: string;
-  stageOnTransfer: TransferStage;
-  loanType: string;
-  preApprovalAmount: string;
-  timeline: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified';
-  referralDate: string;
-}
-
 const DETAIL_FIELD_KEYS: (keyof DetailDraft)[] = [
   'borrowerFirstName',
   'borrowerLastName',
@@ -226,49 +229,6 @@ const centsToCurrencyInput = (value?: number | null) => {
   }
   const amount = value / 100;
   return Number.isInteger(amount) ? amount.toString() : amount.toFixed(2);
-};
-
-const sanitizeCurrencyInput = (value: string) => {
-  if (!value) {
-    return '';
-  }
-  const stripped = value.replace(/[^0-9.]/g, '');
-  if (!stripped) {
-    return '';
-  }
-
-  const [integerPart = '', ...decimalParts] = stripped.split('.');
-  const decimalPart = decimalParts.join('').slice(0, 2);
-  const normalizedInteger = integerPart.replace(/^0+(?=\d)/, '');
-  const hasDecimal = decimalParts.length > 0;
-  const safeInteger = normalizedInteger || (integerPart.length > 0 ? '0' : '');
-
-  if (!hasDecimal) {
-    return safeInteger;
-  }
-
-  const integerPortion = safeInteger || '0';
-  return decimalPart.length > 0 ? `${integerPortion}.${decimalPart}` : `${integerPortion}.`;
-};
-
-const formatCurrencyInputDisplay = (value: string) => {
-  if (!value) {
-    return '';
-  }
-
-  const [integerPart = '', decimalPart] = value.split('.');
-  const hasDecimal = decimalPart !== undefined;
-  const sanitizedInteger = integerPart.replace(/[^0-9]/g, '');
-  const integerValue = sanitizedInteger ? Number(sanitizedInteger) : 0;
-  const formattedInteger = sanitizedInteger
-    ? new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(integerValue)
-    : '';
-
-  if (!hasDecimal) {
-    return formattedInteger;
-  }
-
-  return decimalPart !== undefined ? `${formattedInteger}.${decimalPart}` : formattedInteger;
 };
 
 // Convert ISO date string to datetime-local format (YYYY-MM-DDTHH:mm)
@@ -658,6 +618,136 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   }, []);
   const [deleting, setDeleting] = useState(false);
 
+  const handleAgentStatusChanged = useCallback(
+    (next: ReferralStatus, payload?: Record<string, unknown>) => {
+      const statusLastUpdated =
+        typeof payload?.statusLastUpdated === 'string' ? payload.statusLastUpdated : new Date().toISOString();
+      const daysInStatus = typeof payload?.daysInStatus === 'number' ? payload.daysInStatus : 0;
+
+      setFinancials((previous) => (previous.status === next ? previous : { ...previous, status: next }));
+      setReferral((previous) => ({ ...previous, status: next, statusLastUpdated, daysInStatus }));
+      void mutate(activityFeedKey);
+    },
+    [activityFeedKey, mutate]
+  );
+
+  /** Adding a deal is the same flow as picking Under Contract: collect the deal, then move the status. */
+  const handleAgentAddDeal = useCallback(async () => {
+    const saved = await collectUnderContractDeal({
+      defaultSide: primarySide === 'sell' ? 'sell' : 'buy',
+      isAgentOrigin,
+      onSubmit: (result) => submitUnderContractDeal(referralId, result, 'referral_detail')
+    });
+    if (!saved) {
+      return;
+    }
+    handleAgentStatusChanged('Under Contract');
+    router.refresh();
+    toast.success('Deal saved and referral moved to Under Contract');
+  }, [handleAgentStatusChanged, isAgentOrigin, primarySide, referralId, router]);
+
+  const handleAgentDealStage = useCallback(
+    async (
+      deal: ReferralPayment,
+      nextStatus: DealStatus,
+      extras: DealStageExtras = {}
+    ): Promise<boolean> => {
+      try {
+        const response = await fetch('/api/payments', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: deal._id, status: nextStatus, ...extras }),
+        });
+
+        if (!response.ok) {
+          toast.error('Unable to update deal stage');
+          return false;
+        }
+
+        const patchResult = (await response.json()) as {
+          status?: DealStatus;
+          closingDate?: string | null;
+          referralStatus?: ReferralStatus | null;
+          referralStatusLastUpdated?: string | null;
+        };
+
+        handleDealUpdated(
+          {
+            ...deal,
+            status: patchResult.status ?? nextStatus,
+            closingDate: patchResult.closingDate ?? extras.closingDate ?? deal.closingDate ?? null,
+            usedAfc: extras.usedAfc ?? deal.usedAfc,
+            terminatedReason:
+              nextStatus === 'terminated' ? extras.terminatedReason ?? null : deal.terminatedReason,
+            updatedAt: new Date().toISOString(),
+          },
+          {
+            referralStatus: patchResult.referralStatus,
+            referralStatusLastUpdated: patchResult.referralStatusLastUpdated,
+          }
+        );
+        void mutate(activityFeedKey);
+        toast.success('Deal stage updated');
+        return true;
+      } catch (error) {
+        console.error(error);
+        toast.error('Something went wrong while updating the deal');
+        return false;
+      }
+    },
+    [activityFeedKey, handleDealUpdated, mutate]
+  );
+
+  /** The toast owns the save so a failed PATCH keeps the entered values on screen. */
+  const handleAgentDealEdit = useCallback(
+    async (deal: ReferralPayment) => {
+      await editDealDetails({
+        deal,
+        isAgentOrigin,
+        onSubmit: async (payload) => {
+          const response = await fetch('/api/payments', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: deal._id, ...payload }),
+          });
+
+          if (!response.ok) {
+            throw new Error('Unable to update deal');
+          }
+
+          const patchResult = (await response.json()) as {
+            status?: DealStatus;
+            expectedAmountCents?: number;
+            netReferralFeePaidCents?: number;
+            closingDate?: string | null;
+            referralStatus?: ReferralStatus | null;
+            referralStatusLastUpdated?: string | null;
+          };
+
+          handleDealUpdated(
+            {
+              ...deal,
+              ...payload,
+              expectedAmountCents: patchResult.expectedAmountCents ?? payload.expectedAmountCents,
+              netReferralFeePaidCents:
+                patchResult.netReferralFeePaidCents ?? deal.netReferralFeePaidCents,
+              closingDate: patchResult.closingDate ?? payload.closingDate,
+              status: patchResult.status ?? deal.status,
+              updatedAt: new Date().toISOString(),
+            },
+            {
+              referralStatus: patchResult.referralStatus,
+              referralStatusLastUpdated: patchResult.referralStatusLastUpdated,
+            }
+          );
+          void mutate(activityFeedKey);
+          toast.success('Deal updated');
+        },
+      });
+    },
+    [activityFeedKey, handleDealUpdated, isAgentOrigin, mutate]
+  );
+
   const normalizedDetailDraft = useMemo(() => normalizeDetailDraft(detailsDraft), [detailsDraft]);
   const normalizedCurrentDetails = useMemo(
     () => normalizeDetailDraft(createDetailDraft(referral)),
@@ -888,10 +978,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     }
   };
 
-  const handleDetailsSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    const normalizedDraft = normalizeDetailDraft(detailsDraft);
+  /** Shared by the inline details form and the intake toast; `true` means the caller can close its editor. */
+  const saveDetails = async (draft: DetailDraft): Promise<boolean> => {
+    const normalizedDraft = normalizeDetailDraft(draft);
     const normalizedCurrent = normalizedCurrentDetails;
     const hasExistingPreApproval = Boolean(normalizedCurrent.preApprovalAmount);
     let preApprovalAmountValue: number | undefined;
@@ -906,52 +995,51 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     
     if (!standardFieldsChanged && !referralDateChanged) {
       toast.info('No changes to save');
-      setIsEditingDetails(false);
-      return;
+      return true;
     }
 
     if (!normalizedDraft.loanFileNumber && !isAgentOrigin) {
       toast.error('Loan file number is required.');
-      return;
+      return false;
     }
     if (canEditSourceAndEndorser && !normalizedDraft.endorser) {
       toast.error('Endorser is required.');
-      return;
+      return false;
     }
     const parsedZips = parseZipList(normalizedDraft.lookingInZip);
     if (parsedZips.length === 0) {
       toast.error('Add at least one 5-digit ZIP code.');
-      return;
+      return false;
     }
     if (!normalizedDraft.borrowerCurrentAddress) {
       toast.error('Borrower current address is required.');
-      return;
+      return false;
     }
     if (!normalizedDraft.stageOnTransfer) {
       toast.error('Stage on transfer is required.');
-      return;
+      return false;
     }
     if (canEditBorrowerContact && borrowerFieldsChanged) {
       if (!normalizedDraft.borrowerFirstName) {
         toast.error('Borrower first name is required.');
-        return;
+        return false;
       }
       if (!normalizedDraft.borrowerLastName) {
         toast.error('Borrower last name is required.');
-        return;
+        return false;
       }
       if (!normalizedDraft.borrowerEmail) {
         toast.error('Borrower email is required.');
-        return;
+        return false;
       }
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
       if (!emailRegex.test(normalizedDraft.borrowerEmail)) {
         toast.error('Enter a valid borrower email.');
-        return;
+        return false;
       }
       if (!normalizedDraft.borrowerPhone || normalizedDraft.borrowerPhone.replace(/\D+/g, '').length < 7) {
         toast.error('Enter a valid borrower phone number.');
-        return;
+        return false;
       }
     }
 
@@ -959,7 +1047,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       preApprovalAmountValue = Number.parseFloat(normalizedDraft.preApprovalAmount);
       if (Number.isNaN(preApprovalAmountValue) || preApprovalAmountValue < 0) {
         toast.error('Enter a valid pre-approval amount.');
-        return;
+        return false;
       }
     } else if (hasExistingPreApproval) {
       preApprovalAmountValue = 0;
@@ -1001,8 +1089,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
     if (Object.keys(payload).length === 0) {
       toast.info('No changes to save');
-      setIsEditingDetails(false);
-      return;
+      return true;
     }
 
     setSavingDetails(true);
@@ -1116,7 +1203,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       
       // Update details draft with the normalized draft (which includes updated referralDate)
       setDetailsDraft(normalizedDraft);
-      setIsEditingDetails(false);
       toast.success('Referral details updated');
       
       // Mutate activity feed in background
@@ -1130,12 +1216,29 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
           router.refresh();
         });
       }, 100);
+      return true;
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Unable to update referral details');
+      return false;
     } finally {
       setSavingDetails(false);
     }
+  };
+
+  const handleDetailsSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (await saveDetails(detailsDraft)) {
+      setIsEditingDetails(false);
+    }
+  };
+
+  const handleEditIntake = () => {
+    void collectIntakeDetails({
+      initialDraft: createDetailDraft(referral),
+      canEditBorrowerContact,
+      onSubmit: saveDetails
+    });
   };
 
   const handleFinancialsChange = (snapshot: {
@@ -1369,6 +1472,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const showNav = (viewerRole === 'admin' || viewerRole === 'manager') && (prevReferralId || nextReferralId);
   const buildNavHref = (id: string) => listParams ? `/referrals/${id}?${listParams}` : `/referrals/${id}`;
 
+  const isAgentLayout = viewerRole === 'agent';
+  const agentTimelineLabel =
+    REFERRAL_TIMELINE_OPTIONS.find((option) => option.value === referral.timeline)?.label ?? null;
+
   return (
     <div className="space-y-6">
       {showNav && (
@@ -1401,20 +1508,114 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
           )}
         </nav>
       )}
-      <ReferralHeader
-        referral={headerReferral}
-        viewerRole={viewerRole}
-        latestDealStatus={latestDealReferralStatuses.overall}
-        latestBuyDealStatus={latestDealReferralStatuses.buy}
-        latestSellDealStatus={latestDealReferralStatuses.sell}
-        onFinancialsChange={handleFinancialsChange}
-        buySideAgentContact={buySideAgentContact}
-        sellSideAgentContact={sellSideAgentContact}
-        mcContact={mcContact}
-        onBuySideAgentContactChange={handleBuySideAgentContactChange}
-        onSellSideAgentContactChange={handleSellSideAgentContactChange}
-        onMcContactChange={handleMcContactChange}
-      />
+      {isAgentLayout ? (
+        <>
+          <AgentDetailHeader
+            borrowerName={referral.borrower.name}
+            clientType={referral.clientType ?? 'Buyer'}
+            preApprovalAmountCents={financials.preApprovalAmountCents}
+            lookingIn={lookingInZipDisplay}
+            loanType={referral.loanType}
+            referredAt={referral.referralDate ?? referral.createdAt}
+            status={effectiveHeaderStatus}
+            isAgentOrigin={isAgentOrigin}
+            daysInStatus={referral.daysInStatus}
+            propertyAddress={formatFullAddress(
+              headerReferral.propertyAddress,
+              headerReferral.propertyCity,
+              headerReferral.propertyState,
+              headerReferral.propertyPostalCode
+            )}
+            loanFileNumber={referral.loanFileNumber}
+            borrowerEmail={referral.borrower.email}
+            borrowerPhone={referral.borrower.phone}
+            backHref={listParams ? `/referrals?${listParams}` : '/referrals'}
+          />
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+            <div className="flex min-w-0 flex-col gap-4">
+              <section className="rounded-card border border-border-strong/60 bg-surface px-5 py-[18px] shadow-card">
+                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                  <h2 className="text-base font-bold tracking-[-0.02em] text-foreground">Where are they now?</h2>
+                  {referral.statusLastUpdated ? (
+                    <p className="text-[13px] text-foreground-subtle">
+                      Updated <span className="text-numeric">{formatDateMST(referral.statusLastUpdated)}</span>
+                    </p>
+                  ) : null}
+                </div>
+                <div className="mt-3.5">
+                  <StatusChanger
+                    referralId={referralId}
+                    status={financials.status}
+                    statuses={REFERRAL_STATUSES}
+                    isAgentOrigin={isAgentOrigin}
+                    side={primarySide}
+                    mode="chips"
+                    promptMode="toast"
+                    borrowerName={referral.borrower.name}
+                    showPreApproval={false}
+                    onStatusChanged={handleAgentStatusChanged}
+                  />
+                </div>
+              </section>
+              <AgentActivityCard
+                key={referralId}
+                referralId={referralId}
+                notes={notes}
+                agentContact={{
+                  name: primaryAgentContact?.name ?? null,
+                  email: primaryAgentContact?.email ?? null
+                }}
+                mcContact={{ name: mcContact?.name ?? null, email: mcContact?.email ?? null }}
+                adminContacts={referral.adminContacts ?? []}
+                hasAnyPayments={noteEmailDefaultSummary.hasAnyPayments}
+                hasAnyUsedAfcTrue={noteEmailDefaultSummary.hasAnyUsedAfcTrue}
+              />
+              <AgentDealsCard
+                deals={visibleReferralDeals}
+                hiddenOutsideAgentCount={hiddenOutsideAgentCount}
+                onStageChange={handleAgentDealStage}
+                onEdit={(deal) => void handleAgentDealEdit(deal)}
+                onAddDeal={() => void handleAgentAddDeal()}
+                canAddDeal={Boolean(referral.viewerAssignedSide)}
+                borrowerName={referral.borrower.name}
+                isAgentOrigin={isAgentOrigin}
+              />
+            </div>
+            <AgentContextRail
+              mc={mcContact}
+              agentSideLabel={primarySide === 'sell' ? 'Sell-side agent' : 'Buy-side agent'}
+              agent={primaryAgentContact}
+              clientType={referral.clientType ?? 'Buyer'}
+              loanType={referral.loanType}
+              preApprovalAmountCents={financials.preApprovalAmountCents}
+              lookingIn={lookingInZipDisplay}
+              stageOnTransfer={referral.stageOnTransfer}
+              timelineLabel={agentTimelineLabel}
+              createdAt={referral.createdAt}
+              currentAddress={referral.borrowerCurrentAddress}
+              borrowerEmail={referral.borrower.email}
+              borrowerPhone={referral.borrower.phone}
+              onEditIntake={canEditDetails ? handleEditIntake : undefined}
+            />
+          </div>
+        </>
+      ) : (
+        <ReferralHeader
+          referral={headerReferral}
+          viewerRole={viewerRole}
+          latestDealStatus={latestDealReferralStatuses.overall}
+          latestBuyDealStatus={latestDealReferralStatuses.buy}
+          latestSellDealStatus={latestDealReferralStatuses.sell}
+          onFinancialsChange={handleFinancialsChange}
+          buySideAgentContact={buySideAgentContact}
+          sellSideAgentContact={sellSideAgentContact}
+          mcContact={mcContact}
+          onBuySideAgentContactChange={handleBuySideAgentContactChange}
+          onSellSideAgentContactChange={handleSellSideAgentContactChange}
+          onMcContactChange={handleMcContactChange}
+        />
+      )}
+      {!isAgentLayout ? (
       <Card>
         <CardHeader className="flex-row flex-wrap items-start justify-between gap-3 space-y-0">
           <div className="space-y-1">
@@ -1706,37 +1907,43 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         )}
         </CardContent>
       </Card>
-      <ReferralNotes
-        key={referralId}
-        referralId={referralId}
-        initialNotes={notes}
-        viewerRole={viewerRole}
-        agentContact={{
-          name: primaryAgentContact?.name ?? null,
-          email: primaryAgentContact?.email ?? null
-        }}
-        mcContact={{
-          name: mcContact?.name ?? null,
-          email: mcContact?.email ?? null
-        }}
-        adminContacts={referral.adminContacts ?? []}
-        hasAnyPayments={noteEmailDefaultSummary.hasAnyPayments}
-        hasAnyUsedAfcTrue={noteEmailDefaultSummary.hasAnyUsedAfcTrue}
-      />
-      <ReferralDeals
-        referralId={referralId}
-        deals={visibleReferralDeals}
-        onDealCreated={handleDealCreated}
-        onDealUpdated={handleDealUpdated}
-        onDealDeleted={handleDealDeleted}
-        viewerRole={viewerRole}
-        viewerAssignedSide={referral.viewerAssignedSide ?? null}
-        referralOrigin={referral.origin}
-        feeBreakdownAutoSendEnabled={referral.feeBreakdownAutoSendEnabled as boolean | undefined}
-        hiddenOutsideAgentCount={hiddenOutsideAgentCount}
-        assignedAgentDesignation={referral.assignedAgent?.ahaDesignation}
-        defaultSide={referral.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
-      />
+      ) : null}
+      {isAgentLayout ? null : (
+        <ReferralNotes
+          key={referralId}
+          referralId={referralId}
+          initialNotes={notes}
+          viewerRole={viewerRole}
+          agentContact={{
+            name: primaryAgentContact?.name ?? null,
+            email: primaryAgentContact?.email ?? null
+          }}
+          mcContact={{
+            name: mcContact?.name ?? null,
+            email: mcContact?.email ?? null
+          }}
+          adminContacts={referral.adminContacts ?? []}
+          hasAnyPayments={noteEmailDefaultSummary.hasAnyPayments}
+          hasAnyUsedAfcTrue={noteEmailDefaultSummary.hasAnyUsedAfcTrue}
+        />
+      )}
+      {isAgentLayout ? null : (
+        <ReferralDeals
+          referralId={referralId}
+          deals={visibleReferralDeals}
+          onDealCreated={handleDealCreated}
+          onDealUpdated={handleDealUpdated}
+          onDealDeleted={handleDealDeleted}
+          viewerRole={viewerRole}
+          viewerAssignedSide={referral.viewerAssignedSide ?? null}
+          referralOrigin={referral.origin}
+          feeBreakdownAutoSendEnabled={referral.feeBreakdownAutoSendEnabled as boolean | undefined}
+          hiddenOutsideAgentCount={hiddenOutsideAgentCount}
+          assignedAgentDesignation={referral.assignedAgent?.ahaDesignation}
+          defaultSide={referral.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
+          borrowerName={referral.borrower.name}
+        />
+      )}
       {viewerRole !== 'agent' ? <ReferralTimeline referralId={referralId} /> : null}
       {canDelete && (
         <div className="flex justify-end">

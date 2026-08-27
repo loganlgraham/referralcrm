@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/constants/deals';
-import type { ReferralStatus } from '@/constants/referrals';
+import type { LostReason, ReferralStatus } from '@/constants/referrals';
 import { formatCurrency, formatDateMST, formatDateTimeMST } from '@/utils/formatters';
 import type { ReferralPayment } from '@/types/referral-payment';
 import {
@@ -14,6 +14,10 @@ import {
   confirmFeeBreakdownSend,
   confirmPaidStatusDate,
 } from '@/components/referrals/status-date-confirmation-toast';
+import {
+  confirmReferralTermination,
+  type TerminationResolvedStatus
+} from '@/components/referrals/terminate-confirmation-toast';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,6 +41,7 @@ interface ReferralDealsProps {
   hiddenOutsideAgentCount?: number;
   assignedAgentDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   defaultSide?: 'buy' | 'sell';
+  borrowerName?: string;
 }
 
 type AgentOption = { id: string; name: string };
@@ -69,6 +74,8 @@ type DealUpdatePayload = {
   usedAssignedAgent: boolean;
   receivedAmountCents?: number;
   terminatedReason?: TerminatedReason | null;
+  nextReferralStatus?: TerminationResolvedStatus;
+  lostReason?: LostReason | null;
 };
 
 type PaymentPatchResponse = {
@@ -150,6 +157,7 @@ function DealCard({
   viewerRole,
   feeBreakdownAutoSendEnabled,
   isCrossSideReadOnly = false,
+  borrowerName,
 }: {
   deal: ReferralPayment;
   agents: AgentOption[];
@@ -171,6 +179,7 @@ function DealCard({
   viewerRole?: string;
   feeBreakdownAutoSendEnabled?: boolean;
   isCrossSideReadOnly?: boolean;
+  borrowerName: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -422,13 +431,27 @@ function DealCard({
       return;
     }
 
-    setSaving(true);
     const statusToSend = viewerRole === 'admin' && markPaid ? 'paid' : status;
-    if (statusToSend === 'terminated' && !terminatedReason) {
+    let nextReferralStatus: TerminationResolvedStatus | undefined;
+    let nextLostReason: LostReason | null | undefined;
+    let reasonToSend = terminatedReason;
+    if (statusToSend === 'terminated' && deal.status !== 'terminated') {
+      const confirmation = await confirmReferralTermination({
+        borrowerName,
+        isAgentOrigin: Boolean(isAgentOrigin)
+      });
+      if (!confirmation.confirmed || !confirmation.resolvedStatus || !confirmation.terminatedReason) {
+        return;
+      }
+      reasonToSend = confirmation.terminatedReason;
+      setTerminatedReason(confirmation.terminatedReason);
+      nextReferralStatus = confirmation.resolvedStatus;
+      nextLostReason = confirmation.lostReason ?? null;
+    } else if (statusToSend === 'terminated' && !reasonToSend) {
       toast.error('Select a termination reason');
-      setSaving(false);
       return;
     }
+    setSaving(true);
     // Only auto-set closing date when status is CHANGING to 'closed' (not already closed)
     const isChangingToClosed = statusToSend === 'closed' && deal.status !== 'closed';
     const closingDateToSend = isChangingToClosed
@@ -457,7 +480,9 @@ function DealCard({
       usedAfc: side === 'sell' ? false : usedAfc,
       usedAssignedAgent,
       receivedAmountCents: netReferralFeePaidCents,
-      terminatedReason: statusToSend === 'terminated' ? terminatedReason : undefined,
+      terminatedReason: statusToSend === 'terminated' ? reasonToSend : undefined,
+      nextReferralStatus,
+      lostReason: nextReferralStatus === 'Lost' ? nextLostReason ?? null : undefined,
     });
 
     if (success) {
@@ -608,11 +633,7 @@ function DealCard({
               <select
                 value={(deal.status as DealStatus | undefined) ?? 'under_contract'}
                 onChange={(event) =>
-                  onStatusChange(
-                    deal,
-                    event.target.value as DealStatus,
-                    event.target.value === 'terminated' ? terminatedReason : null
-                  )
+                  onStatusChange(deal, event.target.value as DealStatus)
                 }
                 disabled={!canManage || statusUpdating}
                 className={cn(inputFieldClasses, 'mt-1 h-8 px-2 text-xs')}
@@ -1129,6 +1150,7 @@ export function ReferralDeals({
   hiddenOutsideAgentCount = 0,
   assignedAgentDesignation,
   defaultSide = 'buy',
+  borrowerName = 'this referral',
 }: ReferralDealsProps) {
   const [status, setStatus] = useState<DealStatus>('under_contract');
   const [markPaid, setMarkPaid] = useState(false);
@@ -1463,9 +1485,21 @@ export function ReferralDeals({
     paidDateFromAction?: string
   ): Promise<boolean> => {
     if (statusUpdating[deal._id]) return false;
-    if (nextStatus === 'terminated' && !terminationReason) {
-      toast.error('Select a termination reason before marking the deal terminated');
-      return false;
+
+    let resolvedTerminationReason = terminationReason ?? null;
+    let nextReferralStatus: TerminationResolvedStatus | undefined;
+    let nextLostReason: LostReason | null | undefined;
+    if (nextStatus === 'terminated') {
+      const confirmation = await confirmReferralTermination({
+        borrowerName,
+        isAgentOrigin,
+      });
+      if (!confirmation.confirmed || !confirmation.resolvedStatus || !confirmation.terminatedReason) {
+        return false;
+      }
+      resolvedTerminationReason = confirmation.terminatedReason;
+      nextReferralStatus = confirmation.resolvedStatus;
+      nextLostReason = confirmation.lostReason ?? null;
     }
     
     let closingDate: string | undefined;
@@ -1556,7 +1590,9 @@ export function ReferralDeals({
               : Boolean(deal.usedAfc);
       }
       if (nextStatus === 'terminated') {
-        patchPayload.terminatedReason = terminationReason ?? null;
+        patchPayload.terminatedReason = resolvedTerminationReason;
+        patchPayload.nextReferralStatus = nextReferralStatus;
+        patchPayload.lostReason = nextReferralStatus === 'Lost' ? nextLostReason ?? null : null;
       }
 
       const response = await fetch('/api/payments', {
@@ -1581,7 +1617,7 @@ export function ReferralDeals({
         expectedAmountCents: patchResult.expectedAmountCents ?? deal.expectedAmountCents,
         receivedAmountCents: resolvedPaidAmountCents ?? deal.receivedAmountCents,
         netReferralFeePaidCents: resolvedPaidAmountCents ?? deal.netReferralFeePaidCents,
-        terminatedReason: nextStatus === 'terminated' ? terminationReason ?? null : null,
+        terminatedReason: nextStatus === 'terminated' ? resolvedTerminationReason : null,
         closingDate: patchResult.closingDate ?? closingDate ?? deal.closingDate ?? null,
         paidDate: patchResult.paidDate ?? paidDate ?? deal.paidDate ?? null,
         updatedAt: new Date().toISOString(),
@@ -2067,6 +2103,7 @@ export function ReferralDeals({
                 onUpdate={handleDealEdit}
                 viewerRole={viewerRole}
                 feeBreakdownAutoSendEnabled={feeBreakdownAutoSendEnabled}
+                borrowerName={borrowerName}
               />
             ))}
           </>

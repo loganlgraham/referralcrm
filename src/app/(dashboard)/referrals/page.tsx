@@ -11,6 +11,7 @@ import { Filters } from '@/components/forms/referral-filters';
 import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { buttonClasses } from '@/components/ui/button';
+import { AgentReferralList } from '@/components/referrals/agent-referral-list';
 
 export const metadata: Metadata = {
   title: 'Referrals | Referral CRM'
@@ -65,15 +66,35 @@ export default async function ReferralsPage({
   const showAgentOriginIndicator = tableMode === 'admin' && agentReferrals === 'all';
   const showAddReferralButton = role !== 'mc';
 
+  if (tableMode === 'agent') {
+    return hasReferrals ? (
+      <AgentReferralList
+        rows={items}
+        page={data?.page ?? 1}
+        pageSize={data?.pageSize ?? pageSize}
+        total={data?.total ?? items.length}
+      />
+    ) : (
+      <EmptyState
+        icon={<Send className="h-4 w-4" aria-hidden />}
+        title="No referrals yet"
+        description="When you have a buyer ready for financing, introduce them to AFC and we will pair them with a mortgage consultant."
+        action={
+          <Link href="/referrals/new" className={buttonClasses({ size: 'sm' })}>
+            Introduce a client to AFC
+          </Link>
+        }
+      />
+    );
+  }
+
   return (
     <div className="space-y-5">
       <PageHeader
         eyebrow="Pipeline"
-        title={tableMode === 'agent' ? 'My referrals' : 'Referrals'}
+        title="Referrals"
         description={
-          tableMode === 'agent'
-            ? 'Review your leads, update their status, and capture quick notes as you work each opportunity.'
-            : tableMode === 'mc'
+          tableMode === 'mc'
             ? 'Keep tabs on the borrowers you have handed off and collaborate with partnered agents.'
             : 'Track every lead from intake through close.'
         }
@@ -90,9 +111,7 @@ export default async function ReferralsPage({
       <Filters mode={tableMode} />
       {hasReferrals ? (
         <div className="space-y-4">
-          {tableMode !== 'admin' && (
-            <ReferralSummary summary={summary} mode={tableMode === 'agent' ? 'agent' : 'mc'} />
-          )}
+          {tableMode === 'mc' && <ReferralSummary summary={summary} mode="mc" />}
           <ReferralTable
             data={items}
             mode={tableMode}
@@ -111,11 +130,7 @@ export default async function ReferralsPage({
         <EmptyState
           icon={<Send className="h-4 w-4" aria-hidden />}
           title="No referrals yet"
-          description={
-            tableMode === 'agent'
-              ? 'When you have a buyer ready for financing, introduce them to AFC and we will pair them with a mortgage consultant.'
-              : 'Add your first referral to get started.'
-          }
+          description="Add your first referral to get started."
           action={
             showAddReferralButton ? (
               <Link href="/referrals/new" className={buttonClasses({ size: 'sm' })}>

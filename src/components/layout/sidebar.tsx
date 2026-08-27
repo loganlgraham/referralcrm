@@ -98,7 +98,16 @@ function RoleLabel({ role }: { role: Role }) {
   return <span className="capitalize">{role}</span>;
 }
 
-export function Sidebar({ session, className }: { session: Session; className?: string }) {
+export function Sidebar({
+  session,
+  className,
+  needsUpdateCount = 0
+}: {
+  session: Session;
+  className?: string;
+  /** Referrals waiting on this agent, shown as a badge on the Referrals nav item. */
+  needsUpdateCount?: number;
+}) {
   const pathname = usePathname();
   const role = session.user.role;
   const sections = filterSections(role);
@@ -110,12 +119,12 @@ export function Sidebar({ session, className }: { session: Session; className?: 
         className
       )}
     >
-      <div className="relative flex h-[72px] items-center justify-between gap-2 border-b border-white/10 px-5">
+      <div className="relative flex h-[72px] items-center justify-between gap-2 border-b border-white/10 px-6">
         <Link
           href={role === 'admin' ? '/dashboard' : '/referrals'}
           className="group flex min-w-0 items-center gap-2.5 no-underline"
         >
-          <BrandMark inverted />
+          <BrandMark inverted variant="wordmark" wordmarkSize={24} />
         </Link>
         <NotificationBell session={session} inverted />
       </div>
@@ -144,6 +153,7 @@ export function Sidebar({ session, className }: { session: Session; className?: 
                 // Referrals parent shouldn't stay highlighted when admin tasks is active.
                 const excluded = item.href === '/referrals' && pathname.startsWith('/admin/tasks');
                 const active = (isExact || isNested) && !excluded;
+                const badgeCount = item.href === '/referrals' ? needsUpdateCount : 0;
                 return (
                   <li key={item.href}>
                     <Link
@@ -169,6 +179,14 @@ export function Sidebar({ session, className }: { session: Session; className?: 
                         )}
                       />
                       {item.label}
+                      {badgeCount > 0 ? (
+                        <span
+                          className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-pill bg-signal px-1.5 font-mono text-[11px] font-semibold tabular-nums text-white"
+                          aria-label={`${badgeCount} referrals need an update`}
+                        >
+                          {badgeCount}
+                        </span>
+                      ) : null}
                     </Link>
                   </li>
                 );

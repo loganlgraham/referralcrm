@@ -50,6 +50,9 @@ export const LOST_REASON_VALUES = [
   'chose_other_agent_precontact',
   'not_qualified',
   'no_longer_buying',
+  'out_of_area',
+  'already_transacted',
+  'duplicate_or_invalid',
   'chose_other_agent_postcontact',
   'unresponsive_after_contact',
   'service_issue',
@@ -60,11 +63,14 @@ export type LostReason = (typeof LOST_REASON_VALUES)[number];
 
 export const LOST_REASON_LABELS: Record<LostReason, string> = {
   never_connected: 'Never able to reach the borrower',
-  already_had_agent: 'Borrower already had an agent',
-  chose_other_agent_precontact: 'Chose another agent before we connected',
+  already_had_agent: 'Already working with someone else',
+  chose_other_agent_precontact: 'Went with someone else before we connected',
   not_qualified: 'Not qualified to buy',
   no_longer_buying: 'No longer buying / timeline changed',
-  chose_other_agent_postcontact: 'Chose another agent after meeting ours',
+  out_of_area: 'Looking outside our area',
+  already_transacted: 'Already bought or sold',
+  duplicate_or_invalid: 'Duplicate or bad contact info',
+  chose_other_agent_postcontact: 'Went with someone else after we connected',
   unresponsive_after_contact: 'Went quiet after we connected',
   service_issue: 'Service or responsiveness issue',
   other: 'Other'
@@ -81,6 +87,9 @@ export const LOST_REASON_COUNTS_AGAINST_AGENT: Record<LostReason, boolean> = {
   chose_other_agent_precontact: false,
   not_qualified: false,
   no_longer_buying: false,
+  out_of_area: false,
+  already_transacted: false,
+  duplicate_or_invalid: false,
   chose_other_agent_postcontact: true,
   unresponsive_after_contact: true,
   service_issue: true,
@@ -93,34 +102,13 @@ export const LOST_REASON_OPTIONS: { value: LostReason; label: string }[] = LOST_
 );
 
 /**
- * The agent-choice reasons make no sense when the agent is the referrer, so
- * agent-created referrals get a narrower list worded around the MC.
+ * One shared list for every origin. The unused options argument is kept so
+ * existing call sites do not need a rewrite.
  */
-export const AGENT_ORIGIN_LOST_REASON_VALUES = [
-  'never_connected',
-  'not_qualified',
-  'no_longer_buying',
-  'unresponsive_after_contact',
-  'service_issue',
-  'other'
-] as const satisfies readonly LostReason[];
-
-export const AGENT_ORIGIN_LOST_REASON_LABELS: Partial<Record<LostReason, string>> = {
-  never_connected: 'MC was never able to reach the client',
-  not_qualified: 'Client did not qualify',
-  unresponsive_after_contact: 'Client went quiet after the MC connected'
-};
-
-export const AGENT_ORIGIN_LOST_REASON_OPTIONS: { value: LostReason; label: string }[] =
-  AGENT_ORIGIN_LOST_REASON_VALUES.map((value) => ({
-    value,
-    label: AGENT_ORIGIN_LOST_REASON_LABELS[value] ?? LOST_REASON_LABELS[value]
-  }));
-
-export function getLostReasonOptions(options?: {
+export function getLostReasonOptions(_options?: {
   isAgentOrigin?: boolean;
 }): { value: LostReason; label: string }[] {
-  return options?.isAgentOrigin ? AGENT_ORIGIN_LOST_REASON_OPTIONS : LOST_REASON_OPTIONS;
+  return LOST_REASON_OPTIONS;
 }
 
 export const LOST_REASON_SOURCE_VALUES = ['reported', 'inferred'] as const;

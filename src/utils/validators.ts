@@ -130,10 +130,15 @@ export const updateStatusSchema = z.object({
     });
   }
   if (data.terminateDeal) {
-    if (data.status !== 'Active Lead' && data.status !== 'Lost' && data.status !== 'Showing Homes') {
+    if (
+      data.status !== 'Active Lead' &&
+      data.status !== 'Lost' &&
+      data.status !== 'Showing Homes' &&
+      data.status !== 'In Communication'
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'terminateDeal requires status Active Lead or Lost.',
+        message: 'terminateDeal requires status Active Lead, In Communication, or Lost.',
         path: ['status'],
       });
     }
@@ -168,12 +173,17 @@ export const createLenderNoteSchema = z.object({
   content: z.string().min(1)
 });
 
+const POST_TERMINATION_REFERRAL_STATUSES = ['Active Lead', 'In Communication', 'Lost'] as const;
+
 export const paymentSchema = z.object({
   referralId: z.string().min(1),
   status: z.enum(DEAL_STATUS_VALUES).default('under_contract'),
   expectedAmountCents: z.number().int().min(0),
   receivedAmountCents: z.number().int().min(0).optional(),
   terminatedReason: z.enum(TERMINATED_REASON_VALUES).nullable().optional(),
+  /** After a deal is terminated, park the referral here instead of writing Terminated. */
+  nextReferralStatus: z.enum(POST_TERMINATION_REFERRAL_STATUSES).optional(),
+  lostReason: z.enum(LOST_REASON_VALUES).nullable().optional(),
   agentAttribution: z.enum(['AHA', 'AHA_OOS', 'OUTSIDE_AGENT']).nullable().optional(),
   agentId: z
     .union([z.string().trim().regex(/^[0-9a-fA-F]{24}$/), z.literal(null)])

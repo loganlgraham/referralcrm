@@ -93,6 +93,7 @@ const config: Config = {
         pill: '9999px'
       },
       boxShadow: {
+        resting: '0 1px 2px rgba(20, 20, 60, 0.04)',
         card: '0 1px 2px rgba(20, 20, 60, 0.04), 0 10px 30px -14px rgba(20, 20, 60, 0.14)',
         raised: '0 4px 14px rgba(20, 20, 60, 0.06), 0 24px 48px -18px rgba(20, 20, 60, 0.20)',
         focus: '0 0 0 4px hsl(var(--ring) / 0.22)'

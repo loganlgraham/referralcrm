@@ -1041,6 +1041,25 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const hasAgitAgent = assignedAgentDesignation === 'AGIT';
 
   const previousStatus = existingPayment.status;
+  const isTerminatingNow = parsed.data.status === 'terminated' && previousStatus !== 'terminated';
+  if (isTerminatingNow && !parsed.data.nextReferralStatus) {
+    return NextResponse.json(
+      {
+        error: {
+          fieldErrors: {
+            nextReferralStatus: ['Choose whether the customer is still shopping before terminating this deal.'],
+          },
+        },
+      },
+      { status: 422 }
+    );
+  }
+  if (isTerminatingNow && parsed.data.nextReferralStatus === 'Lost' && !parsed.data.lostReason) {
+    return NextResponse.json(
+      { error: { fieldErrors: { lostReason: ['Please tell us why this referral was lost.'] } } },
+      { status: 422 }
+    );
+  }
   const isClosingNow = parsed.data.status === 'closed' && previousStatus !== 'closed';
   const isPayingNow = parsed.data.status === 'paid' && previousStatus !== 'paid';
 
@@ -1159,8 +1178,15 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     nextReceivedAmountCents = 0;
   }
 
+  if (parsed.data.status === 'terminated') {
+    nextExpectedAmountCents = 0;
+    nextReceivedAmountCents = 0;
+  }
+
   const updatePayload: Record<string, unknown> = { ...parsed.data };
   delete updatePayload.referralId;
+  delete updatePayload.nextReferralStatus;
+  delete updatePayload.lostReason;
   updatePayload.contractPriceCents = nextContractPriceCents ?? null;
   updatePayload.commissionBasisPoints = nextCommissionBasisPoints ?? null;
   updatePayload.commissionFlatFeeCents = isAgentOrigin ? null : nextCommissionFlatFeeCents ?? null;
@@ -1336,7 +1362,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         previousStatus === 'terminated' && parsed.data.status !== 'terminated';
       const nextReferralStatus = isReactivatedFromTerminated
         ? 'Active Lead'
-        : mapDealStatusToReferralStatus(parsed.data.status as DealStatus);
+        : parsed.data.status === 'terminated' && parsed.data.nextReferralStatus
+          ? parsed.data.nextReferralStatus
+          : mapDealStatusToReferralStatus(parsed.data.status as DealStatus);
       if (effectiveSide === 'sell') {
         referral.sellStatus = nextReferralStatus;
       } else {
@@ -1347,6 +1375,49 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         referral.sellStatus ?? referral.status,
         referral.clientType ?? null
       );
+
+      if (parsed.data.nextReferralStatus === 'Lost') {
+        const previousLostReason = referral.lostReason ?? null;
+        const nextLostReason =
+          nextSummaryStatus === 'Lost' ? parsed.data.lostReason ?? previousLostReason : null;
+        if (nextLostReason !== previousLostReason) {
+          referral.lostReason = nextLostReason;
+          referral.lostReasonSource = nextLostReason ? 'reported' : null;
+          const lostReasonAudit: Record<string, unknown> = {
+            actorRole: session.user.role,
+            field: 'lostReason',
+            previousValue: previousLostReason,
+            newValue: nextLostReason,
+            timestamp: now,
+          };
+          const lostReasonActorId = resolveAuditActorId(session.user.id);
+          if (lostReasonActorId) {
+            lostReasonAudit.actorId = lostReasonActorId;
+          }
+          referral.audit = Array.isArray(referral.audit) ? referral.audit : [];
+          referral.audit.push(lostReasonAudit as any);
+          referral.markModified('audit');
+        }
+        referral.estPurchasePriceCents = 0;
+        referral.referralFeeDueCents = 0;
+        if (referral.autoUpdateRemindersEnabled !== false) {
+          referral.autoUpdateRemindersEnabled = false;
+          const reminderAudit: Record<string, unknown> = {
+            actorRole: session.user.role,
+            field: 'autoUpdateRemindersEnabled',
+            previousValue: true,
+            newValue: false,
+            timestamp: now,
+          };
+          const reminderActorId = resolveAuditActorId(session.user.id);
+          if (reminderActorId) {
+            reminderAudit.actorId = reminderActorId;
+          }
+          referral.audit = Array.isArray(referral.audit) ? referral.audit : [];
+          referral.audit.push(reminderAudit as any);
+          referral.markModified('audit');
+        }
+      }
 
       if (previousReferralStatus !== nextSummaryStatus) {
         const auditEntry: Record<string, unknown> = {

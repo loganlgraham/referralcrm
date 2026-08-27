@@ -538,6 +538,127 @@ describe('Payments PATCH outside-agent normalization', () => {
     expect(mockedPaymentFindByIdAndUpdate).not.toHaveBeenCalled();
   });
 
+  it('rejects newly terminated deals without nextReferralStatus', async () => {
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        status: 'terminated',
+        terminatedReason: 'inspection',
+      })
+    );
+
+    expect(response.status).toBe(422);
+    expect(mockedPaymentFindByIdAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects Lost nextReferralStatus without lostReason', async () => {
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        status: 'terminated',
+        terminatedReason: 'changed_mind',
+        nextReferralStatus: 'Lost',
+      })
+    );
+
+    expect(response.status).toBe(422);
+    expect(mockedPaymentFindByIdAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('parks the referral as Active Lead when a deal is terminated and the client is still shopping', async () => {
+    mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
+      _id: { toString: () => 'pay-1' },
+      status: 'terminated',
+      usedAssignedAgent: true,
+      createdAt: new Date('2026-03-05T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T10:02:00.000Z'),
+      closingDate: null,
+    });
+    referralDoc.clientType = 'Buyer';
+
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        status: 'terminated',
+        terminatedReason: 'financing',
+        nextReferralStatus: 'Active Lead',
+        expectedAmountCents: 0,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(referralDoc.buyStatus).toBe('Active Lead');
+    expect(referralDoc.status).toBe('Active Lead');
+    expect(mockedPaymentFindByIdAndUpdate).toHaveBeenCalledWith(
+      'pay-1',
+      expect.not.objectContaining({
+        nextReferralStatus: expect.anything(),
+        lostReason: expect.anything(),
+      }),
+      { new: true }
+    );
+  });
+
+  it('parks the referral In Communication when a deal is terminated with maybe still shopping', async () => {
+    mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
+      _id: { toString: () => 'pay-1' },
+      status: 'terminated',
+      usedAssignedAgent: true,
+      createdAt: new Date('2026-03-05T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T10:02:00.000Z'),
+      closingDate: null,
+    });
+    referralDoc.clientType = 'Buyer';
+
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        status: 'terminated',
+        terminatedReason: 'appraisal',
+        nextReferralStatus: 'In Communication',
+        expectedAmountCents: 0,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(referralDoc.buyStatus).toBe('In Communication');
+    expect(referralDoc.status).toBe('In Communication');
+  });
+
+  it('marks the referral Lost and stores the lost reason when shopping is no', async () => {
+    mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({
+      _id: { toString: () => 'pay-1' },
+      status: 'terminated',
+      usedAssignedAgent: true,
+      createdAt: new Date('2026-03-05T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T10:02:00.000Z'),
+      closingDate: null,
+    });
+    referralDoc.clientType = 'Buyer';
+    referralDoc.autoUpdateRemindersEnabled = true;
+    referralDoc.estPurchasePriceCents = 50000000;
+    referralDoc.referralFeeDueCents = 375000;
+
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        status: 'terminated',
+        terminatedReason: 'changed_mind',
+        nextReferralStatus: 'Lost',
+        lostReason: 'no_longer_buying',
+        expectedAmountCents: 0,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(referralDoc.buyStatus).toBe('Lost');
+    expect(referralDoc.status).toBe('Lost');
+    expect(referralDoc.lostReason).toBe('no_longer_buying');
+    expect(referralDoc.estPurchasePriceCents).toBe(0);
+    expect(referralDoc.referralFeeDueCents).toBe(0);
+    expect(referralDoc.autoUpdateRemindersEnabled).toBe(false);
+  });
+
   it('reactivates a terminated referral back to Active Lead when deal leaves terminated', async () => {
     mockedPaymentFindById.mockResolvedValueOnce({
       _id: { toString: () => 'pay-1' },

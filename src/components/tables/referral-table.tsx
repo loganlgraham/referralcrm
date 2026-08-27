@@ -29,16 +29,22 @@ import {
   type LostReason,
   type ReferralTimeline
 } from '@/constants/referrals';
-import {
-  TERMINATED_REASON_OPTIONS,
-  type DealStatus,
-  type TerminatedReason,
-} from '@/constants/deals';
+import { type DealStatus } from '@/constants/deals';
 import { formatNumber, formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import { calculateTimelineDaysRemaining, formatTimelineCountdown } from '@/utils/timeline-countdown';
 import { mapDealStatusToReferralStatusDisplay } from '@/lib/latest-deal-referral-status';
+import type {
+  ReferralCounterparty,
+  ReferralLastActivity,
+  ReferralLatestDeal
+} from '@/lib/referral-activity';
 import { confirmCloseStatusDate } from '@/components/referrals/status-date-confirmation-toast';
+import { confirmReferralTermination } from '@/components/referrals/terminate-confirmation-toast';
+import {
+  collectUnderContractDeal,
+  submitUnderContractDeal,
+} from '@/components/referrals/deal-details-toast';
 import { StatusPill } from '@/components/ui/status-pill';
 import { AgentOriginMarker } from '@/components/referrals/agent-origin-marker';
 import { Button } from '@/components/ui/button';
@@ -63,6 +69,7 @@ export interface ReferralRow {
   stageOnTransfer?: string;
   initialNotes?: string;
   loanFileNumber: string;
+  loanType?: string;
   status: ReferralStatus;
   statusLastUpdated?: string | null;
   daysInStatus?: number;
@@ -86,6 +93,12 @@ export interface ReferralRow {
   autoUpdateRemindersEnabled?: boolean;
   hasAnyPayments?: boolean;
   hasAnyUsedAfcTrue?: boolean;
+  needsUpdate?: boolean;
+  statusChangedAt?: string | null;
+  referredAt?: string | null;
+  lastActivity?: ReferralLastActivity | null;
+  latestDeal?: ReferralLatestDeal | null;
+  counterparty?: ReferralCounterparty | null;
 }
 
 type TableMode = 'admin' | 'mc' | 'agent';
@@ -116,6 +129,7 @@ interface StatusSelectProps {
   side?: 'buy' | 'sell';
   compact?: boolean;
   roleMode?: TableMode;
+  borrowerName?: string;
   /** Agent-created (agent→AFC) referrals collect no referral fee. */
   isAgentOrigin?: boolean;
   onStatusResolved?: (nextStatus: ReferralStatus) => void;
@@ -152,398 +166,20 @@ const extractStatusErrorMessage = (payload: StatusUpdateResponse | null): string
   return payload.error.message ?? firstFieldError ?? 'Unable to update status';
 };
 
-const parseNumericInput = (value: string): number => {
-  const numeric = Number.parseFloat(value.replace(/[^0-9.\-]/g, ''));
-  return Number.isFinite(numeric) ? numeric : Number.NaN;
-};
-
-const toCents = (value: string): number => {
-  const numeric = parseNumericInput(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) {
-    return 0;
-  }
-  return Math.round(numeric * 100);
-};
-
-const formatCurrencyInput = (value: string): string => {
-  const sanitized = value.replace(/[^0-9.]/g, '');
-  if (!sanitized) {
-    return '';
-  }
-
-  const [wholeRaw, ...fractionSegments] = sanitized.split('.');
-  const normalizedWhole = wholeRaw.replace(/^0+(?=\d)/, '');
-  const wholeDigits = normalizedWhole || '0';
-  const groupedWhole = wholeDigits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  if (fractionSegments.length === 0) {
-    return groupedWhole;
-  }
-
-  const fraction = fractionSegments.join('').slice(0, 2);
-  return `${groupedWhole}.${fraction}`;
-};
-
-const dateStringToLocalISO = (dateString: string): string => {
-  if (!dateString) return '';
-  if (dateString.includes('T')) return dateString;
-  const [year, month, day] = dateString.split('-').map(Number);
-  return new Date(year, month - 1, day).toISOString();
-};
-
-interface UnderContractDealToastProps {
-  defaultSide?: 'buy' | 'sell';
-  /** Agent-created (agent→AFC) referrals collect no referral fee. */
-  isAgentOrigin?: boolean;
-  onClose: () => void;
-  onSubmit: (payload: {
-    paymentPayload: Record<string, unknown>;
-    contractDetails: {
-      propertyAddress: string;
-      propertyCity: string;
-      propertyState: string;
-      propertyPostalCode: string;
-      contractPrice: number;
-      agentCommissionPercentage: number;
-      referralFeePercentage: number;
-      dealSide: 'buy' | 'sell';
-    };
-  }) => Promise<void>;
-}
-
-function UnderContractDealToast({
-  onClose,
-  onSubmit,
-  defaultSide = 'buy',
-  isAgentOrigin = false,
-}: UnderContractDealToastProps) {
-  const [expectedAmount, setExpectedAmount] = useState('');
-  const [expectedManuallyEdited, setExpectedManuallyEdited] = useState(false);
-  const [contractPrice, setContractPrice] = useState('');
-  const [commissionMode, setCommissionMode] = useState<'%' | '$'>('%');
-  const [commissionPercentage, setCommissionPercentage] = useState('');
-  const [commissionFlat, setCommissionFlat] = useState('');
-  const [referralFeePercentage, setReferralFeePercentage] = useState('');
-  const [propertyAddress, setPropertyAddress] = useState('');
-  const [propertyCity, setPropertyCity] = useState('');
-  const [propertyState, setPropertyState] = useState('');
-  const [propertyPostalCode, setPropertyPostalCode] = useState('');
-  const [closingDate, setClosingDate] = useState('');
-  const [underContractDate, setUnderContractDate] = useState('');
-  const [side, setSide] = useState<'buy' | 'sell'>(defaultSide);
-  const [usedAfc, setUsedAfc] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleDateInputClick = useCallback((event: React.MouseEvent<HTMLInputElement>) => {
-    try {
-      event.currentTarget.showPicker?.();
-    } catch {
-      // Fallback to native date input behavior for browsers without showPicker support.
-    }
-  }, []);
-
-  useEffect(() => {
-    if (expectedManuallyEdited) return;
-    const referral = parseNumericInput(referralFeePercentage);
-    if (!Number.isFinite(referral)) return;
-    if (commissionMode === '$') {
-      const flatFee = parseNumericInput(commissionFlat);
-      if (Number.isFinite(flatFee)) {
-        const computed = flatFee * (referral / 100);
-        if (Number.isFinite(computed)) {
-          setExpectedAmount(computed.toFixed(2));
-        }
-      }
-      return;
-    }
-    const contract = parseNumericInput(contractPrice);
-    const commission = parseNumericInput(commissionPercentage);
-    if (Number.isFinite(contract) && Number.isFinite(commission)) {
-      const computed = ((contract * commission) / 100) * (referral / 100);
-      if (Number.isFinite(computed)) {
-        setExpectedAmount(computed.toFixed(2));
-      }
-    }
-  }, [commissionFlat, commissionMode, commissionPercentage, contractPrice, expectedManuallyEdited, referralFeePercentage]);
-
-  useEffect(() => {
-    if (side === 'sell' && usedAfc) {
-      setUsedAfc(false);
-    }
-  }, [side, usedAfc]);
-
-  return (
-    <div className="w-[min(calc(100vw-1rem),40rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-lg border border-border bg-surface-raised p-4 shadow-xl">
-      <h3 className="text-sm font-semibold text-foreground">Add Deal Details</h3>
-      <p className="mt-1 text-xs text-foreground-subtle">Enter full deal info before moving referral to Under Contract.</p>
-      <form
-        className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (submitting) return;
-          if (!propertyAddress.trim() || !propertyCity.trim()) {
-            toast.error('Property address and city are required.');
-            return;
-          }
-          if (!/^[A-Za-z]{2}$/.test(propertyState.trim())) {
-            toast.error('Property state must be a 2-letter code.');
-            return;
-          }
-          if (!/^\d{5}(?:-\d{4})?$/.test(propertyPostalCode.trim())) {
-            toast.error('Enter a valid property ZIP code.');
-            return;
-          }
-          if (!contractPrice || parseNumericInput(contractPrice) <= 0) {
-            toast.error('Contract price is required.');
-            return;
-          }
-          if (!isAgentOrigin) {
-            if (!referralFeePercentage.trim()) {
-              toast.error('Referral fee % is required.');
-              return;
-            }
-            const referralFeeParsed = parseNumericInput(referralFeePercentage);
-            if (!Number.isFinite(referralFeeParsed) || referralFeeParsed < 0) {
-              toast.error('Enter a valid referral fee % (0 or greater).');
-              return;
-            }
-          }
-          const contractPriceCents = toCents(contractPrice);
-          const isFlatFeeMode = commissionMode === '$';
-          const commissionBasisPoints = isAgentOrigin
-            ? null
-            : isFlatFeeMode
-              ? null
-              : commissionPercentage
-                ? Math.round(parseNumericInput(commissionPercentage) * 100)
-                : null;
-          const commissionFlatFeeCents = isAgentOrigin
-            ? null
-            : isFlatFeeMode
-              ? (commissionFlat ? toCents(commissionFlat) : null)
-              : null;
-          const referralFeeBasisPoints = isAgentOrigin
-            ? null
-            : Math.round(parseNumericInput(referralFeePercentage) * 100);
-          const expectedAmountCents = isAgentOrigin ? 0 : toCents(expectedAmount);
-          const computedExpectedAmountCents =
-            isAgentOrigin
-              ? 0
-              : !expectedAmountCents && referralFeeBasisPoints
-                ? isFlatFeeMode
-                  ? Math.round(((commissionFlatFeeCents ?? 0) * referralFeeBasisPoints) / 10_000)
-                  : Math.round((contractPriceCents * (commissionBasisPoints ?? 0) * referralFeeBasisPoints) / 100_000_000)
-                : expectedAmountCents;
-          const finalExpectedAmountCents = computedExpectedAmountCents;
-
-          const agentCommissionPercentage = isAgentOrigin
-            ? 0
-            : isFlatFeeMode
-              ? commissionFlatFeeCents != null && contractPriceCents > 0
-                ? (commissionFlatFeeCents / contractPriceCents) * 100
-                : 0
-              : (commissionBasisPoints ?? 0) / 100;
-          const referralFeePercentageValue = isAgentOrigin ? 0 : (referralFeeBasisPoints ?? 0) / 100;
-          const resolvedUnderContractDate = underContractDate
-            ? dateStringToLocalISO(underContractDate)
-            : new Date().toISOString();
-
-          setSubmitting(true);
-          try {
-            await onSubmit({
-              paymentPayload: {
-                status: 'under_contract',
-                expectedAmountCents: finalExpectedAmountCents,
-                receivedAmountCents: 0,
-                netReferralFeePaidCents: 0,
-                contractPriceCents,
-                commissionBasisPoints,
-                commissionFlatFeeCents,
-                referralFeeBasisPoints,
-                propertyAddress: propertyAddress.trim(),
-                propertyCity: propertyCity.trim(),
-                propertyState: propertyState.trim().toUpperCase(),
-                closingDate: closingDate ? dateStringToLocalISO(closingDate) : null,
-                underContractDate: resolvedUnderContractDate,
-                usedAfc: side === 'sell' ? false : usedAfc,
-                // Agent-entered deals always use the assigned agent.
-                usedAssignedAgent: true,
-                side,
-                terminatedReason: null,
-              },
-              contractDetails: {
-                propertyAddress: propertyAddress.trim(),
-                propertyCity: propertyCity.trim(),
-                propertyState: propertyState.trim().toUpperCase(),
-                propertyPostalCode: propertyPostalCode.trim(),
-                contractPrice: contractPriceCents / 100,
-                agentCommissionPercentage,
-                referralFeePercentage: referralFeePercentageValue,
-                dealSide: side,
-              },
-            });
-          } finally {
-            setSubmitting(false);
-          }
-        }}
-      >
-        <label className="text-xs font-medium text-foreground-muted">Contract price
-          <div className="relative mt-1">
-            <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-sm text-foreground-subtle">$</span>
-            <input
-              className="text-numeric w-full rounded-lg border border-border-strong/70 py-1 pl-6 pr-2 text-sm"
-              inputMode="decimal"
-              value={contractPrice}
-              onChange={(e) => setContractPrice(formatCurrencyInput(e.target.value))}
-            />
-          </div>
-        </label>
-        {!isAgentOrigin ? (
-          <>
-            <div className="text-xs font-medium text-foreground-muted">
-              <span>Commission</span>
-              <div className="mt-1 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className={`rounded border px-2 py-1 text-xs font-semibold transition ${
-                    commissionMode === '%'
-                      ? 'border-primary bg-primary text-white'
-                      : 'border-border-strong bg-surface-raised text-foreground-muted hover:bg-surface-muted'
-                  }`}
-                  onClick={() => setCommissionMode('%')}
-                >
-                  %
-                </button>
-                <button
-                  type="button"
-                  className={`rounded border px-2 py-1 text-xs font-semibold transition ${
-                    commissionMode === '$'
-                      ? 'border-primary bg-primary text-white'
-                      : 'border-border-strong bg-surface-raised text-foreground-muted hover:bg-surface-muted'
-                  }`}
-                  onClick={() => setCommissionMode('$')}
-                >
-                  $
-                </button>
-                <input
-                  className="text-numeric w-full rounded-lg border border-border-strong/70 px-2 py-1 text-sm sm:flex-1"
-                  value={commissionMode === '%' ? commissionPercentage : commissionFlat}
-                  onChange={(event) => commissionMode === '%' ? setCommissionPercentage(event.target.value) : setCommissionFlat(event.target.value)}
-                />
-              </div>
-            </div>
-            <label className="text-xs font-medium text-foreground-muted">Referral fee %
-              <input className="text-numeric mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-sm" value={referralFeePercentage} onChange={(e) => setReferralFeePercentage(e.target.value)} />
-            </label>
-            <label className="text-xs font-medium text-foreground-muted">Expected amount
-              <input className="text-numeric mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-sm" value={expectedAmount} onChange={(e) => { setExpectedManuallyEdited(Boolean(e.target.value)); setExpectedAmount(e.target.value); }} />
-            </label>
-          </>
-        ) : null}
-        <label className="text-xs font-medium text-foreground-muted">Under contract date
-          <input
-            type="date"
-            className="text-numeric mt-1 w-full cursor-pointer rounded-lg border border-border-strong/70 px-2 py-1 text-sm"
-            value={underContractDate}
-            onClick={handleDateInputClick}
-            onChange={(e) => setUnderContractDate(e.target.value)}
-          />
-        </label>
-        <label className="text-xs font-medium text-foreground-muted">Closing date
-          <input
-            type="date"
-            className="text-numeric mt-1 w-full cursor-pointer rounded-lg border border-border-strong/70 px-2 py-1 text-sm"
-            value={closingDate}
-            onClick={handleDateInputClick}
-            onChange={(e) => setClosingDate(e.target.value)}
-          />
-        </label>
-        <label className="text-xs font-medium text-foreground-muted sm:col-span-2">Property address
-          <input className="mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-sm" value={propertyAddress} onChange={(e) => setPropertyAddress(e.target.value)} />
-        </label>
-        <label className="text-xs font-medium text-foreground-muted">Property city
-          <input className="mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-sm" value={propertyCity} onChange={(e) => setPropertyCity(e.target.value)} />
-        </label>
-        <label className="text-xs font-medium text-foreground-muted">Property state
-          <input className="mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-sm uppercase" maxLength={2} value={propertyState} onChange={(e) => setPropertyState(e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2))} />
-        </label>
-        <label className="text-xs font-medium text-foreground-muted">Property ZIP
-          <input className="text-numeric mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-sm" value={propertyPostalCode} onChange={(e) => setPropertyPostalCode(e.target.value)} />
-        </label>
-        <label className="text-xs font-medium text-foreground-muted">Deal side
-          <select className="mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-sm" value={side} onChange={(e) => setSide(e.target.value as 'buy' | 'sell')}>
-            <option value="buy">Buy-side</option>
-            <option value="sell">Sell-side</option>
-          </select>
-        </label>
-        {side !== 'sell' && (
-          <fieldset className="rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 sm:col-span-2">
-            <legend className="px-1 text-sm font-semibold text-foreground">
-              Is this client financing with AFC?
-            </legend>
-            <p className="mt-1 text-xs text-foreground-muted">
-              Keeps the client outcome accurate for coordination with your mortgage consultant.
-            </p>
-            <div className="mt-2 flex flex-col gap-2 text-sm text-foreground-muted">
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="underContractUsedAfc"
-                  className="h-4 w-4 accent-brand"
-                  checked={usedAfc}
-                  onChange={() => setUsedAfc(true)}
-                />
-                Yes — financing with AFC
-              </label>
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="underContractUsedAfc"
-                  className="h-4 w-4 accent-brand"
-                  checked={!usedAfc}
-                  onChange={() => setUsedAfc(false)}
-                />
-                No — financing with another lender
-              </label>
-            </div>
-          </fieldset>
-        )}
-        <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="w-full sm:w-auto"
-            onClick={onClose}
-            disabled={submitting}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" size="sm" className="w-full sm:w-auto" loading={submitting}>
-            {submitting ? 'Saving…' : 'Save deal & move status'}
-          </Button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
 function StatusSelect({
   referralId,
   value,
   dealStatusLabel,
   defaultSide = 'buy',
   side,
-  compact = false,
   roleMode,
+  borrowerName = 'this referral',
   isAgentOrigin = false,
   onStatusResolved,
 }: StatusSelectProps) {
   const router = useRouter();
   const [status, setStatus] = useState<ReferralStatus>(value);
   const [loading, setLoading] = useState(false);
-  const [pendingTerminatedSelection, setPendingTerminatedSelection] = useState(false);
-  const [stillShopping, setStillShopping] = useState<'yes' | 'no' | ''>('');
-  const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | ''>('');
   const [pendingLostSelection, setPendingLostSelection] = useState(false);
   const [lostReason, setLostReason] = useState<LostReason | ''>('');
   const [hideDealStage, setHideDealStage] = useState(false);
@@ -562,62 +198,22 @@ function StatusSelect({
     [onStatusResolved]
   );
 
-  const resetTerminatedPanel = () => {
-    setPendingTerminatedSelection(false);
-    setStillShopping('');
-    setTerminatedReason('');
-    setLostReason('');
-  };
-
   const resetLostPanel = () => {
     setPendingLostSelection(false);
     setLostReason('');
   };
 
   const openUnderContractDealModal = () => {
-    const toastId = toast.custom((t) => (
-      <UnderContractDealToast
-        defaultSide={defaultSide}
-        isAgentOrigin={isAgentOrigin}
-        onClose={() => toast.dismiss(t)}
-        onSubmit={async ({ paymentPayload, contractDetails }) => {
-          const paymentResponse = await fetch('/api/payments', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              referralId,
-              ...paymentPayload,
-            }),
-          });
-          if (!paymentResponse.ok) {
-            throw new Error('Unable to save deal details');
-          }
-          const statusResponse = await fetch(`/api/referrals/${referralId}/status`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              status: 'Under Contract',
-              source: 'referral_table',
-              side: contractDetails.dealSide,
-              contractDetails,
-              createNewDeal: false,
-              usedAfc:
-                contractDetails.dealSide === 'sell'
-                  ? false
-                  : Boolean(paymentPayload.usedAfc),
-            }),
-          });
-          if (!statusResponse.ok) {
-            throw new Error('Unable to move referral to Under Contract');
-          }
-          applyResolvedStatus('Under Contract');
-          router.refresh();
-          toast.dismiss(t);
-          toast.success('Deal saved and referral moved to Under Contract');
-        }}
-      />
-    ), { duration: Infinity, position: 'top-center' });
-    void toastId;
+    void collectUnderContractDeal({
+      defaultSide,
+      isAgentOrigin,
+      onSubmit: async (result) => {
+        await submitUnderContractDeal(referralId, result, 'referral_table');
+        applyResolvedStatus('Under Contract');
+        router.refresh();
+        toast.success('Deal saved and referral moved to Under Contract');
+      },
+    });
   };
 
   const handleChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -629,11 +225,53 @@ function StatusSelect({
       return;
     }
     if (nextStatus === 'Terminated') {
-      // Keep the prior status in the select while collecting shopping + reason.
-      setPendingTerminatedSelection(true);
-      setStillShopping('');
-      setTerminatedReason('');
-      setLostReason('');
+      const confirmation = await confirmReferralTermination({
+        borrowerName,
+        isAgentOrigin,
+      });
+      if (!confirmation.confirmed || !confirmation.resolvedStatus || !confirmation.terminatedReason) {
+        applyResolvedStatus(value);
+        return;
+      }
+      setLoading(true);
+      try {
+        const response = await fetch(`/api/referrals/${referralId}/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: confirmation.resolvedStatus,
+            source: 'referral_table',
+            side,
+            terminatedReason: confirmation.terminatedReason,
+            lostReason: confirmation.resolvedStatus === 'Lost' ? confirmation.lostReason : null,
+            terminateDeal: true,
+          }),
+        });
+        const payload = (await response.json().catch(() => null)) as StatusUpdateResponse | null;
+        if (!response.ok) {
+          if (isReferralStatus(payload?.currentStatus)) {
+            applyResolvedStatus(payload.currentStatus);
+          } else {
+            applyResolvedStatus(value);
+          }
+          toast.error(extractStatusErrorMessage(payload));
+          router.refresh();
+          return;
+        }
+        const resolved = isReferralStatus(payload?.status)
+          ? payload.status
+          : confirmation.resolvedStatus;
+        applyResolvedStatus(resolved);
+        setHideDealStage(true);
+        toast.success('Referral status updated');
+        router.refresh();
+      } catch (error) {
+        console.error(error);
+        toast.error('Unable to update status');
+        applyResolvedStatus(value);
+      } finally {
+        setLoading(false);
+      }
       return;
     }
     if (nextStatus === 'Lost') {
@@ -730,132 +368,6 @@ function StatusSelect({
           </option>
         ))}
       </select>
-      {pendingTerminatedSelection && (
-        <div className="space-y-2 rounded-lg border border-border bg-surface-muted p-2">
-          <label className="block text-xs font-semibold text-foreground-muted">
-            Is this customer still shopping?
-            <select
-              value={stillShopping}
-              onChange={(event) => setStillShopping(event.target.value as 'yes' | 'no' | '')}
-              className="mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
-              disabled={loading}
-            >
-              <option value="">Select</option>
-              <option value="yes">Yes</option>
-              <option value="no">No</option>
-            </select>
-          </label>
-          <label className="block text-xs font-semibold text-foreground-muted">
-            Why did the deal fall through?
-            <select
-              value={terminatedReason}
-              onChange={(event) => setTerminatedReason(event.target.value as TerminatedReason | '')}
-              className="mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
-              disabled={loading}
-            >
-              <option value="">Select reason</option>
-              {TERMINATED_REASON_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {stillShopping === 'no' && (
-            <label className="block text-xs font-semibold text-foreground-muted">
-              Why are we losing this client?
-              <select
-                value={lostReason}
-                onChange={(event) => setLostReason(event.target.value as LostReason | '')}
-                className="mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
-                disabled={loading}
-              >
-                <option value="">Select reason</option>
-                {lostReasonOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className="rounded bg-primary hover:bg-primary-hover px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
-              disabled={loading}
-              onClick={async () => {
-                if (!stillShopping) {
-                  toast.error('Please choose whether the customer is still shopping.');
-                  return;
-                }
-                if (!terminatedReason) {
-                  toast.error('Termination reason is required.');
-                  return;
-                }
-                const resolvedStatus: ReferralStatus = stillShopping === 'yes' ? 'Active Lead' : 'Lost';
-                if (resolvedStatus === 'Lost' && !lostReason) {
-                  toast.error('Please choose why we are losing this client.');
-                  return;
-                }
-                setLoading(true);
-                try {
-                  const response = await fetch(`/api/referrals/${referralId}/status`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      status: resolvedStatus,
-                      source: 'referral_table',
-                      side,
-                      terminatedReason,
-                      lostReason: resolvedStatus === 'Lost' ? lostReason : null,
-                      terminateDeal: true,
-                    }),
-                  });
-                  const payload = (await response.json().catch(() => null)) as StatusUpdateResponse | null;
-                  if (!response.ok) {
-                    if (isReferralStatus(payload?.currentStatus)) {
-                      applyResolvedStatus(payload.currentStatus);
-                    } else {
-                      applyResolvedStatus(value);
-                    }
-                    toast.error(extractStatusErrorMessage(payload));
-                    resetTerminatedPanel();
-                    router.refresh();
-                    return;
-                  }
-                  const nextStatus = isReferralStatus(payload?.status) ? payload.status : resolvedStatus;
-                  applyResolvedStatus(nextStatus);
-                  setHideDealStage(true);
-                  resetTerminatedPanel();
-                  toast.success('Referral status updated');
-                  router.refresh();
-                } catch (error) {
-                  console.error(error);
-                  toast.error('Unable to update status');
-                  applyResolvedStatus(value);
-                  resetTerminatedPanel();
-                } finally {
-                  setLoading(false);
-                }
-              }}
-            >
-              Confirm
-            </button>
-            <button
-              type="button"
-              className="rounded-lg border border-border-strong/70 px-2 py-1 text-xs font-semibold text-foreground-muted"
-              disabled={loading}
-              onClick={() => {
-                resetTerminatedPanel();
-                applyResolvedStatus(value);
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
       {pendingLostSelection && (
         <div className="space-y-2 rounded-lg border border-border bg-surface-muted p-2">
           <label className="block text-xs font-semibold text-foreground-muted">
@@ -945,8 +457,7 @@ function StatusSelect({
           </div>
         </div>
       )}
-      {!pendingTerminatedSelection &&
-        !pendingLostSelection &&
+      {!pendingLostSelection &&
         !hideDealStage &&
         dealStatusLabel &&
         dealStatusLabel !== status &&
@@ -1151,6 +662,7 @@ function AgentBothStatusCell({ row }: { row: ReferralRow }) {
           side={assignedSide}
           compact
           roleMode="agent"
+          borrowerName={row.borrowerName}
           isAgentOrigin={isAgentOrigin}
           onStatusResolved={(nextStatus) => {
             if (assignedSide === 'sell') {
@@ -1453,6 +965,7 @@ function buildColumns(
               side={row.original.viewerAssignedSide ?? undefined}
               defaultSide={row.original.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
               roleMode="agent"
+              borrowerName={row.original.borrowerName}
               isAgentOrigin={row.original.origin === 'agent'}
             />
           );
@@ -1654,6 +1167,7 @@ function ReferralMobileStack({
                         side={row.viewerAssignedSide ?? undefined}
                         defaultSide={row.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
                         roleMode="agent"
+                        borrowerName={row.borrowerName}
                         isAgentOrigin={row.origin === 'agent'}
                       />
                     )}

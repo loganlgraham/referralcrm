@@ -14,6 +14,7 @@ import {
   startOfDay,
 } from 'date-fns';
 import { formatInTimeZone, utcToZonedTime } from 'date-fns-tz';
+import { ACTIVE_REFERRAL_STATUS_VALUES } from '@/constants/referrals';
 
 interface AuditEntryLike {
   field?: string;
@@ -261,6 +262,71 @@ const resolveEarliestStart = (first: Date | null, second: Date | null): Date | n
   }
 
   return first.getTime() <= second.getTime() ? first : second;
+};
+
+/**
+ * How long a referral may sit in a status before the agent owes an update, even
+ * when a note has already been logged since the last status change.
+ */
+export const NEEDS_UPDATE_THRESHOLD_DAYS: Record<string, number> = {
+  Paired: 1,
+  'In Communication': SLA_THRESHOLDS.daysWithoutTouchPoint,
+  'Active Lead': SLA_THRESHOLDS.activeLeadCheckInDays,
+  'Showing Homes': SLA_THRESHOLDS.activeLeadCheckInDays,
+  'Under Contract': SLA_THRESHOLDS.daysToUnderContract,
+};
+
+const NEEDS_UPDATE_ACTIVE_STATUSES = new Set<string>(ACTIVE_REFERRAL_STATUS_VALUES);
+
+export interface NeedsUpdateInput {
+  status?: string | null;
+  statusChangedAt?: string | Date | null;
+  createdAt?: string | Date | null;
+  referralDate?: string | Date | null;
+  lastNoteAt?: string | Date | null;
+  now?: Date;
+}
+
+export interface NeedsUpdateResult {
+  needsUpdate: boolean;
+  daysInStatus: number;
+  hasNoteSinceStatusChange: boolean;
+}
+
+/**
+ * Single source of truth for "this referral is waiting on the agent" so the list
+ * rows and the detail page can never disagree. Terminal statuses never qualify.
+ */
+export const resolveNeedsUpdate = (input: NeedsUpdateInput): NeedsUpdateResult => {
+  const now = input.now ?? new Date();
+  const createdAt = parseTimestamp(input.createdAt);
+  const referralDate = parseTimestamp(input.referralDate);
+  const statusChangedAt = parseTimestamp(input.statusChangedAt);
+
+  const fallbackStart = resolveEarliestStart(
+    isValidDate(referralDate) ? referralDate : null,
+    isValidDate(createdAt) ? createdAt : null
+  );
+  const anchor = isValidDate(statusChangedAt) ? statusChangedAt : fallbackStart;
+  const daysInStatus = anchor ? Math.max(differenceInDays(now, anchor), 0) : 0;
+
+  const lastNoteAt = parseTimestamp(input.lastNoteAt);
+  const hasNoteSinceStatusChange =
+    isValidDate(lastNoteAt) && (!anchor || lastNoteAt.getTime() >= anchor.getTime());
+
+  const status = normalizeStatusValue(input.status);
+
+  if (!status || !NEEDS_UPDATE_ACTIVE_STATUSES.has(status)) {
+    return { needsUpdate: false, daysInStatus, hasNoteSinceStatusChange };
+  }
+
+  const threshold = NEEDS_UPDATE_THRESHOLD_DAYS[status] ?? SLA_THRESHOLDS.daysWithoutTouchPoint;
+
+  return {
+    needsUpdate: !hasNoteSinceStatusChange || daysInStatus > threshold,
+    daysInStatus,
+    hasNoteSinceStatusChange,
+  };
 };
 
 const formatDateKey = (date: Date): string => formatInTimeZone(date, SLA_TIME_ZONE, 'yyyy-MM-dd');

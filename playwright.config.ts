@@ -1,26 +1,37 @@
-import { defineConfig, devices } from '@playwright/test';
-import { readFileSync } from 'fs';
+import { existsSync } from 'fs';
 import { join } from 'path';
+import { config as loadEnv } from 'dotenv';
+import { defineConfig, devices } from '@playwright/test';
 
-// Load .env.test.local if it exists
-try {
-  const envPath = join(process.cwd(), '.env.test.local');
-  const envFile = readFileSync(envPath, 'utf-8');
-  envFile.split('\n').forEach((line) => {
-    const trimmedLine = line.trim();
-    if (trimmedLine && !trimmedLine.startsWith('#')) {
-      const [key, ...valueParts] = trimmedLine.split('=');
-      if (key && valueParts.length > 0) {
-        const value = valueParts.join('=').trim().replace(/^["']|["']$/g, '');
-        if (!process.env[key.trim()]) {
-          process.env[key.trim()] = value;
-        }
-      }
-    }
-  });
-} catch (error) {
-  // File doesn't exist, which is fine
+const testEnvPath = join(process.cwd(), '.env.test.local');
+if (existsSync(testEnvPath)) {
+  loadEnv({ path: testEnvPath });
 }
+
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
+
+function isLocalBaseUrl(url: string): boolean {
+  try {
+    const { hostname } = new URL(url);
+    return hostname === 'localhost' || hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+function localDevPort(url: string): number {
+  try {
+    const parsed = new URL(url);
+    if (parsed.port) {
+      return Number(parsed.port);
+    }
+    return 3000;
+  } catch {
+    return 3000;
+  }
+}
+
+const localServer = isLocalBaseUrl(baseURL);
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -28,8 +39,12 @@ export default defineConfig({
   expect: {
     timeout: 10 * 1000
   },
+  fullyParallel: true,
+  forbidOnly: Boolean(process.env.CI),
+  retries: process.env.CI ? 2 : 0,
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
+    baseURL,
     trace: 'on-first-retry'
   },
   projects: [
@@ -37,5 +52,13 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] }
     }
-  ]
+  ],
+  webServer: localServer
+    ? {
+        command: `npx next dev --port ${localDevPort(baseURL)}`,
+        url: baseURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120 * 1000
+      }
+    : undefined
 });

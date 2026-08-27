@@ -22,6 +22,14 @@ import { type DealStatus } from '@/constants/deals';
 import { resolveAgentSideForReferral, pickPrimarySideForReferral } from '@/lib/server/referral-sides';
 import { mergeClosedStatusQuery } from '@/lib/server/merge-closed-status-query';
 import { displayLoanFileNumber } from '@/utils/loan-file-number';
+import { resolveNeedsUpdate } from '@/utils/sla-insights';
+import {
+  isNoteVisibleTo,
+  resolveLastActivity,
+  type ReferralCounterparty,
+  type ReferralLastActivity,
+  type ReferralLatestDeal
+} from '@/lib/referral-activity';
 import {
   FUNNEL_STAGE_ORDER,
   isFunnelStage,
@@ -90,6 +98,7 @@ interface ReferralListItem {
   stageOnTransfer?: string;
   initialNotes?: string;
   loanFileNumber: string;
+  loanType?: string;
   status: string;
   statusLastUpdated?: string | null;
   daysInStatus?: number;
@@ -118,6 +127,12 @@ interface ReferralListItem {
   viewerAssignedSide?: 'buy' | 'sell' | null;
   hasAnyPayments?: boolean;
   hasAnyUsedAfcTrue?: boolean;
+  needsUpdate?: boolean;
+  statusChangedAt?: string | null;
+  referredAt?: string | null;
+  lastActivity?: ReferralLastActivity | null;
+  latestDeal?: ReferralLatestDeal | null;
+  counterparty?: ReferralCounterparty | null;
 }
 
 /**
@@ -621,7 +636,7 @@ export async function getReferrals(params: GetReferralsParams) {
   };
   const paymentDocs = await Payment.find({ referralId: { $in: referralIds } })
     .sort({ createdAt: -1 })
-    .select('referralId status side usedAfc usedAssignedAgent agentAttribution')
+    .select('referralId status side usedAfc usedAssignedAgent agentAttribution closingDate createdAt')
     .lean<
       {
         referralId: Types.ObjectId;
@@ -630,6 +645,8 @@ export async function getReferrals(params: GetReferralsParams) {
         usedAfc?: boolean | null;
         usedAssignedAgent?: boolean | null;
         agentAttribution?: string | null;
+        closingDate?: Date | null;
+        createdAt?: Date | null;
       }[]
     >();
   const paymentSummaryByReferralId = new Map<
@@ -657,6 +674,22 @@ export async function getReferrals(params: GetReferralsParams) {
     }
 
     paymentSummaryByReferralId.set(referralId, existingSummary);
+  });
+
+  // Payments arrive sorted newest-first, so the first entry per referral wins.
+  const latestDealByReferralId = new Map<string, ReferralLatestDeal>();
+
+  paymentDocs.forEach((payment) => {
+    const referralId = payment.referralId.toString();
+    if (latestDealByReferralId.has(referralId) || !payment.status) {
+      return;
+    }
+
+    latestDealByReferralId.set(referralId, {
+      status: payment.status,
+      stageLabel: DEAL_STATUS_LABELS[payment.status as keyof typeof DEAL_STATUS_LABELS] ?? null,
+      closingDate: payment.closingDate ? new Date(payment.closingDate).toISOString() : null
+    });
   });
 
   const dealStatusMap = buildDealStatusMap(paymentDocs);
@@ -750,6 +783,24 @@ export async function getReferrals(params: GetReferralsParams) {
         hasAnyUsedAfcTrue: false
       };
 
+      const lastActivity = resolveLastActivity(item.notes as any[], session?.user?.role);
+      const { needsUpdate, daysInStatus } = resolveNeedsUpdate({
+        status: effectiveStatus,
+        statusChangedAt: item.statusLastUpdated ?? null,
+        createdAt: item.createdAt,
+        referralDate: item.referralDate ?? null,
+        lastNoteAt: lastActivity?.at ?? null
+      });
+
+      const referredAt = (() => {
+        const created = item.createdAt;
+        const referralDate = item.referralDate ? new Date(item.referralDate) : null;
+        if (!referralDate || Number.isNaN(referralDate.getTime())) {
+          return created.toISOString();
+        }
+        return (referralDate.getTime() < created.getTime() ? referralDate : created).toISOString();
+      })();
+
       return {
         _id: item._id.toString(),
         createdAt: item.createdAt.toISOString(),
@@ -770,9 +821,11 @@ export async function getReferrals(params: GetReferralsParams) {
         stageOnTransfer: item.stageOnTransfer,
         initialNotes: item.initialNotes,
         loanFileNumber: displayLoanFileNumber(item.loanFileNumber),
+        loanType: typeof item.loanType === 'string' ? item.loanType : undefined,
         status: effectiveStatus,
         statusLastUpdated: item.statusLastUpdated ? item.statusLastUpdated.toISOString() : null,
-        daysInStatus: differenceInDays(new Date(), item.statusLastUpdated ?? item.createdAt),
+        statusChangedAt: item.statusLastUpdated ? item.statusLastUpdated.toISOString() : null,
+        daysInStatus,
         assignedAgentName: agent?.name,
         buySideAgentName: item.buySideAgent?.name,
         sellSideAgentName: item.sellSideAgent?.name,
@@ -801,7 +854,20 @@ export async function getReferrals(params: GetReferralsParams) {
         sellStatus: item.sellStatus ?? 'New Lead',
         viewerAssignedSide,
         hasAnyPayments: paymentSummary.hasAnyPayments,
-        hasAnyUsedAfcTrue: paymentSummary.hasAnyUsedAfcTrue
+        hasAnyUsedAfcTrue: paymentSummary.hasAnyUsedAfcTrue,
+        needsUpdate,
+        referredAt,
+        lastActivity,
+        latestDeal: hideTerminatedDealPresentationForAgent
+          ? null
+          : latestDealByReferralId.get(item._id.toString()) ?? null,
+        counterparty: item.lender
+          ? {
+              name: item.lender.name,
+              email: item.lender.email ?? null,
+              phone: item.lender.phone ?? null
+            }
+          : null
       } as ReferralListItem;
     }),
     total,
@@ -814,6 +880,25 @@ export async function getReferrals(params: GetReferralsParams) {
       activeReferrals
     }
   };
+}
+
+/**
+ * Referrals waiting on the signed-in agent, across every page. Runs the same
+ * `getReferrals` pipeline the list uses so the sidebar badge can never disagree
+ * with the "Waiting on you" group.
+ */
+export async function getAgentNeedsUpdateCount(session: Session | null): Promise<number> {
+  if (session?.user?.role !== 'agent') {
+    return 0;
+  }
+
+  try {
+    const data = await getReferrals({ session, fetchAll: true });
+    return data.items.reduce((count, item) => (item.needsUpdate ? count + 1 : count), 0);
+  } catch (error) {
+    console.error('Failed to compute agent needs-update count', error);
+    return 0;
+  }
 }
 
 export async function getReferralById(id: string) {
@@ -903,14 +988,14 @@ export async function getReferralById(id: string) {
     emailedTargets: Array.isArray(note.emailedTargets) ? note.emailedTargets : []
   }));
 
-  const filteredNotes = notes.filter((note) => {
-    if (viewerRole === 'agent' && note.hiddenFromAgent) {
-      return false;
-    }
-    if (viewerRole === 'mc' && note.hiddenFromMc) {
-      return false;
-    }
-    return true;
+  const filteredNotes = notes.filter((note) => isNoteVisibleTo(note, viewerRole));
+  const lastActivity = resolveLastActivity(filteredNotes, viewerRole);
+  const { needsUpdate } = resolveNeedsUpdate({
+    status: referral.status,
+    statusChangedAt: referral.statusLastUpdated ?? null,
+    createdAt: referral.createdAt,
+    referralDate: referral.referralDate ?? null,
+    lastNoteAt: lastActivity?.at ?? null
   });
 
   // Compute hasAhaOosAgentAttached: check if any attached agent has ahaDesignation === 'AHA_OOS'
@@ -1073,6 +1158,9 @@ export async function getReferralById(id: string) {
         : 'admin',
     timeline: referral.timeline ?? 'not_specified',
     daysInStatus,
+    needsUpdate,
+    lastActivity,
+    statusChangedAt: referral.statusLastUpdated ? referral.statusLastUpdated.toISOString() : null,
     statusLastUpdated: referral.statusLastUpdated ? referral.statusLastUpdated.toISOString() : null,
     audit: Array.isArray(referral.audit)
       ? referral.audit.map((entry) => ({

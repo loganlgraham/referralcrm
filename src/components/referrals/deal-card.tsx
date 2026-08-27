@@ -15,6 +15,7 @@ import {
   confirmFeeBreakdownSend,
   confirmPaidStatusDate,
 } from '@/components/referrals/status-date-confirmation-toast';
+import { confirmReferralTermination } from '@/components/referrals/terminate-confirmation-toast';
 export type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
 export type AgentSelectValue = '' | 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT';
 
@@ -838,6 +839,23 @@ export function DealCard({
       paidDateIso = confirmation.paidDateIso;
     }
 
+    let terminatedReasonForPatch: TerminatedReason | undefined;
+    let nextReferralStatus: 'Active Lead' | 'In Communication' | 'Lost' | undefined;
+    let lostReasonForPatch: string | null | undefined;
+    if (nextStatus === 'terminated') {
+      const confirmation = await confirmReferralTermination({
+        borrowerName: summaryBorrower ?? 'this referral',
+        isAgentOrigin,
+      });
+      if (!confirmation.confirmed || !confirmation.resolvedStatus || !confirmation.terminatedReason) {
+        selectEl.value = previousStatus;
+        return;
+      }
+      terminatedReasonForPatch = confirmation.terminatedReason;
+      nextReferralStatus = confirmation.resolvedStatus;
+      lostReasonForPatch = confirmation.lostReason ?? null;
+    }
+
     setStatusMap((prev) => ({ ...prev, [deal._id]: nextStatus }));
     setSavingMap((prev) => ({ ...prev, [deal._id]: true }));
 
@@ -864,9 +882,10 @@ export function DealCard({
       if (nextStatus === 'terminated') {
         payload.expectedAmountCents = 0;
         payload.receivedAmountCents = 0;
-        const reason = reasonMap[deal._id] ?? deal.terminatedReason ?? 'inspection';
-        payload.terminatedReason = reason;
-        setReasonMap((prev) => ({ ...prev, [deal._id]: reason }));
+        payload.terminatedReason = terminatedReasonForPatch;
+        payload.nextReferralStatus = nextReferralStatus;
+        payload.lostReason = nextReferralStatus === 'Lost' ? lostReasonForPatch ?? null : null;
+        setReasonMap((prev) => ({ ...prev, [deal._id]: terminatedReasonForPatch as TerminatedReason }));
       } else if (expectedAmountCents > 0) {
         payload.expectedAmountCents = expectedAmountCents;
         setReasonMap((prev) => {
@@ -897,9 +916,7 @@ export function DealCard({
           }
 
           const nextTerminatedReason =
-            nextStatus === 'terminated'
-              ? reasonMap[deal._id] ?? deal.terminatedReason ?? 'inspection'
-              : null;
+            nextStatus === 'terminated' ? terminatedReasonForPatch ?? null : null;
 
           const nextExpectedAmount =
             nextStatus === 'terminated'
