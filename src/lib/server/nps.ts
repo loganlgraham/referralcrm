@@ -3,6 +3,7 @@ import crypto from 'crypto';
 
 import { connectMongo } from '@/lib/mongoose';
 import { sendTransactionalEmail } from '@/lib/email';
+import { renderNpsSurveyEmail } from '@/lib/email-templates/close-nps';
 import { NPSToken } from '@/models/nps-token';
 import { Agent } from '@/models/agent';
 import { LenderMC } from '@/models/lender';
@@ -64,40 +65,17 @@ export async function sendNPSSurveyEmail(
       : `On a scale of 0-10, how likely are you to recommend ${data.agentName || 'this agent'} to a client or colleague?`;
 
   const firstName = data.recipientName.split(' ')[0] || data.recipientName;
-
-  const html = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
-      <h2 style="font-size: 20px; margin-bottom: 8px;">Help us improve</h2>
-      <p style="margin: 0 0 12px 0;">Hi ${firstName},</p>
-      <p style="margin: 0 0 12px 0;">${question}</p>
-      <p style="margin: 12px 0 0 0;">
-        <a href="${surveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
-          Take the survey
-        </a>
-      </p>
-      <p style="margin: 12px 0 0 0; font-size: 14px; color: #64748b;">
-        This link will expire in 30 days.
-      </p>
-    </div>
-  `;
-
-  const text = `
-Help us improve
-
-Hi ${firstName},
-
-${question}
-
-Take the survey: ${surveyUrl}
-
-This link will expire in 30 days.
-  `.trim();
+  const rendered = renderNpsSurveyEmail({
+    firstName,
+    question,
+    surveyUrl,
+  });
 
   return sendTransactionalEmail({
     to: [data.recipientEmail],
     subject: 'How likely are you to recommend us?',
-    html,
-    text,
+    html: rendered.html,
+    text: rendered.text,
   });
 }
 

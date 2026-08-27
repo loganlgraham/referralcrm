@@ -13,6 +13,11 @@ import { ReferralMetadata } from '@/models/referral-metadata';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
 import { sendTransactionalEmail, isTransactionalEmailConfigured } from '@/lib/email';
+import {
+  renderAfcAdminNotificationEmail,
+  renderAgentReferralReceiptEmail,
+  renderNewReferralNotificationEmail,
+} from '@/lib/email-templates/referral-ops';
 import { getReferralNotificationRecipients } from '@/lib/server/cc-recipients';
 import { buildReferralLink } from '@/lib/referral-links';
 import { normalizePhoneNumber } from '@/utils/phone-utils';
@@ -1197,25 +1202,6 @@ export async function POST(request: Request) {
           return;
         }
 
-        const escapeHtml = (value: string): string => {
-          return value.replace(/[&<>"']/g, (char) => {
-            switch (char) {
-              case '&':
-                return '&amp;';
-              case '<':
-                return '&lt;';
-              case '>':
-                return '&gt;';
-              case '"':
-                return '&quot;';
-              case "'":
-                return '&#39;';
-              default:
-                return char;
-            }
-          });
-        };
-
         const referralLink = buildReferralLink(referral._id.toString());
         const summaryFields = [
           `Client Type: ${referral.clientType}`,
@@ -1228,20 +1214,17 @@ export async function POST(request: Request) {
         ].filter(Boolean) as string[];
 
         const borrowerLabel = borrowerName || 'New Referral';
-        const html = `
-          <p>A new referral has been created for <strong>${escapeHtml(borrowerLabel)}</strong>.</p>
-          <ul>
-            ${summaryFields.map((field) => `<li>${escapeHtml(field)}</li>`).join('')}
-          </ul>
-          <p><a href="${referralLink}">View the referral</a></p>
-        `;
-        const text = `A new referral has been created for ${borrowerLabel}.\n\n${summaryFields.join('\n')}\n\nView the referral: ${referralLink}`;
+        const rendered = renderNewReferralNotificationEmail({
+          borrowerLabel,
+          summaryFields,
+          referralLink,
+        });
 
         await sendTransactionalEmail({
           to: coordinatorRecipients,
           subject: `New Referral: ${borrowerLabel}`,
-          html,
-          text,
+          html: rendered.html,
+          text: rendered.text,
           context: { referralId: referral._id.toString() }
         });
       } catch (error) {
@@ -1280,25 +1263,6 @@ export async function POST(request: Request) {
             return;
           }
 
-          const escapeHtml = (value: string): string => {
-            return value.replace(/[&<>"']/g, (char) => {
-              switch (char) {
-                case '&':
-                  return '&amp;';
-                case '<':
-                  return '&lt;';
-                case '>':
-                  return '&gt;';
-                case '"':
-                  return '&quot;';
-                case "'":
-                  return '&#39;';
-                default:
-                  return char;
-              }
-            });
-          };
-
           const referralLink = buildReferralLink(referral._id.toString());
           const summaryFields = [
             `Agent: ${agentName}`,
@@ -1308,21 +1272,18 @@ export async function POST(request: Request) {
             referral.borrower?.phone ? `Phone: ${referral.borrower.phone}` : null,
           ].filter(Boolean) as string[];
 
-          const html = `
-            <p><strong>${escapeHtml(agentName)}</strong> created a new AFC referral for <strong>${escapeHtml(borrowerLabel)}</strong>.</p>
-            <ul>
-              ${summaryFields.map((field) => `<li>${escapeHtml(field)}</li>`).join('')}
-            </ul>
-            <p>Assign a mortgage consultant from the referral page.</p>
-            <p><a href="${referralLink}">View the referral</a></p>
-          `;
-          const text = `${agentName} created a new AFC referral for ${borrowerLabel}.\n\n${summaryFields.join('\n')}\n\nAssign a mortgage consultant from the referral page.\n\nView the referral: ${referralLink}`;
+          const rendered = renderAfcAdminNotificationEmail({
+            agentName,
+            borrowerLabel,
+            summaryFields,
+            referralLink,
+          });
 
           await sendTransactionalEmail({
             to: adminEmails,
             subject: `New AFC referral from ${agentName}: ${borrowerLabel}`,
-            html,
-            text,
+            html: rendered.html,
+            text: rendered.text,
           });
         } catch (error) {
           console.error('Failed to send admin AFC referral notification email', error);
@@ -1346,48 +1307,18 @@ export async function POST(request: Request) {
     if (agentReceiptEmail) {
       (async () => {
         try {
-          const escapeHtml = (value: string): string => {
-            return value.replace(/[&<>"']/g, (char) => {
-              switch (char) {
-                case '&':
-                  return '&amp;';
-                case '<':
-                  return '&lt;';
-                case '>':
-                  return '&gt;';
-                case '"':
-                  return '&quot;';
-                case "'":
-                  return '&#39;';
-                default:
-                  return char;
-              }
-            });
-          };
-
           const referralLink = buildReferralLink(referral._id.toString());
-          const html = `
-            <p>Hi ${escapeHtml(agentGreeting)},</p>
-            <p>Thank you so much for introducing <strong>${escapeHtml(borrowerLabel)}</strong> to AFC — we truly appreciate you trusting us with your client.</p>
-            <p>We've received your referral and our team is already on it. We'll pair them with a mortgage consultant shortly and email you again as soon as that happens so you have everything you need.</p>
-            <p><a href="${referralLink}">View the referral</a></p>
-            <p>We're grateful for the partnership. Thank you again!</p>
-          `;
-          const text = `Hi ${agentGreeting},
-
-Thank you so much for introducing ${borrowerLabel} to AFC — we truly appreciate you trusting us with your client.
-
-We've received your referral and our team is already on it. We'll pair them with a mortgage consultant shortly and email you again as soon as that happens so you have everything you need.
-
-View the referral: ${referralLink}
-
-We're grateful for the partnership. Thank you again!`;
+          const rendered = renderAgentReferralReceiptEmail({
+            agentGreeting,
+            borrowerLabel,
+            referralLink,
+          });
 
           await sendTransactionalEmail({
             to: [agentReceiptEmail],
             subject: `We received your referral for ${borrowerLabel} — thank you!`,
-            html,
-            text,
+            html: rendered.html,
+            text: rendered.text,
           });
         } catch (error) {
           console.error('Failed to send agent AFC referral receipt email', error);

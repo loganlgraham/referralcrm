@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
+import { renderPasswordResetEmail } from '@/lib/email-templates/auth';
 import { connectMongo } from '@/lib/mongoose';
 import { PasswordResetToken } from '@/models/password-reset-token';
 import { User } from '@/models/user';
@@ -57,12 +58,16 @@ export async function POST(request: Request) {
     });
 
     const resetUrl = buildResetUrl(request, token, email);
+    const rendered = renderPasswordResetEmail({
+      name: user.name ?? 'there',
+      resetUrl,
+    });
 
     const emailSent = await sendTransactionalEmail({
       to: [email],
       subject: 'Reset your Referral CRM password',
-      html: `<p>Hi ${user.name ?? 'there'},</p><p>We received a request to reset your Referral CRM password. Click the link below to set a new password:</p><p><a href="${resetUrl}">Reset password</a></p><p>This link will expire in 30 minutes. If you did not request this, you can safely ignore this email.</p>`,
-      text: `Hi ${user.name ?? 'there'},\n\nUse the link below to reset your Referral CRM password. This link expires in 30 minutes.\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`,
+      html: rendered.html,
+      text: rendered.text,
     });
 
     if (!emailSent) {

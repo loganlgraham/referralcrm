@@ -14,7 +14,7 @@ import {
   startOfDay,
 } from 'date-fns';
 import { formatInTimeZone, utcToZonedTime } from 'date-fns-tz';
-import { ACTIVE_REFERRAL_STATUS_VALUES } from '@/constants/referrals';
+import { hasPendingUpdateRequest } from '@/utils/update-request-pending';
 
 interface AuditEntryLike {
   field?: string;
@@ -276,7 +276,7 @@ export const NEEDS_UPDATE_THRESHOLD_DAYS: Record<string, number> = {
   'Under Contract': SLA_THRESHOLDS.daysToUnderContract,
 };
 
-const NEEDS_UPDATE_ACTIVE_STATUSES = new Set<string>(ACTIVE_REFERRAL_STATUS_VALUES);
+const NEEDS_UPDATE_HIDDEN_STATUSES = new Set(['Closed', 'Lost', 'Terminated']);
 
 export interface NeedsUpdateInput {
   status?: string | null;
@@ -284,6 +284,9 @@ export interface NeedsUpdateInput {
   createdAt?: string | Date | null;
   referralDate?: string | Date | null;
   lastNoteAt?: string | Date | null;
+  lastAutoReminderSentAt?: string | Date | null;
+  lastManualReminderSentAt?: string | Date | null;
+  lastUpdateRequestResponseNotifiedAt?: string | Date | null;
   now?: Date;
 }
 
@@ -295,7 +298,9 @@ export interface NeedsUpdateResult {
 
 /**
  * Single source of truth for "this referral is waiting on the agent" so the list
- * rows and the detail page can never disagree. Terminal statuses never qualify.
+ * rows and the detail page can never disagree. Waiting on you only when an auto
+ * or admin update-request email is unanswered. Closed, Lost, and Terminated never
+ * qualify, even if an old request is still outstanding.
  */
 export const resolveNeedsUpdate = (input: NeedsUpdateInput): NeedsUpdateResult => {
   const now = input.now ?? new Date();
@@ -316,14 +321,16 @@ export const resolveNeedsUpdate = (input: NeedsUpdateInput): NeedsUpdateResult =
 
   const status = normalizeStatusValue(input.status);
 
-  if (!status || !NEEDS_UPDATE_ACTIVE_STATUSES.has(status)) {
+  if (!status || NEEDS_UPDATE_HIDDEN_STATUSES.has(status)) {
     return { needsUpdate: false, daysInStatus, hasNoteSinceStatusChange };
   }
 
-  const threshold = NEEDS_UPDATE_THRESHOLD_DAYS[status] ?? SLA_THRESHOLDS.daysWithoutTouchPoint;
-
   return {
-    needsUpdate: !hasNoteSinceStatusChange || daysInStatus > threshold,
+    needsUpdate: hasPendingUpdateRequest({
+      lastAutoReminderSentAt: input.lastAutoReminderSentAt,
+      lastManualReminderSentAt: input.lastManualReminderSentAt,
+      lastUpdateRequestResponseNotifiedAt: input.lastUpdateRequestResponseNotifiedAt,
+    }),
     daysInStatus,
     hasNoteSinceStatusChange,
   };

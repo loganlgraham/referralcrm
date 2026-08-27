@@ -8,26 +8,22 @@ import type { Contact } from '@/components/referrals/contact-assignment';
 import { getNextAutoUpdateSendAt } from '@/utils/auto-update-schedule';
 import { formatInTimeZone } from 'date-fns-tz';
 import { SLA_TIME_ZONE } from '@/utils/sla-insights';
+import {
+  getLastUpdateRequestSentAt,
+  hasPendingUpdateRequest,
+} from '@/utils/update-request-pending';
 
 interface RequestUpdateButtonProps {
   referralId: string;
   assignedAgent?: Contact | null;
   buySideAgent?: Contact | null;
   sellSideAgent?: Contact | null;
-  lastAutoReminderSentAt?: Date | null;
-  lastManualReminderSentAt?: Date | null;
+  lastAutoReminderSentAt?: string | Date | null;
+  lastManualReminderSentAt?: string | Date | null;
+  lastUpdateRequestResponseNotifiedAt?: string | Date | null;
   autoRemindersEnabled?: boolean;
   status?: string;
   lastPairedAt?: Date | null;
-  audit?: Array<{
-    actorRole: string;
-    field: string;
-    timestamp: Date;
-  }>;
-  notes?: Array<{
-    authorRole: string;
-    createdAt: Date;
-  }>;
   viewerRole: string;
 }
 
@@ -38,11 +34,10 @@ export function RequestUpdateButton({
   sellSideAgent,
   lastAutoReminderSentAt,
   lastManualReminderSentAt,
+  lastUpdateRequestResponseNotifiedAt,
   autoRemindersEnabled = false,
   status = 'New Lead',
   lastPairedAt,
-  audit = [],
-  notes = [],
   viewerRole,
 }: RequestUpdateButtonProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -75,13 +70,14 @@ export function RequestUpdateButton({
       .filter((contact): contact is Contact & { id: string } => Boolean(contact.id));
   }, [assignedAgent, buySideAgent, sellSideAgent]);
 
-  // Calculate last sent timestamp and agent response
   const statusInfo = useMemo(() => {
-    const lastAutoTime = lastAutoReminderSentAt ? new Date(lastAutoReminderSentAt).getTime() : 0;
-    const lastManualTime = lastManualReminderSentAt ? new Date(lastManualReminderSentAt).getTime() : 0;
-    const lastSentTime = Math.max(lastAutoTime, lastManualTime);
-
-    if (lastSentTime === 0) {
+    const pendingInput = {
+      lastAutoReminderSentAt,
+      lastManualReminderSentAt,
+      lastUpdateRequestResponseNotifiedAt,
+    };
+    const lastSent = getLastUpdateRequestSentAt(pendingInput);
+    if (!lastSent) {
       return {
         lastSent: null,
         agentResponded: false,
@@ -89,38 +85,19 @@ export function RequestUpdateButton({
       };
     }
 
-    const lastSentDate = new Date(lastSentTime);
-
-    // Check for agent actions after last sent
-    const agentActionsAfter = audit.filter(
-      (entry) =>
-        entry.actorRole === 'agent' &&
-        new Date(entry.timestamp).getTime() > lastSentTime &&
-        ['status', 'propertyAddress', 'stageOnTransfer'].includes(entry.field)
-    );
-
-    const notesAfter = notes.filter(
-      (note) =>
-        note.authorRole === 'agent' &&
-        new Date(note.createdAt).getTime() > lastSentTime
-    );
-
-    const hasResponse = agentActionsAfter.length > 0 || notesAfter.length > 0;
-    let responseDate: Date | null = null;
-
-    if (hasResponse) {
-      const actionTimes = agentActionsAfter.map((a) => new Date(a.timestamp).getTime());
-      const noteTimes = notesAfter.map((n) => new Date(n.createdAt).getTime());
-      const allTimes = [...actionTimes, ...noteTimes];
-      responseDate = new Date(Math.max(...allTimes));
-    }
+    const pending = hasPendingUpdateRequest(pendingInput);
+    const responseTime = lastUpdateRequestResponseNotifiedAt
+      ? new Date(lastUpdateRequestResponseNotifiedAt)
+      : null;
+    const responseDate =
+      !pending && responseTime && !Number.isNaN(responseTime.getTime()) ? responseTime : null;
 
     return {
-      lastSent: lastSentDate,
-      agentResponded: hasResponse,
+      lastSent,
+      agentResponded: !pending,
       responseDate,
     };
-  }, [lastAutoReminderSentAt, lastManualReminderSentAt, audit, notes]);
+  }, [lastAutoReminderSentAt, lastManualReminderSentAt, lastUpdateRequestResponseNotifiedAt]);
 
   // Calculate next scheduled send
   const nextSendInfo = useMemo(() => {

@@ -1,6 +1,10 @@
 import { Types } from 'mongoose';
 import { Referral } from '@/models/referral';
 import { createAdminNotifications } from '@/lib/server/notifications';
+import {
+  getLastUpdateRequestSentAt,
+  hasPendingUpdateRequest,
+} from '@/utils/update-request-pending';
 
 interface MaybeNotifyParams {
   referral: {
@@ -40,35 +44,17 @@ export async function maybeNotifyAdminsOnUpdateRequestResponse({
     return false;
   }
 
-  // Calculate the most recent request sent time
-  const lastAutoTime = referral.lastAutoReminderSentAt
-    ? new Date(referral.lastAutoReminderSentAt).getTime()
-    : 0;
-  const lastManualTime = referral.lastManualReminderSentAt
-    ? new Date(referral.lastManualReminderSentAt).getTime()
-    : 0;
-  const lastRequestSentAt = Math.max(lastAutoTime, lastManualTime);
-
-  // No request was ever sent
-  if (lastRequestSentAt === 0) {
+  if (!hasPendingUpdateRequest(referral)) {
     return false;
   }
 
-  const lastRequestSentDate = new Date(lastRequestSentAt);
-  const actionTime = actionAt.getTime();
+  const lastRequestSentAt = getLastUpdateRequestSentAt(referral);
+  if (!lastRequestSentAt) {
+    return false;
+  }
 
   // Action happened before or at the same time as the request
-  if (actionTime <= lastRequestSentAt) {
-    return false;
-  }
-
-  // Check if we already notified for this request cycle
-  const lastNotifiedTime = referral.lastUpdateRequestResponseNotifiedAt
-    ? new Date(referral.lastUpdateRequestResponseNotifiedAt).getTime()
-    : 0;
-
-  // Already notified for this request
-  if (lastNotifiedTime >= lastRequestSentAt) {
+  if (actionAt.getTime() <= lastRequestSentAt.getTime()) {
     return false;
   }
 

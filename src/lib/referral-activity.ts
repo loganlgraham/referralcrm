@@ -51,8 +51,7 @@ export const isNoteVisibleTo = (note: ReferralNoteLike, viewerRole?: string | nu
 
 /**
  * Newest note this viewer is allowed to see. Notes hidden from the viewer are
- * skipped entirely so a hidden admin note cannot silently clear an agent's
- * "waiting on you" flag.
+ * skipped so last-activity copy matches what they can actually read.
  */
 export const resolveLastActivity = (
   notes: ReferralNoteLike[] | undefined | null,

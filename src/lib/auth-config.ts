@@ -9,6 +9,7 @@ import { Types } from 'mongoose';
 import { User } from '@/models/user';
 import { z } from 'zod';
 import { recordAgentLoginEvent } from '@/lib/server/agent-activity';
+import { renderMagicLinkEmail } from '@/lib/email-templates/auth';
 
 const roleValues = ['agent', 'mortgage-consultant', 'admin'] as const;
 type Role = (typeof roleValues)[number];
@@ -142,12 +143,13 @@ if (process.env.RESEND_API_KEY && process.env.EMAIL_FROM) {
       from: process.env.EMAIL_FROM,
       async sendVerificationRequest({ identifier, url, provider }) {
         const host = new URL(url).host;
+        const email = renderMagicLinkEmail({ host, url });
         await resend.emails.send({
           from: provider.from as string,
           to: identifier,
           subject: `Sign in to ${host}`,
-          html: `<p>Click the link below to sign in to ${host}:</p><p><a href="${url}">Sign in</a></p>`,
-          text: `Sign in to ${host}:\n${url}`,
+          html: email.html,
+          text: email.text,
         });
       },
     })

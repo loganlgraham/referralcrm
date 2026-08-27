@@ -11,6 +11,7 @@ import { utcToZonedTime } from 'date-fns-tz';
 import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
+import { renderScheduledUpdateReminderEmail } from '@/lib/email-templates/update-request';
 import { getAppOrigin } from '@/lib/server/app-origin';
 import { logReferralActivity } from '@/lib/server/activities';
 import { createAdminNotifications } from '@/lib/server/notifications';
@@ -209,79 +210,28 @@ export async function runAutoUpdateReminders(
 
       for (const agent of agents) {
         const agentFirstName = getFirstName(agent.name ?? '');
-        const emailHtml = `
-<div style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;max-width:640px;color:#0f172a;line-height:1.6;">
-  <p style="margin:0 0 8px 0;">Hi ${agentFirstName},</p>
-  <p style="margin:0 0 16px 0;">This is an automated reminder to update one of your referrals (Day ${daysSincePairing} since pairing):</p>
-  <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;">
-    <h3 style="margin:0 0 12px 0;font-size:16px;font-weight:600;color:#0f172a;">Buyer Info</h3>
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Buyer:</strong> ${buyerName}</div>
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Email:</strong> ${referral.borrower?.email || 'Not provided'}</div>
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Phone:</strong> ${referral.borrower?.phone || 'Not provided'}</div>
-    <div><strong style="color:#64748b;">Current Status:</strong> ${referral.status}</div>
-  </div>
-  <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;">
-    <h3 style="margin:0 0 12px 0;font-size:16px;font-weight:600;color:#0f172a;">Mortgage Consultant at AFC</h3>
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Name:</strong> ${lenderName}</div>
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Email:</strong> ${lenderEmail}</div>
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Phone:</strong> ${lenderPhone}</div>
-    <div><strong style="color:#64748b;">File Number:</strong> ${referral.loanFileNumber || 'N/A'}</div>
-  </div>
-  <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;">
-    <h3 style="margin:0 0 12px 0;font-size:16px;font-weight:600;color:#0f172a;">Agent Relationship Coordinator</h3>
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Name:</strong> Kristen Truong</div>
-    <div style="margin-bottom:8px;"><strong style="color:#64748b;">Email:</strong> kristen.truong@americanhomeagents.com</div>
-    <div><strong style="color:#64748b;">Phone:</strong> 303-557-4230</div>
-  </div>
-  <p style="margin:16px 0;">Please log in to update the status and add any relevant notes:</p>
-  <a href="${referralUrl}" style="display:inline-block;margin:16px 0;padding:12px 24px;border-radius:8px;background:#0f172a;color:#fff;font-weight:600;text-decoration:none;">View Referral</a>
-  <p style="margin:16px 0 8px 0;color:#64748b;font-size:13px;">
-    <strong>Automated reminders are enabled for this referral.</strong><br>
-    Schedule: Day 1, 3, 7, 14, then every 2 weeks from agent pairing.
-  </p>
-  <p style="margin:0;color:#64748b;font-size:14px;">Thanks,<br>Referral CRM Team</p>
-</div>
-        `.trim();
-
-        const emailText = `
-Scheduled Update: ${buyerName}
-
-Hi ${agentFirstName},
-
-This is an automated reminder to update one of your referrals (Day ${daysSincePairing} since pairing):
-
-Buyer Info
-Buyer: ${buyerName}
-Email: ${referral.borrower?.email || 'Not provided'}
-Phone: ${referral.borrower?.phone || 'Not provided'}
-Current Status: ${referral.status}
-
-Mortgage Consultant at AFC
-Name: ${lenderName}
-Email: ${lenderEmail}
-Phone: ${lenderPhone}
-File Number: ${referral.loanFileNumber || 'N/A'}
-
-Agent Relationship Coordinator
-Name: Kristen Truong
-Email: kristen.truong@americanhomeagents.com
-Phone: 303-557-4230
-
-Please log in to update the status and add any relevant notes:
-${referralUrl}
-
-Automated reminders are enabled for this referral.
-Schedule: Day 1, 3, 7, 14, then every 2 weeks from agent pairing.
-
-Thanks,
-Referral CRM Team
-        `.trim();
+        const { html, text } = renderScheduledUpdateReminderEmail({
+          agentFirstName,
+          buyerName,
+          daysSincePairing,
+          referralUrl,
+          contacts: {
+            buyerName,
+            buyerEmail: referral.borrower?.email || 'Not provided',
+            buyerPhone: referral.borrower?.phone || 'Not provided',
+            status: referral.status,
+            lenderName,
+            lenderEmail,
+            lenderPhone,
+            loanFileNumber: referral.loanFileNumber || 'N/A',
+          },
+        });
 
         const delivered = await sendTransactionalEmail({
           to: [agent.email!],
           subject: `Scheduled Update: ${buyerName}`,
-          html: emailHtml,
-          text: emailText,
+          html,
+          text,
         });
 
         if (delivered) {

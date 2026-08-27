@@ -26,6 +26,11 @@ import { Referral } from '@/models/referral';
 import { LenderMC } from '@/models/lender';
 import { User } from '@/models/user';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
+import {
+  renderAgentCloseEmail,
+  renderBorrowerCloseEmail,
+  renderPaymentSentEmail,
+} from '@/lib/email-templates/close-nps';
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
@@ -1641,21 +1646,16 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
               const agentSurveyUrl = `${origin}/nps/agent?token=${agentSurveyToken}`;
 
+              const borrowerEmailContent = renderBorrowerCloseEmail({
+                borrowerFirstName,
+                agentName: agentFullName,
+                surveyUrl: agentSurveyUrl,
+              });
               const borrowerSurveySent = await sendTransactionalEmail({
                 to: [borrowerEmail],
                 subject: 'Congrats on Your New Home!',
-                html: `
-                  <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
-                    <p>Hi ${borrowerFirstName},</p>
-                    <p>Congratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best!</p>
-                    <p style="margin: 20px 0 0 0;">
-                      <a href="${agentSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
-                        Rate Your Agent
-                      </a>
-                    </p>
-                  </div>
-                `,
-                text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best!\n\nRate your agent: ${agentSurveyUrl}`,
+                html: borrowerEmailContent.html,
+                text: borrowerEmailContent.text,
               });
               if (borrowerSurveySent === true) {
                 await logReferralActivity({
@@ -1695,32 +1695,17 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
                 lenderSurveyUrl = `${origin}/nps/lender?token=${lenderSurveyToken}`;
               }
 
-              const mcQuestion =
-                'If you have a quick moment: on a scale of 0-10, how likely are you to recommend American Financing to a client or colleague?';
-              const mcBlockHtml = lenderSurveyUrl
-                ? `
-                    <p style="margin: 20px 0 0 0;">${mcQuestion}</p>
-                    <p style="margin: 20px 0 0 0;">
-                      <a href="${lenderSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
-                        Rate Your Mortgage Consultant
-                      </a>
-                    </p>
-                  `
-                : '';
-              const mcBlockText = lenderSurveyUrl
-                ? `\n\n${mcQuestion}\n\nRate your mortgage consultant: ${lenderSurveyUrl}`
-                : '';
+              const agentCloseEmail = renderAgentCloseEmail({
+                agentFirstName,
+                borrowerDisplayName,
+                lenderSurveyUrl,
+              });
 
               const agentCloseSurveySent = await sendTransactionalEmail({
                 to: [agent.email],
                 subject: 'Congratulations on Your Closed Deal!',
-                html: `
-                  <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
-                    <p>Hi ${agentFirstName},</p>
-                    <p>Congratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.</p>${mcBlockHtml}
-                  </div>
-                `,
-                text: `Hi ${agentFirstName},\n\nCongratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.${mcBlockText}`,
+                html: agentCloseEmail.html,
+                text: agentCloseEmail.text,
               });
               if (agentCloseSurveySent === true && lenderSurveyUrl) {
                 const lenderPop = referral.lender as { name?: string | null } | null | undefined;
@@ -1768,25 +1753,18 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       const referralLink = referral ? buildReferralLink(referral._id.toString()) : null;
       const agentName = session.user.name ?? 'An agent';
 
-      const textBody = [
-        `${agentName} marked the referral fee as Payment Sent for ${borrowerName}.`,
-        `Amount: ${formattedAmount}.`,
-        referralLink ? `View the referral: ${referralLink}` : '',
-      ]
-        .filter(Boolean)
-        .join('\n');
-
-      const htmlBody = `
-        <p>${agentName} marked the referral fee as <strong>Payment Sent</strong> for ${borrowerName}.</p>
-        <p>Amount: <strong>${formattedAmount}</strong></p>
-        ${referralLink ? `<p><a href="${referralLink}" style="color:#0c6ce9;">View referral details</a></p>` : ''}
-      `;
+      const rendered = renderPaymentSentEmail({
+        agentName,
+        borrowerName,
+        formattedAmount,
+        referralLink,
+      });
 
       await sendTransactionalEmail({
         to: adminEmails,
         subject: `${agentName} sent a referral payment for ${borrowerName}`,
-        text: textBody,
-        html: htmlBody,
+        text: rendered.text,
+        html: rendered.html,
       });
     }
   }

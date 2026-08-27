@@ -789,7 +789,10 @@ export async function getReferrals(params: GetReferralsParams) {
         statusChangedAt: item.statusLastUpdated ?? null,
         createdAt: item.createdAt,
         referralDate: item.referralDate ?? null,
-        lastNoteAt: lastActivity?.at ?? null
+        lastNoteAt: lastActivity?.at ?? null,
+        lastAutoReminderSentAt: item.lastAutoReminderSentAt ?? null,
+        lastManualReminderSentAt: item.lastManualReminderSentAt ?? null,
+        lastUpdateRequestResponseNotifiedAt: item.lastUpdateRequestResponseNotifiedAt ?? null
       });
 
       const referredAt = (() => {
@@ -995,7 +998,10 @@ export async function getReferralById(id: string) {
     statusChangedAt: referral.statusLastUpdated ?? null,
     createdAt: referral.createdAt,
     referralDate: referral.referralDate ?? null,
-    lastNoteAt: lastActivity?.at ?? null
+    lastNoteAt: lastActivity?.at ?? null,
+    lastAutoReminderSentAt: referral.lastAutoReminderSentAt ?? null,
+    lastManualReminderSentAt: referral.lastManualReminderSentAt ?? null,
+    lastUpdateRequestResponseNotifiedAt: referral.lastUpdateRequestResponseNotifiedAt ?? null
   });
 
   // Compute hasAhaOosAgentAttached: check if any attached agent has ahaDesignation === 'AHA_OOS'

@@ -7,6 +7,11 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { buildContactActionLink, buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
 import {
+  renderAgentIntroEmail,
+  renderMcIntroEmail,
+  renderPairingSummaryEmail,
+} from '@/lib/email-templates/referral-ops';
+import {
   buildCcList,
   getReferralNotificationRecipients,
   parseCcRecipients,
@@ -117,25 +122,6 @@ const buildBorrowerFirstName = (borrower: any): string => {
   return firstFromFull || 'the buyer';
 };
 
-const formatContactLines = (contact: BasicContact | null, label: string) => {
-  if (!contact) return [] as string[];
-  const lines: (string | null)[] = [
-    `<strong>${label}:</strong> ${contact.name ?? 'Not provided'}`,
-    contact.email ? `<strong>Email:</strong> ${contact.email}` : null,
-    contact.phone ? `<strong>Phone:</strong> ${contact.phone}` : null,
-  ];
-  return lines.filter(Boolean) as string[];
-};
-
-const formatContactTextLines = (contact: BasicContact | null, label: string) => {
-  if (!contact) return [] as string[];
-  return [
-    `${label}: ${contact.name ?? 'Not provided'}`,
-    `Email: ${contact.email ?? 'Not provided'}`,
-    `Phone: ${contact.phone ?? 'Not provided'}`,
-  ];
-};
-
 const extractBorrowerContact = (referral: any): BasicContact => {
   const borrower = referral?.borrower ?? {};
   const normalizedName = buildBorrowerName(borrower);
@@ -180,8 +166,8 @@ const extractBorrowerContact = (referral: any): BasicContact => {
 const trySendEmail = async (
   toAddress: string | null,
   subject: string,
-  htmlLines: Array<string | null>,
-  textLines: Array<string | null>,
+  html: string,
+  text: string,
   label: string,
   result: SendResult,
   cc?: string[]
@@ -195,8 +181,8 @@ const trySendEmail = async (
   const success = await sendTransactionalEmail({
     to: [to],
     subject,
-    html: htmlLines.filter(Boolean).join(''),
-    text: textLines.filter(Boolean).join('\n'),
+    html,
+    text,
     cc: cc ? buildCcList(cc, [], to) : undefined,
   });
 
@@ -321,8 +307,6 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   };
 
   if (shouldEmailAgent) {
-    const notesHtmlLine = notes ? `<br><b>Notes:</b> ${notes.replace(/\n/g, '<br>')}` : '';
-    const notesTextLine = notes ? `Notes: ${notes}` : null;
     const agentTargets: Array<{ label: string; side: 'buy' | 'sell'; contact: BasicContact | null }> = [];
 
     if (referral.clientType === 'Both') {
@@ -349,72 +333,43 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         side === 'buy'
           ? 'Selling Agent at American Home Agents'
           : 'Buying Agent';
-      const oppositeAgentHtmlLines = formatContactLines(oppositeAgentContact, oppositeAgentLabel);
-      const oppositeAgentTextLines = formatContactTextLines(oppositeAgentContact, oppositeAgentLabel);
-
-      const oppositeAgentInfoHtml =
-        oppositeAgentHtmlLines.length > 0 ? `<p>${oppositeAgentHtmlLines.join('<br>')}</p>` : null;
-
-      const mcInfoHtml = isSellerOnly
-        ? null
-        : lenderContact
-        ? `<p><b>Mortgage Consultant at American Financing:</b> ${lenderContact.name ?? 'Not provided'}<br><b>Email:</b> ${
-            lenderContact.email ?? 'Not provided'
-          }<br><b>Phone:</b> ${lenderContact.phone ?? 'Not provided'}<br><b>Loan File Number:</b> ${loanFileNumber}</p>`
-        : `<p><b>Mortgage Consultant at American Financing:</b> Not provided<br><b>Loan File Number:</b> ${loanFileNumber}</p>`;
-
-      const mcInfoText = isSellerOnly
-        ? null
-        : lenderContact
-        ? `Mortgage Consultant at American Financing: ${lenderContact.name ?? 'Not provided'} | Email: ${
-            lenderContact.email ?? 'Not provided'
-          } | Phone: ${lenderContact.phone ?? 'Not provided'} | Loan File Number: ${loanFileNumber}`
-        : `Mortgage Consultant at American Financing: Not provided | Loan File Number: ${loanFileNumber}`;
+      const rendered = renderAgentIntroEmail({
+        agentFirstName,
+        introCopy: buildAgentIntroCopy(side),
+        borrowerName,
+        borrowerEmail: borrowerEmail ?? 'Not provided',
+        borrowerPhone: borrowerPhone ?? 'Not provided',
+        notes,
+        oppositeAgent: oppositeAgentContact
+          ? {
+              label: oppositeAgentLabel,
+              contact: {
+                name: oppositeAgentContact.name ?? 'N/A',
+                email: oppositeAgentContact.email ?? 'N/A',
+                phone: oppositeAgentContact.phone ?? 'N/A',
+              },
+            }
+          : null,
+        mc: isSellerOnly
+          ? null
+          : {
+              name: lenderContact?.name ?? 'Not provided',
+              email: lenderContact?.email ?? 'Not provided',
+              phone: lenderContact?.phone ?? 'Not provided',
+              loanFileNumber,
+            },
+        isSellerOnly,
+        borrowerFirstName,
+        contactMadeLink,
+        contactAttemptedLink,
+        referralLink: referralLink || undefined,
+      });
 
       await trySendEmail(
         contact?.email ?? null,
         agentEmailSubject,
-        [
-          `<p>Hi ${agentFirstName},</p>`,
-          `<p>${buildAgentIntroCopy(side)}</p>`,
-          '<p>Here are the key details so you can reach out confidently:</p>',
-          `<p><b>Client Name:</b> ${borrowerName}<br><b>Email:</b> ${borrowerEmail ?? 'Not provided'}<br><b>Phone:</b> ${
-            borrowerPhone ?? 'Not provided'
-          }${notesHtmlLine}</p>`,
-          oppositeAgentInfoHtml,
-          mcInfoHtml,
-          contactMadeLink && contactAttemptedLink
-            ? `<p>Please select one of the following after attempting to contact ${borrowerFirstName}: </p>`
-            : null,
-          contactMadeLink && contactAttemptedLink
-            ? `<p><a href="${contactMadeLink}">Made Contact</a><br><a href="${contactAttemptedLink}">Unable to reach after first attempt</a></p>`
-            : null,
-          referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
-          `<p>Thank you for taking great care of ${borrowerFirstName}!</p>`,
-        ],
-        [
-          `Hi ${agentFirstName},`,
-          buildAgentIntroCopy(side),
-          'Here are the key details so you can reach out confidently:',
-          `Client Name: ${borrowerName}`,
-          `Email: ${borrowerEmail ?? 'Not provided'}`,
-          `Phone: ${borrowerPhone ?? 'Not provided'}`,
-          notesTextLine,
-          ...oppositeAgentTextLines,
-          oppositeAgentTextLines.length > 0 ? '' : null,
-          mcInfoText,
-          contactMadeLink && contactAttemptedLink
-            ? `Please select one of the following after attempting to contact ${borrowerFirstName}:`
-            : null,
-          contactMadeLink && contactAttemptedLink
-            ? `Made Contact: ${contactMadeLink}`
-            : null,
-          contactMadeLink && contactAttemptedLink
-            ? `Unable to reach after first attempt: ${contactAttemptedLink}`
-            : null,
-          referralLink ? `Referral workspace: ${referralLink}` : null,
-          `Thank you for taking great care of ${borrowerFirstName}!`,
-        ],
+        rendered.html,
+        rendered.text,
         label,
         result,
         agentEmailCC
@@ -448,70 +403,30 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     mcAgentContacts.push({ label: 'Agent', contact: primaryAgent });
   }
 
-  const mcEmailHtmlLines: Array<string | null> = [
-    `<p>Hi ${lenderFirstName},</p>`,
-    `<p>The agent team who will be helping ${borrowerName}, file number ${loanFileNumber}, is:</p>`,
-    ...mcAgentContacts.map(
-      ({ label, contact }) =>
-        `<p><strong>${label}:</strong> ${contact.name ?? 'N/A'}<br/>Email: ${contact.email ?? 'N/A'}<br/>Phone: ${
-          contact.phone ?? 'N/A'
-        }</p>`
-    ),
-  ];
-
-  const mcEmailTextLines: Array<string | null> = [
-    `Hi ${lenderFirstName},`,
-    `The agent team who will be helping ${borrowerName}, file number ${loanFileNumber}, is:`,
-  ];
-
-  for (const { label, contact } of mcAgentContacts) {
-    mcEmailTextLines.push(
-      `${label}: ${contact.name ?? 'N/A'}`,
-      `Email: ${contact.email ?? 'N/A'}`,
-      `Phone: ${contact.phone ?? 'N/A'}`,
-      ''
-    );
-  }
-
-  if (session.user.role === 'agent') {
-    mcEmailHtmlLines.push(
-      `<p>Borrower contact details to connect directly:</p>`,
-      '<ul>',
-      `<li><strong>Borrower:</strong> ${borrowerName}</li>`,
-      borrowerEmail ? `<li><strong>Email:</strong> ${borrowerEmail}</li>` : null,
-      borrowerPhone ? `<li><strong>Phone:</strong> ${borrowerPhone}</li>` : null,
-      '</ul>'
-    );
-
-    mcEmailTextLines.push(
-      'Borrower contact details to connect directly:',
-      `Borrower: ${borrowerName}`,
-      borrowerEmail ? `Email: ${borrowerEmail}` : null,
-      borrowerPhone ? `Phone: ${borrowerPhone}` : null
-    );
-  }
-
-  mcEmailHtmlLines.push(
-    referralLink ? `<p>Referral workspace: <a href="${referralLink}">${referralLink}</a></p>` : null,
-    `<p>Please reach out to the agent to introduce yourself and fill them in on the details of ${
-      borrowerFirstName || borrowerName || 'the borrower'
-    }'s financing and add their contact information to the LOS.</p>`
-  );
-
-  mcEmailTextLines.push(
-    referralLink ? `Referral workspace: ${referralLink}` : null,
-    `Please reach out to the agent to introduce yourself and fill them in on the details of ${
-      borrowerFirstName || borrowerName || 'the borrower'
-    }'s financing and add their contact information to the LOS.`
-  );
+  const mcRendered = renderMcIntroEmail({
+    lenderFirstName,
+    borrowerName,
+    loanFileNumber,
+    agents: mcAgentContacts.map(({ label, contact }) => ({
+      label,
+      name: contact.name ?? 'N/A',
+      email: contact.email ?? 'N/A',
+      phone: contact.phone ?? 'N/A',
+    })),
+    includeBorrowerDetails: session.user.role === 'agent',
+    borrowerEmail,
+    borrowerPhone,
+    borrowerFirstName,
+    referralLink: referralLink || undefined,
+  });
 
   // Skip MC email for seller-only referrals (no mortgage consultant needed)
   if (referral.clientType !== 'Seller') {
     await trySendEmail(
       lenderContact?.email ?? null,
       `Agent helping ${borrowerName}`,
-      mcEmailHtmlLines.filter(Boolean),
-      mcEmailTextLines.filter(Boolean),
+      mcRendered.html,
+      mcRendered.text,
       'mc',
       result,
       mcEmailCC
@@ -522,25 +437,6 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   if (result.sent.length > 0) {
     (async () => {
       try {
-        const escapeHtml = (value: string): string => {
-          return value.replace(/[&<>"']/g, (char) => {
-            switch (char) {
-              case '&':
-                return '&amp;';
-              case '<':
-                return '&lt;';
-              case '>':
-                return '&gt;';
-              case '"':
-                return '&quot;';
-              case "'":
-                return '&#39;';
-              default:
-                return char;
-            }
-          });
-        };
-
         const pairedContacts: Array<{ label: string; contact: BasicContact }> = [];
 
         if (primaryAgent) {
@@ -571,8 +467,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
         const introSubject = `Introduction – Partnering on ${borrowerFirstName}'s Home Search`;
         const agentEntries = pairedContacts.filter(({ label }) => label !== 'Mortgage Consultant');
-        const introLinkHtmlParts: string[] = [];
-        const introLinkTextParts: string[] = [];
+        const introLinks: Array<{ label: string; url: string }> = [];
 
         for (const { contact } of agentEntries) {
           if (!contact.email) continue;
@@ -600,44 +495,28 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
           composePageParams.set('subject', introSubject);
           composePageParams.set('body', introBody);
           const composePageUrl = `${referralLinkBase}/compose-email?${composePageParams.toString()}`;
-
-          introLinkHtmlParts.push(`<p><a href="${composePageUrl}">Send Introduction Email to ${escapeHtml(contact.name ?? 'Agent')}</a></p>`);
-          introLinkTextParts.push(`Send Introduction Email to ${contact.name ?? 'Agent'}: ${composePageUrl}`);
+          introLinks.push({ label: contact.name ?? 'Agent', url: composePageUrl });
         }
 
-        const pairingSummaryHtml = [
-          `<p>A referral has been paired:</p>`,
-          `<p><strong>Borrower:</strong> ${escapeHtml(borrowerName)}</p>`,
-          `<p><strong>Loan File Number:</strong> ${escapeHtml(loanFileNumber)}</p>`,
-          `<p><strong>Client Type:</strong> ${referral.clientType}</p>`,
-          pairedContacts.length > 0
-            ? `<p><strong>Paired Team Members:</strong></p><ul>${pairedContacts.map(({ label, contact }) => 
-                `<li><strong>${label}:</strong> ${escapeHtml(contact.name ?? 'N/A')}${contact.email ? ` (${escapeHtml(contact.email)})` : ''}${contact.phone ? ` - ${escapeHtml(contact.phone)}` : ''}</li>`
-              ).join('')}</ul>`
-            : '<p>No team members paired yet.</p>',
-          referralLink ? `<p><a href="${referralLink}">View the referral</a></p>` : '',
-          ...introLinkHtmlParts,
-        ].filter(Boolean).join('');
-
-        const pairingSummaryText = [
-          'A referral has been paired:',
-          `Borrower: ${borrowerName}`,
-          `Loan File Number: ${loanFileNumber}`,
-          `Client Type: ${referral.clientType}`,
-          pairedContacts.length > 0
-            ? `Paired Team Members:\n${pairedContacts.map(({ label, contact }) => 
-                `${label}: ${contact.name ?? 'N/A'}${contact.email ? ` (${contact.email})` : ''}${contact.phone ? ` - ${contact.phone}` : ''}`
-              ).join('\n')}`
-            : 'No team members paired yet.',
-          referralLink ? `View the referral: ${referralLink}` : '',
-          ...introLinkTextParts,
-        ].filter(Boolean).join('\n\n');
+        const pairing = renderPairingSummaryEmail({
+          borrowerName,
+          loanFileNumber,
+          clientType: referral.clientType,
+          pairedMembers: pairedContacts.map(({ label, contact }) => ({
+            label,
+            name: contact.name ?? 'N/A',
+            email: contact.email ?? undefined,
+            phone: contact.phone ?? undefined,
+          })),
+          referralLink: referralLink || undefined,
+          introLinks,
+        });
 
         await sendTransactionalEmail({
           to: ['logan.graham@americanfinancing.net'],
           subject: `Referral Paired: ${borrowerName}`,
-          html: pairingSummaryHtml,
-          text: pairingSummaryText
+          html: pairing.html,
+          text: pairing.text
         });
       } catch (error) {
         console.error('Failed to send referral pairing notification email', error);

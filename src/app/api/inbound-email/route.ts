@@ -5,6 +5,10 @@ import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { uploadEmailAttachment } from '@/lib/server/gcs';
 import { sendTransactionalEmail } from '@/lib/email';
+import {
+  renderInboundConfirmationEmail,
+  renderNewReferralNotificationEmail,
+} from '@/lib/email-templates/referral-ops';
 import { buildReferralLink } from '@/lib/referral-links';
 import { logReferralActivity } from '@/lib/server/activities';
 import { extractInboundEmailFieldsWithAI } from '@/lib/server/inbound-email-ai-parser';
@@ -1078,20 +1082,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     await Promise.allSettled(activityPromises);
 
-    const borrowerLabel = escapeHtml(borrowerName);
-    const summaryHtml = `
-      <p>Referral received for <strong>${borrowerLabel}</strong>.</p>
-      <ul>
-        ${summaryFields.map((field) => `<li>${escapeHtml(field)}</li>`).join('')}
-      </ul>
-    `;
-    const summaryText = [`Referral received for ${borrowerName}.`, ...summaryFields].join('\n');
+    const confirmation = renderInboundConfirmationEmail({
+      borrowerName,
+      summaryFields,
+    });
 
     await sendTransactionalEmail({
       to: [CONFIRMATION_RECIPIENT],
       subject: `Referral received: ${borrowerName} (${channelInfo.channel})`,
-      html: summaryHtml,
-      text: summaryText
+      html: confirmation.html,
+      text: confirmation.text
     });
 
     // Notify the referral coordinators configured for the account.
@@ -1103,21 +1103,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         }
 
         const referralLink = buildReferralLink(referral._id.toString());
-        const borrowerLabel = escapeHtml(borrowerName);
-        const notificationHtml = `
-          <p>A new referral has been created for <strong>${borrowerLabel}</strong>.</p>
-          <ul>
-            ${summaryFields.map((field) => `<li>${escapeHtml(field)}</li>`).join('')}
-          </ul>
-          <p><a href="${referralLink}">View the referral</a></p>
-        `;
-        const notificationText = `A new referral has been created for ${borrowerName}.\n\n${summaryFields.join('\n')}\n\nView the referral: ${referralLink}`;
+        const notification = renderNewReferralNotificationEmail({
+          borrowerLabel: borrowerName,
+          summaryFields,
+          referralLink,
+        });
 
         await sendTransactionalEmail({
           to: coordinatorRecipients,
           subject: `New Referral: ${borrowerName}`,
-          html: notificationHtml,
-          text: notificationText,
+          html: notification.html,
+          text: notification.text,
           context: { referralId: referral._id.toString() }
         });
       } catch (error) {

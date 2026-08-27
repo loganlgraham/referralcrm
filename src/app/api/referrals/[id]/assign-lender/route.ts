@@ -12,6 +12,10 @@ import { Types } from 'mongoose';
 import { LenderMC } from '@/models/lender';
 import { buildReferralLink } from '@/lib/referral-links';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
+import {
+  renderAgentMcAssignmentThankYouEmail,
+  renderMcAssignmentEmail,
+} from '@/lib/email-templates/referral-ops';
 import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
 import {
   deriveReferralStatusFromSides,
@@ -203,30 +207,19 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     const agentLines = [agentName, agentEmail, agentPhone].filter((line) => line && line.trim()) as string[];
 
     const greetingName = nextLenderDoc?.name?.trim() || 'there';
-    const html = `
-      <p>Hi ${greetingName},</p>
-      <p>You have been assigned a new referral.</p>
-      <p>${borrowerLines.join('<br />')}</p>
-      ${
-        agentLines.length > 0
-          ? `<p><strong>Agent who sent it:</strong><br />${agentLines.join('<br />')}</p>`
-          : ''
-      }
-      <p><a href="${referralLink}">View the referral</a> to acknowledge and follow up.</p>
-    `;
-    const text = `Hi ${greetingName},
-
-You have been assigned a new referral.
-${borrowerLines.join('\n')}
-
-${agentLines.length > 0 ? `Agent who sent it:\n${agentLines.join('\n')}\n\n` : ''}View the referral: ${referralLink}`;
+    const rendered = renderMcAssignmentEmail({
+      greetingName,
+      borrowerLines,
+      agentLines,
+      referralLink,
+    });
 
     try {
       await sendTransactionalEmail({
         to: [lenderEmail],
         subject: `New referral: ${borrowerName}`,
-        html,
-        text,
+        html: rendered.html,
+        text: rendered.text,
       });
     } catch (error) {
       console.error('Failed to deliver MC assignment email', error);
@@ -248,32 +241,20 @@ ${agentLines.length > 0 ? `Agent who sent it:\n${agentLines.join('\n')}\n\n` : '
     ].filter(Boolean) as string[];
 
     const greeting = agentName || 'there';
-    const html = `
-      <p>Hi ${greeting},</p>
-      <p>Thank you so much for referring <strong>${borrowerName}</strong> — we really appreciate you trusting us with your client.</p>
-      <p>We've paired them with <strong>${mcName}</strong>, who will take great care of them as their mortgage consultant. Here's how to reach them:</p>
-      <p>${mcLines.join('<br />')}</p>
-      <p><a href="${referralLink}">View the referral</a></p>
-      <p>Thanks again for the referral!</p>
-    `;
-    const text = `Hi ${greeting},
-
-Thank you so much for referring ${borrowerName} — we really appreciate you trusting us with your client.
-
-We've paired them with ${mcName}, who will take great care of them as their mortgage consultant. Here's how to reach them:
-
-${mcLines.join('\n')}
-
-View the referral: ${referralLink}
-
-Thanks again for the referral!`;
+    const rendered = renderAgentMcAssignmentThankYouEmail({
+      greeting,
+      borrowerName,
+      mcName,
+      mcLines,
+      referralLink,
+    });
 
     try {
       await sendTransactionalEmail({
         to: [agentEmail],
         subject: `Thanks for your referral — ${mcName} is on it for ${borrowerName}`,
-        html,
-        text,
+        html: rendered.html,
+        text: rendered.text,
       });
     } catch (error) {
       console.error('Failed to deliver agent MC assignment email', error);

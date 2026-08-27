@@ -6,6 +6,7 @@ import { createReferralNoteSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { canViewReferral } from '@/lib/rbac';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
+import { renderNoteEmail } from '@/lib/email-templates/referral-ops';
 import { logReferralActivity } from '@/lib/server/activities';
 import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
 import { createAdminNotifications } from '@/lib/server/notifications';
@@ -142,21 +143,19 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       const plainContent = note.content;
       const htmlContent = note.content.replace(/\n/g, '<br />');
 
+      const rendered = renderNoteEmail({
+        authorName,
+        borrowerName,
+        htmlContent,
+        plainContent,
+        referralLink,
+      });
+
       const delivered = await sendTransactionalEmail({
         to: recipients.map((recipient) => recipient.email),
         subject: `New note on ${borrowerName}`,
-        html: `<p>${authorName} added a new note on ${borrowerName}.</p>
-        <blockquote style="margin: 1rem 0; padding-left: 1rem; border-left: 4px solid #cbd5f5;">${htmlContent}</blockquote>
-        ${
-          referralLink
-            ? `<p>Review the referral: <a href="${referralLink}">${referralLink}</a></p>`
-            : ''
-        }`,
-        text: `${authorName} added a new note on ${borrowerName}.
-
-${plainContent}
-
-${referralLink ? `Review the referral: ${referralLink}` : ''}`
+        html: rendered.html,
+        text: rendered.text,
       });
 
       if (delivered) {

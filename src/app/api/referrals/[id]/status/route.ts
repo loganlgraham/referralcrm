@@ -22,6 +22,7 @@ import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconcil
 import { mapReferralStatusToDealStatus } from '@/lib/server/referral-deal-status-mapper';
 import { type ReferralStatus } from '@/constants/referrals';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
+import { renderAgentCloseEmail, renderBorrowerCloseEmail } from '@/lib/email-templates/close-nps';
 import { getReferralAppBaseUrl } from '@/lib/referral-links';
 import { createNPSToken } from '@/lib/server/nps';
 import {
@@ -703,21 +704,16 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
               });
               const agentSurveyUrl = `${origin}/nps/agent?token=${agentSurveyToken}`;
 
+              const borrowerEmailContent = renderBorrowerCloseEmail({
+                borrowerFirstName,
+                agentName,
+                surveyUrl: agentSurveyUrl,
+              });
               const borrowerSurveySentStatus = await sendTransactionalEmail({
                 to: [borrowerEmail],
                 subject: 'Congrats on Your New Home!',
-                html: `
-                  <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
-                    <p>Hi ${borrowerFirstName},</p>
-                    <p>Congratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentName}—your feedback means a lot and helps others tremendously. Wishing you all the best!</p>
-                    <p style="margin: 20px 0 0 0;">
-                      <a href="${agentSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
-                        Rate Your Agent
-                      </a>
-                    </p>
-                  </div>
-                `,
-                text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentName}—your feedback means a lot and helps others tremendously. Wishing you all the best!\n\nRate your agent: ${agentSurveyUrl}`,
+                html: borrowerEmailContent.html,
+                text: borrowerEmailContent.text,
               });
               if (borrowerSurveySentStatus === true) {
                 await logReferralActivity({
@@ -750,32 +746,17 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
               const agentFirstName = agentName.split(' ')[0] || 'there';
               const borrowerDisplayName =
                 referral.borrower?.name || referral.borrower?.firstName || 'your client';
-              const mcQuestion =
-                'If you have a quick moment: on a scale of 0-10, how likely are you to recommend American Financing to a client or colleague?';
-              const mcBlockHtml = lenderSurveyUrl
-                ? `
-                    <p style="margin: 20px 0 0 0;">${mcQuestion}</p>
-                    <p style="margin: 20px 0 0 0;">
-                      <a href="${lenderSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
-                        Rate Your Mortgage Consultant
-                      </a>
-                    </p>
-                  `
-                : '';
-              const mcBlockText = lenderSurveyUrl
-                ? `\n\n${mcQuestion}\n\nRate your mortgage consultant: ${lenderSurveyUrl}`
-                : '';
+              const agentCloseEmail = renderAgentCloseEmail({
+                agentFirstName,
+                borrowerDisplayName,
+                lenderSurveyUrl,
+              });
 
               const agentCloseSurveySentStatus = await sendTransactionalEmail({
                 to: [agentEmail],
                 subject: 'Congratulations on Your Closed Deal!',
-                html: `
-                  <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
-                    <p>Hi ${agentFirstName},</p>
-                    <p>Congratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.</p>${mcBlockHtml}
-                  </div>
-                `,
-                text: `Hi ${agentFirstName},\n\nCongratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.${mcBlockText}`,
+                html: agentCloseEmail.html,
+                text: agentCloseEmail.text,
               });
               if (agentCloseSurveySentStatus === true && lenderSurveyUrl) {
                 const lenderPopStatus = referral.lender as { name?: string | null } | null | undefined;
