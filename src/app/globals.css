@@ -258,3 +258,33 @@
     opacity: 0.4;
   }
 }
+
+/*
+  Sonner's mobile sheet uses width: 100% plus left/right offsets, which pushes
+  toasts off-screen (and body overflow-x: hidden then clips them). Stretch the
+  admin toaster between equal gutters so every toast sits fully on-screen and
+  centered.
+*/
+@media (max-width: 767px) {
+  [data-sonner-toaster].admin-toaster {
+    left: 1rem !important;
+    right: 1rem !important;
+    top: max(1rem, env(safe-area-inset-top)) !important;
+    width: auto !important;
+    max-width: none;
+    transform: none !important;
+  }
+
+  [data-sonner-toaster].admin-toaster [data-sonner-toast] {
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  [data-sonner-toaster].admin-toaster [data-sonner-toast] > * {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+}

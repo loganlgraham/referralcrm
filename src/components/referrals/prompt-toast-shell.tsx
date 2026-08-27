@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button';
 export type PromptToastWidth = 'compact' | 'wide';
 
 const widthClasses: Record<PromptToastWidth, string> = {
-  compact: 'w-[min(calc(100vw-2rem),360px)]',
-  wide: 'w-[min(calc(100vw-2rem),40rem)]'
+  compact: 'mx-auto w-full max-w-[min(360px,calc(100vw-2rem))] md:w-[360px] md:max-w-none',
+  wide: 'mx-auto w-full max-w-[min(40rem,calc(100vw-2rem))] md:w-[40rem] md:max-w-none'
 };
 
 /**
@@ -43,7 +43,7 @@ export function PromptToastCard({
   return (
     <form
       className={cn(
-        'max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-card border border-border bg-surface-raised px-5 py-4 shadow-raised',
+        'box-border max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-card border border-border bg-surface-raised px-5 py-4 shadow-raised',
         widthClasses[width]
       )}
       onSubmit={(event) => {

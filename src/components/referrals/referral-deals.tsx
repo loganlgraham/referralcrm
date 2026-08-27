@@ -532,7 +532,7 @@ function DealCard({
     toast.custom(
       (toastInstance) => (
         <form
-          className="w-[360px] rounded-card border border-border bg-surface-raised p-4 shadow-card"
+          className="mx-auto w-full max-w-[360px] rounded-card border border-border bg-surface-raised p-4 shadow-card"
           onSubmit={async (event) => {
             event.preventDefault();
             const trimmedValue = amountDraft.trim();

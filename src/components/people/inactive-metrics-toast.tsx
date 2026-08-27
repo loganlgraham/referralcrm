@@ -11,7 +11,7 @@ interface PromptInactiveMetricsChoiceOptions {
 export function promptInactiveMetricsChoice({ label, onChoose }: PromptInactiveMetricsChoiceOptions): void {
   toast.custom(
     (id) => (
-      <div className="w-[356px] max-w-[calc(100vw-2rem)] rounded-card border border-border bg-surface-raised p-4 shadow-raised">
+      <div className="mx-auto w-full max-w-[356px] rounded-card border border-border bg-surface-raised p-4 shadow-raised">
         <p className="text-sm font-medium text-foreground">Mark this {label} inactive</p>
         <p className="mt-1 text-xs text-foreground-muted">
           Should they still count in dashboard leaderboards?

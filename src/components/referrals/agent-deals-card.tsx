@@ -46,7 +46,8 @@ interface AgentDealsCardProps {
   isAgentOrigin?: boolean;
 }
 
-const DEAL_GRID = 'grid grid-cols-[minmax(0,1fr)_150px_130px_120px_30px] items-center gap-4';
+const DEAL_GRID =
+  'hidden md:grid md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.7fr)_minmax(0,1fr)_1.875rem] md:items-center md:gap-3 lg:gap-4';
 
 const TERMINATED_REASON_LABELS: Record<string, string> = {
   inspection: 'Inspection',
@@ -88,13 +89,13 @@ export function AgentDealsCard({
 
   return (
     <section className="rounded-card border border-border bg-surface shadow-resting">
-      <div className="flex items-end justify-between gap-4 px-5 pb-3.5 pt-[18px]">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-3 px-5 pb-3.5 pt-[18px] md:items-end">
+        <div className="min-w-0 flex-1">
           <h2 className="text-base font-bold tracking-[-0.02em] text-foreground">Deals</h2>
           <p className="mt-1 text-[13px] text-foreground-subtle">Contracts and payouts tied to this referral.</p>
         </div>
         {canAddDeal && onAddDeal ? (
-          <Button type="button" variant="secondary" size="sm" className="h-9" onClick={onAddDeal}>
+          <Button type="button" variant="secondary" size="sm" className="h-9 shrink-0" onClick={onAddDeal}>
             Add deal
           </Button>
         ) : null}
@@ -129,6 +130,26 @@ export function AgentDealsCard({
         </>
       )}
     </section>
+  );
+}
+
+function EditDealButton({
+  disabled,
+  onEdit
+}: {
+  disabled: boolean;
+  onEdit: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label="Edit deal"
+      disabled={disabled}
+      onClick={onEdit}
+      className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] text-foreground-subtle transition hover:bg-surface-muted hover:text-foreground-muted disabled:opacity-50"
+    >
+      <Pencil className="h-[14px] w-[14px]" aria-hidden />
+    </button>
   );
 }
 
@@ -227,38 +248,56 @@ function DealRow({
   // Payment Received is only reachable once the referral fee lands, so agents never pick it.
   const stageChoices = DEAL_STATUS_OPTIONS.filter((option) => option.value !== 'paid');
 
+  const priceClass = cn('text-sm font-semibold', muted ? 'text-foreground-subtle' : 'text-foreground');
+  const metaClass = cn('text-numeric text-[13px]', muted ? 'text-foreground-subtle' : 'text-foreground-muted');
+  const expectedClass = cn(
+    'text-numeric text-[15px] font-semibold',
+    muted ? 'text-foreground-subtle' : 'text-foreground'
+  );
+
   return (
     <div className={cn('px-5 py-3.5', isLast ? null : 'border-b border-border/60')}>
+      <div className="md:hidden">
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <p className={priceClass}>
+              {contractPrice ? <span className="text-numeric">{contractPrice}</span> : 'Deal'}
+            </p>
+            <p className="mt-[3px] break-words text-[13px] leading-5 text-foreground-subtle">{subline}</p>
+          </div>
+          <EditDealButton disabled={updating} onEdit={() => onEdit(deal)} />
+        </div>
+        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5">
+          <div className="min-w-0">
+            <dt className="text-eyebrow text-foreground-subtle">Closing</dt>
+            <dd className={cn('mt-1', metaClass)}>{deal.closingDate ? formatDateMST(deal.closingDate) : '—'}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-eyebrow text-foreground-subtle">Fee</dt>
+            <dd className={cn('mt-1', metaClass)}>
+              {referralFee ? <span className="text-numeric">{referralFee}</span> : '—'}
+            </dd>
+          </div>
+          <div className="min-w-0 col-span-2">
+            <dt className="text-eyebrow text-foreground-subtle">Expected</dt>
+            <dd className={cn('mt-1', expectedClass)}>{formatCurrency(expectedCents)}</dd>
+          </div>
+        </dl>
+      </div>
+
       <div className={DEAL_GRID}>
         <div className="min-w-0">
-          <p className={cn('text-sm font-semibold', muted ? 'text-foreground-subtle' : 'text-foreground')}>
+          <p className={priceClass}>
             {contractPrice ? <span className="text-numeric">{contractPrice}</span> : 'Deal'}
           </p>
           <p className="mt-[3px] truncate text-[13px] text-foreground-subtle">{subline}</p>
         </div>
-        <p className={cn('text-numeric text-[13px]', muted ? 'text-foreground-subtle' : 'text-foreground-muted')}>
-          {deal.closingDate ? formatDateMST(deal.closingDate) : '—'}
-        </p>
+        <p className={metaClass}>{deal.closingDate ? formatDateMST(deal.closingDate) : '—'}</p>
         <p className={cn('text-[13px]', muted ? 'text-foreground-subtle' : 'text-foreground-muted')}>
           {referralFee ? <span className="text-numeric">{referralFee}</span> : '—'}
         </p>
-        <p
-          className={cn(
-            'text-numeric text-right text-[15px] font-semibold',
-            muted ? 'text-foreground-subtle' : 'text-foreground'
-          )}
-        >
-          {formatCurrency(expectedCents)}
-        </p>
-        <button
-          type="button"
-          aria-label="Edit deal"
-          disabled={updating}
-          onClick={() => onEdit(deal)}
-          className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-[8px] text-foreground-subtle transition hover:bg-surface-muted hover:text-foreground-muted disabled:opacity-50"
-        >
-          <Pencil className="h-[14px] w-[14px]" aria-hidden />
-        </button>
+        <p className={cn(expectedClass, 'text-right')}>{formatCurrency(expectedCents)}</p>
+        <EditDealButton disabled={updating} onEdit={() => onEdit(deal)} />
       </div>
       {readOnly ? null : (
         <div className="mt-3 flex flex-wrap gap-1.5">
