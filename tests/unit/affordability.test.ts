@@ -186,14 +186,44 @@ describe('loan programs', () => {
     );
 
     expect(result.mortgageInsuranceMonthly).toBe(0);
-    expect(result.financedFeeAmount).toBeCloseTo(result.baseLoanAmount * 0.023, 6);
+    expect(result.financedFeeAmount).toBeCloseTo(result.baseLoanAmount * 0.0215, 6);
   });
 
   it('picks the self-consistent VA funding fee tier in dollar mode', () => {
     const result = calculateAffordability(input({ loanType: 'va', downPaymentAmount: 50_000 }));
-    const expectedFeePercent = result.downPaymentPercent >= 10 ? 0.013 : 0.018;
+    const expectedFeePercent =
+      result.downPaymentPercent >= 10 ? 0.0125 : result.downPaymentPercent >= 5 ? 0.015 : 0.0215;
 
     expect(result.financedFeeAmount).toBeCloseTo(result.baseLoanAmount * expectedFeePercent, 6);
+  });
+
+  it('charges a repeat VA buyer the higher funding fee below 5% down', () => {
+    const shared = { loanType: 'va' as const, downPaymentMode: 'percent' as const, downPaymentPercent: 0 };
+    const firstUse = calculateAffordability(input(shared));
+    const repeatUse = calculateAffordability(input({ ...shared, vaSubsequentUse: true }));
+
+    expect(firstUse.financedFeeAmount).toBeCloseTo(firstUse.baseLoanAmount * 0.0215, 6);
+    expect(repeatUse.financedFeeAmount).toBeCloseTo(repeatUse.baseLoanAmount * 0.033, 6);
+    // The bigger financed fee eats into the payment, so it buys less house.
+    expect(repeatUse.maxPurchasePrice).toBeLessThan(firstUse.maxPurchasePrice);
+  });
+
+  it('leaves the repeat-use fee behind once the buyer puts 5% down', () => {
+    const shared = { loanType: 'va' as const, downPaymentMode: 'percent' as const, downPaymentPercent: 5 };
+    const firstUse = calculateAffordability(input(shared));
+    const repeatUse = calculateAffordability(input({ ...shared, vaSubsequentUse: true }));
+
+    expect(repeatUse.financedFeeAmount).toBeCloseTo(repeatUse.baseLoanAmount * 0.015, 6);
+    expect(repeatUse.maxPurchasePrice).toBe(firstUse.maxPurchasePrice);
+  });
+
+  it('charges jumbo mortgage insurance below 20% down', () => {
+    const result = calculateAffordability(
+      input({ loanType: 'jumbo', downPaymentMode: 'percent', downPaymentPercent: 10 })
+    );
+
+    expect(result.mortgageInsuranceMonthly).toBeGreaterThan(0);
+    expect(result.warnings.map((warning) => warning.id)).toContain('mi-cliff');
   });
 
   it('ignores the front-end ratio for programs that do not use one', () => {
@@ -294,13 +324,30 @@ describe('edge cases', () => {
 });
 
 describe('warnings', () => {
-  it('flags a loan above the conforming limit', () => {
+  it('flags a conventional loan above the conforming limit', () => {
     const result = calculateAffordability(
       input({ grossMonthlyIncome: 30_000, monthlyDebts: 0, downPaymentAmount: 200_000 })
     );
 
     expect(result.totalLoanAmount).toBeGreaterThan(DEFAULT_CONFORMING_LOAN_LIMIT);
     expect(result.warnings.map((warning) => warning.id)).toContain('over-conforming');
+  });
+
+  it('does not hold VA or USDA to a conforming limit they do not have', () => {
+    const big = { grossMonthlyIncome: 30_000, monthlyDebts: 0, downPaymentAmount: 200_000 };
+
+    for (const loanType of ['va', 'usda'] as const) {
+      const result = calculateAffordability(input({ ...big, loanType, frontEndCapPercent: null }));
+
+      expect(result.totalLoanAmount).toBeGreaterThan(DEFAULT_CONFORMING_LOAN_LIMIT);
+      expect(result.warnings.map((warning) => warning.id)).not.toContain('over-conforming');
+    }
+  });
+
+  it('points out that FHA county limits are not checked', () => {
+    const result = calculateAffordability(input({ loanType: 'fha' }));
+
+    expect(result.warnings.map((warning) => warning.id)).toContain('fha-county-limit');
   });
 
   it('flags how much more cash removes conventional mortgage insurance', () => {

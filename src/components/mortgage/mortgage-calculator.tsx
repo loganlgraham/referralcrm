@@ -6,21 +6,31 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { Tooltip } from '@/components/ui/tooltip';
+import { describeMortgageInsuranceDuration, getMortgageInsuranceLabel } from '@/utils/affordability';
 import {
   MortgageInputs,
   calculateMortgage,
   generateAmortizationSchedule,
   getLoanTypeInfo,
-  LoanType,
 } from '@/utils/mortgage-calculations';
 import { AmortizationTable } from './amortization-table';
-import { ScenarioComparison, type Scenario } from './scenario-comparison';
+import { ScenarioComparison, createScenario, type Scenario } from './scenario-comparison';
 import {
   AffordabilityCalculator,
   type AffordabilityActions,
 } from './affordability-calculator';
 import { CalculatorTab } from './calculator-tab';
 import { CalculatorTabs, type CalculatorTabDefinition, type CalculatorTabId } from './calculator-tabs';
+import {
+  clearStoredCalculatorState,
+  loadCalculatorState,
+  parseInputsFromParams,
+  saveCalculatorState,
+  toInputParams,
+  type MortgageNumericKey,
+  type StoredScenario,
+} from './calculator-state';
+import { copyToClipboard } from './copy-to-clipboard';
 import { formatCurrency, formatPercent } from './formatters';
 import { useNumberInputs } from './use-number-inputs';
 
@@ -35,9 +45,14 @@ const defaultInputs: MortgageInputs = {
   pmiRate: 0.55,
   extraPrincipal: 0,
   loanType: 'conventional',
+  vaSubsequentUse: false,
 };
 
-type MortgageFieldKey = Exclude<keyof MortgageInputs, 'loanType'>;
+/** Past this the comparison table is wider than it is useful. */
+const MAX_SCENARIOS = 6;
+
+/** How long to wait after the last edit before writing state to storage. */
+const SAVE_DEBOUNCE_MS = 400;
 
 function isTabType(value: string | null): value is CalculatorTabId {
   return (
@@ -48,30 +63,36 @@ function isTabType(value: string | null): value is CalculatorTabId {
   );
 }
 
+/** Lowest unused "Scenario N", so removing one never creates a duplicate name. */
+function nextScenarioName(existing: Scenario[]): string {
+  const taken = new Set(existing.map((scenario) => scenario.name));
+  let number = existing.length + 1;
+  while (taken.has(`Scenario ${number}`)) number += 1;
+  return `Scenario ${number}`;
+}
+
+function toStoredScenario(scenario: Scenario): StoredScenario {
+  return { id: scenario.id, name: scenario.name, inputs: scenario.inputs };
+}
+
 export function MortgageCalculator() {
   const [inputs, setInputs] = useState<MortgageInputs>(defaultInputs);
   const [activeTab, setActiveTab] = useState<CalculatorTabId>('calculator');
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  // Storage is read after mount to keep the server and client markup identical,
+  // so saving has to wait until that read has happened.
+  const [hasRestoredState, setHasRestoredState] = useState(false);
+  // Bumped on reset to remount the Affordability panel back to its defaults.
+  const [affordabilityInstance, setAffordabilityInstance] = useState(0);
   const affordabilityActions = useRef<AffordabilityActions | null>(null);
 
-  const {
-    purchasePrice,
-    downPaymentPercent,
-    interestRate,
-    termYears,
-    propertyTaxRate,
-    insuranceMonthly,
-    hoaMonthly,
-    pmiRate,
-    extraPrincipal,
-    loanType,
-  } = inputs;
+  const { termYears, insuranceMonthly, hoaMonthly, extraPrincipal } = inputs;
 
-  const handleNumberChange = useCallback((key: MortgageFieldKey, value: number) => {
+  const handleNumberChange = useCallback((key: MortgageNumericKey, value: number) => {
     setInputs((prev) => ({ ...prev, [key]: value }));
   }, []);
 
-  const numberInputs = useNumberInputs<MortgageFieldKey>(handleNumberChange);
+  const numberInputs = useNumberInputs<MortgageNumericKey>(handleNumberChange);
 
   const handleInputsPatch = useCallback((patch: Partial<MortgageInputs>) => {
     setInputs((prev) => ({ ...prev, ...patch }));
@@ -85,14 +106,16 @@ export function MortgageCalculator() {
   );
 
   const handleSaveScenario = () => {
+    if (scenarios.length >= MAX_SCENARIOS) {
+      toast.error(`You can compare up to ${MAX_SCENARIOS} scenarios at once`, {
+        description: 'Remove one on the Scenarios tab to make room.',
+      });
+      return;
+    }
+
     setScenarios((prev) => [
       ...prev,
-      {
-        id: `scenario-${Date.now()}`,
-        name: `Scenario ${prev.length + 1}`,
-        inputs: { ...inputs },
-        calculations: { ...calculations },
-      },
+      createScenario(`scenario-${Date.now()}`, nextScenarioName(prev), { ...inputs }),
     ]);
     toast.success('Scenario saved', {
       description: 'Compare it on the Scenarios tab.',
@@ -115,13 +138,18 @@ export function MortgageCalculator() {
   }, []);
 
   const handleReset = () => {
+    clearStoredCalculatorState();
     setInputs(defaultInputs);
+    setScenarios([]);
     numberInputs.reset();
+    setAffordabilityInstance((instance) => instance + 1);
     const url = new URL(window.location.href);
     url.search = '';
     window.history.replaceState({}, '', url.toString());
     setActiveTab('calculator');
-    toast.success('Calculator reset');
+    toast.success('Calculator reset', {
+      description: 'Loan terms, borrower details, and saved scenarios are all cleared.',
+    });
   };
 
   const handleShareLink = () => {
@@ -130,26 +158,16 @@ export function MortgageCalculator() {
       return;
     }
 
-    const params = new URLSearchParams({
-      price: purchasePrice.toString(),
-      down: downPaymentPercent.toString(),
-      rate: interestRate.toString(),
-      term: termYears.toString(),
-      tax: propertyTaxRate.toString(),
-      insurance: insuranceMonthly.toString(),
-      hoa: hoaMonthly.toString(),
-      pmi: pmiRate.toString(),
-      extra: extraPrincipal.toString(),
-      type: loanType || 'conventional',
-    });
+    const params = toInputParams(inputs);
     if (activeTab !== 'calculator') params.set('tab', activeTab);
 
-    navigator.clipboard.writeText(
-      `${window.location.origin}${window.location.pathname}?${params.toString()}`
+    void copyToClipboard(
+      `${window.location.origin}${window.location.pathname}?${params.toString()}`,
+      {
+        title: 'Share link copied',
+        description: 'Anyone you send it to opens this exact scenario.',
+      }
     );
-    toast.success('Share link copied', {
-      description: 'Anyone you send it to opens this exact scenario.',
-    });
   };
 
   const handleCopySummary = () => {
@@ -158,14 +176,15 @@ export function MortgageCalculator() {
       return;
     }
 
+    const loanType = inputs.loanType ?? 'conventional';
     const lines = [
       'Mortgage estimate',
-      `Purchase price: ${formatCurrency(purchasePrice)}`,
-      `Down payment: ${downPaymentPercent}% (${formatCurrency(calculations.downPaymentAmount)})`,
+      `Purchase price: ${formatCurrency(inputs.purchasePrice)}`,
+      `Down payment: ${inputs.downPaymentPercent}% (${formatCurrency(calculations.downPaymentAmount)})`,
       `Loan amount: ${formatCurrency(calculations.loanAmount)}`,
-      `Interest rate: ${interestRate}%`,
+      `Interest rate: ${inputs.interestRate}%`,
       `Term: ${termYears} years`,
-      `Loan type: ${getLoanTypeInfo(loanType || 'conventional').name}`,
+      `Loan type: ${getLoanTypeInfo(loanType).name}`,
       '',
       'Monthly payment',
       `  Principal & interest: ${formatCurrency(calculations.principalAndInterest)}`,
@@ -175,23 +194,32 @@ export function MortgageCalculator() {
     ];
 
     if (calculations.pmiMonthly > 0) {
-      lines.push(`  Mortgage insurance: ${formatCurrency(calculations.pmiMonthly)}`);
+      const duration = describeMortgageInsuranceDuration(calculations.mortgageInsuranceMonths);
+      lines.push(
+        `  ${getMortgageInsuranceLabel(loanType)}: ${formatCurrency(calculations.pmiMonthly)}${
+          duration ? ` (${duration.toLowerCase()})` : ''
+        }`
+      );
     }
     if (extraPrincipal > 0) {
       lines.push(`  Extra principal: ${formatCurrency(extraPrincipal)}`);
     }
 
+    // Read the interest off the schedule rather than the scheduled-payments
+    // total, so extra principal is reflected in what gets pasted to a client.
+    const interestPaid = amortizationSchedule.at(-1)?.cumulativeInterest ?? 0;
+
     lines.push(
       '',
       `Total monthly payment: ${formatCurrency(calculations.totalMonthly)}`,
-      `Total interest over the life of the loan: ${formatCurrency(calculations.totalInterest)}`,
+      `Paid off in: ${amortizationSchedule.length} payments`,
+      `Total interest paid: ${formatCurrency(interestPaid)}`,
       `Loan-to-value: ${formatPercent(calculations.ltv)}`,
       '',
       'These are estimates for planning. Your lender\u2019s approval and disclosures are the final word.'
     );
 
-    navigator.clipboard.writeText(lines.join('\n'));
-    toast.success('Summary copied');
+    void copyToClipboard(lines.join('\n'), { title: 'Summary copied' });
   };
 
   const handleUseAffordabilityResults = useCallback(
@@ -206,26 +234,38 @@ export function MortgageCalculator() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const urlInputs: Partial<MortgageInputs> = {};
+    const linkInputs = parseInputsFromParams(params);
+    const stored = loadCalculatorState();
 
-    if (params.has('price')) urlInputs.purchasePrice = Number(params.get('price'));
-    if (params.has('down')) urlInputs.downPaymentPercent = Number(params.get('down'));
-    if (params.has('rate')) urlInputs.interestRate = Number(params.get('rate'));
-    if (params.has('term')) urlInputs.termYears = Number(params.get('term'));
-    if (params.has('tax')) urlInputs.propertyTaxRate = Number(params.get('tax'));
-    if (params.has('insurance')) urlInputs.insuranceMonthly = Number(params.get('insurance'));
-    if (params.has('hoa')) urlInputs.hoaMonthly = Number(params.get('hoa'));
-    if (params.has('pmi')) urlInputs.pmiRate = Number(params.get('pmi'));
-    if (params.has('extra')) urlInputs.extraPrincipal = Number(params.get('extra'));
-    if (params.has('type')) urlInputs.loanType = params.get('type') as LoanType;
+    // A share link describes one specific scenario, so it wins over whatever
+    // was last left on this device.
+    const restored = Object.keys(linkInputs).length > 0 ? linkInputs : stored.inputs;
+    if (Object.keys(restored).length > 0) {
+      setInputs((prev) => ({ ...prev, ...restored }));
+    }
 
-    if (Object.keys(urlInputs).length > 0) {
-      setInputs((prev) => ({ ...prev, ...urlInputs }));
+    if (stored.scenarios.length > 0) {
+      setScenarios(
+        stored.scenarios.map((scenario) =>
+          createScenario(scenario.id, scenario.name, { ...defaultInputs, ...scenario.inputs })
+        )
+      );
     }
 
     const tab = params.get('tab');
     if (isTabType(tab)) setActiveTab(tab);
+
+    setHasRestoredState(true);
   }, []);
+
+  useEffect(() => {
+    if (!hasRestoredState) return undefined;
+
+    const timer = setTimeout(() => {
+      saveCalculatorState({ inputs, scenarios: scenarios.map(toStoredScenario) });
+    }, SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [hasRestoredState, inputs, scenarios]);
 
   const tabs: CalculatorTabDefinition[] = [
     { id: 'calculator', label: 'Calculator' },
@@ -243,11 +283,11 @@ export function MortgageCalculator() {
         actions={
           <>
             <div className="flex items-center gap-0.5 rounded-lg bg-surface-muted p-0.5">
-              <Tooltip content="Reset to defaults">
+              <Tooltip content="Reset everything to defaults">
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="Reset to defaults"
+                  aria-label="Reset everything to defaults"
                   onClick={handleReset}
                 >
                   <RotateCcwIcon className="h-4 w-4" />
@@ -316,6 +356,7 @@ export function MortgageCalculator() {
       {/* Kept mounted so borrower details survive a trip to another tab. */}
       <TabPanel id="affordability" hidden={activeTab !== 'affordability'}>
         <AffordabilityCalculator
+          key={affordabilityInstance}
           loanInputs={inputs}
           onLoanInputsChange={handleInputsPatch}
           onUseResults={handleUseAffordabilityResults}

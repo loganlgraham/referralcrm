@@ -1,7 +1,10 @@
 'use client';
 
 import { cn } from '@/lib/cn';
-import { getMortgageInsuranceLabel } from '@/utils/affordability';
+import {
+  describeMortgageInsuranceDuration,
+  getMortgageInsuranceLabel,
+} from '@/utils/affordability';
 import {
   type LoanType,
   type MortgageCalculations,
@@ -53,7 +56,7 @@ function buildSegments(
       label: getMortgageInsuranceLabel(loanType),
       amount: calculations.pmiMonthly,
       swatch: 'bg-signal',
-      note: loanType === 'conventional' ? 'Drops off at 80% loan-to-value' : undefined,
+      note: describeMortgageInsuranceDuration(calculations.mortgageInsuranceMonths),
     },
     {
       id: 'extra-principal',

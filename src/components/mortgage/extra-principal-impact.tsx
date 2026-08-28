@@ -36,16 +36,8 @@ export function ExtraPrincipalImpact({
   originalMonths,
   newMonths,
 }: ExtraPrincipalImpactProps) {
-  if (extraPrincipalAmount === 0 || monthsSaved <= 0) {
-    return (
-      <section className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-        <h3 className="text-eyebrow text-foreground-subtle">Extra principal</h3>
-        <p className="mt-2 text-sm text-foreground-muted">
-          Add an extra monthly payment to see how much time and interest it saves.
-        </p>
-      </section>
-    );
-  }
+  // Too small a payment to shorten the term by a whole month has nothing to show.
+  if (extraPrincipalAmount <= 0 || monthsSaved <= 0) return null;
 
   const remainingShare = originalMonths > 0 ? Math.min(newMonths / originalMonths, 1) : 1;
 

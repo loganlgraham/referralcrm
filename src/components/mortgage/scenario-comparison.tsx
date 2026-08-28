@@ -4,7 +4,12 @@ import { LayersIcon, XIcon } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
-import { MortgageInputs, MortgageCalculations } from '@/utils/mortgage-calculations';
+import {
+  MortgageInputs,
+  MortgageCalculations,
+  calculateMortgage,
+  generateAmortizationSchedule,
+} from '@/utils/mortgage-calculations';
 import { formatCurrency, formatPercent } from './formatters';
 
 export interface Scenario {
@@ -12,6 +17,28 @@ export interface Scenario {
   name: string;
   inputs: MortgageInputs;
   calculations: MortgageCalculations;
+  /** Interest actually paid, with any extra principal taken into account. */
+  totalInterestPaid: number;
+  /** Months until the balance is cleared, which extra principal shortens. */
+  payoffMonths: number;
+}
+
+/**
+ * Builds a scenario from its inputs alone, so a scenario restored from storage
+ * is priced by today's rules rather than by whatever was saved alongside it.
+ */
+export function createScenario(id: string, name: string, inputs: MortgageInputs): Scenario {
+  const calculations = calculateMortgage(inputs);
+  const schedule = generateAmortizationSchedule(inputs, calculations);
+
+  return {
+    id,
+    name,
+    inputs,
+    calculations,
+    totalInterestPaid: schedule.at(-1)?.cumulativeInterest ?? 0,
+    payoffMonths: schedule.length,
+  };
 }
 
 interface ScenarioComparisonProps {
@@ -113,10 +140,16 @@ const rows: ComparisonRow[] = [
     value: (scenario) => scenario.inputs.extraPrincipal,
   },
   {
-    label: 'Total interest',
+    label: 'Payoff',
+    format: 'text',
+    best: 'none',
+    value: (scenario) => `${scenario.payoffMonths} months`,
+  },
+  {
+    label: 'Total interest paid',
     format: 'currency',
     best: 'low',
-    value: (scenario) => scenario.calculations.totalInterest,
+    value: (scenario) => scenario.totalInterestPaid,
   },
 ];
 

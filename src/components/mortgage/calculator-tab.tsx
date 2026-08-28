@@ -9,13 +9,12 @@ import {
   type MortgageCalculations,
   type MortgageInputs,
 } from '@/utils/mortgage-calculations';
+import { type MortgageNumericKey } from './calculator-state';
 import { ExtraPrincipalImpact } from './extra-principal-impact';
-import { FieldGrid, FieldGroup, NumberField, SelectField } from './fields';
+import { CheckboxField, FieldGrid, FieldGroup, NumberField, SelectField } from './fields';
 import { formatCurrency, formatPercent } from './formatters';
 import { PaymentStackCard } from './payment-stack-card';
 import { type NumberInputHandlers } from './use-number-inputs';
-
-type MortgageFieldKey = Exclude<keyof MortgageInputs, 'loanType'>;
 
 const loanTypeOptions = [
   { value: 'conventional', label: 'Conventional' },
@@ -28,7 +27,7 @@ const loanTypeOptions = [
 interface CalculatorTabProps {
   inputs: MortgageInputs;
   calculations: MortgageCalculations;
-  numberInputs: NumberInputHandlers<MortgageFieldKey>;
+  numberInputs: NumberInputHandlers<MortgageNumericKey>;
   onInputsPatch: (patch: Partial<MortgageInputs>) => void;
 }
 
@@ -49,19 +48,24 @@ export function CalculatorTab({
   const insights = useMemo(() => {
     const ideas: string[] = [];
 
-    if (loanType === 'conventional' && calculations.ltv > 0.8) {
+    if (loanTypeInfo.hasPMI && calculations.pmiMonthly > 0) {
+      const months = calculations.mortgageInsuranceMonths;
       ideas.push(
-        'Loan-to-value is above 80%, so mortgage insurance is included. A slightly larger down payment or a seller credit could remove it.'
+        months === null
+          ? 'Mortgage insurance is included and stays for the life of this loan. A larger down payment or a different program is the only way out of it.'
+          : `Mortgage insurance is included for about ${Math.max(Math.round(months / 12), 1)} years until the balance reaches 80% of the price. A slightly larger down payment or a seller credit could remove it now.`
       );
     }
     if (loanType === 'fha') {
       ideas.push(
-        'FHA carries both an upfront and a monthly mortgage insurance premium. Conventional is usually cheaper with 20% down.'
+        'FHA carries both an upfront and a monthly mortgage insurance premium. Getting to 10% down cuts the monthly premium to 11 years instead of the full term.'
       );
     }
     if (loanType === 'va') {
       ideas.push(
-        'VA allows 0% down with no monthly mortgage insurance, though it does include a funding fee. Strong terms for eligible veterans.'
+        inputs.vaSubsequentUse
+          ? 'A repeat VA buyer pays 3.3% on the funding fee under 5% down, but only 1.5% at 5% down. Worth pricing both ways.'
+          : 'VA allows 0% down with no monthly mortgage insurance, though it does include a funding fee. Strong terms for eligible veterans.'
       );
     }
     if (inputs.interestRate >= 7) {
@@ -88,13 +92,24 @@ export function CalculatorTab({
     );
 
     return ideas;
-  }, [calculations.ltv, inputs.extraPrincipal, inputs.interestRate, loanType]);
+  }, [
+    calculations.mortgageInsuranceMonths,
+    calculations.pmiMonthly,
+    inputs.extraPrincipal,
+    inputs.interestRate,
+    inputs.vaSubsequentUse,
+    loanType,
+    loanTypeInfo.hasPMI,
+  ]);
 
   const snapshot = [
     { label: 'Loan amount', value: formatCurrency(calculations.loanAmount) },
     { label: 'Down payment', value: formatCurrency(calculations.downPaymentAmount) },
     { label: 'Loan-to-value', value: formatPercent(calculations.ltv) },
-    { label: 'Total scheduled interest', value: formatCurrency(calculations.totalInterest) },
+    {
+      label: 'Total scheduled interest',
+      value: formatCurrency(calculations.totalScheduledInterest),
+    },
   ];
 
   if (calculations.upfrontMIP) {
@@ -162,6 +177,19 @@ export function CalculatorTab({
                 footnote={`${inputs.termYears * 12} payments`}
               />
             </FieldGrid>
+            {loanType === 'va' ? (
+              <div className="border-t border-border pt-3">
+                <CheckboxField
+                  label="They have used a VA loan before"
+                  checked={inputs.vaSubsequentUse ?? false}
+                  onChange={(vaSubsequentUse) => onInputsPatch({ vaSubsequentUse })}
+                />
+                <p className="mt-1.5 text-xs text-foreground-subtle">
+                  A repeat VA buyer pays 3.3% instead of 2.15% on the funding fee, unless they put
+                  at least 5% down.
+                </p>
+              </div>
+            ) : null}
           </div>
         </FieldGroup>
 

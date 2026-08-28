@@ -22,15 +22,15 @@ import {
   calculateMortgage,
   getFinancedFeePercent,
   getLoanTypeInfo,
-  getVaFundingFeePercent,
+  getVaFundingFeePercentTiers,
   type LoanType,
 } from './mortgage-calculations';
 
 /**
- * FHFA baseline conforming loan limit. Review every January, and let agents
- * override it for high-cost counties.
+ * FHFA baseline conforming loan limit for a one-unit property, 2026. Review
+ * every January, and let agents override it for high-cost counties.
  */
-export const DEFAULT_CONFORMING_LOAN_LIMIT = 806_500;
+export const DEFAULT_CONFORMING_LOAN_LIMIT = 832_750;
 
 /** Never round an approval number up. */
 const PRICE_ROUNDING_STEP = 1_000;
@@ -65,6 +65,8 @@ export interface ProgramGuidelines {
 
 export interface AffordabilityInput {
   loanType: LoanType;
+  /** VA only. A repeat VA buyer with under 5% down pays a higher funding fee. */
+  vaSubsequentUse?: boolean;
   grossMonthlyIncome: number;
   monthlyDebts: number;
   downPaymentMode: DownPaymentMode;
@@ -124,6 +126,8 @@ export interface AffordabilityResult {
   insuranceMonthly: number;
   hoaMonthly: number;
   mortgageInsuranceMonthly: number;
+  /** Months mortgage insurance is charged; `0` for none, `null` for the full term. */
+  mortgageInsuranceMonths: number | null;
   totalMonthlyPayment: number;
   closingCosts: number;
   cashToClose: number;
@@ -178,7 +182,8 @@ export function getProgramGuidelines(loanType: LoanType): ProgramGuidelines {
         miBasis: 'financed-loan',
         miCancelsAtLtv: null,
         requiresResidualIncomeReview: false,
-        guidelineNote: 'Manual underwriting uses 31/43; an Approve/Eligible finding can stretch well past that. Annual MIP stays for the life of most FHA loans.',
+        guidelineNote:
+          'Manual underwriting uses 31/43; an Approve/Eligible finding can stretch well past that. Annual MIP runs 11 years at 90% LTV or below, and for the life of the loan above that.',
       };
     case 'va':
       return {
@@ -207,11 +212,12 @@ export function getProgramGuidelines(loanType: LoanType): ProgramGuidelines {
         ...base,
         frontEndCapPercent: null,
         backEndCapPercent: 43,
-        defaultAnnualMiPercent: 0,
-        miBasis: 'none',
-        miCancelsAtLtv: null,
+        defaultAnnualMiPercent: 0.55,
+        miBasis: 'base-loan',
+        miCancelsAtLtv: CONVENTIONAL_MI_CANCEL_LTV,
         requiresResidualIncomeReview: false,
-        guidelineNote: 'Jumbo investors usually cap total debt at 43% and expect significant reserves.',
+        guidelineNote:
+          'Jumbo investors usually cap total debt at 43% and expect significant reserves. Under 20% down, expect mortgage insurance priced above conventional.',
       };
     default: {
       const exhaustive: never = loanType;
@@ -230,15 +236,15 @@ function mortgageInsuranceApplies(guidelines: ProgramGuidelines, baseLtv: number
  * Financed-fee rates that could apply, so a self-consistent branch can be found
  * when the fee tier depends on a down payment percent we have not solved yet.
  */
-function candidateFeePercents(loanType: LoanType): number[] {
+function candidateFeePercents(loanType: LoanType, vaSubsequentUse: boolean): number[] {
   if (loanType !== 'va') return [getFinancedFeePercent(loanType, 0)];
-  const tiers = [getVaFundingFeePercent(0), getVaFundingFeePercent(5), getVaFundingFeePercent(10)];
-  return Array.from(new Set(tiers));
+  return getVaFundingFeePercentTiers(vaSubsequentUse);
 }
 
 export interface SolveMaxPriceParams {
   monthlyAllowance: number;
   loanType: LoanType;
+  vaSubsequentUse?: boolean;
   downPaymentMode: DownPaymentMode;
   downPaymentAmount: number;
   downPaymentPercent: number;
@@ -278,6 +284,7 @@ interface SolvedBranch {
 export function solveMaxPriceForPayment(params: SolveMaxPriceParams): MaxPriceSolution {
   const guidelines = getProgramGuidelines(params.loanType);
   const isPercentMode = params.downPaymentMode === 'percent';
+  const vaSubsequentUse = params.vaSubsequentUse ?? false;
   const downFraction = Math.min(Math.max(params.downPaymentPercent, 0), 100) / 100;
   const downAmount = Math.max(params.downPaymentAmount, 0);
 
@@ -288,7 +295,11 @@ export function solveMaxPriceForPayment(params: SolveMaxPriceParams): MaxPriceSo
 
   const emptySolution: MaxPriceSolution = {
     price: 0,
-    financedFeePercent: getFinancedFeePercent(params.loanType, isPercentMode ? downFraction * 100 : 0),
+    financedFeePercent: getFinancedFeePercent(
+      params.loanType,
+      isPercentMode ? downFraction * 100 : 0,
+      vaSubsequentUse
+    ),
     mortgageInsuranceApplies: guidelines.miBasis !== 'none',
     pricePerMonthlyDollar: 0,
     limitedByInsuranceCliff: false,
@@ -320,7 +331,8 @@ export function solveMaxPriceForPayment(params: SolveMaxPriceParams): MaxPriceSo
 
     const consistent =
       miApplies === mortgageInsuranceApplies(guidelines, baseLtv) &&
-      financedFeePercent === getFinancedFeePercent(params.loanType, appliedDownPercent);
+      financedFeePercent ===
+        getFinancedFeePercent(params.loanType, appliedDownPercent, vaSubsequentUse);
 
     return {
       price,
@@ -339,7 +351,7 @@ export function solveMaxPriceForPayment(params: SolveMaxPriceParams): MaxPriceSo
       : [false, true];
 
   const branches: SolvedBranch[] = [];
-  for (const feePercent of candidateFeePercents(params.loanType)) {
+  for (const feePercent of candidateFeePercents(params.loanType, vaSubsequentUse)) {
     for (const miApplies of miStates) {
       const branch = solveBranch(feePercent, miApplies);
       if (branch) branches.push(branch);
@@ -371,7 +383,11 @@ export function solveMaxPriceForPayment(params: SolveMaxPriceParams): MaxPriceSo
     const withInsurance = branches.find((branch) => branch.mortgageInsuranceApplies);
     return {
       price: cliffPrice,
-      financedFeePercent: getFinancedFeePercent(params.loanType, (downAmount / cliffPrice) * 100),
+      financedFeePercent: getFinancedFeePercent(
+        params.loanType,
+        (downAmount / cliffPrice) * 100,
+        vaSubsequentUse
+      ),
       mortgageInsuranceApplies: false,
       pricePerMonthlyDollar: withInsurance?.pricePerMonthlyDollar ?? 0,
       limitedByInsuranceCliff: true,
@@ -544,15 +560,26 @@ function buildWarnings(
     });
   }
 
+  // Only conventional loans are held to the conforming limit. FHA has its own
+  // county limits, and VA and USDA have no loan limit at all.
   if (
-    input.loanType !== 'jumbo' &&
+    input.loanType === 'conventional' &&
     input.conformingLoanLimit > 0 &&
     result.totalLoanAmount > input.conformingLoanLimit
   ) {
     warnings.push({
       id: 'over-conforming',
       severity: 'info',
-      message: `The loan is above the ${Math.round(input.conformingLoanLimit).toLocaleString('en-US')} limit entered, so jumbo pricing and guidelines would apply instead.`,
+      message: `The loan is above the ${Math.round(input.conformingLoanLimit).toLocaleString('en-US')} conforming limit entered, so jumbo pricing and guidelines would apply instead.`,
+    });
+  }
+
+  if (input.loanType === 'fha') {
+    warnings.push({
+      id: 'fha-county-limit',
+      severity: 'info',
+      message:
+        'FHA sets its own maximum loan amount county by county, which this calculator does not check. Confirm the local limit before quoting this price.',
     });
   }
 
@@ -697,6 +724,7 @@ export function calculateAffordability(input: AffordabilityInput): Affordability
     pmiRate: input.annualMiRate,
     extraPrincipal: 0,
     loanType: input.loanType,
+    vaSubsequentUse: input.vaSubsequentUse,
   });
 
   const income = Math.max(input.grossMonthlyIncome, 0);
@@ -738,6 +766,7 @@ export function calculateAffordability(input: AffordabilityInput): Affordability
     insuranceMonthly: Math.max(input.insuranceMonthly, 0),
     hoaMonthly: Math.max(input.hoaMonthly, 0),
     mortgageInsuranceMonthly: mortgage.pmiMonthly,
+    mortgageInsuranceMonths: mortgage.mortgageInsuranceMonths,
     totalMonthlyPayment: mortgage.totalMonthly,
     closingCosts,
     cashToClose: downPaymentAmount + closingCosts,
@@ -761,15 +790,28 @@ export function getMortgageInsuranceLabel(loanType: LoanType): string {
     case 'usda':
       return 'USDA annual fee';
     case 'conventional':
+    case 'jumbo':
       return 'Mortgage insurance (PMI)';
     case 'va':
-    case 'jumbo':
       return 'Mortgage insurance';
     default: {
       const exhaustive: never = loanType;
       throw new Error(`Unhandled loan type: ${String(exhaustive)}`);
     }
   }
+}
+
+/**
+ * Plain-language note about how long mortgage insurance sticks around, or
+ * `undefined` when none is charged and there is nothing to say.
+ */
+export function describeMortgageInsuranceDuration(months: number | null): string | undefined {
+  if (months === null) return 'Stays for the life of the loan';
+  if (months <= 0) return undefined;
+  if (months <= 12) return 'Drops off within the first year';
+
+  const years = Math.round(months / 12);
+  return `Drops off after about ${years} ${years === 1 ? 'year' : 'years'}`;
 }
 
 /**

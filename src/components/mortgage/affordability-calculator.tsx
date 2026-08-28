@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState, type MutableRefObject } from 'react';
 import { AlertTriangleIcon } from 'lucide-react';
-import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   AffordabilityInput,
@@ -10,13 +9,21 @@ import {
   DownPaymentMode,
   calculateAffordability,
   describeBindingConstraint,
+  describeMortgageInsuranceDuration,
   getMortgageInsuranceLabel,
   getProgramGuidelines,
 } from '@/utils/affordability';
-import { LoanType, MortgageInputs, getLoanTypeInfo } from '@/utils/mortgage-calculations';
+import { LoanType, MortgageInputs, getLoanTypeInfo, isLoanType } from '@/utils/mortgage-calculations';
 import { AffordabilityResultCard } from './affordability-result-card';
 import { AffordabilityRatioMeters } from './affordability-ratio-meters';
 import { BuyingPowerLeversPanel } from './buying-power-levers';
+import {
+  loadAffordabilityState,
+  loadCalculatorState,
+  parseFiniteNumber,
+  saveAffordabilityState,
+} from './calculator-state';
+import { copyToClipboard } from './copy-to-clipboard';
 import {
   CheckboxField,
   FieldGrid,
@@ -75,15 +82,8 @@ const loanTypeOptions = [
   { value: 'jumbo', label: 'Jumbo' },
 ];
 
-function isLoanType(value: string | null): value is LoanType {
-  return (
-    value === 'conventional' ||
-    value === 'fha' ||
-    value === 'va' ||
-    value === 'usda' ||
-    value === 'jumbo'
-  );
-}
+/** How long to wait after the last edit before writing state to storage. */
+const SAVE_DEBOUNCE_MS = 400;
 
 function defaultBorrowerState(loanType: LoanType): BorrowerState {
   const guidelines = getProgramGuidelines(loanType);
@@ -102,6 +102,46 @@ function defaultBorrowerState(loanType: LoanType): BorrowerState {
     frontEndCapPercent: guidelines.frontEndCapPercent,
     backEndCapPercent: guidelines.backEndCapPercent,
     conformingLoanLimit: DEFAULT_CONFORMING_LOAN_LIMIT,
+  };
+}
+
+/** Borrower details from storage, which may have been written by an older release. */
+function sanitizeBorrowerState(value: unknown, fallback: BorrowerState): BorrowerState {
+  if (typeof value !== 'object' || value === null) return fallback;
+  const record = value as Record<string, unknown>;
+
+  const number = (key: keyof BorrowerState, current: number): number => {
+    const raw = record[key];
+    return typeof raw === 'number' && Number.isFinite(raw) ? raw : current;
+  };
+  const flag = (key: keyof BorrowerState, current: boolean): boolean => {
+    const raw = record[key];
+    return typeof raw === 'boolean' ? raw : current;
+  };
+
+  const storedFrontCap = record.frontEndCapPercent;
+  const frontEndCapPercent =
+    storedFrontCap === null
+      ? null
+      : typeof storedFrontCap === 'number' && Number.isFinite(storedFrontCap)
+      ? storedFrontCap
+      : fallback.frontEndCapPercent;
+
+  return {
+    incomeMode: record.incomeMode === 'annual' ? 'annual' : 'monthly',
+    incomeValue: number('incomeValue', fallback.incomeValue),
+    monthlyDebts: number('monthlyDebts', fallback.monthlyDebts),
+    downPaymentMode: record.downPaymentMode === 'percent' ? 'percent' : 'amount',
+    downPaymentAmount: number('downPaymentAmount', fallback.downPaymentAmount),
+    downPaymentPercent: number('downPaymentPercent', fallback.downPaymentPercent),
+    useCashLimit: flag('useCashLimit', fallback.useCashLimit),
+    cashOnHand: number('cashOnHand', fallback.cashOnHand),
+    closingCostPercent: number('closingCostPercent', fallback.closingCostPercent),
+    useComfortBudget: flag('useComfortBudget', fallback.useComfortBudget),
+    comfortBudget: number('comfortBudget', fallback.comfortBudget),
+    frontEndCapPercent,
+    backEndCapPercent: number('backEndCapPercent', fallback.backEndCapPercent),
+    conformingLoanLimit: number('conformingLoanLimit', fallback.conformingLoanLimit),
   };
 }
 
@@ -129,6 +169,9 @@ export function AffordabilityCalculator({
 
   const [borrower, setBorrower] = useState<BorrowerState>(() => defaultBorrowerState(loanType));
   const [capsProgram, setCapsProgram] = useState<LoanType>(loanType);
+  // Storage is read after mount to keep the server and client markup identical,
+  // so saving has to wait until that read has happened.
+  const [hasRestoredState, setHasRestoredState] = useState(false);
 
   // Switching programs swaps in that program's qualifying limits.
   if (capsProgram !== loanType) {
@@ -143,68 +186,82 @@ export function AffordabilityCalculator({
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (Array.from(params.keys()).length === 0) return;
+    const hasLink = Array.from(params.keys()).length > 0;
 
-    const readNumber = (key: string): number | null => {
-      const raw = params.get(key);
-      if (raw === null) return null;
-      const parsed = Number(raw);
-      return Number.isFinite(parsed) ? parsed : null;
-    };
+    // The program arrives from the Calculator tab's own restore pass, whether
+    // from the link or from storage. Claim it here so the caps land on that
+    // program's defaults before the render-time check would reset them, then
+    // let the link or the saved profile override those defaults.
+    const linkLoanType = params.get('type');
+    const incomingLoanType = isLoanType(linkLoanType)
+      ? linkLoanType
+      : loadCalculatorState().inputs.loanType ?? null;
+    if (incomingLoanType) setCapsProgram(incomingLoanType);
 
-    // The shared program arrives from the Calculator tab's own restore pass. Claim
-    // it here so the caps land on that program's defaults once, then let any caps
-    // in the link override them.
-    const sharedLoanType = params.get('type');
-    const sharedGuidelines = isLoanType(sharedLoanType)
-      ? getProgramGuidelines(sharedLoanType)
-      : null;
-    if (isLoanType(sharedLoanType)) setCapsProgram(sharedLoanType);
+    // A share link describes one specific borrower, so it replaces rather than
+    // merges with whatever profile was last left on this device.
+    const storedBorrower = hasLink ? null : loadAffordabilityState();
 
     setBorrower((prev) => {
-      const next = { ...prev };
-      if (sharedGuidelines) {
-        next.frontEndCapPercent = sharedGuidelines.frontEndCapPercent;
-        next.backEndCapPercent = sharedGuidelines.backEndCapPercent;
+      let next = { ...prev };
+
+      if (incomingLoanType) {
+        const guidelines = getProgramGuidelines(incomingLoanType);
+        next.frontEndCapPercent = guidelines.frontEndCapPercent;
+        next.backEndCapPercent = guidelines.backEndCapPercent;
       }
-      const income = readNumber('income');
+      if (storedBorrower) {
+        next = sanitizeBorrowerState(storedBorrower, next);
+      }
+
+      const income = parseFiniteNumber(params.get('income'));
       if (income !== null) {
         next.incomeMode = 'monthly';
         next.incomeValue = income;
       }
-      const debts = readNumber('debts');
+      const debts = parseFiniteNumber(params.get('debts'));
       if (debts !== null) next.monthlyDebts = debts;
-      const downAmount = readNumber('dpAmount');
+      const downAmount = parseFiniteNumber(params.get('dpAmount'));
       if (downAmount !== null) {
         next.downPaymentMode = 'amount';
         next.downPaymentAmount = downAmount;
       }
-      const downPercent = readNumber('dpPercent');
+      const downPercent = parseFiniteNumber(params.get('dpPercent'));
       if (downPercent !== null) {
         next.downPaymentMode = 'percent';
         next.downPaymentPercent = downPercent;
       }
-      const cash = readNumber('cash');
+      const cash = parseFiniteNumber(params.get('cash'));
       if (cash !== null) {
         next.useCashLimit = true;
         next.cashOnHand = cash;
       }
-      const closingCosts = readNumber('cc');
+      const closingCosts = parseFiniteNumber(params.get('cc'));
       if (closingCosts !== null) next.closingCostPercent = closingCosts;
-      const budget = readNumber('budget');
+      const budget = parseFiniteNumber(params.get('budget'));
       if (budget !== null) {
         next.useComfortBudget = true;
         next.comfortBudget = budget;
       }
-      const frontCap = readNumber('feCap');
+      const frontCap = parseFiniteNumber(params.get('feCap'));
       if (frontCap !== null) next.frontEndCapPercent = frontCap;
-      const backCap = readNumber('beCap');
+      const backCap = parseFiniteNumber(params.get('beCap'));
       if (backCap !== null) next.backEndCapPercent = backCap;
-      const limit = readNumber('limit');
+      const limit = parseFiniteNumber(params.get('limit'));
       if (limit !== null) next.conformingLoanLimit = limit;
+
       return next;
     });
+
+    setHasRestoredState(true);
   }, []);
+
+  useEffect(() => {
+    if (!hasRestoredState) return undefined;
+
+    const timer = setTimeout(() => saveAffordabilityState(borrower), SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [hasRestoredState, borrower]);
 
   const handleBorrowerNumber = useCallback((key: BorrowerFieldKey, value: number) => {
     setBorrower((prev) => ({ ...prev, [key]: value }));
@@ -226,6 +283,7 @@ export function AffordabilityCalculator({
   const affordabilityInput = useMemo<AffordabilityInput>(
     () => ({
       loanType,
+      vaSubsequentUse: loanInputs.vaSubsequentUse ?? false,
       grossMonthlyIncome,
       monthlyDebts: borrower.monthlyDebts,
       downPaymentMode: borrower.downPaymentMode,
@@ -251,12 +309,15 @@ export function AffordabilityCalculator({
 
   const bindingLabel = describeBindingConstraint(result.bindingConstraint, affordabilityInput);
   const loanTypeInfo = getLoanTypeInfo(loanType);
-  const showMiRateField = loanType === 'conventional' || loanType === 'fha';
+  const showMiRateField = loanTypeInfo.hasPMI;
+  const miDuration = describeMortgageInsuranceDuration(result.mortgageInsuranceMonths);
 
   const handleUseResults = () => {
     onUseResults?.({
       purchasePrice: result.maxPurchasePrice,
-      downPaymentPercent: result.downPaymentPercent,
+      // Rounded to what the field can display, so the calculator's inputs
+      // reproduce the numbers shown beside them.
+      downPaymentPercent: Math.round(result.downPaymentPercent * 100) / 100,
       loanType,
     });
   };
@@ -274,7 +335,9 @@ export function AffordabilityCalculator({
 
     if (result.mortgageInsuranceMonthly > 0) {
       lines.push(
-        `  ${getMortgageInsuranceLabel(loanType)}: ${formatCurrency(result.mortgageInsuranceMonthly)}`
+        `  ${getMortgageInsuranceLabel(loanType)}: ${formatCurrency(result.mortgageInsuranceMonthly)}${
+          miDuration ? ` (${miDuration.toLowerCase()})` : ''
+        }`
       );
     }
 
@@ -307,8 +370,7 @@ export function AffordabilityCalculator({
       'These are estimates for planning. Your lender\u2019s approval and disclosures are the final word.'
     );
 
-    navigator.clipboard.writeText(lines.join('\n'));
-    toast.success('Buyer summary copied');
+    void copyToClipboard(lines.join('\n'), { title: 'Buyer summary copied' });
   };
 
   const handleShareLink = () => {
@@ -338,13 +400,15 @@ export function AffordabilityCalculator({
     if (borrower.frontEndCapPercent !== null) {
       params.set('feCap', String(borrower.frontEndCapPercent));
     }
+    if (loanType === 'va' && loanInputs.vaSubsequentUse) params.set('vaSub', '1');
 
-    navigator.clipboard.writeText(
-      `${window.location.origin}${window.location.pathname}?${params.toString()}`
+    void copyToClipboard(
+      `${window.location.origin}${window.location.pathname}?${params.toString()}`,
+      {
+        title: 'Share link copied',
+        description: 'Anyone you send it to opens this exact scenario.',
+      }
     );
-    toast.success('Share link copied', {
-      description: 'Anyone you send it to opens this exact scenario.',
-    });
   };
 
   // No dependency array: the page header calls these on demand, so they must
@@ -579,6 +643,19 @@ export function AffordabilityCalculator({
                 />
               ) : null}
             </FieldGrid>
+            {loanType === 'va' ? (
+              <div className="border-t border-border pt-3">
+                <CheckboxField
+                  label="They have used a VA loan before"
+                  checked={loanInputs.vaSubsequentUse ?? false}
+                  onChange={(vaSubsequentUse) => onLoanInputsChange({ vaSubsequentUse })}
+                />
+                <p className="mt-1.5 text-xs text-foreground-subtle">
+                  A repeat VA buyer pays 3.3% instead of 2.15% on the funding fee, unless they put
+                  at least 5% down.
+                </p>
+              </div>
+            ) : null}
           </div>
         </FieldGroup>
 
