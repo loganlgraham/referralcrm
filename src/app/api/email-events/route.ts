@@ -4,7 +4,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectMongo } from '@/lib/mongoose';
 import { EmailMessage, type EmailMessageStatus } from '@/models/email-message';
 import { recordBounce, recordDelivery } from '@/lib/server/email-address-health';
-import { recordEmailDeliveryFailure } from '@/lib/server/email-delivery-failure';
+import {
+  recordEmailDeliveryFailure,
+  type EmailFailureKind
+} from '@/lib/server/email-delivery-failure';
 import {
   resolveResendSignatureHeader,
   resolveResendTimestampHeader,
@@ -16,7 +19,8 @@ const HANDLED_EVENTS = [
   'email.delivered',
   'email.bounced',
   'email.complained',
-  'email.delivery_delayed'
+  'email.delivery_delayed',
+  'email.failed'
 ] as const;
 
 type HandledEvent = (typeof HANDLED_EVENTS)[number];
@@ -36,6 +40,8 @@ function resolveStatus(event: HandledEvent): EmailMessageStatus {
       return 'complained';
     case 'email.delivery_delayed':
       return 'delayed';
+    case 'email.failed':
+      return 'failed';
     default: {
       const exhaustive: never = event;
       return exhaustive;
@@ -43,8 +49,46 @@ function resolveStatus(event: HandledEvent): EmailMessageStatus {
   }
 }
 
+/** Returns null for the statuses that represent a healthy message. */
+function resolveFailureKind(status: EmailMessageStatus): EmailFailureKind | null {
+  switch (status) {
+    case 'bounced':
+      return 'bounced';
+    case 'complained':
+      return 'complained';
+    case 'failed':
+      return 'send_failed';
+    case 'sent':
+    case 'delivered':
+    case 'delayed':
+    case 'suppressed':
+      return null;
+    default: {
+      const exhaustive: never = status;
+      return exhaustive;
+    }
+  }
+}
+
+/**
+ * The events webhook and the inbound webhook are separate Resend endpoints with separate signing
+ * secrets, so the fallback below only works if both happen to be the same value. Falling back
+ * silently once cost us every delivery event until Resend disabled the endpoint, hence the warning.
+ */
 function resolveEventSecret(): string | undefined {
-  return process.env.RESEND_EVENTS_WEBHOOK_SECRET || process.env.RESEND_WEBHOOK_SECRET;
+  const dedicated = process.env.RESEND_EVENTS_WEBHOOK_SECRET;
+  if (dedicated) {
+    return dedicated;
+  }
+
+  const fallback = process.env.RESEND_WEBHOOK_SECRET;
+  if (fallback) {
+    console.warn(
+      '[EmailEvents] RESEND_EVENTS_WEBHOOK_SECRET is not set; falling back to RESEND_WEBHOOK_SECRET, ' +
+        'which is the inbound webhook secret and will not verify events.'
+    );
+  }
+  return fallback;
 }
 
 const EMAIL_IN_TEXT = /[^\s<>,;"']+@[^\s<>,;"']+\.[^\s<>,;"']+/g;
@@ -85,6 +129,7 @@ function resolveFailedRecipients(
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const secret = resolveEventSecret();
   if (!secret) {
+    console.error('[EmailEvents] Rejected event: no signing secret is configured.');
     return NextResponse.json(
       { error: 'Email event signing secret is not configured.' },
       { status: 500 }
@@ -93,6 +138,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const signatureHeader = resolveResendSignatureHeader(request.headers);
   if (!signatureHeader) {
+    console.warn('[EmailEvents] Rejected event: request carried no signature header.');
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
@@ -103,6 +149,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (
     !verifyResendWebhookSignature(rawBody, signatureHeader, secret, timestampHeader, svixMessageId)
   ) {
+    console.warn(
+      '[EmailEvents] Rejected event: signature did not match the configured signing secret. ' +
+        'Check that RESEND_EVENTS_WEBHOOK_SECRET matches this webhook in Resend.'
+    );
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
@@ -130,8 +180,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const status = resolveStatus(eventType);
+  // Bounces explain themselves under `bounce`, while a send that never left Resend uses `failed`.
   const bounce = (data.bounce ?? {}) as Record<string, unknown>;
-  const bounceMessage = typeof bounce.message === 'string' ? bounce.message : null;
+  const failed = (data.failed ?? {}) as Record<string, unknown>;
+  const failureMessage =
+    (typeof bounce.message === 'string' ? bounce.message : null) ??
+    (typeof failed.reason === 'string' ? failed.reason : null);
+
+  console.log(`[EmailEvents] Accepted ${eventType} for ${resendId}`);
 
   try {
     await connectMongo();
@@ -150,9 +206,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       ? [...(message.to ?? []), ...(message.cc ?? [])]
       : [...toStringArray(data.to), ...toStringArray(data.cc)];
 
-    const isFailure = status === 'bounced' || status === 'complained';
+    const failureKind = resolveFailureKind(status);
+    const isFailure = failureKind !== null;
     const failedRecipients = isFailure
-      ? resolveFailedRecipients(bounceMessage, knownRecipients)
+      ? resolveFailedRecipients(failureMessage, knownRecipients)
       : [];
 
     await EmailMessage.updateOne(
@@ -162,27 +219,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           status,
           lastEventAt: new Date(),
           ...(isFailure
-            ? { failedRecipients, failureReason: bounceMessage }
+            ? { failedRecipients, failureReason: failureMessage }
             : {}),
         },
       }
     );
 
-    if (isFailure && failedRecipients.length > 0) {
-      await recordBounce(failedRecipients, bounceMessage);
+    // A send that failed on our side says nothing about the address, so it must not start a
+    // bounce backoff the way a real bounce or complaint does.
+    const blamesTheAddress = failureKind === 'bounced' || failureKind === 'complained';
+    if (blamesTheAddress && failedRecipients.length > 0) {
+      await recordBounce(failedRecipients, failureMessage);
     }
 
     if (status === 'delivered') {
       await recordDelivery(knownRecipients);
     }
 
-    if (isFailure && message?.referralId) {
+    if (failureKind && message?.referralId) {
       await recordEmailDeliveryFailure({
         referralId: message.referralId as Types.ObjectId,
         subject: message.subject,
         recipients: failedRecipients,
-        reason: bounceMessage,
-        kind: status === 'complained' ? 'complained' : 'bounced',
+        reason: failureMessage,
+        kind: failureKind,
       });
     }
 
@@ -192,7 +252,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           (failedRecipients.length > 0
             ? ` (${failedRecipients.join(', ')})`
             : ' (recipient could not be identified)') +
-          (bounceMessage ? `: ${bounceMessage}` : '')
+          (failureMessage ? `: ${failureMessage}` : '')
       );
     }
   } catch (error) {

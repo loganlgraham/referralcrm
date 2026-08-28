@@ -25,6 +25,9 @@ jest.mock('@next-auth/mongodb-adapter', () => ({
   MongoDBAdapter: jest.fn(() => ({ name: 'mock-adapter' }))
 }));
 
+const { MongoDBAdapter } = require('@next-auth/mongodb-adapter') as {
+  MongoDBAdapter: jest.Mock;
+};
 const { connectMongo } = require('@/lib/mongoose') as {
   connectMongo: jest.Mock;
 };
@@ -141,5 +144,15 @@ describe('Auth config last login persistence', () => {
 
     expect(mockedUpdateOne).not.toHaveBeenCalled();
     expect(mockedRecordAgentLoginEvent).not.toHaveBeenCalled();
+  });
+
+  it('defers adapter Mongo connect until the client promise is used', async () => {
+    const adapterArg = MongoDBAdapter.mock.calls[0]?.[0] as Promise<unknown> | undefined;
+    expect(adapterArg).toBeDefined();
+    expect(typeof adapterArg?.then).toBe('function');
+
+    mockedConnectMongo.mockClear();
+    await adapterArg;
+    expect(mockedConnectMongo).toHaveBeenCalled();
   });
 });

@@ -2,9 +2,11 @@ import { MongoDBAdapter } from '@next-auth/mongodb-adapter';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import EmailProvider from 'next-auth/providers/email';
 import bcrypt from 'bcryptjs';
+import type { MongoClient } from 'mongodb';
 import type { NextAuthOptions } from 'next-auth';
 import { Resend } from 'resend';
 import { connectMongo } from '@/lib/mongoose';
+import { lazyThenable } from '@/lib/mongo-connection';
 import { Types } from 'mongoose';
 import { User } from '@/models/user';
 import { z } from 'zod';
@@ -171,7 +173,10 @@ if (!authSecret) {
 
 // Reuse mongoose's underlying MongoClient so auth shares the single connection
 // pool instead of opening a second one (halves per-instance connections + monitoring).
-const getAdapterClientPromise = () => connectMongo().then((m) => m.connection.getClient());
+// Lazy: do not open Mongo at module load; the adapter awaits this on first use.
+const adapterClientPromise = lazyThenable(() =>
+  connectMongo().then((m) => m.connection.getClient() as MongoClient)
+);
 
 export async function persistUserLastLoginAt(input: { id?: string | null; email?: string | null }) {
   const userId = typeof input.id === 'string' && input.id.length > 0 ? input.id : null;
@@ -202,7 +207,7 @@ export async function persistUserLastLoginAt(input: { id?: string | null; email?
 }
 
 export const authOptions: NextAuthOptions = {
-  adapter: MongoDBAdapter(getAdapterClientPromise() as any),
+  adapter: MongoDBAdapter(adapterClientPromise as never),
   session: { strategy: 'jwt' },
   pages: {
     signIn: '/login',

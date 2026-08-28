@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
 
-interface Notification {
+export interface Notification {
   _id: string;
   type:
     | 'note'

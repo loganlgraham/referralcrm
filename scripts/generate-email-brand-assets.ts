@@ -140,13 +140,17 @@ async function buildWordmark(): Promise<Buffer> {
   return sharp(Buffer.from(svg)).resize({ height: 56 }).png().toBuffer();
 }
 
+function writePng(path: string, data: Buffer) {
+  writeFileSync(path, Uint8Array.from(data));
+}
+
 async function main() {
   const icon = await sharp(Buffer.from(ICON_SVG)).resize(64, 64).png().toBuffer();
-  writeFileSync(join(publicBrand, 'email-icon.png'), icon);
+  writePng(join(publicBrand, 'email-icon.png'), icon);
 
   const wordmark = await buildWordmark();
   const { width, height } = await sharp(wordmark).metadata();
-  writeFileSync(join(publicBrand, 'email-wordmark.png'), wordmark);
+  writePng(join(publicBrand, 'email-wordmark.png'), wordmark);
 
   console.log(`Wrote public/brand/email-icon.png (64x64) and public/brand/email-wordmark.png (${width}x${height})`);
 }

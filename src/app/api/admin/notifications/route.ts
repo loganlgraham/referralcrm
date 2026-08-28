@@ -16,10 +16,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   await connectMongo();
 
-  const [count, notifications] = await Promise.all([
-    getUnreadNotificationCount(session.user.id),
-    getNotifications(session.user.id, 50),
-  ]);
+  const countOnly = request.nextUrl.searchParams.get('count') === '1';
+  const count = await getUnreadNotificationCount(session.user.id);
+  if (countOnly) {
+    return NextResponse.json({ count });
+  }
+
+  const notifications = await getNotifications(session.user.id, 50);
 
   return NextResponse.json({
     count,

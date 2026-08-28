@@ -43,6 +43,9 @@
     ".next-buildcheck/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "scripts",
+    "tests",
+    "e2e"
   ]
 }

@@ -6,6 +6,8 @@ export const EMAIL_MESSAGE_STATUSES = [
   'bounced',
   'complained',
   'delayed',
+  /** Accepted by Resend but never sent, e.g. an attachment it could not fetch. */
+  'failed',
   /** Never handed to Resend because every To recipient was in a bounce backoff window. */
   'suppressed',
 ] as const;
