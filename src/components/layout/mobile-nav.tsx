@@ -57,8 +57,8 @@ export function MobileNav({ session }: MobileNavProps) {
     <>
       <header className="sticky top-0 z-30 border-b border-white/10 bg-primary/95 text-white backdrop-blur md:hidden">
         <div className="flex h-16 items-center justify-between px-4">
-          <Link href={role === 'admin' ? '/dashboard' : '/referrals'} className="flex items-center gap-2 no-underline">
-            <BrandMark inverted />
+          <Link href={role === 'admin' ? '/dashboard' : '/referrals'} className="flex items-center no-underline">
+            <BrandMark inverted variant="wordmark" wordmarkSize={22} />
           </Link>
           <div className="flex items-center gap-1.5">
             <NotificationBell session={session} inverted />
