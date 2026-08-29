@@ -25,7 +25,7 @@ export function AuthShell({ hero, brand, children, wide = false }: AuthShellProp
     <div
       className={
         isMinimal
-          ? 'flex min-h-screen flex-col items-center justify-center bg-surface-muted px-5 py-10'
+          ? 'flex min-h-screen flex-col items-center justify-start bg-surface-muted px-5 pt-14 pb-10 sm:justify-center sm:py-10'
           : 'flex min-h-screen flex-col bg-surface-muted lg:flex-row'
       }
     >
