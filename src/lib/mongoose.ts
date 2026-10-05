@@ -5,6 +5,7 @@ import {
   MONGO_PING_TIMEOUT_MS,
   MONGO_POOL_OPTIONS,
   raceWithTimeout,
+  shouldCloseBeforeConnect,
 } from '@/lib/mongo-connection';
 
 const resolvedMongoUri =
@@ -131,12 +132,42 @@ function attachLifecycleListeners(connection: mongoose.Connection): void {
   if (cached) {
     cached.listenersAttached = true;
   }
-  connection.on('disconnected', () => invalidateCache('disconnected'));
-  connection.on('close', () => invalidateCache('close'));
+  // A transient disconnect is recovered by the driver; keep the client and force a ping
+  // on the next request instead of opening a second client next to the reconnecting one.
+  connection.on('disconnected', () => {
+    if (cached) {
+      cached.lastSuccessfulOpAt = 0;
+    }
+  });
+  connection.on('close', () => {
+    if (!closingIntentionally) {
+      invalidateCache('close');
+    }
+  });
   connection.on('error', (error: unknown) => {
     console.error('[mongo] connection error', error instanceof Error ? error.message : String(error));
-    invalidateCache('error');
   });
+}
+
+let closingIntentionally = false;
+
+async function closeExistingClient(): Promise<void> {
+  const connection = mongoose.connection;
+  const hasClient = Boolean(connection.getClient?.());
+  if (!shouldCloseBeforeConnect(connection.readyState, hasClient)) {
+    return;
+  }
+  closingIntentionally = true;
+  try {
+    await mongoose.disconnect();
+  } catch (error) {
+    console.warn(
+      '[mongo] closing previous client failed',
+      error instanceof Error ? error.message : String(error)
+    );
+  } finally {
+    closingIntentionally = false;
+  }
 }
 
 async function pingWithTimeout(connection: mongoose.Connection): Promise<boolean> {
@@ -157,17 +188,8 @@ async function pingWithTimeout(connection: mongoose.Connection): Promise<boolean
 
 async function resetMongooseConnection(): Promise<void> {
   invalidateCache('reset');
-  if (mongoose.connection.readyState === mongoose.ConnectionStates.disconnected) {
-    return;
-  }
-  try {
-    await mongoose.disconnect();
-  } catch (error) {
-    console.warn(
-      '[mongo] disconnect during reset failed',
-      error instanceof Error ? error.message : String(error)
-    );
-  }
+  // A "disconnected" client may still be retrying in the background with live sockets.
+  await closeExistingClient();
 }
 
 /**
@@ -319,6 +341,7 @@ async function connectMongoUnchecked(): Promise<typeof mongoose> {
 
     cached!.promise = retryConnection(async () => {
       try {
+        await closeExistingClient();
         const conn = await mongoose.connect(MONGODB_URI, connectionOptions);
 
         // Ensure the underlying connection is actually ready.
@@ -338,8 +361,9 @@ async function connectMongoUnchecked(): Promise<typeof mongoose> {
 
         return conn;
       } catch (error) {
-        // Clear the cached promise on failure so we can retry
-        cached!.promise = null;
+        // Keep cached.promise set during retries so concurrent callers await this attempt
+        // instead of starting a parallel client; the outer .catch clears it on final failure.
+        await closeExistingClient();
         cached!.conn = null;
         cached!.lastSuccessfulOpAt = 0;
         

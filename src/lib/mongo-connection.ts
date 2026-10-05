@@ -30,6 +30,16 @@ export function isCachedConnectionFresh(
   return lastSuccessfulOpAt > 0 && now - lastSuccessfulOpAt < staleAfterMs;
 }
 
+/**
+ * Mongoose's `openUri` only reuses the existing MongoClient while `connecting`/`connected`;
+ * otherwise it builds a new one and orphans the old client, which keeps reconnecting
+ * with live monitor sockets. Close whatever exists before opening a fresh client.
+ * `readyState` 0 is mongoose's `disconnected`.
+ */
+export function shouldCloseBeforeConnect(readyState: number, hasClient: boolean): boolean {
+  return hasClient || readyState !== 0;
+}
+
 export async function raceWithTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number,

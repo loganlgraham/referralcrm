@@ -7,9 +7,27 @@ import {
   MONGO_POOL_OPTIONS,
   MONGO_STALE_AFTER_MS,
   raceWithTimeout,
+  shouldCloseBeforeConnect,
 } from '@/lib/mongo-connection';
 
+const DISCONNECTED = 0;
+const CONNECTED = 1;
+const CONNECTING = 2;
+
 describe('mongo connection helpers', () => {
+  it('closes a disconnected client that may still be reconnecting in the background', () => {
+    expect(shouldCloseBeforeConnect(DISCONNECTED, true)).toBe(true);
+  });
+
+  it('closes a connecting or connected client before opening a new one', () => {
+    expect(shouldCloseBeforeConnect(CONNECTING, true)).toBe(true);
+    expect(shouldCloseBeforeConnect(CONNECTED, true)).toBe(true);
+  });
+
+  it('skips closing on the very first connect when no client exists', () => {
+    expect(shouldCloseBeforeConnect(DISCONNECTED, false)).toBe(false);
+  });
+
   it('treats a never-used cache as stale', () => {
     expect(isCachedConnectionFresh(0, 1_000_000)).toBe(false);
   });
